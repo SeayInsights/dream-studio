@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-16
+
+### Added
+- 10 hook handlers ported to `hooks/handlers/`, all built on `hooks/lib`:
+  - `on-pulse` — cross-project health check; `github_repo` comes from `config.json`, not hardcoded
+  - `on-milestone-start` / `on-milestone-end` — DCL-matched milestone marker in `~/.dream-studio/state/`
+  - `on-context-threshold` — four-band warn/compact/handoff/block with project-dir auto-detection (override via `CLAUDE_PROJECTS_DIR`)
+  - `on-quality-score` — advisory diff scan (tests, debug, secrets, size, scope); writes `quality-score.json`
+  - `on-token-log` — appends token usage rows to `token-log.md`
+  - `on-meta-review` — weekly retrospective reading `~/.dream-studio/planning/session-context.md`
+  - `on-agent-correction` — pattern accumulation with auto-draft threshold (override via `DREAM_STUDIO_CORRECTIONS_PATH`)
+  - `on-skill-load` — logs skill reads; surfaces `{{director_name}}` resolution from `config.json`
+  - `on-tool-activity` — rolling activity snapshot under `state/activity.json`
+- `hooks/hooks.json` — declares hooks on `UserPromptSubmit`, `Stop`, and `PostToolUse` (via `${CLAUDE_PLUGIN_ROOT}/hooks/run.sh`)
+- 28 integration tests (one file per hook) — `pytest tests/` now runs 51 tests total
+
+### Removed
+- `_notion.py` and `_torii_feed.py` helpers — dream-studio core no longer talks to Notion or the TORII feed
+
 ## [0.3.0] — 2026-04-16
 
 ### Added

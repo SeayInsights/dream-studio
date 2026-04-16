@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""Hook: on-context-threshold — warn, auto-handoff, or block when context fills.
+
+Trigger: UserPromptSubmit.
+Reads the current session JSONL file as a context-usage proxy and acts in
+four bands:
+
+  WARN_KB     -> surface a mild warning
+  COMPACT_KB  -> recommend /compact soon
+  HANDOFF_KB  -> write a structured handoff + recap to `.sessions/<date>/`
+                 and draft a retrospective lesson
+  URGENT_KB   -> block the prompt with a stopReason asking for /compact;
+                 one subsequent prompt passes through (compact sentinel)
+
+Projects live under `~/.claude/projects/<slug>/` where <slug> is the cwd
+path with path separators replaced by `-` (plus a drive-letter prefix on
+Windows). When `CLAUDE_PROJECTS_DIR` is set the hook uses that instead —
+useful for tests and unusual platforms.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib import paths  # noqa: E402
+
+WARN_KB = 1500
+COMPACT_KB = 2500
+HANDOFF_KB = 3500
+URGENT_KB = 4500
+
+
+def projects_dir_for_cwd(cwd: Path) -> Path:
+    """Return `~/.claude/projects/<slug>` for the given cwd."""
+    override = os.environ.get("CLAUDE_PROJECTS_DIR")
+    if override:
+        return Path(override)
+    s = str(cwd).replace("\\", "/")
+    if len(s) >= 2 and s[1] == ":":
+        slug = s[0].upper() + "-" + s[2:].replace("/", "-")
+    else:
+        slug = s.replace("/", "-")
+    return Path.home() / ".claude" / "projects" / slug
+
+
+def git(args: list[str], cwd: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def git_context(cwd: Path) -> str:
+    branch = git(["branch", "--show-current"], cwd)
+    last = git(["log", "--oneline", "-1"], cwd)
+    top = git(["rev-parse", "--show-toplevel"], cwd)
+    return f"branch: {branch or 'unknown'} | last commit: {last or 'unknown'} | repo: {top or str(cwd)}"
+
+
+def active_files(cwd: Path) -> list[tuple[str, str]]:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        raw = proc.stdout
+    except Exception:
+        return []
+    labels = {"M": "modified", "A": "added", "D": "deleted", "??": "untracked", "R": "renamed"}
+    result = []
+    for line in raw.splitlines():
+        if len(line) < 4:
+            continue
+        code = line[:2].strip()
+        path = line[3:]
+        if code and path:
+            result.append((labels.get(code, code), path))
+    return result
+
+
+def session_kb(projects: Path, session_id: str | None) -> float:
+    try:
+        if session_id:
+            p = projects / f"{session_id}.jsonl"
+            return p.stat().st_size / 1024 if p.exists() else 0.0
+        if not projects.exists():
+            return 0.0
+        files = list(projects.glob("*.jsonl"))
+        if not files:
+            return 0.0
+        current = max(files, key=lambda f: f.stat().st_mtime)
+        if time.time() - current.stat().st_mtime > 60:
+            return 0.0
+        return current.stat().st_size / 1024
+    except Exception:
+        return 0.0
+
+
+def sentinel(projects: Path, session_id: str | None, label: str) -> Path:
+    return projects / f".{label}-sentinel-{session_id or 'unknown'}"
+
+
+def write_handoff(cwd: Path, kb: float, session_id: str | None) -> Path | None:
+    now = datetime.now(timezone.utc)
+    date_str = now.strftime("%Y-%m-%d")
+    sessions_dir = cwd / ".sessions" / date_str
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    sid = (session_id or "unknown")[:8]
+    handoff_path = sessions_dir / f"handoff-{sid}.md"
+
+    branch = git(["branch", "--show-current"], cwd) or "unknown"
+    last_commit = git(["log", "--oneline", "-1"], cwd) or "unknown"
+    files = active_files(cwd)
+    files_lines = (
+        "\n".join(f"- `{p}`: {l}" for l, p in files) if files else "- (working tree clean)"
+    )
+
+    handoff = (
+        f"# Handoff: {branch}\n"
+        f"Date: {date_str}\n\n"
+        f"## Current state\n"
+        f"- **Branch:** {branch}\n"
+        f"- **Last commit:** {last_commit}\n"
+        f"- **Context:** ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB)\n\n"
+        f"## Active files\n"
+        f"{files_lines}\n\n"
+        f"## Next action\n"
+        f"Continue work on branch `{branch}`. Check git log for recent task context.\n"
+    )
+    try:
+        handoff_path.write_text(handoff, encoding="utf-8")
+    except Exception as e:
+        print(f"[on-context-threshold] handoff write failed: {e}", file=sys.stderr, flush=True)
+        return None
+
+    print(
+        f"\n  -> HANDOFF written: {handoff_path}\n"
+        f"  -> Open a new session and resume from this file.\n",
+        flush=True,
+    )
+    return handoff_path
+
+
+def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path | None) -> None:
+    now = datetime.now(timezone.utc)
+    date_str = now.strftime("%Y-%m-%d")
+    sessions_dir = cwd / ".sessions" / date_str
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    sid = (session_id or "unknown")[:8]
+    recap_path = sessions_dir / f"recap-{sid}.md"
+    branch = git(["branch", "--show-current"], cwd) or "unknown"
+    commits_raw = git(["log", "--oneline", "-10"], cwd)
+    commits = commits_raw.splitlines() if commits_raw else []
+    files = active_files(cwd)
+
+    commits_lines = "\n".join(f"  - {c}" for c in commits) if commits else "  - (no recent commits)"
+    changed_lines = "\n".join(f"- `{p}`: {l}" for l, p in files) if files else "- (working tree clean)"
+    next_step = (
+        f"Read `{handoff_path}` to resume." if handoff_path
+        else f"Continue work on branch `{branch}`."
+    )
+
+    recap = (
+        f"# Recap: {branch}\n"
+        f"Date: {date_str}\n"
+        f"Session: {session_id or 'unknown'}\n\n"
+        f"## What was built\n"
+        f"{changed_lines}\n"
+        f"- Commits:\n{commits_lines}\n\n"
+        f"## Risk flags\n"
+        f"- Context budget exceeded at ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB)\n\n"
+        f"## Next step\n"
+        f"{next_step}\n"
+    )
+    try:
+        recap_path.write_text(recap, encoding="utf-8")
+        print(f"  -> RECAP written: {recap_path}\n", flush=True)
+    except Exception as e:
+        print(f"[on-context-threshold] recap write failed: {e}", file=sys.stderr, flush=True)
+
+
+def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None) -> None:
+    try:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        drafts_dir = paths.meta_dir() / "draft-lessons"
+        drafts_dir.mkdir(parents=True, exist_ok=True)
+
+        sid = session_id or "unknown"
+        draft_path = drafts_dir / f"handoff-{date_str}-{sid[:8]}.md"
+        if draft_path.exists():
+            return
+
+        draft = (
+            f"---\n"
+            f"type: draft-lesson\n"
+            f"source: on-context-threshold\n"
+            f"status: draft\n"
+            f"created: {timestamp}\n"
+            f"---\n\n"
+            f"## Context Budget Exceeded\n\n"
+            f"Session hit auto-handoff at ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB).\n\n"
+            f"**Git state:** {ctx}\n"
+            f"**Session:** {sid}\n\n"
+            f"## Retrospective Prompts\n\n"
+            f"1. What task was being worked on when context blew up?\n"
+            f"2. Was there unnecessary exploration or thrashing?\n"
+            f"3. Could the task have been split into smaller milestones?\n"
+            f"4. Were large files read that didn't need to be?\n"
+            f"5. Should a /compact have been run earlier?\n\n"
+            f"## Director Action\n\n"
+            f"- [ ] Add lesson to patterns (what to avoid next time)\n"
+            f"- [ ] No action needed (one-off)\n"
+            f"- [ ] Reject (delete this file)\n"
+        )
+        draft_path.write_text(draft, encoding="utf-8")
+        print(f"  -> SENSOR: Handoff retrospective drafted: {draft_path}\n", flush=True)
+    except Exception:
+        pass
+
+
+def main() -> None:
+    try:
+        payload = json.loads(sys.stdin.read())
+        session_id = payload.get("session_id")
+    except Exception:
+        session_id = None
+
+    cwd = paths.project_root()
+    projects = projects_dir_for_cwd(cwd)
+    kb = session_kb(projects, session_id)
+    if kb <= 0:
+        return
+
+    compact_sentinel = sentinel(projects, session_id, "compact")
+    handoff_sentinel = sentinel(projects, session_id, "handoff")
+
+    if compact_sentinel.exists():
+        compact_sentinel.unlink(missing_ok=True)
+        return
+
+    if kb >= URGENT_KB:
+        try:
+            compact_sentinel.parent.mkdir(parents=True, exist_ok=True)
+            compact_sentinel.write_text(str(kb))
+        except Exception:
+            pass
+        result = {
+            "continue": False,
+            "stopReason": (
+                f"[dream-studio] Context at ~{kb:.0f} KB — auto-blocked at {URGENT_KB} KB limit.\n"
+                "Type /compact to compress the session, then resend your message."
+            ),
+        }
+        print(json.dumps(result), flush=True)
+        return
+
+    if kb >= HANDOFF_KB:
+        if not handoff_sentinel.exists():
+            try:
+                handoff_sentinel.parent.mkdir(parents=True, exist_ok=True)
+                handoff_sentinel.write_text(str(kb))
+            except Exception:
+                pass
+            handoff_path = write_handoff(cwd, kb, session_id)
+            write_recap(cwd, kb, session_id, handoff_path)
+            draft_handoff_lesson(kb, git_context(cwd), session_id)
+        else:
+            print(
+                f"\n[dream-studio] Context at ~{kb:.0f} KB — handoff already sent. Run /compact.\n",
+                flush=True,
+            )
+        return
+
+    if kb >= COMPACT_KB:
+        print(f"\n[dream-studio] Context at ~{kb:.0f} KB — run /compact soon.\n", flush=True)
+        return
+
+    if kb >= WARN_KB:
+        print(f"\n[dream-studio] Context at ~{kb:.0f} KB — growing.\n", flush=True)
+
+
+if __name__ == "__main__":
+    main()
