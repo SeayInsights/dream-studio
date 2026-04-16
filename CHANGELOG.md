@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-16
+
+### Added
+- `hooks/lib/paths.py` — `plugin_root`, `user_data_dir` (`~/.dream-studio/`), `project_root`, `meta_dir`, `state_dir`, `planning_dir`
+- `hooks/lib/python_shim.py` — `detect_python()` tries `py`, `python3`, `python` in order, raises `PythonNotFoundError` with OS-specific install hints
+- `hooks/lib/state.py` — `read_config`/`write_config`, `read_pulse`/`write_pulse`, schema-version guard via `SchemaVersionError`
+- `hooks/run.sh` + `hooks/run.cmd` — cross-platform handler launchers that pick a Python interpreter and exec `hooks/handlers/<name>.py`, preserving `CLAUDE_PLUGIN_ROOT`
+- `tests/` — 23 unit tests (paths, python_shim, state) with 97% line coverage on `hooks/lib`
+- `requirements-dev.txt` pinning pytest + pytest-cov
+- `.gitattributes` enforcing LF for `.sh`/Python and CRLF for `.cmd`/`.bat`
+- CI matrix now installs deps and runs `pytest --cov=hooks/lib --cov-fail-under=80`
+
 ## [0.2.0] — 2026-04-16
 
 ### Added

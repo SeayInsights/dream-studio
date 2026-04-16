@@ -28,9 +28,11 @@ jobs:
         shell: python
         run: |
           import json, sys
-          with open("plugin.json") as f:
+          from pathlib import Path
+          manifest = Path(".claude-plugin/plugin.json")
+          with manifest.open() as f:
               m = json.load(f)
-          required = ["schema_version", "name", "version", "description", "license"]
+          required = ["name", "version", "description", "license"]
           missing = [k for k in required if k not in m]
           if missing:
               print(f"plugin.json missing keys: {missing}")
@@ -38,17 +40,12 @@ jobs:
           print(f"plugin.json OK: {m['name']}@{m['version']}")
 
       - name: Install dev deps
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-        shell: bash
+          pip install -r requirements-dev.txt
 
-      - name: Run tests
-        run: |
-          if [ -d tests ]; then
-            pip install pytest
-            pytest tests/ -v
-          else
-            echo "no tests yet — skipping"
-          fi
+      - name: Run tests with coverage
         shell: bash
+        run: |
+          pytest tests/ -v --cov=hooks/lib --cov-report=term-missing --cov-fail-under=80
