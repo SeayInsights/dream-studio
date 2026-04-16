@@ -39,15 +39,22 @@ URGENT_KB = 4500
 
 
 def projects_dir_for_cwd(cwd: Path) -> Path:
-    """Return `~/.claude/projects/<slug>` for the given cwd."""
+    """Return `~/.claude/projects/<slug>` for the given cwd.
+
+    Claude Code slug format: drive letter + path with `:`, `\\`, `/`, and
+    spaces all replaced by `-`. E.g., `C:\\Users\\Jane Doe\\studio` →
+    `C--Users-Jane-Doe-studio`. The space replacement matters on every
+    Windows user profile that has a space in its name (and any other path
+    containing spaces), or the hook silently fails to find the session JSONL.
+    """
     override = os.environ.get("CLAUDE_PROJECTS_DIR")
     if override:
         return Path(override)
     s = str(cwd).replace("\\", "/")
     if len(s) >= 2 and s[1] == ":":
-        slug = s[0].upper() + "-" + s[2:].replace("/", "-")
+        slug = s[0].upper() + "-" + s[2:].replace("/", "-").replace(" ", "-")
     else:
-        slug = s.replace("/", "-")
+        slug = s.replace("/", "-").replace(" ", "-")
     return Path.home() / ".claude" / "projects" / slug
 
 

@@ -67,3 +67,22 @@ def test_warn_band_prints_growing(isolated_home, monkeypatch, capsys, handler):
     mod.main()
 
     assert "growing" in capsys.readouterr().out
+
+
+def test_projects_dir_slug_replaces_spaces(monkeypatch, handler):
+    """Claude Code slug format replaces `:`, `\\`, `/`, AND spaces with `-`."""
+    from pathlib import Path
+    monkeypatch.delenv("CLAUDE_PROJECTS_DIR", raising=False)
+    mod = handler("on-context-threshold")
+
+    # Windows path with spaces — the common case
+    win = Path("C:\\Users\\Jane Doe\\studio")
+    assert mod.projects_dir_for_cwd(win).name == "C--Users-Jane-Doe-studio"
+
+    # Unix path with spaces
+    unix = Path("/home/some user/work")
+    assert mod.projects_dir_for_cwd(unix).name == "-home-some-user-work"
+
+    # No spaces — unchanged behavior
+    plain = Path("C:\\code\\repo")
+    assert mod.projects_dir_for_cwd(plain).name == "C--code-repo"
