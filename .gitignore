@@ -1,0 +1,21 @@
+# dream-studio runtime state (user data dir, never committed)
+.dream-studio/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
