@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] — 2026-04-16
 
 ### Added
-- `plugin.json` manifest (schema_version 1, paths for skills/agents/hooks/statusline)
+- `.claude-plugin/plugin.json` manifest (name, version, author, license, repository)
+- `.claude-plugin/marketplace.json` self-hosted dev marketplace entry
 - `README.md`, `LICENSE` (MIT), `.gitignore`, `CHANGELOG.md`
-- `.github/workflows/ci.yml` scaffold (lint + pytest matrix, empty tests)
+- `.github/workflows/ci.yml` scaffold (lint + pytest matrix on Windows/macOS/Linux × py3.10/3.11/3.12, empty tests OK)
 - Repo bootstrapped, initial commit on `main`
+- Verified `claude plugins list` shows `dream-studio@0.1.0` after local install
 
 ## [0.0.1] — 2026-04-16
 

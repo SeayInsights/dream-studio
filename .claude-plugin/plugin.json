@@ -1,0 +1,19 @@
+{
+  "name": "dream-studio",
+  "description": "An opinionated Claude Code plugin: two engines (Build Pipeline + Improvement Loop), 18 skills, agent personas, and a status bar.",
+  "version": "0.1.0",
+  "author": {
+    "name": "SeayInsights",
+    "email": "dannis.seay@seayinsights.com"
+  },
+  "homepage": "https://github.com/SeayInsights/dream-studio",
+  "repository": "https://github.com/SeayInsights/dream-studio",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "agents",
+    "workflow",
+    "pipeline",
+    "statusline"
+  ]
+}
