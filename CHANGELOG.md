@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-04-16
+
+### Added
+- `agents/chief-of-staff.md`, `agents/engineering.md`, `agents/game.md`, `agents/client.md` — four agent personas flattened from `<name>/CLAUDE.md` layout; Dannis/SeayInsights references replaced with `{{director_name}}` placeholder resolved at skill-load time
+- `agents/director.md` — fill-in-blanks Director persona template (name, role, focus, hard limits, tool preferences)
+- `agents/context/director-preferences.md`, `director-corrections.md`, `session-context.md`, `session-primer.md`, `fullstack-standards.md` — ported from studio, generalized (notion-studio-mcp calls and brand-specific tokens removed; `{{director_name}}` placeholder)
+- `on-context-threshold.py` slug builder now replaces spaces with `-` on both drive-letter and fallback branches (mirrors studio fix from commit `25208c9`); new unit test covers Windows-path-with-spaces, Unix-path-with-spaces, and no-spaces cases
+- Integration test `test_projects_dir_slug_replaces_spaces` (52 tests total)
+
+### Removed
+- `agents/torii/` — TORII is a separate product, not shipped with dream-studio
+- All `notion-studio-mcp` auto-logging calls from agent personas (log_agent_action, log_escalation, get_pending_escalations, etc.)
+- References to `studio-ops`, `dannis-naomi`, specific project repos
+- "SeayInsights brand tokens" section in `fullstack-standards.md` — now a fill-in-blanks block
+
 ## [0.4.0] — 2026-04-16
 
 ### Added
