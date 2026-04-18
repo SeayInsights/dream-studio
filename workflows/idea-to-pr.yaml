@@ -96,7 +96,7 @@ nodes:
   - id: verify
     skill: verify
     depends_on: [synthesize, fix-findings]
-    trigger_rule: one_success
+    trigger_rule: all_done
     gate: evidence-required
     model: sonnet
     context: fresh

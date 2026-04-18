@@ -12,6 +12,7 @@ Commands:
   abort  <key>                                         → cancel workflow
   status [<key>]                                       → print state
   eval   <key> <expression>                            → evaluate condition, exit 0=true 1=false
+  next   <key>                                         → list nodes ready to execute
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.workflow_validate import parse_workflow  # noqa: E402
 
 SCHEMA_VERSION = 1
 
@@ -322,6 +324,97 @@ def _coerce(val: str):
     return val
 
 
+def cmd_next(args: argparse.Namespace) -> None:
+    data = _read_state()
+    wf = _get_workflow(data, args.key)
+
+    if wf.get("status") == "paused":
+        gate = (wf.get("gates_pending") or ["?"])[0]
+        node = wf.get("current_node", "?")
+        print(f"paused: {node} (gate: {gate})")
+        return
+
+    if wf.get("status") in ("completed", "completed_with_failures", "aborted"):
+        print("done")
+        return
+
+    yaml_path = wf.get("yaml_path")
+    if not yaml_path or not Path(yaml_path).is_file():
+        print(f"Error: YAML not found at {yaml_path}", file=sys.stderr)
+        sys.exit(1)
+
+    yaml_data = parse_workflow(yaml_path)
+    yaml_nodes = {n["id"]: n for n in yaml_data.get("nodes", []) if "id" in n}
+    state_nodes = wf.get("nodes", {})
+
+    ready = []
+    for nid, ynode in yaml_nodes.items():
+        snode = state_nodes.get(nid, {})
+        if snode.get("status") != "pending":
+            continue
+
+        deps = ynode.get("depends_on", [])
+        if isinstance(deps, str):
+            deps = [deps]
+        if not deps:
+            ready.append(nid)
+            continue
+
+        trigger_rule = ynode.get("trigger_rule", "all_success")
+        dep_statuses = [state_nodes.get(d, {}).get("status", "pending") for d in deps]
+
+        if trigger_rule == "all_success":
+            if all(s == "completed" for s in dep_statuses):
+                ready.append(nid)
+        elif trigger_rule == "all_done":
+            if all(s in ("completed", "failed", "skipped") for s in dep_statuses):
+                ready.append(nid)
+        elif trigger_rule == "one_success":
+            if any(s == "completed" for s in dep_statuses):
+                ready.append(nid)
+
+    if not ready:
+        running = [nid for nid, n in state_nodes.items() if n.get("status") == "running"]
+        if running:
+            print(f"waiting: {', '.join(running)} still running")
+        else:
+            print("blocked: no nodes ready (check for failed dependencies)")
+        return
+
+    has_gate = {}
+    for nid in ready:
+        gate = yaml_nodes[nid].get("gate")
+        if gate:
+            has_gate[nid] = gate
+
+    model_map = {}
+    for nid in ready:
+        m = yaml_nodes[nid].get("model")
+        if m:
+            model_map[nid] = m
+
+    print(f"ready: {', '.join(ready)}")
+    if len(ready) > 1:
+        print("  (parallel — these share the same dependency wave)")
+    for nid in ready:
+        parts = []
+        if nid in has_gate:
+            parts.append(f"gate={has_gate[nid]}")
+        if nid in model_map:
+            parts.append(f"model={model_map[nid]}")
+        skill = yaml_nodes[nid].get("skill")
+        cmd = yaml_nodes[nid].get("command")
+        if skill:
+            parts.append(f"skill={skill}")
+        elif cmd:
+            parts.append("command")
+        condition = yaml_nodes[nid].get("condition")
+        if condition:
+            parts.append(f"condition={condition}")
+        if parts:
+            print(f"  {nid}: {', '.join(parts)}")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────
 
 
@@ -358,11 +451,14 @@ def main() -> None:
     p.add_argument("key")
     p.add_argument("expression")
 
+    p = sub.add_parser("next", help="List nodes ready to execute")
+    p.add_argument("key")
+
     args = parser.parse_args()
     cmds = {
         "start": cmd_start, "update": cmd_update, "pause": cmd_pause,
         "resume": cmd_resume, "abort": cmd_abort, "status": cmd_status,
-        "eval": cmd_eval,
+        "eval": cmd_eval, "next": cmd_next,
     }
     cmds[args.command](args)
 

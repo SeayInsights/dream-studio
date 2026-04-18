@@ -26,6 +26,7 @@ py "$PLUGIN/hooks/lib/workflow_state.py" resume <key>
 py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
 py "$PLUGIN/hooks/lib/workflow_state.py" status [<key>]
 py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<expression>"
+py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
 ```
 
 ---
@@ -46,38 +47,34 @@ py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<expression>"
 2. Capture the workflow key from the first line of output (e.g., `idea-to-pr-1713456000`)
 3. Save the key — every subsequent command uses it
 
-#### Step 3 — Plan waves
+#### Step 3 — Execution loop
 
-Read the YAML. Group nodes by `depends_on`:
-- **Wave 1:** Nodes with no `depends_on`
-- **Wave N:** Nodes whose deps all resolved in earlier waves
+**Do not manually plan waves.** Use the `next` command — it reads state + YAML, applies trigger rules, and returns exactly which nodes are ready:
 
-Within a wave, parallel rules:
-- `review`/`secure` skill nodes → read-only, share working tree, safe to parallelize
-- `build` skill nodes → need `isolation: worktree` if running parallel
-- When unsure → run sequentially
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
+```
 
-#### Step 4 — Execute wave by wave
+Output tells you what to do:
+- `ready: think` → one node to execute
+- `ready: review-code, review-security, ...` + `(parallel)` → dispatch simultaneously
+- `paused: plan (gate: director-approval)` → waiting for Director
+- `waiting: review-code still running` → agents haven't finished
+- `done` → workflow complete
 
-For each node in the current wave:
+**For each ready node:**
 
-**4a. Check preconditions**
-
-If the node has `depends_on`, check the trigger rule:
-- `all_success` (default): all deps must be `completed`
-- `all_done`: all deps must be `completed` or `failed`
-- `one_success`: at least one dep `completed`
-
-If the node has `condition`, evaluate it:
+**3a. Condition check** — if `next` shows `condition=...` on a node, evaluate it:
 ```
 py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<condition>"
 ```
-If exit code 1 (false) → skip the node:
+Exit 1 (false) → skip it:
 ```
 py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> skipped
 ```
+Then call `next` again — skipping a node may unblock others.
 
-**4b. Gate check**
+**3b. Gate check**
 
 If the node has a `gate`, look up the gate definition in the YAML:
 
@@ -95,7 +92,7 @@ If the node has a `gate`, look up the gate definition in the YAML:
 
 - **`pause` with `requires`** → check artifacts exist (screenshots in `.verify/`, test output). If all present → continue. If missing → pause.
 
-**4c. Run the node**
+**3c. Run the node**
 
 Mark running:
 ```
@@ -118,7 +115,7 @@ py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> running
 
 After the agent returns, verify the file exists. If not, write the agent's response to that file yourself. This ensures synthesize can find all review outputs.
 
-**4d. Record result**
+**3d. Record result**
 
 ```
 py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<summary>" --duration <seconds>
@@ -131,9 +128,11 @@ py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> failed --output 
 
 On failure: retry up to 3 times (or node's `retry` value). Upgrade model each retry (haiku→sonnet→opus). After exhaustion → pause workflow, escalate to Director.
 
-#### Step 5 — Complete
+**3e. Loop** — after recording, call `next` again. Repeat from 3a until `next` returns `done`.
 
-When all nodes are done, run `workflow_state.py status <key>` to print the final summary. Then trigger `skills/studio/recap`.
+#### Step 4 — Complete
+
+When `next` returns `done`, run `workflow_state.py status <key>` to print the final summary. Then trigger `skills/studio/recap`.
 
 ---
 
@@ -146,9 +145,14 @@ Print the output. If no key given, shows all workflows.
 
 ### `workflow resume`
 
-1. Find the active paused workflow key from `workflow_state.py status`
-2. Run: `py "$PLUGIN/hooks/lib/workflow_state.py" resume <key>`
-3. Continue execution from the paused node
+Works for both gate pauses and session recovery (fresh session picking up a prior workflow):
+
+1. Run `workflow_state.py status` to find the workflow key and current state
+2. If paused at a gate: run `workflow_state.py resume <key>` to clear the gate
+3. Run `workflow_state.py next <key>` to get the next ready nodes
+4. Continue the execution loop from Step 3 of the `workflow:` protocol
+
+You do NOT need the original session context. The state file + YAML have everything: which nodes ran, what they output, what's next. The `next` command does the graph math.
 
 ### `workflow abort`
 
