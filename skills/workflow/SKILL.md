@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: YAML workflow orchestration — read DAG definitions from workflows/*.yaml, execute nodes through existing skills with gates and parallel spawning. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
+description: YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 ---
 
 # Workflow — YAML Pipeline Orchestration
@@ -8,144 +8,161 @@ description: YAML workflow orchestration — read DAG definitions from workflows
 ## Trigger
 `workflow: <name>`, `workflow status`, `workflow resume`, `workflow abort`
 
-## DCL Commands
+## CLI Tools
 
-| Command | Action |
-|---|---|
-| `workflow: <name>` | Load and execute the named workflow |
-| `workflow status` | Read `~/.dream-studio/state/workflows.json`, print per-node status |
-| `workflow resume` | Resume a paused workflow after gate approval |
-| `workflow abort` | Mark all pending/running nodes `skipped`, set status `aborted` |
+All state management and validation runs through scripts at the plugin root. Resolve the plugin root from where you loaded this skill (two directories up from `skills/workflow/`).
+
+```
+PLUGIN=<plugin-root>
+
+# Validate YAML before execution
+py "$PLUGIN/hooks/lib/workflow_validate.py" <yaml-path>
+
+# State management (each returns structured output)
+py "$PLUGIN/hooks/lib/workflow_state.py" start <name> <yaml-path>
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> <status> [--output TEXT] [--duration SECS]
+py "$PLUGIN/hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
+py "$PLUGIN/hooks/lib/workflow_state.py" resume <key>
+py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
+py "$PLUGIN/hooks/lib/workflow_state.py" status [<key>]
+py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<expression>"
+```
 
 ---
 
 ## Execution Protocol
 
-### Phase 1: Load
+### `workflow: <name>`
 
-1. Find `<name>.yaml` — check project `.workflows/` first, then plugin `workflows/`
-2. Read the YAML. Extract `name`, `gates`, and `nodes`.
-3. Quick-check: every `depends_on` ID exists as a node `id`, every `gate` name exists in `gates:` section, every `skill` has a matching `skills/<name>/SKILL.md`
-4. If anything fails → tell Director what's wrong and stop
+#### Step 1 — Find and validate
 
-### Phase 2: Plan waves
+1. Look for `<name>.yaml` in project `.workflows/` first, then plugin `workflows/`
+2. Run the validator: `py "$PLUGIN/hooks/lib/workflow_validate.py" <yaml-path>`
+3. If it exits non-zero → show errors to Director, stop
 
-Group nodes into execution waves by `depends_on`:
+#### Step 2 — Initialize state
+
+1. Run: `py "$PLUGIN/hooks/lib/workflow_state.py" start <name> <yaml-path>`
+2. Capture the workflow key from the first line of output (e.g., `idea-to-pr-1713456000`)
+3. Save the key — every subsequent command uses it
+
+#### Step 3 — Plan waves
+
+Read the YAML. Group nodes by `depends_on`:
 - **Wave 1:** Nodes with no `depends_on`
 - **Wave N:** Nodes whose deps all resolved in earlier waves
 
-Within a wave, nodes run in parallel unless they both write code. Rules:
-- `review` and `secure` skill nodes → read-only, share working tree
-- `build` skill nodes → use `isolation: worktree` if parallel
-- `command` nodes → assume write-capable unless obviously read-only
-- When unsure, run sequentially
+Within a wave, parallel rules:
+- `review`/`secure` skill nodes → read-only, share working tree, safe to parallelize
+- `build` skill nodes → need `isolation: worktree` if running parallel
+- When unsure → run sequentially
 
-### Phase 3: Execute wave by wave
+#### Step 4 — Execute wave by wave
 
-Initialize workflow state (see State Management below), then for each wave:
+For each node in the current wave:
 
-**For each node in the wave:**
+**4a. Check preconditions**
 
-#### 3a. Preconditions
-- Check `depends_on` against `trigger_rule`:
-  - `all_success` (default): every dep status is `completed`
-  - `all_done`: every dep is `completed` or `failed`
-  - `one_success`: at least one dep is `completed`
-- Check `condition`: read the referenced value from workflow state (e.g., `{{synthesize.output}}`). If false → mark `skipped`, move on.
+If the node has `depends_on`, check the trigger rule:
+- `all_success` (default): all deps must be `completed`
+- `all_done`: all deps must be `completed` or `failed`
+- `one_success`: at least one dep `completed`
 
-#### 3b. Gate check (before execution)
-If node has a `gate`, look up the gate definition:
-- **`pause`**: Print status block (below), stop, wait for `workflow resume`
-- **`conditional`**: Evaluate condition. True → proceed. False → fall back to `pause`.
-- **`pause` with `requires`**: Check for artifacts (screenshots in `.verify/`, test results in recent output). All present → proceed. Missing → pause.
-- **`skip`**: No gate, continue.
-
-Gate pause message:
+If the node has `condition`, evaluate it:
 ```
-[workflow] <name> — PAUSED at gate "<gate-name>" on node "<node-id>"
-  Completed: N/M nodes
-  Gate requires: <what's needed>
-  → `workflow resume` to continue, `workflow abort` to cancel
+py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<condition>"
+```
+If exit code 1 (false) → skip the node:
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> skipped
 ```
 
-#### 3c. Run the node
+**4b. Gate check**
 
-**Skill node** — dispatch agent:
+If the node has a `gate`, look up the gate definition in the YAML:
+
+- **`pause`** type → pause and ask Director:
+  ```
+  py "$PLUGIN/hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
+  ```
+  Print the gate status. Stop. Wait for `workflow resume`.
+
+- **`conditional`** type → evaluate:
+  ```
+  py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<gate-condition>"
+  ```
+  If true → continue. If false → fall back to pause behavior.
+
+- **`pause` with `requires`** → check artifacts exist (screenshots in `.verify/`, test output). If all present → continue. If missing → pause.
+
+**4c. Run the node**
+
+Mark running:
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> running
+```
+
+**Skill node:**
 1. Read `skills/<skill-name>/SKILL.md`
-2. Read the `input` field, replace `{{node-id.output}}` with the stored output from workflow state
-3. Spawn via Task tool with: skill content + `director-preferences.md` + resolved input + any `config`
-4. Set `model` from the node. Use `agent` field for persona if set.
+2. Resolve `input` field: for `{{node-id.output}}`, read the output from `workflow_state.py status <key>` or from your memory of prior node results
+3. Spawn agent via Task tool with: skill content + `director-preferences.md` + resolved input + `config`
+4. Set `model` from node. Use `agent` field for persona if set.
 5. `context: fresh` (default) → new agent. `context: inherit` → current session.
-6. **For review/secure nodes in parallel:** include in the agent prompt: "Write your findings to `review-<node-id>-findings.md` in the project root."
 
-**Command node** — execute inline:
+**Command node:**
 1. The `command` text is the full prompt
-2. If `context: fresh`, spawn as a new agent. Otherwise run in current session.
+2. `context: fresh` → spawn as new agent. Otherwise current session.
 
-**After the node completes:**
-1. Update workflow state → set node status to `completed` or `failed`, record output summary and duration
-2. If `failed` and retries remain (default 3): re-dispatch, upgrade model on capability failures (haiku→sonnet→opus)
-3. If retries exhausted: mark `failed`, pause workflow, escalate to Director
+**For parallel review/secure nodes:** include in each agent's prompt:
+> "Write your complete findings to `review-<node-id>-findings.md` in the project root."
 
-### Phase 4: Completion
+After the agent returns, verify the file exists. If not, write the agent's response to that file yourself. This ensures synthesize can find all review outputs.
 
-When all nodes are done:
-1. Print final summary: each node's status, duration, and output
-2. Update workflow state → status `completed` or `completed_with_failures`
-3. Trigger `skills/studio/recap`
+**4d. Record result**
+
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<summary>" --duration <seconds>
+```
+
+Or on failure:
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> failed --output "<error>"
+```
+
+On failure: retry up to 3 times (or node's `retry` value). Upgrade model each retry (haiku→sonnet→opus). After exhaustion → pause workflow, escalate to Director.
+
+#### Step 5 — Complete
+
+When all nodes are done, run `workflow_state.py status <key>` to print the final summary. Then trigger `skills/studio/recap`.
 
 ---
 
-## State Management
+### `workflow status`
 
-**You (Chief-of-Staff) own the state file.** The `on-workflow-progress` hook only reads it and prints a status line — it does not write.
-
-State file: `~/.dream-studio/state/workflows.json`
-
-**On workflow start**, read the file (create if missing), add an entry:
-```json
-{
-  "schema_version": 1,
-  "active_workflows": {
-    "<name>-<unix-timestamp>": {
-      "workflow": "<name>",
-      "started": "<ISO-8601>",
-      "status": "running",
-      "current_node": null,
-      "nodes": {
-        "<node-id>": { "status": "pending" }
-      },
-      "gates_passed": [],
-      "gates_pending": []
-    }
-  }
-}
 ```
-
-**After each node**, read → update the node entry → write back:
-```json
-{
-  "status": "completed",
-  "output": "<summary or file path>",
-  "duration_s": 120,
-  "started": "<ISO-8601>",
-  "finished": "<ISO-8601>"
-}
+py "$PLUGIN/hooks/lib/workflow_state.py" status [<key>]
 ```
+Print the output. If no key given, shows all workflows.
 
-Also update `current_node` and `gates_passed`/`gates_pending` as appropriate.
+### `workflow resume`
 
-**On pause**, set workflow status to `paused` and add the gate to `gates_pending`.
-**On resume**, set status back to `running` and move gate to `gates_passed`.
-**On abort**, set all `pending`/`running` nodes to `skipped`, workflow status to `aborted`.
+1. Find the active paused workflow key from `workflow_state.py status`
+2. Run: `py "$PLUGIN/hooks/lib/workflow_state.py" resume <key>`
+3. Continue execution from the paused node
+
+### `workflow abort`
+
+```
+py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
+```
 
 ---
 
 ## Error Handling
 
-**Node failure:** Retry up to 3 times (or node's `retry` value). Upgrade model on each retry. After exhaustion → mark `failed`, pause workflow, tell Director.
+**Node failure:** Retry up to 3× with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
 
-**Dependency failure:**
+**Dependency failure by trigger rule:**
 - `all_success` → skip the dependent node
-- `all_done` → run it anyway (it reads the failure context)
+- `all_done` → run it anyway
 - `one_success` → run if any dep succeeded
