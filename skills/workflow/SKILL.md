@@ -1,6 +1,6 @@
 ---
 name: workflow
-description: YAML workflow orchestration — parse DAG definitions, resolve dependencies, execute nodes through existing skills with gates, parallel spawning, and state tracking. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
+description: YAML workflow orchestration — read DAG definitions from workflows/*.yaml, execute nodes through existing skills with gates and parallel spawning. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 ---
 
 # Workflow — YAML Pipeline Orchestration
@@ -13,208 +13,139 @@ description: YAML workflow orchestration — parse DAG definitions, resolve depe
 | Command | Action |
 |---|---|
 | `workflow: <name>` | Load and execute the named workflow |
-| `workflow status` | Print current workflow state from `workflows.json` |
+| `workflow status` | Read `~/.dream-studio/state/workflows.json`, print per-node status |
 | `workflow resume` | Resume a paused workflow after gate approval |
-| `workflow abort` | Cancel the active workflow, mark all pending nodes as `skipped` |
+| `workflow abort` | Mark all pending/running nodes `skipped`, set status `aborted` |
 
 ---
 
-## YAML Schema Reference
+## Execution Protocol
 
-Workflow files live in `workflows/` at the plugin root. Per-project overrides go in `.workflows/` at the project root (project files take precedence).
+### Phase 1: Load
 
-```yaml
-name: string          # Unique workflow identifier
-description: string   # Human-readable purpose
-version: number       # Schema version (currently 1)
+1. Find `<name>.yaml` — check project `.workflows/` first, then plugin `workflows/`
+2. Read the YAML. Extract `name`, `gates`, and `nodes`.
+3. Quick-check: every `depends_on` ID exists as a node `id`, every `gate` name exists in `gates:` section, every `skill` has a matching `skills/<name>/SKILL.md`
+4. If anything fails → tell Director what's wrong and stop
 
-gates:                # Named gate policies
-  <gate-name>:
-    type: pause | conditional | skip
-    condition: string       # For conditional type — expression to evaluate
-    requires: [string]      # For evidence-required — artifact types that must exist
-    prompt: string          # For pause type — message shown to Director
+### Phase 2: Plan waves
 
-nodes:                # Ordered list of execution steps
-  - id: string              # Unique node identifier (required)
-    skill: string           # Skill to invoke (from skills/ directory)
-    command: string          # Inline instruction (if no skill)
-    depends_on: [string]    # Node IDs that must complete first
-    gate: string            # Gate policy name (from gates section)
-    model: opus | sonnet | haiku
-    context: fresh | inherit  # fresh = new agent, inherit = continue session
-    agent: string           # Agent persona (engineering, game, client)
-    trigger_rule: string    # all_success (default), all_done, one_success
-    condition: string       # Expression — node only runs if true
-    input: string           # Template referencing prior node outputs: {{node-id.output}}
-    config: object          # Skill-specific configuration passed to agent
-    retry: number           # Max retries before escalation (default: 3)
-    isolation: shared | worktree  # Git isolation strategy (default: shared)
-```
+Group nodes into execution waves by `depends_on`:
+- **Wave 1:** Nodes with no `depends_on`
+- **Wave N:** Nodes whose deps all resolved in earlier waves
 
-**Exactly one of `skill` or `command` must be set per node.**
+Within a wave, nodes run in parallel unless they both write code. Rules:
+- `review` and `secure` skill nodes → read-only, share working tree
+- `build` skill nodes → use `isolation: worktree` if parallel
+- `command` nodes → assume write-capable unless obviously read-only
+- When unsure, run sequentially
 
----
+### Phase 3: Execute wave by wave
 
-## Workflow Execution Protocol
+Initialize workflow state (see State Management below), then for each wave:
 
-When Chief-of-Staff receives `workflow: <name>`:
+**For each node in the wave:**
 
-### Phase 1: Load and validate
+#### 3a. Preconditions
+- Check `depends_on` against `trigger_rule`:
+  - `all_success` (default): every dep status is `completed`
+  - `all_done`: every dep is `completed` or `failed`
+  - `one_success`: at least one dep is `completed`
+- Check `condition`: read the referenced value from workflow state (e.g., `{{synthesize.output}}`). If false → mark `skipped`, move on.
 
-1. Search for `<name>.yaml` in project `.workflows/` first, then plugin `workflows/`
-2. Parse the YAML file — extract `name`, `gates`, and `nodes`
-3. Validate:
-   - Every node has a unique `id`
-   - Every `depends_on` reference points to an existing node `id`
-   - Every `gate` reference points to a defined gate in the `gates` section
-   - Every `skill` reference corresponds to an existing skill directory
-   - No circular dependencies exist
-4. If validation fails → report errors to Director and stop
+#### 3b. Gate check (before execution)
+If node has a `gate`, look up the gate definition:
+- **`pause`**: Print status block (below), stop, wait for `workflow resume`
+- **`conditional`**: Evaluate condition. True → proceed. False → fall back to `pause`.
+- **`pause` with `requires`**: Check for artifacts (screenshots in `.verify/`, test results in recent output). All present → proceed. Missing → pause.
+- **`skip`**: No gate, continue.
 
-### Phase 2: Build dependency graph (DAG)
-
-1. Construct a directed acyclic graph from `depends_on` edges
-2. Topologically sort nodes into execution waves:
-   - **Wave 1:** Nodes with no `depends_on` (roots)
-   - **Wave N:** Nodes whose dependencies are all in earlier waves
-3. Within each wave, identify parallelizable groups:
-   - Nodes with `skill` only (read-only like `review`, `secure`) → share main working tree
-   - Nodes with `command` or write-capable skills (`build`) touching different files → parallel in worktrees if `isolation: worktree`
-   - Nodes touching the same files → must be sequential within the wave
-
-### Phase 3: Execute nodes wave by wave
-
-For each wave, for each node:
-
-#### 3a. Check preconditions
-- **`depends_on`**: All listed nodes must have completed (or match `trigger_rule`)
-- **`condition`**: Evaluate expression against prior node outputs. If false → mark node `skipped`
-- **`trigger_rule`**:
-  - `all_success` (default): All deps must have status `completed`
-  - `all_done`: All deps must have status `completed` or `failed` (runs regardless of dep outcome)
-  - `one_success`: At least one dep must have status `completed`
-
-#### 3b. Pre-gate check
-If the node has a `gate`, evaluate it **before** execution:
-- **`pause`**: Stop execution. Report workflow status to Director. Wait for `workflow resume`.
-- **`conditional`**: Evaluate the condition expression. If true → continue. If false → fall back to `pause`.
-- **`skip`**: Gate is disabled, continue execution.
-- **Evidence-required (`pause` with `requires`)**: Check for required artifacts. If all exist → auto-continue. If missing → pause for Director.
-
-When paused at a gate, print:
+Gate pause message:
 ```
 [workflow] <name> — PAUSED at gate "<gate-name>" on node "<node-id>"
   Completed: N/M nodes
-  Gate requires: <condition or artifacts>
-  → Use `workflow resume` to continue, `workflow abort` to cancel
+  Gate requires: <what's needed>
+  → `workflow resume` to continue, `workflow abort` to cancel
 ```
 
-#### 3c. Execute node
+#### 3c. Run the node
 
-**If node has `skill`:**
-1. Resolve the skill path: `skills/<skill-name>/SKILL.md`
-2. Determine the agent: use `agent` field if set, otherwise execute in main session
-3. Set model: use `model` field if set, otherwise follow `director-preferences.md` routing
-4. Resolve `input` template: replace `{{node-id.output}}` with the referenced node's output value from workflow state
-5. Spawn agent with:
-   - Skill content (read from skill path)
-   - `director-preferences.md`
-   - Input context from `input` field
-   - Skill-specific `config` if present
-   - `context: fresh` → new agent via Task tool; `context: inherit` → continue in current session
+**Skill node** — dispatch agent:
+1. Read `skills/<skill-name>/SKILL.md`
+2. Read the `input` field, replace `{{node-id.output}}` with the stored output from workflow state
+3. Spawn via Task tool with: skill content + `director-preferences.md` + resolved input + any `config`
+4. Set `model` from the node. Use `agent` field for persona if set.
+5. `context: fresh` (default) → new agent. `context: inherit` → current session.
+6. **For review/secure nodes in parallel:** include in the agent prompt: "Write your findings to `review-<node-id>-findings.md` in the project root."
 
-**If node has `command`:**
-1. Execute the inline instruction in the current session (or a fresh agent if `context: fresh`)
-2. The command text is the full prompt — no skill injection needed
+**Command node** — execute inline:
+1. The `command` text is the full prompt
+2. If `context: fresh`, spawn as a new agent. Otherwise run in current session.
 
-**For parallel nodes within a wave:**
-- Spawn all eligible nodes simultaneously via Task tool
-- Each parallel node gets its own agent (fresh context)
-- Read-only nodes share the working tree
-- Write nodes get worktrees if `isolation: worktree` is set
-- For parallel review nodes: each agent writes findings to `review-{node-id}-findings.md`
+**After the node completes:**
+1. Update workflow state → set node status to `completed` or `failed`, record output summary and duration
+2. If `failed` and retries remain (default 3): re-dispatch, upgrade model on capability failures (haiku→sonnet→opus)
+3. If retries exhausted: mark `failed`, pause workflow, escalate to Director
 
-#### 3d. Handle node result
+### Phase 4: Completion
 
-Each node produces a result with:
-- **status**: `completed`, `failed`, or `blocked`
-- **output**: Summary string or file path (stored in workflow state)
-- **duration_s**: Execution time in seconds
-
-On completion:
-1. Update workflow state via `on-workflow-progress` hook (automatic on Stop)
-2. If node `failed` and `retry` > 0 → re-execute with retry count decremented
-3. If node `failed` and retries exhausted → escalate to Director with full context
-4. Print progress: `[workflow] <name> — Node <id> COMPLETED (N/M nodes done)`
-
-### Phase 4: Workflow completion
-
-When all nodes are done (completed, skipped, or failed):
-1. Print final summary with per-node status and durations
-2. Update workflow state to `completed` or `completed_with_failures`
-3. Trigger `skills/studio/recap` automatically
+When all nodes are done:
+1. Print final summary: each node's status, duration, and output
+2. Update workflow state → status `completed` or `completed_with_failures`
+3. Trigger `skills/studio/recap`
 
 ---
 
-## State Reporting Format
+## State Management
 
-After each node completes, report:
+**You (Chief-of-Staff) own the state file.** The `on-workflow-progress` hook only reads it and prints a status line — it does not write.
 
-```
-[workflow] <name> — Node <id> <STATUS> (N/M nodes done)
-  Duration: Xs
-  Output: <summary or path>
-  Next: <list of now-unblocked nodes or "waiting for <deps>">
-  Gates pending: <gate names or "none">
+State file: `~/.dream-studio/state/workflows.json`
+
+**On workflow start**, read the file (create if missing), add an entry:
+```json
+{
+  "schema_version": 1,
+  "active_workflows": {
+    "<name>-<unix-timestamp>": {
+      "workflow": "<name>",
+      "started": "<ISO-8601>",
+      "status": "running",
+      "current_node": null,
+      "nodes": {
+        "<node-id>": { "status": "pending" }
+      },
+      "gates_passed": [],
+      "gates_pending": []
+    }
+  }
+}
 ```
 
----
+**After each node**, read → update the node entry → write back:
+```json
+{
+  "status": "completed",
+  "output": "<summary or file path>",
+  "duration_s": 120,
+  "started": "<ISO-8601>",
+  "finished": "<ISO-8601>"
+}
+```
 
-## Error and Retry Protocol
+Also update `current_node` and `gates_passed`/`gates_pending` as appropriate.
 
-1. **Node failure**: If a node's agent reports `BLOCKED` or fails:
-   - Check `retry` count (default: 3)
-   - If retries remain: re-spawn with the same context + error details from the failed attempt
-   - On retry, upgrade model if the failure suggests capability limitations (haiku → sonnet → opus)
-   - If all retries exhausted: mark node `failed`, report to Director, pause workflow
-
-2. **Dependency failure**: If a required dependency failed:
-   - `all_success` trigger rule: mark dependent node `skipped`
-   - `all_done` trigger rule: execute dependent node anyway (it can read the failure)
-   - `one_success` trigger rule: execute if at least one dep succeeded
-
-3. **Workflow abort**: On `workflow abort`:
-   - Mark all `pending` and `running` nodes as `skipped`
-   - Mark workflow status as `aborted`
-   - Report final state
+**On pause**, set workflow status to `paused` and add the gate to `gates_pending`.
+**On resume**, set status back to `running` and move gate to `gates_passed`.
+**On abort**, set all `pending`/`running` nodes to `skipped`, workflow status to `aborted`.
 
 ---
 
-## Template Variables
+## Error Handling
 
-Nodes can reference outputs from prior nodes using `{{node-id.output}}` and `{{node-id.status}}` in their `input` and `condition` fields.
+**Node failure:** Retry up to 3 times (or node's `retry` value). Upgrade model on each retry. After exhaustion → mark `failed`, pause workflow, tell Director.
 
-Resolution:
-1. Look up the referenced node in workflow state
-2. Replace the template with the node's stored `output` or `status` value
-3. If the referenced node hasn't run yet → validation error (caught in Phase 1)
-
----
-
-## Parallel Execution Safety
-
-Before spawning parallel nodes, verify:
-1. No two parallel nodes modify the same files (check skill type + config)
-2. Read-only skills (`review`, `secure`) are safe to parallelize on shared tree
-3. Write skills in parallel require `isolation: worktree` or explicit file-disjointness
-4. When in doubt, run sequentially — correctness over speed
-
----
-
-## Per-Project Overrides
-
-Projects can override plugin-bundled workflows:
-1. Create `.workflows/<name>.yaml` in the project root
-2. Project file completely replaces the plugin version (no merging)
-3. This allows teams to customize gate policies, add/remove nodes, or adjust model routing
+**Dependency failure:**
+- `all_success` → skip the dependent node
+- `all_done` → run it anyway (it reads the failure context)
+- `one_success` → run if any dep succeeded

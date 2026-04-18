@@ -88,7 +88,7 @@ nodes:
   - id: fix-findings
     skill: build
     depends_on: [synthesize]
-    condition: "{{synthesize.status}} == BLOCKED"
+    condition: "{{synthesize.output}} == BLOCKED"
     model: sonnet
     context: fresh
     input: "{{synthesize.output}}"

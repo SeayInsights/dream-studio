@@ -9,6 +9,9 @@ gates:
   auto-pass:
     type: conditional
     condition: quality-score > 3
+  evidence-required:
+    type: pause
+    requires: [screenshots, test-results]
 
 nodes:
   - id: diagnose
