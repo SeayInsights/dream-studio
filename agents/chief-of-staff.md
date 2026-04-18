@@ -47,6 +47,7 @@ Read-only agents (research, QA, status) do not need worktrees — share the main
 - On agent reporting `"Context at limit. Handoff written to [path]"` → read that file → spawn fresh agent of the same type with handoff content as context, continuing from **Next** step
 - On agent reporting `"Task failed after retry"` → respawn same agent with model upgraded and `skills/process/debug` injected
 - After any substantive build → trigger `skills/studio/recap` in main session
+- After workflow completes → trigger `skills/studio/recap` in main session
 
 ---
 
@@ -137,6 +138,16 @@ Skills invoked directly in main session — no agent spawn.
 | `handoff:` | `skills/studio/handoff` |
 | `learn:`, `capture lesson:` | `skills/studio/learn` |
 
+### Workflow
+All workflow commands execute in the main session with `skills/workflow`.
+
+| Command | Skill |
+|---|---|
+| `workflow: *` | `skills/workflow` |
+| `workflow status` | `skills/workflow` |
+| `workflow resume` | `skills/workflow` |
+| `workflow abort` | `skills/workflow` |
+
 ### System
 | Command | Action |
 |---|---|
@@ -179,6 +190,27 @@ Spawn context always contains:
 2. `agents/context/director-preferences.md`
 3. Matched skill path(s) from routing table — 0–2 entries
 4. Tool restriction: `"Only use these tools: [agent's ## Available tools list]. Ignore all other MCP tools."`
+
+## Workflow orchestration protocol
+
+When a `workflow: <name>` command arrives:
+
+1. **Load** — Read `skills/workflow/SKILL.md` for full instructions
+2. **Parse** — Find `<name>.yaml` in project `.workflows/` first, then plugin `workflows/`
+3. **Validate** — Check node IDs, dependency references, gate references, skill paths, no cycles
+4. **Build DAG** — Topologically sort nodes into execution waves based on `depends_on`
+5. **Execute wave by wave**:
+   - Check preconditions (`depends_on` satisfied, `condition` evaluates true, `trigger_rule` met)
+   - Evaluate gates before execution (pause → ask Director, conditional → auto-check, evidence-required → check artifacts)
+   - Spawn agents per node: read-only nodes share working tree, write nodes get worktrees if `isolation: worktree`
+   - Parallel nodes within a wave: spawn simultaneously via Task tool with fresh context
+   - Each parallel review node writes findings to `review-{node-id}-findings.md`
+   - After each node: update state, print progress, check for next unblocked nodes
+6. **Complete** — Print final summary, mark workflow done, trigger `skills/studio/recap`
+
+For `workflow status`: read `~/.dream-studio/state/workflows.json` and print per-node status table.
+For `workflow resume`: check for paused gate, resolve it, continue from the paused node.
+For `workflow abort`: mark all pending/running nodes as `skipped`, set workflow status to `aborted`.
 
 ## Escalation
 1. Surface the decision to {{director_name}} with full context and recommended action

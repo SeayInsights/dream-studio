@@ -1,0 +1,54 @@
+name: fix-issue
+description: Diagnose a bug, plan a fix, implement, review, and verify
+version: 1
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve fix approach?"
+  auto-pass:
+    type: conditional
+    condition: quality-score > 3
+
+nodes:
+  - id: diagnose
+    skill: debug
+    model: sonnet
+    context: fresh
+
+  - id: plan-fix
+    skill: plan
+    depends_on: [diagnose]
+    model: haiku
+    context: fresh
+    input: "{{diagnose.output}}"
+
+  - id: implement-fix
+    skill: build
+    depends_on: [plan-fix]
+    gate: director-approval
+    model: sonnet
+    context: fresh
+    input: "{{plan-fix.output}}"
+
+  - id: review
+    skill: review
+    depends_on: [implement-fix]
+    gate: auto-pass
+    model: sonnet
+    context: fresh
+
+  - id: verify
+    skill: verify
+    depends_on: [review]
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+
+  - id: report
+    depends_on: [verify]
+    command: |
+      Summarize the fix: what was wrong, what changed, how it was verified.
+      Include file paths and commit references.
+    model: haiku
+    context: fresh

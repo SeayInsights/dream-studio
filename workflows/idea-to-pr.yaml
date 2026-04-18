@@ -1,0 +1,108 @@
+name: idea-to-pr
+description: Feature concept through implementation to merged PR
+version: 1
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve to continue?"
+  auto-pass:
+    type: conditional
+    condition: quality-score > 3
+  evidence-required:
+    type: pause
+    requires: [screenshots, test-results]
+
+nodes:
+  - id: think
+    skill: think
+    gate: director-approval
+    model: opus
+    context: fresh
+
+  - id: plan
+    skill: plan
+    depends_on: [think]
+    gate: director-approval
+    model: opus
+    context: fresh
+    input: "{{think.output}}"
+
+  - id: build
+    skill: build
+    depends_on: [plan]
+    gate: auto-pass
+    model: sonnet
+    context: fresh
+    input: "{{plan.output}}"
+
+  - id: review-code
+    skill: review
+    depends_on: [build]
+    model: sonnet
+    context: fresh
+    agent: engineering
+
+  - id: review-security
+    skill: secure
+    depends_on: [build]
+    model: sonnet
+    context: fresh
+    agent: engineering
+
+  - id: review-tests
+    skill: review
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    config:
+      focus: test-coverage-only
+
+  - id: review-perf
+    skill: review
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    config:
+      focus: performance-only
+
+  - id: review-docs
+    skill: review
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    config:
+      focus: docs-impact-only
+
+  - id: synthesize
+    depends_on: [review-code, review-security, review-tests, review-perf, review-docs]
+    trigger_rule: all_done
+    command: |
+      Read all review reports (review-{node-id}-findings.md for each review node).
+      Synthesize into one findings document with severity tags (Critical/High/Medium/Low).
+      If any Critical or High findings: output BLOCKED with fix list.
+      If all clean: output PASSED.
+    model: sonnet
+    context: fresh
+
+  - id: fix-findings
+    skill: build
+    depends_on: [synthesize]
+    condition: "{{synthesize.status}} == BLOCKED"
+    model: sonnet
+    context: fresh
+    input: "{{synthesize.output}}"
+
+  - id: verify
+    skill: verify
+    depends_on: [synthesize, fix-findings]
+    trigger_rule: one_success
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+
+  - id: ship
+    skill: ship
+    depends_on: [verify]
+    model: sonnet
+    context: fresh

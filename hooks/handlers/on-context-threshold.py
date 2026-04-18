@@ -2,15 +2,17 @@
 """Hook: on-context-threshold — warn, auto-handoff, or block when context fills.
 
 Trigger: UserPromptSubmit.
-Reads the current session JSONL file as a context-usage proxy and acts in
-four bands:
+Reads the statusline bridge file (written by statusline-command.sh) for real
+context usage percentage. Falls back to JSONL file size as a crude proxy.
 
-  WARN_KB     -> surface a mild warning
-  COMPACT_KB  -> recommend /compact soon
-  HANDOFF_KB  -> write a structured handoff + recap to `.sessions/<date>/`
-                 and draft a retrospective lesson
-  URGENT_KB   -> block the prompt with a stopReason asking for /compact;
-                 one subsequent prompt passes through (compact sentinel)
+Thresholds are in used_percentage (0-100, where ~83% triggers auto-compact):
+
+  WARN_PCT     -> surface a mild warning
+  COMPACT_PCT  -> recommend /compact soon
+  HANDOFF_PCT  -> write a structured handoff + recap to `.sessions/<date>/`
+                  and draft a retrospective lesson
+  URGENT_PCT   -> block the prompt with a stopReason asking for /compact;
+                  one subsequent prompt passes through (compact sentinel)
 
 Projects live under `~/.claude/projects/<slug>/` where <slug> is the cwd
 path with path separators replaced by `-` (plus a drive-letter prefix on
@@ -24,6 +26,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,10 +35,58 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
 
-WARN_KB = 1500
-COMPACT_KB = 2500
-HANDOFF_KB = 3500
-URGENT_KB = 4500
+WARN_PCT = 30
+COMPACT_PCT = 50
+HANDOFF_PCT = 65
+URGENT_PCT = 75
+
+WARN_KB = 400
+COMPACT_KB = 700
+HANDOFF_KB = 1000
+URGENT_KB = 1300
+
+
+def read_bridge_pct(session_id: str | None) -> float | None:
+    """Read used_pct from the statusline bridge file in temp dir."""
+    if not session_id:
+        return None
+    try:
+        bp = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id}.json"
+        if not bp.exists():
+            return None
+        data = json.loads(bp.read_text(encoding="utf-8"))
+        ts = data.get("timestamp", 0)
+        if time.time() - ts > 600:
+            return None
+        return float(data.get("used_pct", 0))
+    except Exception:
+        return None
+
+
+def pct_to_band(pct: float) -> tuple[str, str]:
+    """Map a used_pct to a threshold band and label."""
+    if pct >= URGENT_PCT:
+        return "urgent", f"~{pct:.0f}%"
+    if pct >= HANDOFF_PCT:
+        return "handoff", f"~{pct:.0f}%"
+    if pct >= COMPACT_PCT:
+        return "compact", f"~{pct:.0f}%"
+    if pct >= WARN_PCT:
+        return "warn", f"~{pct:.0f}%"
+    return "ok", f"~{pct:.0f}%"
+
+
+def kb_to_band(kb: float) -> tuple[str, str]:
+    """Fallback: map JSONL KB to a threshold band."""
+    if kb >= URGENT_KB:
+        return "urgent", f"~{kb:.0f} KB"
+    if kb >= HANDOFF_KB:
+        return "handoff", f"~{kb:.0f} KB"
+    if kb >= COMPACT_KB:
+        return "compact", f"~{kb:.0f} KB"
+    if kb >= WARN_KB:
+        return "warn", f"~{kb:.0f} KB"
+    return "ok", f"~{kb:.0f} KB"
 
 
 def projects_dir_for_cwd(cwd: Path) -> Path:
@@ -114,7 +165,7 @@ def session_kb(projects: Path, session_id: str | None) -> float:
         if not files:
             return 0.0
         current = max(files, key=lambda f: f.stat().st_mtime)
-        if time.time() - current.stat().st_mtime > 60:
+        if time.time() - current.stat().st_mtime > 3600:
             return 0.0
         return current.stat().st_size / 1024
     except Exception:
@@ -247,16 +298,28 @@ def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None) -> None:
 
 
 def main() -> None:
+    session_id = None
+    payload_cwd = None
     try:
         payload = json.loads(sys.stdin.read())
         session_id = payload.get("session_id")
+        payload_cwd = payload.get("cwd")
     except Exception:
-        session_id = None
+        pass
 
-    cwd = paths.project_root()
+    cwd = Path(payload_cwd) if payload_cwd else paths.project_root()
     projects = projects_dir_for_cwd(cwd)
-    kb = session_kb(projects, session_id)
-    if kb <= 0:
+
+    bridge_pct = read_bridge_pct(session_id)
+    if bridge_pct is not None:
+        band, label = pct_to_band(bridge_pct)
+    else:
+        kb = session_kb(projects, session_id)
+        if kb <= 0:
+            return
+        band, label = kb_to_band(kb)
+
+    if band == "ok":
         return
 
     compact_sentinel = sentinel(projects, session_id, "compact")
@@ -266,45 +329,46 @@ def main() -> None:
         compact_sentinel.unlink(missing_ok=True)
         return
 
-    if kb >= URGENT_KB:
+    if band == "urgent":
         try:
             compact_sentinel.parent.mkdir(parents=True, exist_ok=True)
-            compact_sentinel.write_text(str(kb))
+            compact_sentinel.write_text(label)
         except Exception:
             pass
         result = {
             "continue": False,
             "stopReason": (
-                f"[dream-studio] Context at ~{kb:.0f} KB — auto-blocked at {URGENT_KB} KB limit.\n"
+                f"[dream-studio] Context at {label} — auto-blocked at {URGENT_PCT}% limit.\n"
                 "Type /compact to compress the session, then resend your message."
             ),
         }
         print(json.dumps(result), flush=True)
         return
 
-    if kb >= HANDOFF_KB:
+    if band == "handoff":
         if not handoff_sentinel.exists():
             try:
                 handoff_sentinel.parent.mkdir(parents=True, exist_ok=True)
-                handoff_sentinel.write_text(str(kb))
+                handoff_sentinel.write_text(label)
             except Exception:
                 pass
-            handoff_path = write_handoff(cwd, kb, session_id)
-            write_recap(cwd, kb, session_id, handoff_path)
-            draft_handoff_lesson(kb, git_context(cwd), session_id)
+            kb_val = bridge_pct if bridge_pct is not None else session_kb(projects, session_id)
+            handoff_path = write_handoff(cwd, kb_val, session_id)
+            write_recap(cwd, kb_val, session_id, handoff_path)
+            draft_handoff_lesson(kb_val, git_context(cwd), session_id)
         else:
             print(
-                f"\n[dream-studio] Context at ~{kb:.0f} KB — handoff already sent. Run /compact.\n",
+                f"\n[dream-studio] Context at {label} — handoff already sent. Run /compact.\n",
                 flush=True,
             )
         return
 
-    if kb >= COMPACT_KB:
-        print(f"\n[dream-studio] Context at ~{kb:.0f} KB — run /compact soon.\n", flush=True)
+    if band == "compact":
+        print(f"\n[dream-studio] Context at {label} — run /compact soon.\n", flush=True)
         return
 
-    if kb >= WARN_KB:
-        print(f"\n[dream-studio] Context at ~{kb:.0f} KB — growing.\n", flush=True)
+    if band == "warn":
+        print(f"\n[dream-studio] Context at {label} — growing.\n", flush=True)
 
 
 if __name__ == "__main__":

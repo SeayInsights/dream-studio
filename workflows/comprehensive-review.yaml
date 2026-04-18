@@ -1,0 +1,53 @@
+name: comprehensive-review
+description: Five-way parallel review with synthesis report
+version: 1
+
+nodes:
+  - id: review-code
+    skill: review
+    model: sonnet
+    context: fresh
+
+  - id: review-security
+    skill: secure
+    model: sonnet
+    context: fresh
+
+  - id: review-tests
+    skill: review
+    model: haiku
+    context: fresh
+    config:
+      focus: test-coverage-only
+
+  - id: review-perf
+    skill: review
+    model: haiku
+    context: fresh
+    config:
+      focus: performance-only
+
+  - id: review-docs
+    skill: review
+    model: haiku
+    context: fresh
+    config:
+      focus: docs-impact-only
+
+  - id: synthesize
+    depends_on: [review-code, review-security, review-tests, review-perf, review-docs]
+    trigger_rule: all_done
+    command: |
+      Read all review reports (review-{node-id}-findings.md for each review node).
+      Synthesize into one findings document with severity tags (Critical/High/Medium/Low).
+      List actionable items grouped by severity.
+    model: sonnet
+    context: fresh
+
+  - id: report
+    depends_on: [synthesize]
+    command: |
+      Format the synthesized findings as a summary suitable for posting as a PR comment
+      or sharing with the team. Include a pass/fail recommendation.
+    model: haiku
+    context: fresh

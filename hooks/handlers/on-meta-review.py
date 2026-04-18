@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Hook: on-meta-review — weekly retrospective across recent sessions.
 
-Trigger: scheduled or on demand.
-Reads `~/.dream-studio/planning/session-context.md`, extracts the last
-seven session entries, generates a themed retrospective, drafts lessons
-for any theme occurring THEME_DRAFT_THRESHOLD+ times, and writes
+Trigger: Stop.
+Reads `~/.dream-studio/meta/token-log.md`, aggregates the last seven
+unique sessions, generates a themed retrospective, drafts lessons for
+any theme occurring THEME_DRAFT_THRESHOLD+ times, and writes
 `review-YYYY-MM-DD.md` into `~/.dream-studio/meta/`.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import sys
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,61 +21,115 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import paths  # noqa: E402
 
 THEME_DRAFT_THRESHOLD = 3
-SESSION_CONTEXT_FILENAME = "session-context.md"
+SESSION_COUNT = 7
 
 
-def session_context_path() -> Path:
-    return paths.planning_dir() / SESSION_CONTEXT_FILENAME
+def parse_token_log(count: int = SESSION_COUNT) -> list[dict]:
+    log_path = paths.meta_dir() / "token-log.md"
+    if not log_path.exists():
+        return []
 
-
-def parse_sessions(text: str, count: int = 7) -> list[dict]:
-    blocks = re.split(r"\n---\n", text)
-    sessions = []
-    for block in blocks:
-        block = block.strip()
-        if not block or "## Session End" not in block:
+    sessions: OrderedDict[str, dict] = OrderedDict()
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("|") or line.startswith("| Timestamp") or line.startswith("|---"):
             continue
-        entry = {}
-        for pattern, key in [
-            (r"\*\*Session:\*\*\s*(.+)", "session"),
-            (r"\*\*Tokens used:\*\*\s*(\d+)", "tokens"),
-            (r"\*\*Summary:\*\*\s*(.+)", "summary"),
-            (r"## Session End — (.+)", "timestamp"),
-        ]:
-            m = re.search(pattern, block)
-            if m:
-                entry[key] = m.group(1).strip()
-        if entry:
-            sessions.append(entry)
-    return sessions[-count:]
+        cols = [c.strip() for c in line.split("|")]
+        if len(cols) < 7:
+            continue
+        # cols: ['', timestamp, session, model, prompt, completion, total, '']
+        timestamp = cols[1]
+        session_id = cols[2]
+        model = cols[3]
+        try:
+            prompt_t = int(cols[4])
+            completion_t = int(cols[5])
+            total_t = int(cols[6])
+        except (ValueError, IndexError):
+            continue
+
+        if session_id not in sessions:
+            sessions[session_id] = {
+                "session": session_id,
+                "model": model,
+                "first_seen": timestamp,
+                "last_seen": timestamp,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "turns": 0,
+            }
+        s = sessions[session_id]
+        s["last_seen"] = timestamp
+        s["prompt_tokens"] = prompt_t
+        s["completion_tokens"] = completion_t
+        s["total_tokens"] = total_t
+        s["turns"] += 1
+
+    recent = list(sessions.values())[-count:]
+    return recent
+
+
+def format_duration(first: str, last: str) -> str:
+    try:
+        t1 = datetime.fromisoformat(first)
+        t2 = datetime.fromisoformat(last)
+        mins = int((t2 - t1).total_seconds() / 60)
+        if mins < 1:
+            return "<1m"
+        if mins < 60:
+            return f"{mins}m"
+        return f"{mins // 60}h{mins % 60:02d}m"
+    except Exception:
+        return "?"
 
 
 def generate_review(sessions: list[dict]) -> tuple[str, list[tuple[str, int]]]:
     if not sessions:
-        return "# Weekly Review\n\nNo session data found for the review period.\n", []
+        return "# Weekly Review\n\nNo session data found in token-log.md.\n", []
 
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    total_tokens = sum(int(s.get("tokens", 0)) for s in sessions)
+    total_tokens = sum(s.get("total_tokens", 0) for s in sessions)
+    total_turns = sum(s.get("turns", 0) for s in sessions)
 
     lines = []
     for s in sessions:
-        ts = s.get("timestamp", "unknown")[:10]
-        name = s.get("session", "unknown")
-        tokens = s.get("tokens", "0")
-        summary = s.get("summary", "(no summary)")
-        lines.append(f"| {ts} | {name} | {tokens} | {summary[:80]} |")
+        ts = s["first_seen"][:10]
+        sid = s["session"][:8]
+        model = s["model"]
+        tokens = f"{s['total_tokens']:,}"
+        turns = s["turns"]
+        duration = format_duration(s["first_seen"], s["last_seen"])
+        lines.append(f"| {ts} | {sid} | {model} | {tokens} | {turns} | {duration} |")
     sessions_table = "\n".join(lines)
 
-    all_summaries = " ".join(s.get("summary", "") for s in sessions).lower()
+    model_counts: dict[str, int] = {}
+    for s in sessions:
+        m = s.get("model", "unknown")
+        model_counts[m] = model_counts.get(m, 0) + 1
+    model_lines = "\n".join(f"- **{m}** ({c} session{'s' if c > 1 else ''})" for m, c in sorted(model_counts.items(), key=lambda x: -x[1]))
+
+    avg_tokens = total_tokens // len(sessions) if sessions else 0
+    max_session = max(sessions, key=lambda s: s["total_tokens"])
+    max_sid = max_session["session"][:8]
+    max_tokens = f"{max_session['total_tokens']:,}"
+
     themes: list[tuple[str, int]] = []
-    for keyword in [
-        "build", "fix", "deploy", "refactor", "design", "debug",
-        "migrate", "test", "hook", "skill", "agent", "review",
-        "ship", "polish", "audit", "config",
+    for keyword, label in [
+        ("opus", "opus"), ("sonnet", "sonnet"), ("haiku", "haiku"),
     ]:
-        c = all_summaries.count(keyword)
+        c = sum(1 for s in sessions if keyword in s.get("model", "").lower())
         if c > 0:
-            themes.append((keyword, c))
+            themes.append((label, c))
+
+    high_token_sessions = [s for s in sessions if s["total_tokens"] > 100_000]
+    if high_token_sessions:
+        themes.append(("high-context", len(high_token_sessions)))
+
+    long_sessions = [s for s in sessions if s["turns"] > 10]
+    if long_sessions:
+        themes.append(("long-running", len(long_sessions)))
+
     themes.sort(key=lambda t: t[1], reverse=True)
     theme_lines = (
         "\n".join(f"- **{k}** ({c}x)" for k, c in themes[:6])
@@ -85,18 +139,23 @@ def generate_review(sessions: list[dict]) -> tuple[str, list[tuple[str, int]]]:
     return (
         f"# Weekly Meta-Review — {date}\n\n"
         f"**Period:** Last {len(sessions)} sessions\n"
-        f"**Total tokens:** {total_tokens:,}\n\n"
+        f"**Total tokens:** {total_tokens:,}\n"
+        f"**Total turns:** {total_turns}\n"
+        f"**Avg tokens/session:** {avg_tokens:,}\n"
+        f"**Heaviest session:** {max_sid} ({max_tokens} tokens)\n\n"
         f"## Sessions\n\n"
-        f"| Date | Session | Tokens | Summary |\n"
-        f"|---|---|---|---|\n"
+        f"| Date | Session | Model | Tokens | Turns | Duration |\n"
+        f"|---|---|---|---|---|---|\n"
         f"{sessions_table}\n\n"
-        f"## Themes\n\n"
+        f"## Model Usage\n\n"
+        f"{model_lines}\n\n"
+        f"## Patterns\n\n"
         f"{theme_lines}\n\n"
         f"## Retrospective Prompts\n\n"
-        f"1. What patterns repeated? Should any become permanent skills or rules?\n"
-        f"2. Where did token usage spike? Was it justified or a sign of thrashing?\n"
-        f"3. Which sessions advanced goals vs. maintained existing work?\n"
-        f"4. Any corrections or escalations that suggest a systemic issue?\n"
+        f"1. Which sessions had the highest token burn? Was it productive or thrashing?\n"
+        f"2. Are high-context sessions being compacted or handed off in time?\n"
+        f"3. Is the model mix right? (Haiku for exploration, Sonnet for code, Opus for complex)\n"
+        f"4. Any sessions that could have been shorter with better scoping?\n"
         f"5. What should next week's focus be?\n"
     ), themes
 
@@ -127,7 +186,7 @@ def draft_theme_lessons(themes: list[tuple[str, int]], timestamp: str) -> list[s
             f"created: {timestamp}\n"
             f"---\n\n"
             f"## Recurring Theme: {keyword}\n\n"
-            f"This theme appeared {count}x across the last 7 sessions.\n\n"
+            f"This theme appeared {count}x across the last {SESSION_COUNT} sessions.\n\n"
             f"A recurring theme may indicate:\n"
             f"- A sustained initiative (good — track progress)\n"
             f"- A recurring problem (needs a permanent fix or new skill)\n"
@@ -143,15 +202,8 @@ def draft_theme_lessons(themes: list[tuple[str, int]], timestamp: str) -> list[s
 
 
 def main() -> None:
-    context_path = session_context_path()
-    if not context_path.exists():
-        print("[on-meta-review] No session-context.md found — nothing to review.", flush=True)
-        return
-
-    text = context_path.read_text(encoding="utf-8")
-    sessions = parse_sessions(text, count=7)
+    sessions = parse_token_log(count=SESSION_COUNT)
     if not sessions:
-        print("[on-meta-review] No session entries found.", flush=True)
         return
 
     review, themes = generate_review(sessions)
