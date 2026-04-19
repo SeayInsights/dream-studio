@@ -7,10 +7,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
 
-from lib.workflow_validate import parse_workflow  # noqa: E402
+from lib.workflow_validate import parse_workflow, validate  # noqa: E402
 
 
 HOTFIX_YAML = Path(__file__).resolve().parents[2] / "workflows" / "hotfix.yaml"
+PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_hotfix_yaml_parses():
@@ -40,3 +41,39 @@ def test_hotfix_build_depends_on_debug():
     verify = nodes_by_id.get("verify", {})
     depends = verify.get("depends_on", [])
     assert "build" in depends
+
+
+def test_hotfix_validates_clean():
+    wf = parse_workflow(str(HOTFIX_YAML))
+    errors = validate(wf, PLUGIN_ROOT)
+    assert errors == [], f"Validation errors: {errors}"
+
+
+def test_validate_catches_missing_node_id():
+    wf = {"nodes": [{"skill": "build"}], "gates": {}}
+    errors = validate(wf, PLUGIN_ROOT)
+    assert any("missing 'id'" in e for e in errors)
+
+
+def test_validate_catches_duplicate_node_id():
+    wf = {"nodes": [{"id": "a", "skill": "build"}, {"id": "a", "skill": "build"}], "gates": {}}
+    errors = validate(wf, PLUGIN_ROOT)
+    assert any("Duplicate" in e for e in errors)
+
+
+def test_validate_catches_missing_dependency():
+    wf = {"nodes": [{"id": "a", "skill": "build", "depends_on": ["nonexistent"]}], "gates": {}}
+    errors = validate(wf, PLUGIN_ROOT)
+    assert any("nonexistent" in e for e in errors)
+
+
+def test_validate_catches_cycle():
+    wf = {
+        "nodes": [
+            {"id": "a", "skill": "build", "depends_on": ["b"]},
+            {"id": "b", "skill": "build", "depends_on": ["a"]},
+        ],
+        "gates": {},
+    }
+    errors = validate(wf, PLUGIN_ROOT)
+    assert any("Cycle" in e for e in errors)

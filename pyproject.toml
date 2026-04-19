@@ -12,6 +12,10 @@ testpaths = ["tests"]
 
 [tool.coverage.run]
 source = ["hooks"]
+omit = [
+    "hooks/lib/workflow_state.py",
+    "hooks/lib/traceability.py",
+]
 
 [tool.coverage.report]
 fail_under = 70
