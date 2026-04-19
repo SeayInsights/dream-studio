@@ -213,16 +213,16 @@ Pre-built YAML DAG workflows in `workflows/`:
 <!-- workflows-table-start -->
 | Workflow | Nodes | Purpose |
 |---|---|---|
-| `comprehensive-review` | review-code → review-security → review-tests → review-perf → review-docs → synthesize → … | Five-way parallel review with synthesis report |
-| `feature-research` | intake → research-repos → research-issues → research-prs → research-code → research-synthesis → … | GitHub research pipeline — researches any Claude feature, integration, MCP server, hook, or skill, then recommends a native integration strategy (make it your own) with a drop-in alternative. |
-| `fix-issue` | diagnose → plan-fix → implement-fix → review → verify → report | Diagnose a bug, plan a fix, implement, review, and verify |
-| `game-feature` | think → plan → build → review-gameplay → review-data → validate-engine → … | Game feature from design through implementation with Godot-specific QA |
-| `hotfix` | debug → build → verify → ship | Fast debug-fix-verify cycle for production issues |
-| `idea-to-pr` | think → plan → build → review-code → review-security → review-tests → … | Feature concept through implementation to merged PR |
-| `project-audit` | harden → secure → review → report | Full project audit — harden (structure + best practices), secure (OWASP + STRIDE), then re… |
-| `prototype` | think → build → verify | Fast prototype — think then build, skip formal review. |
-| `safe-refactor` | plan-refactor → implement → type-check → test → review → verify → … | Plan a refactor, implement, validate with type checks and tests, review, and verify |
-| `studio-onboard` | discovery → baseline-fetch → breakpoint-analysis → gap-analysis → improvement-scan → synthesis → … | Dream-studio onboarding audit for an end user's existing environment. |
+| `comprehensive-review` | review-code → review-security → review-tests → review-perf → review-docs → synthesize → report | Five-way parallel review with synthesis report — HIGH/CRITICAL findings saved to `~/.dream-studio/secure/reports/` and create GitHub Issues automatically |
+| `feature-research` | intake → research-repos → research-issues → research-prs → research-code → research-synthesis → … | GitHub research pipeline — native integration strategy (make it your own) with drop-in alternative. Gap analysis includes PERSISTENCE_GAP and TRACKING_GAP checks. |
+| `fix-issue` | diagnose → plan-fix → implement-fix → review → verify → report | Diagnose a bug, plan a fix, implement, review, and verify — fix summary saved to `.sessions/<date>/` |
+| `game-feature` | think → plan → build → review-gameplay → review-data → validate-engine → record | Game feature through implementation with Godot-specific QA — feature record saved to `~/.dream-studio/state/` |
+| `hotfix` | debug → build → verify → ship → record | Fast debug-fix-verify cycle — PR URL recorded to `~/.dream-studio/state/hotfix-prs.log` |
+| `idea-to-pr` | think → plan → build → review-code → review-security → review-tests → ship → record | Feature concept through merged PR — PR URL recorded to `~/.dream-studio/state/idea-to-pr.log` |
+| `project-audit` | harden → secure → review → report | Full project audit — report saved to `~/.dream-studio/secure/reports/`, HIGH/CRITICAL findings create GitHub Issues automatically |
+| `prototype` | think → build → verify → snapshot | Fast prototype — what-was-built snapshot saved to `~/.dream-studio/state/` |
+| `safe-refactor` | plan-refactor → implement → type-check → test → review → verify → report | Refactor with type checks and tests — summary saved to `.sessions/<date>/` |
+| `studio-onboard` | discovery → baseline-fetch → breakpoint-analysis → gap-analysis → improvement-scan → synthesis → … | Dream-studio onboarding audit — gap analysis includes PERSISTENCE_GAP and TRACKING_GAP checks, improvement-scan audits all installed workflows for ephemeral output |
 <!-- workflows-table-end -->
 
 **Usage:**
