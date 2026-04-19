@@ -17,9 +17,9 @@ from lib import paths  # noqa: E402
 from lib.time_utils import utcnow  # noqa: E402
 
 WARN_PCT = 30
-COMPACT_PCT = 50
-HANDOFF_PCT = 65
-URGENT_PCT = 75
+COMPACT_PCT = 70
+HANDOFF_PCT = 80
+URGENT_PCT = 88
 
 WARN_KB = 800
 COMPACT_KB = 2000

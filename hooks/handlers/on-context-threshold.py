@@ -32,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.models import UserPromptSubmitPayload  # noqa: E402
 from lib.context_handoff import (  # noqa: E402
     COMPACT_KB,
     COMPACT_PCT,
@@ -142,27 +143,82 @@ def sentinel(projects: Path, session_id: str | None, label: str) -> Path:
     return projects / f".{label}-sentinel-{session_id or 'unknown'}"
 
 
+_MILESTONE_BOOST = 10  # extra % headroom when a milestone is active
+_COMPACT_COOLDOWN_TURNS = 2  # turns to suppress WARN/COMPACT after /compact
+
+
+def _milestone_boost() -> int:
+    try:
+        return _MILESTONE_BOOST if (paths.state_dir() / "milestone-active.txt").exists() else 0
+    except Exception:
+        return 0
+
+
+def _handle_compact_cooldown(projects: Path, session_id: str | None, is_compact_cmd: bool) -> bool:
+    """Manage post-/compact suppression. Returns True if this turn should be suppressed."""
+    cd_sentinel = sentinel(projects, session_id, "compact-cooldown")
+    if is_compact_cmd:
+        # Reset cooldown and clear compact-msg sentinel so it fires fresh next time
+        try:
+            cd_sentinel.parent.mkdir(parents=True, exist_ok=True)
+            cd_sentinel.write_text(str(_COMPACT_COOLDOWN_TURNS))
+            sentinel(projects, session_id, "compact-msg").unlink(missing_ok=True)
+        except Exception:
+            pass
+        return True  # suppress this turn (/compact itself)
+    if cd_sentinel.exists():
+        try:
+            count = int(cd_sentinel.read_text(encoding="utf-8").strip())
+            if count > 1:
+                cd_sentinel.write_text(str(count - 1))
+            else:
+                cd_sentinel.unlink(missing_ok=True)
+            return True
+        except Exception:
+            pass
+    return False
+
+
 def main() -> None:
+    from pydantic import ValidationError
+
     session_id = None
     payload_cwd = None
     try:
         payload = json.loads(sys.stdin.read())
-        session_id = payload.get("session_id")
-        payload_cwd = payload.get("cwd")
+        try:
+            validated = UserPromptSubmitPayload(**payload)
+            session_id = validated.session_id or None
+            payload_cwd = validated.cwd or None
+        except ValidationError as ve:
+            print(f"[on-context-threshold] payload validation warning: {ve}", file=sys.stderr)
+            session_id = payload.get("session_id")
+            payload_cwd = payload.get("cwd")
     except Exception:
         pass
+
+    user_msg = os.environ.get("CLAUDE_USER_MESSAGE_TEXT", "").strip()
+    is_compact_cmd = user_msg.lower().startswith("/compact")
 
     cwd = Path(payload_cwd) if payload_cwd else paths.project_root()
     projects = projects_dir_for_cwd(cwd)
 
+    # Apply milestone boost: if a milestone is active, treat context as if it's lower
+    boost = _milestone_boost()
+
     bridge_pct = read_bridge_pct(session_id)
     if bridge_pct is not None:
-        band, label = pct_to_band(bridge_pct)
+        adjusted = max(0.0, bridge_pct - boost)
+        band, label = pct_to_band(adjusted)
+        label = f"~{bridge_pct:.0f}%"  # show real pct in messages
     else:
         kb = session_kb(projects, session_id)
         if kb <= 0:
             return
-        band, label = kb_to_band(kb)
+        # KB proxy: reduce effective KB by boost fraction of HANDOFF_KB
+        adjusted_kb = max(0.0, kb - boost * HANDOFF_KB / 100)
+        band, label = kb_to_band(adjusted_kb)
+        label = f"~{kb:.0f} KB"
 
     if band == "ok":
         return
@@ -182,6 +238,10 @@ def main() -> None:
             pass
         msg = f"Context auto-blocked at {label} — run /compact to continue."
         print(json.dumps({"continue": False, "stopReason": msg}), flush=True)
+        return
+
+    # Suppress WARN/COMPACT during post-/compact cooldown
+    if _handle_compact_cooldown(projects, session_id, is_compact_cmd):
         return
 
     if band == "handoff":
@@ -204,7 +264,15 @@ def main() -> None:
         return
 
     if band == "compact":
-        print(f"\n[dream-studio] Context at {label} — run /compact soon.\n", flush=True)
+        # Only print once per session (progressive messaging)
+        msg_sentinel = sentinel(projects, session_id, "compact-msg")
+        if not msg_sentinel.exists():
+            try:
+                msg_sentinel.parent.mkdir(parents=True, exist_ok=True)
+                msg_sentinel.write_text(label)
+            except Exception:
+                pass
+            print(f"\n[dream-studio] Context at {label} — run /compact soon.\n", flush=True)
         return
 
     if band == "warn":
