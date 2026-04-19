@@ -58,3 +58,39 @@ evaluate-data:
     strategy: consensus-report
     disagreement_threshold: 2
     output: risk-report
+
+evaluate-strategy:
+  description: "C-level multi-perspective business strategy evaluation"
+  analysts:
+    - cfo
+    - cto
+    - cmo
+    - cpo
+    - ceo
+  quick_analysts:
+    - cfo
+    - ceo
+  max_parallel: 2
+  min_quorum: 4
+  raw_input: false
+  always_synthesize: true
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: decision-memo
+
+evaluate-content:
+  description: "Content quality and SEO readiness assessment"
+  analysts:
+    - seo
+    - cmo
+  quick_analysts:
+    - seo
+  max_parallel: 2
+  min_quorum: 1
+  raw_input: true
+  always_synthesize: false
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: decision-memo

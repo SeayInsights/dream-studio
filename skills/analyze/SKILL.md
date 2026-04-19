@@ -3,7 +3,7 @@ name: analyze
 description: "Multi-perspective analysis engine — parallel analyst subagents evaluate input from different angles, then synthesis resolves conflicts into a decision memo. Trigger on /analyze or analyze:."
 user_invocable: true
 args: mode
-argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data] [--quick]"
+argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data | evaluate-strategy | evaluate-content] [--quick]"
 ---
 
 # Analyze — Multi-Perspective Decision Engine
@@ -20,6 +20,8 @@ Inspired by multi-agent hedge fund architectures, adapted for career offers, cli
 - `evaluate-offer` — Job/contract offer evaluation (Compensation, Growth, Risk, Lifestyle)
 - `evaluate-gig` — Freelance/consulting assessment (Profitability, Feasibility, Scope-Risk, Timeline)
 - `evaluate-data` — Dataset/BI analysis (Anomaly, Trend, Hypothesis, Validation)
+- `evaluate-strategy` — C-level business strategy evaluation (CFO, CTO, CMO, CPO, CEO)
+- `evaluate-content` — Content quality + SEO readiness (SEO, CMO)
 - `--quick` flag — Run only the 2 highest-priority analysts per mode
 
 ## Signal Scale

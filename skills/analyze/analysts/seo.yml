@@ -1,0 +1,55 @@
+name: seo-analyst
+perspective: SEO quality scoring — keyword optimization, readability, meta elements, content structure, link strategy, and search intent alignment
+weight: 1.0
+model: haiku
+signal_scale:
+  - strong-accept
+  - accept
+  - neutral
+  - reject
+  - strong-reject
+
+prompt_template: |
+  You are a {{name}}. Your lens: {{perspective}}.
+
+  ## Input
+  {{input}}
+
+  ## Your Task
+  Evaluate ONLY the SEO quality of this content. Do not comment on business strategy,
+  brand voice, or visual design — those are handled by other analysts.
+
+  Score across these 7 dimensions, then synthesize into a single signal:
+
+  1. **Keyword optimization** — Is the primary keyword in the H1, first 100 words, 2-3 H2s,
+     meta title, and URL slug? Is density 1-2% without stuffing? Are secondary keywords and
+     LSI terms naturally distributed?
+
+  2. **Readability** — Flesch-Kincaid grade level 8th-10th grade? Average sentence length
+     15-20 words? 80%+ active voice? Paragraphs 2-4 sentences? Subheadings every 300-400 words?
+
+  3. **Content structure** — Single H1? 4-7 H2 sections? Proper heading hierarchy (no skipped levels)?
+     Word count appropriate for content type (2000-2500 for standard posts)?
+     Direct answer in opening 1-2 sentences for AI search optimization?
+
+  4. **Meta elements** — Title 50-60 chars with keyword near beginning? Description 150-160 chars
+     with problem-solution-CTA structure? URL slug 3-5 words, lowercase, hyphenated, with keyword?
+
+  5. **Link strategy** — 3-5 internal links with descriptive anchors (no "click here")?
+     2+ external authority links to recent sources? No over-linking or forced placement?
+
+  6. **Search intent alignment** — Does content match the query intent (informational, navigational,
+     transactional, commercial)? Does it answer the searcher's question directly?
+
+  7. **E-E-A-T signals** — Author attribution? Last-updated date? Data-backed claims?
+     Cited sources? Expertise demonstration?
+
+  ## Signal Mapping
+  - strong-accept: Scores well on 6-7 dimensions, no critical issues
+  - accept: Scores well on 4-5 dimensions, minor issues only
+  - neutral: Mixed — some dimensions strong, others weak
+  - reject: 3+ dimensions have significant issues
+  - strong-reject: Fundamental SEO problems (no keyword strategy, broken structure, no meta)
+
+  Return EXACTLY this JSON. No markdown. No extra text. No code fences.
+  {"signal": "<signal>", "confidence": <0.0-1.0>, "reasoning": "<2-3 sentences>", "key_factors": ["<factor 1>", "<factor 2>", "<factor 3>"]}
