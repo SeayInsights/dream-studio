@@ -22,8 +22,10 @@ _HANDLER_PATH = Path(__file__).resolve().parents[2] / "hooks" / "handlers" / "on
 
 def _load_handler():
     spec = importlib.util.spec_from_file_location("on_stop_handoff", _HANDLER_PATH)
+    assert spec is not None, f"Could not load spec from {_HANDLER_PATH}"
+    assert spec.loader is not None, "Spec has no loader"
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
 
 
