@@ -1,0 +1,513 @@
+name: studio-onboard
+description: >
+  NASA-grade dream-studio onboarding audit for an end user's existing environment.
+  Discovers what the user already has, compares against dream-studio baseline,
+  runs parallel breakpoint + gap + improvement analysis, plans fixes, and produces
+  a full onboarding report with wiring instructions.
+  Invoke: "workflow: studio-onboard" — optionally pass "path: <home-dir>" to target
+  a specific user's environment (defaults to current user's ~/.claude/).
+version: 1
+on_failure: abort
+
+gates:
+  post-discovery:
+    type: pause
+    prompt: "Environment discovery complete. Review the inventory above and confirm this is the correct environment before deep analysis begins?"
+  post-synthesis:
+    type: pause
+    prompt: "Analysis synthesis complete. Review findings above and confirm direction before planning begins?"
+  mission-commander:
+    type: pause
+    requires: [fix-plan, risk-matrix]
+    prompt: "Onboarding mission briefing delivered. Director approval required before applying any changes."
+
+nodes:
+
+  # ── PHASE 0: ENVIRONMENT DISCOVERY ───────────────────────────────────────
+  - id: discovery
+    gate: post-discovery
+    command: |
+      MISSION: Full environment inventory — map everything that exists before touching anything.
+
+      The user's home is assumed to be the current user's home directory unless
+      a "path:" argument was provided in the workflow invocation.
+
+      Read and inventory each of the following, noting PRESENT / MISSING / PARTIAL for each:
+
+      ## A. Claude Installation
+        - ~/.claude/settings.json          — read full contents if present
+        - ~/.claude/settings.local.json    — read full contents if present
+        - ~/.claude/CLAUDE.md              — read full contents if present
+        - ~/.claude/keybindings.json       — note if present
+        - List ~/.claude/plugins/          — list all installed plugins with versions
+        - List ~/.claude/skills/           — list all installed skills
+        - List ~/.claude/hooks/            — list any hook scripts
+        - List ~/.claude/commands/         — list any custom slash commands
+
+      ## B. Dream-Studio State
+        - List ~/.dream-studio/            — full directory tree (2 levels deep)
+        - ~/.dream-studio/state/workflows.json     — note if present, last 3 entries
+        - ~/.dream-studio/career-ops/config.yml    — note if present
+        - ~/.dream-studio/feeds/                   — list feed files
+        - ~/.dream-studio/meta/skill-usage.log     — note if present
+
+      ## C. Build Directory
+        - Locate dream-studio build: check ~/builds/dream-studio/ or ~/dream-studio/
+        - If found: list workflows/, list skills/ or plugins/
+        - Note git remote and current branch if it's a git repo
+
+      ## D. MCP Servers (from settings.json)
+        For each mcpServer configured:
+          - Name, command/url, transport type
+          - Whether it appears to be running/reachable (check process or port if possible)
+
+      ## E. Hooks (from settings.json)
+        For each hook configured:
+          - Event name, command, timeout
+          - Whether the command file/script actually exists on disk
+
+      ## F. Permissions (from settings.json)
+        - List all allow/deny rules
+        - Flag any overly broad permissions (e.g., allow: "*")
+        - Flag any missing permissions that dream-studio commonly needs
+
+      ## G. External Tools
+        Check availability of each (run --version):
+          - git, gh (GitHub CLI), node, npm, python / py, pip, wrangler, bun, jq
+          - Note version for each found tool
+
+      ## H. Platform Context
+        - OS and version
+        - Shell (bash / zsh / powershell)
+        - Home directory path
+        - Python environment (venv? conda? system?)
+
+      Output a structured ENVIRONMENT INVENTORY REPORT covering all sections above.
+      Use ✅ PRESENT, ⚠️ PARTIAL, ❌ MISSING for each item.
+
+      End with: VERDICT: discovery complete — <N present, M partial, K missing>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 0b: DREAM-STUDIO BASELINE FETCH ────────────────────────────────
+  - id: baseline-fetch
+    depends_on: [discovery]
+    command: |
+      MISSION: Fetch the current dream-studio baseline from GitHub to compare against.
+
+      Using mcp__github__get_file_contents on the SeayInsights/dream-studio repository:
+
+        1. Read the plugin manifest or package.json at the repo root — note current version
+        2. List the skills/ directory — get the canonical list of all skills
+        3. List the workflows/ directory — get the canonical list of all workflows
+        4. Read CLAUDE.md or any baseline configuration file at repo root if present
+        5. Check the latest release via mcp__github__get_latest_release
+        6. Read any INSTALL.md or SETUP.md if present
+
+      Also check mcp__github__list_commits (limit: 5) on main to see recent changes.
+
+      Output a DREAM-STUDIO BASELINE document:
+
+        ## Current Release
+        [version, release date, changelog summary]
+
+        ## Canonical Skill List
+        [all skills that should be present in a complete installation]
+
+        ## Canonical Workflow List
+        [all workflows that should be present]
+
+        ## Recent Changes (last 5 commits)
+        [what has changed recently — helps identify what the user might be missing]
+
+        ## Required External Dependencies
+        [tools, MCP servers, or config that dream-studio requires]
+
+      End with: VERDICT: baseline fetched — version <X.Y.Z>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 1: PARALLEL DEEP ANALYSIS ──────────────────────────────────────
+  - id: breakpoint-analysis
+    depends_on: [discovery, baseline-fetch]
+    command: |
+      MISSION: NASA-grade breakpoint analysis — find every conflict before applying dream-studio.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      A BREAKPOINT here is any place where the user's existing configuration, rules,
+      hooks, or installed tools CONFLICT with or will be OVERWRITTEN by dream-studio.
+      Think like a flight systems engineer — every coupling is a failure path.
+
+      Produce a BREAKPOINT ANALYSIS REPORT:
+
+        ## BREAKPOINT REGISTRY
+        | ID   | Location              | Type        | Severity | Likelihood | Description |
+        |------|----------------------|-------------|----------|------------|-------------|
+
+        Severity:    CRITICAL (breaks existing workflow) | HIGH (data loss or silent override) | MEDIUM (degraded) | LOW (cosmetic)
+        Likelihood:  CERTAIN | PROBABLE | POSSIBLE | UNLIKELY
+        Type:        CONFIG_CONFLICT | RULE_CONFLICT | HOOK_CONFLICT | SKILL_OVERLAP | VERSION_MISMATCH | PERMISSION_CLASH
+
+        ## CRITICAL AND HIGH BREAKPOINT DETAILS
+        For each CRITICAL or HIGH breakpoint:
+          Conflict description:   [exactly what collides with what]
+          Current behavior:       [what the user's setup does today]
+          Dream-studio behavior:  [what dream-studio would do instead]
+          Data at risk:           [any existing config, state, or files that could be lost]
+          Resolution strategy:    [merge | replace | rename | exclude | wrap]
+          Verification test:      [how to confirm this breakpoint is resolved]
+
+        ## EXISTING RULES THAT CONFLICT
+        For each CLAUDE.md rule or settings.json hook that dream-studio would override:
+          [existing rule/hook] → [dream-studio equivalent] → [resolution]
+
+        ## SAFE SEQUENCING CONSTRAINT
+        The order breakpoints MUST be resolved in to avoid cascading failures:
+          [BP-ID] must precede [BP-ID] because [reason]
+
+      End with: VERDICT: breakpoint analysis complete — <N critical, M high, K medium, J low>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: gap-analysis
+    depends_on: [discovery, baseline-fetch]
+    command: |
+      MISSION: NASA-grade gap analysis — every missing piece with exact wiring instructions.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      Compare what the user HAS (from discovery) against what they NEED (from baseline).
+      A GAP is anything missing, misconfigured, or incompletely wired.
+
+      Produce a GAP ANALYSIS REPORT:
+
+        ## GAP REGISTRY
+        | Gap ID | Category      | Description | Size | Blocking? |
+        |--------|---------------|-------------|------|-----------|
+
+        Categories:
+          PLUGIN_GAP     — dream-studio plugin not installed or wrong version
+          SKILL_GAP      — one or more canonical skills missing
+          WORKFLOW_GAP   — one or more canonical workflows missing
+          CONFIG_GAP     — missing settings.json keys, hooks, or mcpServers entries
+          WIRE_GAP       — component exists but is not connected to the runtime
+          PERMISSION_GAP — missing tool permissions needed by dream-studio skills
+          STATE_GAP      — ~/.dream-studio/ directory structure missing or incomplete
+          RULE_GAP       — missing CLAUDE.md rules that dream-studio depends on
+          TOOL_GAP       — external tool (git, gh, node, etc.) missing or wrong version
+          TEST_GAP       — no way to verify the installation is working after onboarding
+
+        Size: S (< 15 min) | M (15–60 min) | L (1–4 hr) | XL (> 4 hr)
+
+        ## WIRING INSTRUCTIONS (for each CONFIG_GAP, WIRE_GAP, RULE_GAP)
+        For each gap requiring exact wiring:
+
+          Gap ID:         [GAP-ID]
+          File to edit:   [absolute path]
+          Section:        [JSON key path or markdown heading]
+          Exact addition:
+            ```
+            [the exact JSON / YAML / markdown block to add]
+            ```
+          Validation:     [command or check to confirm it's correctly wired]
+
+        ## CONFIGURATION DIFF
+        Show the before → after for settings.json and CLAUDE.md:
+          Present only the sections that change — not the full file.
+          Use --- before / +++ after format.
+
+        ## MISSING SKILLS INSTALL STEPS
+        For each SKILL_GAP: exact steps to install the missing skill.
+
+        ## CLOSURE ORDER
+        Correct sequence to close all gaps (dependency order):
+          1. [GAP-ID] — [why this must come first]
+          2. [GAP-ID] — [reason]
+          ...
+
+      End with: VERDICT: gap analysis complete — <N gaps total, M blocking>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: improvement-scan
+    depends_on: [discovery, baseline-fetch]
+    command: |
+      MISSION: Identify improvements the user could make beyond baseline dream-studio.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      Look BEYOND the minimum viable installation and identify:
+
+        ## CONFIGURATION IMPROVEMENTS
+        Settings or rules that would make dream-studio work better for this user's
+        specific setup — e.g., model routing preferences, hook optimizations,
+        permission tuning, MCP server additions that match their workflow.
+
+        ## MISSING MCP SERVERS (high value, not required)
+        MCP servers that dream-studio can use but aren't required — ranked by value:
+          - Name, purpose, install command, which skills benefit
+
+        ## SKILL ENHANCEMENTS
+        Skills the user has that could be configured better, or optional skills
+        they don't have that would extend their capabilities:
+          - Skill name, current state, improvement, expected benefit
+
+        ## WORKFLOW OPPORTUNITIES
+        Workflows that would benefit this user based on what they have installed
+        (e.g., if they have godot-mcp, recommend game-feature workflow):
+          - Workflow name, trigger scenario, why it fits their setup
+
+        ## CLAUDE.MD RULE IMPROVEMENTS
+        Rules that would improve reliability or reduce permission prompts:
+          - Rule, rationale, exact text to add
+
+        ## PERFORMANCE & RELIABILITY IMPROVEMENTS
+        Hook timeouts, retry configs, model assignments, or permission grants
+        that would make the system faster or more resilient:
+          - Change, expected improvement, risk level (LOW / MED)
+
+        ## QUICK WINS (S-size, immediate impact)
+        List 3-5 things that take < 15 minutes and deliver clear value.
+        For each: what to do + exact change + expected benefit.
+
+      End with: VERDICT: improvement scan complete — <N improvements identified, M quick wins>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 2: SYNTHESIS ───────────────────────────────────────────────────
+  - id: synthesis
+    depends_on: [breakpoint-analysis, gap-analysis, improvement-scan]
+    trigger_rule: all_done
+    gate: post-synthesis
+    command: |
+      MISSION: Synthesize all analysis into a unified onboarding intelligence brief.
+
+      Inputs:
+        - Discovery:     {{discovery.output}}
+        - Baseline:      {{baseline-fetch.output}}
+        - Breakpoints:   {{breakpoint-analysis.output}}
+        - Gaps:          {{gap-analysis.output}}
+        - Improvements:  {{improvement-scan.output}}
+
+      Produce a SYNTHESIS BRIEF:
+
+        ## Onboarding Readiness Score
+        Score the environment 0–100:
+          - 0–39:  Needs significant work before dream-studio can function
+          - 40–69: Partial installation — core features will work, some won't
+          - 70–89: Nearly complete — a few targeted fixes needed
+          - 90–100: Dream-studio ready — only improvements remain
+
+        Show scoring breakdown by category (Plugin / Skills / Workflows / Config / Tools).
+
+        ## Critical Path to Functional
+        The minimum set of changes needed before dream-studio is usable at all.
+        Ordered list: [change] → [what it unlocks]
+
+        ## What Works Right Now
+        [Features/skills that will work immediately with no changes]
+
+        ## What Will Break Without Fixes
+        [Features/skills that will fail unless CRITICAL/HIGH breakpoints are resolved]
+
+        ## Top 5 Improvements (ranked by impact/effort ratio)
+        [From improvement-scan — the highest-value changes to make after baseline]
+
+      Write this brief to:
+        ~/.dream-studio/planning/onboard-synthesis-<YYYY-MM-DD>.md
+      Output the saved file path.
+
+      End with: VERDICT: synthesis complete — readiness score: <N>/100
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 3: FIX + IMPROVEMENT PLAN ──────────────────────────────────────
+  - id: fix-plan
+    depends_on: [synthesis]
+    skill: dream-studio:plan
+    input: |
+      Generate an onboarding implementation plan for applying dream-studio to this environment.
+
+      Synthesis brief:
+      {{synthesis.output}}
+
+      Breakpoint analysis:
+      {{breakpoint-analysis.output}}
+
+      Gap analysis:
+      {{gap-analysis.output}}
+
+      Improvement scan:
+      {{improvement-scan.output}}
+
+      CONSTRAINTS for this plan:
+        1. Wave 1 must only contain CRITICAL breakpoint resolutions — nothing else
+        2. Wave 2 closes all blocking gaps in closure order from gap analysis
+        3. Wave 3 closes non-blocking gaps and installs missing skills/workflows
+        4. Wave 4+ covers improvements ordered by impact/effort ratio
+        5. Every task ends with an explicit verification step
+        6. Tasks within a wave can run in parallel
+        7. Include a smoke-test task as the final task of every wave
+        8. No single task exceeds 1 hour — split larger tasks
+        9. Assign model per task: haiku (read/list/check), sonnet (edit/install/wire)
+        10. Final task: full end-to-end test of dream-studio in this environment
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 4: RISK MATRIX ─────────────────────────────────────────────────
+  - id: risk-matrix
+    depends_on: [breakpoint-analysis, gap-analysis, fix-plan]
+    trigger_rule: all_done
+    command: |
+      MISSION: Construct a NASA-grade risk matrix for this onboarding.
+
+      Inputs:
+        - Breakpoints: {{breakpoint-analysis.output}}
+        - Gaps:        {{gap-analysis.output}}
+        - Fix plan:    {{fix-plan.output}}
+
+      Produce a RISK ASSESSMENT REPORT:
+
+        ## RISK REGISTER
+        | Risk ID | Description | Probability (1-5) | Impact (1-5) | RPN | Response |
+        |---------|-------------|-------------------|--------------|-----|----------|
+
+        RPN = Probability × Impact. Sort descending. Mark RPN ≥ 15 as [RED].
+        Response types: MITIGATE | ACCEPT | AVOID | TRANSFER
+
+        ## TOP RISKS — FULL DETAIL (all risks with RPN ≥ 15)
+        For each red-level risk:
+          Trigger conditions:             [what must go wrong]
+          Early warning indicators:       [detectable before full failure]
+          Mitigation plan:                [specific steps to reduce RPN]
+          Residual risk after mitigation: [new Probability × new Impact = new RPN]
+          Contingency:                    [if mitigation fails, exact fallback]
+
+        ## GO / NO-GO CRITERIA
+          ✅ GO conditions:    [conditions that must be true before applying any changes]
+          ⛔ NO-GO conditions: [hard blockers — stop until these are resolved]
+
+        ## ROLLBACK PLAN
+        If onboarding fails mid-stream, exact steps to restore the environment:
+          Step 1: [action] → verify with: [check]
+          Step 2: [action] → verify with: [check]
+          ...
+        Note: identify any changes that are NOT safely reversible and flag them explicitly.
+
+        ## MISSION VERDICT
+        GO | NO-GO | GO WITH CONDITIONS
+        Conditions (if applicable): [specific pre-conditions to resolve first]
+
+      End with: VERDICT: risk matrix complete — GO|NO-GO|GO WITH CONDITIONS
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 5: DIRECTOR GATE ───────────────────────────────────────────────
+  - id: mission-briefing
+    depends_on: [fix-plan, risk-matrix]
+    trigger_rule: all_done
+    gate: mission-commander
+    command: |
+      MISSION: Deliver the executive onboarding briefing for Director approval.
+
+      Compile a MISSION BRIEFING using all prior outputs:
+
+        # Dream-Studio Onboarding Briefing
+
+        ## Environment Readiness Score
+        [Score from synthesis with one-line interpretation]
+
+        ## What Works Right Now
+        [Skills and features usable immediately with no changes]
+
+        ## Critical Breakpoints
+        [CRITICAL and HIGH breakpoints with their resolutions]
+        [If none: "No critical breakpoints identified — clean environment"]
+
+        ## Open Gaps
+        [Count by category with estimated closure time]
+
+        ## Fix Plan Summary
+        [Number of waves, total tasks, estimated total time to fully onboarded]
+
+        ## Top 5 Improvements After Baseline
+        [From improvement-scan — highest impact/effort ratio]
+
+        ## Risk Verdict
+        [GO / NO-GO / GO WITH CONDITIONS + top 2 risks by RPN]
+
+        ## Recommendation
+        [One paragraph: proceed, sequence recommendation, or specific blockers to resolve first]
+
+      Director: review the briefing and approve to generate the final onboarding report,
+      or abort to stop. Awaiting your decision.
+
+      End with: VERDICT: briefing delivered — awaiting Director decision
+    model: sonnet
+    context: inherit
+    timeout_seconds: 180
+
+  # ── PHASE 6: FINAL ONBOARDING REPORT ─────────────────────────────────────
+  - id: final-report
+    depends_on: [mission-briefing]
+    command: |
+      MISSION: Compile and save the complete onboarding report to disk.
+
+      Save to: ~/.dream-studio/planning/onboard-report-<YYYY-MM-DD>.md
+
+      Report structure:
+
+        # Dream-Studio Onboarding Report
+        **Generated:** [date]   **Readiness Score:** [N]/100   **Risk Verdict:** [GO/NO-GO]
+
+        ## Executive Summary
+        [4-6 sentences: environment state, what works now, what needs fixing,
+         top risk, estimated time to fully onboarded, recommendation]
+
+        ## Readiness Score Breakdown
+        [Scoring table by category from synthesis]
+
+        ## What Works Right Now (no changes needed)
+        [Full list from synthesis]
+
+        ## Breakpoint Analysis
+        [Full breakpoint registry + critical/high details + safe sequencing constraint]
+
+        ## Gap Analysis
+        [Full gap registry + all wiring instructions + configuration diff + closure order]
+
+        ## Fix and Improvement Plan
+        [Full plan with all waves and tasks — do not truncate]
+
+        ## Improvement Opportunities
+        [Full improvement-scan output — quick wins first]
+
+        ## Risk Matrix
+        [Full risk register + top risk details + GO/NO-GO criteria + rollback plan]
+
+        ## Appendix A: Full Environment Inventory
+        [Full discovery output]
+
+        ## Appendix B: Dream-Studio Baseline Reference
+        [Full baseline-fetch output — canonical skills, workflows, version]
+
+      After writing the file, output its full absolute path on a line by itself.
+      End with: VERDICT: report saved — <file path>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
