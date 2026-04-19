@@ -299,3 +299,9 @@ When invoked from `dream-studio:ship`:
 - **Skipping dependency-audit on dependency changes** — any PR touching requirements.txt/package.json triggers dependency-audit automatically.
 - **Running on untrusted input** — security review prompt templates are not hardened against prompt injection. Only review trusted code.
 - **Flagging without confidence** — if an analyst can't determine whether a pattern is vulnerable without more context, it must return `neutral` with a specific question, not `reject`.
+- **Acting on stale findings (L1)** — before fixing any finding from this report, grep or read
+  the actual file to confirm the issue still exists in the current codebase. Reports go stale
+  within hours. Wasted remediation effort is the cost of skipping this check.
+- **Leaving findings unannotated after fixing (L5)** — after each finding is fixed, update
+  this report with the commit SHA: `[FIXED: abc1234]`. A report with no resolution markers
+  misleads every future session that reads it.

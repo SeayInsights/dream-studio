@@ -179,8 +179,21 @@ accent:    #<hex>
 background:#<hex>
 ```
 
+## Hard rules (non-negotiable)
+
+**Lint integrity (L2):** Never downgrade ESLint or TypeScript rules from `error` to `warn`
+to make CI pass. If lint has errors, fix the errors. Downgrading hides real bugs silently.
+Only acceptable with an explicit inline comment + an immediate follow-up task.
+
+**Local validation before push (L3):** Before any `git push`, run the full chain locally:
+```bash
+npm run lint && npx tsc --noEmit && npm run build
+```
+All three must exit 0. Never push and let CI tell you what a local run would have caught.
+
 ## Vercel pre-deploy checklist
 - [ ] All env vars set in Vercel dashboard (never committed)
+- [ ] `npm run lint` exits 0 — zero errors, rules at `error` level (no downgrades)
 - [ ] `npm run build` passes locally
 - [ ] `npx tsc --noEmit` clean
 - [ ] No console errors in production build

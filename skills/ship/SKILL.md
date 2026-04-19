@@ -50,8 +50,21 @@ Test:     PASS / FAIL ([details])
 Verdict: CLEAR TO SHIP / BLOCKED ([what must be fixed])
 ```
 
+## Pre-push local validation (L3)
+Before any `git push`, run the full local chain first. Never push and wait for CI:
+```bash
+npm run lint && npx tsc --noEmit && npm run build
+```
+All three must exit 0. If any fail, fix locally — do not push a broken state.
+
 ## Rules
 - Any FAIL blocks deployment
 - Director can override a FAIL with explicit approval (logged)
 - After fix, re-run the failed check — don't skip re-verification
 - This gate runs in the main session, not in a sub-agent
+- **Never downgrade lint/TS rules to pass CI (L2).** If lint has errors, fix the errors.
+  Downgrading `"error"` → `"warn"` is only acceptable with an inline comment explaining why
+  and an immediate follow-up task. CI green ≠ code healthy.
+- **Verify CI steps exist locally before adding them (L4).** Before adding any step to a
+  CI pipeline, run the command locally. If it exits non-zero or finds no files, do not add
+  it — create the prerequisite first or omit the step.

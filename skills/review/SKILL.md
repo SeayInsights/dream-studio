@@ -109,3 +109,8 @@ Ship: YES / BLOCKED ([reason])
 - Flagging style preferences as High severity
 - Skipping security checks because "it's internal"
 - Trusting self-reports instead of reading the code
+- **Acting on stale findings (L1)** — before fixing any finding from a review report, verify
+  it still exists: grep or read the file. Reports go stale within hours of being written.
+- **Leaving findings unannotated after fixing (L5)** — after each finding is resolved, add
+  `[FIXED: <commit-sha>]` inline in the review report. An unmarked report misleads the next
+  session into re-fixing already-resolved issues.
