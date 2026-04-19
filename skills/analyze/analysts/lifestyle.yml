@@ -1,5 +1,5 @@
 name: lifestyle-analyst
-tested: false
+tested: true
 perspective: Work-life fit assessment — remote/hybrid/onsite, commute, PTO, expected hours, on-call burden, travel, and cultural fit
 weight: 1.0
 model: haiku

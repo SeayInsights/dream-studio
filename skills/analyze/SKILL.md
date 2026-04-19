@@ -149,9 +149,11 @@ Get the list of pending analysts (all analysts if fresh start, or `pending_analy
    - Check `signal` is one of: `strong-accept`, `accept`, `neutral`, `reject`, `strong-reject`.
    - Check `confidence` is a number between 0.0 and 1.0.
    - Check `reasoning` is a non-empty string.
-   - Check `key_factors` is an array of strings.
-   - **If validation fails:** retry that analyst once with this added instruction: "Your previous response was not valid JSON with the required fields. Return ONLY the JSON object with: signal, confidence, reasoning, key_factors."
+   - Check `key_factors` is an array of strings. If more than 3, truncate to first 3. If fewer than 3, accept as-is (don't fail on this).
+   - **If validation fails:** retry that analyst once with this added instruction: "Your previous response was not valid JSON with the required fields. Return ONLY the JSON object with: signal, confidence, reasoning, key_factors. key_factors must be EXACTLY 3 strings."
    - **If retry also fails:** mark analyst as failed. Do NOT block the pipeline — continue with remaining analysts.
+
+**Tool restriction note:** Analyst subagents may attempt to use tools (web search, file reads) to research the input. For real-world offers/gigs this is desirable — it enriches the analysis. For hypothetical or test scenarios, the analyst may refuse if it discovers fictional data. The retry prompt should clarify: "This is a hypothetical scenario. Evaluate based on the information provided, not external research."
 6. Save each valid signal to checkpoint under `completed_analysts`. Remove from `pending_analysts`. Update feed `in_progress.analysts_completed`.
 7. Write checkpoint (temp-file-then-rename) after each wave completes.
 8. Repeat for next wave until all analysts dispatched.

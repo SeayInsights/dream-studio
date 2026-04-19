@@ -1,5 +1,5 @@
 name: growth-analyst
-tested: false
+tested: true
 perspective: Career trajectory assessment — promotion velocity, skill development, mentorship, industry positioning, and resume value
 weight: 1.0
 model: haiku

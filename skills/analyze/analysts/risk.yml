@@ -1,5 +1,5 @@
 name: risk-analyst
-tested: false
+tested: true
 perspective: Stability and downside assessment — company health, layoff history, industry headwinds, contractual risks, and single-point-of-failure dependencies
 weight: 1.0
 model: haiku
