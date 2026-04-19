@@ -53,18 +53,21 @@ dream-studio wraps Claude Code with a structured developer workflow:
 
 ## Installation
 
-**From the registry:**
+**From GitHub (recommended — works now):**
 
 ```bash
-claude plugins install dream-studio
+claude plugin install github:SeayInsights/dream-studio
 ```
 
-**From source:**
+**From source (local clone):**
 
 ```bash
 git clone https://github.com/SeayInsights/dream-studio.git
-claude plugins install file://path/to/dream-studio
+claude plugin install file://path/to/dream-studio
 ```
+
+> **Note:** dream-studio is not yet listed in the official Claude Code plugin registry.
+> Use the GitHub install command above. Registry install (`claude plugin install dream-studio`) will not work until the plugin is submitted to Anthropic.
 
 **Install dev dependencies (for contributing):**
 
