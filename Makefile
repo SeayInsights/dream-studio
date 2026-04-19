@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev status
+.PHONY: test lint fmt security install-dev status docs
 
 test:
 	py -3.12 -m pytest tests/ --cov=hooks --cov-fail-under=70 -q
@@ -17,3 +17,6 @@ install-dev:
 
 status:
 	@if [ -f hooks/handlers/on-status.py ]; then py -3.12 hooks/handlers/on-status.py; fi
+
+docs:
+	py -3.12 scripts/sync_docs.py
