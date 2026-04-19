@@ -339,6 +339,16 @@ nodes:
           PERMISSION_GAP — missing tool permissions or MCP server access grants
           KNOWLEDGE_GAP  — missing CLAUDE.md rules, constraints, or context
           TEST_GAP       — no verification path exists to confirm the feature works
+          PERSISTENCE_GAP — workflow or skill terminal nodes that print output but never save
+                            to a durable location (project root files don't count — they are
+                            ephemeral). Output must land in ~/.dream-studio/ or .sessions/.
+                            Flag any workflow whose final node produces findings, reports, or
+                            decisions without writing them to a persistent path.
+          TRACKING_GAP   — HIGH or CRITICAL findings produced by a workflow with no durable
+                            follow-up mechanism (no GitHub Issue created, no task written,
+                            no next-session-readable record). If a workflow can produce
+                            findings that require action, those findings must be tracked in
+                            a system that survives session end (GitHub Issues preferred).
 
         Size: S (< 30 min) | M (30 min–2 hr) | L (2–8 hr) | XL (> 8 hr)
 

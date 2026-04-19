@@ -204,6 +204,17 @@ nodes:
           RULE_GAP       — missing CLAUDE.md rules that dream-studio depends on
           TOOL_GAP       — external tool (git, gh, node, etc.) missing or wrong version
           TEST_GAP       — no way to verify the installation is working after onboarding
+          PERSISTENCE_GAP — any installed workflow or skill whose terminal node produces
+                            output (findings, reports, summaries, decisions) but does NOT
+                            write to a durable location (~/.dream-studio/ or .sessions/).
+                            Project-root files (e.g. final-audit-report.md) are ephemeral
+                            and DO NOT satisfy this requirement. Flag every workflow that
+                            falls into this pattern — list the workflow name and terminal node.
+          TRACKING_GAP   — any installed workflow that can produce HIGH or CRITICAL findings
+                            with no mechanism to create durable follow-up (GitHub Issues,
+                            persistent task list, or next-session-readable record). If the
+                            user's environment has GitHub MCP configured but workflows are
+                            not creating Issues for findings, this is a blocking gap.
 
         Size: S (< 15 min) | M (15–60 min) | L (1–4 hr) | XL (> 4 hr)
 
@@ -298,6 +309,21 @@ nodes:
         Workflows that would benefit this user based on what they have installed
         (e.g., if they have godot-mcp, recommend game-feature workflow):
           - Workflow name, trigger scenario, why it fits their setup
+
+        ## WORKFLOW PERSISTENCE + TRACKING AUDIT
+        For each installed workflow (read their YAML from the build directory):
+          Check the terminal node(s) — the last node(s) with no dependents.
+          For each terminal node, answer:
+            - Does it write output to ~/.dream-studio/ or .sessions/? (YES/NO)
+            - Can it produce findings/errors that require action? (YES/NO)
+            - If YES to findings: does it create GitHub Issues or equivalent? (YES/NO)
+
+          Flag as PERSISTENCE_GAP if: terminal node produces output but doesn't persist it.
+          Flag as TRACKING_GAP if: terminal node produces actionable findings with no Issue creation.
+
+          Output a table:
+          | Workflow | Terminal Node | Persists Output | Creates Issues | Gap Type |
+          |----------|---------------|-----------------|----------------|----------|
 
         ## CLAUDE.MD RULE IMPROVEMENTS
         Rules that would improve reliability or reduce permission prompts:
