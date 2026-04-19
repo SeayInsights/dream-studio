@@ -12,8 +12,8 @@
     {
       "name": "dream-studio",
       "source": "./",
-      "version": "0.5.0",
-      "description": "An opinionated Claude Code plugin: two engines (Build Pipeline + Improvement Loop), 18 skills, agent personas, and a status bar."
+      "version": "0.6.1",
+      "description": "An opinionated Claude Code plugin: two engines (Build Pipeline + Improvement Loop), 20 skills, agent personas, and a status bar."
     }
   ]
 }
