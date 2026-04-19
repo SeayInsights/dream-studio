@@ -12,12 +12,13 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 MARKER_FILENAME = "milestone-active.txt"
 DIFFICULTY_THRESHOLD_MINUTES = 30
@@ -37,7 +38,7 @@ def main() -> None:
 
     command = marker.get("command", "unknown")
     started_at = marker.get("started_at", "unknown")
-    completed_at = datetime.now(timezone.utc).isoformat()
+    completed_at = utcnow().isoformat()
 
     print(
         f"\n[dream-studio] Milestone complete: {command[:60]}\n"
@@ -80,7 +81,7 @@ def draft_difficulty_lesson(command: str, started_at: str, completed_at: str) ->
     drafts_dir = paths.meta_dir() / "draft-lessons"
     drafts_dir.mkdir(parents=True, exist_ok=True)
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = utcnow().strftime("%Y-%m-%d")
     slug = re.sub(r"[^a-z0-9]+", "-", command.lower())[:40].strip("-") or "milestone"
     draft_path = drafts_dir / f"long-milestone-{date_str}-{slug}.md"
     if draft_path.exists():

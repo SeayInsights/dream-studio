@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+from freezegun import freeze_time
+
+FROZEN = "2026-01-01 12:00:00"
+
 
 def test_no_marker_is_noop(isolated_home, handler):
     mod = handler("on-milestone-end")
@@ -14,6 +18,7 @@ def test_no_marker_is_noop(isolated_home, handler):
     assert not log.exists()
 
 
+@freeze_time(FROZEN)
 def test_marker_cleared_and_logged(isolated_home, handler):
     mod = handler("on-milestone-end")
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
@@ -29,6 +34,7 @@ def test_marker_cleared_and_logged(isolated_home, handler):
     assert "build feature: x" in log.read_text(encoding="utf-8")
 
 
+@freeze_time(FROZEN)
 def test_long_milestone_drafts_lesson(isolated_home, handler):
     mod = handler("on-milestone-end")
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"

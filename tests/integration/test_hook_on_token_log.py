@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 
+from freezegun import freeze_time
+
+FROZEN = "2026-01-01 12:00:00"
+
 
 def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys):
     mod = handler("on-token-log")
@@ -30,6 +34,7 @@ def test_appends_row_with_explicit_tokens(isolated_home, handler, capsys):
     assert result["total_tokens"] == 150
 
 
+@freeze_time(FROZEN)
 def test_parses_transcript_when_tokens_missing(isolated_home, handler):
     transcript = isolated_home / "transcript.jsonl"
     transcript.write_text(

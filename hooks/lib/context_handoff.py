@@ -9,12 +9,12 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 WARN_PCT = 30
 COMPACT_PCT = 50
@@ -97,7 +97,7 @@ def checkpoint_career_ops(session_id: str | None) -> str | None:
 
 
 def write_handoff(cwd: Path, kb: float, session_id: str | None, is_pct: bool = False) -> Path | None:
-    now = datetime.now(timezone.utc)
+    now = utcnow()
     date_str = now.strftime("%Y-%m-%d")
     sessions_dir = cwd / ".sessions" / date_str
     try:
@@ -151,7 +151,7 @@ def write_handoff(cwd: Path, kb: float, session_id: str | None, is_pct: bool = F
 
 
 def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path | None) -> None:
-    now = datetime.now(timezone.utc)
+    now = utcnow()
     date_str = now.strftime("%Y-%m-%d")
     sessions_dir = cwd / ".sessions" / date_str
     sessions_dir.mkdir(parents=True, exist_ok=True)
@@ -191,8 +191,8 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
 
 def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bool = False) -> None:
     try:
-        timestamp = datetime.now(timezone.utc).isoformat()
-        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        timestamp = utcnow().isoformat()
+        date_str = utcnow().strftime("%Y-%m-%d")
         drafts_dir = paths.meta_dir() / "draft-lessons"
         drafts_dir.mkdir(parents=True, exist_ok=True)
 

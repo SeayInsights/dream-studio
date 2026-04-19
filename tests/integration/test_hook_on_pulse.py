@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+
+from freezegun import freeze_time
+
+FROZEN = "2026-01-01 12:00:00"
 
 
+@freeze_time(FROZEN)
 def test_generates_healthy_report_without_github(isolated_home, monkeypatch, handler):
     monkeypatch.delenv("GITHUB_PERSONAL_ACCESS_TOKEN", raising=False)
     mod = handler("on-pulse")
     mod.main()
 
     meta = isolated_home / ".dream-studio" / "meta"
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    report = meta / f"pulse-{date_str}.md"
+    report = meta / "pulse-2026-01-01.md"
     latest = meta / "pulse-latest.json"
 
     assert report.exists()
@@ -23,6 +26,7 @@ def test_generates_healthy_report_without_github(isolated_home, monkeypatch, han
     assert doc["schema_version"] == 1
 
 
+@freeze_time(FROZEN)
 def test_respects_github_repo_from_config(isolated_home, monkeypatch, handler):
     from lib import state
 
@@ -32,8 +36,7 @@ def test_respects_github_repo_from_config(isolated_home, monkeypatch, handler):
     mod = handler("on-pulse")
     mod.main()
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    report = (isolated_home / ".dream-studio" / "meta" / f"pulse-{date_str}.md").read_text(encoding="utf-8")
+    report = (isolated_home / ".dream-studio" / "meta" / "pulse-2026-01-01.md").read_text(encoding="utf-8")
     assert "acme/widgets" in report
 
 

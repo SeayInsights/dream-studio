@@ -16,12 +16,13 @@ import json
 import os
 import sys
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths, state  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
 STALE_BRANCH_DAYS = 7
@@ -54,7 +55,7 @@ def check_stale_branches(repo: str) -> list[str]:
     branches = gh_api(f"repos/{repo}/branches?per_page=100")
     if not isinstance(branches, list):
         return []
-    cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_BRANCH_DAYS)
+    cutoff = utcnow() - timedelta(days=STALE_BRANCH_DAYS)
     stale = []
     for b in branches:
         name = b.get("name", "")
@@ -68,7 +69,7 @@ def check_stale_branches(repo: str) -> list[str]:
         try:
             commit_date = datetime.fromisoformat(commit_date_str.replace("Z", "+00:00"))
             if commit_date < cutoff:
-                days_ago = (datetime.now(timezone.utc) - commit_date).days
+                days_ago = (utcnow() - commit_date).days
                 stale.append(f"{name} ({days_ago}d stale)")
         except (ValueError, TypeError):
             continue
@@ -79,7 +80,7 @@ def check_overdue_milestones(repo: str) -> list[str]:
     milestones = gh_api(f"repos/{repo}/milestones?state=open&per_page=100")
     if not isinstance(milestones, list):
         return []
-    now = datetime.now(timezone.utc)
+    now = utcnow()
     overdue = []
     for ms in milestones:
         due = ms.get("due_on")
@@ -175,7 +176,7 @@ def check_open_escalations() -> list[str]:
 
 
 def generate_pulse() -> tuple[str, dict]:
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    date = utcnow().strftime("%Y-%m-%d %H:%M UTC")
     repo = _github_repo()
 
     if repo:
@@ -251,12 +252,12 @@ def main() -> None:
     paths.warn_version_mismatch()
     report, stats = generate_pulse()
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = utcnow().strftime("%Y-%m-%d")
     report_path = paths.meta_dir() / f"pulse-{date_str}.md"
     report_path.write_text(report, encoding="utf-8")
 
     state.write_pulse(
-        {"timestamp": datetime.now(timezone.utc).isoformat(), **stats}
+        {"timestamp": utcnow().isoformat(), **stats}
     )
 
     print(

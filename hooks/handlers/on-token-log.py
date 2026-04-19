@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.models import StopPayload  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 
 def extract_usage_from_transcript(transcript_path: str) -> tuple[str, int, int, int]:
@@ -49,7 +50,7 @@ def extract_usage_from_transcript(transcript_path: str) -> tuple[str, int, int, 
 def main(payload: dict) -> None:
     session_name = payload.get("session_name") or payload.get("session_id", "unknown")
     transcript_path = payload.get("transcript_path", "")
-    timestamp = payload.get("timestamp", datetime.now(timezone.utc).isoformat())
+    timestamp = payload.get("timestamp", utcnow().isoformat())
 
     if "prompt_tokens" in payload:
         model = payload.get("model", "unknown")
@@ -89,9 +90,15 @@ def main(payload: dict) -> None:
 
 if __name__ == "__main__":
     try:
+        from pydantic import ValidationError
+
         raw = sys.stdin.read()
-        payload = json.loads(raw) if raw.strip() else {}
+        data = json.loads(raw) if raw.strip() else {}
+        try:
+            StopPayload(**data)
+        except ValidationError as ve:
+            print(f"[on-token-log] payload validation warning: {ve}", file=sys.stderr)
+        main(data)
     except json.JSONDecodeError as e:
         print(json.dumps({"status": "error", "message": str(e)}))
         sys.exit(1)
-    main(payload)

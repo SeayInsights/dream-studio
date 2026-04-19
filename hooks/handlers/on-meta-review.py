@@ -14,12 +14,13 @@ import json
 import re
 import sys
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 THEME_DRAFT_THRESHOLD = 3
 SESSION_COUNT = 7
@@ -159,7 +160,7 @@ def generate_review(
     if not sessions:
         return "# Weekly Review\n\nNo session data found in token-log.md.\n", []
 
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date = utcnow().strftime("%Y-%m-%d")
     total_tokens = sum(s.get("total_tokens", 0) for s in sessions)
     total_turns = sum(s.get("turns", 0) for s in sessions)
 
@@ -287,8 +288,8 @@ def main() -> None:
         return
 
     review, themes = generate_review(sessions, extra_themes=extra_themes)
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    timestamp = datetime.now(timezone.utc).isoformat()
+    date_str = utcnow().strftime("%Y-%m-%d")
+    timestamp = utcnow().isoformat()
 
     drafted = draft_theme_lessons(themes, timestamp)
     if drafted:

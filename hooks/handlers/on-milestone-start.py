@@ -12,12 +12,12 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths  # noqa: E402
+from lib.time_utils import utcnow  # noqa: E402
 
 DCL_PATTERN = re.compile(
     r"^(build feature:|build page:|build api:|build component:|build schema:|"
@@ -47,7 +47,7 @@ def main() -> None:
         return
 
     marker_path = paths.state_dir() / MARKER_FILENAME
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = utcnow().isoformat()
 
     if marker_path.exists():
         print(
