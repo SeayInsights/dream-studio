@@ -1,0 +1,60 @@
+# Analyze Skill — Mode Configuration
+# Each mode defines which analysts run, how they're dispatched, and how signals are synthesized.
+# To add a custom mode: add an entry here with an analyst list referencing YAMLs in analysts/
+
+evaluate-offer:
+  description: "Multi-perspective job/contract offer evaluation"
+  analysts:
+    - compensation
+    - growth
+    - risk
+    - lifestyle
+  quick_analysts:
+    - compensation
+    - risk
+  max_parallel: 2
+  min_quorum: 3
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: decision-memo
+
+evaluate-gig:
+  description: "Freelance/consulting opportunity assessment"
+  analysts:
+    - profitability
+    - feasibility
+    - scope-risk
+    - timeline
+  quick_analysts:
+    - profitability
+    - scope-risk
+  max_parallel: 2
+  min_quorum: 3
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: decision-memo
+
+evaluate-data:
+  description: "Multi-angle dataset or BI analysis"
+  analysts:
+    - anomaly
+    - trend
+    - hypothesis
+    - validation
+  quick_analysts:
+    - anomaly
+    - trend
+  max_parallel: 2
+  min_quorum: 3
+  raw_input: true
+  always_synthesize: false
+  synthesis:
+    strategy: consensus-report
+    disagreement_threshold: 2
+    output: risk-report
