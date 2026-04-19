@@ -216,6 +216,8 @@ Pre-built YAML DAG workflows in `workflows/`:
 | `comprehensive-review` | analyze → review → secure → verify | Deep review pass |
 | `fix-issue` | debug → plan → build → verify | Structured issue resolution |
 | `game-feature` | think → plan → build → game-dev → verify | Godot feature with game-dev gate |
+| `feature-research` | intake → 4× GitHub research → synthesis → breakpoint + gap → plan → risk → report | NASA-grade GitHub research for any Claude integration or addition |
+| `studio-onboard` | discovery → baseline → breakpoint + gap + improvements → plan → risk → report | Onboarding audit for a new dream-studio user's existing environment |
 
 **Usage:**
 
@@ -373,12 +375,14 @@ dream-studio/
 │   └── unit/                        # Library unit tests (4 test files)
 ├── workflows/                       # YAML workflow DAG definitions
 │   ├── comprehensive-review.yaml
+│   ├── feature-research.yaml        # GitHub research pipeline for Claude integrations
 │   ├── fix-issue.yaml
 │   ├── game-feature.yaml
 │   ├── hotfix.yaml
 │   ├── idea-to-pr.yaml
 │   ├── prototype.yaml
-│   └── safe-refactor.yaml
+│   ├── safe-refactor.yaml
+│   └── studio-onboard.yaml          # Onboarding audit for new dream-studio users
 ├── CHANGELOG.md                     # Version history
 ├── CONTRIBUTING.md                  # Branch naming, commit format, PR checklist
 ├── LICENSE                          # MIT
