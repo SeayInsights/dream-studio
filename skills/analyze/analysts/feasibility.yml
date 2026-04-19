@@ -1,4 +1,5 @@
 name: feasibility-analyst
+tested: false
 perspective: Technical and resource assessment — does the user have the required skills and tools, knowledge gaps and ramp-up time, infrastructure needs, third-party dependencies, access requirements (licenses, environments, data), team coordination overhead.
 weight: 1.0
 model: haiku

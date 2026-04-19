@@ -1,4 +1,5 @@
 name: validation-analyst
+tested: false
 perspective: Assess methodology robustness — sample adequacy, statistical significance, bias types, measurement validity, and whether the conclusion holds under scrutiny
 weight: 1.0
 model: haiku

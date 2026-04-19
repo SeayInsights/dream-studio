@@ -1,4 +1,5 @@
 name: anomaly-analyst
+tested: false
 perspective: Detect outliers, data quality issues, distribution irregularities, and sudden metric shifts that may indicate data problems or real anomalies
 weight: 1.0
 model: haiku

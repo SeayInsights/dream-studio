@@ -1,7 +1,8 @@
 name: ceo-analyst
+tested: false
 perspective: Strategic alignment and capital allocation — mission fit, resource allocation trade-offs, organizational capacity, long-term positioning, and risk tolerance
 weight: 1.2
-model: haiku
+model: sonnet
 signal_scale:
   - strong-accept
   - accept

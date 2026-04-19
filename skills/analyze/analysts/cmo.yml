@@ -1,4 +1,5 @@
 name: cmo-analyst
+tested: false
 perspective: Market positioning and growth assessment — audience fit, competitive landscape, go-to-market viability, brand impact, and customer acquisition potential
 weight: 1.0
 model: haiku

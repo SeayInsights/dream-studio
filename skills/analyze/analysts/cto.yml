@@ -1,7 +1,8 @@
 name: cto-analyst
+tested: false
 perspective: Technical feasibility and architecture assessment — stack fitness, scalability, technical debt risk, build-vs-buy, and infrastructure requirements
 weight: 1.0
-model: haiku
+model: sonnet
 signal_scale:
   - strong-accept
   - accept

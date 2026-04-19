@@ -1,4 +1,5 @@
 name: trend-analyst
+tested: false
 perspective: Identify time-series patterns, growth trajectories, seasonality, and the strength and reliability of directional signals in the data
 weight: 1.0
 model: haiku

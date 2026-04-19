@@ -1,7 +1,8 @@
 name: cfo-analyst
+tested: false
 perspective: Financial viability assessment — ROI projection, cost structure, cash flow impact, margin analysis, burn rate, and financial risk quantification
 weight: 1.0
-model: haiku
+model: sonnet
 signal_scale:
   - strong-accept
   - accept

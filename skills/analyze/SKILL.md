@@ -73,6 +73,8 @@ Before spawning any subagents, validate the full configuration:
 4. Read each analyst YAML. Verify required fields: `name`, `perspective`, `weight`, `model`, `prompt_template`.
 5. If ANY file is missing or ANY required field is absent: **stop immediately** with a specific error.
    Example: "Validation failed: analysts/growth.yml missing field `prompt_template`."
+6. Check mode's `status` field. If `experimental`: warn user — "Mode `{mode}` is experimental. Results may vary."
+7. Check each analyst's `tested` field. If any analyst has `tested: false`: warn — "Untested analysts in this mode: {list}. Proceed?" Wait for confirmation before continuing.
 
 Do NOT proceed to Step 2 if validation fails.
 
@@ -207,6 +209,17 @@ Save mechanical scores to checkpoint:
 }
 ```
 
+### Step 6b: Deduplication Check (BP10)
+
+Before synthesis, check for cross-analyst signal contamination:
+
+1. Collect all `key_factors` from all analysts.
+2. For each pair of analysts, fuzzy-match their key_factors (same concept, different wording counts as a match).
+3. If the same factor appears in 2+ analysts' key_factors, flag as a **shared factor**.
+4. Pass shared factors to the synthesis prompt: "These factors were cited by multiple analysts: {list}. Weight each shared factor once in your assessment, not per-analyst. The independent signals are what matter."
+
+This prevents domain-bleed in modes like evaluate-strategy where C-level analysts may inadvertently evaluate the same dimension.
+
 ### Step 7: Synthesis Decision (BP4 Short-Circuit)
 
 **Check for unanimous agreement:** If ALL analysts agree within 1 signal level (max distance between any pair <= 1) AND average confidence > 0.7 AND mode has `always_synthesize: false`:
@@ -298,10 +311,12 @@ Build the final report markdown:
 
 ## Raw Analyst Signals
 
-| Analyst | Signal | Confidence | Weighted Score | Key Factors |
-|---------|--------|------------|----------------|-------------|
-| {name} | {signal} | {confidence} | {weighted} | {key_factors joined} |
-| ... | ... | ... | ... | ... |
+| Analyst | Signal | Confidence | Weight | Weighted Score | % of Total | Key Factors |
+|---------|--------|------------|--------|----------------|------------|-------------|
+| {name} | {signal} | {confidence} | {weight} | {weighted} | {pct_of_total} | {key_factors joined} |
+| ... | ... | ... | ... | ... | ... | ... |
+
+**Weight note:** {If any analyst's weight exceeds 15% of total weight pool, note: "{analyst} carries {pct}% weight — above the 15% equal-share threshold. This is intentional for the {mode} mode."}
 
 ## Methodology
 - Signal scale: strong-accept (+2) to strong-reject (-2)
@@ -346,6 +361,11 @@ Show the user:
 5. **Report path:** "Full report saved to: {report_path}"
 
 Keep presentation concise. The report has the full detail — the in-conversation output is a summary.
+
+6. **Verdict prompt:** Ask the user: "**Accept**, **discard**, or **re-run**?"
+   - **Accept** → done, analysis stands
+   - **Discard** → delete the report file, reset checkpoint to `{"schema_version": 1, "status": "idle"}`, decrement `analyses_completed` in feed, clear `last_analysis`, set `in_progress: null`. Confirm: "Analysis discarded."
+   - **Re-run** → reset checkpoint to idle, restart from Step 0 with same input
 
 ---
 

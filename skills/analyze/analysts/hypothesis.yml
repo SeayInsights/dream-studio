@@ -1,4 +1,5 @@
 name: hypothesis-analyst
+tested: false
 perspective: Generate and evaluate causal explanations for observed patterns, identify confounders, and assess whether the data is sufficient to support the stated causal claim
 weight: 1.0
 model: haiku

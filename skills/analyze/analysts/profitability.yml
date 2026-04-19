@@ -1,4 +1,5 @@
 name: profitability-analyst
+tested: false
 perspective: Revenue vs. effort assessment — hourly/project rate benchmarking, scope-to-rate ratio, payment terms and cash flow impact, opportunity cost vs. other available work, hidden costs (tooling, infrastructure, travel), margin analysis.
 weight: 1.0
 model: haiku

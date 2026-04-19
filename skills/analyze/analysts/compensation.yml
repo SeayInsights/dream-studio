@@ -1,4 +1,5 @@
 name: compensation-analyst
+tested: false
 perspective: Total compensation benchmarking — base salary, bonus, equity/stock, benefits, signing bonus, and hidden costs
 weight: 1.0
 model: haiku

@@ -3,6 +3,7 @@
 # To add a custom mode: add an entry here with an analyst list referencing YAMLs in analysts/
 
 evaluate-offer:
+  status: tested
   description: "Multi-perspective job/contract offer evaluation"
   analysts:
     - compensation
@@ -22,6 +23,7 @@ evaluate-offer:
     output: decision-memo
 
 evaluate-gig:
+  status: tested
   description: "Freelance/consulting opportunity assessment"
   analysts:
     - profitability
@@ -41,6 +43,7 @@ evaluate-gig:
     output: decision-memo
 
 evaluate-data:
+  status: tested
   description: "Multi-angle dataset or BI analysis"
   analysts:
     - anomaly
@@ -60,6 +63,7 @@ evaluate-data:
     output: risk-report
 
 evaluate-strategy:
+  status: experimental
   description: "C-level multi-perspective business strategy evaluation"
   analysts:
     - cfo
@@ -80,10 +84,11 @@ evaluate-strategy:
     output: decision-memo
 
 evaluate-content:
+  status: experimental
   description: "Content quality and SEO readiness assessment"
   analysts:
     - seo
-    - cmo
+    - cmo-content
   quick_analysts:
     - seo
   max_parallel: 2

@@ -1,7 +1,8 @@
 name: seo-analyst
+tested: false
 perspective: SEO quality scoring — keyword optimization, readability, meta elements, content structure, link strategy, and search intent alignment
 weight: 1.0
-model: haiku
+model: sonnet
 signal_scale:
   - strong-accept
   - accept

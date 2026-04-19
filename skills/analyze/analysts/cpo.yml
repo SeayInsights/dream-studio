@@ -1,4 +1,5 @@
 name: cpo-analyst
+tested: false
 perspective: Product-market fit and prioritization — user need validation, feature scope, adoption likelihood, retention signals, and strategic alignment
 weight: 1.0
 model: haiku

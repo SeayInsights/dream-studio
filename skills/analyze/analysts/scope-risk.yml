@@ -1,4 +1,5 @@
 name: scope-risk-analyst
+tested: false
 perspective: Scope and contractual risk — requirement clarity, change request exposure, acceptance criteria ambiguity, client communication patterns, escalation paths, IP ownership, liability clauses, milestone definition quality.
 weight: 1.0
 model: haiku
