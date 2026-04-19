@@ -28,11 +28,11 @@ nodes:
       hook, skill, plugin, or configuration the user wants to research or add.
 
       Then read these paths to map the current system state:
-        - C:/Users/Dannis Seay/.claude/CLAUDE.md
-        - C:/Users/Dannis Seay/.claude/settings.json (if it exists)
-        - List C:/Users/Dannis Seay/.claude/plugins/ (plugin inventory)
-        - List C:/Users/Dannis Seay/.claude/skills/ (skill inventory)
-        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json (last 3 entries)
+        - ~/.claude/CLAUDE.md
+        - ~/.claude/settings.json (if it exists)
+        - List ~/.claude/plugins/ (plugin inventory)
+        - List ~/.claude/skills/ (skill inventory)
+        - ~/.dream-studio/state/workflows.json (last 3 entries)
 
       Output a STRUCTURED INTAKE REPORT:
 
@@ -244,7 +244,7 @@ nodes:
         and any caveats. Be brief. This is not the recommended path.
 
       Write this report to:
-        C:/Users/Dannis Seay/.dream-studio/planning/research-synthesis-<YYYY-MM-DD>.md
+        ~/.dream-studio/planning/research-synthesis-<YYYY-MM-DD>.md
       Then output the saved file path on a line by itself.
 
       End with: VERDICT: synthesis complete — confidence: HIGH|MED|LOW — strategy: NATIVE BUILD recommended
@@ -263,10 +263,10 @@ nodes:
         - Research: {{research-synthesis.output}}
 
       First, read the current system state:
-        - C:/Users/Dannis Seay/.claude/settings.json
-        - C:/Users/Dannis Seay/.claude/CLAUDE.md
-        - List C:/Users/Dannis Seay/.claude/plugins/
-        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json
+        - ~/.claude/settings.json
+        - ~/.claude/CLAUDE.md
+        - List ~/.claude/plugins/
+        - ~/.dream-studio/state/workflows.json
 
       A BREAKPOINT is any system coupling where this integration could:
         (a) silently corrupt state without visible error
@@ -317,11 +317,11 @@ nodes:
         - Research: {{research-synthesis.output}}
 
       First, read current system state:
-        - C:/Users/Dannis Seay/.claude/settings.json
-        - C:/Users/Dannis Seay/.claude/CLAUDE.md
-        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json
-        - List C:/Users/Dannis Seay/.claude/plugins/
-        - List C:/Users/Dannis Seay/.claude/skills/ (if accessible)
+        - ~/.claude/settings.json
+        - ~/.claude/CLAUDE.md
+        - ~/.dream-studio/state/workflows.json
+        - List ~/.claude/plugins/
+        - List ~/.claude/skills/ (if accessible)
 
       A GAP is anything MISSING between the current state and the desired fully-integrated state.
       Think like a mission readiness reviewer — nothing ships until every gap has an owner and a plan.
@@ -520,7 +520,7 @@ nodes:
       MISSION: Compile and save the complete integration report to disk.
 
       Determine subject slug from {{intake.output}} — lowercase, hyphens, no spaces.
-      Save to: C:/Users/Dannis Seay/.dream-studio/planning/claude-integration-<subject-slug>-<YYYY-MM-DD>.md
+      Save to: ~/.dream-studio/planning/claude-integration-<subject-slug>-<YYYY-MM-DD>.md
 
       Report structure:
 
