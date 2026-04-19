@@ -6,7 +6,41 @@ description: YAML workflow orchestration — validate, execute DAG nodes through
 # Workflow — YAML Pipeline Orchestration
 
 ## Trigger
-`workflow: <name>`, `workflow status`, `workflow resume`, `workflow abort`
+`workflow: <name>`, `workflow list`, `workflow status`, `workflow resume`, `workflow abort`
+
+## Discovery — no name given
+
+If the user invokes `/workflow` with no workflow name (or types just `workflow` or `workflow list`):
+
+1. Scan for YAML files in two locations, in this order:
+   - Project-local: `.workflows/*.yaml` relative to cwd (user custom workflows)
+   - Plugin: `<plugin-root>/workflows/*.yaml` (built-in workflows)
+2. Print a formatted list:
+
+```
+Available workflows
+───────────────────────────────────────────────────────
+Built-in (plugin):
+  • comprehensive-review  Five-way parallel review with synthesis report
+  • feature-research      Deep research + native integration strategy
+  • fix-issue             Diagnose and resolve a bug or ticket
+  • game-feature          Design and implement a game mechanic or system
+  • hotfix                Fast-track critical fix straight to production
+  • idea-to-pr            Spec, plan, implement, and ship
+  • optimize              Profile, audit bloat, apply quick wins, verify improvement
+  • project-audit         Health, debt, security, and gap analysis
+  • prototype             Rapid proof-of-concept build
+  • safe-refactor         Test-guarded structural improvements
+  • studio-onboard        Assess and adopt project assets into dream-studio
+
+Project-local (.workflows/):
+  (none found)  ← or list any found
+
+Run a workflow:  workflow: <name>
+```
+
+3. Read the `description:` field from each YAML file for the summary text.
+4. Then stop — do not proceed to execution.
 
 ## CLI Tools
 
