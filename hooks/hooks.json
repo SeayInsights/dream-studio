@@ -23,6 +23,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" on-stop-handoff"
+          },
+          {
+            "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" on-quality-score"
           },
           {

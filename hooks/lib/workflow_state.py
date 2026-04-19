@@ -34,7 +34,7 @@ from lib.workflow_validate import parse_workflow             # noqa: E402
 from lib.workflow_engine import (                            # noqa: E402
     _file_lock, _extract_node_ids,
     _evaluate, _resolve_ref, _coerce,
-    _compute_ready_nodes,
+    _compute_ready_nodes, _check_context_budget,
 )
 
 SCHEMA_VERSION = 1
@@ -328,6 +328,25 @@ def cmd_next(args: argparse.Namespace) -> None:
         elif not skipped_by_condition:
             print("blocked: no nodes ready (check for failed dependencies)")
         return
+
+    # Check context budget before dispatching parallel agents
+    if len(ready) > 1:
+        budget_result = _check_context_budget(len(ready))
+        if budget_result == "block":
+            now = datetime.now(timezone.utc).isoformat()
+            with _state_lock():
+                data2 = _read_state()
+                wf2 = data2.get("active_workflows", {}).get(args.key, {})
+                for nid in ready:
+                    wf2.get("nodes", {}).setdefault(nid, {}).update({
+                        "status": "skipped",
+                        "finished": now,
+                        "output": "WARNING: parallel dispatch skipped — context budget too high",
+                    })
+                _write_state(data2)
+            _write_checkpoint(args.key, ready[0], "skipped")
+            print(f"skipped (context budget): {', '.join(ready)}")
+            return
 
     has_gate = {nid: yaml_nodes[nid]["gate"] for nid in ready if yaml_nodes[nid].get("gate")}
     model_map = {nid: yaml_nodes[nid]["model"] for nid in ready if yaml_nodes[nid].get("model")}

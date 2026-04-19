@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths           # noqa: E402
 from lib.workflow_validate import parse_workflow  # noqa: E402
+from lib.context_handoff import HANDOFF_PCT, URGENT_PCT  # noqa: E402
 
 
 # ── File locking ──────────────────────────────────────────────────────
@@ -206,6 +207,64 @@ def _evaluate(expr: str, wf: dict) -> bool:
     if has_unresolved:
         return False
     return bool(resolved.strip())
+
+
+# ── Context budget guard ───────────────────────────────────────────────
+
+
+def _check_context_budget(n_agents: int) -> str | None:
+    """Check remaining context budget before dispatching parallel agents.
+
+    Reads ~/.dream-studio/state/context.json (written by on-context-threshold).
+    Returns None when dispatch is safe, "warn" when the user should confirm,
+    or "block" when dispatch must be skipped entirely.
+
+    Callers should handle each return value:
+      None   → proceed normally
+      "warn" → prompt user; if non-interactive, write warning to state and skip
+      "block" → skip wave entirely, write WARNING status to state
+    """
+    context_file = paths.state_dir() / "context.json"
+    if not context_file.is_file():
+        return None
+
+    try:
+        data = json.loads(context_file.read_text(encoding="utf-8"))
+        pct = float(data.get("pct", data.get("used_pct", 0)))
+    except Exception:
+        return None
+
+    if pct <= 0:
+        return None
+
+    if pct >= URGENT_PCT:
+        print(
+            f"[workflow] Context at {pct:.0f}% — too high to dispatch parallel agents safely. "
+            f"Run /compact or start a new session.",
+            flush=True,
+        )
+        return "block"
+
+    if pct >= HANDOFF_PCT:
+        msg = (
+            f"[workflow] Context at {pct:.0f}%. Dispatching {n_agents} parallel agent(s) "
+            f"may push into auto-compact. Continue? (y/n): "
+        )
+        if not sys.stdin.isatty():
+            print(
+                f"[workflow] Context at {pct:.0f}% — non-interactive session, "
+                f"skipping parallel dispatch of {n_agents} agent(s).",
+                flush=True,
+            )
+            return "block"
+        try:
+            answer = input(msg).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return "block"
+        if answer not in ("y", "yes"):
+            return "block"
+
+    return None
 
 
 # ── Ready-node computation ─────────────────────────────────────────────
