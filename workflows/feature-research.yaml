@@ -1,0 +1,521 @@
+name: feature-research
+description: >
+  NASA-grade GitHub research pipeline for any Claude feature, integration, MCP server,
+  hook, skill, or plugin. Phases: intake → 4-way parallel GitHub research → synthesis
+  (gate) → parallel breakpoint + gap analysis → implementation plan → risk matrix →
+  director gate → final report.
+  Invoke: "workflow: claude-feature-research" then describe what you want to add to Claude.
+version: 1
+on_failure: abort
+
+gates:
+  post-synthesis:
+    type: pause
+    prompt: "Research synthesis complete. Review findings above and confirm direction before deep analysis begins?"
+  mission-commander:
+    type: pause
+    requires: [implementation-plan, risk-matrix]
+    prompt: "Mission briefing delivered. Director approval required before proceeding to implementation."
+
+nodes:
+
+  # ── PHASE 0: INTAKE ──────────────────────────────────────────────────────
+  - id: intake
+    command: |
+      Parse the current workflow invocation context and produce a structured intake report.
+
+      Read the conversation to identify what Claude feature, tool, integration, MCP server,
+      hook, skill, plugin, or configuration the user wants to research or add.
+
+      Then read these paths to map the current system state:
+        - C:/Users/Dannis Seay/.claude/CLAUDE.md
+        - C:/Users/Dannis Seay/.claude/settings.json (if it exists)
+        - List C:/Users/Dannis Seay/.claude/plugins/ (plugin inventory)
+        - List C:/Users/Dannis Seay/.claude/skills/ (skill inventory)
+        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json (last 3 entries)
+
+      Output a STRUCTURED INTAKE REPORT:
+
+        subject:          [exact feature/integration being researched]
+        scope:            [narrow: one feature | broad: category of features]
+        search_terms:     [5-10 GitHub search keywords to use in research phase]
+        already_exists:   [anything related already present in ~/.claude/]
+        success_criteria: [what "research done" means for this specific request]
+        target_files:     [files in ~/.claude/ that would be modified by this integration]
+
+      End with: VERDICT: intake complete — <subject>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 1: PARALLEL GITHUB RESEARCH ────────────────────────────────────
+  - id: research-repos
+    depends_on: [intake]
+    command: |
+      MISSION: Repository survey for Claude integration research.
+      Subject from intake: {{intake.output}}
+
+      Using mcp__github__search_repositories:
+        1. Run 3 separate searches using the search_terms from intake
+        2. Collect top 10 most relevant repos (filter: recently active, stars > 20)
+        3. For each repo note: name, description, stars, last commit, language
+        4. Flag any official Anthropic/anthropics repos found
+        5. Rank top 3 repos for deeper inspection
+
+      For each top-3 repo, use mcp__github__get_file_contents to read:
+        - README.md (or README.rst)
+        - CHANGELOG.md or RELEASES.md if present
+        - Any .claude/ directory contents if present
+        - Main implementation file (index.ts, main.py, server.py, or equivalent)
+
+      Output a REPO SURVEY document:
+
+        ## Official Sources (Anthropic-owned or officially referenced)
+        ## Community Implementations (stars, adoption signals)
+        ## Key Implementation Patterns Discovered
+        ## Configuration Examples Found
+        ## Repos to Avoid (stale, broken, or anti-pattern)
+
+      End with: VERDICT: repo survey complete — <N repos found, top: repo-name>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: research-issues
+    depends_on: [intake]
+    command: |
+      MISSION: Issues and discussions survey for Claude integration research.
+      Subject from intake: {{intake.output}}
+
+      Using mcp__github__search_issues:
+        1. Search open issues across GitHub with intake search_terms (limit: 15)
+        2. Search closed/resolved issues for proven solutions (limit: 10)
+        3. Search specifically within anthropics/claude-code if accessible (limit: 10)
+        4. Search within modelcontextprotocol/* repos if MCP-related (limit: 5)
+
+      For each of the top-5 most relevant issues, capture:
+        - Title, repo path, state (open/closed), created date
+        - Core problem described and surrounding context
+        - Key solutions or workarounds proposed in comments
+        - Community consensus (thumbs-ups, most-upvoted responses)
+        - Any official Anthropic team responses or labels
+
+      Output an ISSUES SURVEY document:
+
+        ## Open Problems (unresolved — known pain points)
+        ## Solved Problems (closed with working solutions)
+        ## Anthropic Official Responses
+        ## Community Consensus Patterns
+        ## Recurring Complaints (same issue appearing across repos)
+
+      End with: VERDICT: issues survey complete — <N open, M solved reviewed>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: research-prs
+    depends_on: [intake]
+    command: |
+      MISSION: Pull request survey for Claude integration research.
+      Subject from intake: {{intake.output}}
+
+      Using mcp__github__search_pull_requests:
+        1. Find merged PRs that implemented similar features (limit: 10)
+        2. Find open in-progress PRs that are still being worked (limit: 5)
+        3. Search anthropics/claude-code for relevant merged PRs (limit: 5)
+
+      For top-5 most relevant merged PRs:
+        - Use mcp__github__get_commit to inspect the implementation commit
+        - Note which files were changed and the implementation approach taken
+        - Extract reviewer feedback and key discussion points
+        - Note any follow-up issues or regressions that were created after merge
+
+      For top-3 open PRs:
+        - Note current status, review feedback received, and blockers
+        - Note what is preventing merge (to avoid hitting the same wall)
+
+      Output a PR SURVEY document:
+
+        ## Successful Implementations (merged — proven approaches)
+        ## Implementation Approaches Used (ranked by quality)
+        ## Reviewer Lessons (what reviewers flagged — avoid these mistakes)
+        ## In-Progress Work (open PRs — do not duplicate effort)
+        ## Rejected Approaches (PRs closed without merge — and why)
+
+      End with: VERDICT: PR survey complete — <N merged, M open reviewed>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: research-code
+    depends_on: [intake]
+    command: |
+      MISSION: Code pattern survey for Claude integration research.
+      Subject from intake: {{intake.output}}
+
+      Using mcp__github__search_code:
+        1. Search for the core implementation pattern (limit: 10)
+        2. Search for configuration schemas (JSON Schema, Zod, TypeScript types) (limit: 5)
+        3. Search for CLAUDE.md usage examples if config-related (limit: 5)
+        4. Search for settings.json patterns if relevant (limit: 5)
+        5. Search for MCP server manifest/package.json patterns if MCP-related (limit: 5)
+
+      For each of the top-5 most relevant code results:
+        - Show the actual code or config snippet verbatim
+        - Identify the pattern being used and its purpose
+        - Note the file type, repo context, and language
+        - Rate pattern quality: production-ready | prototype | example-only
+
+      Output a CODE SURVEY document:
+
+        ## Implementation Patterns (ranked by quality and adoption)
+        ## Configuration Schemas Found
+        ## Integration Entry Points (where code hooks in)
+        ## Anti-Patterns to Avoid (with explanation)
+        ## Minimal Working Example (distill the best pattern into one snippet)
+
+      End with: VERDICT: code survey complete — <N patterns found, top pattern: name>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 2: RESEARCH SYNTHESIS ──────────────────────────────────────────
+  - id: research-synthesis
+    depends_on: [research-repos, research-issues, research-prs, research-code]
+    trigger_rule: all_done
+    gate: post-synthesis
+    command: |
+      MISSION: Synthesize all GitHub research into a unified intelligence brief.
+
+      Inputs:
+        - Intake:     {{intake.output}}
+        - Repos:      {{research-repos.output}}
+        - Issues:     {{research-issues.output}}
+        - PRs:        {{research-prs.output}}
+        - Code:       {{research-code.output}}
+
+      Produce a RESEARCH INTELLIGENCE BRIEF:
+
+        ## 1. Subject Confirmed
+        [Restate exactly what is being integrated, with any scope clarifications from research]
+
+        ## 2. What Already Exists
+        - Official implementations or Anthropic-supported references found
+        - Community implementations with measurable adoption
+        - Anything already in ~/.claude/ that overlaps
+
+        ## 3. What Has Been Attempted (and outcome)
+        - Failed or abandoned approaches and the documented reason
+        - Open issues with no resolution path
+        - PRs rejected and the stated reasons
+
+        ## 4. Dominant Implementation Pattern
+        [The one pattern with the most evidence for working correctly]
+        [Include a concise, self-contained code/config example — the minimum viable snippet]
+
+        ## 5. Known Risks and Gotchas
+        [Bugs, version incompatibilities, breaking changes, silent failures, edge cases]
+
+        ## 6. Research Confidence Assessment
+        HIGH — strong official docs + multiple independent community examples
+        MED  — community examples only, or partial official docs, or conflicting signals
+        LOW  — sparse information, contradictory findings, or rapidly changing API
+
+      Write this report to:
+        C:/Users/Dannis Seay/.dream-studio/planning/research-synthesis-<YYYY-MM-DD>.md
+      Then output the saved file path on a line by itself.
+
+      End with: VERDICT: synthesis complete — confidence: HIGH|MED|LOW
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 3: PARALLEL DEEP ANALYSIS ──────────────────────────────────────
+  - id: breakpoint-analysis
+    depends_on: [research-synthesis]
+    command: |
+      MISSION: NASA-grade breakpoint analysis — map every failure mode before touching a file.
+
+      Context:
+        - Subject:  {{intake.output}}
+        - Research: {{research-synthesis.output}}
+
+      First, read the current system state:
+        - C:/Users/Dannis Seay/.claude/settings.json
+        - C:/Users/Dannis Seay/.claude/CLAUDE.md
+        - List C:/Users/Dannis Seay/.claude/plugins/
+        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json
+
+      A BREAKPOINT is any system coupling where this integration could:
+        (a) silently corrupt state without visible error
+        (b) cause a hard visible failure that blocks use
+        (c) regress existing behavior that currently works
+
+      Think like a flight systems engineer — every coupling is a potential failure path.
+
+      Produce a BREAKPOINT ANALYSIS REPORT:
+
+        ## BREAKPOINT REGISTRY
+        | ID   | Location          | Type        | Severity | Likelihood | Description |
+        |------|-------------------|-------------|----------|------------|-------------|
+
+        Severity:    CRITICAL (system unusable) | HIGH (data loss or core failure) | MEDIUM (degraded) | LOW (cosmetic)
+        Likelihood:  CERTAIN | PROBABLE | POSSIBLE | UNLIKELY
+        Type:        CONFIG | RUNTIME | PERMISSION | INTEGRATION | REGRESSION
+
+        ## CRITICAL AND HIGH BREAKPOINT DETAILS
+        For each CRITICAL or HIGH breakpoint:
+          Trigger condition:    [what must happen to activate this breakpoint]
+          Failure mode:         [exactly what breaks and how]
+          Early warning signal: [how to detect this is about to break before it does]
+          Mitigation strategy:  [specific steps to prevent or contain this breakpoint]
+          Verification test:    [how to confirm this breakpoint is safe before proceeding]
+
+        ## REGRESSION MAP
+        For every existing workflow, skill, and hook that could behave differently:
+          [name] → [specific behavior that changes] → [risk level]
+        If none are at risk, state that explicitly.
+
+        ## SAFE SEQUENCING CONSTRAINT
+        The exact order breakpoints MUST be resolved to keep the system stable.
+        Format: [BP-ID] must precede [BP-ID] because [reason]
+
+      End with: VERDICT: breakpoint analysis complete — <N critical, M high, K medium, J low>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: gap-analysis
+    depends_on: [research-synthesis]
+    command: |
+      MISSION: NASA-grade gap analysis — nothing proceeds until every gap has a closure plan.
+
+      Context:
+        - Subject:  {{intake.output}}
+        - Research: {{research-synthesis.output}}
+
+      First, read current system state:
+        - C:/Users/Dannis Seay/.claude/settings.json
+        - C:/Users/Dannis Seay/.claude/CLAUDE.md
+        - C:/Users/Dannis Seay/.dream-studio/state/workflows.json
+        - List C:/Users/Dannis Seay/.claude/plugins/
+        - List C:/Users/Dannis Seay/.claude/skills/ (if accessible)
+
+      A GAP is anything MISSING between the current state and the desired fully-integrated state.
+      Think like a mission readiness reviewer — nothing ships until every gap has an owner and a plan.
+
+      Produce a GAP ANALYSIS REPORT:
+
+        ## GAP REGISTRY
+        | Gap ID | Category      | Description | Size | Blocking? |
+        |--------|---------------|-------------|------|-----------|
+
+        Categories:
+          CONFIG_GAP     — missing settings.json keys, hooks, or mcpServers entries
+          CODE_GAP       — missing files, skills, agents, or workflow nodes
+          WIRE_GAP       — integration points that exist but are not yet connected
+          PERMISSION_GAP — missing tool permissions or MCP server access grants
+          KNOWLEDGE_GAP  — missing CLAUDE.md rules, constraints, or context
+          TEST_GAP       — no verification path exists to confirm the feature works
+
+        Size: S (< 30 min) | M (30 min–2 hr) | L (2–8 hr) | XL (> 8 hr)
+
+        ## WIRING INSTRUCTIONS (for each CONFIG_GAP and WIRE_GAP)
+        For each gap requiring exact wiring, provide:
+
+          Gap ID:         [GAP-ID]
+          File to edit:   [absolute path]
+          Section:        [JSON key path, e.g. mcpServers.my-server, or markdown heading]
+          Exact addition:
+            ```
+            [the exact JSON / YAML / markdown block to insert]
+            ```
+          Validation:     [the command or manual check to confirm wiring is correct]
+
+        ## CONFIGURATION DIFF
+        Show the before → after for settings.json and CLAUDE.md:
+          Present only the changed sections — not the full file.
+          Use --- before / +++ after format.
+
+        ## CLOSURE ORDER
+        The correct sequence to close gaps (some gaps block others):
+          1. [GAP-ID] — [reason this must come first]
+          2. [GAP-ID] — [reason]
+          ...
+
+      End with: VERDICT: gap analysis complete — <N gaps total, M blocking>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 4: IMPLEMENTATION PLAN ─────────────────────────────────────────
+  - id: implementation-plan
+    depends_on: [breakpoint-analysis, gap-analysis]
+    trigger_rule: all_done
+    skill: dream-studio:plan
+    input: |
+      Generate an atomic, dependency-ordered implementation plan for: {{intake.output}}
+
+      Breakpoint analysis:
+      {{breakpoint-analysis.output}}
+
+      Gap analysis:
+      {{gap-analysis.output}}
+
+      Research synthesis:
+      {{research-synthesis.output}}
+
+      HARD CONSTRAINTS for this plan:
+        1. Resolve all CRITICAL breakpoints in Wave 1 before any other work
+        2. Close gaps in the closure order specified by gap analysis
+        3. Every task must end with an explicit verification step
+        4. Group tasks into numbered waves — tasks within a wave can run in parallel
+        5. Assign a model per task: haiku (search/read/explore), sonnet (code/config/write)
+        6. No single task should exceed 2 hours — split larger tasks into subtasks
+        7. Include a smoke-test task as the final task of every wave
+        8. The final wave must contain a full regression test against existing workflows
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 5: RISK MATRIX ─────────────────────────────────────────────────
+  - id: risk-matrix
+    depends_on: [breakpoint-analysis, gap-analysis, implementation-plan]
+    trigger_rule: all_done
+    command: |
+      MISSION: Construct a NASA-grade risk matrix before any implementation begins.
+
+      Inputs:
+        - Breakpoints:          {{breakpoint-analysis.output}}
+        - Gaps:                 {{gap-analysis.output}}
+        - Implementation plan:  {{implementation-plan.output}}
+
+      Produce a RISK ASSESSMENT REPORT:
+
+        ## RISK REGISTER
+        | Risk ID | Description | Probability (1-5) | Impact (1-5) | RPN | Response |
+        |---------|-------------|-------------------|--------------|-----|----------|
+
+        RPN = Probability × Impact. Sort descending. Mark RPN ≥ 15 as [RED].
+        Response types: MITIGATE | ACCEPT | AVOID | TRANSFER
+
+        ## TOP RISKS — FULL DETAIL (all risks with RPN ≥ 15)
+        For each red-level risk:
+          Trigger conditions:           [what must go wrong for this risk to activate]
+          Early warning indicators:     [detectable signals before full failure]
+          Mitigation plan:              [specific concrete steps to reduce RPN]
+          Residual risk after mitigation: [new Probability × new Impact = new RPN]
+          Contingency:                  [if mitigation fails, exact fallback steps]
+
+        ## GO / NO-GO CRITERIA
+        Conditions that MUST be true before implementation starts.
+        Any NO-GO condition must block the plan entirely until resolved.
+
+          ✅ GO conditions:    [list each]
+          ⛔ NO-GO conditions: [list each — these are hard blockers]
+
+        ## ROLLBACK PLAN
+        If implementation fails mid-stream, exact steps to restore current state:
+          Step 1: [action] → verify with: [check]
+          Step 2: [action] → verify with: [check]
+          ...
+
+        ## MISSION VERDICT
+        Based on all analysis: GO | NO-GO | GO WITH CONDITIONS
+        Conditions (if applicable): [specific pre-conditions that must be resolved first]
+
+      End with: VERDICT: risk matrix complete — GO|NO-GO|GO WITH CONDITIONS
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 6: DIRECTOR GATE ───────────────────────────────────────────────
+  - id: mission-briefing
+    depends_on: [implementation-plan, risk-matrix]
+    trigger_rule: all_done
+    gate: mission-commander
+    command: |
+      MISSION: Deliver a concise executive briefing for Director approval.
+
+      Compile a MISSION BRIEFING using all prior node outputs:
+
+        # Mission Briefing: {{intake.output}}
+
+        ## Research Confidence
+        [Confidence level: HIGH / MED / LOW — one-line justification]
+
+        ## Key Findings (3 bullets max — most important things discovered)
+
+        ## Critical Breakpoints
+        [List CRITICAL and HIGH breakpoints with their mitigations]
+        [If none: state "No critical breakpoints identified"]
+
+        ## Open Gaps Summary
+        [Total count by category: CONFIG / WIRE / CODE / PERMISSION / KNOWLEDGE / TEST]
+
+        ## Implementation Summary
+        [Number of waves, total tasks, estimated total clock time]
+
+        ## Risk Verdict
+        [GO / NO-GO / GO WITH CONDITIONS + the top 2 risks by RPN score]
+
+        ## Recommendation
+        [One paragraph: proceed, hold, or abort — and the specific reason why]
+
+      Director: review the briefing above and approve to generate the final report,
+      or abort to stop. Awaiting your decision.
+
+      End with: VERDICT: briefing delivered — awaiting Director decision
+    model: sonnet
+    context: inherit
+    timeout_seconds: 180
+
+  # ── PHASE 7: FINAL REPORT ────────────────────────────────────────────────
+  - id: final-report
+    depends_on: [mission-briefing]
+    command: |
+      MISSION: Compile and save the complete integration report to disk.
+
+      Determine subject slug from {{intake.output}} — lowercase, hyphens, no spaces.
+      Save to: C:/Users/Dannis Seay/.dream-studio/planning/claude-integration-<subject-slug>-<YYYY-MM-DD>.md
+
+      Report structure:
+
+        # Claude Integration Report: [Subject]
+        **Generated:** [date]   **Confidence:** [HIGH/MED/LOW]   **Risk Verdict:** [GO/NO-GO]
+
+        ## Executive Summary
+        [3-5 sentences: what was researched, key finding, risk verdict, top risk, recommendation]
+
+        ## Research Findings
+        [Full content from research-synthesis — do not truncate]
+
+        ## Breakpoint Analysis
+        [Full breakpoint registry table + critical/high details + safe sequencing constraint]
+
+        ## Gap Analysis
+        [Full gap registry table + all wiring instructions + configuration diff + closure order]
+
+        ## Implementation Plan
+        [Full plan with all waves and tasks — do not truncate]
+
+        ## Risk Matrix
+        [Full risk register table + top risk details + GO/NO-GO criteria + rollback plan]
+
+        ## Appendix A: Repository Survey
+        [Full content from research-repos]
+
+        ## Appendix B: Issues Survey
+        [Full content from research-issues]
+
+        ## Appendix C: PR Survey
+        [Full content from research-prs]
+
+        ## Appendix D: Code Pattern Survey
+        [Full content from research-code]
+
+      After writing the file, output its full absolute path on a line by itself.
+      End with: VERDICT: report saved — <file path>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
