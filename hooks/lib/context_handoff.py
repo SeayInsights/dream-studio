@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import paths  # noqa: E402
 from lib.time_utils import utcnow  # noqa: E402
 
-WARN_PCT = 30
+WARN_PCT = 55
 COMPACT_PCT = 70
 HANDOFF_PCT = 75
 URGENT_PCT = 82

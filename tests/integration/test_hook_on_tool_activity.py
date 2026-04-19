@@ -54,3 +54,36 @@ def test_caps_entries_at_max(isolated_home, monkeypatch, handler):
     doc = json.loads(target.read_text(encoding="utf-8"))
     assert len(doc["agents"]) == 6  # MAX_AGENTS
     assert doc["agents"][0]["task"] == "$ ls"
+
+
+def test_harden_nudge_uses_project_root(isolated_home, tmp_path, monkeypatch, capsys, handler):
+    # File deep in a subdir — project root (tmp_path) has no Makefile/SECURITY.md
+    subdir = tmp_path / "src" / "utils"
+    subdir.mkdir(parents=True)
+    file_path = str(subdir / "helper.py")
+
+    payload = {"tool_name": "Edit", "tool_input": {"file_path": file_path}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    mod = handler("on-tool-activity")
+    # Patch _project_root to return tmp_path (simulating no Makefile at root)
+    monkeypatch.setattr(mod, "_project_root", lambda _: tmp_path)
+    mod.main()
+
+    out = capsys.readouterr().out
+    assert "harden" in out.lower()
+
+
+def test_harden_nudge_suppressed_when_makefile_at_root(isolated_home, tmp_path, monkeypatch, capsys, handler):
+    (tmp_path / "Makefile").write_text("test:\n\tpytest\n")
+    file_path = str(tmp_path / "src" / "app.py")
+
+    payload = {"tool_name": "Edit", "tool_input": {"file_path": file_path}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    mod = handler("on-tool-activity")
+    monkeypatch.setattr(mod, "_project_root", lambda _: tmp_path)
+    mod.main()
+
+    out = capsys.readouterr().out
+    assert "harden" not in out.lower()

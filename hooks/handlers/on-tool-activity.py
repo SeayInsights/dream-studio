@@ -79,16 +79,28 @@ def elapsed(ts: float) -> str:
     return f"{secs // 60}m ago"
 
 
+def _project_root(file_path: str) -> Path:
+    """Walk up from file_path to the nearest .git or pyproject.toml; fall back to file's parent."""
+    p = Path(file_path).resolve().parent
+    for _ in range(10):
+        if (p / ".git").exists() or (p / "pyproject.toml").exists() or (p / "Makefile").exists():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return Path(file_path).resolve().parent
+
+
 def _maybe_harden_nudge(tool_name: str, tool_input: dict) -> None:
     if tool_name not in _NUDGE_TOOLS:
         return
     file_path = tool_input.get("file_path", tool_input.get("path", ""))
     if not file_path:
         return
-    cwd = Path(file_path).parent
-    if (cwd / "Makefile").exists() or (cwd / "SECURITY.md").exists():
+    root = _project_root(file_path)
+    if (root / "Makefile").exists() or (root / "SECURITY.md").exists():
         return
-    slug = str(cwd).replace("\\", "-").replace("/", "-").replace(":", "-").replace(" ", "-")[:60]
+    slug = str(root).replace("\\", "-").replace("/", "-").replace(":", "-").replace(" ", "-")[:80]
     sentinel = paths.state_dir() / f"harden-nudge-{slug}.json"
     if sentinel.exists():
         return
