@@ -41,7 +41,7 @@ Spawn an Explore subagent (model: haiku) with this task:
 | 16 | Integration tests | `tests/integration/` directory with test files |
 | 17 | Health/status reporter | Handler or script for health check / pulse |
 | 18 | CHANGELOG | CHANGELOG.md in Keep a Changelog format |
-| 19 | README | README.md with setup instructions |
+| 19 | README | README.md with: title + badges, quick start, usage examples, project structure tree, contributing + license sections |
 | 20 | Telemetry | Hook or handler usage telemetry (token log, audit.jsonl) |
 
 After the Explore subagent returns:
@@ -53,9 +53,10 @@ After the Explore subagent returns:
 
 ## Phase 2: Fix
 
-### Tier 1 structural files (items 1, 2, 3, 6, 7, 11, 13)
+### Tier 1 structural files (items 1, 2, 3, 6, 7, 11, 13, 19)
 
 For each missing structural file, copy from `templates/project-standards/` in the dream-studio repo:
+- `README.md` → project root (replace `{project-name}`, `{owner}`, `{repo}` placeholders; then fill sections from actual project)
 - `Makefile` → project root (parameterize Python command if needed)
 - `pyproject.toml` → project root
 - `.coveragerc` → project root (or add to pyproject.toml)
@@ -64,6 +65,13 @@ For each missing structural file, copy from `templates/project-standards/` in th
 - `.pre-commit-config.yaml` → project root
 - `requirements.txt` → project root (stub)
 - `requirements-dev.txt` → project root (stub, merge with existing)
+
+**README.md audit — mark item 19 as ⚠ partial if the file exists but is missing any of:**
+- Badges (CI, version, license)
+- Quick start (≤5 copy-paste steps)
+- Usage examples with code blocks
+- Project structure tree (annotated folder/file listing)
+- Contributing and License sections
 
 **Never overwrite an existing file** — only fill gaps.
 

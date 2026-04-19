@@ -163,6 +163,16 @@ def _handle_compact_cooldown(projects: Path, session_id: str | None, is_compact_
             cd_sentinel.parent.mkdir(parents=True, exist_ok=True)
             cd_sentinel.write_text(str(_COMPACT_COOLDOWN_TURNS))
             sentinel(projects, session_id, "compact-msg").unlink(missing_ok=True)
+            # Reset bridge file so statusline shows ~0% on next turn
+            bp = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id or 'unknown'}.json"
+            bp.write_text(json.dumps({
+                "session_id": session_id or "",
+                "used_pct": 0.0,
+                "raw_pct": 0.0,
+                "remaining_percentage": 100.0,
+                "timestamp": int(time.time()),
+                "post_compact": True,
+            }))
         except Exception:
             pass
         return True  # suppress this turn (/compact itself)
