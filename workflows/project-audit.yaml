@@ -1,0 +1,62 @@
+name: project-audit
+description: >
+  Full project audit — harden (structure + best practices), secure (OWASP + STRIDE),
+  then review (code quality) — run sequentially with director gates between each phase.
+  Invoke from the project root directory, or say "workflow: project-audit path: <absolute-path>".
+version: 1
+on_failure: abort
+
+gates:
+  after-harden:
+    type: pause
+    prompt: "Harden complete. Review findings above, then approve to proceed to security audit?"
+  after-secure:
+    type: pause
+    prompt: "Security audit complete. Review findings above, then approve to proceed to code review?"
+
+nodes:
+  - id: harden
+    skill: harden
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: secure
+    skill: secure
+    depends_on: [harden]
+    gate: after-harden
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: review
+    skill: review
+    depends_on: [secure]
+    gate: after-secure
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: report
+    depends_on: [harden, secure, review]
+    trigger_rule: all_done
+    command: |
+      Read all audit findings files in the project root:
+        - review-harden-findings.md
+        - review-secure-findings.md
+        - review-review-findings.md
+
+      For each file: if missing, note as SKIPPED. If present, extract all findings with
+      their severity tags (Critical / High / Medium / Low).
+
+      Synthesize into a single final-audit-report.md at the project root with:
+        1. Executive summary — pass/fail verdict per phase (Harden / Security / Review)
+        2. All findings grouped by severity (Critical first)
+        3. Recommended fix order
+        4. Overall verdict: PASSED if no Critical or High findings, BLOCKED otherwise
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
+      Format: VERDICT: one-line summary of what was found.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
