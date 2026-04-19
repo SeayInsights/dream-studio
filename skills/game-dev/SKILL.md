@@ -15,6 +15,79 @@ Any game build, review, QA, design, or asset pipeline command.
 - **godot-mcp** over shell-mcp. **blender-mcp** over shell-mcp.
 - Structure: `scenes/ · scripts/ · assets/ · tests/ · design/`
 
+## Path-Scoped Coding Rules
+
+**Path resolution:** This skill is loaded from the dream-studio plugin. To find rule files, resolve the plugin root: look at the path you loaded THIS file from, go up two directories (past `skills/game-dev/`), then into `rules/game/`. Example: if you loaded `…/dream-studio/0.2.0/skills/game-dev/SKILL.md`, the rules live at `…/dream-studio/0.2.0/rules/game/`.
+
+When editing game project files, **Read** the matching rule file before writing code.
+
+**Matching strategy (in priority order):**
+1. **Directory name match** — any directory in the file's path matches a keyword below
+2. **Filename match** — the file's stem contains a keyword (e.g., `combat_system.gd` → gameplay)
+3. **Content match** — if no path/name match, peek at the file: `CharacterBody` → gameplay, `NavigationAgent` → ai, `Control`/`Panel` → ui, `@rpc` → networking
+
+| Keywords in path or filename | Read this rule |
+|---|---|
+| `gameplay`, `systems`, `mechanics`, `combat`, `movement`, `abilities` | `rules/game/gameplay-code.md` |
+| `networking`, `multiplayer`, `net`, `network`, `online` | `rules/game/networking-code.md` |
+| `ai`, `npc`, `enemies`, `behavior`, `mobs`, `pathfinding` | `rules/game/ai-code.md` |
+| `ui`, `hud`, `menu`, `gui`, `interface`, `dialog`, `screens` | `rules/game/ui-code.md` |
+| `shaders`, `materials`, or `.gdshader` extension | `rules/game/shader-code.md` |
+| `data`, `balance`, `config`, `gamedata`, or `.json` in data dirs | `rules/game/data-files.md` |
+
+**Non-standard project structures:** Rules use broad glob patterns (e.g., `**/gameplay/**/*.gd`, `**/src/gameplay/**`) to match common alternatives like `src/gameplay/`, flat `gameplay/`, or `scripts/gameplay/`. If your project uses a unique structure, the content-based fallback will still classify most files correctly.
+
+**Fallback:** If the file doesn't match any pattern above, apply the general architecture rules in this file. If a rule file can't be found, don't fail — apply the summary constraint from the table below:
+
+| Rule | One-line constraint if file not found |
+|---|---|
+| gameplay-code | No hardcoded values; signals up, never call siblings; no UI references |
+| networking-code | Server-authoritative; never trust client state; handle disconnect everywhere |
+| ai-code | Timer-based updates not per-frame; all params in data files; expose debug state |
+| ui-code | No game state ownership; all strings use tr(); 44px min touch targets |
+| shader-code | No hardcoded visual params; uniforms with hint_range(); under 50 lines per function |
+| data-files | Valid JSON; snake_case keys; reasonable numeric bounds; document changes |
+
+## Engine Reference
+
+**Path resolution (priority order):**
+1. **User override:** `~/.dream-studio/engine-ref/godot4/` — user can add or replace files here
+2. **Project override:** `.dream-studio/engine-ref/godot4/` in the project root — project-specific additions
+3. **Plugin built-in:** Same plugin root as above, then `engine-ref/godot4/`
+
+Check user/project overrides first. If a file exists there, use it instead of the plugin built-in. This lets users add entries for newer Godot versions without waiting for a plugin update.
+
+Before suggesting Godot APIs, check these files in order:
+1. `deprecated-apis.md` — will this API even work?
+2. `breaking-changes.md` — has the signature/behavior changed?
+3. `best-practices.md` — is there a better modern pattern?
+
+If an API appears in the deprecated list, **do not suggest it**. Use the replacement. If an API appears in the breaking changes with HIGH risk, warn the user explicitly.
+
+### Verification Tags
+
+Every entry in the engine reference is tagged with a confidence level:
+
+| Tag | Your obligation |
+|-----|-----------------|
+| `[VERIFIED]` | Safe to suggest without caveat |
+| `[HIGH-CONFIDENCE]` | Safe to suggest; mention "based on engine reference" if the user asks how you know |
+| `[UNVERIFIED]` | **Must warn the user:** "This is from my training data and hasn't been verified against current Godot docs. Check the official API reference before using in production." |
+
+**When you suggest a Godot API or pattern:**
+1. Check if it appears in any engine reference file
+2. Note the tag on the relevant entry
+3. If `[UNVERIFIED]`: add the warning above to your response
+4. If the entry references a Godot version newer than the project's version: warn about forward-compatibility
+5. If no entry exists in the reference: treat as `[UNVERIFIED]` by default for any API that changed between 3.x→4.x
+
+### Staleness Guard
+
+If the project's `project.godot` specifies a Godot version newer than 4.4:
+1. Warn: "Engine reference covers up to Godot 4.4. Your project uses [version]. Some API guidance may be outdated."
+2. For any API suggestion, add: "Verify this works in Godot [version]"
+3. Suggest checking official sources (URLs in `engine-ref/godot4/VERSION.md`)
+
 ---
 
 ## 2D Patterns

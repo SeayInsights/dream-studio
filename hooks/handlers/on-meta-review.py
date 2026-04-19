@@ -11,6 +11,7 @@ any theme occurring THEME_DRAFT_THRESHOLD+ times, and writes
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -22,6 +23,12 @@ from lib import paths  # noqa: E402
 
 THEME_DRAFT_THRESHOLD = 3
 SESSION_COUNT = 7
+
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "of",
+    "with", "some", "did", "work", "that", "this", "was", "is", "it", "be",
+    "by", "from", "as", "not", "are", "has", "have", "do", "done", "been",
+}
 
 
 def parse_token_log(count: int = SESSION_COUNT) -> list[dict]:
@@ -70,6 +77,67 @@ def parse_token_log(count: int = SESSION_COUNT) -> list[dict]:
     return recent
 
 
+def _extract_summary_themes(summaries: list[str]) -> list[tuple[str, int]]:
+    """Count keyword frequency across session summaries; return words appearing 2+ times."""
+    counts: dict[str, int] = {}
+    for summary in summaries:
+        words = set(re.findall(r"\b[a-z][a-z0-9-]*\b", summary.lower()))
+        for w in words:
+            if w not in _STOPWORDS and len(w) > 2:
+                counts[w] = counts.get(w, 0) + 1
+    return [(w, c) for w, c in counts.items() if c >= 2]
+
+
+def parse_session_context(count: int = SESSION_COUNT) -> tuple[list[dict], list[tuple[str, int]]]:
+    """Read session-context.md and return (sessions, summary_themes).
+
+    Fallback data source when token-log.md is absent.
+    """
+    ctx_path = paths.planning_dir() / "session-context.md"
+    if not ctx_path.exists():
+        return [], []
+    try:
+        text = ctx_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return [], []
+
+    blocks = re.split(r"\n---\n", text)
+    sessions: list[dict] = []
+    summaries: list[str] = []
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+        ts_match = re.search(r"## Session End\s*[—\-]\s*(\S+)", block)
+        timestamp = ts_match.group(1) if ts_match else "unknown"
+        fields: dict[str, str] = {}
+        for line in block.splitlines():
+            m = re.match(r"\*\*([^*:]+):\*\*\s*(.+)", line.strip())
+            if m:
+                fields[m.group(1).strip()] = m.group(2).strip()
+        session_id = fields.get("Session", "unknown")
+        try:
+            total_tokens = int(fields.get("Tokens used", "0"))
+        except ValueError:
+            total_tokens = 0
+        summary = fields.get("Summary", "")
+        if summary:
+            summaries.append(summary)
+        sessions.append({
+            "session": session_id,
+            "model": "unknown",
+            "first_seen": timestamp,
+            "last_seen": timestamp,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": total_tokens,
+            "turns": 1,
+        })
+
+    return sessions[-count:], _extract_summary_themes(summaries)
+
+
 def format_duration(first: str, last: str) -> str:
     try:
         t1 = datetime.fromisoformat(first)
@@ -84,7 +152,10 @@ def format_duration(first: str, last: str) -> str:
         return "?"
 
 
-def generate_review(sessions: list[dict]) -> tuple[str, list[tuple[str, int]]]:
+def generate_review(
+    sessions: list[dict],
+    extra_themes: list[tuple[str, int]] | None = None,
+) -> tuple[str, list[tuple[str, int]]]:
     if not sessions:
         return "# Weekly Review\n\nNo session data found in token-log.md.\n", []
 
@@ -129,6 +200,12 @@ def generate_review(sessions: list[dict]) -> tuple[str, list[tuple[str, int]]]:
     long_sessions = [s for s in sessions if s["turns"] > 10]
     if long_sessions:
         themes.append(("long-running", len(long_sessions)))
+
+    if extra_themes:
+        theme_dict = dict(themes)
+        for k, v in extra_themes:
+            theme_dict[k] = theme_dict.get(k, 0) + v
+        themes = list(theme_dict.items())
 
     themes.sort(key=lambda t: t[1], reverse=True)
     theme_lines = (
@@ -203,10 +280,13 @@ def draft_theme_lessons(themes: list[tuple[str, int]], timestamp: str) -> list[s
 
 def main() -> None:
     sessions = parse_token_log(count=SESSION_COUNT)
+    extra_themes: list[tuple[str, int]] | None = None
+    if not sessions:
+        sessions, extra_themes = parse_session_context(count=SESSION_COUNT)
     if not sessions:
         return
 
-    review, themes = generate_review(sessions)
+    review, themes = generate_review(sessions, extra_themes=extra_themes)
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     timestamp = datetime.now(timezone.utc).isoformat()
 

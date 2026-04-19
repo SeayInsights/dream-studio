@@ -31,10 +31,25 @@ def extract_skill_name(file_path: str) -> str:
     return match.group(1) if match else Path(file_path).stem
 
 
+def _is_safe_skill_path(file_path: str) -> bool:
+    """Reject symlinks that resolve outside the user's home directory."""
+    try:
+        p = Path(file_path)
+        if not p.is_symlink():
+            return True
+        resolved = p.resolve()
+        home = Path.home().resolve()
+        return str(resolved).replace("\\", "/").startswith(str(home).replace("\\", "/"))
+    except Exception:
+        return False
+
+
 def maybe_announce_director(file_path: str) -> None:
     """If the read file contains the placeholder, surface the resolved value."""
+    if not _is_safe_skill_path(file_path):
+        return
     try:
-        content = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+        content = Path(file_path).read_text(encoding="utf-8", errors="replace")
     except Exception:
         return
     if DIRECTOR_PLACEHOLDER not in content:

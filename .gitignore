@@ -1,6 +1,15 @@
 # dream-studio runtime state (user data dir, never committed)
 .dream-studio/
 
+# Generated session handoffs — contain conversation history, never commit
+.sessions/
+
+# Ephemeral planning artifacts — not source, not docs
+.planning/
+
+# Structure audit reports — generated artifacts
+.audit/
+
 # Python
 __pycache__/
 *.pyc

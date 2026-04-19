@@ -12,6 +12,8 @@ fields.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
@@ -44,24 +46,40 @@ def _check_schema(doc: Dict[str, Any], source: Path) -> None:
         )
 
 
+def _atomic_write(path: Path, payload: Dict[str, Any]) -> None:
+    """Write JSON atomically via temp file + rename to prevent partial writes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def read_config() -> Dict[str, Any]:
-    """Return the user config dict, or a default stub if the file is absent."""
+    """Return the user config dict, or a default stub if the file is absent or corrupt."""
     path = _config_path()
     if not path.is_file():
         return {"schema_version": SCHEMA_VERSION}
-    with path.open("r", encoding="utf-8") as f:
-        doc = json.load(f)
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            doc = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"schema_version": SCHEMA_VERSION}
     _check_schema(doc, path)
     return doc
 
 
 def write_config(data: Dict[str, Any]) -> Path:
-    """Persist the user config, stamping schema_version."""
+    """Persist the user config atomically, stamping schema_version."""
     path = _config_path()
-    payload = {**data, "schema_version": SCHEMA_VERSION}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
+    _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
     return path
 
 
@@ -70,17 +88,17 @@ def read_pulse() -> Dict[str, Any]:
     path = _pulse_path()
     if not path.is_file():
         return {}
-    with path.open("r", encoding="utf-8") as f:
-        doc = json.load(f)
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            doc = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
     _check_schema(doc, path)
     return doc
 
 
 def write_pulse(data: Dict[str, Any]) -> Path:
-    """Persist the latest pulse snapshot, stamping schema_version."""
+    """Persist the latest pulse snapshot atomically, stamping schema_version."""
     path = _pulse_path()
-    payload = {**data, "schema_version": SCHEMA_VERSION}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
+    _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
     return path

@@ -102,31 +102,62 @@ py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> running
 **Skill node:**
 1. Read `skills/<skill-name>/SKILL.md`
 2. Resolve `input` field: for `{{node-id.output}}`, read the output from `workflow_state.py status <key>` or from your memory of prior node results
-3. Spawn agent via Task tool with: skill content + `director-preferences.md` + resolved input + `config`
+3. Spawn agent via Task tool with: skill content + `director-preferences.md` + resolved input
 4. Set `model` from node. Use `agent` field for persona if set.
-5. `context: fresh` (default) → new agent. `context: inherit` → current session.
+5. `context: fresh` (default) → new agent via Task tool. Pass ONLY the node's input + skill content + config — do NOT paste prior nodes' full output into the prompt. If the new agent needs a prior node's verdict, include just the verdict string, not the full response. `context: inherit` → execute in the current session (all prior context visible).
+6. If the node has a `config` block, pass those key-value pairs as additional instructions to the agent prompt (e.g., `focus`, `rules`, `output_contract`).
 
 **Command node:**
 1. The `command` text is the full prompt
-2. `context: fresh` → spawn as new agent. Otherwise current session.
+2. `context: fresh` → spawn as new agent via Task tool (isolated context). `context: inherit` → current session.
+3. **Output contract:** The agent's final line of output MUST be one of the standard verdicts (see Output Contract below). Include this instruction in the agent's prompt.
 
 **For parallel review/secure nodes:** include in each agent's prompt:
-> "Write your complete findings to `review-<node-id>-findings.md` in the project root."
+> "Write your complete findings to `review-<node-id>-findings.md` in the project root. Your final line of output must be exactly PASSED or BLOCKED."
 
 After the agent returns, verify the file exists. If not, write the agent's response to that file yourself. This ensures synthesize can find all review outputs.
 
 **3d. Record result**
 
+Extract the verdict from the agent's output (last non-empty line). If the verdict doesn't match a known value, treat as `UNKNOWN` and pause for Director review.
+
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<summary>" --duration <seconds>
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<verdict>: <summary>" --duration <seconds>
 ```
 
 Or on failure:
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> failed --output "<error>"
+py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> failed --output "FAILED: <error>"
 ```
 
 On failure: retry up to 3 times (or node's `retry` value). Upgrade model each retry (haiku→sonnet→opus). After exhaustion → pause workflow, escalate to Director.
+
+---
+
+## Output Contract
+
+Every workflow node — skill or command — must end its output with a **verdict line**. This is what conditions (`{{node.output}} == BLOCKED`) match against. The verdict is the first word of the `--output` value stored in state.
+
+**Standard verdicts:**
+
+| Verdict | Meaning | Next action |
+|---------|---------|-------------|
+| `PASSED` | Node completed successfully, no issues | Continue to dependents |
+| `BLOCKED` | Critical/high issues found that must be fixed | Trigger fix node or pause |
+| `FAILED` | Node could not complete its work | Retry or escalate |
+| `SKIPPED` | Node was not applicable (condition false) | Continue, treat as non-blocking |
+| `VERIFIED` | Evidence-based confirmation (verify skill) | Continue to ship |
+| `UNKNOWN` | Agent didn't produce a clear verdict | Pause for Director review |
+
+**How conditions match:** `{{node.output}} == BLOCKED` checks if the stored output equals `BLOCKED` OR starts with `BLOCKED:` (colon-delimited prefix). So `BLOCKED: 2 critical findings` matches `== BLOCKED`. This is symmetric — the shorter string is always treated as a potential prefix of the longer string. Always store as `VERDICT: detail`.
+
+**Prompt injection for command nodes:** When writing `command:` blocks in workflow YAML, always end the prompt with:
+```
+Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
+Format: VERDICT: one-line summary of what you found.
+```
+
+This prevents ambiguous outputs that break condition evaluation.
 
 **3e. Loop** — after recording, call `next` again. Repeat from 3a until `next` returns `done`.
 

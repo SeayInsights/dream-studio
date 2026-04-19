@@ -51,6 +51,10 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" on-agent-correction"
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh\" on-game-validate"
           }
         ]
       },

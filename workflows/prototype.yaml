@@ -1,0 +1,28 @@
+name: prototype
+description: Fast prototype — think then build, skip formal review. For game jams and quick experiments.
+version: 2
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve prototype scope?"
+
+nodes:
+  - id: think
+    skill: think
+    gate: director-approval
+    model: sonnet
+    context: fresh
+
+  - id: build
+    skill: build
+    depends_on: [think]
+    model: sonnet
+    context: fresh
+    input: "{{think.output}}"
+
+  - id: verify
+    skill: verify
+    depends_on: [build]
+    model: sonnet
+    context: fresh

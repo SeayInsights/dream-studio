@@ -113,11 +113,39 @@ def check_ci_status(repo: str) -> str:
     return f"{run.get('name', 'unknown')}: {conclusion}"
 
 
+MAX_PENDING_DRAFTS = 100
+DRAFT_STALE_DAYS = 30
+
+
 def check_pending_drafts() -> list[str]:
     drafts_dir = paths.meta_dir() / "draft-lessons"
     if not drafts_dir.exists():
         return []
-    return sorted(f.name for f in drafts_dir.glob("*.md"))
+    try:
+        files = sorted(drafts_dir.glob("*.md"))
+    except OSError:
+        return []
+    return [f.name for f in files]
+
+
+def auto_archive_stale_drafts() -> int:
+    """Move drafts older than DRAFT_STALE_DAYS to draft-lessons/archive/. Returns count moved."""
+    drafts_dir = paths.meta_dir() / "draft-lessons"
+    if not drafts_dir.exists():
+        return 0
+    import time as _time
+    cutoff = _time.time() - (DRAFT_STALE_DAYS * 86400)
+    archive_dir = drafts_dir / "archive"
+    moved = 0
+    try:
+        for f in drafts_dir.glob("*.md"):
+            if f.stat().st_mtime < cutoff:
+                archive_dir.mkdir(exist_ok=True)
+                f.rename(archive_dir / f.name)
+                moved += 1
+    except Exception:
+        pass
+    return moved
 
 
 def check_corrections_growth() -> tuple[int, str]:
@@ -158,11 +186,15 @@ def generate_pulse() -> tuple[str, dict]:
     else:
         stale_branches, overdue_ms, open_prs, ci_status = [], [], [], "no github_repo configured"
 
+    archived = auto_archive_stale_drafts()
     pending_drafts = check_pending_drafts()
     corrections_count, last_correction = check_corrections_growth()
     open_escalations = check_open_escalations()
+    drafts_overflow = len(pending_drafts) > MAX_PENDING_DRAFTS
 
     issues = len(stale_branches) + len(overdue_ms) + len(open_escalations)
+    if drafts_overflow:
+        issues += 1
     if issues == 0:
         health = "HEALTHY"
     elif issues <= 3:
@@ -189,8 +221,10 @@ def generate_pulse() -> tuple[str, dict]:
         f"### CI Status\n\n"
         f"- {ci_status}\n\n"
         f"## Local\n\n"
-        f"### Pending Draft Lessons ({len(pending_drafts)})\n\n"
-        f"{bullets(pending_drafts, 'None pending')}\n"
+        f"### Pending Draft Lessons ({len(pending_drafts)}){' ⚠ OVERFLOW — run /recap to clear' if drafts_overflow else ''}\n\n"
+        f"{f'> {archived} stale drafts auto-archived (older than {DRAFT_STALE_DAYS}d).' + chr(10) if archived else ''}"
+        f"{bullets(pending_drafts[:20], 'None pending')}"
+        f"{f'... and {len(pending_drafts) - 20} more. Run /recap to review.' + chr(10) if len(pending_drafts) > 20 else chr(10)}"
         f"### Corrections Log\n\n"
         f"- Total corrections: {corrections_count}\n"
         f"- Last correction: {last_correction or 'none'}\n\n"
@@ -214,6 +248,7 @@ def generate_pulse() -> tuple[str, dict]:
 
 
 def main() -> None:
+    paths.warn_version_mismatch()
     report, stats = generate_pulse()
 
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")

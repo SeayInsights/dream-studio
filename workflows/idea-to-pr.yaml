@@ -78,10 +78,22 @@ nodes:
     depends_on: [review-code, review-security, review-tests, review-perf, review-docs]
     trigger_rule: all_done
     command: |
-      Read all review reports (review-{node-id}-findings.md for each review node).
-      Synthesize into one findings document with severity tags (Critical/High/Medium/Low).
-      If any Critical or High findings: output BLOCKED with fix list.
-      If all clean: output PASSED.
+      Read all review findings files:
+      - review-review-code-findings.md
+      - review-review-security-findings.md
+      - review-review-tests-findings.md
+      - review-review-perf-findings.md
+      - review-review-docs-findings.md
+
+      For each file: if missing, note as SKIPPED. If present, extract findings with severity tags.
+      Synthesize into review-synthesize-findings.md: combined, de-duplicated, sorted by severity.
+
+      Decision:
+      - Any Critical or High → BLOCKED
+      - Medium/Low only or all SKIPPED → PASSED
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
+      Format: VERDICT: one-line summary.
     model: sonnet
     context: fresh
 

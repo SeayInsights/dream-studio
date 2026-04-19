@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +26,7 @@ from lib import paths  # noqa: E402
 
 DEFAULT_TARGET_BASENAME = "director-corrections.md"
 ACCUMULATION_THRESHOLD = 3
+MAX_LOG_SIZE = 2 * 1024 * 1024  # 2 MB — archive and start fresh if exceeded
 
 
 def target_path() -> Path:
@@ -42,10 +44,15 @@ def is_target_file(path: str) -> bool:
 
 
 def parse_latest_correction(text: str) -> dict | None:
-    parts = text.split("## Corrections")
-    if len(parts) < 2:
+    # Case-insensitive, flexible header matching (## Corrections, ### Corrections Found, etc.)
+    match = re.search(r"^#{1,4}\s*corrections\b.*$", text, re.IGNORECASE | re.MULTILINE)
+    if not match:
         return None
-    block = parts[-1].split("## Derived Rules")[0]
+    block_start = match.end()
+    # Stop at the next top-level section (## something other than corrections)
+    next_section = re.search(r"^#{1,4}\s+(?!corrections\b)\w", text[block_start:], re.IGNORECASE | re.MULTILINE)
+    block = text[block_start: block_start + next_section.start()] if next_section else text[block_start:]
+
     entries = re.split(r"\n(?=- Session:)", block)
     entries = [e.strip() for e in entries if e.strip().startswith("- Session:")]
     if not entries:
@@ -60,24 +67,73 @@ def parse_latest_correction(text: str) -> dict | None:
     return fields or None
 
 
+def _log_lock(log_path: Path) -> "tuple[Path, bool]":
+    """Acquire a lock file for corrections.log. Returns (lock_path, acquired)."""
+    lock_path = log_path.parent / f"{log_path.name}.lock"
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode())
+            os.close(fd)
+            return lock_path, True
+        except FileExistsError:
+            if time.monotonic() > deadline:
+                try:
+                    lock_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                continue
+            time.sleep(0.005)
+
+
+def _archive_log_if_large(log_path: Path) -> None:
+    """Archive corrections.log if it exceeds MAX_LOG_SIZE."""
+    try:
+        if log_path.exists() and log_path.stat().st_size > MAX_LOG_SIZE:
+            archive = log_path.parent / f"corrections-{datetime.now(timezone.utc).strftime('%Y%m%d')}.log"
+            log_path.rename(archive)
+    except OSError:
+        pass
+
+
 def append_to_log(session: str, pattern: str, timestamp: str) -> None:
     log_path = paths.meta_dir() / "corrections.log"
     try:
-        with log_path.open("a", encoding="utf-8") as f:
-            f.write(f"{timestamp}\t{session}\t{pattern}\n")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path, _ = _log_lock(log_path)
+        try:
+            _archive_log_if_large(log_path)
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(f"{timestamp}\t{session}\t{pattern}\n")
+        finally:
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+    except Exception as e:
+        print(f"[on-agent-correction] failed to write log: {e}", file=sys.stderr)
+
+
+def _read_log_patterns(log_path: Path) -> list[str]:
+    """Read all pattern entries from log. Returns empty list on any error."""
+    try:
+        if not log_path.exists():
+            return []
+        text = log_path.read_text(encoding="utf-8")
+        patterns = []
+        for line in text.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[2].strip():
+                patterns.append(parts[2].strip())
+        return patterns
     except Exception:
-        pass
+        return []
 
 
 def check_pattern_accumulation(pattern: str, timestamp: str) -> None:
     log_path = paths.meta_dir() / "corrections.log"
-    if not log_path.exists():
-        return
-    patterns: list[str] = []
-    for line in log_path.read_text(encoding="utf-8").splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 3 and parts[2].strip():
-            patterns.append(parts[2].strip())
+    patterns = _read_log_patterns(log_path)
     match_count = Counter(patterns).get(pattern, 0)
     if match_count < ACCUMULATION_THRESHOLD:
         return
@@ -90,10 +146,13 @@ def check_pattern_accumulation(pattern: str, timestamp: str) -> None:
         return
 
     evidence = []
-    for line in log_path.read_text(encoding="utf-8").splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 3 and parts[2].strip() == pattern:
-            evidence.append(f"- {parts[0]} (session: {parts[1]})")
+    try:
+        for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[2].strip() == pattern:
+                evidence.append(f"- {parts[0]} (session: {parts[1]})")
+    except Exception:
+        pass
 
     draft = (
         f"---\n"
@@ -138,8 +197,8 @@ def main() -> None:
     if not correction:
         return
 
-    pattern = correction.get("Pattern to apply", "")
-    session = correction.get("Session", "unknown")
+    pattern = correction.get("Pattern to apply", "").replace("\t", " ").strip()
+    session = correction.get("Session", "unknown").replace("\t", " ").strip()
     timestamp = datetime.now(timezone.utc).isoformat()
 
     print(

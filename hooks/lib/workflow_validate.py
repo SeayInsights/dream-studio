@@ -24,8 +24,8 @@ from lib import paths  # noqa: E402
 
 
 def parse_workflow(yaml_path: str) -> dict:
-    with open(yaml_path, encoding="utf-8") as f:
-        lines = f.readlines()
+    text = Path(yaml_path).read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    lines = text.split("\n")
 
     result: dict = {"name": None, "description": None, "version": None,
                     "gates": {}, "nodes": []}
@@ -35,8 +35,7 @@ def parse_workflow(yaml_path: str) -> dict:
     in_block = False
     block_indent = 0
 
-    for raw in lines:
-        line = raw.rstrip("\n")
+    for line in lines:
         stripped = line.strip()
         indent = len(line) - len(line.lstrip())
 
@@ -50,8 +49,7 @@ def parse_workflow(yaml_path: str) -> dict:
 
         # Top-level keys
         if indent == 0 and ":" in stripped:
-            key, _, val = stripped.partition(":")
-            key, val = key.strip(), val.strip()
+            key, val = _split_kv(stripped)
             if key == "gates":
                 section, gate_name = "gates", None
                 if node:
@@ -71,8 +69,8 @@ def parse_workflow(yaml_path: str) -> dict:
                 gate_name = stripped[:-1].strip()
                 result["gates"][gate_name] = {}
             elif indent >= 4 and gate_name and ":" in stripped:
-                k, _, v = stripped.partition(":")
-                result["gates"][gate_name][k.strip()] = _parse_scalar(v.strip())
+                k, v = _split_kv(stripped)
+                result["gates"][gate_name][k] = _parse_scalar(v)
             continue
 
         if section == "nodes":
@@ -81,8 +79,7 @@ def parse_workflow(yaml_path: str) -> dict:
                     result["nodes"].append(node)
                 node = {"id": stripped.split(":", 1)[1].strip()}
             elif node and indent >= 4 and ":" in stripped:
-                k, _, v = stripped.partition(":")
-                k, v = k.strip(), v.strip()
+                k, v = _split_kv(stripped)
                 if v == "|":
                     node[k] = True
                     in_block, block_indent = True, indent
@@ -93,6 +90,17 @@ def parse_workflow(yaml_path: str) -> dict:
     if node:
         result["nodes"].append(node)
     return result
+
+
+def _split_kv(line: str) -> tuple[str, str]:
+    """Split a 'key: value' line, respecting quoted values with colons."""
+    stripped = line.strip()
+    idx = stripped.find(":")
+    if idx < 0:
+        return stripped, ""
+    key = stripped[:idx].strip()
+    rest = stripped[idx + 1:].strip()
+    return key, rest
 
 
 def _parse_scalar(val: str):

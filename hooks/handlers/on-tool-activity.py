@@ -11,6 +11,7 @@ label; entries older than MAX_AGE_SECS are dropped on each write.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -93,37 +94,63 @@ def main() -> None:
 
     now = time.time()
     target = activity_path()
-
-    activity: dict = {}
-    try:
-        if target.exists():
-            activity = json.loads(target.read_text(encoding="utf-8"))
-    except Exception:
-        activity = {}
-
-    agents: list[dict] = [a for a in activity.get("agents", []) if now - a.get("ts", 0) < MAX_AGE_SECS]
-
-    new_entry = {
-        "id": int(now * 1000) & 0x7FFFFFFF,
-        "name": agent_name(tool_name),
-        "status": "running",
-        "task": short_task(tool_name, tool_input),
-        "elapsed": "just now",
-        "ts": now,
-    }
-
-    agents = [new_entry] + agents[: MAX_AGENTS - 1]
-    for i, a in enumerate(agents):
-        if i == 0:
-            continue
-        a["status"] = "idle"
-        a["elapsed"] = elapsed(a["ts"])
-
-    activity["agents"] = agents
-    activity["timestamp"] = now
+    lock_path = target.parent / f"{target.name}.lock"
 
     try:
-        target.write_text(json.dumps(activity, indent=2), encoding="utf-8")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(fd)
+                break
+            except FileExistsError:
+                if time.monotonic() > deadline:
+                    try:
+                        lock_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                    continue
+                time.sleep(0.005)
+
+        try:
+            activity: dict = {}
+            try:
+                if target.exists():
+                    activity = json.loads(target.read_text(encoding="utf-8"))
+            except Exception:
+                activity = {}
+
+            agents: list[dict] = [
+                a for a in activity.get("agents", [])
+                if a.get("ts") and now - a["ts"] < MAX_AGE_SECS
+            ]
+
+            new_entry = {
+                "id": int(now * 1000) & 0x7FFFFFFF,
+                "name": agent_name(tool_name),
+                "status": "running",
+                "task": short_task(tool_name, tool_input),
+                "elapsed": "just now",
+                "ts": now,
+            }
+
+            agents = [new_entry] + agents[: MAX_AGENTS - 1]
+            for i, a in enumerate(agents):
+                if i == 0:
+                    continue
+                a["status"] = "idle"
+                a["elapsed"] = elapsed(a["ts"])
+
+            activity["agents"] = agents
+            activity["timestamp"] = now
+
+            target.write_text(json.dumps(activity, indent=2), encoding="utf-8")
+        finally:
+            try:
+                lock_path.unlink(missing_ok=True)
+            except OSError:
+                pass
     except Exception:
         pass
 

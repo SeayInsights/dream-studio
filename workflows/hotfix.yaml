@@ -1,0 +1,34 @@
+name: hotfix
+description: Fast debug-fix-verify cycle for production issues
+version: 2
+
+gates:
+  evidence-required:
+    type: pause
+    requires: [test-results]
+
+nodes:
+  - id: debug
+    skill: debug
+    model: sonnet
+    context: fresh
+
+  - id: build
+    skill: build
+    depends_on: [debug]
+    model: sonnet
+    context: fresh
+    input: "{{debug.output}}"
+
+  - id: verify
+    skill: verify
+    depends_on: [build]
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+
+  - id: ship
+    skill: ship
+    depends_on: [verify]
+    model: sonnet
+    context: fresh

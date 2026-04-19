@@ -1,0 +1,122 @@
+name: game-feature
+description: Game feature from design through implementation with Godot-specific QA
+version: 2
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve to continue?"
+  qa-gate:
+    type: pause
+    requires: [test-results]
+
+nodes:
+  - id: think
+    skill: think
+    gate: director-approval
+    model: opus
+    context: fresh
+
+  - id: plan
+    skill: plan
+    depends_on: [think]
+    gate: director-approval
+    model: opus
+    context: fresh
+    input: "{{think.output}}"
+
+  - id: build
+    skill: build
+    depends_on: [plan]
+    model: sonnet
+    context: fresh
+    input: "{{plan.output}}"
+
+  - id: review-gameplay
+    skill: review
+    depends_on: [build]
+    model: sonnet
+    context: fresh
+    config:
+      focus: gameplay-code
+      rules: rules/game/gameplay-code.md
+      output_contract: "Your final output line MUST be exactly PASSED or BLOCKED. Format: VERDICT: one-line summary."
+
+  - id: review-data
+    skill: review
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    config:
+      focus: data-files
+      rules: rules/game/data-files.md
+      output_contract: "Your final output line MUST be exactly PASSED or BLOCKED. Format: VERDICT: one-line summary."
+
+  - id: validate-engine
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    command: |
+      Check all new/modified GDScript files against engine-ref/godot4/deprecated-apis.md.
+      Flag any deprecated API usage. Check breaking-changes.md for HIGH risk patterns.
+      Check best-practices.md for patterns LLMs often get wrong.
+      Write findings to review-validate-engine-findings.md with severity tags (Critical/High/Medium/Low).
+
+      For each finding, include:
+      - File and line number
+      - What was found (deprecated API, breaking change, anti-pattern)
+      - Severity (Critical = won't compile, High = runtime bug, Medium = deprecation warning, Low = style)
+      - Suggested fix
+      - Verification status of the reference entry ([VERIFIED], [HIGH-CONFIDENCE], [UNVERIFIED])
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
+      Format: VERDICT: one-line summary of what you found.
+
+  - id: synthesize
+    depends_on: [review-gameplay, review-data, validate-engine]
+    trigger_rule: all_done
+    model: sonnet
+    context: fresh
+    command: |
+      Discover all review findings files by globbing for `review-*-findings.md` in the project root.
+      Expected files (but discover dynamically — don't hardcode):
+      - review-review-gameplay-findings.md
+      - review-review-data-findings.md
+      - review-validate-engine-findings.md
+
+      For each discovered file:
+      1. Read and extract all findings with severity tags
+      2. Note which review node produced it (from the filename)
+
+      For expected files that are missing:
+      1. Note as SKIPPED (the review node may have had no findings or wrote to a different name)
+
+      Synthesize into review-synthesize-findings.md with:
+      - Combined findings sorted by severity (Critical → High → Medium → Low)
+      - De-duplicated (same issue found by multiple reviewers = one finding)
+      - Action items for each Critical/High finding
+
+      Decision:
+      - Any Critical finding → BLOCKED (must fix before proceeding)
+      - Any High finding → BLOCKED (must fix before proceeding)
+      - Medium/Low only → PASSED (can proceed, fix later)
+      - All reviews SKIPPED or no findings → PASSED
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED.
+      Format: VERDICT: one-line summary (e.g., "BLOCKED: 2 critical findings in gameplay code" or "PASSED: 3 medium findings, no blockers").
+
+  - id: fix-findings
+    skill: build
+    depends_on: [synthesize]
+    condition: "{{synthesize.output}} == BLOCKED"
+    model: sonnet
+    context: fresh
+    input: "{{synthesize.output}}"
+
+  - id: verify
+    skill: verify
+    depends_on: [synthesize, fix-findings]
+    trigger_rule: all_done
+    gate: qa-gate
+    model: sonnet
+    context: fresh

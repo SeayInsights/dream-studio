@@ -40,10 +40,10 @@ COMPACT_PCT = 50
 HANDOFF_PCT = 65
 URGENT_PCT = 75
 
-WARN_KB = 400
-COMPACT_KB = 700
-HANDOFF_KB = 1000
-URGENT_KB = 1300
+WARN_KB = 800
+COMPACT_KB = 2000
+HANDOFF_KB = 2500
+URGENT_KB = 3000
 
 
 def read_bridge_pct(session_id: str | None) -> float | None:
@@ -103,9 +103,18 @@ def projects_dir_for_cwd(cwd: Path) -> Path:
         return Path(override)
     s = str(cwd).replace("\\", "/")
     if len(s) >= 2 and s[1] == ":":
-        slug = s[0].upper() + "-" + s[2:].replace("/", "-").replace(" ", "-")
+        slug = s[0].upper() + "-" + s[2:]
     else:
-        slug = s.replace("/", "-").replace(" ", "-")
+        slug = s
+    cleaned = ""
+    for ch in slug:
+        if ch.isascii() and (ch.isalnum() or ch in "-_."):
+            cleaned += ch
+        elif ch in ":\\/  ":
+            cleaned += "-"
+        else:
+            cleaned += f"-u{ord(ch):04x}-"
+    slug = cleaned[:200]
     return Path.home() / ".claude" / "projects" / slug
 
 
@@ -176,14 +185,48 @@ def sentinel(projects: Path, session_id: str | None, label: str) -> Path:
     return projects / f".{label}-sentinel-{session_id or 'unknown'}"
 
 
-def write_handoff(cwd: Path, kb: float, session_id: str | None) -> Path | None:
+def checkpoint_career_ops(session_id: str | None) -> str | None:
+    """If career-ops has an in-progress checkpoint, preserve it in the handoff."""
+    try:
+        cp = paths.user_data_dir() / "career-ops" / "checkpoint.json"
+        if not cp.exists():
+            return None
+        data = json.loads(cp.read_text(encoding="utf-8"))
+        if data.get("status") in ("in_progress", "partial"):
+            data["handoff_session"] = session_id
+            data["handoff_reason"] = "context_threshold"
+            cp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            return (
+                f"\n## Career-Ops State\n"
+                f"- **Action:** {data.get('last_action', 'unknown')}\n"
+                f"- **Mode:** {data.get('mode', 'unknown')}\n"
+                f"- **Status:** {data.get('status')}\n"
+                f"- **Checkpoint:** `~/.dream-studio/career-ops/checkpoint.json`\n"
+                f"- Resume with: read checkpoint → continue from pending items\n"
+            )
+        return None
+    except Exception:
+        return None
+
+
+def write_handoff(cwd: Path, kb: float, session_id: str | None, is_pct: bool = False) -> Path | None:
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
     sessions_dir = cwd / ".sessions" / date_str
-    sessions_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"[on-context-threshold] cannot create sessions dir: {e}", file=sys.stderr, flush=True)
+        return None
 
     sid = (session_id or "unknown")[:8]
-    handoff_path = sessions_dir / f"handoff-{sid}.md"
+    base = sessions_dir / f"handoff-{sid}.md"
+    # Avoid overwriting if same session triggers multiple times
+    handoff_path = base
+    counter = 1
+    while handoff_path.exists():
+        handoff_path = sessions_dir / f"handoff-{sid}-{counter}.md"
+        counter += 1
 
     branch = git(["branch", "--show-current"], cwd) or "unknown"
     last_commit = git(["log", "--oneline", "-1"], cwd) or "unknown"
@@ -192,15 +235,18 @@ def write_handoff(cwd: Path, kb: float, session_id: str | None) -> Path | None:
         "\n".join(f"- `{p}`: {l}" for l, p in files) if files else "- (working tree clean)"
     )
 
+    career_section = checkpoint_career_ops(session_id) or ""
+
     handoff = (
         f"# Handoff: {branch}\n"
         f"Date: {date_str}\n\n"
         f"## Current state\n"
         f"- **Branch:** {branch}\n"
         f"- **Last commit:** {last_commit}\n"
-        f"- **Context:** ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB)\n\n"
+        f"- **Context:** ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else HANDOFF_KB}{'%' if is_pct else ' KB'})\n\n"
         f"## Active files\n"
-        f"{files_lines}\n\n"
+        f"{files_lines}\n"
+        f"{career_section}\n"
         f"## Next action\n"
         f"Continue work on branch `{branch}`. Check git log for recent task context.\n"
     )
@@ -257,7 +303,7 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
         print(f"[on-context-threshold] recap write failed: {e}", file=sys.stderr, flush=True)
 
 
-def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None) -> None:
+def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bool = False) -> None:
     try:
         timestamp = datetime.now(timezone.utc).isoformat()
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -277,7 +323,7 @@ def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None) -> None:
             f"created: {timestamp}\n"
             f"---\n\n"
             f"## Context Budget Exceeded\n\n"
-            f"Session hit auto-handoff at ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB).\n\n"
+            f"Session hit auto-handoff at ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else HANDOFF_KB}{'%' if is_pct else ' KB'}).\n\n"
             f"**Git state:** {ctx}\n"
             f"**Session:** {sid}\n\n"
             f"## Retrospective Prompts\n\n"
@@ -335,14 +381,8 @@ def main() -> None:
             compact_sentinel.write_text(label)
         except Exception:
             pass
-        result = {
-            "continue": False,
-            "stopReason": (
-                f"[dream-studio] Context at {label} — auto-blocked at {URGENT_PCT}% limit.\n"
-                "Type /compact to compress the session, then resend your message."
-            ),
-        }
-        print(json.dumps(result), flush=True)
+        msg = f"Context auto-blocked at {label} — run /compact to continue."
+        print(json.dumps({"continue": False, "stopReason": msg}), flush=True)
         return
 
     if band == "handoff":
@@ -352,10 +392,11 @@ def main() -> None:
                 handoff_sentinel.write_text(label)
             except Exception:
                 pass
-            kb_val = bridge_pct if bridge_pct is not None else session_kb(projects, session_id)
-            handoff_path = write_handoff(cwd, kb_val, session_id)
+            using_pct = bridge_pct is not None
+            kb_val = bridge_pct if using_pct else session_kb(projects, session_id)
+            handoff_path = write_handoff(cwd, kb_val, session_id, is_pct=using_pct)
             write_recap(cwd, kb_val, session_id, handoff_path)
-            draft_handoff_lesson(kb_val, git_context(cwd), session_id)
+            draft_handoff_lesson(kb_val, git_context(cwd), session_id, is_pct=using_pct)
         else:
             print(
                 f"\n[dream-studio] Context at {label} — handoff already sent. Run /compact.\n",

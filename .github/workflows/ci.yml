@@ -45,7 +45,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Run tests with coverage
+      - name: Run unit tests (fast)
         shell: bash
         run: |
-          pytest tests/ -v --cov=hooks/lib --cov-report=term-missing --cov-fail-under=80
+          pytest tests/unit/ -v
+
+      - name: Run integration tests with coverage
+        shell: bash
+        run: |
+          pytest tests/integration/ -v --cov=hooks/lib --cov-report=term-missing --cov-fail-under=80

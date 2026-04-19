@@ -13,13 +13,15 @@ Commands:
   status [<key>]                                       → print state
   eval   <key> <expression>                            → evaluate condition, exit 0=true 1=false
   next   <key>                                         → list nodes ready to execute
+
+Pure evaluation logic lives in workflow_engine.py. This module handles
+all CLI parsing, state I/O, and command dispatch.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -27,10 +29,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import paths  # noqa: E402
-from lib.workflow_validate import parse_workflow  # noqa: E402
+from lib import paths                                        # noqa: E402
+from lib.workflow_validate import parse_workflow             # noqa: E402
+from lib.workflow_engine import (                            # noqa: E402
+    _file_lock, _extract_node_ids,
+    _evaluate, _resolve_ref, _coerce,
+    _compute_ready_nodes,
+)
 
 SCHEMA_VERSION = 1
+
+
+# ── State I/O ─────────────────────────────────────────────────────────
 
 
 def _state_path() -> Path:
@@ -39,6 +49,13 @@ def _state_path() -> Path:
 
 def _checkpoint_path() -> Path:
     return paths.state_dir() / "workflow-checkpoint.json"
+
+
+def _state_lock():
+    """Lock for atomic read-modify-write on workflows.json."""
+    p = _state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return _file_lock(p.parent / f"{p.name}.lock")
 
 
 def _read_state() -> dict:
@@ -83,15 +100,6 @@ def _get_workflow(data: dict, key: str) -> dict:
     return wf
 
 
-def _extract_node_ids(yaml_path: str) -> list[str]:
-    ids = []
-    with open(yaml_path, encoding="utf-8") as f:
-        for line in f:
-            if line.strip().startswith("- id:"):
-                ids.append(line.strip().split(":", 1)[1].strip())
-    return ids
-
-
 # ── Commands ──────────────────────────────────────────────────────────
 
 
@@ -109,18 +117,19 @@ def cmd_start(args: argparse.Namespace) -> None:
     key = f"{args.name}-{int(time.time())}"
     now = datetime.now(timezone.utc).isoformat()
 
-    data = _read_state()
-    data.setdefault("active_workflows", {})[key] = {
-        "workflow": args.name,
-        "started": now,
-        "status": "running",
-        "current_node": None,
-        "yaml_path": str(Path(yaml_path).resolve()),
-        "nodes": {nid: {"status": "pending"} for nid in node_ids},
-        "gates_passed": [],
-        "gates_pending": [],
-    }
-    _write_state(data)
+    with _state_lock():
+        data = _read_state()
+        data.setdefault("active_workflows", {})[key] = {
+            "workflow": args.name,
+            "started": now,
+            "status": "running",
+            "current_node": None,
+            "yaml_path": str(Path(yaml_path).resolve()),
+            "nodes": {nid: {"status": "pending"} for nid in node_ids},
+            "gates_passed": [],
+            "gates_pending": [],
+        }
+        _write_state(data)
     _write_checkpoint(key, None, "running")
 
     print(key)
@@ -128,36 +137,37 @@ def cmd_start(args: argparse.Namespace) -> None:
 
 
 def cmd_update(args: argparse.Namespace) -> None:
-    data = _read_state()
-    wf = _get_workflow(data, args.key)
-    nodes = wf.get("nodes", {})
+    with _state_lock():
+        data = _read_state()
+        wf = _get_workflow(data, args.key)
+        nodes = wf.get("nodes", {})
 
-    if args.node_id not in nodes:
-        print(f"Error: node '{args.node_id}' not in workflow", file=sys.stderr)
-        sys.exit(1)
+        if args.node_id not in nodes:
+            print(f"Error: node '{args.node_id}' not in workflow", file=sys.stderr)
+            sys.exit(1)
 
-    now = datetime.now(timezone.utc).isoformat()
-    node = nodes[args.node_id]
-    node["status"] = args.status
+        now = datetime.now(timezone.utc).isoformat()
+        node = nodes[args.node_id]
+        node["status"] = args.status
 
-    if args.status == "running" and "started" not in node:
-        node["started"] = now
-    if args.status in ("completed", "failed", "skipped"):
-        node["finished"] = now
-    if args.output is not None:
-        node["output"] = args.output
-    if args.duration is not None:
-        node["duration_s"] = args.duration
+        if args.status == "running" and "started" not in node:
+            node["started"] = now
+        if args.status in ("completed", "failed", "skipped"):
+            node["finished"] = now
+        if args.output is not None:
+            node["output"] = args.output
+        if args.duration is not None:
+            node["duration_s"] = args.duration
 
-    wf["current_node"] = args.node_id
+        wf["current_node"] = args.node_id
 
-    statuses = [n.get("status") for n in nodes.values()]
-    if all(s in ("completed", "skipped") for s in statuses):
-        wf["status"] = "completed"
-    elif all(s in ("completed", "skipped", "failed") for s in statuses):
-        wf["status"] = "completed_with_failures"
+        statuses = [n.get("status") for n in nodes.values()]
+        if all(s in ("completed", "skipped") for s in statuses):
+            wf["status"] = "completed"
+        elif all(s in ("completed", "skipped", "failed") for s in statuses):
+            wf["status"] = "completed_with_failures"
 
-    _write_state(data)
+        _write_state(data)
     _write_checkpoint(args.key, args.node_id, args.status)
 
     done = sum(1 for s in statuses if s in ("completed", "skipped"))
@@ -166,16 +176,17 @@ def cmd_update(args: argparse.Namespace) -> None:
 
 
 def cmd_pause(args: argparse.Namespace) -> None:
-    data = _read_state()
-    wf = _get_workflow(data, args.key)
+    with _state_lock():
+        data = _read_state()
+        wf = _get_workflow(data, args.key)
 
-    wf["status"] = "paused"
-    wf["current_node"] = args.node_id
-    pending = wf.setdefault("gates_pending", [])
-    if args.gate_name not in pending:
-        pending.append(args.gate_name)
+        wf["status"] = "paused"
+        wf["current_node"] = args.node_id
+        pending = wf.setdefault("gates_pending", [])
+        if args.gate_name not in pending:
+            pending.append(args.gate_name)
 
-    _write_state(data)
+        _write_state(data)
     _write_checkpoint(args.key, args.node_id, "paused")
 
     nodes = wf.get("nodes", {})
@@ -185,31 +196,33 @@ def cmd_pause(args: argparse.Namespace) -> None:
 
 
 def cmd_resume(args: argparse.Namespace) -> None:
-    data = _read_state()
-    wf = _get_workflow(data, args.key)
+    with _state_lock():
+        data = _read_state()
+        wf = _get_workflow(data, args.key)
 
-    pending = wf.get("gates_pending", [])
-    if pending:
-        gate = pending.pop(0)
-        passed = wf.setdefault("gates_passed", [])
-        passed.append(f"{wf.get('current_node')}:{gate}")
+        pending = wf.get("gates_pending", [])
+        if pending:
+            gate = pending.pop(0)
+            passed = wf.setdefault("gates_passed", [])
+            passed.append(f"{wf.get('current_node')}:{gate}")
 
-    wf["status"] = "running"
-    _write_state(data)
+        wf["status"] = "running"
+        _write_state(data)
     _write_checkpoint(args.key, wf.get("current_node"), "running")
     print(f"[workflow] {wf['workflow']} — RESUMED")
 
 
 def cmd_abort(args: argparse.Namespace) -> None:
-    data = _read_state()
-    wf = _get_workflow(data, args.key)
+    with _state_lock():
+        data = _read_state()
+        wf = _get_workflow(data, args.key)
 
-    for node in wf.get("nodes", {}).values():
-        if node.get("status") in ("pending", "running", "blocked_by_deps"):
-            node["status"] = "skipped"
+        for node in wf.get("nodes", {}).values():
+            if node.get("status") in ("pending", "running", "blocked_by_deps"):
+                node["status"] = "skipped"
 
-    wf["status"] = "aborted"
-    _write_state(data)
+        wf["status"] = "aborted"
+        _write_state(data)
     _write_checkpoint(args.key, wf.get("current_node"), "aborted")
     print(f"[workflow] {wf['workflow']} — ABORTED")
 
@@ -269,61 +282,6 @@ def cmd_eval(args: argparse.Namespace) -> None:
     sys.exit(0 if result else 1)
 
 
-def _evaluate(expr: str, wf: dict) -> bool:
-    resolved = re.sub(
-        r"\{\{(.+?)\}\}",
-        lambda m: _resolve_ref(m.group(1), wf),
-        expr,
-    )
-
-    for op in ("!=", ">=", "<=", "==", ">", "<"):
-        if op in resolved:
-            left, right = [s.strip() for s in resolved.split(op, 1)]
-            left_val = _coerce(left)
-            right_val = _coerce(right)
-
-            if isinstance(left_val, (int, float)) and isinstance(right_val, (int, float)):
-                return {
-                    "==": left_val == right_val, "!=": left_val != right_val,
-                    ">": left_val > right_val,   "<": left_val < right_val,
-                    ">=": left_val >= right_val,  "<=": left_val <= right_val,
-                }[op]
-            return {
-                "==": str(left_val) == str(right_val),
-                "!=": str(left_val) != str(right_val),
-            }.get(op, False)
-
-    return bool(resolved.strip())
-
-
-def _resolve_ref(ref: str, wf: dict) -> str:
-    if "." not in ref:
-        return ref
-    node_id, field = ref.rsplit(".", 1)
-    return str(wf.get("nodes", {}).get(node_id, {}).get(field, ""))
-
-
-def _coerce(val: str):
-    if val == "quality-score":
-        score_path = paths.meta_dir() / "quality-score.json"
-        if score_path.is_file():
-            try:
-                return float(json.loads(score_path.read_text(encoding="utf-8"))
-                             .get("overall_score", 0))
-            except (json.JSONDecodeError, OSError, ValueError):
-                pass
-        return 0.0
-    try:
-        return int(val)
-    except ValueError:
-        pass
-    try:
-        return float(val)
-    except ValueError:
-        pass
-    return val
-
-
 def cmd_next(args: argparse.Namespace) -> None:
     data = _read_state()
     wf = _get_workflow(data, args.key)
@@ -347,51 +305,32 @@ def cmd_next(args: argparse.Namespace) -> None:
     yaml_nodes = {n["id"]: n for n in yaml_data.get("nodes", []) if "id" in n}
     state_nodes = wf.get("nodes", {})
 
-    ready = []
-    for nid, ynode in yaml_nodes.items():
-        snode = state_nodes.get(nid, {})
-        if snode.get("status") != "pending":
-            continue
+    ready, skipped_by_condition = _compute_ready_nodes(yaml_nodes, state_nodes, wf)
 
-        deps = ynode.get("depends_on", [])
-        if isinstance(deps, str):
-            deps = [deps]
-        if not deps:
-            ready.append(nid)
-            continue
-
-        trigger_rule = ynode.get("trigger_rule", "all_success")
-        dep_statuses = [state_nodes.get(d, {}).get("status", "pending") for d in deps]
-
-        if trigger_rule == "all_success":
-            if all(s == "completed" for s in dep_statuses):
-                ready.append(nid)
-        elif trigger_rule == "all_done":
-            if all(s in ("completed", "failed", "skipped") for s in dep_statuses):
-                ready.append(nid)
-        elif trigger_rule == "one_success":
-            if any(s == "completed" for s in dep_statuses):
-                ready.append(nid)
+    if skipped_by_condition:
+        now = datetime.now(timezone.utc).isoformat()
+        for nid in skipped_by_condition:
+            state_nodes[nid]["status"] = "skipped"
+            state_nodes[nid]["finished"] = now
+            state_nodes[nid]["output"] = "SKIPPED: condition false"
+        with _state_lock():
+            data2 = _read_state()
+            wf2 = data2.get("active_workflows", {}).get(args.key, {})
+            for nid in skipped_by_condition:
+                wf2.get("nodes", {}).setdefault(nid, {}).update(state_nodes[nid])
+            _write_state(data2)
+        print(f"skipped (condition false): {', '.join(skipped_by_condition)}")
 
     if not ready:
         running = [nid for nid, n in state_nodes.items() if n.get("status") == "running"]
         if running:
             print(f"waiting: {', '.join(running)} still running")
-        else:
+        elif not skipped_by_condition:
             print("blocked: no nodes ready (check for failed dependencies)")
         return
 
-    has_gate = {}
-    for nid in ready:
-        gate = yaml_nodes[nid].get("gate")
-        if gate:
-            has_gate[nid] = gate
-
-    model_map = {}
-    for nid in ready:
-        m = yaml_nodes[nid].get("model")
-        if m:
-            model_map[nid] = m
+    has_gate = {nid: yaml_nodes[nid]["gate"] for nid in ready if yaml_nodes[nid].get("gate")}
+    model_map = {nid: yaml_nodes[nid]["model"] for nid in ready if yaml_nodes[nid].get("model")}
 
     print(f"ready: {', '.join(ready)}")
     if len(ready) > 1:
@@ -408,9 +347,6 @@ def cmd_next(args: argparse.Namespace) -> None:
             parts.append(f"skill={skill}")
         elif cmd:
             parts.append("command")
-        condition = yaml_nodes[nid].get("condition")
-        if condition:
-            parts.append(f"condition={condition}")
         if parts:
             print(f"  {nid}: {', '.join(parts)}")
 

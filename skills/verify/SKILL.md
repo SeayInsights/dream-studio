@@ -63,6 +63,8 @@ BEFORE claiming any status:
 
 ## Steps
 1. **Identify targets** — What needs to be proven? Reference spec acceptance criteria.
+   - If `.planning/traceability.yaml` exists: use TR-IDs as the verification checklist. Every `must` requirement needs evidence.
+   - If no traceability file: use the plan's acceptance criteria per task.
 2. **Run the app** — Start dev server, build, or launch scene.
 3. **Golden path** — Test the primary user flow end-to-end.
 4. **Edge cases** — Test boundaries, empty states, error states, invalid input.
@@ -72,6 +74,9 @@ BEFORE claiming any status:
    - Game: scene output, QA stdout events
    - CLI: terminal output
 6. **Regression** — Does existing functionality still work?
+7. **Update traceability** (conditional) — Check if `.planning/traceability.yaml` exists.
+   - **If it exists:** append test file paths to the `tests` list for each verified TR-ID. Set status to `verified` for passing requirements. Update the summary counts. Report coverage: "X of Y requirements verified."
+   - **If it doesn't exist:** skip. Don't create the file.
 
 ## Evidence patterns
 

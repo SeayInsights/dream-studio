@@ -64,9 +64,19 @@ Independent tasks within a wave MAY run as parallel subagents IF they touch diff
    - Only after spec compliance passes
    - If issues: implementer fixes → re-review → repeat until ✅
 
-5. **Commit** — Atomic commit referencing plan task number
+5. **Commit** — Atomic commit referencing plan task number.
+   - If plan has TR-IDs: `feat(task-3): implement login form [TR-001, TR-002]`
+   - If plan has no TR-IDs (lite mode): `feat(task-3): implement login form`
 
-6. **Mark complete** — Write proof to disk (task status in plan file or state file)
+6. **Update traceability** (conditional) — Check if `.planning/traceability.yaml` exists.
+   - **If it exists:**
+     1. Validate first: `py "$PLUGIN/hooks/lib/traceability.py" validate .planning/traceability.yaml`
+     2. If valid: append the commit SHA to the `commits` list for each TR-ID this task implements. Update requirement status to `in_progress` or `implemented`.
+     3. If invalid: warn and skip — don't corrupt a broken file further.
+     4. After editing: re-validate to confirm your edit didn't break the YAML.
+   - **If it doesn't exist:** skip this step entirely. Don't create the file.
+
+7. **Mark complete** — Write proof to disk (task status in plan file or state file)
 
 ### Step 3: Checkpoint
 After every 3 tasks or 30 minutes (whichever first):
