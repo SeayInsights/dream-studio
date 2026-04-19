@@ -1,0 +1,218 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ── Workflows ────────────────────────────────────────────────────────────
+    {
+      "label": "dream-studio: Onboard Project",
+      "detail": "Run the studio-onboard workflow — assess and adopt project assets into dream-studio",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow studio-onboard"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Research Feature",
+      "detail": "Run the feature-research workflow — deep research + native integration strategy",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow feature-research"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Idea → PR",
+      "detail": "Run the idea-to-pr workflow — spec, plan, implement, and ship",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow idea-to-pr"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Fix Issue",
+      "detail": "Run the fix-issue workflow — diagnose and resolve a bug or ticket",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow fix-issue"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Hotfix",
+      "detail": "Run the hotfix workflow — fast-track critical fix straight to production",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow hotfix"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Safe Refactor",
+      "detail": "Run the safe-refactor workflow — test-guarded structural improvements",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow safe-refactor"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Comprehensive Review",
+      "detail": "Run the comprehensive-review workflow — full code, security, and architecture review",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow comprehensive-review"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Project Audit",
+      "detail": "Run the project-audit workflow — health, debt, security, and gap analysis",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow project-audit"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Prototype",
+      "detail": "Run the prototype workflow — rapid proof-of-concept build",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow prototype"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Game Feature",
+      "detail": "Run the game-feature workflow — design and implement a game mechanic or system",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow game-feature"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    // ── Skills ────────────────────────────────────────────────────────────────
+    {
+      "label": "dream-studio: /plan",
+      "detail": "Structured planning skill — break down a task into a sequenced implementation plan",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/plan"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /debug",
+      "detail": "Systematic debugging skill — isolate root cause and produce a minimal fix",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/debug"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /build",
+      "detail": "Structured build skill — implement a feature from spec to working code",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/build"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /ship",
+      "detail": "Ship skill — lint, build, commit, and push with pre-push validation",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/ship"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /review",
+      "detail": "Code review skill — quality, correctness, and style analysis",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/review"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /secure",
+      "detail": "Security review skill — OWASP, secrets, injection, and auth checks",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/secure"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /harden",
+      "detail": "Hardening skill — tighten error handling, validation, and edge cases",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/harden"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /analyze",
+      "detail": "Analysis skill — deep dive into a dataset, system, or codebase",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/analyze"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /handoff",
+      "detail": "Handoff skill — write a structured cross-session context document",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/handoff"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /recap",
+      "detail": "Recap skill — summarize what was accomplished in this session",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/recap"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: /learn",
+      "detail": "Learn skill — capture a lesson from this session into draft-lessons",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/learn"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    // ── Session ────────────────────────────────────────────────────────────────
+    {
+      "label": "dream-studio: Compact Context",
+      "detail": "Run /compact — compress conversation context to extend the session",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/compact"],
+      "group": "build",
+      "presentation": { "panel": "shared", "reveal": "always", "focus": true }
+    },
+    {
+      "label": "dream-studio: Pulse Check",
+      "detail": "Print the latest pulse report from ~/.dream-studio/meta/pulse-latest.json",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-c",
+        "import json,pathlib; p=pathlib.Path.home()/'.dream-studio/meta/pulse-latest.json'; print(json.dumps(json.loads(p.read_text()),indent=2)) if p.exists() else print('No pulse report found.')"
+      ],
+      "group": "test",
+      "presentation": { "panel": "shared", "reveal": "always", "focus": true }
+    }
+  ]
+}
