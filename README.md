@@ -211,7 +211,7 @@ Pre-built YAML DAG workflows in `workflows/`:
 | Workflow | Nodes | Purpose |
 |---|---|---|
 | `comprehensive-review` | review-code → review-security → review-tests → review-perf → review-docs → synthesize → … | Five-way parallel review with synthesis report |
-| `feature-research` | intake → research-repos → research-issues → research-prs → research-code → research-synthesis → … | NASA-grade GitHub research pipeline for any Claude feature, integration, MCP server, hook,… |
+| `feature-research` | intake → research-repos → research-issues → research-prs → research-code → research-synthesis → … | GitHub research pipeline — researches any Claude feature, integration, MCP server, hook, or skill, then recommends a native integration strategy (make it your own) with a drop-in alternative. |
 | `fix-issue` | diagnose → plan-fix → implement-fix → review → verify → report | Diagnose a bug, plan a fix, implement, review, and verify |
 | `game-feature` | think → plan → build → review-gameplay → review-data → validate-engine → … | Game feature from design through implementation with Godot-specific QA |
 | `hotfix` | debug → build → verify → ship | Fast debug-fix-verify cycle for production issues |
@@ -219,7 +219,7 @@ Pre-built YAML DAG workflows in `workflows/`:
 | `project-audit` | harden → secure → review → report | Full project audit — harden (structure + best practices), secure (OWASP + STRIDE), then re… |
 | `prototype` | think → build → verify | Fast prototype — think then build, skip formal review. |
 | `safe-refactor` | plan-refactor → implement → type-check → test → review → verify → … | Plan a refactor, implement, validate with type checks and tests, review, and verify |
-| `studio-onboard` | discovery → baseline-fetch → breakpoint-analysis → gap-analysis → improvement-scan → synthesis → … | NASA-grade dream-studio onboarding audit for an end user's existing environment. |
+| `studio-onboard` | discovery → baseline-fetch → breakpoint-analysis → gap-analysis → improvement-scan → synthesis → … | Dream-studio onboarding audit for an end user's existing environment. |
 <!-- workflows-table-end -->
 
 **Usage:**

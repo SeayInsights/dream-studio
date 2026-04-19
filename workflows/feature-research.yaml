@@ -1,9 +1,9 @@
 name: feature-research
 description: >
-  NASA-grade GitHub research pipeline for any Claude feature, integration, MCP server,
+  GitHub research pipeline for any Claude feature, integration, MCP server,
   hook, skill, or plugin. Phases: intake → 4-way parallel GitHub research → synthesis
-  (gate) → parallel breakpoint + gap analysis → implementation plan → risk matrix →
-  director gate → final report.
+  (gate) → parallel breakpoint + gap analysis → integration strategy → implementation plan →
+  risk matrix → director gate → final report.
   Invoke: "workflow: claude-feature-research" then describe what you want to add to Claude.
 version: 1
 on_failure: abort
@@ -221,11 +221,33 @@ nodes:
         MED  — community examples only, or partial official docs, or conflicting signals
         LOW  — sparse information, contradictory findings, or rapidly changing API
 
+        ## 7. Integration Strategy — Make It Your Own (RECOMMENDED)
+        [This is the primary recommendation. Do NOT default to "just bring it in."]
+
+        ### Recommended Approach: Native Integration
+        Based on the dominant pattern found in research, explain:
+          - Which parts of the pattern are worth keeping as-is
+          - Which parts should be rewritten to fit dream-studio's conventions, idioms, and skill system
+          - How to wire it natively: which skill/workflow/agent it connects to, and at what entry point
+          - What makes the dream-studio version BETTER than the source (tighter scope, proper gates, model routing, etc.)
+          - Estimated effort to build it natively vs. drop it in as-is
+
+        Provide a concise NATIVE INTEGRATION BLUEPRINT:
+          - Entry point: [which file(s) to create or modify]
+          - Wire point:  [where in the skill/workflow system it connects]
+          - Key rewrites: [what to adapt from the source pattern and how]
+          - Why this beats drop-in: [concrete reasons — maintainability, fit, control]
+
+        ### Alternative: Drop-In (User's Choice)
+        If the user prefers to bring the external implementation in directly rather than
+        building natively, describe exactly how to do that — the install steps, wiring,
+        and any caveats. Be brief. This is not the recommended path.
+
       Write this report to:
         C:/Users/Dannis Seay/.dream-studio/planning/research-synthesis-<YYYY-MM-DD>.md
       Then output the saved file path on a line by itself.
 
-      End with: VERDICT: synthesis complete — confidence: HIGH|MED|LOW
+      End with: VERDICT: synthesis complete — confidence: HIGH|MED|LOW — strategy: NATIVE BUILD recommended
     model: sonnet
     context: fresh
     timeout_seconds: 300
@@ -234,7 +256,7 @@ nodes:
   - id: breakpoint-analysis
     depends_on: [research-synthesis]
     command: |
-      MISSION: NASA-grade breakpoint analysis — map every failure mode before touching a file.
+      MISSION: Breakpoint analysis — map every failure mode before touching a file.
 
       Context:
         - Subject:  {{intake.output}}
@@ -288,7 +310,7 @@ nodes:
   - id: gap-analysis
     depends_on: [research-synthesis]
     command: |
-      MISSION: NASA-grade gap analysis — nothing proceeds until every gap has a closure plan.
+      MISSION: Gap analysis — nothing proceeds until every gap has a closure plan.
 
       Context:
         - Subject:  {{intake.output}}
@@ -362,18 +384,26 @@ nodes:
       Gap analysis:
       {{gap-analysis.output}}
 
-      Research synthesis:
+      Research synthesis (includes Integration Strategy section):
       {{research-synthesis.output}}
 
+      FRAMING: This plan MUST lead with the Native Integration approach from the synthesis
+      Integration Strategy. Do NOT default to drop-in. The plan should show how to build
+      this natively into dream-studio — rewriting, adapting, and wiring it properly.
+      Present the drop-in alternative as a clearly labeled secondary option at the end
+      of the plan so the user can choose it if they prefer.
+
       HARD CONSTRAINTS for this plan:
-        1. Resolve all CRITICAL breakpoints in Wave 1 before any other work
-        2. Close gaps in the closure order specified by gap analysis
-        3. Every task must end with an explicit verification step
-        4. Group tasks into numbered waves — tasks within a wave can run in parallel
-        5. Assign a model per task: haiku (search/read/explore), sonnet (code/config/write)
-        6. No single task should exceed 2 hours — split larger tasks into subtasks
-        7. Include a smoke-test task as the final task of every wave
-        8. The final wave must contain a full regression test against existing workflows
+        1. Wave 0: present the strategy decision — NATIVE BUILD (recommended) vs DROP-IN (alternative)
+           Show key differences in outcome, effort, and maintainability for each path
+        2. Resolve all CRITICAL breakpoints in Wave 1 before any other work
+        3. Close gaps in the closure order specified by gap analysis
+        4. Every task must end with an explicit verification step
+        5. Group tasks into numbered waves — tasks within a wave can run in parallel
+        6. Assign a model per task: haiku (search/read/explore), sonnet (code/config/write)
+        7. No single task should exceed 2 hours — split larger tasks into subtasks
+        8. Include a smoke-test task as the final task of every wave
+        9. The final wave must contain a full regression test against existing workflows
     model: sonnet
     context: fresh
     timeout_seconds: 300
@@ -383,7 +413,7 @@ nodes:
     depends_on: [breakpoint-analysis, gap-analysis, implementation-plan]
     trigger_rule: all_done
     command: |
-      MISSION: Construct a NASA-grade risk matrix before any implementation begins.
+      MISSION: Construct a risk matrix before any implementation begins.
 
       Inputs:
         - Breakpoints:          {{breakpoint-analysis.output}}
@@ -446,6 +476,19 @@ nodes:
 
         ## Key Findings (3 bullets max — most important things discovered)
 
+        ## Integration Strategy Decision
+        Present BOTH paths clearly so the Director can choose:
+
+        ### Path A — Native Integration (RECOMMENDED)
+        [What gets built natively, key rewrites from the source pattern, wiring point in dream-studio,
+         estimated effort, and why this is the better long-term choice]
+
+        ### Path B — Drop-In (Alternative)
+        [How to bring the external implementation in as-is, install steps, caveats,
+         and what you give up vs. the native approach]
+
+        Director: which path do you want to proceed with? (A = native, B = drop-in)
+
         ## Critical Breakpoints
         [List CRITICAL and HIGH breakpoints with their mitigations]
         [If none: state "No critical breakpoints identified"]
@@ -454,15 +497,15 @@ nodes:
         [Total count by category: CONFIG / WIRE / CODE / PERMISSION / KNOWLEDGE / TEST]
 
         ## Implementation Summary
-        [Number of waves, total tasks, estimated total clock time]
+        [Number of waves, total tasks, estimated total clock time — for the recommended path]
 
         ## Risk Verdict
         [GO / NO-GO / GO WITH CONDITIONS + the top 2 risks by RPN score]
 
         ## Recommendation
-        [One paragraph: proceed, hold, or abort — and the specific reason why]
+        [One paragraph: proceed with native build, hold, or abort — and the specific reason why]
 
-      Director: review the briefing above and approve to generate the final report,
+      Director: choose Path A (native) or Path B (drop-in), then approve to generate the final report,
       or abort to stop. Awaiting your decision.
 
       End with: VERDICT: briefing delivered — awaiting Director decision
@@ -485,7 +528,11 @@ nodes:
         **Generated:** [date]   **Confidence:** [HIGH/MED/LOW]   **Risk Verdict:** [GO/NO-GO]
 
         ## Executive Summary
-        [3-5 sentences: what was researched, key finding, risk verdict, top risk, recommendation]
+        [3-5 sentences: what was researched, key finding, which integration path was chosen, risk verdict, recommendation]
+
+        ## Integration Strategy
+        [Chosen path (Native or Drop-In) with full Native Integration Blueprint from research-synthesis,
+         or drop-in steps if that path was chosen. Include the alternative path summary for reference.]
 
         ## Research Findings
         [Full content from research-synthesis — do not truncate]

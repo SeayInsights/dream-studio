@@ -1,6 +1,6 @@
 name: studio-onboard
 description: >
-  NASA-grade dream-studio onboarding audit for an end user's existing environment.
+  Dream-studio onboarding audit for an end user's existing environment.
   Discovers what the user already has, compares against dream-studio baseline,
   runs parallel breakpoint + gap + improvement analysis, plans fixes, and produces
   a full onboarding report with wiring instructions.
@@ -133,7 +133,7 @@ nodes:
   - id: breakpoint-analysis
     depends_on: [discovery, baseline-fetch]
     command: |
-      MISSION: NASA-grade breakpoint analysis — find every conflict before applying dream-studio.
+      MISSION: Breakpoint analysis — find every conflict before applying dream-studio.
 
       Inputs:
         - Environment inventory: {{discovery.output}}
@@ -178,7 +178,7 @@ nodes:
   - id: gap-analysis
     depends_on: [discovery, baseline-fetch]
     command: |
-      MISSION: NASA-grade gap analysis — every missing piece with exact wiring instructions.
+      MISSION: Gap analysis — every missing piece with exact wiring instructions.
 
       Inputs:
         - Environment inventory: {{discovery.output}}
@@ -241,13 +241,44 @@ nodes:
   - id: improvement-scan
     depends_on: [discovery, baseline-fetch]
     command: |
-      MISSION: Identify improvements the user could make beyond baseline dream-studio.
+      MISSION: Assess what the user already has that isn't in dream-studio yet, and show
+      them how to make it theirs — natively wired, not bolted on.
 
       Inputs:
         - Environment inventory: {{discovery.output}}
         - Dream-studio baseline: {{baseline-fetch.output}}
 
-      Look BEYOND the minimum viable installation and identify:
+      PART 1 — MAKE IT YOURS (primary focus)
+      ─────────────────────────────────────
+      Compare the user's environment against the dream-studio baseline.
+      For every custom asset found that is NOT already part of dream-studio
+      (skills, hooks, CLAUDE.md rules, workflows, MCP servers, scripts, agents,
+      keybindings, permission patterns), produce an ADOPTION ENTRY:
+
+        ## USER ASSETS TO ADOPT INTO DREAM-STUDIO
+        | Asset ID | Type           | Current Location | Description | Adopt Value |
+        |----------|----------------|-----------------|-------------|-------------|
+
+        Types: SKILL | WORKFLOW | HOOK | CLAUDE_RULE | MCP_SERVER | AGENT | SCRIPT | PERMISSION_PATTERN
+        Adopt Value: HIGH (core to their workflow) | MED (useful extension) | LOW (nice to have)
+
+        For each HIGH and MED asset, produce a full ADOPTION BLUEPRINT:
+
+          Asset:              [name and current path]
+          What it does:       [one-line description of its current function]
+          Native wiring:      [exactly where in dream-studio this belongs —
+                               which skill/workflow/agent/hook it connects to]
+          Rewrite needed:     [what to adapt to fit dream-studio conventions vs. keep as-is]
+          Integration steps:  [numbered, exact steps to wire it in natively]
+          Why native is better: [maintainability, model routing, gate access, etc.]
+
+        For each LOW asset:
+          [Asset name] → [brief one-line adoption note or "skip — low value"]
+
+        If no custom assets found outside dream-studio baseline, state that explicitly.
+
+      PART 2 — STANDARD IMPROVEMENTS
+      ────────────────────────────────
 
         ## CONFIGURATION IMPROVEMENTS
         Settings or rules that would make dream-studio work better for this user's
@@ -281,7 +312,7 @@ nodes:
         List 3-5 things that take < 15 minutes and deliver clear value.
         For each: what to do + exact change + expected benefit.
 
-      End with: VERDICT: improvement scan complete — <N improvements identified, M quick wins>
+      End with: VERDICT: improvement scan complete — <N assets to adopt, M improvements identified, K quick wins>
     model: sonnet
     context: fresh
     timeout_seconds: 300
@@ -322,14 +353,25 @@ nodes:
         ## What Will Break Without Fixes
         [Features/skills that will fail unless CRITICAL/HIGH breakpoints are resolved]
 
+        ## Make It Yours — Adoption Summary
+        Summarize the user's custom assets found outside the dream-studio baseline.
+        For each asset worth adopting (HIGH or MED value from improvement-scan):
+
+          Asset: [name]
+          Native wiring: [where it connects in dream-studio]
+          Effort: [S / M / L]
+          Why adopt natively: [one sentence — the concrete benefit over keeping it separate]
+
+        If no custom assets: state "No custom assets found outside baseline — nothing to adopt."
+
         ## Top 5 Improvements (ranked by impact/effort ratio)
-        [From improvement-scan — the highest-value changes to make after baseline]
+        [From improvement-scan Part 2 — the highest-value standard changes to make after baseline]
 
       Write this brief to:
         ~/.dream-studio/planning/onboard-synthesis-<YYYY-MM-DD>.md
       Output the saved file path.
 
-      End with: VERDICT: synthesis complete — readiness score: <N>/100
+      End with: VERDICT: synthesis complete — readiness score: <N>/100 — <N> assets to adopt
     model: sonnet
     context: fresh
     timeout_seconds: 300
@@ -357,13 +399,20 @@ nodes:
         1. Wave 1 must only contain CRITICAL breakpoint resolutions — nothing else
         2. Wave 2 closes all blocking gaps in closure order from gap analysis
         3. Wave 3 closes non-blocking gaps and installs missing skills/workflows
-        4. Wave 4+ covers improvements ordered by impact/effort ratio
-        5. Every task ends with an explicit verification step
-        6. Tasks within a wave can run in parallel
-        7. Include a smoke-test task as the final task of every wave
-        8. No single task exceeds 1 hour — split larger tasks
-        9. Assign model per task: haiku (read/list/check), sonnet (edit/install/wire)
-        10. Final task: full end-to-end test of dream-studio in this environment
+        4. Wave 4 — MAKE IT YOURS: adopt the user's custom assets into dream-studio natively.
+           For each HIGH/MED asset from the improvement-scan adoption summary:
+             - Create a task using the full Adoption Blueprint from improvement-scan
+             - Each task: rewrite/adapt the asset + wire it in + verify it works within dream-studio
+             - Do NOT just copy files — adapt them to fit dream-studio conventions
+           Present adoption tasks as "Path A (Recommended)" and note "Path B: keep it separate"
+           as an explicit alternative the user can choose instead for any individual asset
+        5. Wave 5+ covers standard improvements ordered by impact/effort ratio
+        6. Every task ends with an explicit verification step
+        7. Tasks within a wave can run in parallel
+        8. Include a smoke-test task as the final task of every wave
+        9. No single task exceeds 1 hour — split larger tasks
+        10. Assign model per task: haiku (read/list/check), sonnet (edit/install/wire)
+        11. Final task: full end-to-end test of dream-studio in this environment
     model: sonnet
     context: fresh
     timeout_seconds: 300
@@ -373,7 +422,7 @@ nodes:
     depends_on: [breakpoint-analysis, gap-analysis, fix-plan]
     trigger_rule: all_done
     command: |
-      MISSION: Construct a NASA-grade risk matrix for this onboarding.
+      MISSION: Construct a risk matrix for this onboarding.
 
       Inputs:
         - Breakpoints: {{breakpoint-analysis.output}}
@@ -445,8 +494,21 @@ nodes:
         ## Fix Plan Summary
         [Number of waves, total tasks, estimated total time to fully onboarded]
 
+        ## Make It Yours — Assets to Adopt
+        List each custom asset found outside the dream-studio baseline.
+        For each HIGH/MED asset, present BOTH options clearly:
+
+          Asset: [name]
+          Path A — Native Integration (Recommended):
+            [what gets rewritten/adapted, where it wires in, effort estimate, concrete benefit]
+          Path B — Keep Separate (Alternative):
+            [what stays the same, any caveats, what the user gives up]
+
+        Director: for each asset, confirm Path A (adopt natively) or Path B (keep separate).
+        If no custom assets were found, state that here.
+
         ## Top 5 Improvements After Baseline
-        [From improvement-scan — highest impact/effort ratio]
+        [From improvement-scan Part 2 — highest impact/effort ratio standard improvements]
 
         ## Risk Verdict
         [GO / NO-GO / GO WITH CONDITIONS + top 2 risks by RPN]
@@ -454,8 +516,9 @@ nodes:
         ## Recommendation
         [One paragraph: proceed, sequence recommendation, or specific blockers to resolve first]
 
-      Director: review the briefing and approve to generate the final onboarding report,
-      or abort to stop. Awaiting your decision.
+      Director: review the briefing, confirm adoption decisions for each asset,
+      then approve to generate the final onboarding report, or abort to stop.
+      Awaiting your decision.
 
       End with: VERDICT: briefing delivered — awaiting Director decision
     model: sonnet
@@ -477,13 +540,18 @@ nodes:
 
         ## Executive Summary
         [4-6 sentences: environment state, what works now, what needs fixing,
-         top risk, estimated time to fully onboarded, recommendation]
+         how many custom assets were found to adopt, top risk, estimated time to fully onboarded, recommendation]
 
         ## Readiness Score Breakdown
         [Scoring table by category from synthesis]
 
         ## What Works Right Now (no changes needed)
         [Full list from synthesis]
+
+        ## Make It Yours — Adoption Plan
+        [Full adoption section from improvement-scan and synthesis — all assets, all blueprints,
+         confirmed Path A/B decisions from Director, exact integration steps for each adopted asset.
+         This section is the user's permanent reference for what was brought in natively and how.]
 
         ## Breakpoint Analysis
         [Full breakpoint registry + critical/high details + safe sequencing constraint]
@@ -495,7 +563,7 @@ nodes:
         [Full plan with all waves and tasks — do not truncate]
 
         ## Improvement Opportunities
-        [Full improvement-scan output — quick wins first]
+        [Full improvement-scan Part 2 output — quick wins first]
 
         ## Risk Matrix
         [Full risk register + top risk details + GO/NO-GO criteria + rollback plan]
