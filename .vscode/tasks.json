@@ -84,6 +84,15 @@
       "presentation": { "panel": "new", "reveal": "always", "focus": true }
     },
     {
+      "label": "dream-studio: Optimize",
+      "detail": "Run the optimize workflow — profile, audit bloat, apply quick wins, verify improvement",
+      "type": "shell",
+      "command": "claude",
+      "args": ["/workflow optimize"],
+      "group": "build",
+      "presentation": { "panel": "new", "reveal": "always", "focus": true }
+    },
+    {
       "label": "dream-studio: Game Feature",
       "detail": "Run the game-feature workflow — design and implement a game mechanic or system",
       "type": "shell",

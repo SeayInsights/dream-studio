@@ -1,0 +1,423 @@
+name: optimize
+description: Profile, audit, and reduce bloat — bundle size, dead code, deps, infra, and queries — with baseline measurement before and after
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Review the optimization plan. Approve to apply quick wins automatically?"
+  evidence-required:
+    type: pause
+    requires: [before-metrics, after-metrics]
+
+nodes:
+  # ── Stage 1: Seed context from prior review if available ─────────────────
+  - id: context-check
+    command: |
+      PRIOR REVIEW CONTEXT (optional seed):
+      Look for a recent comprehensive-review or project-audit report in:
+        ~/.dream-studio/secure/reports/
+      Find any file matching review-*.md or audit-*.md whose modification time
+      is within the last 7 days (use file system stat, not git).
+
+      If a recent report exists:
+        - Read it
+        - Extract any findings tagged as performance, bundle, dependency,
+          dead-code, infrastructure, or query-related
+        - Write a short seed summary to: .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+        - Print: "Prior review found — seeding X performance findings"
+      If no recent report exists:
+        - Print: "No recent review found — running full audit from scratch"
+        - Write an empty seed file so downstream nodes have a consistent path
+
+      Do not fail if the reports directory does not exist — just skip silently.
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  # ── Stage 2: Baseline profile ─────────────────────────────────────────────
+  - id: profile
+    depends_on: [context-check]
+    command: |
+      Measure and record baseline metrics for the current project. Adapt to
+      whatever stack is present — skip sections that don't apply.
+
+      BUNDLE / FRONTEND (if package.json present):
+        - Count total dependencies (prod + dev) and their approximate disk size
+          using: du -sh node_modules 2>/dev/null || echo "no node_modules"
+        - If a build script exists, note the last build output size from dist/
+          or .next/ or build/ (whichever exists)
+        - List the 10 heaviest packages by size if node_modules exists:
+            du -sh node_modules/* 2>/dev/null | sort -rh | head -10
+
+      PYTHON (if requirements.txt or pyproject.toml present):
+        - Count installed packages: pip list 2>/dev/null | wc -l
+        - Note any obviously heavy packages (torch, tensorflow, scipy, etc.)
+
+      INFRASTRUCTURE:
+        - Count total source files by type (*.ts, *.py, *.js, etc.)
+        - Count total lines of code: find src -name "*.ts" -o -name "*.py" |
+          xargs wc -l 2>/dev/null | tail -1 (adapt path as needed)
+        - Note any Cloudflare Worker bundles: check wrangler.toml for size hints
+
+      DATABASE / API (if applicable):
+        - Note if an ORM is present (Prisma, Drizzle, SQLAlchemy, TypeORM)
+        - Check for any query logging or explain-plan output in the codebase
+
+      Save all baseline metrics to: .sessions/<YYYY-MM-DD>/optimize-baseline.md
+      Print a one-line summary of each metric found.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  # ── Stage 3: Parallel audits ──────────────────────────────────────────────
+  - id: audit-deps
+    depends_on: [profile]
+    command: |
+      DEPENDENCY AUDIT — find bloat and redundancy in project dependencies.
+
+      Read the prior findings seed from: .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+      Read the baseline profile from: .sessions/<YYYY-MM-DD>/optimize-baseline.md
+
+      Analyze the dependency manifest (package.json, requirements.txt, pyproject.toml,
+      Cargo.toml — whichever is present):
+
+      1. UNUSED DEPENDENCIES
+         - Cross-reference declared deps against actual import/require statements in src/
+         - Flag any package that is declared but never imported
+         - Skip devDependencies used only in config files (eslint, prettier, etc.)
+
+      2. DUPLICATE / REDUNDANT
+         - Look for packages that serve the same purpose (e.g., lodash + underscore,
+           moment + dayjs, axios + node-fetch)
+         - Flag candidates for consolidation
+
+      3. HEAVY PACKAGES WITH LIGHTER ALTERNATIVES
+         Common swaps to check:
+           moment → dayjs or date-fns (saves ~200KB)
+           lodash → native ES methods or lodash-es (tree-shakeable)
+           axios → native fetch (Node 18+)
+           uuid → crypto.randomUUID() (Node 14.17+)
+           chalk → picocolors or kleur
+           express → hono or fastify (for edge/serverless targets)
+         Only flag if the project actually uses the heavy package.
+
+      4. MISSING PEER / UNUSED LOCK ENTRIES
+         - Note any lockfile entries for packages not in the manifest
+
+      Write findings to: .sessions/<YYYY-MM-DD>/optimize-audit-deps.md
+      Format each finding as: [UNUSED|DUPLICATE|HEAVY|LOCK] package-name — reason — estimated saving
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  - id: audit-code
+    depends_on: [profile]
+    command: |
+      DEAD CODE AUDIT — find code that is defined but never used.
+
+      Read the prior findings seed from: .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+      Read the baseline profile from: .sessions/<YYYY-MM-DD>/optimize-baseline.md
+
+      1. UNUSED EXPORTS (TypeScript/JavaScript)
+         - Search for exported functions, classes, constants, and types
+         - Cross-reference against import statements across the codebase
+         - Flag exports that are never imported anywhere
+
+      2. UNREACHABLE CODE
+         - Look for code after unconditional return/throw statements
+         - Look for conditions that are always true or always false
+         - Look for commented-out code blocks > 10 lines (candidates for deletion)
+
+      3. OVER-ENGINEERED ABSTRACTIONS
+         - Look for utility functions called only once (inline candidates)
+         - Look for wrapper classes that add no logic over what they wrap
+         - Look for configuration objects with only one possible value
+
+      4. STALE FEATURE FLAGS / ENV VARS
+         - Search for feature flag checks (if (FEATURE_X), process.env.ENABLE_*)
+         - Flag any flag that is always-on or always-off based on the codebase
+         - Search .env.example or config files for variables never read in code
+
+      5. LARGE ASSETS IN SOURCE
+         - Find any file > 100KB committed to the repo (images, fixtures, data files)
+         - Flag if they could live in CDN or object storage instead
+
+      Write findings to: .sessions/<YYYY-MM-DD>/optimize-audit-code.md
+      Format each finding as: [DEAD_EXPORT|UNREACHABLE|ABSTRACTION|FLAG|ASSET] file:line — reason
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: audit-infra
+    depends_on: [profile]
+    command: |
+      INFRASTRUCTURE AUDIT — find right-sizing and configuration opportunities.
+
+      Read the prior findings seed from: .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+      Read the baseline profile from: .sessions/<YYYY-MM-DD>/optimize-baseline.md
+
+      1. CLOUDFLARE WORKERS (if wrangler.toml present)
+         - Check worker bundle size against the 1MB (compressed) limit
+         - Look for large imported libraries that could be replaced with edge-native APIs
+         - Check for missing `nodejs_compat` flag if Node built-ins are imported
+         - Look for KV/R2/D1 bindings declared but never used in worker code
+
+      2. CACHING HEADERS
+         - Search for Cache-Control, Expires, ETag headers in server/edge code
+         - Flag any static asset route missing cache headers
+         - Flag any API route that returns the same data repeatedly without caching
+
+      3. EDGE VS SERVERLESS PLACEMENT
+         - Identify any route that does heavy DB work — flag as poor edge candidate
+         - Identify any route that is purely data transformation — flag as good edge candidate
+
+      4. BUILD OUTPUT
+         - Check if source maps are being shipped to production (should be off or external)
+         - Check if console.log/debug statements are stripped in production builds
+         - Look for unminified output in dist/ or build/
+
+      5. DOCKER / CI (if Dockerfile or .github/workflows present)
+         - Check for non-slim base images (node:latest vs node:alpine)
+         - Check for missing .dockerignore
+         - Check for duplicate apt-get/npm install steps that could be cached layers
+
+      Write findings to: .sessions/<YYYY-MM-DD>/optimize-audit-infra.md
+      Format each finding as: [SIZING|CACHE|PLACEMENT|BUILD|DOCKER] file — reason — impact
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  - id: audit-queries
+    depends_on: [profile]
+    command: |
+      QUERY / API AUDIT — find inefficient data fetching patterns.
+
+      Read the prior findings seed from: .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+      Read the baseline profile from: .sessions/<YYYY-MM-DD>/optimize-baseline.md
+
+      First check: does this project have a database or API data layer?
+      Look for: ORM config files (schema.prisma, drizzle.config.ts, models.py),
+      SQL files, or fetch/axios calls to internal APIs.
+
+      If NO data layer is found:
+        Write to .sessions/<YYYY-MM-DD>/optimize-audit-queries.md:
+          "SKIPPED — no database or API data layer detected"
+        Exit cleanly.
+
+      If a data layer IS present:
+
+      1. N+1 QUERY PATTERNS
+         - Look for query calls inside loops (for/forEach/map wrapping a DB call)
+         - Flag as N+1 candidates; suggest batching or eager loading
+
+      2. OVERFETCHING
+         - Look for SELECT * or findMany() with no field selection
+         - Look for API responses where only a subset of fields are used by the caller
+         - Suggest explicit field selection or projection
+
+      3. MISSING INDEXES (heuristic)
+         - Look for .where() / .filter() clauses on fields not in a schema index
+         - Look for ORDER BY on non-indexed fields in migration files
+         - Flag as index candidates
+
+      4. REPEATED IDENTICAL QUERIES
+         - Look for the same query called in multiple places without caching
+         - Suggest memoization, loader pattern, or Redis cache layer
+
+      Write findings to: .sessions/<YYYY-MM-DD>/optimize-audit-queries.md
+      Format each finding as: [N+1|OVERFETCH|INDEX|CACHE] file:line — pattern — suggested fix
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  # ── Stage 4: Synthesize all findings ────────────────────────────────────
+  - id: synthesize
+    depends_on: [audit-deps, audit-code, audit-infra, audit-queries]
+    trigger_rule: all_done
+    command: |
+      Synthesize all audit findings into a single ranked optimization backlog.
+
+      Read all audit output files:
+        .sessions/<YYYY-MM-DD>/optimize-prior-findings.md
+        .sessions/<YYYY-MM-DD>/optimize-baseline.md
+        .sessions/<YYYY-MM-DD>/optimize-audit-deps.md
+        .sessions/<YYYY-MM-DD>/optimize-audit-code.md
+        .sessions/<YYYY-MM-DD>/optimize-audit-infra.md
+        .sessions/<YYYY-MM-DD>/optimize-audit-queries.md
+
+      De-duplicate any findings that appear in both the prior review seed and the
+      fresh audits (keep the more detailed entry).
+
+      Rank every finding using this impact/effort matrix:
+        HIGH IMPACT / LOW EFFORT  → Priority 1 (Quick Win)
+        HIGH IMPACT / HIGH EFFORT → Priority 2 (Major)
+        LOW IMPACT / LOW EFFORT   → Priority 3 (Minor)
+        LOW IMPACT / HIGH EFFORT  → Priority 4 (Defer)
+
+      Assign estimated savings where measurable:
+        - KB saved from dep removal
+        - Lines of dead code removed
+        - Query round-trips reduced
+
+      Output format:
+        ## Quick Wins (Priority 1)
+        | # | Category | Finding | File/Package | Estimated Saving | Effort |
+        |---|----------|---------|--------------|-----------------|--------|
+        ...
+
+        ## Major Improvements (Priority 2)
+        ...
+
+        ## Minor / Housekeeping (Priority 3)
+        ...
+
+        ## Deferred (Priority 4)
+        ...
+
+        ## Baseline Summary
+        (paste key metrics from optimize-baseline.md)
+
+      Save synthesis to: .sessions/<YYYY-MM-DD>/optimize-synthesis.md
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── Stage 5: Optimization plan with Director gate ───────────────────────
+  - id: plan
+    depends_on: [synthesize]
+    gate: director-approval
+    command: |
+      Read the synthesis from: .sessions/<YYYY-MM-DD>/optimize-synthesis.md
+
+      Produce a sequenced optimization plan:
+
+      WAVE 0 — AUTO-APPLY (Quick Wins, risk-free)
+        List only findings where the fix is mechanical and reversible:
+          - Remove a clearly unused dependency (npm uninstall / pip uninstall)
+          - Delete a dead export with no callers
+          - Add an explicit field selection to a SELECT *
+          - Swap a heavy package for a lighter equivalent with the same API
+        For each: state exact command or file edit required.
+
+      WAVE 1 — MANUAL (Major improvements)
+        List findings that require judgment or significant code changes.
+        For each: describe the approach, estimated effort, and risk.
+
+      WAVE 2 — DEFER
+        List Priority 4 findings with a one-line reason to revisit later.
+
+      CONSTRAINT: Do not include any change that would break the public API,
+      change behavior, or require a migration without first flagging it explicitly.
+
+      Save plan to: .sessions/<YYYY-MM-DD>/optimize-plan.md
+      Present Wave 0 items clearly — these are what auto-apply will execute next.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── Stage 6: Apply quick wins ───────────────────────────────────────────
+  - id: apply
+    depends_on: [plan]
+    skill: build
+    command: |
+      Execute WAVE 0 items from the optimization plan:
+        .sessions/<YYYY-MM-DD>/optimize-plan.md
+
+      For each Wave 0 item:
+        1. Read the exact action specified in the plan
+        2. Apply it (uninstall dep, delete dead code, update query, etc.)
+        3. Confirm the change compiled / type-checked successfully before moving on
+        4. Log each applied change as: [APPLIED] <item> — <file or package>
+
+      After all Wave 0 items are applied:
+        Run the project's type checker and/or linter if available.
+        If any check fails, revert the last change and mark it [SKIPPED — broke types].
+
+      Do not touch Wave 1 or Wave 2 items.
+      Do not push to git — leave that for the Director.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  # ── Stage 7: Verify improvement ─────────────────────────────────────────
+  - id: verify
+    depends_on: [apply]
+    gate: evidence-required
+    command: |
+      Re-measure the same metrics captured in the baseline profile:
+        .sessions/<YYYY-MM-DD>/optimize-baseline.md
+
+      Run the same commands used in the `profile` node and record the new values.
+      Compare before vs. after for each metric:
+
+        | Metric            | Before | After | Delta |
+        |-------------------|--------|-------|-------|
+        | node_modules size |        |       |       |
+        | Dep count         |        |       |       |
+        | Bundle size       |        |       |       |
+        | Source lines      |        |       |       |
+        | (others)          |        |       |       |
+
+      If any metric got worse, flag it clearly and note which applied change
+      likely caused it.
+
+      Save verification results to: .sessions/<YYYY-MM-DD>/optimize-verify.md
+      Print the before/after table.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  # ── Stage 8: Final report ───────────────────────────────────────────────
+  - id: report
+    depends_on: [verify]
+    command: |
+      Produce the final optimization report by reading all session files:
+        .sessions/<YYYY-MM-DD>/optimize-synthesis.md
+        .sessions/<YYYY-MM-DD>/optimize-plan.md
+        .sessions/<YYYY-MM-DD>/optimize-verify.md
+
+      Report structure:
+        # Optimization Report — <project-slug> — <YYYY-MM-DD>
+
+        ## Results
+        (before/after table from verify)
+
+        ## Applied (Wave 0)
+        (list of changes actually made)
+
+        ## Remaining Backlog
+        Wave 1 and Wave 2 items not yet addressed
+
+        ## Deferred
+        Priority 4 items
+
+      PERSISTENT STORAGE:
+      Derive the project slug from the cwd basename, lowercased, spaces → hyphens.
+      Save the complete report to:
+        ~/.dream-studio/state/optimize-<project-slug>-<YYYY-MM-DD>.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path.
+
+      GITHUB ISSUE CREATION (HIGH impact findings only — Priority 1 and 2):
+      Attempt to infer the GitHub repo by running:
+        git remote get-url origin
+      and parsing the owner/repo from the URL.
+
+      If a repo can be determined and mcp__github__issue_write is available:
+        For each Priority 1 or Priority 2 finding NOT already applied in Wave 0:
+          - Create a GitHub Issue with:
+              title: "[OPTIMIZE] <category>: <finding title>"
+              body: "<finding>\n\n**Estimated saving:** <saving>\n\n**Suggested fix:** <fix>\n\n---\n_Generated by dream-studio optimize workflow on <date>_"
+              labels: ["optimization", "tech-debt"]
+          - If either label does not exist in the repo, create it first.
+          - Print each created issue URL.
+      If GitHub is not configured or no repo can be determined:
+        Skip issue creation silently and note it in the report.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
