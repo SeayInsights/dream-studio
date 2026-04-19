@@ -1,0 +1,5 @@
+[run]
+source = hooks
+
+[report]
+fail_under = 70

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Makefile** — standard targets: `test`, `lint`, `fmt`, `security`, `install-dev`, `status`
+- **pyproject.toml** — black, flake8, pytest, and coverage config (replaces need for separate `.coveragerc`)
+- **hooks/lib/time_utils.py** — `utcnow()` utility; replaced all bare `datetime.now(timezone.utc)` calls in handlers and `context_handoff.py`
+- **hooks/lib/models.py** — Pydantic v2 models (`UserPromptSubmitPayload`, `PostToolUsePayload`, `StopPayload`) for stdin validation in handlers
+- **hooks/lib/audit.py** — append-only event log writing to `~/.dream-studio/audit.jsonl`
+- **hooks/lib/telemetry.py** — optional Sentry error tracking stub (activated by `SENTRY_DSN` env var)
+- **SECURITY.md** — vulnerability disclosure process (30-day SLA, dannis.seay@twinrootsllc.com)
+- **CONTRIBUTING.md** — branch naming, commit format, PR checklist, code style guide
+- **requirements.txt** — runtime dependencies (pydantic, sentry-sdk) split from dev deps
+- **requirements-dev.txt** — added freezegun, factory-boy, black, flake8, pip-audit, pre-commit
+- **.pre-commit-config.yaml** — black and flake8 hooks
+- **scripts/bom.py** — Bill of Materials script (git SHA, Python version, pip freeze, build date)
+- **skills/harden/SKILL.md** — `/harden` skill: 20-item audit + gap-fill from templates
+- **templates/project-standards/** — reusable template files (Makefile, pyproject.toml, SECURITY.md, CONTRIBUTING.md, requirements files, hooks/lib stubs)
+- **tests/factories.py** — factory_boy factories for hook payload models
+- **on-tool-activity** hook: one-time `/harden audit` nudge on first Edit/Write in unhardened projects
+
+### Changed
+- `on-token-log.py`, `on-milestone-start.py`, `on-milestone-end.py`, `on-pulse.py`, `on-meta-review.py`, `context_handoff.py` — all `datetime.now(timezone.utc)` replaced with `utcnow()` from `time_utils`
+- `on-token-log.py`, `on-context-threshold.py` — added Pydantic payload validation with graceful fallback on `ValidationError`
+- `test_hook_on_pulse.py`, `test_hook_on_milestone_end.py`, `test_hook_on_token_log.py` — added `@freeze_time` to time-sensitive tests
+
 ## [0.6.0] — 2026-04-17
 
 ### Changed
