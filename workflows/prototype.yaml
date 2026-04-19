@@ -36,3 +36,24 @@ nodes:
     retry:
       max: 1
       backoff_seconds: 15
+
+  - id: snapshot
+    depends_on: [verify]
+    command: |
+      Produce a "what exists now" snapshot:
+        - What was prototyped (one-paragraph description)
+        - Entry point: how to run it (command, file to open, URL, etc.)
+        - Key files created and their purpose (bulleted list with paths)
+        - Known limitations or rough edges (this is a prototype — be honest)
+        - Suggested next steps if this prototype is worth pursuing further
+
+      PERSISTENT STORAGE:
+      Derive the project slug from the cwd basename, lowercased with spaces replaced by hyphens.
+      Get today's date as YYYY-MM-DD.
+      Save this snapshot to:
+        ~/.dream-studio/state/prototype-<project-slug>-<YYYY-MM-DD>.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path and the "how to run it" line clearly — the user should be able to pick this up after closing the session.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120

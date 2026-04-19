@@ -65,6 +65,13 @@ nodes:
     command: |
       Summarize the fix: what was wrong, what changed, how it was verified.
       Include file paths and commit references.
+
+      PERSISTENT STORAGE:
+      Get today's date as YYYY-MM-DD.
+      Save this summary to:
+        .sessions/<YYYY-MM-DD>/fix-report.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path so the user has a session record of what was fixed.
     model: haiku
     context: fresh
     timeout_seconds: 180

@@ -43,3 +43,17 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 600
+
+  - id: record
+    depends_on: [ship]
+    command: |
+      Extract the PR URL from the ship node output (look for a github.com/.../pull/... URL).
+      Get today's date as YYYY-MM-DD.
+      Save a one-line record to:
+        ~/.dream-studio/state/hotfix-prs.log
+      Format of each line: "<YYYY-MM-DD>  <PR URL>  <one-sentence description of the fix>"
+      Create the directory if it does not exist (mkdir -p).
+      Print the PR URL clearly so the user can open it immediately.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120

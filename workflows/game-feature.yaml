@@ -139,3 +139,24 @@ nodes:
     retry:
       max: 1
       backoff_seconds: 15
+
+  - id: record
+    depends_on: [verify]
+    command: |
+      Summarize the game feature that was built and verified:
+        - Feature name and brief description
+        - Files created or modified (list paths)
+        - Any findings that were fixed during this workflow
+        - Verification outcome (pass/fail evidence)
+        - Clear next steps (e.g., "Merge branch X", "Test in Godot editor", "Connect to level Y")
+
+      PERSISTENT STORAGE:
+      Derive the project slug from the cwd basename, lowercased with spaces replaced by hyphens.
+      Get today's date as YYYY-MM-DD.
+      Save this summary to:
+        ~/.dream-studio/state/game-feature-<project-slug>-<YYYY-MM-DD>.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path and the next steps clearly so the user knows exactly what to do after this session.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120

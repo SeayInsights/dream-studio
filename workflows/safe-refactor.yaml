@@ -75,6 +75,13 @@ nodes:
     command: |
       Summarize the refactor: what changed, why, type-check and test results,
       review findings, and verification evidence.
+
+      PERSISTENT STORAGE:
+      Get today's date as YYYY-MM-DD.
+      Save this summary to:
+        .sessions/<YYYY-MM-DD>/refactor-report.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path so the user has a session record of the refactor.
     model: haiku
     context: fresh
     timeout_seconds: 180
