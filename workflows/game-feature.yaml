@@ -57,7 +57,7 @@ nodes:
     model: haiku
     context: fresh
     command: |
-      Check all new/modified GDScript files against engine-ref/godot4/deprecated-apis.md.
+      Check all new/modified GDScript files against docs/engine-ref/godot4/deprecated-apis.md.
       Flag any deprecated API usage. Check breaking-changes.md for HIGH risk patterns.
       Check best-practices.md for patterns LLMs often get wrong.
       Write findings to review-validate-engine-findings.md with severity tags (Critical/High/Medium/Low).

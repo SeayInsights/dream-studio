@@ -53,7 +53,7 @@ When editing game project files, **Read** the matching rule file before writing 
 **Path resolution (priority order):**
 1. **User override:** `~/.dream-studio/engine-ref/godot4/` — user can add or replace files here
 2. **Project override:** `.dream-studio/engine-ref/godot4/` in the project root — project-specific additions
-3. **Plugin built-in:** Same plugin root as above, then `engine-ref/godot4/`
+3. **Plugin built-in:** Same plugin root as above, then `docs/engine-ref/godot4/`
 
 Check user/project overrides first. If a file exists there, use it instead of the plugin built-in. This lets users add entries for newer Godot versions without waiting for a plugin update.
 
@@ -86,7 +86,7 @@ Every entry in the engine reference is tagged with a confidence level:
 If the project's `project.godot` specifies a Godot version newer than 4.4:
 1. Warn: "Engine reference covers up to Godot 4.4. Your project uses [version]. Some API guidance may be outdated."
 2. For any API suggestion, add: "Verify this works in Godot [version]"
-3. Suggest checking official sources (URLs in `engine-ref/godot4/VERSION.md`)
+3. Suggest checking official sources (URLs in `docs/engine-ref/godot4/VERSION.md`)
 
 ---
 

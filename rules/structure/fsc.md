@@ -55,7 +55,7 @@ This plugin follows FSC with domain-specific adaptations:
 |---|---|
 | `src/` / `lib/` | `hooks/` (plugin hooks = source) + `hooks/lib/` (shared library) |
 | `tests/` | `tests/unit/` and `tests/integration/` |
-| `docs/` | `docs/` + `engine-ref/` (Godot4 reference) |
+| `docs/` | `docs/engine-ref/` (Godot4 reference) |
 | `rules/` | Plugin-specific: coding standards for agents |
 | `skills/` | Plugin-specific: reusable agent skill definitions |
 | `agents/` | Plugin-specific: agent role definitions |

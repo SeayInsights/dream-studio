@@ -127,7 +127,7 @@ def warn_version_mismatch() -> None:
                     if cache_ver and cache_ver != source_ver:
                         print(
                             f"[dream-studio] Version mismatch: source={source_ver}, "
-                            f"cache={cache_ver}. Run: cp -r skills rules engine-ref templates "
+                            f"cache={cache_ver}. Run: cp -r skills rules docs templates "
                             f"~/.claude/plugins/cache/dream-studio/dream-studio/{cache_ver}/",
                             file=_sys.stderr,
                         )
