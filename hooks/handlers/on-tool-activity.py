@@ -115,6 +115,41 @@ def _maybe_harden_nudge(tool_name: str, tool_input: dict) -> None:
     )
 
 
+_SECURITY_PATTERNS = {
+    "auth", "login", "logout", "signup", "register", "password",
+    "oauth", "token", "credential", "session", "payment", "checkout",
+    "billing", "stripe", "webhook", "secret", "api_key",
+}
+
+
+def _maybe_security_suggest(tool_name: str, tool_input: dict) -> None:
+    if tool_name not in _NUDGE_TOOLS:
+        return
+    file_path = tool_input.get("file_path", tool_input.get("path", ""))
+    if not file_path:
+        return
+    name_lower = Path(file_path).stem.lower()
+    parts_lower = {p.lower() for p in Path(file_path).parts}
+    matched = _SECURITY_PATTERNS & (parts_lower | {name_lower})
+    if not matched:
+        return
+    root = _project_root(file_path)
+    slug = str(root).replace("\\", "-").replace("/", "-").replace(":", "-")[:80]
+    sentinel = paths.state_dir() / f"security-suggest-{slug}.json"
+    if sentinel.exists():
+        return
+    try:
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("{}", encoding="utf-8")
+    except Exception:
+        return
+    label = next(iter(matched))
+    print(
+        f"\n[dream-studio] Security: editing {Path(file_path).name} ({label}) — consider running /secure.\n",
+        flush=True,
+    )
+
+
 def main() -> None:
     try:
         payload = json.loads(sys.stdin.read())
@@ -130,6 +165,7 @@ def main() -> None:
             tool_input = {}
 
     _maybe_harden_nudge(tool_name, tool_input)
+    _maybe_security_suggest(tool_name, tool_input)
 
     now = time.time()
     target = activity_path()

@@ -87,3 +87,47 @@ def test_harden_nudge_suppressed_when_makefile_at_root(isolated_home, tmp_path, 
 
     out = capsys.readouterr().out
     assert "harden" not in out.lower()
+
+
+def test_security_suggest_fires_for_auth_file(isolated_home, tmp_path, monkeypatch, capsys, handler):
+    """Edit of auth/login.py triggers security suggest nudge."""
+    auth = tmp_path / "auth"
+    auth.mkdir()
+    file_path = str(auth / "login.py")
+
+    payload = {"tool_name": "Edit", "tool_input": {"file_path": file_path}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    mod = handler("on-tool-activity")
+    # Patch _project_root to return tmp_path (no Makefile/SECURITY.md — harden nudge also fires)
+    monkeypatch.setattr(mod, "_project_root", lambda _: tmp_path)
+    mod.main()
+
+    out = capsys.readouterr().out
+    assert "Security" in out
+    assert "login.py" in out
+    assert "/secure" in out
+
+
+def test_security_suggest_suppressed_after_first(isolated_home, tmp_path, monkeypatch, capsys, handler):
+    """Security suggest fires once, then sentinel suppresses subsequent calls."""
+    auth = tmp_path / "auth"
+    auth.mkdir()
+    file_path = str(auth / "login.py")
+
+    mod = handler("on-tool-activity")
+    monkeypatch.setattr(mod, "_project_root", lambda _: tmp_path)
+
+    # First call — should fire
+    payload = {"tool_name": "Edit", "tool_input": {"file_path": file_path}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    mod.main()
+    out1 = capsys.readouterr().out
+    assert "Security" in out1
+
+    # Second call — sentinel exists, should be suppressed
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    mod.main()
+    out2 = capsys.readouterr().out
+    # Security suggest should NOT appear again
+    assert "Security" not in out2

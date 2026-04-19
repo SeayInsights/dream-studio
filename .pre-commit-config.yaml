@@ -7,3 +7,10 @@ repos:
     rev: 7.0.0
     hooks:
       - id: flake8
+  - repo: local
+    hooks:
+      - id: conventional-commits
+        name: Conventional commit message format
+        language: pygrep
+        entry: '^(feat|fix|docs|chore|refactor|test|ci|style|perf|build|revert)(\(.+\))?: .{1,72}'
+        stages: [commit-msg]

@@ -1,22 +1,26 @@
 name: comprehensive-review
 description: Five-way parallel review with synthesis report
 version: 1
+on_failure: abort
 
 nodes:
   - id: review-code
     skill: review
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: review-security
     skill: secure
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: review-tests
     skill: review
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: test-coverage-only
 
@@ -24,6 +28,7 @@ nodes:
     skill: review
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: performance-only
 
@@ -31,6 +36,7 @@ nodes:
     skill: review
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: docs-impact-only
 
@@ -43,6 +49,7 @@ nodes:
       List actionable items grouped by severity.
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: report
     depends_on: [synthesize]
@@ -51,3 +58,4 @@ nodes:
       or sharing with the team. Include a pass/fail recommendation.
     model: haiku
     context: fresh
+    timeout_seconds: 180

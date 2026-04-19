@@ -1,6 +1,7 @@
 name: idea-to-pr
 description: Feature concept through implementation to merged PR
 version: 1
+on_failure: abort
 
 gates:
   director-approval:
@@ -19,6 +20,7 @@ nodes:
     gate: director-approval
     model: opus
     context: fresh
+    timeout_seconds: 300
 
   - id: plan
     skill: plan
@@ -26,6 +28,7 @@ nodes:
     gate: director-approval
     model: opus
     context: fresh
+    timeout_seconds: 300
     input: "{{think.output}}"
 
   - id: build
@@ -34,6 +37,10 @@ nodes:
     gate: auto-pass
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{plan.output}}"
 
   - id: review-code
@@ -41,6 +48,7 @@ nodes:
     depends_on: [build]
     model: sonnet
     context: fresh
+    timeout_seconds: 300
     agent: engineering
 
   - id: review-security
@@ -48,6 +56,7 @@ nodes:
     depends_on: [build]
     model: sonnet
     context: fresh
+    timeout_seconds: 300
     agent: engineering
 
   - id: review-tests
@@ -55,6 +64,7 @@ nodes:
     depends_on: [build]
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: test-coverage-only
 
@@ -63,6 +73,7 @@ nodes:
     depends_on: [build]
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: performance-only
 
@@ -71,6 +82,7 @@ nodes:
     depends_on: [build]
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: docs-impact-only
 
@@ -96,6 +108,7 @@ nodes:
       Format: VERDICT: one-line summary.
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: fix-findings
     skill: build
@@ -103,6 +116,10 @@ nodes:
     condition: "{{synthesize.output}} == BLOCKED"
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{synthesize.output}}"
 
   - id: verify
@@ -112,9 +129,14 @@ nodes:
     gate: evidence-required
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
 
   - id: ship
     skill: ship
     depends_on: [verify]
     model: sonnet
     context: fresh
+    timeout_seconds: 600

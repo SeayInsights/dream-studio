@@ -1,6 +1,7 @@
 name: game-feature
 description: Game feature from design through implementation with Godot-specific QA
 version: 2
+on_failure: abort
 
 gates:
   director-approval:
@@ -16,6 +17,7 @@ nodes:
     gate: director-approval
     model: opus
     context: fresh
+    timeout_seconds: 300
 
   - id: plan
     skill: plan
@@ -23,6 +25,7 @@ nodes:
     gate: director-approval
     model: opus
     context: fresh
+    timeout_seconds: 300
     input: "{{think.output}}"
 
   - id: build
@@ -30,6 +33,10 @@ nodes:
     depends_on: [plan]
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{plan.output}}"
 
   - id: review-gameplay
@@ -37,6 +44,7 @@ nodes:
     depends_on: [build]
     model: sonnet
     context: fresh
+    timeout_seconds: 300
     config:
       focus: gameplay-code
       rules: rules/game/gameplay-code.md
@@ -47,6 +55,7 @@ nodes:
     depends_on: [build]
     model: haiku
     context: fresh
+    timeout_seconds: 300
     config:
       focus: data-files
       rules: rules/game/data-files.md
@@ -56,6 +65,7 @@ nodes:
     depends_on: [build]
     model: haiku
     context: fresh
+    timeout_seconds: 180
     command: |
       Check all new/modified GDScript files against docs/engine-ref/godot4/deprecated-apis.md.
       Flag any deprecated API usage. Check breaking-changes.md for HIGH risk patterns.
@@ -77,6 +87,7 @@ nodes:
     trigger_rule: all_done
     model: sonnet
     context: fresh
+    timeout_seconds: 300
     command: |
       Discover all review findings files by globbing for `review-*-findings.md` in the project root.
       Expected files (but discover dynamically — don't hardcode):
@@ -111,6 +122,10 @@ nodes:
     condition: "{{synthesize.output}} == BLOCKED"
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{synthesize.output}}"
 
   - id: verify
@@ -120,3 +135,7 @@ nodes:
     gate: qa-gate
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15

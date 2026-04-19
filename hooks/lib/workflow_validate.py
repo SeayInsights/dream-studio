@@ -164,6 +164,35 @@ def validate(data: dict, plugin_root: Path) -> list[str]:
                 errors.append(f"Node \"{nid}\": skill \"{skill}\" — "
                               f"{skill_path} not found")
 
+    # Validate on_failure at workflow level
+    on_failure = data.get("on_failure")
+    if on_failure is not None:
+        valid_on_failure = {"abort"} | node_ids
+        if not isinstance(on_failure, str):
+            errors.append("Warning: on_failure must be a string (\"abort\" or a node ID)")
+        elif on_failure not in valid_on_failure:
+            errors.append(f"Warning: on_failure \"{on_failure}\" is not \"abort\" or a known node ID")
+
+    # Validate new per-node fields
+    for n in nodes:
+        nid = n.get("id", "?")
+
+        timeout = n.get("timeout_seconds")
+        if timeout is not None:
+            if not isinstance(timeout, int) or timeout <= 0:
+                errors.append(f"Node \"{nid}\": timeout_seconds must be a positive integer")
+
+        retry = n.get("retry")
+        if retry is not None:
+            if not isinstance(retry, dict):
+                errors.append(f"Node \"{nid}\": retry must be a mapping")
+            else:
+                max_val = retry.get("max")
+                if max_val is None:
+                    errors.append(f"Node \"{nid}\": retry.max is required")
+                elif not isinstance(max_val, int) or max_val <= 0:
+                    errors.append(f"Node \"{nid}\": retry.max must be a positive integer")
+
     # Cycle detection — Kahn's algorithm
     in_degree = {nid: 0 for nid in node_ids}
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}

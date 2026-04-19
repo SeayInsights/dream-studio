@@ -1,6 +1,7 @@
 name: prototype
 description: Fast prototype — think then build, skip formal review. For game jams and quick experiments.
 version: 2
+on_failure: abort
 
 gates:
   director-approval:
@@ -13,12 +14,17 @@ nodes:
     gate: director-approval
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: build
     skill: build
     depends_on: [think]
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{think.output}}"
 
   - id: verify
@@ -26,3 +32,7 @@ nodes:
     depends_on: [build]
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15

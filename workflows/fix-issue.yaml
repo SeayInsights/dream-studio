@@ -1,6 +1,7 @@
 name: fix-issue
 description: Diagnose a bug, plan a fix, implement, review, and verify
 version: 1
+on_failure: abort
 
 gates:
   director-approval:
@@ -18,12 +19,14 @@ nodes:
     skill: debug
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: plan-fix
     skill: plan
     depends_on: [diagnose]
     model: haiku
     context: fresh
+    timeout_seconds: 300
     input: "{{diagnose.output}}"
 
   - id: implement-fix
@@ -32,6 +35,10 @@ nodes:
     gate: director-approval
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{plan-fix.output}}"
 
   - id: review
@@ -40,6 +47,7 @@ nodes:
     gate: auto-pass
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: verify
     skill: verify
@@ -47,6 +55,10 @@ nodes:
     gate: evidence-required
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
 
   - id: report
     depends_on: [verify]
@@ -55,3 +67,4 @@ nodes:
       Include file paths and commit references.
     model: haiku
     context: fresh
+    timeout_seconds: 180

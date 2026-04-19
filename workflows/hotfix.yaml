@@ -1,6 +1,7 @@
 name: hotfix
 description: Fast debug-fix-verify cycle for production issues
 version: 2
+on_failure: abort
 
 gates:
   evidence-required:
@@ -12,12 +13,17 @@ nodes:
     skill: debug
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: build
     skill: build
     depends_on: [debug]
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{debug.output}}"
 
   - id: verify
@@ -26,9 +32,14 @@ nodes:
     gate: evidence-required
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
 
   - id: ship
     skill: ship
     depends_on: [verify]
     model: sonnet
     context: fresh
+    timeout_seconds: 600

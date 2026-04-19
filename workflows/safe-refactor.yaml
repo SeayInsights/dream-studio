@@ -1,6 +1,7 @@
 name: safe-refactor
 description: Plan a refactor, implement, validate with type checks and tests, review, and verify
 version: 1
+on_failure: abort
 
 gates:
   director-approval:
@@ -19,12 +20,17 @@ nodes:
     gate: director-approval
     model: opus
     context: fresh
+    timeout_seconds: 300
 
   - id: implement
     skill: build
     depends_on: [plan-refactor]
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
     input: "{{plan-refactor.output}}"
 
   - id: type-check
@@ -34,6 +40,7 @@ nodes:
       Report pass/fail with error count and details.
     model: haiku
     context: fresh
+    timeout_seconds: 180
 
   - id: test
     depends_on: [implement]
@@ -42,6 +49,7 @@ nodes:
       Report pass/fail with test count and any failures.
     model: haiku
     context: fresh
+    timeout_seconds: 180
 
   - id: review
     skill: review
@@ -49,6 +57,7 @@ nodes:
     gate: auto-pass
     model: sonnet
     context: fresh
+    timeout_seconds: 300
 
   - id: verify
     skill: verify
@@ -56,6 +65,10 @@ nodes:
     gate: evidence-required
     model: sonnet
     context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
 
   - id: report
     depends_on: [verify]
@@ -64,3 +77,4 @@ nodes:
       review findings, and verification evidence.
     model: haiku
     context: fresh
+    timeout_seconds: 180

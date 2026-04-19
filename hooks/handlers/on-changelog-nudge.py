@@ -41,6 +41,41 @@ def _find_project_root(start: Path) -> Path:
     return start
 
 
+_README_REQUIRED = [
+    ("badge", ["![CI]", "![Version]", "shields.io", "img.shields"]),
+    ("quick start", ["## Quick Start", "## Quickstart", "## Getting Started"]),
+    ("usage", ["## Usage", "## Commands", "## Skills"]),
+    ("structure", ["## Project Structure", "```\n", "├──", "└──"]),
+    ("contributing", ["## Contributing", "## Development"]),
+]
+
+
+def _check_readme_quality(root: Path, git_lines: list[str]) -> None:
+    readme_changed = any(
+        "README" in line.upper() and line.strip().endswith(("README.md", "README"))
+        for line in git_lines
+    )
+    if not readme_changed:
+        return
+    readme = root / "README.md"
+    if not readme.exists():
+        return
+    try:
+        content = readme.read_text(encoding="utf-8")
+    except Exception:
+        return
+    missing = []
+    for section_name, indicators in _README_REQUIRED:
+        if not any(ind in content for ind in indicators):
+            missing.append(section_name)
+    if missing:
+        print(
+            f"\n[dream-studio] README updated but missing sections: {', '.join(missing)}. "
+            f"Run /harden to scaffold them.\n",
+            flush=True,
+        )
+
+
 def main() -> None:
     try:
         json.loads(sys.stdin.read())
@@ -54,8 +89,9 @@ def main() -> None:
 
     source_changed = False
     changelog_changed = False
+    lines = status.splitlines()
 
-    for line in status.splitlines():
+    for line in lines:
         if len(line) < 4:
             continue
         fname = line[3:].strip()
@@ -76,6 +112,9 @@ def main() -> None:
             "\n[dream-studio] Source files changed — CHANGELOG.md not updated. Consider adding an entry.\n",
             flush=True,
         )
+
+    # README quality check: if README was modified, verify it has required sections
+    _check_readme_quality(root, lines)
 
 
 if __name__ == "__main__":
