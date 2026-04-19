@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import paths  # noqa: E402
 
 MAX_AGENTS = 6
+_NUDGE_TOOLS = {"Edit", "Write"}
 MAX_AGE_SECS = 300
 
 TOOL_AGENT_MAP = {
@@ -78,6 +79,30 @@ def elapsed(ts: float) -> str:
     return f"{secs // 60}m ago"
 
 
+def _maybe_harden_nudge(tool_name: str, tool_input: dict) -> None:
+    if tool_name not in _NUDGE_TOOLS:
+        return
+    file_path = tool_input.get("file_path", tool_input.get("path", ""))
+    if not file_path:
+        return
+    cwd = Path(file_path).parent
+    if (cwd / "Makefile").exists() or (cwd / "SECURITY.md").exists():
+        return
+    slug = str(cwd).replace("\\", "-").replace("/", "-").replace(":", "-").replace(" ", "-")[:60]
+    sentinel = paths.state_dir() / f"harden-nudge-{slug}.json"
+    if sentinel.exists():
+        return
+    try:
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text("{}", encoding="utf-8")
+    except Exception:
+        return
+    print(
+        "\n[dream-studio] This project hasn't been hardened. Run /harden audit to check.\n",
+        flush=True,
+    )
+
+
 def main() -> None:
     try:
         payload = json.loads(sys.stdin.read())
@@ -91,6 +116,8 @@ def main() -> None:
             tool_input = json.loads(tool_input)
         except Exception:
             tool_input = {}
+
+    _maybe_harden_nudge(tool_name, tool_input)
 
     now = time.time()
     target = activity_path()
