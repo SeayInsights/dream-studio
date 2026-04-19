@@ -92,6 +92,31 @@ Fix only the item with that number. Use templates where available, generate stub
 
 ---
 
+---
+
+## Phase 3: Enforcement Audit (gap analysis)
+
+After the Phase 1 file audit, always append this enforcement status table to the report:
+
+> Scan `hooks/hooks.json` to verify which handlers are registered, then report:
+
+| Standard | Status | How |
+|---|---|---|
+| Context budget + handoff | Auto / Missing | `on-context-threshold` in UserPromptSubmit hooks |
+| Project health check | Auto / Missing | `on-pulse` in UserPromptSubmit hooks |
+| Security pattern scan | Auto / Missing | `on-security-scan` in PostToolUse Edit\|Write hooks |
+| CHANGELOG reminder | Auto / Missing | `on-changelog-nudge` in Stop hooks |
+| Hardening nudge | Auto / Missing | `on-tool-activity` in PostToolUse hooks |
+| Code format/lint | Auto / Missing | `.pre-commit-config.yaml` with black + flake8 |
+| Test coverage threshold | Auto / Missing | `pyproject.toml [tool.coverage.report] fail_under` |
+| Full security review | **Manual** | `/secure` must be invoked |
+| Folder structure audit | **Manual** | `/structure-audit` must be invoked |
+| Workflow gating | **Manual** | `/workflow run <name>` must be invoked |
+
+Mark each Auto row ✓ if the handler is registered in hooks.json, ✗ if missing.
+
+---
+
 ## Rules
 
 - Always confirm before overwriting any existing file

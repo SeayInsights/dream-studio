@@ -163,6 +163,7 @@ def _handle_compact_cooldown(projects: Path, session_id: str | None, is_compact_
             cd_sentinel.parent.mkdir(parents=True, exist_ok=True)
             cd_sentinel.write_text(str(_COMPACT_COOLDOWN_TURNS))
             sentinel(projects, session_id, "compact-msg").unlink(missing_ok=True)
+            sentinel(projects, session_id, "warn-pct").unlink(missing_ok=True)
             # Reset bridge file so statusline shows ~0% on next turn
             bp = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id or 'unknown'}.json"
             bp.write_text(json.dumps({
@@ -286,7 +287,26 @@ def main() -> None:
         return
 
     if band == "warn":
-        print(f"\n[dream-studio] Context at {label} — growing.\n", flush=True)
+        # Fire once per 5pp increment (bridge pct) or once per session (KB proxy)
+        warn_sentinel = sentinel(projects, session_id, "warn-pct")
+        try:
+            last = float(warn_sentinel.read_text(encoding="utf-8")) if warn_sentinel.exists() else -1.0
+        except Exception:
+            last = -1.0
+        if bridge_pct is not None:
+            current_floor = float((int(bridge_pct) // 5) * 5)
+            should_fire = current_floor > last
+            save_val = str(current_floor)
+        else:
+            should_fire = last < 0.0  # KB proxy: fire once per session
+            save_val = "0"
+        if should_fire:
+            try:
+                warn_sentinel.parent.mkdir(parents=True, exist_ok=True)
+                warn_sentinel.write_text(save_val, encoding="utf-8")
+            except Exception:
+                pass
+            print(f"\n[dream-studio] Context at {label} — growing.\n", flush=True)
 
 
 if __name__ == "__main__":

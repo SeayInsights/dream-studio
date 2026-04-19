@@ -69,6 +69,37 @@ def test_warn_band_prints_growing(isolated_home, monkeypatch, capsys, handler):
     assert "growing" in capsys.readouterr().out
 
 
+def test_warn_fires_once_per_5pp(isolated_home, monkeypatch, capsys, handler):
+    """WARN band only prints when crossing a 5pp boundary, not on every prompt."""
+    projects = isolated_home / "projects"
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    _write_jsonl(projects, "sw", kb=1800)
+    (projects / "sw.jsonl").touch()
+
+    import tempfile, json as _json, time
+    from pathlib import Path
+
+    session_id = "sw"
+    bridge_file = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id}.json"
+    bridge_file.write_text(_json.dumps({
+        "used_pct": 57.0, "raw_pct": 47.0, "timestamp": time.time(),
+    }), encoding="utf-8")
+
+    mod = handler("on-context-threshold")
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps({"session_id": session_id})))
+    mod.main()
+    out1 = capsys.readouterr().out
+    assert "growing" in out1  # first crossing at 55pp floor → fires
+
+    # Same percentage again — sentinel exists, should NOT fire
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps({"session_id": session_id})))
+    mod.main()
+    out2 = capsys.readouterr().out
+    assert "growing" not in out2  # same floor, no re-fire
+
+    bridge_file.unlink(missing_ok=True)
+
+
 def test_projects_dir_slug_replaces_spaces(monkeypatch, handler):
     """Claude Code slug format replaces `:`, `\\`, `/`, AND spaces with `-`."""
     from pathlib import Path

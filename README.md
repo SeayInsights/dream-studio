@@ -196,7 +196,7 @@ Claude Sonnet 4.6  ⬢ dream-studio:main●  ████████░░ 78% 
 | Model name | Active Claude model |
 | `⬢ repo:branch` | Git branch; color = pulse health (green/yellow/red) |
 | `●` | Uncommitted changes present |
-| Context bar `%` | Usage relative to auto-compact threshold; green < 65%, yellow 65–80%, red > 80% |
+| Context bar `%` | Normalized against Claude's ~83% auto-compact trigger — so 100% = compact point, not full window. Displayed value is ~20% higher than raw token fill. Green < 65%, yellow 65–80%, red > 80% |
 | `Effort ◉/◐/○` | Current thinking effort (high/medium/low) |
 
 After `/compact`, the bar resets to `0%` on the next prompt.
@@ -232,17 +232,20 @@ workflow abort
 
 ### Context Thresholds
 
-Defined in `hooks/lib/context_handoff.py`:
+Defined in `hooks/lib/context_handoff.py`.
 
-| Constant | Default | Behavior |
-|---|---|---|
-| `WARN_PCT` | 65% | Prints a mild "Context growing" notice |
-| `COMPACT_PCT` | 70% | Prints "Run /compact soon" once per session |
-| `HANDOFF_PCT` | 75% | Auto-writes handoff + recap files to `.sessions/<date>/` |
-| `URGENT_PCT` | 82% | Blocks the prompt; requires /compact to continue |
+**How the numbers work:** Claude Code's auto-compact fires at roughly 83% of the raw context window. dream-studio normalizes all context usage against that 83% trigger point — so `100%` on this scale = the moment Claude would auto-compact. This is the **same scale the status bar displays**, which means the percentage shown in the bar is approximately 20% higher than the raw token fill level (e.g., status bar shows 70% when the window is ~58% full). The threshold constants below are in this normalized scale and match exactly what you see on screen.
 
-Active milestones add a **+10% boost** (all thresholds treated as 10 pp higher).  
-Post-`/compact`, warnings are suppressed for 2 turns.
+| Constant | Status bar value | ≈ Raw fill | Behavior |
+|---|---|---|---|
+| `WARN_PCT` | 55% | ~46% | "Growing" — fires once per 5% increment as context climbs |
+| `COMPACT_PCT` | 70% | ~58% | "Run /compact soon" — once per session |
+| `HANDOFF_PCT` | 75% | ~62% | Auto-writes handoff + recap to `.sessions/<date>/` |
+| `URGENT_PCT` | 82% | ~68% | Blocks prompt; requires `/compact` to continue |
+| Auto-compact | 100% | ~83% | Claude Code compacts automatically (not configurable here) |
+
+Active milestones add a **+10 pp boost**: effective trigger points shift to 65 / 80 / 85 / 92% on the status bar, so milestone work is not interrupted.  
+Post-`/compact`, warnings are suppressed for 2 turns and the WARN increment counter resets.
 
 ### Environment Variables
 
@@ -389,12 +392,36 @@ dream-studio/
 
 ---
 
+## Enforcement Status
+
+What fires automatically vs what requires a manual command:
+
+| Standard | Enforced | Mechanism |
+|---|---|---|
+| Context budget + handoff | **Auto** | `on-context-threshold` — blocks at 82%, writes handoff at 75% |
+| Project health check | **Auto** | `on-pulse` — every prompt |
+| Session token logging | **Auto** | `on-token-log` — every Stop |
+| Security pattern scan | **Auto** | `on-security-scan` — every Edit/Write |
+| CHANGELOG reminder | **Auto** | `on-changelog-nudge` — every Stop when source changed |
+| Hardening nudge | **Auto** | `on-tool-activity` — once per project on first Edit/Write |
+| Code format | **Auto** | Pre-commit black hook |
+| Code lint | **Auto** | Pre-commit flake8 hook |
+| Test coverage ≥ 70% | **Auto** | CI on every push/PR |
+| Full security review | **Manual** | `/secure` — OWASP + STRIDE |
+| Folder structure audit | **Manual** | `/structure-audit` |
+| Documentation quality | **Manual** | `/harden` item 19 + template scaffold |
+| Workflow gating | **Manual** | `/workflow run <name>` |
+
+> Run `/harden audit` to get a scored gap report for any project. Items marked Manual require intentional invocation — they are not wired to hooks to avoid excessive interruption during development.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming conventions, commit format, and the PR checklist.
 
 ```bash
-make test        # run 152 tests with coverage (threshold: 70%)
+make test        # run 167 tests with coverage (threshold: 70%)
 make lint        # flake8
 make fmt         # black --check
 make security    # pip-audit for known vulnerabilities
