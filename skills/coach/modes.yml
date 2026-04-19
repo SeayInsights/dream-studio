@@ -1,0 +1,83 @@
+# Coach Skill — Mode Configuration
+# Each mode targets one dimension of Claude Code workflow quality.
+# Grades are independent — a reject on one dimension doesn't block others.
+
+workflow-fit:
+  status: tested
+  description: "Is this task matched to the right dream-studio skill? Are you using the right tool?"
+  analysts:
+    - workflow-fit
+  quick_analysts:
+    - workflow-fit
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: coach-report
+
+context-health:
+  status: tested
+  description: "Context management — when to rewind, compaction patterns, session efficiency"
+  analysts:
+    - context-budget
+  quick_analysts:
+    - context-budget
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: coach-report
+
+pr-hygiene:
+  status: tested
+  description: "PR size, commit quality, branch hygiene, review patterns"
+  analysts:
+    - pr-hygiene
+  quick_analysts:
+    - pr-hygiene
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: coach-report
+
+agent-dispatch:
+  status: tested
+  description: "Subagent usage quality — when to dispatch, model assignments, prompt quality"
+  analysts:
+    - agent-dispatch
+  quick_analysts:
+    - agent-dispatch
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: coach-report
+
+full-audit:
+  status: experimental
+  description: "All four dimensions in parallel — comprehensive workflow audit"
+  analysts:
+    - workflow-fit
+    - context-budget
+    - pr-hygiene
+    - agent-dispatch
+  quick_analysts:
+    - workflow-fit
+    - context-budget
+  max_parallel: 4
+  min_quorum: 2
+  raw_input: false
+  always_synthesize: true
+  synthesis:
+    strategy: consensus-report
+    disagreement_threshold: 2
+    output: coach-report
