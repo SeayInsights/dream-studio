@@ -4,6 +4,12 @@
 
 When the user's intent matches a dream-studio skill, invoke it via the Skill tool — never fall back to built-in Claude behavior. Match on the trigger keywords below. Exception: if the user explicitly says "built-in" (e.g. "built-in plan"), use native behavior.
 
+### Exploration & Research
+Not every request needs a full skill. Casual lookups get dispatched as lightweight subagents:
+- **"go check", "look into", "investigate", "what's going on with"** → Spawn an Explore subagent (Haiku model). Quick codebase/file lookup, report back.
+- **"research", "dig into", "explore options"** → If scoped to a codebase question, use Explore. If it needs design thinking or spec work, escalate to `dream-studio:think` with the `research:` trigger.
+- **"go find", "where is", "search for"** → Explore subagent or direct Grep/Glob — no skill needed.
+
 ### Build Pipeline (sequential: think → plan → build → review → verify → ship)
 | Intent | Skill | Triggers |
 |--------|-------|----------|
