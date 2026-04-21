@@ -3,11 +3,11 @@ REM dream-studio hook launcher (Windows cmd).
 REM
 REM Usage: run.cmd <handler-name> [args...]
 REM
-REM Resolves the plugin root, picks a Python interpreter (py, python3, python),
-REM and executes hooks\handlers\<handler-name>.py. Preserves CLAUDE_PLUGIN_ROOT
-REM and forwards any extra arguments.
+REM Resolves the plugin root, picks a Python interpreter, and searches
+REM packs\{pack}\hooks\ for the named handler. Falls back to the legacy
+REM hooks\handlers\ path during migration.
 
-setlocal
+setlocal enabledelayedexpansion
 
 if "%~1"=="" (
     echo usage: run.cmd ^<handler-name^> [args...] 1^>^&2
@@ -24,9 +24,22 @@ if defined CLAUDE_PLUGIN_ROOT (
     for %%I in ("%SCRIPT_DIR%..") do set "PLUGIN_ROOT=%%~fI"
 )
 
-set "HANDLER_PATH=%PLUGIN_ROOT%\hooks\handlers\%HANDLER%.py"
-if not exist "%HANDLER_PATH%" (
-    echo run.cmd: handler not found: "%HANDLER_PATH%" 1^>^&2
+REM Resolution order is explicit, not a filesystem glob — first match wins.
+set "HANDLER_PATH="
+for %%K in (core quality career analyze domains meta) do (
+    if not defined HANDLER_PATH (
+        if exist "%PLUGIN_ROOT%\packs\%%K\hooks\%HANDLER%.py" (
+            set "HANDLER_PATH=%PLUGIN_ROOT%\packs\%%K\hooks\%HANDLER%.py"
+        )
+    )
+)
+if not defined HANDLER_PATH (
+    if exist "%PLUGIN_ROOT%\hooks\handlers\%HANDLER%.py" (
+        set "HANDLER_PATH=%PLUGIN_ROOT%\hooks\handlers\%HANDLER%.py"
+    )
+)
+if not defined HANDLER_PATH (
+    echo run.cmd: handler not found: %HANDLER% 1^>^&2
     exit /b 3
 )
 

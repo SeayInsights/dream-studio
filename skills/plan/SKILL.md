@@ -1,6 +1,7 @@
 ---
 name: plan
 description: Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. Trigger on `plan:` or after `think` is approved.
+pack: core
 ---
 
 # Plan — Break Spec Into Steps

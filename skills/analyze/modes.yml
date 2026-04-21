@@ -83,6 +83,27 @@ evaluate-strategy:
     disagreement_threshold: 2
     output: decision-memo
 
+evaluate-repo:
+  status: experimental
+  description: "Repo bug audit — forensic, systemic, risk, and prevention analysis of recurring bug clusters from pasted PR/issue data"
+  analysts:
+    - forensic
+    - systemic
+    - repo-risk
+    - prevention
+  quick_analysts:
+    - repo-risk
+    - prevention
+  max_parallel: 2
+  min_quorum: 3
+  raw_input: true
+  always_synthesize: true
+  auto_learn: true
+  synthesis:
+    strategy: risk-report
+    disagreement_threshold: 2
+    output: risk-report
+
 evaluate-content:
   status: experimental
   description: "Content quality and SEO readiness assessment"

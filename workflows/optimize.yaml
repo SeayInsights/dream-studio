@@ -321,7 +321,7 @@ nodes:
   - id: apply
     depends_on: [plan]
     skill: build
-    command: |
+    input: |
       Execute WAVE 0 items from the optimization plan:
         .sessions/<YYYY-MM-DD>/optimize-plan.md
 

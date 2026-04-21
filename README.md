@@ -188,7 +188,7 @@ Hooks run automatically on every session — no user action required.
 
 ## Status Bar
 
-dream-studio installs a status bar (configured in `~/.claude/settings.json`) that renders on every prompt:
+dream-studio ships a status bar that renders on every prompt:
 
 ```
 Claude Sonnet 4.6  ⬢ dream-studio:main●  ████████░░ 78%  Effort ◉
@@ -203,6 +203,36 @@ Claude Sonnet 4.6  ⬢ dream-studio:main●  ████████░░ 78% 
 | `Effort ◉/◐/○` | Current thinking effort (high/medium/low) |
 
 After `/compact`, the bar resets to `0%` on the next prompt.
+
+### Setup
+
+**Prerequisites:** Python 3.10+ and `git` on PATH.
+
+```bash
+make install-statusline
+```
+
+Then add to `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"~/.claude/statusline-command.sh\""
+  }
+}
+```
+
+On Windows, use the full path:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"C:/Users/<you>/.claude/statusline-command.sh\""
+  }
+}
+```
 
 ---
 
@@ -280,124 +310,65 @@ Session notes are written to `.sessions/<YYYY-MM-DD>/` inside each project.
 
 ## Project Structure
 
+dream-studio organizes non-skill assets into **packs** — domain-grouped bundles of hooks, agents, rules, and context. Skills stay in `skills/` (Claude Code discovery requirement) but each SKILL.md declares its `pack:` in frontmatter.
+
+### Packs
+
+| Pack | Purpose | Skills | Hooks | Other |
+|---|---|---|---|---|
+| **core** | Build lifecycle | think, plan, build, review, verify, ship, handoff, recap | milestone-start/end, workflow-progress, changelog-nudge, stop-handoff | Agents: director, engineering, chief-of-staff. Context: session, director prefs |
+| **quality** | Code quality & learning | debug, polish, harden, secure, structure-audit, learn, coach | security-scan, quality-score, structure-check, agent-correction | Rules: FSC, architecture |
+| **career** | Job search pipeline | career-ops, -scan, -evaluate, -apply, -track, -pdf | — | Config: career-ops/config.yml |
+| **analyze** | Multi-perspective analysis | analyze, domain-re | — | 27 analyst personas |
+| **domains** | Stack-specific builders | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design | game-validate | Agents: game, client. Rules: game/*. Templates: project-standards/ |
+| **meta** | Observability & sessions | workflow | pulse, meta-review, context-threshold, post-compact, token-log, tool-activity, skill-load | Shared hook lib (hooks/lib/) |
+
+### Directory Layout
+
 ```
 dream-studio/
 ├── .claude-plugin/
-│   └── plugin.json                  # Plugin manifest (name, version, author, keywords)
-├── .github/
-│   └── workflows/
-│       └── ci.yml                   # CI matrix: ubuntu/macos/windows × py3.10–3.12
-├── agents/                          # Agent persona definitions
-│   ├── context/                     # Context files injected at session start
-│   │   ├── director-corrections.md
-│   │   ├── director-preferences.md
-│   │   ├── fullstack-standards.md
-│   │   ├── session-context.md
-│   │   └── session-primer.md
-│   ├── chief-of-staff.md
-│   ├── client.md
-│   ├── director.md
-│   ├── engineering.md
-│   └── game.md
-├── docs/
-│   └── engine-ref/
-│       └── godot4/                  # Godot 4 reference (best practices, deprecated APIs)
+│   └── plugin.json                  # Plugin manifest
+├── packs/                           # Domain-grouped non-skill assets
+│   ├── core/
+│   │   ├── agents/                  # director, engineering, chief-of-staff
+│   │   ├── context/                 # session-context, director-preferences, fullstack-standards
+│   │   └── hooks/                   # on-milestone-start, on-stop-handoff, etc.
+│   ├── quality/
+│   │   ├── hooks/                   # on-security-scan, on-quality-score, etc.
+│   │   └── rules/structure/         # fsc.md, architecture.md
+│   ├── career/                      # Skills-only pack (no hooks/agents/rules)
+│   ├── analyze/                     # Skills-only pack (analysts live inside skill dirs)
+│   ├── domains/
+│   │   ├── agents/                  # game, client
+│   │   ├── hooks/                   # on-game-validate
+│   │   ├── rules/game/              # Godot 4 coding rules (6 files)
+│   │   └── templates/               # project-standards/ scaffold
+│   └── meta/
+│       └── hooks/                   # on-pulse, on-context-threshold, on-token-log, etc.
 ├── hooks/
-│   ├── handlers/                    # 12 hook event handlers (Python scripts)
-│   │   ├── on-context-threshold.py  # Context budget + handoff trigger
-│   │   ├── on-pulse.py              # Project health check
-│   │   ├── on-token-log.py          # Token usage logger
-│   │   ├── on-milestone-start.py
-│   │   ├── on-milestone-end.py
-│   │   ├── on-meta-review.py
-│   │   ├── on-agent-correction.py
-│   │   ├── on-quality-score.py
-│   │   ├── on-skill-load.py
-│   │   ├── on-tool-activity.py      # Nudges /harden on first edit in unhardened projects
-│   │   ├── on-game-validate.py
-│   │   └── on-workflow-progress.py
 │   ├── lib/                         # Shared Python library (imported by all handlers)
-│   │   ├── audit.py                 # Append-only event log writer
-│   │   ├── context_handoff.py       # Threshold constants + handoff/recap/lesson writers
-│   │   ├── models.py                # Pydantic v2 payload models (UserPromptSubmit, etc.)
 │   │   ├── paths.py                 # Cross-platform path resolution
-│   │   ├── telemetry.py             # Optional Sentry integration (no-op without DSN)
-│   │   ├── time_utils.py            # utcnow() — single UTC source of truth
+│   │   ├── models.py                # Pydantic v2 payload models
+│   │   ├── context_handoff.py       # Threshold constants + handoff writers
 │   │   ├── workflow_engine.py       # DAG execution engine
-│   │   ├── workflow_state.py        # Workflow state persistence
-│   │   └── workflow_validate.py     # YAML parser + DAG cycle/dependency validator
-│   ├── hooks.json                   # Hook event → handler registrations
-│   ├── run.cmd                      # Windows hook runner shim
-│   └── run.sh                       # Unix hook runner shim
-├── rules/
-│   ├── game/                        # Godot 4 coding rules (AI, data, gameplay, networking, shaders, UI)
-│   └── structure/                   # Project structure conventions (FSC, architecture)
-├── scripts/
-│   └── bom.py                       # Bill of materials: git SHA, packages, build date
-├── skills/                          # 28 skill definitions — each folder contains SKILL.md
-│   ├── analyze/
-│   ├── build/
-│   ├── career-apply/                # Sub-skill of career-ops
-│   ├── career-evaluate/             # Sub-skill of career-ops
-│   ├── career-ops/                  # Entry point — routes to sub-skills
-│   ├── career-pdf/                  # Sub-skill of career-ops
-│   ├── career-scan/                 # Sub-skill of career-ops
-│   ├── career-track/                # Sub-skill of career-ops
-│   ├── client-work/
-│   ├── dashboard-dev/
-│   ├── debug/
-│   ├── design/
-│   ├── game-dev/
-│   ├── handoff/
-│   ├── harden/
-│   ├── learn/
-│   ├── mcp-build/
-│   ├── plan/
-│   ├── polish/
-│   ├── recap/
-│   ├── review/
-│   ├── saas-build/
-│   ├── secure/
-│   ├── ship/
-│   ├── structure-audit/
-│   ├── think/
-│   ├── verify/
-│   └── workflow/
-├── templates/
-│   └── project-standards/           # Scaffold files used by /harden to gap-fill projects
-│       ├── Makefile
-│       ├── CONTRIBUTING.md
-│       ├── SECURITY.md
-│       ├── README.md                # README template for new projects
-│       ├── pyproject.toml
-│       ├── requirements.txt
-│       ├── requirements-dev.txt
-│       ├── scripts/bom.py
-│       └── hooks/lib/               # Copies of core lib files (audit, models, telemetry, time_utils)
-├── tests/
-│   ├── conftest.py
-│   ├── factories.py                 # factory_boy payload factories
-│   ├── integration/                 # Hook + workflow integration tests (16 test files)
-│   └── unit/                        # Library unit tests (4 test files)
+│   │   └── ...                      # audit, telemetry, time_utils, etc.
+│   ├── hooks.json                   # Hook event -> handler registrations
+│   ├── run.sh                       # Unix launcher (searches packs/*/hooks/)
+│   └── run.cmd                      # Windows launcher
+├── skills/                          # 30 skill definitions (each has SKILL.md with pack: field)
 ├── workflows/                       # YAML workflow DAG definitions
-│   ├── comprehensive-review.yaml
-│   ├── feature-research.yaml        # GitHub research pipeline for Claude integrations
-│   ├── fix-issue.yaml
-│   ├── game-feature.yaml
-│   ├── hotfix.yaml
-│   ├── idea-to-pr.yaml
-│   ├── prototype.yaml
-│   ├── safe-refactor.yaml
-│   └── studio-onboard.yaml          # Onboarding audit for new dream-studio users
-├── CHANGELOG.md                     # Version history
-├── CONTRIBUTING.md                  # Branch naming, commit format, PR checklist
-├── LICENSE                          # MIT
-├── Makefile                         # Targets: test, lint, fmt, security, install-dev, status
-├── README.md
-├── SECURITY.md                      # Vulnerability reporting (30-day SLA)
-├── pyproject.toml                   # Black, Flake8, pytest, coverage config (≥70% threshold)
+├── packs.yaml                       # Pack manifest — defines all 6 packs and their members
+├── scripts/
+│   ├── bom.py                       # Bill of materials
+│   ├── statusline-command.sh        # Status bar script (make install-statusline)
+│   └── sync_docs.py                 # Regenerate workflow table in README
+├── tests/
+├── CHANGELOG.md
+├── Makefile
+├── pyproject.toml
 ├── requirements.txt                 # Runtime: pydantic>=2.0, sentry-sdk
-└── requirements-dev.txt             # Dev: pytest-cov, freezegun, factory-boy, black, flake8, pip-audit
+└── requirements-dev.txt
 ```
 
 ---

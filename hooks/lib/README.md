@@ -1,6 +1,6 @@
 # hooks/lib/
 
-Shared library modules imported by handlers and tests. No handler logic lives here — only reusable utilities.
+Shared library modules imported by handlers and tests. No handler logic lives here — only reusable utilities. Owned by the **meta** pack (`packs/meta/`) — stays at this path because all packs depend on it via PYTHONPATH.
 
 ## What this directory provides
 
@@ -11,7 +11,7 @@ Shared library modules imported by handlers and tests. No handler logic lives he
 | `workflow_state.py` | Workflow lifecycle — loading, persisting, and querying workflow run state |
 | `workflow_engine.py` | Pure evaluation engine — node execution, gate checks, DAG traversal (no I/O) |
 | `workflow_validate.py` | YAML workflow schema validation |
-| `game_validate.py` | Godot project detection and game-file validation logic (pure functions) |
+| ~~`game_validate.py`~~ | Moved to `packs/domains/domain_lib/` — domain-specific, not shared infra |
 | `context_handoff.py` | Session handoff writers — handoff.md, recap.md, draft lessons |
 | `traceability.py` | File size cap guard and UTF-8 encoding check |
 | `python_shim.py` | Cross-platform Python interpreter discovery |

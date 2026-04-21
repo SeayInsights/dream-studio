@@ -4,6 +4,7 @@ description: "AI job search command center — routes to career sub-skills (eval
 user_invocable: true
 args: mode
 argument-hint: "[scan | evaluate | pdf | apply | compare | tracker | pipeline | deep | training | project | gig | proposal | sow | patterns | followup | batch | contact | interview-prep]"
+pack: career
 ---
 
 # Career-Ops — Router & Command Center

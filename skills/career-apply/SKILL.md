@@ -1,6 +1,7 @@
 ---
 name: career-apply
 description: "Live application assistant (form fill + answer generation) and batch processing. Modes: apply (single), batch (parallel workers). Trigger via /career-ops apply or /career-ops batch."
+pack: career
 ---
 
 # Career-Apply — Application Engine

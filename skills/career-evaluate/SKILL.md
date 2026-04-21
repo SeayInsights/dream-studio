@@ -1,6 +1,7 @@
 ---
 name: career-evaluate
 description: "Evaluate job offers, freelance gigs, or compare multiple opportunities. Modes: auto-pipeline, oferta, ofertas, gig, proposal, sow. Trigger via /career-ops routing."
+pack: career
 ---
 
 # Career-Evaluate — Offer Assessment Engine

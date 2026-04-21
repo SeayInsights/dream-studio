@@ -1,6 +1,7 @@
 ---
 name: debug
 description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure.
+pack: quality
 ---
 
 # Debug — Scientific Method

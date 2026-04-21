@@ -4,6 +4,7 @@ description: "Claude Code workflow coach — evaluates HOW you're using Claude C
 user_invocable: true
 args: mode
 argument-hint: "[workflow-fit | context-health | pr-hygiene | agent-dispatch] [--quick]"
+pack: quality
 ---
 
 # Coach — Claude Code Workflow Advisor

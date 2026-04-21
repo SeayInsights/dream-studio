@@ -1,6 +1,7 @@
 ---
 name: saas-build
 description: React 19 + React Router 7 + Cloudflare Workers + D1/Kysely stack patterns for SaaS builds — API contract-first, loaders/actions, migrations, CI-only deploys. Trigger on `build feature:`, `build api:`, `build page:`, `deploy:`, `build supabase:`, and related web commands.
+pack: domains
 ---
 
 # SaaS Build — React + Cloudflare Stack

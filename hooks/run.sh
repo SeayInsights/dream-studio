@@ -3,10 +3,9 @@
 #
 # Usage: run.sh <handler-name> [args...]
 #
-# Resolves the plugin root, picks a Python interpreter via lib.python_shim,
-# and executes hooks/handlers/<handler-name>.py, forwarding CLAUDE_PLUGIN_ROOT
-# and any remaining arguments. Claude Code sets CLAUDE_PLUGIN_ROOT when it
-# invokes a hook; we preserve it so the handler can resolve plugin assets.
+# Resolves the plugin root, picks a Python interpreter, and searches
+# packs/{pack}/hooks/ for the named handler. Falls back to the legacy
+# hooks/handlers/ path during migration.
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
@@ -19,10 +18,25 @@ shift
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-HANDLER_PATH="${PLUGIN_ROOT}/hooks/handlers/${HANDLER}.py"
 
-if [[ ! -f "${HANDLER_PATH}" ]]; then
-  echo "run.sh: handler not found: ${HANDLER_PATH}" >&2
+# Resolution order is explicit, not a filesystem glob — first match wins.
+# If two packs ever define the same handler name, the earlier pack takes priority.
+HANDLER_PATH=""
+for pack in core quality career analyze domains meta; do
+  candidate="${PLUGIN_ROOT}/packs/${pack}/hooks/${HANDLER}.py"
+  if [[ -f "${candidate}" ]]; then
+    HANDLER_PATH="${candidate}"
+    break
+  fi
+done
+if [[ -z "${HANDLER_PATH}" ]]; then
+  candidate="${PLUGIN_ROOT}/hooks/handlers/${HANDLER}.py"
+  if [[ -f "${candidate}" ]]; then
+    HANDLER_PATH="${candidate}"
+  fi
+fi
+if [[ -z "${HANDLER_PATH}" ]]; then
+  echo "run.sh: handler not found: ${HANDLER}" >&2
   exit 3
 fi
 

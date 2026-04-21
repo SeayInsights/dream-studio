@@ -1,0 +1,46 @@
+schema_version: 1
+
+packs:
+  core:
+    description: Build lifecycle — think through ship, core agents, session context
+    skills: [think, plan, build, review, verify, ship, handoff, recap]
+    agents: [director, engineering, chief-of-staff]
+    context: [session-context, session-primer, director-preferences, director-corrections, fullstack-standards]
+    hooks: [on-milestone-start, on-milestone-end, on-workflow-progress, on-changelog-nudge, on-stop-handoff]
+
+  quality:
+    description: Code quality, learning, and structural discipline
+    skills: [debug, polish, harden, secure, structure-audit, learn, coach]
+    hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
+    rules: [structure/architecture.md, structure/fsc.md]
+
+  career:
+    description: Job search and career pipeline management
+    skills: [career-ops, career-scan, career-evaluate, career-apply, career-track, career-pdf]
+
+  analyze:
+    description: Multi-perspective analysis engine
+    skills: [analyze, domain-re]
+
+  domains:
+    description: Stack-specific and domain builders
+    skills: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design]
+    agents: [game, client]
+    hooks: [on-game-validate]
+    rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
+    templates: [project-standards/]
+
+  meta:
+    description: Observability, session management, and shared hook infrastructure
+    skills: [workflow]
+    hooks: [on-pulse, on-meta-review, on-context-threshold, on-post-compact, on-token-log, on-tool-activity, on-skill-load]
+    lib: hooks/lib/
+
+# Cross-pack assets not owned by any single pack.
+# traceability-registry is used by build (core) for build DAGs — lives at root
+# because multiple packs reference it. If more cross-pack templates appear,
+# consider whether they belong in a pack or need their own namespace.
+shared:
+  templates: [templates/traceability-registry.yaml]
+  workflows: workflows/
+  feeds: feeds/

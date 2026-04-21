@@ -1,6 +1,7 @@
 ---
 name: handoff
 description: Session continuity — capture structured state (current task, progress, phase, decisions, active files, next action) to both markdown and JSON. A fresh session resumes from the file alone. Trigger on `handoff:`, at compact threshold, or session end with WIP.
+pack: core
 ---
 
 # Handoff — Session Continuity

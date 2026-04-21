@@ -4,6 +4,7 @@ description: "Security review — parallel OWASP+STRIDE analyst subagents produc
 user_invocable: true
 args: mode
 argument-hint: "[pr-review | architecture-review | dependency-audit] [--quick]"
+pack: quality
 ---
 
 # Secure — Parallel Security Review

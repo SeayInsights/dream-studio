@@ -1,6 +1,7 @@
 ---
 name: polish
 description: UI quality decision tree — critique seven dimensions (layout, typography, color, animation, copy, responsive, edge cases), score 1-5, fix by priority, re-score. Trigger on `polish ui:`, `critique design:`, `redesign:`, `make it premium:`, or auto after `build page:`/`build component:`.
+pack: quality
 ---
 
 # Polish — UI Quality Decision Tree

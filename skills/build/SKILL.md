@@ -1,6 +1,7 @@
 ---
 name: build
 description: Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`.
+pack: core
 ---
 
 # Build — Execute With Discipline

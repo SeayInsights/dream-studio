@@ -1,6 +1,7 @@
 ---
 name: career-track
 description: "Pipeline management, application tracking, pattern analysis, and follow-up cadence. Modes: tracker, pipeline, patterns, followup. Trigger via /career-ops tracker|pipeline|patterns|followup."
+pack: career
 ---
 
 # Career-Track — Pipeline Intelligence

@@ -3,7 +3,8 @@ name: analyze
 description: "Multi-perspective analysis engine — parallel analyst subagents evaluate input from different angles, then synthesis resolves conflicts into a decision memo. Trigger on /analyze or analyze:."
 user_invocable: true
 args: mode
-argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data | evaluate-strategy | evaluate-content] [--quick]"
+argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data | evaluate-strategy | evaluate-content | evaluate-repo] [--quick]"
+pack: analyze
 ---
 
 # Analyze — Multi-Perspective Decision Engine
@@ -22,6 +23,7 @@ Inspired by multi-agent hedge fund architectures, adapted for career offers, cli
 - `evaluate-data` — Dataset/BI analysis (Anomaly, Trend, Hypothesis, Validation)
 - `evaluate-strategy` — C-level business strategy evaluation (CFO, CTO, CMO, CPO, CEO)
 - `evaluate-content` — Content quality + SEO readiness (SEO, CMO)
+- `evaluate-repo` — Repo bug audit (Forensic, Systemic, Risk, Prevention) — paste pre-pulled PR/issue data
 - `--quick` flag — Run only the 2 highest-priority analysts per mode
 
 ## Signal Scale
@@ -351,6 +353,45 @@ Write the report to: `~/.dream-studio/analyze/reports/{mode}-{topic_slug}-{YYYY-
 - Set `last_updated`: current ISO-8601 timestamp
 
 Write feed using temp-file-then-rename. Validate `schema_version` is 1 before writing. If validation fails, preserve existing feed file and warn.
+
+### Step 9b: Auto-Learn Draft (conditional)
+
+Check if mode config has `auto_learn: true`. If yes:
+
+1. Extract from completed analyst signals and synthesis:
+   - Top 3 risk findings (from repo-risk analyst `key_factors`)
+   - Top 3 systemic gaps (from systemic analyst `key_factors`)
+   - Prevention checklist items (from prevention analyst reasoning + key_factors)
+   - Forensic patterns (from forensic analyst `key_factors`)
+
+2. Write lesson draft to `~/.dream-studio/meta/draft-lessons/repo-audit-{topic_slug}-{YYYY-MM-DD}.md`:
+
+```markdown
+---
+source: analyze/evaluate-repo
+repo: {topic_slug}
+date: {ISO-8601 date}
+report: {report_path}
+---
+
+# Lessons: {topic_slug} Repo Audit
+
+## Top Risk Clusters
+{top 3 risk findings from repo-risk analyst, one bullet each}
+
+## Systemic Gaps Found
+{top 3 gaps from systemic analyst, one bullet each}
+
+## Key Forensic Patterns
+{top 3 decision patterns from forensic analyst, one bullet each}
+
+## Prevention Checklist (High Priority)
+{top 3 prevention items from prevention analyst, tagged [type]}
+```
+
+3. Notify user at end of Step 10: "Lesson draft saved to `meta/draft-lessons/` — run `/learn` to review and promote."
+
+If `auto_learn` is false or absent: skip this step entirely.
 
 ### Step 10: Present Results
 

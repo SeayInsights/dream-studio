@@ -1,6 +1,7 @@
 ---
 name: verify
 description: Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. Trigger on `verify:`, `prove it:`, or after `review` passes.
+pack: core
 ---
 
 # Verify — Prove It Works

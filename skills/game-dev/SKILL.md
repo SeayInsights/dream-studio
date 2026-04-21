@@ -1,6 +1,7 @@
 ---
 name: game-dev
 description: Godot 4 consolidated patterns — 2D/3D player controllers, scene hierarchies, CSG blockouts, Blender→GLB pipeline with QA gates, two-tier automated/manual QA, and game design scaffolding. Trigger on any game build, review, QA, design, or asset-pipeline command.
+pack: domains
 ---
 
 # Game Dev — Godot 4 Consolidated Patterns
@@ -17,7 +18,7 @@ Any game build, review, QA, design, or asset pipeline command.
 
 ## Path-Scoped Coding Rules
 
-**Path resolution:** This skill is loaded from the dream-studio plugin. To find rule files, resolve the plugin root: look at the path you loaded THIS file from, go up two directories (past `skills/game-dev/`), then into `rules/game/`. Example: if you loaded `…/dream-studio/0.2.0/skills/game-dev/SKILL.md`, the rules live at `…/dream-studio/0.2.0/rules/game/`.
+**Path resolution:** This skill is loaded from the dream-studio plugin. To find rule files, resolve the plugin root: look at the path you loaded THIS file from, go up two directories (past `skills/game-dev/`), then into `packs/domains/rules/game/`. Example: if you loaded `…/dream-studio/0.2.0/skills/game-dev/SKILL.md`, the rules live at `…/dream-studio/0.2.0/packs/domains/rules/game/`.
 
 When editing game project files, **Read** the matching rule file before writing code.
 
@@ -28,12 +29,12 @@ When editing game project files, **Read** the matching rule file before writing 
 
 | Keywords in path or filename | Read this rule |
 |---|---|
-| `gameplay`, `systems`, `mechanics`, `combat`, `movement`, `abilities` | `rules/game/gameplay-code.md` |
-| `networking`, `multiplayer`, `net`, `network`, `online` | `rules/game/networking-code.md` |
-| `ai`, `npc`, `enemies`, `behavior`, `mobs`, `pathfinding` | `rules/game/ai-code.md` |
-| `ui`, `hud`, `menu`, `gui`, `interface`, `dialog`, `screens` | `rules/game/ui-code.md` |
-| `shaders`, `materials`, or `.gdshader` extension | `rules/game/shader-code.md` |
-| `data`, `balance`, `config`, `gamedata`, or `.json` in data dirs | `rules/game/data-files.md` |
+| `gameplay`, `systems`, `mechanics`, `combat`, `movement`, `abilities` | `packs/domains/rules/game/gameplay-code.md` |
+| `networking`, `multiplayer`, `net`, `network`, `online` | `packs/domains/rules/game/networking-code.md` |
+| `ai`, `npc`, `enemies`, `behavior`, `mobs`, `pathfinding` | `packs/domains/rules/game/ai-code.md` |
+| `ui`, `hud`, `menu`, `gui`, `interface`, `dialog`, `screens` | `packs/domains/rules/game/ui-code.md` |
+| `shaders`, `materials`, or `.gdshader` extension | `packs/domains/rules/game/shader-code.md` |
+| `data`, `balance`, `config`, `gamedata`, or `.json` in data dirs | `packs/domains/rules/game/data-files.md` |
 
 **Non-standard project structures:** Rules use broad glob patterns (e.g., `**/gameplay/**/*.gd`, `**/src/gameplay/**`) to match common alternatives like `src/gameplay/`, flat `gameplay/`, or `scripts/gameplay/`. If your project uses a unique structure, the content-based fallback will still classify most files correctly.
 

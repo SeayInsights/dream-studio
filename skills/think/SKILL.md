@@ -1,6 +1,7 @@
 ---
 name: think
 description: Clarify an idea, explore 2-3 approaches with trade-offs, write a spec, and get approval before any code. Trigger on `think:`, `spec:`, `shape ux:`, `design brief:`, `research:`.
+pack: core
 ---
 
 # Think — Design Before Building

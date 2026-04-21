@@ -1,3 +1,7 @@
+---
+pack: quality
+---
+
 # Skill: /structure-audit
 
 **Trigger**: `/structure-audit [path]`
@@ -131,8 +135,8 @@ Score: {weighted score}/10
 3. {specific action}
 
 ## Rules Reference
-- FSC: `rules/structure/fsc.md`
-- Architecture: `rules/structure/architecture.md`
+- FSC: `packs/quality/rules/structure/fsc.md`
+- Architecture: `packs/quality/rules/structure/architecture.md`
 ```
 
 ### Step 6 — Write the report

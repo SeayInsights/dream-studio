@@ -1,4 +1,4 @@
-"""Unit tests for hooks/handlers/on-stop-handoff.py."""
+"""Unit tests for on-stop-handoff hook."""
 
 from __future__ import annotations
 
@@ -13,20 +13,13 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# Import the handler module via conftest helper (or direct import here)
-import importlib.util
-
-_HANDLER_PATH = Path(__file__).resolve().parents[2] / "hooks" / "handlers" / "on-stop-handoff.py"
+from conftest import load_handler  # noqa: E402
 
 
 def _load_handler():
-    spec = importlib.util.spec_from_file_location("on_stop_handoff", _HANDLER_PATH)
-    assert spec is not None, f"Could not load spec from {_HANDLER_PATH}"
-    assert spec.loader is not None, "Spec has no loader"
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod
+    return load_handler("on-stop-handoff")
 
 
 # ── _has_activity ──────────────────────────────────────────────────────
@@ -102,7 +95,9 @@ def test_main_skips_on_no_activity(tmp_path, monkeypatch):
 def test_main_writes_on_activity(tmp_path, monkeypatch):
     mod = _load_handler()
     monkeypatch.setattr(mod, "_has_activity", lambda cwd: True)
-    monkeypatch.setattr(mod, "paths", mock.Mock(project_root=lambda: tmp_path))
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    monkeypatch.setattr(mod, "paths", mock.Mock(project_root=lambda: tmp_path, state_dir=lambda: state_dir))
 
     written = []
 

@@ -4,6 +4,7 @@ description: "Real estate domain expert — parallel analyst lenses (forensic sk
 user_invocable: true
 args: mode
 argument-hint: "[lease-analysis | credit-check | renewal-economics | rollover-analysis] [--quick]"
+pack: analyze
 ---
 
 # Domain-RE — Real Estate Analysis Engine

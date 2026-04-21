@@ -2,30 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import importlib.util
 import sys
-import types
+from pathlib import Path
 
 import pytest
 
-# Load handler directly (conftest not importable as module)
-_HANDLERS_DIR = Path(__file__).resolve().parents[2] / "hooks" / "handlers"
-_HOOKS_DIR = Path(__file__).resolve().parents[2] / "hooks"
-if str(_HOOKS_DIR) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_DIR))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import load_handler  # noqa: E402
 
-def _load_handler(name: str) -> types.ModuleType:
-    module_name = f"handlers_{name.replace('-', '_')}"
-    spec = importlib.util.spec_from_file_location(module_name, _HANDLERS_DIR / f"{name}.py")
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-mod = _load_handler("on-game-validate")
+mod = load_handler("on-game-validate")
 
 
 @pytest.fixture
