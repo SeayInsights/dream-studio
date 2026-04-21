@@ -48,4 +48,4 @@ jobs:
       - name: Run tests with coverage
         shell: bash
         run: |
-          pytest tests/ -v --cov=hooks/lib --cov-report=term-missing
+          pytest tests/ -v --cov=hooks/lib --cov=packs/domains/domain_lib --cov-report=term-missing

@@ -1,7 +1,7 @@
 .PHONY: test lint fmt security install-dev install-statusline status docs
 
 test:
-	py -3.12 -m pytest tests/ --cov=hooks --cov-fail-under=70 -q
+	py -3.12 -m pytest tests/ --cov=hooks/lib --cov=packs/domains/domain_lib --cov-fail-under=70 -q
 
 lint:
 	py -3.12 -m black --check . && py -3.12 -m flake8 .

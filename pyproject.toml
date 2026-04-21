@@ -11,7 +11,7 @@ per-file-ignores = [
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["hooks"]
+source = ["hooks/lib", "packs/domains/domain_lib"]
 omit = [
     "hooks/lib/workflow_state.py",
     "hooks/lib/traceability.py",
