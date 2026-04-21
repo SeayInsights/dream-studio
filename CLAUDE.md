@@ -62,6 +62,7 @@ When the user's intent matches a dream-studio skill, invoke it via the Skill too
 - Use `gh` CLI for all GitHub operations (PRs, issues, releases), not the MCP GitHub tools.
 - Never force-push without explicit user approval.
 - Never push to stale/old branches — check branch freshness first.
+- **Before pushing to a branch with an existing PR**, run `gh pr view <branch> --json state` to check if it's been merged or closed. If merged/closed, pull latest main, create a new branch, cherry-pick or reapply changes, and open a new PR. Never push commits to a branch whose PR is already merged.
 
 ## Commits
 - Never add Co-Authored-By attribution to git commits.
