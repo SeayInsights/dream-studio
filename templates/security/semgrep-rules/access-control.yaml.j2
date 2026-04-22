@@ -1,0 +1,441 @@
+# Semgrep rules — Access Control
+# Generated for client: {{ client.name }}
+# Template: access-control.yaml.j2
+# Tenant key: {{ client.isolation.tenant_key }}
+# Alternate keys: {{ client.isolation.alternate_keys | join(', ') }}
+# Coverage: missing tenant_key WHERE clause, IDOR patterns,
+#           missing auth middleware, unscoped bulk exports, ORM queries without scope
+{% if client.isolation.model == 'multi-tenant' %}
+# Multi-tenant isolation model — all rules enforced
+{% endif %}
+rules:
+
+  # AC-001: SQL query missing tenant key filter (Python)
+  - id: {{ client.name | lower }}-ac-001-missing-tenant-filter-sql
+    pattern-either:
+      - pattern: |
+          $CURSOR.execute("SELECT ... FROM $TABLE ...")
+      - pattern: |
+          $CURSOR.execute(f"SELECT ... FROM $TABLE ...")
+      - pattern: |
+          $DB.execute("SELECT ... FROM $TABLE ...")
+      - pattern: |
+          db.session.execute(text("SELECT ... FROM $TABLE ..."))
+    pattern-not-either:
+      - pattern: |
+          $CURSOR.execute("SELECT ... WHERE ... {{ client.isolation.tenant_key }} ...", ...)
+      - pattern: |
+          $CURSOR.execute("SELECT ... WHERE {{ client.isolation.tenant_key }} = ...", ...)
+      - pattern: |
+          $CURSOR.execute(f"SELECT ... WHERE ... {{ client.isolation.tenant_key }} ...")
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $CURSOR.execute("SELECT ... WHERE ... {{ key }} ...", ...)
+      - pattern: |
+          $CURSOR.execute(f"SELECT ... WHERE ... {{ key }} ...")
+      {% endfor %}
+    message: >
+      SQL SELECT query missing {{ client.isolation.tenant_key }} filter — potential data
+      leakage across tenants. All queries in a {{ client.isolation.model }} system must
+      include a WHERE clause filtering on {{ client.isolation.tenant_key }}
+      (or alternate: {{ client.isolation.alternate_keys | join(', ') }}).
+      Missing this scope means one tenant can read another's
+      {{ client.data.critical | join(', ') }} data.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-002: SQL query missing tenant key filter (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-ac-002-missing-tenant-filter-sql-js
+    pattern-either:
+      - pattern: |
+          $DB.query(`SELECT ... FROM $TABLE ...`)
+      - pattern: |
+          $DB.query("SELECT ... FROM $TABLE ...")
+      - pattern: |
+          $DB.raw(`SELECT ... FROM $TABLE ...`)
+    pattern-not-either:
+      - pattern: |
+          $DB.query(`SELECT ... WHERE ... {{ client.isolation.tenant_key }} ...`)
+      - pattern: |
+          $DB.query("SELECT ... WHERE ... {{ client.isolation.tenant_key }} ...")
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $DB.query(`SELECT ... WHERE ... {{ key }} ...`)
+      {% endfor %}
+    message: >
+      SQL query in JavaScript missing {{ client.isolation.tenant_key }} tenant scope.
+      Every data access in the {{ client.name }} system must be scoped to the current
+      tenant. Add WHERE {{ client.isolation.tenant_key }} = $tenantId to prevent
+      cross-tenant data exposure.
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-003: IDOR — direct object lookup without ownership check (Python)
+  - id: {{ client.name | lower }}-ac-003-idor-direct-lookup
+    pattern-either:
+      - pattern: |
+          $OBJ = $MODEL.objects.get(id=$ID)
+      - pattern: |
+          $OBJ = $MODEL.objects.get(pk=$PK)
+      - pattern: |
+          $OBJ = $MODEL.query.get($ID)
+      - pattern: |
+          $OBJ = db.session.get($MODEL, $ID)
+      - pattern: |
+          $OBJ = $MODEL.objects.filter(id=$ID).first()
+    pattern-not-either:
+      - pattern: |
+          $OBJ = $MODEL.objects.get(id=$ID, {{ client.isolation.tenant_key }}=$TENANT)
+      - pattern: |
+          $OBJ = $MODEL.objects.filter(id=$ID, {{ client.isolation.tenant_key }}=$TENANT).first()
+      - pattern: |
+          $OBJ = $MODEL.objects.get(pk=$PK, {{ client.isolation.tenant_key }}=$TENANT)
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $OBJ = $MODEL.objects.get(id=$ID, {{ key }}=$TENANT)
+      - pattern: |
+          $OBJ = $MODEL.objects.filter(id=$ID, {{ key }}=$TENANT).first()
+      {% endfor %}
+    message: >
+      Insecure Direct Object Reference (IDOR): object fetched by ID without
+      {{ client.isolation.tenant_key }} ownership check. An authenticated user from
+      one tenant could access another tenant's records by guessing IDs.
+      Always scope lookups: Model.objects.get(id=id, {{ client.isolation.tenant_key }}=current_tenant)
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-639: Authorization Bypass Through User-Controlled Key"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-004: IDOR — direct object lookup without ownership check (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-ac-004-idor-js
+    pattern-either:
+      - pattern: |
+          $REPO.findById($ID)
+      - pattern: |
+          $REPO.findOne({ id: $ID })
+      - pattern: |
+          $MODEL.findById($ID)
+      - pattern: |
+          $MODEL.findOne({ where: { id: $ID } })
+    pattern-not-either:
+      - pattern: |
+          $REPO.findOne({ id: $ID, {{ client.isolation.tenant_key }}: $TENANT })
+      - pattern: |
+          $MODEL.findOne({ where: { id: $ID, {{ client.isolation.tenant_key }}: $TENANT } })
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $MODEL.findOne({ where: { id: $ID, {{ key }}: $TENANT } })
+      {% endfor %}
+    message: >
+      IDOR risk: record fetched by ID only, without {{ client.isolation.tenant_key }}
+      scoping. Include tenant context in every ORM lookup:
+        findOne({ where: { id, {{ client.isolation.tenant_key }}: currentTenant } })
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-639: Authorization Bypass Through User-Controlled Key"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-005: Route definition missing auth middleware (Python — Flask/FastAPI)
+  - id: {{ client.name | lower }}-ac-005-missing-auth-middleware-python
+    pattern-either:
+      - pattern: |
+          @app.route($PATH)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @router.get($PATH)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @router.post($PATH)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @router.put($PATH)
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @router.delete($PATH)
+          def $FUNC(...):
+              ...
+    pattern-not-either:
+      - pattern: |
+          @login_required
+          ...
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @require_auth
+          ...
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @jwt_required()
+          ...
+          def $FUNC(...):
+              ...
+      - pattern: |
+          @permission_required(...)
+          ...
+          def $FUNC(...):
+              ...
+      - pattern: |
+          def $FUNC($REQ: Request, $USER = Depends($AUTH)):
+              ...
+      - pattern: |
+          def $FUNC(..., $USER = Depends(get_current_user)):
+              ...
+    message: >
+      Route handler defined without an authentication decorator or dependency.
+      All {{ client.name }} API endpoints must require authentication.
+      Add @login_required, @jwt_required(), or a FastAPI Depends(get_current_user)
+      to prevent unauthenticated access to {{ client.data.critical | join(', ') }} data.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-306: Missing Authentication for Critical Function"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}
+
+  # AC-006: Route definition missing auth middleware (JavaScript/TypeScript — Express)
+  - id: {{ client.name | lower }}-ac-006-missing-auth-middleware-js
+    pattern-either:
+      - pattern: |
+          $ROUTER.get($PATH, $HANDLER)
+      - pattern: |
+          $ROUTER.post($PATH, $HANDLER)
+      - pattern: |
+          $ROUTER.put($PATH, $HANDLER)
+      - pattern: |
+          $ROUTER.delete($PATH, $HANDLER)
+      - pattern: |
+          app.get($PATH, $HANDLER)
+      - pattern: |
+          app.post($PATH, $HANDLER)
+    pattern-not-either:
+      - pattern: |
+          $ROUTER.get($PATH, authenticate, ...)
+      - pattern: |
+          $ROUTER.post($PATH, authenticate, ...)
+      - pattern: |
+          $ROUTER.get($PATH, requireAuth, ...)
+      - pattern: |
+          $ROUTER.post($PATH, requireAuth, ...)
+      - pattern: |
+          $ROUTER.get($PATH, verifyToken, ...)
+      - pattern: |
+          $ROUTER.post($PATH, verifyToken, ...)
+      - pattern: |
+          $ROUTER.get($PATH, passport.authenticate(...), ...)
+    message: >
+      Express route registered without an authentication middleware.
+      Pass your auth middleware before the handler:
+        router.get('/path', authenticate, handler)
+        router.post('/path', verifyToken, requireTenant, handler)
+      All {{ client.name }} routes must enforce authentication.
+    severity: WARNING
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-306: Missing Authentication for Critical Function"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}
+
+  # AC-007: Unscoped bulk export / download endpoint (Python)
+  - id: {{ client.name | lower }}-ac-007-unscoped-bulk-export-python
+    pattern-either:
+      - pattern: |
+          $MODEL.objects.all()
+      - pattern: |
+          $MODEL.query.all()
+      - pattern: |
+          db.session.query($MODEL).all()
+      - pattern: |
+          $CURSOR.execute("SELECT * FROM $TABLE")
+      - pattern: |
+          $CURSOR.execute("SELECT * FROM $TABLE;")
+    pattern-not-either:
+      - pattern: |
+          $MODEL.objects.filter({{ client.isolation.tenant_key }}=$TENANT).all()
+      - pattern: |
+          $MODEL.objects.filter({{ client.isolation.tenant_key }}=$TENANT)
+      - pattern: |
+          db.session.query($MODEL).filter($MODEL.{{ client.isolation.tenant_key }} == $TENANT).all()
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $MODEL.objects.filter({{ key }}=$TENANT).all()
+      {% endfor %}
+      - pattern: |
+          $CURSOR.execute("SELECT * FROM $TABLE WHERE {{ client.isolation.tenant_key }} = ...", ...)
+    message: >
+      Unscoped bulk data access: .all() or SELECT * without {{ client.isolation.tenant_key }}
+      filter returns ALL tenant data. This is a critical data isolation violation in
+      {{ client.name }}'s {{ client.isolation.model }} system.
+      Scope every bulk query: Model.objects.filter({{ client.isolation.tenant_key }}=current_tenant_id)
+      This protects: {{ client.data.critical | join(', ') }}.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-008: Unscoped bulk export / download endpoint (JavaScript/TypeScript)
+  - id: {{ client.name | lower }}-ac-008-unscoped-bulk-export-js
+    pattern-either:
+      - pattern: |
+          $MODEL.findAll()
+      - pattern: |
+          $MODEL.find({})
+      - pattern: |
+          $REPO.find()
+      - pattern: |
+          $REPO.findAll({})
+      - pattern: |
+          $DB.query("SELECT * FROM $TABLE")
+    pattern-not-either:
+      - pattern: |
+          $MODEL.findAll({ where: { {{ client.isolation.tenant_key }}: $TENANT } })
+      - pattern: |
+          $MODEL.find({ {{ client.isolation.tenant_key }}: $TENANT })
+      - pattern: |
+          $REPO.find({ {{ client.isolation.tenant_key }}: $TENANT })
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $MODEL.findAll({ where: { {{ key }}: $TENANT } })
+      - pattern: |
+          $MODEL.find({ {{ key }}: $TENANT })
+      {% endfor %}
+    message: >
+      Unscoped findAll() / find({}) returns records for ALL tenants.
+      In {{ client.name }}'s {{ client.isolation.model }} architecture, every bulk
+      query must be filtered by {{ client.isolation.tenant_key }}:
+        Model.findAll({ where: { {{ client.isolation.tenant_key }}: req.tenantId } })
+    severity: ERROR
+    languages: [javascript, typescript]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-009: ORM queryset without tenant scope (Python Django)
+  - id: {{ client.name | lower }}-ac-009-orm-no-tenant-scope-django
+    pattern-either:
+      - pattern: |
+          $MODEL.objects.filter($FIELD=$VAL)
+      - pattern: |
+          $MODEL.objects.exclude($FIELD=$VAL)
+      - pattern: |
+          $MODEL.objects.annotate(...)
+      - pattern: |
+          $MODEL.objects.values(...)
+      - pattern: |
+          $MODEL.objects.aggregate(...)
+    pattern-not-either:
+      - pattern: |
+          $MODEL.objects.filter({{ client.isolation.tenant_key }}=$TENANT, ...)
+      - pattern: |
+          $MODEL.objects.filter({{ client.isolation.tenant_key }}=$TENANT).filter(...)
+      - pattern: |
+          $TENANT_QS.filter(...)
+      {% for key in client.isolation.alternate_keys %}
+      - pattern: |
+          $MODEL.objects.filter({{ key }}=$TENANT, ...)
+      {% endfor %}
+    message: >
+      Django ORM queryset without {{ client.isolation.tenant_key }} scope.
+      Chained filters/annotations that don't start from a tenant-scoped base queryset
+      may expose cross-tenant {{ client.name }} data.
+      Use a scoped base: qs = Model.objects.filter({{ client.isolation.tenant_key }}=tenant_id)
+      then chain additional filters on qs.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}
+
+  # AC-010: Report generation / data export without tenant scope check (Python)
+  - id: {{ client.name | lower }}-ac-010-report-export-no-scope
+    pattern-either:
+      {% for term in client.isolation.scope_required_on %}
+      - pattern: |
+          def $FUNC(...):
+              ...
+              return ${{ term | replace('_', '') | upper }}
+      {% endfor %}
+      - pattern: |
+          def export_$NAME(...):
+              $DATA = $MODEL.objects.all()
+              ...
+              return $RESP
+      - pattern: |
+          def generate_report(...):
+              $DATA = $MODEL.objects.all()
+              ...
+              return $RESP
+      - pattern: |
+          def download_$NAME(...):
+              $DATA = $MODEL.objects.all()
+              ...
+              return $RESP
+    pattern-not-either:
+      - pattern: |
+          def $FUNC(...):
+              ...
+              $DATA = $MODEL.objects.filter({{ client.isolation.tenant_key }}=$TENANT, ...)
+              ...
+      - pattern: |
+          def $FUNC(..., {{ client.isolation.tenant_key }}=$TENANT):
+              ...
+    message: >
+      Export/report/download function missing {{ client.isolation.tenant_key }} scope
+      enforcement. {{ client.name }} requires tenant scoping on:
+      {{ client.isolation.scope_required_on | join(', ') }}.
+      Ensure the function accepts and enforces {{ client.isolation.tenant_key }}
+      before returning any {{ client.data.critical | join(', ') }} data.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-284: Improper Access Control"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}
+      tenant_key: {{ client.isolation.tenant_key }}

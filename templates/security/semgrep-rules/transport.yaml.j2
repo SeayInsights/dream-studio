@@ -1,0 +1,143 @@
+rules:
+
+  # Rule 1: HTTP URLs (non-HTTPS) — excludes localhost and 127.0.0.1
+  - id: {{ client.name | lower }}-tls-001
+    pattern-either:
+      - pattern-regex: 'http://(?!localhost|127\.0\.0\.1|::1|\[::1\])[a-zA-Z0-9]'
+    message: >
+      Hardcoded HTTP URL detected. All external connections from {{ client.name }}
+      must use HTTPS to ensure data is encrypted in transit. Replace http:// with
+      https://. This is especially important given that traffic routes through
+      {% if client.network.proxy.type == 'zscaler' %}Zscaler SSL inspection{% else %}the corporate proxy{% endif %}
+      which expects encrypted upstream connections.
+    severity: ERROR
+    languages:
+      - python
+      - javascript
+      - typescript
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      rule-group: transport
+
+  # Rule 2: Database connections without SSL/TLS parameters
+  - id: {{ client.name | lower }}-tls-002
+    pattern-either:
+      - pattern: |
+          psycopg2.connect($...ARGS)
+      - pattern: |
+          pymysql.connect($...ARGS)
+      - pattern: |
+          mysql.connector.connect($...ARGS)
+      - pattern: |
+          pyodbc.connect($...ARGS)
+    pattern-not: |
+      $FUNC(sslmode=$SSL, $...ARGS)
+    pattern-not: |
+      $FUNC(ssl=$SSL, $...ARGS)
+    pattern-not: |
+      $FUNC(ssl_ca=$CA, $...ARGS)
+    pattern-not: |
+      $FUNC($...ARGS, sslmode=$SSL)
+    pattern-not: |
+      $FUNC($...ARGS, ssl=$SSL)
+    message: >
+      Database connection made without explicit SSL/TLS parameters. Connections
+      to {{ client.name }} data stores ({{ client.data.critical | join(', ') }})
+      must use encrypted connections. Add sslmode='require' (PostgreSQL) or
+      ssl={'ssl_ca': ca_path} (MySQL) to enforce encryption.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      rule-group: transport
+
+  # Rule 3: TLS verification disabled — verify=False, CERT_NONE, check_hostname=False
+  - id: {{ client.name | lower }}-tls-003
+    pattern-either:
+      - pattern: |
+          requests.$METHOD($URL, ..., verify=False, ...)
+      - pattern: |
+          requests.$METHOD($URL, ..., verify=False)
+      - pattern: |
+          ssl.CERT_NONE
+      - pattern: |
+          $CTX.check_hostname = False
+      - pattern: |
+          $CTX.verify_mode = ssl.CERT_NONE
+      - pattern: |
+          urllib3.disable_warnings(...)
+      - pattern: |
+          InsecureRequestWarning
+    message: >
+      TLS certificate verification is disabled. This exposes {{ client.name }}
+      to man-in-the-middle attacks. Never disable TLS verification in production
+      code. If the issue is a custom CA (e.g., from Zscaler SSL inspection),
+      use verify='/path/to/ca-bundle.crt' instead of verify=False.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      rule-group: transport
+
+  # Rule 4: Insecure cookie flags — missing Secure or HttpOnly
+  - id: {{ client.name | lower }}-tls-004
+    pattern-either:
+      - pattern: |
+          response.set_cookie($NAME, $VALUE)
+      - pattern: |
+          response.set_cookie($NAME, $VALUE, ...)
+    pattern-not: |
+      response.set_cookie($NAME, $VALUE, ..., secure=True, ...)
+    pattern-not: |
+      response.set_cookie($NAME, ..., secure=True)
+    message: >
+      Cookie set without the Secure flag. Cookies for {{ client.name }} must
+      include secure=True and httponly=True to prevent transmission over HTTP
+      and access from JavaScript. Update all set_cookie() calls to include both
+      flags, plus samesite='Strict' or 'Lax'.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      rule-group: transport
+
+  # Rule 5: Unencrypted WebSocket connections (ws:// instead of wss://)
+  - id: {{ client.name | lower }}-tls-005
+    pattern-either:
+      - pattern-regex: 'ws://(?!localhost|127\.0\.0\.1|::1)[a-zA-Z0-9]'
+    message: >
+      Unencrypted WebSocket connection (ws://) detected. All WebSocket
+      connections from {{ client.name }} must use wss:// (WebSocket Secure)
+      to encrypt data in transit. Plain ws:// connections will also fail to
+      tunnel through the corporate proxy. Replace ws:// with wss://.
+    severity: ERROR
+    languages:
+      - python
+      - javascript
+      - typescript
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      rule-group: transport

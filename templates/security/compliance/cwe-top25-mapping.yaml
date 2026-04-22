@@ -1,0 +1,562 @@
+# CWE/SANS Top 25 Most Dangerous Software Weaknesses — Compliance Mapping
+# Maps each CWE to OWASP Top 10 cross-references and Semgrep rule patterns.
+# Used by: dream-studio:comply (map, gaps, evidence modes)
+# Schema version: 1
+# Source: https://cwe.mitre.org/top25/archive/2023/2023_top25_list.html
+
+schema_version: 1
+framework: cwe-top25
+framework_name: "CWE/SANS Top 25 Most Dangerous Software Weaknesses"
+version: "2023"
+description: >
+  The CWE Top 25 is a list of the most dangerous software weaknesses compiled by MITRE
+  from real-world vulnerability data. Each entry represents a common programming error
+  that can lead to severe vulnerabilities. This mapping cross-references each CWE with
+  OWASP Top 10 categories and dream-studio Semgrep rule patterns.
+
+controls:
+
+  - control_id: CWE-787
+    framework: cwe-top25
+    rank: 1
+    name: "Out-of-bounds Write"
+    description: >
+      The software writes data past the end, or before the beginning, of the intended buffer.
+      This can result in memory corruption, program crashes, or arbitrary code execution.
+    owasp_crossref:
+      - "A03:2021"  # Injection (memory safety context)
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-mem-*"
+      - "*-buffer-*"
+    scan_coverage: >
+      Primarily relevant in C/C++. Semgrep rules detect unsafe memory operations,
+      unchecked array bounds, and unsafe pointer arithmetic.
+
+  - control_id: CWE-79
+    framework: cwe-top25
+    rank: 2
+    name: "Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"
+    description: >
+      The software does not neutralize or incorrectly neutralizes user-controllable input
+      before it is placed in output that is used as a web page served to other users.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-xss-*"
+      - "*-inj-*"
+      - "*-val-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Rules detect reflected XSS, stored XSS, DOM-based XSS patterns,
+      and missing output encoding in template engines.
+
+  - control_id: CWE-89
+    framework: cwe-top25
+    rank: 3
+    name: "Improper Neutralization of Special Elements used in an SQL Command (SQL Injection)"
+    description: >
+      The software constructs all or part of an SQL command using externally-influenced input
+      from an upstream component, but does not neutralize or incorrectly neutralizes special
+      elements that could modify the intended SQL command.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-sql-*"
+      - "*-inj-*"
+      - "*-val-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Rules detect string concatenation in SQL queries, raw SQL execution without
+      parameterization, and ORM bypass patterns. Covers SQLite, PostgreSQL, MySQL, MSSQL.
+
+  - control_id: CWE-416
+    framework: cwe-top25
+    rank: 4
+    name: "Use After Free"
+    description: >
+      Referencing memory after it has been freed can cause a program to crash, use unexpected
+      values, or execute code. This is primarily a memory safety issue in C/C++ but can manifest
+      in other contexts as well.
+    owasp_crossref:
+      - "A03:2021"
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-mem-*"
+      - "*-unsafe-*"
+    scan_coverage: >
+      Relevant in C/C++, Rust (unsafe blocks). Semgrep rules detect use-after-free patterns
+      in native code and unsafe memory management.
+
+  - control_id: CWE-78
+    framework: cwe-top25
+    rank: 5
+    name: "Improper Neutralization of Special Elements used in an OS Command (OS Command Injection)"
+    description: >
+      The software constructs all or part of an OS command using externally-influenced input
+      from an upstream component, but does not neutralize or incorrectly neutralizes special
+      elements that could modify the intended OS command.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-cmd-*"
+      - "*-inj-*"
+      - "*-val-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Rules detect shell=True with user input, subprocess with unsanitized args,
+      os.system() with concatenated strings, and exec() with user data.
+
+  - control_id: CWE-20
+    framework: cwe-top25
+    rank: 6
+    name: "Improper Input Validation"
+    description: >
+      The product receives input or data, but it does not validate or incorrectly validates
+      that the input has the properties that are required to process the data safely and correctly.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+      - "A04:2021"  # Insecure Design
+    mapped_owasp:
+      - "A03:2021"
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-val-*"
+      - "*-inj-*"
+      - "KRG-val-*"
+    scan_coverage: >
+      Rules detect missing input validation at API entry points, unvalidated redirect
+      targets, and schema-less data ingestion patterns.
+
+  - control_id: CWE-125
+    framework: cwe-top25
+    rank: 7
+    name: "Out-of-bounds Read"
+    description: >
+      The software reads data past the end, or before the beginning, of the intended buffer.
+      This typically causes a segfault or information disclosure.
+    owasp_crossref:
+      - "A03:2021"
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-mem-*"
+      - "*-buffer-*"
+    scan_coverage: >
+      Primarily relevant in C/C++. Rules detect unchecked array access,
+      off-by-one errors in buffer operations.
+
+  - control_id: CWE-22
+    framework: cwe-top25
+    rank: 8
+    name: "Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)"
+    description: >
+      The software uses external input to construct a pathname that is intended to identify
+      a file or directory that is located underneath a restricted parent directory, but the
+      software does not properly neutralize special elements that can cause the pathname to
+      resolve to a location that is outside of the restricted directory.
+    owasp_crossref:
+      - "A01:2021"  # Broken Access Control
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-path-*"
+      - "*-traversal-*"
+      - "*-file-*"
+    scan_coverage: >
+      Rules detect unsanitized path joins with user input, missing path normalization,
+      and zip/tar extraction without path validation.
+
+  - control_id: CWE-352
+    framework: cwe-top25
+    rank: 9
+    name: "Cross-Site Request Forgery (CSRF)"
+    description: >
+      The web application does not, or can not, sufficiently verify whether a well-formed,
+      valid, consistent request was intentionally provided by the user who submitted the request.
+    owasp_crossref:
+      - "A01:2021"  # Broken Access Control
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-csrf-*"
+      - "*-ac-*"
+    scan_coverage: >
+      Rules detect missing CSRF token validation on state-changing endpoints,
+      SameSite cookie attribute absence, and disabled CSRF protection in frameworks.
+
+  - control_id: CWE-434
+    framework: cwe-top25
+    rank: 10
+    name: "Unrestricted Upload of File with Dangerous Type"
+    description: >
+      The software allows the attacker to upload or transfer files of dangerous types that
+      can be automatically processed within the product's environment.
+    owasp_crossref:
+      - "A04:2021"  # Insecure Design
+    mapped_owasp:
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-upload-*"
+      - "*-file-*"
+    scan_coverage: >
+      Rules detect missing MIME type validation, filename extension allowlisting,
+      and file type verification by content (magic bytes) on upload handlers.
+
+  - control_id: CWE-862
+    framework: cwe-top25
+    rank: 11
+    name: "Missing Authorization"
+    description: >
+      The software does not perform an authorization check when an actor attempts to access
+      a resource or perform an action.
+    owasp_crossref:
+      - "A01:2021"  # Broken Access Control
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-auth-*"
+      - "*-rbac-*"
+      - "KRG-ac-*"
+    scan_coverage: >
+      Rules detect route handlers missing @require_auth decorators, API endpoints
+      without authorization middleware, and direct object references without ownership checks.
+
+  - control_id: CWE-476
+    framework: cwe-top25
+    rank: 12
+    name: "NULL Pointer Dereference"
+    description: >
+      A NULL pointer dereference occurs when the application dereferences a pointer that
+      it expects to be valid, but is NULL, typically causing a crash or exit.
+    owasp_crossref:
+      - "A04:2021"
+    mapped_owasp:
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-null-*"
+      - "*-mem-*"
+    scan_coverage: >
+      Rules detect unchecked return values that may be null, missing null checks
+      before dereference, and optional chaining omissions in JavaScript/TypeScript.
+
+  - control_id: CWE-287
+    framework: cwe-top25
+    rank: 13
+    name: "Improper Authentication"
+    description: >
+      When an actor claims to have a given identity, the software does not prove or
+      insufficiently proves that the claim is correct.
+    owasp_crossref:
+      - "A07:2021"  # Identification and Authentication Failures
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-ac-*"
+      - "KRG-auth-*"
+    scan_coverage: >
+      Rules detect missing authentication middleware, JWT algorithm confusion,
+      weak token validation, and hardcoded bypass conditions.
+
+  - control_id: CWE-190
+    framework: cwe-top25
+    rank: 14
+    name: "Integer Overflow or Wraparound"
+    description: >
+      The software performs a calculation that can produce an integer overflow or wraparound,
+      when the logic assumes that the resulting value will always be larger than the original value.
+    owasp_crossref:
+      - "A03:2021"
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-math-*"
+      - "*-int-*"
+    scan_coverage: >
+      Rules detect unchecked arithmetic in security-sensitive contexts (buffer sizes,
+      financial calculations, index bounds).
+
+  - control_id: CWE-502
+    framework: cwe-top25
+    rank: 15
+    name: "Deserialization of Untrusted Data"
+    description: >
+      The application deserializes untrusted data without sufficiently verifying that the
+      resulting data will be valid, letting the attacker to control the state or flow of execution.
+    owasp_crossref:
+      - "A08:2021"  # Software and Data Integrity Failures
+    mapped_owasp:
+      - "A08:2021"
+    mapped_rule_patterns:
+      - "*-deser-*"
+      - "*-inj-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Rules detect pickle.loads(), yaml.load() without Loader, marshal.loads(),
+      and JSON deserialization with exec() in Python; ObjectInputStream in Java;
+      JSON.parse() with eval() in JavaScript.
+
+  - control_id: CWE-77
+    framework: cwe-top25
+    rank: 16
+    name: "Improper Neutralization of Special Elements used in a Command (Command Injection)"
+    description: >
+      The software constructs all or part of a command using externally-influenced input,
+      but does not neutralize or incorrectly neutralizes special elements that could modify
+      the intended command.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-cmd-*"
+      - "*-inj-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Broader than CWE-78 (OS Command). Covers LDAP injection, expression language
+      injection, shell metacharacter injection, and command template injection.
+
+  - control_id: CWE-119
+    framework: cwe-top25
+    rank: 17
+    name: "Improper Restriction of Operations within the Bounds of a Memory Buffer"
+    description: >
+      The software performs operations on a memory buffer, but it can read from or write to
+      a memory location that is outside of the intended boundary of the buffer.
+    owasp_crossref:
+      - "A03:2021"
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-mem-*"
+      - "*-buffer-*"
+    scan_coverage: >
+      Parent of CWE-787 and CWE-125. Rules detect general unsafe buffer operations
+      in C/C++ and unsafe memory access in Python extensions.
+
+  - control_id: CWE-798
+    framework: cwe-top25
+    rank: 18
+    name: "Use of Hard-coded Credentials"
+    description: >
+      The software contains hard-coded credentials, such as a password or cryptographic key,
+      that it uses for its own inbound authentication, outbound communication to external
+      components, or encryption of internal data.
+    owasp_crossref:
+      - "A07:2021"  # Identification and Authentication Failures
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-sec-*"
+      - "*-secrets-*"
+      - "*-creds-*"
+      - "KRG-sec-*"
+    scan_coverage: >
+      Rules detect password = "literal", API_KEY = "literal", connection strings with
+      embedded credentials, and private keys in source files. Cross-language coverage.
+
+  - control_id: CWE-918
+    framework: cwe-top25
+    rank: 19
+    name: "Server-Side Request Forgery (SSRF)"
+    description: >
+      The web server receives a URL or similar request from an upstream component and
+      retrieves the contents of this URL, but it does not sufficiently ensure that the request
+      is being sent to the expected destination.
+    owasp_crossref:
+      - "A10:2021"  # Server-Side Request Forgery
+    mapped_owasp:
+      - "A10:2021"
+    mapped_rule_patterns:
+      - "*-ssrf-*"
+      - "*-ac-*"
+    scan_coverage: >
+      Rules detect user-controlled URL in HTTP requests without allowlist validation,
+      cloud metadata endpoint access (169.254.169.254), and internal service URL construction.
+
+  - control_id: CWE-306
+    framework: cwe-top25
+    rank: 20
+    name: "Missing Authentication for Critical Function"
+    description: >
+      The software does not perform any authentication for functionality that requires a
+      provable user identity or consumes a significant amount of resources.
+    owasp_crossref:
+      - "A07:2021"  # Identification and Authentication Failures
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-ac-*"
+      - "*-admin-*"
+      - "KRG-auth-*"
+    scan_coverage: >
+      Rules detect critical endpoints (DELETE, admin, payment, user management)
+      missing authentication decorators or middleware.
+
+  - control_id: CWE-362
+    framework: cwe-top25
+    rank: 21
+    name: "Concurrent Execution using Shared Resource with Improper Synchronization (Race Condition)"
+    description: >
+      The program contains a code sequence that can run concurrently with other code, and
+      the code sequence requires temporary, exclusive access to a shared resource, but a
+      timing window exists in which the shared resource can be modified by another code sequence.
+    owasp_crossref:
+      - "A04:2021"  # Insecure Design
+    mapped_owasp:
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-race-*"
+      - "*-concur-*"
+    scan_coverage: >
+      Rules detect TOCTOU patterns, unsynchronized shared state in multi-threaded contexts,
+      and file operation race conditions.
+
+  - control_id: CWE-269
+    framework: cwe-top25
+    rank: 22
+    name: "Improper Privilege Management"
+    description: >
+      The software does not properly assign, modify, track, or check privileges for an actor,
+      creating an unintended sphere of control for that actor.
+    owasp_crossref:
+      - "A01:2021"  # Broken Access Control
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-priv-*"
+      - "*-rbac-*"
+      - "KRG-ac-*"
+    scan_coverage: >
+      Rules detect privilege escalation patterns, missing role checks before privilege
+      grants, and hardcoded admin role assignments.
+
+  - control_id: CWE-94
+    framework: cwe-top25
+    rank: 23
+    name: "Improper Control of Generation of Code (Code Injection)"
+    description: >
+      The software constructs all or part of a code segment using externally-influenced input,
+      but it does not neutralize or incorrectly neutralizes special elements that could modify
+      the syntax or behavior of the intended code segment.
+    owasp_crossref:
+      - "A03:2021"  # Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-code-inj-*"
+      - "*-inj-*"
+      - "*-eval-*"
+      - "KRG-inj-*"
+    scan_coverage: >
+      Rules detect eval() with user input, exec() with user data, dynamic import with
+      user-controlled path, template injection (Jinja2, Twig, Pebble), and expression
+      language injection.
+
+  - control_id: CWE-863
+    framework: cwe-top25
+    rank: 24
+    name: "Incorrect Authorization"
+    description: >
+      The software performs an authorization check, but it does not correctly perform the check.
+      This allows attackers to bypass intended access restrictions.
+    owasp_crossref:
+      - "A01:2021"  # Broken Access Control
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-rbac-*"
+      - "*-authz-*"
+      - "KRG-ac-*"
+    scan_coverage: >
+      Rules detect inverted authorization logic (if not is_admin: allow), incorrect role
+      comparison, and authorization checks that compare against mutable user-supplied data.
+
+  - control_id: CWE-276
+    framework: cwe-top25
+    rank: 25
+    name: "Incorrect Default Permissions"
+    description: >
+      During installation, installed file permissions are set to allow anyone to modify those files.
+      The vendor fails to set appropriate permissions on installed files.
+    owasp_crossref:
+      - "A05:2021"  # Security Misconfiguration
+    mapped_owasp:
+      - "A05:2021"
+    mapped_rule_patterns:
+      - "*-perm-*"
+      - "*-config-*"
+      - "*-file-*"
+    scan_coverage: >
+      Rules detect world-writable file creation (chmod 0777, 0666), directory traversal
+      permission escalation, and file creation without explicit restrictive permissions.
+
+# ─── Supplemental OWASP Coverage Entries ────────────────────────────────────
+# These entries ensure all OWASP Top 10 categories are represented in this file.
+# They map OWASP categories that don't directly appear in the CWE Top 25 list
+# but are covered by adjacent dream-studio Semgrep rules.
+
+  - control_id: CWE-327
+    framework: cwe-top25
+    rank: null
+    name: "Use of a Broken or Risky Cryptographic Algorithm (Supplemental — A02 coverage)"
+    description: >
+      Supplemental entry ensuring A02:2021 (Cryptographic Failures) coverage in this file.
+      CWE-327 is closely related to the CWE Top 25 and is detected by the same tooling.
+    owasp_crossref:
+      - "A02:2021"
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-crypto-*"
+      - "KRG-crypto-*"
+    scan_coverage: "Weak cryptographic algorithm detection (MD5, SHA1, DES, RC4, ECB)."
+
+  - control_id: CWE-1035
+    framework: cwe-top25
+    rank: null
+    name: "Using Components with Known Vulnerabilities (Supplemental — A06 coverage)"
+    description: >
+      Supplemental entry ensuring A06:2021 (Vulnerable and Outdated Components) coverage.
+      Dependency vulnerability tracking via Trivy and pip-audit in CI pipeline.
+    owasp_crossref:
+      - "A06:2021"
+    mapped_owasp:
+      - "A06:2021"
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "KRG-dep-*"
+    scan_coverage: "Outdated and CVE-flagged dependency detection via Trivy and pip-audit."
+
+  - control_id: CWE-778
+    framework: cwe-top25
+    rank: null
+    name: "Insufficient Logging (Supplemental — A08/A09 coverage)"
+    description: >
+      Supplemental entry ensuring A08:2021 (Software and Data Integrity Failures) and
+      A09:2021 (Security Logging and Monitoring Failures) coverage in this file.
+    owasp_crossref:
+      - "A08:2021"
+      - "A09:2021"
+    mapped_owasp:
+      - "A08:2021"
+      - "A09:2021"
+    mapped_rule_patterns:
+      - "*-log-*"
+      - "*-audit-*"
+      - "*-integrity-*"
+      - "KRG-log-*"
+    scan_coverage: "Missing audit log writes, software integrity verification absence detection."
