@@ -1,0 +1,153 @@
+name: Binary Analysis — {{ client.name }}
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target name to analyze (leave empty for all)'
+        required: false
+        type: string
+
+jobs:
+{% for target in client.targets.binaries %}
+
+  analyze-{{ target.name | lower | replace('-', '_') }}:
+    name: "Analyze — {{ target.name }}"
+    runs-on: {% if target.platform == 'windows' %}windows-latest{% elif target.platform == 'macos' %}macos-latest{% else %}ubuntu-latest{% endif %}
+
+    continue-on-error: true
+{% raw %}
+    if: ${{ github.event.inputs.target == '' || github.event.inputs.target == '{% endraw %}{{ target.name }}{% raw %}' }}
+{% endraw %}
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+
+{% if target.artifact_source == 'github-release' %}
+      - name: Download release artifact
+        run: |
+{% raw %}
+          gh release download "${{ github.event.release.tag_name || 'latest' }}" \
+{% endraw %}
+            --repo {{ target.artifact_repo }} \
+            --pattern "{{ target.artifact_pattern }}" \
+            --dir ./artifacts/ \
+            || gh release download latest \
+              --repo {{ target.artifact_repo }} \
+              --pattern "{{ target.artifact_pattern }}" \
+              --dir ./artifacts/
+{% raw %}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+{% endraw %}
+{% elif target.artifact_source == 'ci-artifact' %}
+      - name: Download CI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: {{ target.artifact_pattern }}
+          path: ./artifacts/
+{% endif %}
+
+      - name: Install analysis tools
+{% if target.platform == 'windows' %}
+        run: |
+          choco install yara -y 2>$null
+          Invoke-WebRequest -Uri "https://github.com/trailofbits/winchecksec/releases/latest/download/winchecksec.exe" -OutFile "winchecksec.exe"
+        shell: pwsh
+{% elif target.platform == 'macos' %}
+        run: |
+          brew install yara checksec 2>/dev/null || true
+{% else %}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq checksec yara 2>/dev/null || true
+{% endif %}
+
+      - name: Compute SHA256
+        run: |
+          BINARY=$(find ./artifacts/ -name "{{ target.artifact_pattern }}" -type f | head -1)
+          if [ -z "$BINARY" ]; then
+            BINARY=$(find ./artifacts/ -type f | head -1)
+          fi
+          echo "BINARY_PATH=$BINARY" >> $GITHUB_ENV
+          sha256sum "$BINARY" > sha256.txt || shasum -a 256 "$BINARY" > sha256.txt
+          cat sha256.txt
+{% if target.platform == 'windows' %}
+        shell: bash
+{% endif %}
+
+      - name: Run checksec
+        run: |
+{% if target.platform == 'windows' %}
+          ./winchecksec.exe "$BINARY_PATH" > checksec-results.json 2>&1 || echo '{}' > checksec-results.json
+{% else %}
+          checksec --output=json --file="$BINARY_PATH" > checksec-results.json 2>&1 || echo '{}' > checksec-results.json
+{% endif %}
+{% if target.platform == 'windows' %}
+        shell: bash
+{% endif %}
+
+      - name: Run YARA
+        run: |
+          if [ -f ".security/binary/{{ target.name }}/yara-rules.yar" ]; then
+            yara -j ".security/binary/{{ target.name }}/yara-rules.yar" "$BINARY_PATH" > yara-results.json 2>&1 || echo '{"matches":[]}' > yara-results.json
+          else
+            echo '{"matches":[], "note":"No YARA rules found"}' > yara-results.json
+          fi
+{% if target.platform == 'windows' %}
+        shell: bash
+{% endif %}
+
+      - name: Strings analysis
+        run: |
+          strings "$BINARY_PATH" 2>/dev/null | grep -iE '(https?://|password|secret|api.key|token|private.key)' > strings-raw.txt || true
+          wc -l strings-raw.txt
+{% if target.platform == 'windows' %}
+        shell: bash
+{% endif %}
+
+      - name: Upload analysis results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-binary-{{ target.name | lower }}
+          path: |
+            sha256.txt
+            checksec-results.json
+            yara-results.json
+            strings-raw.txt
+          retention-days: 30
+
+{% endfor %}
+
+  collect-binary-results:
+    name: Collect Binary Analysis Results
+    runs-on: ubuntu-latest
+    needs:
+{% for target in client.targets.binaries %}
+      - analyze-{{ target.name | lower | replace('-', '_') }}
+{% endfor %}
+    if: always()
+    steps:
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binary-results/
+
+      - name: Generate summary
+        run: |
+          echo "## Binary Analysis Summary — {{ client.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+{% raw %}
+          echo "**Run:** \`${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | Platform | Artifact |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+{% for target in client.targets.binaries %}
+          echo "| {{ target.name }} | {{ target.platform | default('linux') }} | {{ client.name | lower }}-binary-{{ target.name | lower }} |" >> $GITHUB_STEP_SUMMARY
+{% endfor %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Artifacts retained for 30 days._" >> $GITHUB_STEP_SUMMARY

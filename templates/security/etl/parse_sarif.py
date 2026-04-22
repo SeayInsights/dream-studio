@@ -139,6 +139,11 @@ def parse_semgrep_sarif(data: dict, repo: str) -> list[dict]:
                 "scanner": "semgrep",
                 "raw_severity": raw_level,
                 "fingerprint": fp,
+                "target_type": "repo",
+                "target_name": "",
+                "url": "",
+                "http_method": "",
+                "binary_hash": "",
             })
     return findings
 
@@ -169,6 +174,11 @@ def parse_bandit(data: dict, repo: str) -> list[dict]:
             "scanner": "bandit",
             "raw_severity": raw_sev,
             "fingerprint": fp,
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         })
     return findings
 
@@ -208,6 +218,11 @@ def parse_trufflehog(data_list: list, repo: str) -> list[dict]:
             "scanner": "trufflehog",
             "raw_severity": "CRITICAL",
             "fingerprint": fp,
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         })
     return findings
 
@@ -246,6 +261,11 @@ def parse_pip_audit(data_list: list, repo: str) -> list[dict]:
                 "scanner": "pip-audit",
                 "raw_severity": sev,
                 "fingerprint": fp,
+                "target_type": "repo",
+                "target_name": "",
+                "url": "",
+                "http_method": "",
+                "binary_hash": "",
             })
     return findings
 
@@ -318,6 +338,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A03:2021",
             "scanner": "semgrep",
             "raw_severity": "error",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "vendor-portal",
@@ -330,6 +355,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A03:2021",
             "scanner": "bandit",
             "raw_severity": "HIGH",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "vendor-portal",
@@ -342,6 +372,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A02:2021",
             "scanner": "bandit",
             "raw_severity": "MEDIUM",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "vendor-portal",
@@ -354,6 +389,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A06:2021",
             "scanner": "pip-audit",
             "raw_severity": "high",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "pricing-api",
@@ -366,6 +406,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A05:2021",
             "scanner": "semgrep",
             "raw_severity": "warning",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "pricing-api",
@@ -378,6 +423,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A02:2021",
             "scanner": "trufflehog",
             "raw_severity": "CRITICAL",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "planogram-service",
@@ -390,6 +440,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A08:2021",
             "scanner": "bandit",
             "raw_severity": "HIGH",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
         {
             "repo": "planogram-service",
@@ -402,6 +457,11 @@ def generate_sample() -> list[dict]:
             "owasp": "A06:2021",
             "scanner": "pip-audit",
             "raw_severity": "high",
+            "target_type": "repo",
+            "target_name": "",
+            "url": "",
+            "http_method": "",
+            "binary_hash": "",
         },
     ]
 
@@ -421,6 +481,11 @@ def generate_sample() -> list[dict]:
             "scanner": r["scanner"],
             "raw_severity": r["raw_severity"],
             "fingerprint": fp,
+            "target_type": r["target_type"],
+            "target_name": r["target_name"],
+            "url": r["url"],
+            "http_method": r["http_method"],
+            "binary_hash": r["binary_hash"],
         })
     return findings
 

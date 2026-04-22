@@ -25,6 +25,17 @@ When the user's intent matches a dream-studio skill, invoke it via the Skill too
 | Workflow coaching | `dream-studio:coach` | /coach, coach: |
 | Structure audit | `dream-studio:structure-audit` | /structure-audit |
 
+### Security Pack
+| Intent | Skill | Triggers |
+|--------|-------|----------|
+| Scan org, security scan, generate rules | `dream-studio:scan` | scan org:, run security scan, generate scan rules |
+| Mitigate findings, how to fix | `dream-studio:mitigate` | mitigate:, how to fix, generate mitigations |
+| Compliance map, audit evidence | `dream-studio:comply` | comply:, compliance map, audit evidence, framework map |
+| Zscaler compat, proxy check | `dream-studio:netcompat` | netcompat:, zscaler check, proxy compat |
+| Security dashboard, export dataset | `dream-studio:security-dashboard` | security dashboard:, refresh dashboard, export dataset |
+| DAST, web scan, pen test web | `dream-studio:dast` | dast:, web scan, pen test web, zap scan |
+| Binary analysis, scan exe | `dream-studio:binary-scan` | binary-scan:, scan binary, analyze exe, checksec |
+
 ### Visual & Design
 | Intent | Skill | Triggers |
 |--------|-------|----------|

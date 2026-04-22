@@ -36,6 +36,10 @@ packs:
     hooks: [on-pulse, on-meta-review, on-context-threshold, on-post-compact, on-token-log, on-tool-activity, on-skill-load]
     lib: hooks/lib/
 
+  security:
+    description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.
+    skills: [scan, dast, binary-scan, mitigate, comply, netcompat, security-dashboard]
+
 # Cross-pack assets not owned by any single pack.
 # traceability-registry is used by build (core) for build DAGs — lives at root
 # because multiple packs reference it. If more cross-pack templates appear,

@@ -119,6 +119,11 @@ def build_findings_csv(findings: list[dict]) -> list[dict]:
             "scanner":            f.get("scanner", ""),
             "message":            f.get("message", ""),
             "compliance_controls": safe_str(f.get("compliance_controls", [])),
+            "target_type":        f.get("target_type", "repo"),
+            "target_name":        f.get("target_name", ""),
+            "url":                f.get("url", ""),
+            "http_method":        f.get("http_method", ""),
+            "binary_hash":        f.get("binary_hash", ""),
         })
     return rows
 
@@ -127,6 +132,7 @@ FINDINGS_FIELDS = [
     "id", "repo", "file", "line", "rule_id", "severity", "cvss",
     "business_impact", "risk_score", "owasp", "cwe", "status",
     "age_days", "scanner", "message", "compliance_controls",
+    "target_type", "target_name", "url", "http_method", "binary_hash",
 ]
 
 
@@ -259,7 +265,43 @@ def build_repos_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
 REPOS_FIELDS = [
     "name", "language", "last_scan", "risk_score",
     "finding_count", "critical_count", "high_count",
+    "medium_count", "low_count",
 ]
+
+
+TARGETS_FIELDS = [
+    "name", "target_type", "url", "platform",
+    "last_scan", "risk_score", "finding_count",
+]
+
+
+def build_targets_csv(findings: list[dict], repo_scores: dict) -> list[dict]:
+    targets: dict[str, dict] = {}
+    today = date.today().isoformat()
+
+    for f in findings:
+        target_type = f.get("target_type", "repo")
+        target_name = f.get("target_name", "") or f.get("repo", "unknown")
+        if target_name not in targets:
+            targets[target_name] = {
+                "name": target_name,
+                "target_type": target_type,
+                "url": f.get("url", ""),
+                "platform": "",
+                "last_scan": today,
+                "risk_score": 0.0,
+                "finding_count": 0,
+            }
+        targets[target_name]["finding_count"] += 1
+
+    for target, score_info in (repo_scores or {}).items():
+        if target in targets:
+            if isinstance(score_info, dict):
+                targets[target]["risk_score"] = score_info.get("score", 0.0)
+            else:
+                targets[target]["risk_score"] = score_info
+
+    return list(targets.values())
 
 
 def build_trends_row(
@@ -323,7 +365,8 @@ def build_metadata(
         sev = f.get("severity", "low")
         if sev in severity_counts:
             severity_counts[sev] += 1
-        repos.add(f.get("repo", "unknown"))
+        target_name = f.get("target_name", "") or f.get("repo", "unknown")
+        repos.add(target_name)
 
     frameworks = client_profile.get("compliance", {}).get("frameworks", [])
 
@@ -430,6 +473,10 @@ def main() -> None:
     repos_rows = build_repos_csv(findings, repo_scores)
     write_csv(output_dir / "repos.csv", repos_rows, REPOS_FIELDS)
 
+    # ── Write targets.csv (all target types) ─────────────────────────────
+    targets_rows = build_targets_csv(findings, repo_scores)
+    write_csv(output_dir / "targets.csv", targets_rows, TARGETS_FIELDS)
+
     # ── Write trends.csv (append if exists) ───────────────────────────────────
     trends_path = output_dir / "trends.csv"
     trends_rows = build_trends_row(findings, org_score, trends_path)
@@ -455,6 +502,7 @@ def main() -> None:
         f"  mitigations.csv ({len(mitigations_rows)} rows)\n"
         f"  compliance.csv ({len(compliance_rows)} rows)\n"
         f"  repos.csv ({len(repos_rows)} rows)\n"
+        f"  targets.csv ({len(targets_rows)} rows)\n"
         f"  trends.csv ({len(trends_rows)} rows)\n"
         f"  metadata.json (org_score={org_score})",
         file=sys.stderr,

@@ -1,0 +1,360 @@
+name: security-audit
+description: >
+  Enterprise security analysis pipeline — intake client profile, generate custom scan rules,
+  ingest scan results, run parallel analysis (mitigate + comply + netcompat), gate on findings,
+  generate Power BI dashboard dataset, and compile executive report.
+version: 1
+on_failure: abort
+
+gates:
+  post-scan-review:
+    type: pause
+    prompt: >
+      Scan results ingested. Review finding summary above.
+      Confirm direction before deep analysis (mitigate + comply + netcompat)?
+  pre-dashboard:
+    type: pause
+    requires: [mitigate, comply, netcompat-analyze]
+    prompt: >
+      Analysis complete. Review mitigations, compliance mapping, and
+      network compatibility results. Approve to generate dashboard dataset
+      and final report?
+
+nodes:
+  - id: intake
+    command: |
+      Parse the workflow invocation to identify the client profile name.
+      Read the client profile from: ~/.dream-studio/clients/{name}.yaml
+
+      Validate the following required fields are present and non-empty:
+        - schema_version
+        - client (must have: name, github_org)
+        - data (must have: output_dir or equivalent)
+        - scan (must have: scans_dir or equivalent)
+
+      Check GitHub org accessibility by running:
+        gh org view {client.github_org} --json login,name 2>/dev/null || echo "ORG_INACCESSIBLE"
+
+      List existing scan files in the configured scans_dir:
+        ls ~/.dream-studio/security/scans/{client}/ 2>/dev/null || echo "NO_SCANS_YET"
+
+      Output a structured intake summary containing:
+        - client_name: resolved client name
+        - github_org: the GitHub org slug
+        - org_accessible: true/false
+        - scans_dir: resolved path
+        - output_dir: resolved path
+        - existing_scans: list of files found, or empty
+        - validation_errors: list of missing/invalid fields, or empty
+        - ready: true if no validation_errors, false otherwise
+
+      If ready is false, print each validation error clearly and halt with INTAKE_FAILED.
+      If ready is true, print the intake summary and end with INTAKE_OK.
+    model: sonnet
+    context: inherit
+    timeout_seconds: 120
+
+  - id: generate-rules
+    depends_on: [intake]
+    skill: scan
+    input: |
+      mode: setup
+      client: "{{intake.output}}"
+
+      Generate custom Semgrep rules tailored to this client's tech stack and risk profile.
+      Source templates from: ~/.dream-studio/security/templates/semgrep/
+      Read the client profile fields (languages, frameworks, compliance_frameworks) to
+      select and customize the appropriate rule templates.
+
+      Also generate a GitHub Actions workflow file that:
+        - Triggers on push and pull_request to main/master
+        - Runs Semgrep with the generated custom rules
+        - Uploads results as a SARIF artifact and to the Security tab
+
+      Write outputs to:
+        - Custom rules:  ~/.dream-studio/security/rules/{client}/
+        - GH Actions:    ~/.dream-studio/security/actions/{client}/semgrep.yml
+
+      Print a summary: how many rules generated, which rule categories, actions file path.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: dast-scan
+    depends_on: [intake]
+    skill: dast
+    input: |
+      mode: run
+      client: "{{intake.output}}"
+
+      Run ZAP + Nuclei against all configured web_app targets from the client profile.
+      Generates configs if not yet present (dast:setup), then executes scans locally.
+      Results stored in ~/.dream-studio/security/scans/{client}/{target}/{date}/.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 900
+
+  - id: binary-scan
+    depends_on: [intake]
+    skill: binary-scan
+    input: |
+      mode: analyze
+      client: "{{intake.output}}"
+
+      Run checksec + YARA + strings analysis against all configured binary targets.
+      Downloads artifacts from configured sources, analyzes locally.
+      Results stored in ~/.dream-studio/security/scans/{client}/{target}/{date}/.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: ingest-scans
+    depends_on: [generate-rules, dast-scan, binary-scan]
+    skill: scan
+    input: |
+      mode: ingest
+      client: "{{intake.output}}"
+
+      Check for existing scan results in ~/.dream-studio/security/scans/{client}/:
+        1. Look for SARIF files (*.sarif, *.sarif.json)
+        2. Look for JSON result files (semgrep-results.json, trivy-results.json, etc.)
+
+      If no local results found, attempt to pull from GitHub Actions:
+        - Run: gh run list --repo {github_org}/{repo} --workflow semgrep.yml --limit 5
+        - Download the most recent successful run's SARIF artifact
+        - Save to ~/.dream-studio/security/scans/{client}/
+
+      If GitHub pull also yields no results, run Semgrep locally:
+        - Use rules from ~/.dream-studio/security/rules/{client}/
+        - Target: current working directory or client-configured repo path
+        - Output: ~/.dream-studio/security/scans/{client}/semgrep-results.json
+
+      Parse all scan results into a unified findings list. For each finding record:
+        - rule_id, severity (Critical/High/Medium/Low), category (OWASP/CWE),
+          file, line, message, repo
+
+      Write unified findings to:
+        ~/.dream-studio/security/scans/{client}/unified-findings.json
+
+      Print a finding count summary by severity and by category.
+      End with: SCAN_COMPLETE: {total} findings ({critical} critical, {high} high)
+    gate: post-scan-review
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: mitigate
+    depends_on: [ingest-scans]
+    skill: mitigate
+    input: |
+      mode: findings
+      client: "{{intake.output}}"
+      findings: "{{ingest-scans.output}}"
+
+      Read unified findings from:
+        ~/.dream-studio/security/scans/{client}/unified-findings.json
+
+      Generate mitigations for ALL findings. For each finding produce:
+        - finding_id (rule_id + file + line hash)
+        - severity
+        - title: short human-readable description
+        - before_code: vulnerable snippet (if extractable)
+        - after_code: fixed snippet
+        - explanation: why this fix resolves the vulnerability
+        - effort: Low / Medium / High
+        - verification_test: how to confirm the fix worked
+
+      Group output by severity (Critical first). Write to:
+        ~/.dream-studio/security/reports/{client}/mitigations.json
+
+      Print a summary: total mitigations generated, effort distribution.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  - id: comply
+    depends_on: [ingest-scans]
+    skill: comply
+    input: |
+      mode: map
+      client: "{{intake.output}}"
+      findings: "{{ingest-scans.output}}"
+
+      Read unified findings from:
+        ~/.dream-studio/security/scans/{client}/unified-findings.json
+
+      Read the client profile for compliance_frameworks list
+      (default to [SOC2, NIST_CSF, OWASP_ASVS] if not specified).
+
+      Map each finding to the applicable controls across all configured frameworks:
+        - SOC 2: CC6.x, CC7.x, CC8.x control families
+        - NIST CSF: Identify / Protect / Detect / Respond / Recover subcategories
+        - OWASP ASVS: V1–V14 chapter references
+
+      Identify compliance coverage gaps: controls with no findings but that require
+      active evidence (e.g., access control, audit logging, encryption at rest).
+
+      Generate audit-ready evidence summaries per control.
+
+      Write to:
+        ~/.dream-studio/security/reports/{client}/compliance-map.json
+
+      Print a summary: frameworks mapped, total control hits, gap count.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: netcompat-analyze
+    depends_on: [ingest-scans]
+    skill: netcompat
+    input: |
+      mode: analyze
+      client: "{{intake.output}}"
+
+      Analyze all repos in the client's GitHub org for network and proxy compatibility issues.
+      Focus on Zscaler/enterprise proxy environments. Check for:
+        - Certificate pinning (mobile SDKs, custom TrustManagers, OkHttp/Retrofit patterns)
+        - Custom SSL/TLS implementations that bypass system trust store
+        - Non-standard ports (anything other than 80/443/8080/8443)
+        - Hardcoded IPs or hostnames that bypass DNS-based proxy routing
+        - DLP-sensitive data patterns in transit (PII, credentials in URL params)
+        - WebSocket or gRPC connections that may not traverse proxies correctly
+
+      For each issue found, produce:
+        - repo, file, line, issue_type, severity, description, proxy_impact, remediation
+
+      Write to:
+        ~/.dream-studio/security/reports/{client}/netcompat-findings.json
+
+      Print a summary: repos analyzed, issues found by category.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: analysis-sync
+    depends_on: [mitigate, comply, netcompat-analyze]
+    trigger_rule: all_done
+    command: |
+      Confirm all three parallel analysis nodes have completed.
+      Read and summarize results from:
+        - ~/.dream-studio/security/reports/{client}/mitigations.json
+        - ~/.dream-studio/security/reports/{client}/compliance-map.json
+        - ~/.dream-studio/security/reports/{client}/netcompat-findings.json
+
+      Where {client} is the client_name from: {{intake.output}}
+
+      Print a brief consolidated status:
+        - Mitigations: N generated (X critical, Y high)
+        - Compliance: N controls mapped across M frameworks, G gaps identified
+        - Netcompat: N issues found across M repos
+
+      This is a sync checkpoint. Output ANALYSIS_COMPLETE if all three reports exist
+      and are non-empty. Output ANALYSIS_PARTIAL with details if any are missing.
+    gate: pre-dashboard
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
+
+  - id: generate-dashboard
+    depends_on: [analysis-sync]
+    skill: security-dashboard
+    input: |
+      mode: generate
+      client: "{{intake.output}}"
+      analysis_summary: "{{analysis-sync.output}}"
+
+      Run the full ETL pipeline to produce Power BI-ready datasets.
+      Source data from:
+        - ~/.dream-studio/security/scans/{client}/unified-findings.json
+        - ~/.dream-studio/security/reports/{client}/mitigations.json
+        - ~/.dream-studio/security/reports/{client}/compliance-map.json
+        - ~/.dream-studio/security/reports/{client}/netcompat-findings.json
+
+      Steps:
+        1. Normalize all findings into a flat row-per-finding schema
+        2. Join mitigations by finding_id
+        3. Join compliance control mappings by finding_id
+        4. Classify each finding by application/repo, OWASP category, CWE ID
+        5. Calculate org-level risk score (weighted by severity + remediation effort)
+        6. Calculate per-application risk rankings
+        7. Assess vendor data isolation status per repo
+        8. Export CSVs to ~/.dream-studio/security/data/{client}/:
+             - findings.csv
+             - mitigations.csv
+             - compliance.csv
+             - netcompat.csv
+             - app_risk_ranking.csv
+             - org_score.csv
+
+      Print: org risk score (0–100), top 3 highest-risk applications, total CSV rows exported.
+      End with: DASHBOARD_READY: org_score={score}
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: executive-report
+    depends_on: [generate-dashboard]
+    command: |
+      Compile the executive security report for this client.
+      Client context: {{intake.output}}
+      Dashboard output: {{generate-dashboard.output}}
+
+      Read all source datasets from ~/.dream-studio/security/ for this client:
+        - scans/{client}/unified-findings.json
+        - reports/{client}/mitigations.json
+        - reports/{client}/compliance-map.json
+        - reports/{client}/netcompat-findings.json
+        - data/{client}/org_score.csv
+        - data/{client}/app_risk_ranking.csv
+
+      Compile a markdown executive report with the following sections:
+
+      # Executive Summary
+      2–3 sentence overview: total findings, org risk score, most critical concern,
+      overall posture (CRITICAL / AT RISK / NEEDS ATTENTION / ACCEPTABLE).
+
+      # Org Risk Score
+      Score breakdown: how the weighted score was calculated, comparison to
+      industry baseline if available. Trend indicator if prior reports exist.
+
+      # Critical Findings
+      Table of all Critical-severity findings: ID, title, affected repo, OWASP category,
+      remediation effort, assigned mitigation.
+
+      # Vulnerability Inventory
+      Full findings table organized by: OWASP category → CWE ID → severity.
+      Include finding count per category and percentage of total.
+
+      # Application Risk Ranking
+      Ranked table of all applications/repos by risk score.
+      Include: app name, finding count, critical count, risk score, top vulnerability.
+
+      # Vendor Data Isolation Status
+      For each repo that handles vendor/third-party data: isolation assessment
+      (ISOLATED / MIXED / EXPOSED), findings that affect isolation.
+
+      # Network Compatibility Status
+      Summary of Zscaler/proxy compatibility findings.
+      Table: repo, issue type, severity, proxy impact, remediation status.
+
+      # Compliance Posture
+      Per-framework compliance coverage table:
+        Framework | Controls Hit | Controls with Gaps | Coverage %
+      List top 5 gap controls requiring immediate evidence collection.
+
+      # Remediation Roadmap
+      Prioritized action list grouped by time horizon:
+        - Immediate (0–7 days): Critical findings only
+        - Short-term (7–30 days): High findings + compliance gaps
+        - Medium-term (30–90 days): Medium findings + netcompat issues
+        - Ongoing: Low findings, process improvements
+
+      Get today's date as YYYY-MM-DD.
+      Save the complete report to:
+        ~/.dream-studio/security/reports/{client}/executive-report-{YYYY-MM-DD}.md
+      Create the directory if it does not exist (mkdir -p).
+
+      Print the saved path and the one-line posture verdict clearly.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300

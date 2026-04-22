@@ -95,7 +95,9 @@ def classify_business_impact(finding: dict, data_config: dict) -> tuple[int, str
 
 # ── Risk score per finding ────────────────────────────────────────────────────
 
-def score_finding(finding: dict, data_config: dict) -> dict:
+def score_finding(finding: dict, data_config: dict, weights_config: dict | None = None) -> dict:
+    if weights_config is None:
+        weights_config = {}
     severity = finding.get("severity", "low")
     cvss = CVSS_BY_SEVERITY.get(severity, 2.0)
 
@@ -105,6 +107,14 @@ def score_finding(finding: dict, data_config: dict) -> dict:
     # multiplier = 1.0 + business_impact/10  → range [1.0, 2.0]
     multiplier = 1.0 + business_impact / 10.0
     risk_score = round(cvss * multiplier, 2)
+
+    target_type = finding.get("target_type", "repo")
+    if target_type == "webapp":
+        dast_mult = 1.0 + weights_config.get("dast_multiplier", 0.2)
+        risk_score = round(risk_score * dast_mult, 2)
+    elif target_type == "binary":
+        binary_mult = 1.0 + weights_config.get("binary_multiplier", 0.1)
+        risk_score = round(risk_score * binary_mult, 2)
 
     return {
         **finding,
@@ -203,7 +213,7 @@ def main() -> None:
     data_config = profile.get("data", {})
 
     # Score each finding
-    scored = [score_finding(f, data_config) for f in findings]
+    scored = [score_finding(f, data_config, weights) for f in findings]
 
     # Aggregate per repo
     repo_scores = aggregate_repos(scored, weights)
