@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-green.svg)](pyproject.toml)
 
-An opinionated Claude Code plugin that adds a **Build Pipeline**, **28 skills**, automated hooks, agent personas, and a context-aware status bar — portable across every project.
+An opinionated Claude Code plugin that adds a **Build Pipeline**, **37 skills**, automated hooks, agent personas, and a context-aware status bar — portable across every project.
 
 ---
 
@@ -128,6 +128,18 @@ Skills are invoked as `/skill-name` or via natural-language triggers listed belo
 | `polish` | `/polish`, `polish ui:`, `critique design:` | Critique 7 UI dimensions (layout, typography, color…), scored 1–5 |
 | `secure` | `/secure`, `secure:`, `check security` | OWASP Top 10 checklist + STRIDE threat model |
 | `analyze` | `/analyze` | Parallel multi-perspective analyst subagents → synthesized decision memo |
+
+### Security
+
+| Skill | Trigger | What it does |
+|---|---|---|
+| `scan` | `scan org:`, `run security scan` | SAST scanning — Semgrep rule generation, scan execution, SARIF ingestion |
+| `dast` | `dast:`, `web scan`, `zap scan` | DAST scanning — ZAP + Nuclei setup, run, ingest for web app targets |
+| `binary-scan` | `binary-scan:`, `scan binary`, `checksec` | Binary analysis — checksec + YARA + strings against compiled artifacts |
+| `mitigate` | `mitigate:`, `how to fix` | Generate fix snippets + effort estimates for every finding |
+| `comply` | `comply:`, `compliance map` | Map findings → SOC 2, NIST CSF, OWASP ASVS controls; identify gaps |
+| `netcompat` | `netcompat:`, `zscaler check` | Detect cert pinning, custom TLS, non-standard ports that break enterprise proxies |
+| `security-dashboard` | `security dashboard:`, `export dataset` | ETL pipeline → Power BI-ready CSVs (findings, mitigations, compliance, risk scores) |
 
 ### Domain
 
@@ -252,6 +264,7 @@ Pre-built YAML DAG workflows in `workflows/`:
 | `project-audit` | harden → secure → review → report | Full project audit — report saved to `~/.dream-studio/secure/reports/`, HIGH/CRITICAL findings create GitHub Issues automatically |
 | `prototype` | think → build → verify → snapshot | Fast prototype — what-was-built snapshot saved to `~/.dream-studio/state/` |
 | `safe-refactor` | plan-refactor → implement → type-check → test → review → verify → report | Refactor with type checks and tests — summary saved to `.sessions/<date>/` |
+| `security-audit` | intake → generate-rules + dast-scan + binary-scan → ingest-scans → mitigate + comply + netcompat → generate-dashboard → executive-report | Enterprise security pipeline — SAST/DAST/binary scanning, parallel analysis (mitigate + comply + netcompat), Power BI dataset export, executive report. Supports three target types: repos, web apps, binaries. |
 | `studio-onboard` | discovery → baseline-fetch → breakpoint-analysis → gap-analysis → improvement-scan → synthesis → … | Dream-studio onboarding audit — gap analysis includes PERSISTENCE_GAP and TRACKING_GAP checks, improvement-scan audits all installed workflows for ephemeral output |
 <!-- workflows-table-end -->
 
@@ -303,6 +316,11 @@ Post-`/compact`, warnings are suppressed for 2 turns and the WARN increment coun
 | `meta/draft-lessons/` | Unreviewed lesson drafts pending Director review |
 | `career-ops/` | Career pipeline state |
 | `state/` | Sentinel files (milestone-active, harden-nudge, compact-cooldown, etc.) |
+| `clients/` | Client profiles (`_schema.yaml` + per-client YAML) for security audits |
+| `security/rules/` | Generated Semgrep rules per client |
+| `security/scans/` | Scan results (SARIF, ZAP JSON, Nuclei JSONL, checksec, YARA) |
+| `security/reports/` | Mitigations, compliance maps, netcompat findings, executive reports |
+| `security/data/` | Power BI-ready CSVs (findings, mitigations, compliance, risk scores) |
 
 Session notes are written to `.sessions/<YYYY-MM-DD>/` inside each project.
 
@@ -321,6 +339,7 @@ dream-studio organizes non-skill assets into **packs** — domain-grouped bundle
 | **career** | Job search pipeline | career-ops, -scan, -evaluate, -apply, -track, -pdf | — | Config: career-ops/config.yml |
 | **analyze** | Multi-perspective analysis | analyze, domain-re | — | 27 analyst personas |
 | **domains** | Stack-specific builders | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design | game-validate | Agents: game, client. Rules: game/*. Templates: project-standards/ |
+| **security** | Enterprise security analysis | scan, dast, binary-scan, mitigate, comply, netcompat, security-dashboard | — | ETL pipeline, Semgrep/ZAP/Nuclei/YARA templates, compliance mappings, Power BI dashboard spec |
 | **meta** | Observability & sessions | workflow | pulse, meta-review, context-threshold, post-compact, token-log, tool-activity, skill-load | Shared hook lib (hooks/lib/) |
 
 ### Directory Layout
@@ -356,7 +375,7 @@ dream-studio/
 │   ├── hooks.json                   # Hook event -> handler registrations
 │   ├── run.sh                       # Unix launcher (searches packs/*/hooks/)
 │   └── run.cmd                      # Windows launcher
-├── skills/                          # 30 skill definitions (each has SKILL.md with pack: field)
+├── skills/                          # 37 skill definitions (each has SKILL.md with pack: field)
 ├── workflows/                       # YAML workflow DAG definitions
 ├── packs.yaml                       # Pack manifest — defines all 6 packs and their members
 ├── scripts/
