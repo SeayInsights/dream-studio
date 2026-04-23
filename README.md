@@ -279,6 +279,156 @@ workflow abort
 
 ---
 
+## Development Workflow
+
+dream-studio enforces a structured Issue → PR workflow for all regular work (bug fixes, features, improvements). This ensures proper tracking and traceability.
+
+### Issue → PR Workflow
+
+When implementing features, fixes, or improvements:
+
+1. **Create GitHub issue** via `gh issue create --title "..." --body "..."`
+2. **Create feature branch** named after issue (e.g., `fix/issue-123-description`)
+3. **Implement** the fix/feature
+4. **Run build** and verify it works
+5. **Commit** with message referencing issue: `"fix: description (fixes #123)"`
+6. **Push branch** and create PR via `gh pr create` with issue reference in body: `"Fixes #123"`
+7. **Verify PR is green**, then merge via `gh pr merge`
+8. **Report** PR URL and issue closure
+
+### Debug Workflow Integration
+
+When `dream-studio:debug` is invoked for a bug:
+
+1. Run systematic debug process (reproduce, hypothesize, test, narrow)
+2. Once root cause is identified, **create GitHub issue** with full debug log
+3. Follow Issue → PR workflow above to implement the fix
+4. Include debug log summary in PR description for traceability
+
+**Never debug without creating an issue** — bugs need tracking even if the fix is trivial.
+
+### When to use `dream-studio:ship`
+
+Regular PRs do NOT need the full ship gate. Use `/ship` (comprehensive quality gate) only when:
+
+- User explicitly says "ship it" or "ready to ship"
+- Before major version releases (v2.0, big feature launches)
+- Before client demos or presentations
+- After risky refactors when full regression check is needed
+- When comprehensive audit is required (a11y, perf, bundle size, e2e tests)
+
+Regular PRs auto-deploy via CI after merge.
+
+### Recommended Hooks Setup
+
+To enforce dream-studio workflow patterns, add these hooks to your global `~/.claude/settings.json`:
+
+#### PreToolUse Guards
+
+Prevent accidental use of built-in tools that dream-studio replaces:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "EnterPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'BLOCKED: Use dream-studio:plan instead of built-in plan mode.' >&2; exit 2"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"~/.claude/hooks/guard-skills.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"~/.claude/hooks/guard-agent.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### PostToolUse Build Checks
+
+Auto-run builds after code edits to catch errors early:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.py) py -m py_compile \"$CLAUDE_FILE_PATH\" 2>&1 | head -3 || true ;; esac"
+          },
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.ts|*.tsx|*.jsx|*.js|*.css|*.astro|*.vue) ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo \"$PWD\"); if [ -f \"$ROOT/package.json\" ] && grep -q '\"build\"' \"$ROOT/package.json\" 2>/dev/null; then echo \"[PostToolUse] Running build check...\"; (cd \"$ROOT\" && npm run build --silent 2>&1 | tail -20) || echo \"Build failed - check errors above\"; fi ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### Guard Scripts
+
+Create `~/.claude/hooks/guard-skills.sh`:
+
+```bash
+#!/bin/bash
+# Block built-in review/security-review/init when dream-studio alternatives exist
+
+SKILL_ARGS="$CLAUDE_SKILL_ARGS"
+
+case "$SKILL_ARGS" in
+  review|security-review|init)
+    echo "BLOCKED: Use dream-studio:$SKILL_ARGS instead of built-in skill." >&2
+    exit 2
+    ;;
+esac
+```
+
+Create `~/.claude/hooks/guard-agent.sh`:
+
+```bash
+#!/bin/bash
+# Block Plan subagent when dream-studio:plan exists
+
+AGENT_TYPE="$CLAUDE_AGENT_SUBAGENT_TYPE"
+
+if [ "$AGENT_TYPE" = "Plan" ]; then
+  echo "BLOCKED: Use dream-studio:plan instead of Plan subagent." >&2
+  exit 2
+fi
+```
+
+Make scripts executable:
+
+```bash
+chmod +x ~/.claude/hooks/*.sh
+```
+
+---
+
 ## Configuration
 
 ### Context Thresholds
