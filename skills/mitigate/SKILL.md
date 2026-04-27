@@ -24,46 +24,14 @@ This skill never modifies client code directly. It outputs recommendations the u
 
 ---
 
-## Storage Layout
+## Storage
+See `docs/security-storage-layout.md`. Uses: `scans/{client}/` (read), `datasets/{client}/mitigations.*` (write)
 
-```
-~/.dream-studio/security/
-├── scans/{client}/{repo}/{date}/       # Ingested findings (from scan:ingest)
-│   ├── semgrep.sarif
-│   ├── trivy.json
-│   └── scan-meta.json
-└── datasets/{client}/
-    ├── mitigations.csv                 # Full mitigation table (all findings)
-    ├── mitigations.md                  # Markdown sprint planning export
-    └── mitigations-{YYYY-MM-DD}.json  # Snapshot per run
-```
+## Templates
+See `templates/security/README.md`. Uses: `mitigations/*.yaml` (fix templates by CWE/OWASP)
 
-## Templates Referenced
-
-Mitigation templates live in the dream-studio repo:
-
-```
-builds/dream-studio/templates/security/mitigations/
-├── injection-fixes.yaml
-├── auth-fixes.yaml
-├── secrets-fixes.yaml
-├── encryption-fixes.yaml
-└── netcompat-fixes.yaml
-```
-
----
-
-## Client Profile Fields Used
-
-Read from `~/.dream-studio/clients/{name}.yaml`:
-
-| Profile field | Used by |
-|---|---|
-| `client.name` | All modes — identity, output paths |
-| `data.classification` | Compliance impact lookup |
-| `isolation.model` | Determines scope of auth mitigations |
-| `network.proxy.*` | Zscaler/netcompat context for ZSC-* mitigations |
-| `compliance.frameworks` | Maps findings to compliance control IDs |
+## Client Profile
+See `docs/client-profile-schema.md`. Required: `client.name`. Optional: `data.classification`, `isolation.model`, `network.proxy.*`, `compliance.frameworks`
 
 ---
 

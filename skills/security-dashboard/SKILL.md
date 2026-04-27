@@ -24,39 +24,14 @@ This skill never modifies scan results or client code. It reads from upstream sk
 
 ---
 
-## Storage Layout
+## Storage
+See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
-```
-~/.dream-studio/security/
-├── scans/{client}/{repo}/{date}/       # INPUT: ingested scan results (from scan:ingest)
-│   ├── semgrep.sarif
-│   ├── bandit.json
-│   ├── trufflehog.json
-│   └── scan-meta.json
-├── datasets/{client}/                  # OUTPUT: Power BI-ready CSVs
-│   ├── findings.csv
-│   ├── mitigations.csv
-│   ├── compliance.csv
-│   ├── repos.csv
-│   ├── trends.csv
-│   ├── netcompat.csv
-│   └── metadata.json
-└── reports/{client}/                   # OUTPUT: executive report (downstream)
-```
+## Templates
+See `templates/security/README.md` for template registry.
 
-## ETL Scripts Referenced
-
-Source scripts live in the dream-studio repo:
-
-```
-builds/dream-studio/templates/security/etl/
-├── parse_sarif.py           # Step 1: SARIF/JSON → normalized findings JSON
-├── score_findings.py        # Step 2: Add CVSS + business impact scores
-├── map_compliance.py        # Step 3: Add compliance framework control IDs
-├── generate_mitigations.py  # Step 4: Match findings to mitigation templates
-├── analyze_netcompat.py     # Step 5: Zscaler/proxy compatibility scoring
-└── export_dataset.py        # Step 6: Export all CSVs + metadata.json
-```
+## Client Profile
+See `docs/client-profile-schema.md`. Required fields vary by mode.
 
 ---
 
