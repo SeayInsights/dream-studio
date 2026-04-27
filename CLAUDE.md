@@ -45,7 +45,13 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 ### Visual & Design
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| Visual design / art / branding | `dream-studio:design` | design art:, canvas:, generative art:, apply theme:, brand:, ad creative: |
+| Visual design / branding / direction | `dream-studio:design` | design art:, brand:, apply theme:, ad creative:, design direction:, visual identity: |
+| HTML prototypes / slides / animations | `huashu-design` | prototype:, mockup:, slides:, deck:, animate:, motion:, export pptx:, export mp4: |
+
+**Design skill routing:**
+- **dream-studio:design** — Brand asset acquisition, design direction advisory, visual identity, theme application, generative art (p5.js), ad creative. Creates brand-spec.md with logo/images/colors.
+- **huashu-design** — Interactive prototypes (iOS/Android), slide decks (HTML + editable PPTX), motion design (MP4/GIF with 60fps), design variations with Tweaks, infographics (PDF/PNG/SVG).
+- **Workflow:** dream-studio:design establishes brand assets → huashu-design produces deliverables using those assets.
 
 ### Domain Builders
 | Intent | Skill | Triggers |
