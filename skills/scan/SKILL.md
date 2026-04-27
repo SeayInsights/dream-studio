@@ -24,130 +24,30 @@ This skill never pushes to GitHub. It outputs files for the user to commit. It n
 
 ---
 
-## Storage Layout
+## Storage
+See `docs/security-storage-layout.md`. Uses:
+- `scans/{client}/{repo}/{date}/` — Ingested scan results
+- `rules/{client}/` — Generated Semgrep rules
+- `actions/{client}/` — Generated GitHub Actions workflow
 
-```
-~/.dream-studio/security/
-├── scans/{client}/{repo}/{date}/      # Ingested scan results (SARIF/JSON)
-│   ├── semgrep.sarif
-│   ├── trivy.json
-│   └── scan-meta.json
-├── rules/{client}/                    # Generated Semgrep rule files
-│   ├── data-protection.yaml
-│   ├── injection.yaml
-│   ├── access-control.yaml
-│   ├── secrets.yaml
-│   ├── transport.yaml
-│   └── netcompat.yaml
-└── actions/{client}/                  # Generated GitHub Actions workflow
-    └── security-scan.yml
-```
+## Templates
+See `templates/security/README.md`. Uses:
+- `semgrep-rules/*.yaml.j2` — Custom rule templates
+- `github-actions/security-scan.yml.j2` — CI workflow template
 
-## Templates Referenced
+## Client Profile
+See `docs/client-profile-schema.md`. Required: `client.name`, `client.github_org`, `stack.languages`. Optional: `data.*`, `isolation.*`, `network.proxy.*`, `scan.*`
 
-Source templates live in the dream-studio repo:
-
-```
-builds/dream-studio/templates/security/
-├── semgrep-rules/
-│   ├── data-protection.yaml.j2
-│   ├── injection.yaml.j2
-│   ├── access-control.yaml.j2
-│   ├── secrets.yaml.j2
-│   ├── transport.yaml.j2
-│   └── netcompat.yaml.j2
-└── github-actions/
-    └── security-scan.yml.j2
-```
-
----
-
-## Client Profile Fields Used
-
-Read from `~/.dream-studio/clients/{name}.yaml`. Fields consumed by each mode:
-
-| Profile field | Used by |
-|---|---|
-| `client.name`, `client.github_org` | All modes — identity |
-| `data.critical`, `data.sensitive`, `data.pii_patterns` | `setup` — data-protection + secrets rules |
-| `isolation.model`, `isolation.tenant_key`, `isolation.alternate_keys` | `setup` — access-control rules |
-| `network.proxy.*` | `setup` — netcompat rules |
-| `stack.languages` | `setup` — selects language rulesets for workflow |
-| `scan.schedule` | `setup` — cron expression in generated workflow |
-| `scan.priority_repos` | `setup`, `status` — repos to configure first |
-| `scan.exclude_repos` | `setup`, `status` — repos to skip |
-| `scan.semgrep_rulesets` | `setup` — community rulesets to include alongside custom rules |
-| `scan.extra_scanners` | `setup` — additional scanners to add (e.g., trivy, codeql) |
-
----
-
-## Orchestration Steps
-
-Follow in order for the active mode. Do not skip steps. Do not proceed past a failed gate.
-
----
+## Orchestration
+See `docs/security-orchestration-pattern.md` for standard workflow. Mode-specific steps:
 
 ### Mode: `setup`
 
-#### Step S0: Parse Arguments
+**Parse:** `--client <name>` (required), `--repo <repo>` (optional)  
+**Load:** Validate `client.name`, `client.github_org`, `stack.languages`
 
-Extract from user input:
-- `--client <name>` — required. If absent, list available profiles and ask.
-- `--repo <repo>` — optional. If provided, generate only for that repo. If absent, generate for all `scan.priority_repos`.
-
-#### Step S1: Load Client Profile
-
-1. Read `~/.dream-studio/clients/{client}.yaml`.
-2. If file does not exist: **stop** with — "Client profile not found at `~/.dream-studio/clients/{client}.yaml`. Run `client-work:intake` to create it."
-3. Validate required fields are present: `client.name`, `client.github_org`, `stack.languages`.
-4. If `stack.languages` is empty or missing: warn — "No languages declared in profile. Generated workflow will use default Semgrep rulesets only."
-
-#### Step S2: Generate Semgrep Rules
-
-For each template in `builds/dream-studio/templates/security/semgrep-rules/`:
-
-1. Read the `.j2` template file.
-2. Fill Jinja2 variables using client profile data (mapping below).
-3. Write rendered file to `~/.dream-studio/security/rules/{client}/{rule-name}.yaml`.
-4. If a template has no matching profile data (e.g., `netcompat.yaml.j2` but `network.proxy` is absent): skip that template and note it in the output summary.
-
-**Variable mapping per template:**
-
-| Template | Profile fields injected |
-|---|---|
-| `data-protection.yaml.j2` | `data.critical`, `data.sensitive`, `data.pii_patterns` |
-| `injection.yaml.j2` | `stack.languages` |
-| `access-control.yaml.j2` | `isolation.model`, `isolation.tenant_key`, `isolation.alternate_keys` |
-| `secrets.yaml.j2` | `data.critical`, `client.name` |
-| `transport.yaml.j2` | `stack.languages` |
-| `netcompat.yaml.j2` | `network.proxy.*` |
-
-#### Step S3: Generate GitHub Actions Workflow
-
-1. Read `builds/dream-studio/templates/security/github-actions/security-scan.yml.j2`.
-2. Fill variables:
-   - `client_name` → `client.name`
-   - `github_org` → `client.github_org`
-   - `schedule` → `scan.schedule` (cron string, e.g. `"0 2 * * 1"`)
-   - `languages` → `stack.languages` (list)
-   - `semgrep_rulesets` → `scan.semgrep_rulesets` (list of community ruleset IDs)
-   - `custom_rules_path` → `.github/semgrep/` (the path where the user will commit the generated rules)
-   - `extra_scanners` → `scan.extra_scanners` (list of scanner names)
-3. Write rendered file to `~/.dream-studio/security/actions/{client}/security-scan.yml`.
-
-#### Step S4: Present Output
-
-Show the user:
-1. Files generated (one per line with full path).
-2. Step-by-step commit instructions:
-   ```
-   1. Copy .github/workflows/security-scan.yml → each target repo
-   2. Create .github/semgrep/ directory in each repo
-   3. Copy generated rule files from ~/.dream-studio/security/rules/{client}/ → .github/semgrep/
-   4. Commit and push — the workflow will trigger on the next push or scheduled run
-   ```
-3. Any skipped templates and why.
-4. Next step: "Run `scan ingest --client {client} --repo {repo}` after the first workflow run to pull results in."
+**Generate:** Render 6 Semgrep rule templates + 1 GitHub Actions workflow using client profile data. Write to `rules/{client}/` and `actions/{client}/`.  
+**Output:** File list + commit instructions. Next: `scan ingest` after first workflow run.
 
 ---
 

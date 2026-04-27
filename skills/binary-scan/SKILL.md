@@ -23,34 +23,14 @@ Orchestrate binary and executable security analysis against binary targets defin
 
 ---
 
-## Storage Layout
+## Storage
+See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
-```
-~/.dream-studio/security/
-├── binary/{client}/{target}/          # Generated analysis configs
-│   ├── yara-rules.yar
-│   ├── checksec-config.yaml
-│   └── analyze.sh
-├── scans/{client}/{target}/{date}/    # Analysis results (unified with SAST/DAST)
-│   ├── checksec.json
-│   ├── yara-matches.json
-│   ├── strings-findings.json
-│   └── scan-meta.json
-└── actions/{client}/                  # Generated GH Actions workflows
-    └── binary-scan.yml
-```
+## Templates
+See `templates/security/README.md` for template registry.
 
-## Templates Referenced
-
-```
-builds/dream-studio/templates/security/
-├── binary/
-│   ├── yara-rules.yar.j2
-│   ├── checksec-config.yaml.j2
-│   └── analyze.sh.j2
-└── github-actions/
-    └── binary-scan.yml.j2
-```
+## Client Profile
+See `docs/client-profile-schema.md`. Required fields vary by mode.
 
 ---
 
