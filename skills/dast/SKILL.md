@@ -25,31 +25,14 @@ Unlike `scan` (which generates configs for CI execution only), `dast:run` CAN ex
 
 ---
 
-## Storage Layout
+## Storage
+See `docs/security-storage-layout.md`. See skill-specific paths in layout doc.
 
-```
-~/.dream-studio/security/
-├── dast/{client}/{target}/            # Generated DAST configs
-│   ├── zap-config.yaml
-│   └── nuclei-config.yaml
-├── scans/{client}/{target}/{date}/    # Scan results (unified with SAST/binary)
-│   ├── zap-report.json
-│   ├── nuclei-output.jsonl
-│   └── scan-meta.json
-└── actions/{client}/                  # Generated GH Actions workflows
-    └── dast-scan.yml
-```
+## Templates
+See `templates/security/README.md` for template registry.
 
-## Templates Referenced
-
-```
-builds/dream-studio/templates/security/
-├── dast/
-│   ├── zap-config.yaml.j2
-│   └── nuclei-config.yaml.j2
-└── github-actions/
-    └── dast-scan.yml.j2
-```
+## Client Profile
+See `docs/client-profile-schema.md`. Required fields vary by mode.
 
 ---
 
