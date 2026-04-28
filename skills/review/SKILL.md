@@ -6,6 +6,12 @@ pack: core
 
 # Review — Two-Stage Quality Check
 
+## Imports
+- core/git.md — read git diff, get commit SHA
+- core/quality.md — OWASP security checks, test coverage
+- core/orchestration.md — subagent review pattern, reviewer prompt template
+- core/format.md — severity-tagged findings, review findings format, verdict statement
+
 ## Trigger
 `review:`, `review commits`, `review code`, `review PR:`, or after `build` completes
 
@@ -55,49 +61,16 @@ When invoked with Haiku for fast scan:
 2. Output: `FAST SCAN: CLEAN` or `FAST SCAN: FINDINGS` with bullet list
 
 ## Subagent review (for larger changes)
-When reviewing substantial work, dispatch separate reviewer agents:
 
-**Spec reviewer agent:**
-- Gets: full task spec + implementer's report
-- Job: verify code matches spec (read code, not report)
-- Critical rule: "Do not trust the report. The implementer finished suspiciously quickly."
-- Returns: ✅ compliant or ❌ issues with file:line references
+**See:** core/orchestration.md — Review loop pattern, reviewer prompt template
 
-**Code quality reviewer agent:**
-- Gets: diff (BASE_SHA..HEAD_SHA) + task summary
-- Job: strengths, issues (critical/important/minor), assessment
-- Only dispatched AFTER spec reviewer passes
-- Returns: approved or issues to fix
-
-Review loops: if reviewer finds issues → implementer fixes → reviewer reviews again → repeat until approved.
+Dispatch spec reviewer first, then code quality reviewer after spec passes. Review loops continue until all issues resolved.
 
 ## Findings format
-```
-## Review: [scope]
-Date: YYYY-MM-DD
 
-### Stage 1: Spec Compliance
-- [requirement]: MET / MISSING / EXTRA — [detail]
-Spec verdict: COMPLIANT / NON-COMPLIANT
+**See:** core/format.md — Review findings format
 
-### Stage 2: Code Quality
-
-#### Critical (blocks ship)
-- [finding]: [file:line] — [description + fix]
-
-#### High (blocks ship)
-- [finding]: [file:line] — [description + fix]
-
-#### Medium (fix before next release)
-- [finding]: [file:line] — [description + fix]
-
-#### Low (improve when convenient)
-- [finding]: [file:line] — [description + fix]
-
-### Summary
-Spec: COMPLIANT / NON-COMPLIANT
-Critical: N | High: N | Medium: N | Low: N
-Ship: YES / BLOCKED ([reason])
+Use two-stage format: Stage 1 (spec compliance) → Stage 2 (code quality with severity tags) → Summary with verdict
 ```
 
 ## Next in pipeline

@@ -1,0 +1,63 @@
+# Google Material Design 3
+# Source: material-components/material-web (10k stars)
+
+principles:
+  material_as_metaphor:
+    description: "Physical surfaces and edges"
+    implementation:
+      - surfaces_have_shadows: true
+      - elevation_creates_depth: true
+      - motion_follows_physics: true
+
+  bold_graphic_intentional:
+    description: "Print-based design"
+    implementation:
+      - strong_typography: true
+      - deliberate_color: true
+      - purposeful_imagery: true
+
+  motion_provides_meaning:
+    description: "User actions have consequences"
+    implementation:
+      - responsive_animation: true
+      - feedback_on_interaction: true
+      - spatial_continuity: true
+
+color_system:
+  primary: ""  # Brand color, most frequent
+  secondary: ""  # Accent color, less frequent
+  tertiary: ""  # Additional accent
+  surface: ""  # Backgrounds, cards
+  error: ""  # Errors and warnings
+
+  tonal_palettes:
+    generate_13_tones: true  # 0, 10, 20, ..., 100
+
+elevation:
+  level_0: "0dp"  # Flat
+  level_1: "1dp"  # Raised
+  level_2: "3dp"  # Overlays
+  level_3: "6dp"  # Modals
+  level_4: "8dp"  # Navigation drawer
+  level_5: "12dp"  # FAB
+
+typography:
+  scale:
+    display_large: "57px"
+    headline_large: "32px"
+    title_large: "22px"
+    body_large: "16px"
+    label_large: "14px"
+
+  font_family: "Roboto"
+
+grid_system:
+  base_unit: 8dp  # 8dp grid
+  dense_ui: 4dp  # 4dp for dense interfaces
+
+touch_targets:
+  minimum_size: "48x48dp"  # Accessibility
+
+component_library:
+  install: "npm install @material/web"
+  import: "import '@material/web/button/filled-button.js'"

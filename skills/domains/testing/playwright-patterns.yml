@@ -1,0 +1,53 @@
+# Playwright Testing Patterns
+# Source: mxschmitt/awesome-playwright (1.4k stars)
+
+page_object_model:
+  structure: |
+    /tests/
+      /pages/       # Page classes (LoginPage, DashboardPage)
+      /fixtures/    # Test data and setup
+      /e2e/         # Test scenarios
+    playwright.config.ts
+
+  example: |
+    class LoginPage {
+      constructor(page) {
+        this.page = page
+        this.emailInput = page.getByTestId('email-input')
+        this.passwordInput = page.getByTestId('password-input')
+        this.submitButton = page.getByTestId('submit-button')
+      }
+      async login(email, password) {
+        await this.emailInput.fill(email)
+        await this.passwordInput.fill(password)
+        await this.submitButton.click()
+      }
+    }
+
+locator_strategies:
+  preferred:
+    - data_testid: "page.getByTestId('submit-button')"
+    - role: "page.getByRole('button', { name: 'Submit' })"
+    - text: "page.getByText('Welcome')"
+
+  avoid:
+    - css_selectors: ".btn-primary.submit  # Brittle"
+    - xpath: "//div[@class='btn']  # Brittle"
+
+best_practices:
+  use_auto_waiting: true  # No hardcoded waits
+  parallel_execution: true  # 2.3x faster than Cypress
+  visual_regression: true  # Screenshot comparison
+  accessibility_checks: true  # axe-core integration
+  screenshots_on_failure: true
+
+test_structure:
+  arrange_act_assert: true
+  one_assertion_per_test: false  # Multiple OK for E2E
+  descriptive_test_names: true
+
+ci_integration:
+  run_in_docker: true
+  parallel_workers: 4  # Adjust based on CI resources
+  retry_flaky_tests: 2  # Max retries
+  record_video_on_failure: true
