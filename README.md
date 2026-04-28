@@ -1,7 +1,7 @@
 # dream-studio
 
 [![CI](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.6.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-green.svg)](pyproject.toml)
@@ -539,6 +539,116 @@ dream-studio/
 ├── requirements.txt                 # Runtime: pydantic>=2.0, sentry-sdk
 └── requirements-dev.txt
 ```
+
+---
+
+## Skill Architecture
+
+As of **v0.7.0 (2026-04-28)**, all 37 skills follow a structured architecture with evolution tracking, quality metrics, and auto-generated documentation.
+
+### Standardized Skill Structure
+
+Every skill has:
+- **metadata.yml** — Evolution tracking, quality metrics (success rate, token usage), dependencies
+- **gotchas.yml** — Structured lessons learned (avoid patterns, best practices, edge cases)
+- **config.yml** — Runtime configuration and performance budgets
+- **changelog.md** — Version history
+
+Core skills (build, plan, review, verify, ship) additionally have:
+- **examples/** — Simple + complex usage scenarios with input/output
+- **templates/** — Agent prompts and output format templates
+- **smoke-test.md** — Quick validation tests
+- **core-imports.md** — Module dependency documentation
+
+### Auto-Generated Catalog
+
+The skill catalog is auto-generated from metadata:
+
+```bash
+cd skills/
+py generate-catalog.py
+```
+
+Produces `dream-studio-catalog.md` with:
+- **Skills by pack** — Organized by core, security, career, design, domains, etc.
+- **Quality metrics** — Success rates, token usage, times used
+- **Dependency graph** — Which skills use which core modules
+- **Health dashboard** — Active, maintenance, deprecated status
+
+**Search the catalog:**
+```bash
+grep "security" skills/dream-studio-catalog.md
+grep "build" skills/dream-studio-catalog.md
+```
+
+### Core Modules (SSOT Pattern)
+
+Skills compose from reusable building blocks in `skills/core/`:
+
+| Module | Used By | Patterns |
+|---|---|---|
+| **git.md** | 7 skills | Commit formatting, branch operations, diff reading |
+| **traceability.md** | 3 skills | TR-ID validation, status tracking |
+| **quality.md** | 4 skills | Build/test execution, linting, evidence patterns |
+| **orchestration.md** | 6 skills | Subagent spawning, model selection, review loops |
+| **format.md** | ALL skills | Markdown tables, severity tags, verdict statements |
+
+**Impact visibility:** Before changing a core module, check `skills/core/REGISTRY.md` to see affected skills.
+
+### Creating New Skills
+
+1. Copy templates from `skills/templates/`
+2. Edit `metadata.yml` with skill info
+3. Create `SKILL.md` with orchestration logic
+4. Add `changelog.md` entry
+5. Regenerate catalog: `py generate-catalog.py`
+
+See `skills/STRUCTURE.md` for complete guide.
+
+---
+
+## Planning Templates & Domain Library
+
+As of **v0.7.0 (Repository Integration v2)**, dream-studio includes production-ready planning templates adapted from GitHub's [spec-kit](https://github.com/github/spec-kit) and a curated domain knowledge library.
+
+### Planning Templates
+
+Located in `skills/think/templates/` and `skills/plan/templates/`:
+
+| Template | Used By | What it provides |
+|---|---|---|
+| **spec-template.md** | `dream-studio:think` | User stories prioritized by value (P1 MVP → P2 → P3), functional requirements (FR-XXX), success criteria (SC-XXX), edge cases |
+| **plan-template.md** | `dream-studio:plan` | Technical context, architecture decisions, requirements traceability, risk analysis |
+| **tasks-template.md** | `dream-studio:plan` | Phase-based task breakdown with [P] parallel markers, user story grouping, dependency chains |
+| **constitution-template.md** | `.planning/` | Project principles and governance framework |
+
+**Workflow**: `think:` generates `.planning/specs/<topic>/spec.md` → `plan:` generates `plan.md` + `tasks.md` → `build:` executes tasks.
+
+See `.planning/README.md` for complete workflow documentation and `.planning/specs/sample-user-auth/` for a working example.
+
+### Domain Knowledge Library
+
+9 curated domains in `skills/domains/` with patterns, standards, and references:
+
+| Domain | Files | Key References |
+|---|---|---|
+| **devops** | github-actions-patterns.yml | awesome-actions (21.7k ⭐) — CI/CD security, OIDC, SHA pinning |
+| **testing** | playwright-patterns.yml | awesome-playwright (1.4k ⭐) — Page Object Model, locator strategies |
+| **documentation** | technical-writing-standards.yml | Diátaxis framework, Google/Microsoft style guides |
+| **design** | 5 standards (fluent, material, typography, color, layout) | Fluent Design, Material Design 3, WCAG 2.1 |
+| **powerbi** | 3 patterns (storytelling, accessibility, design) | Cole Nussbaumer Knaflic, Microsoft Power BI guidelines |
+| **data-visualization** | 2 standards (accessibility, design) | WCAG for charts, data-ink ratio, chart selection |
+| **frontend** | (existing) | React, TypeScript, component patterns |
+| **backend** | (existing) | Node.js, API design, database patterns |
+| **security** | (existing) | OWASP, authentication, cryptography |
+
+**Quality Checklists**: `skills/polish/checklists/` and `skills/client-work/powerbi/` contain 7 YAML checklists for design compliance (web, Fluent, Material, data viz, Power BI).
+
+Each domain includes:
+- **Pattern YAML files**: Structured rules, checklists, scoring criteria
+- **REFERENCES.md**: Curated external resources with GitHub star counts and rationale
+
+**Usage**: Skills automatically reference domain knowledge when relevant (e.g., `polish` uses web-design.yml, `client-work` uses Power BI patterns).
 
 ---
 

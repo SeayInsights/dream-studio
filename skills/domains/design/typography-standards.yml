@@ -1,0 +1,58 @@
+# Typography Standards
+# Sources: Google Fonts, Microsoft Typography, Web Design Rules
+
+web_typography:
+  typeface_limit: 2  # 1-2 per page (max 3 for complex sites)
+
+  sizing:
+    body_text_min: 16px
+    body_text_max: 32px
+    body_text_optimal: 18px
+    headlines_min: 50px
+    small_text_min: 14px  # accessibility minimum
+
+  line_height:
+    body_text: 1.6  # 1.5-1.8 range, 1.6 optimal
+    headlines: 1.2  # 1.1-1.3 range
+
+  line_length:
+    max_characters: 75
+    optimal_characters: 60  # 50-60 optimal
+
+  weights:
+    minimum: 400  # avoid <400
+    body: 500  # 400-500
+    emphasis: 600  # 600-700
+    headlines: 700  # 700-900
+
+dashboard_typography:
+  typeface: "Sans-serif"  # Segoe UI, Roboto, Inter
+
+  sizing:
+    kpi_values: 42px  # 36-48px range
+    kpi_labels: 13px  # 12-14px range
+    chart_titles: 18px  # 16-20px range
+    axis_labels: 11px  # 10-12px range
+
+  line_height: 1.3  # 1.2-1.4 (tighter for data density)
+
+  colors:
+    match_axis_to_data: true  # Y-axis label color = data series color
+
+recommended_fonts:
+  sans_serif:
+    - Inter
+    - Open Sans
+    - Roboto
+    - Montserrat
+    - Segoe UI
+  serif:
+    - Merriweather
+    - Aleo
+    - Playfair Display
+    - Georgia
+
+rules:
+  avoid_justified_text: true
+  dont_center_long_text_blocks: true
+  use_consistent_font_scale: true

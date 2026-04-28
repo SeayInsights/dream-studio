@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.7.0] — 2026-04-28
+
+### Added — Skill Architecture Enhancement (Phase 2)
+- **skills/*/metadata.yml** — Evolution tracking, quality metrics (success_rate, times_used, avg_token_usage), dependency tracking for all 37 skills
+- **skills/*/gotchas.yml** — Structured lessons learned (avoid, best_practices, edge_cases, limitations, deprecated) for all 37 skills
+- **skills/*/config.yml** — Runtime configuration and performance budgets for all 37 skills
+- **skills/*/changelog.md** — Version history for all 37 skills
+- **skills/generate-catalog.py** — Auto-generates dream-studio-catalog.md from skill metadata
+- **skills/dream-studio-catalog.md** — Auto-generated searchable skill dashboard with quality metrics, dependency graph, health status
+- **skills/STRUCTURE.md** — Complete architecture guide (skill structure, file purposes, creating/updating skills, best practices)
+- **skills/templates/** — Templates for metadata.yml, gotchas.yml, config.yml for new skill creation
+- **skills/build/examples/** — Simple + complex usage examples with input/output (also for plan, review, verify, ship)
+- **skills/build/templates/** — Agent prompts (implementer, reviewer) and output formats (checkpoint, findings-report, plan-format)
+- **skills/build/smoke-test.md** — Quick validation tests (also for plan, review, verify, ship)
+- **skills/build/core-imports.md** — Module dependency documentation and impact analysis (also for plan, review, verify, ship)
+
+### Changed
+- **skills/core/REGISTRY.md** — Updated with Phase 2 architecture enhancement history
+- **README.md** — Added Skill Architecture section documenting structured framework
+- All 37 skills now follow standardized structure with metadata, gotchas, config, and changelog
+
+### Infrastructure
 - **Makefile** — standard targets: `test`, `lint`, `fmt`, `security`, `install-dev`, `status`
 - **pyproject.toml** — black, flake8, pytest, and coverage config (replaces need for separate `.coveragerc`)
 - **hooks/lib/time_utils.py** — `utcnow()` utility; replaced all bare `datetime.now(timezone.utc)` calls in handlers and `context_handoff.py`

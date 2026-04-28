@@ -6,103 +6,86 @@ pack: core
 
 # Plan — Break Spec Into Steps
 
+## Imports
+- core/git.md — branch operations
+- core/traceability.md — traceability file structure, when to activate
+- core/format.md — task list format, requirements matrix, summary table
+
 ## Trigger
 `plan:`, or after `think` spec is approved
 
 ## Purpose
 Break an approved spec into executable steps with dependencies, order, and acceptance criteria.
 
+## Templates
+
+**Locations**: 
+- `skills/plan/templates/plan-template.md` — Implementation strategy and architecture
+- `skills/plan/templates/tasks-template.md` — Atomic task breakdown with dependencies
+
+Use these templates to structure your plan:
+- **Plan template** provides: Technical context, project structure, complexity tracking, requirements traceability
+- **Tasks template** provides: Phase-based organization, [P] parallel markers, user story grouping, dependency chains
+
 ## Steps
-1. **Read spec** — Reference the approved spec from `think`. Confirm scope.
-2. **Decompose** — Break into atomic tasks. Each task = one logical commit.
-3. **Order** — Dependencies first. Identify what can run in parallel.
-4. **Acceptance** — Each task gets acceptance criteria that can be verified without judgment.
-5. **Assess traceability need** — See Traceability section below.
-6. **Write plan** — Output to `.planning/<topic>-plan.md`
-7. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
+1. **Read spec** — Reference the approved spec from `think`. Confirm scope, user stories, and requirements.
+2. **Plan architecture** — Use `plan-template.md` to document technical decisions, structure, and approach.
+3. **Decompose** — Use `tasks-template.md` to break into atomic tasks. Each task = one logical commit.
+4. **Organize by user story** — Group tasks so each user story (P1, P2, P3) can be implemented and tested independently.
+5. **Order** — Dependencies first. Mark [P] for tasks that can run in parallel (different files, no dependencies).
+6. **Acceptance** — Each task gets acceptance criteria that can be verified without judgment.
+7. **Assess traceability need** — See Traceability section below.
+8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
+9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
+10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 
 ## Traceability
 
-Traceability links spec requirements → plan tasks → commits → tests via TR-IDs.
+**See:** core/traceability.md — Traceability file structure, status lifecycle, when to activate
 
-**When to activate (any of these):**
-- Plan has **4 or more tasks**
-- Spec has distinct, separately-verifiable requirements (not one monolithic goal)
-- User explicitly asks for traceability (`plan: with traceability`, `track requirements`)
-- Work is for a client, production system, or anything that needs an audit trail
+**Decision criteria:**
+- Activate if: 4+ tasks, distinct requirements, user request, or audit trail needed
+- Skip if: 3 or fewer tasks, prototype work, or single-file bug fix
 
-**When to skip:**
-- Plan has **3 or fewer tasks** AND user didn't request traceability
-- Prototype or experimental work (`prototype:`, `experiment:`, `spike:`)
-- Single-file bug fixes
-
-**When active:**
-1. Extract distinct requirements from the spec
-2. Assign each a TR-ID (`TR-001`, `TR-002`, ...) with priority (must/should/could)
-3. Tag each task with the TR-IDs it implements
-4. Write `.planning/traceability.yaml` using the template from `templates/traceability-registry.yaml`
-5. Include the Requirements table and TR-ID column in the plan
-
-**When inactive:**
-- Skip steps 1-5 above
-- Use the simplified plan format (no Requirements table, no TR-ID column)
-- Do NOT create traceability.yaml
-- The build and verify skills will detect the absence and skip their traceability steps
+**When active:** Create `.planning/traceability.yaml` and include Requirements table in plan
+**When inactive:** Use simplified plan format, do NOT create traceability.yaml
 
 ## Plan format — Full (traceability active)
-```
-# Plan: [topic]
-Spec: [path to spec]
-Traceability: .planning/traceability.yaml
-Date: YYYY-MM-DD
 
-## Requirements
-| TR-ID | Description | Priority | Tasks |
-|-------|-------------|----------|-------|
-| TR-001 | ... | must | 1, 2 |
-| TR-002 | ... | should | 3 |
+**See:** core/format.md — Requirements matrix, numbered task list, summary table
 
-## Tasks
-### 1. [Task name]
-- Implements: TR-001
-- Files: [what's touched]
-- Depends on: [task numbers or "none"]
-- Acceptance: [how to verify this is done]
-
-### 2. [Task name]
-...
-
-## Summary
-| # | Task | Depends on | TR-IDs | Complexity |
-|---|---|---|---|---|
-| 1 | ... | none | TR-001 | low |
-| 2 | ... | 1 | TR-001 | medium |
-```
+Include: Requirements table with TR-IDs, task list with "Implements" field, summary table with TR-ID column
 
 ## Plan format — Lite (traceability inactive)
-```
-# Plan: [topic]
-Spec: [path to spec]
-Date: YYYY-MM-DD
 
-## Tasks
-### 1. [Task name]
-- Files: [what's touched]
-- Depends on: [task numbers or "none"]
-- Acceptance: [how to verify this is done]
+**See:** core/format.md — Numbered task list, summary table
 
-### 2. [Task name]
-...
-
-## Summary
-| # | Task | Depends on | Complexity |
-|---|---|---|---|
-| 1 | ... | none | low |
+Include: Task list without "Implements" field, summary table without TR-ID column
 | 2 | ... | 1 | medium |
 ```
 
+## Example Usage
+
+```
+Input: "plan: user-auth" (after approved spec)
+
+Output: .planning/specs/user-auth/
+├── plan.md — Technical context, React 19 + Cloudflare Workers + D1
+├── tasks.md — 16 tasks organized by user story
+│   Phase 2: Foundational (T001-T003)
+│   Phase 3: User Story 1 - Email/Password (T004-T008) 🎯 MVP
+│   Phase 4: User Story 2 - Password Reset (T009-T012)
+│   Phase 5: User Story 3 - OAuth (T013-T016)
+
+Tasks use [P] markers for parallelization:
+- T004 [P] [US1] Create User model in src/models/user.ts
+- T005 [P] [US1] Create Session model in src/models/session.ts
+- T006 [US1] Implement AuthService (depends on T004, T005)
+```
+
 ## Output
-- Plan document at `.planning/<topic>-plan.md` (always)
+- Plan document at `.planning/specs/<topic>/plan.md` (always)
+- Tasks document at `.planning/specs/<topic>/tasks.md` (always)
 - Traceability registry at `.planning/traceability.yaml` (only when traceability active)
 
 ## Next in pipeline

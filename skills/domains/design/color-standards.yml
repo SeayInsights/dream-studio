@@ -1,0 +1,48 @@
+# Color System Standards
+# Sources: WCAG 2.1, Material Design, Fluent Design
+
+accessibility:
+  text_contrast:
+    normal_text_min: 4.5  # 4.5:1 ratio (WCAG AA)
+    large_text_min: 3.0  # 3:1 ratio (18px+ or 14px bold)
+    aaa_normal: 7.0  # 7:1 ratio (WCAG AAA)
+    aaa_large: 4.5  # 4.5:1 ratio
+
+  non_text_contrast:
+    ui_components_min: 3.0  # 3:1 ratio
+    chart_elements_min: 3.0  # 3:1 ratio
+
+  color_blindness:
+    test_with_simulators: true
+    provide_patterns_labels_annotations: true
+    color_not_sole_indicator: true
+
+semantic_colors:
+  primary: ""  # Brand color, CTAs, links
+  secondary: ""  # Accent color, less frequent actions
+  success: "#10a840"  # Green
+  warning: "#ffc107"  # Yellow/orange
+  error: "#d32f2f"  # Red
+  info: "#0078d4"  # Blue
+  neutral: "#6c757d"  # Gray
+
+color_palette_structure:
+  brand_colors: 2  # 1-2 primary colors
+  grays: 6  # 5-7 shades (background to text)
+  accent_colors: 3  # 2-3 for emphasis
+  semantic_colors: 4  # success, warning, error, info
+
+avoid:
+  pure_black: true  # Use #1a1a1a or similar
+  highly_saturated_large_areas: true
+  more_than_5_colors_in_chart: true
+
+color_psychology:
+  red: "power, passion, excitement"
+  blue: "peace, trustworthiness, professionalism"
+  green: "harmony, nature, growth, health"
+  purple: "wealth, wisdom, magic"
+  orange: "happiness, cheerfulness, creativity"
+  yellow: "optimism, attention, warning"
+  black: "sophistication, luxury, formality"
+  white: "purity, simplicity, cleanliness"

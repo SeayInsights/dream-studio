@@ -6,6 +6,12 @@ pack: core
 
 # Verify — Prove It Works
 
+## Imports
+- core/git.md — get commit SHA
+- core/traceability.md — update TR-ID with test, coverage reporting
+- core/quality.md — run build, run tests, evidence patterns
+- core/format.md — evidence statement, coverage report, checkbox list
+
 ## Trigger
 `verify:`, `prove it:`, or after `review` passes clean
 
@@ -63,33 +69,20 @@ BEFORE claiming any status:
 | "Partial check is enough" | Partial proves nothing |
 
 ## Steps
-1. **Identify targets** — What needs to be proven? Reference spec acceptance criteria.
-   - If `.planning/traceability.yaml` exists: use TR-IDs as the verification checklist. Every `must` requirement needs evidence.
-   - If no traceability file: use the plan's acceptance criteria per task.
-2. **Run the app** — Start dev server, build, or launch scene.
-3. **Golden path** — Test the primary user flow end-to-end.
-4. **Edge cases** — Test boundaries, empty states, error states, invalid input.
-5. **Evidence** — Capture proof:
-   - UI: screenshots at key states
-   - API: request/response logs
-   - Game: scene output, QA stdout events
-   - CLI: terminal output
+1. **Identify targets** — See: core/traceability.md — Use TR-IDs if exists, else plan acceptance criteria
+2. **Run the app** — See: core/quality.md — Run build, start dev server
+3. **Golden path** — Test primary user flow end-to-end
+4. **Edge cases** — Test boundaries, empty states, error states, invalid input
+5. **Evidence** — See: core/format.md — Evidence statement format
+   - Capture: screenshots (UI), logs (API), terminal output (CLI)
 6. **Regression** — Does existing functionality still work?
-7. **Update traceability** (conditional) — Check if `.planning/traceability.yaml` exists.
-   - **If it exists:** append test file paths to the `tests` list for each verified TR-ID. Set status to `verified` for passing requirements. Update the summary counts. Report coverage: "X of Y requirements verified."
-   - **If it doesn't exist:** skip. Don't create the file.
+7. **Update traceability** — See: core/traceability.md — Update TR-ID with test
 
 ## Evidence patterns
 
-```
-✅ [Run test command] → [See: 34/34 pass] → "All tests pass"
-❌ "Should pass now" / "Looks correct"
+**See:** core/quality.md — Evidence patterns
 
-✅ Write test → Run (pass) → Revert fix → Run (MUST FAIL) → Restore → Run (pass)
-❌ "I've written a regression test" (without red-green verification)
-
-✅ [Run build] → [See: exit 0] → "Build passes"
-❌ "Linter passed" (linter doesn't check compilation)
+Must follow format: `[Action] → [Observation] → [Conclusion]`
 
 ✅ Re-read plan → Create checklist → Verify each → Report gaps or completion
 ❌ "Tests pass, phase complete"

@@ -1,0 +1,28 @@
+# Microsoft Fluent Design System Compliance
+# Source: microsoft/fluentui
+
+fluent_principles:
+  light: false  # Illuminate interface, guide focus
+  depth: false  # Create hierarchy with layering
+  motion: false  # Purposeful animation (not decorative)
+  material: false  # Visual language consistent with physical world
+  scale: false  # Responsive across devices
+
+design_tokens:
+  spacing_4px_multiples: false
+  segoe_ui_font_family: false
+  semantic_color_tokens: false
+  elevation_0_to_64px: false
+
+accessibility:
+  wcag_aa_minimum_4_5_to_1: false
+  focus_indicators_visible: false
+  keyboard_navigation: false
+
+animation:
+  easing_curves_not_linear: false
+  duration_200_to_500ms: false
+  purposeful_not_decorative: false
+
+verdict: ""  # compliant | non_compliant
+issues: []
