@@ -263,5 +263,21 @@ Why subagents:
 - Each agent stays focused
 - Failed agents don't pollute controller context
 
+## Pipeline gate check (soft)
+
+At the start of any skill that has a pipeline prerequisite, output a gate check:
+
+```
+Pipeline: [current stage] | Expected prerequisite: [prior stage]
+Prior stage complete? [YES / NO / UNKNOWN]
+```
+
+- **YES** → proceed
+- **NO / UNKNOWN** → "Recommend running [prior skill] first. Continue anyway? (Director can override)"
+
+**Usage:** Add to skill's "Before you start" section — "Check pipeline gate: [this stage] requires [prior stage] complete."
+
+**Why soft (not blocking):** The Director may legitimately skip stages (e.g., running `review` on pre-existing code without a `build` run). The gate surfaces the gap without enforcing it.
+
 ## Used by
 build, review, secure, think, analyze, career-ops
