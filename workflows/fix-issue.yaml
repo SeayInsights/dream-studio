@@ -1,5 +1,5 @@
 name: fix-issue
-description: Diagnose a bug, plan a fix, implement, review, and verify
+description: "Diagnose a bug, plan a fix, implement, review, and verify. Resume-safe: if interrupted, re-run to continue from the last completed node."
 version: 1
 on_failure: abort
 

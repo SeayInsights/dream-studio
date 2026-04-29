@@ -265,6 +265,11 @@ def _cooldown_active() -> bool:
 
 def main() -> None:
     paths.warn_version_mismatch()
+    # Quiet mode: suppress advisory hooks for N turns (user-configured)
+    remaining = state.get_quiet_mode()
+    if remaining > 0:
+        state.set_quiet_mode(remaining - 1)
+        return
     if _cooldown_active():
         return
     report, stats = generate_pulse()
