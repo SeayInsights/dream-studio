@@ -82,6 +82,24 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
         return d1 + d2 + d3
     except Exception: return 0
 
+def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM sum_skill_summary").fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            fail_ids = c.execute(
+                "SELECT id FROM effective_skill_runs WHERE skill_name=? AND success=0 ORDER BY id DESC LIMIT 3",
+                (d["skill_name"],),
+            ).fetchall()
+            d["recent_failure_ids"] = [row[0] for row in fail_ids]
+            result.append(d)
+        c.close()
+        return result
+    except Exception:
+        return []
+
 def skill_correct(telemetry_id: int, success: int, reason: str = "", db_path: Path | None = None) -> bool:
     try:
         with _connect(db_path) as c:
