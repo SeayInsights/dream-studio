@@ -120,6 +120,67 @@ def user_data_dir_writable() -> bool:
         return False
 
 
+def check_for_update() -> None:
+    """Once-per-day GitHub release check — prints to stderr if a newer version is available.
+
+    Writes a daily sentinel before making the request so a network failure
+    doesn't cause hammering on every hook call that day.
+    """
+    import sys as _sys
+    import json as _json
+    import datetime as _dt
+    import urllib.request as _req
+    try:
+        source_ver = plugin_version()
+        if source_ver == "unknown":
+            return
+        today = _dt.date.today().isoformat()
+        sentinel = state_dir() / f".update-checked-{today}"
+        if sentinel.exists():
+            return
+        sentinel.write_text("", encoding="utf-8")
+
+        try:
+            manifest = plugin_root() / ".claude-plugin" / "plugin.json"
+            repo_url = _json.loads(manifest.read_text(encoding="utf-8")).get("repository", "")
+            repo = repo_url.rstrip("/").removeprefix("https://github.com/")
+        except Exception:
+            repo = "SeayInsights/dream-studio"
+
+        request = _req.Request(
+            f"https://api.github.com/repos/{repo}/releases/latest",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": f"dream-studio/{source_ver}"},
+        )
+        with _req.urlopen(request, timeout=3) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+
+        latest = data.get("tag_name", "").lstrip("v")
+        if not latest:
+            return
+
+        def _ver(v: str) -> tuple:
+            try:
+                return tuple(int(x) for x in v.split("."))
+            except ValueError:
+                return (0,)
+
+        if _ver(latest) <= _ver(source_ver):
+            return
+
+        try:
+            root = plugin_root()
+        except RuntimeError:
+            root = "your dream-studio directory"
+
+        print(
+            f"\n[dream-studio] Update available: v{latest} (installed: v{source_ver})\n"
+            f"  → cd {root} && git pull && make setup\n",
+            file=_sys.stderr,
+        )
+    except Exception:
+        pass
+
+
 def warn_version_mismatch() -> None:
     """Emit a one-time stderr warning if plugin source and cache versions differ.
 

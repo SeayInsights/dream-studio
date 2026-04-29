@@ -348,6 +348,7 @@ def _cooldown_active() -> bool:
 
 def main() -> None:
     paths.warn_version_mismatch()
+    paths.check_for_update()
     # Quiet mode: suppress advisory hooks for N turns (user-configured)
     remaining = state.get_quiet_mode()
     if remaining > 0:
