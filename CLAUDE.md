@@ -77,6 +77,10 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 | Session recap | `dream-studio:recap` | recap:, session recap: |
 | YAML workflow orchestration | `dream-studio:workflow` | workflow:, workflow list |
 
+### Routing Fallback
+
+If the user's intent does not match any trigger keyword in the tables above, route to `dream-studio:coach` with mode `route-classify`. Coach will classify the intent, map it to the nearest skill, and explain confidence + alternatives. This prevents unmatched intents from falling through to raw Claude default behavior.
+
 ## GitHub Workflow
 - **Never push directly to `main`** — always create a feature branch first.
 - Before starting PR work, check for open PRs on the repo (`gh pr list`) to avoid conflicts or duplicate work.
