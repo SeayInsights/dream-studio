@@ -1,4 +1,4 @@
-﻿---
+---
 name: mcp-build
 description: 4-phase MCP server development — research, implement (Zod schemas, structured errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. Trigger on `build mcp:`, `new mcp:`, `extend mcp:`.
 pack: domains
@@ -76,3 +76,43 @@ Never throw unhandled exceptions. Always return structured error responses.
 
 ## Depth Status
 JIT-pending — examples and gotchas will be added from the first real MCP build that uses this skill.
+
+## CLI-to-Skill Bridge Pattern
+
+When building an MCP that wraps a CLI tool, follow the **daemon model** — exemplified by `vercel-labs/next-browser`:
+
+### Why daemon instead of per-call spawn
+Per-call process spawning adds 200-500ms overhead per command — fine for humans, fatal for agent loops that fire 20 commands in sequence. A daemon starts once and accepts commands over a socket, making each call ~5ms.
+
+### Implementation pattern
+
+**1. Launch daemon once at session start**
+```bash
+your-tool start  # starts daemon, binds to socket
+```
+Not per-command. The MCP tool's `initialize` or first-call logic handles this.
+
+**2. Communicate via JSON-RPC over a socket**
+- Unix: `/tmp/your-tool.sock`
+- Windows: `\\.\pipe\your-tool`
+- Protocol: `{"method": "command_name", "params": {...}, "id": 1}`
+
+**3. Design CLI commands to be stateless and machine-readable**
+- One command in → structured JSON out
+- No interactive prompts, no ANSI color codes in output
+- Each command is idempotent (safe to retry)
+
+**4. Expose as typed MCP tools**
+```typescript
+server.tool("snapshot", { selector: z.string().optional() }, async ({ selector }) => {
+  return await sendToSocket({ method: "snapshot", params: { selector } });
+});
+```
+
+### When to use this pattern
+- The CLI tool maintains state between calls (browser session, database connection, file watcher)
+- Agent loops need to fire the same tool many times rapidly
+- The tool's startup time is >100ms
+
+### Reference implementation
+`vercel-labs/next-browser` — exposes React DevTools as agent-callable commands via this exact pattern.

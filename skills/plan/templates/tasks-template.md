@@ -12,11 +12,16 @@ description: "Task list template for feature implementation"
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
-## Format: `[ID] [P?] [Story] Description`
+## Format: `[ID] [P?] [Story] [owner:name?] [est:Xh?] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
+- **[owner:name]**: Optional. Assigns the task to a person or subagent role (e.g., `[owner:dannis]`, `[owner:frontend-agent]`)
+- **[est:Xh]**: Optional. Time estimate in hours (e.g., `[est:2h]`, `[est:0.5h]`)
 - Include exact file paths in descriptions
+
+**Example with all optional fields:**
+- [ ] T042 [P] [US2] [owner:dannis] [est:1h] Implement search filter in src/components/SearchBar.tsx
 
 ## Path Conventions
 

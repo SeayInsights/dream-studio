@@ -309,3 +309,19 @@ Add an entry to `skills/domains/ingest-log.yml`:
 - Updated `skills/domains/<domain>/<file>.yml` with new patterns appended
 - New entry in `skills/domains/ingest-log.yml`
 - Summary to Director: N patterns extracted, M skipped (already existed), refresh due date
+
+## Communication Modes
+
+### Caveman mode
+For when AI verbosity is getting in the way — long explanations, summaries of what was just done, preamble before every response.
+
+**Activate:** User says `caveman mode on`
+**Deactivate:** User says `caveman mode off`
+
+**In caveman mode:**
+- Respond with the action done, nothing else
+- No summaries, no "here's what I did", no "let me know if you need anything"
+- Status updates only: `done.` / `blocked: [one word reason]` / `need: [one thing]`
+- Code and file changes still happen in full — only the prose response is compressed
+
+**When to suggest it:** When the user says the AI is being too wordy, or when the session is deep into execution and explanations add no value.

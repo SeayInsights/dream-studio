@@ -114,6 +114,20 @@
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
 
+## Acceptance Criteria
+
+Testable conditions that must be true for the feature to be considered complete. Use Given/When/Then format.
+
+| AC-ID | Given | When | Then |
+|-------|-------|------|------|
+| AC-001 | [starting state] | [action taken] | [expected outcome] |
+| AC-002 | [starting state] | [action taken] | [expected outcome] |
+
+**Rules:**
+- Each AC maps to one or more FRs
+- Each AC must be independently verifiable
+- ACs are not implementation steps — they describe observable outcomes
+
 ## Assumptions
 
 <!--
@@ -140,3 +154,15 @@
 **Next Steps**: 
 1. Run `dream-studio:plan` to break this spec into implementation tasks
 2. Output will be `.planning/specs/[topic-name]/plan.md` and `tasks.md`
+
+## PRD Context (optional)
+
+For features that need business context to be fully understood.
+
+**Problem Statement:** [What problem does this solve? For whom?]
+
+**Target User:** [Who specifically benefits from this feature?]
+
+**Business Goal:** [What outcome does this support — revenue, retention, compliance, efficiency?]
+
+**Success looks like:** [How will we know this worked 30 days after ship?]

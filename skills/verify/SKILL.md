@@ -96,6 +96,13 @@ Must follow format: `[Action] → [Observation] → [Conclusion]`
 
 ## Verification by domain
 - **Web/SaaS** — Run `npm run test:e2e` if Playwright exists. Otherwise open browser, test forms, responsive, a11y.
+   - **Design quality scan:** Run `npx impeccable detect` against the project to check for anti-pattern violations. Reports 24 design issues without requiring AI. Fix any violations before claiming UI is clean.
+   - **React/Next.js deep verification** (when project uses React/Next.js and app is running):
+     - `next-browser snapshot` — confirm key components rendered, no missing nodes
+     - `next-browser accessibility` — surface ARIA violations, missing labels, contrast failures
+     - `next-browser profile` — check Core Web Vitals: LCP < 2.5s, CLS < 0.1, INP < 200ms
+     - `next-browser click <selector>` / `next-browser fill <selector> <value>` — exercise key user paths interactively
+     Start the daemon first if not running: `next-browser start`
 - **API** — Hit endpoints, verify response shape and status codes.
 - **Game** — Run scene via godot-mcp, check QA stdout events.
 - **Power Platform** — Test in preview mode, verify data connections.
