@@ -68,10 +68,17 @@ Action? [promote / reject / defer]
 Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml. On "reject" → move file to `meta/lessons/` with `Status: REJECTED`. On "defer" → leave as-is.
 
 **Step 2 — Session history**
-Scan `.sessions/**/*.md` (handoffs and recaps). Extract:
+Determine scan scope from `config.yml`:
+1. **Auto-discover**: scan every subdirectory of `harvest.projects_root` that contains a `.sessions/` folder — each qualifies as a harvest target automatically. No registration needed; new projects are picked up the moment they have a `.sessions/` dir.
+2. **Extra paths**: also scan any paths listed in `harvest.extra_paths` for one-offs outside `projects_root`.
+3. **Local**: always include the dream-studio repo's own `.sessions/` regardless of config.
+
+For each discovered project, scan `<project>/.sessions/**/*.md` (handoffs and recaps). Extract:
 - "What's broken / blocked" sections with identified root causes
 - "Director correction" mentions
-- Patterns that appear in 2+ different session files
+- Patterns that appear in 2+ different session files (across any projects)
+
+Tag each extracted pattern with its source project path so domain-specific lessons stay scoped correctly.
 
 **Step 3 — Dedup check**
 Scan `skills/*/gotchas.yml`. For each candidate pattern from Step 2, grep existing entries. If the insight already exists → log "already captured in skills/[skill]/gotchas.yml" and skip.
