@@ -24,6 +24,7 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 | Intent | Skill | Triggers |
 |--------|-------|----------|
 | Systematic debugging | `dream-studio:debug` | debug:, diagnose: |
+| Explain code / system | `dream-studio:explain` | explain:, how does X work, walk me through, what is this doing |
 | UI polish | `dream-studio:polish` | polish ui:, clean up ui:, critique design:, redesign:, make it premium: |
 | Security review | `dream-studio:secure` | secure:, check security, review architecture |
 | Project hardening | `dream-studio:harden` | /harden, harden audit |
@@ -75,6 +76,10 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 | Session handoff | `dream-studio:handoff` | handoff: |
 | Session recap | `dream-studio:recap` | recap:, session recap: |
 | YAML workflow orchestration | `dream-studio:workflow` | workflow:, workflow list |
+
+### Routing Fallback
+
+If the user's intent does not match any trigger keyword in the tables above, route to `dream-studio:coach` with mode `route-classify`. Coach will classify the intent, map it to the nearest skill, and explain confidence + alternatives. This prevents unmatched intents from falling through to raw Claude default behavior.
 
 ## GitHub Workflow
 - **Never push directly to `main`** — always create a feature branch first.

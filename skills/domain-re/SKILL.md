@@ -1,4 +1,4 @@
----
+﻿---
 name: domain-re
 description: "Real estate domain expert — parallel analyst lenses (forensic skeptic, diplomatic executor, strategic realist) evaluate leases, credit, renewals, and portfolio risk. Trigger on /domain-re or re:."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: analyze
 ---
 
 # Domain-RE — Real Estate Analysis Engine
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `/domain-re <mode> <input>`, `re:`, or invoked when analyzing lease offers, tenant credit, renewal decisions, or portfolio risk
@@ -75,7 +78,7 @@ Every analyst returns exactly this JSON:
 ```
 /domain-re lease-analysis
 Tenant: Momentum Logistics | 45,000 SF industrial | 5-year term | $27.50/sf net
-6 months free rent | $18/sf TI | Renewal option 2×5yr at market
+6 months free rent | $18/sf TI | Renewal option 2Ã—5yr at market
 [paste lease document or key terms]
 
 /domain-re credit-check
@@ -167,7 +170,7 @@ Minimum quorum per mode. If not met: stop with specific error and checkpoint pat
 ### Step 6: Mechanical Scoring
 
 Map signals to numeric: strong-accept=+2, accept=+1, neutral=0, reject=-1, strong-reject=-2.
-Weighted score = signal × confidence × weight.
+Weighted score = signal Ã— confidence Ã— weight.
 Aggregate = sum(weighted) / sum(weights).
 Flag contested dimensions (analyst pair distance > disagreement_threshold).
 

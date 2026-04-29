@@ -1,4 +1,4 @@
----
+﻿---
 name: career-ops
 description: "AI job search command center — routes to career sub-skills (evaluate, scan, apply, track, pdf). Trigger on /career-ops or career-related commands."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: career
 ---
 
 # Career-Ops — Router & Command Center
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 

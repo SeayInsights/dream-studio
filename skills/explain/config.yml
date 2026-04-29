@@ -1,0 +1,14 @@
+# Model defaults
+models:
+  default: haiku
+  deep_trace: sonnet
+
+# Behavior
+behavior:
+  max_hops_default: 3
+  ask_depth_after_surface: true
+
+# Budgets
+budgets:
+  max_tokens: 60000
+  max_context_percent: 40

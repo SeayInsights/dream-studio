@@ -1,16 +1,51 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: skip-constitution-read
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never start executing tasks without reading CONSTITUTION.md first"
+    context: "Skipping CONSTITUTION.md causes architectural violations mid-build — wrong patterns, wrong files, incompatible approaches. Discovered during DreamySuite builds where canvas SSOT was ignored."
+    fix: "Step 0: if .planning/CONSTITUTION.md exists, read it before touching any file. Same for GOTCHAS.md."
 
-# Best PRACTICES
-best_practices: []
+  - id: parallel-same-file
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never dispatch parallel subagents that write to the same file"
+    context: "Parallel agents with overlapping file scope create race conditions — last writer wins, earlier work is silently lost. Build verification won't catch this."
+    fix: "Group tasks into waves. Within a wave, each agent must own distinct files. If two tasks need the same file, make them sequential."
 
-# Edge CASES handled
-edge_cases: []
+  - id: subagent-file-path-only
+    severity: high
+    discovered: 2026-04-29
+    title: "Never give subagents a file path to read — provide the full text"
+    context: "Subagents have isolated context. Telling them 'read spec.md' adds an unnecessary file read and can fail if the working directory differs."
+    fix: "In the dispatch prompt, paste the full task text and any relevant spec sections inline."
 
-# Known LIMITATIONS
-limitations: []
+  - id: continue-past-major-drift
+    severity: high
+    discovered: 2026-04-29
+    title: "Never continue past major drift without explicit Director approval"
+    context: "Major drift (new dependency, scope change, architecture change) that proceeds silently compounds — later tasks build on the drifted state and become hard to undo."
+    fix: "Stop on major drift. Output: 'Drift detected: [what and why]. Adjust plan or revert?' Wait for answer."
 
-# DEPRECATIONS
+best_practices:
+  - id: commit-per-task
+    title: "Commit after every task, not after every wave"
+    context: "Batching commits makes it impossible to bisect failures. One task = one commit with the task name in the message."
+
+  - id: checkpoint-every-three
+    title: "Output a checkpoint after every 3 tasks or 30 minutes"
+    context: "Long builds lose state silently. Checkpoints surface drift and context growth before they become unrecoverable."
+
+edge_cases:
+  - id: simple-vs-subagent-threshold
+    title: "<=3 tightly coupled tasks: simple mode. >=4 or independent tasks: subagent mode"
+    context: "Subagent mode for 2 coupled tasks creates more overhead than value. Simple mode for 6 independent tasks blows context."
+
+limitations:
+  - id: no-cross-wave-state
+    title: "Subagents in the same wave cannot share state"
+    context: "Each subagent gets only its dispatch prompt. If wave B needs output from wave A, the controller must collect and re-inject that output."
+
 deprecated: []

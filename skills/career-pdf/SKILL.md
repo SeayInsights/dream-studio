@@ -1,10 +1,13 @@
----
+﻿---
 name: career-pdf
 description: "Generate ATS-optimized CV PDFs and LinkedIn outreach messages. Modes: pdf (CV generation), contacto (LinkedIn outreach). Trigger via /career-ops pdf or /career-ops contact."
 pack: career
 ---
 
 # Career-PDF — Content Generation
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 Read `~/.dream-studio/career-ops/config.yml` to get `career_studio_path`.

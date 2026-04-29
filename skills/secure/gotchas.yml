@@ -1,16 +1,44 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: combine-owasp-stride
+    severity: high
+    discovered: 2026-04-29
+    title: "Never run OWASP and STRIDE analyses in a single pass"
+    context: "OWASP covers implementation vulnerabilities; STRIDE covers threat modeling. Combining them causes overlap in findings and missed angles — STRIDE threats that have no OWASP category get dropped."
+    fix: "Run parallel analyst subagents: one OWASP-lens, one STRIDE-lens. Synthesis resolves overlap. Each lens catches what the other misses."
 
-# Best PRACTICES
-best_practices: []
+  - id: severity-without-context
+    severity: high
+    discovered: 2026-04-29
+    title: "Never report severity without exploitability and impact context"
+    context: "'Critical SQL injection' on a read-only public API with no sensitive data is not the same as the same finding on an admin endpoint. Decontextualized severity causes misallocated remediation effort."
+    fix: "Every finding: severity + exploitability (how hard) + impact (what happens if exploited) + affected data/scope."
 
-# Edge CASES handled
-edge_cases: []
+  - id: mix-findings-and-fixes
+    severity: medium
+    discovered: 2026-04-29
+    title: "Don't embed fix recommendations inside secure findings"
+    context: "Secure outputs findings. Fix recommendations belong in dream-studio:mitigate. Mixing them bloats the report and conflates discovery with remediation."
+    fix: "Secure outputs: what's broken, severity, evidence. Run dream-studio:mitigate separately for fix recommendations."
 
-# Known LIMITATIONS
-limitations: []
+best_practices:
+  - id: fresh-subagents-per-lens
+    title: "Use fresh subagents for each analyst lens — never inherit review session history"
+    context: "An analyst that has seen OWASP findings will anchor on implementation details when asked to do STRIDE threat modeling. Fresh context = independent analysis."
 
-# DEPRECATIONS
+  - id: blocked-vs-flags
+    title: "Distinguish BLOCKED (ship-stopper) from SHIP WITH FLAGS (document + monitor)"
+    context: "Not every security finding is a ship-stopper. Conflating severity levels delays shipping and erodes trust in security reviews."
+
+edge_cases:
+  - id: third-party-scope
+    title: "Clarify scope: in-scope code vs third-party dependencies vs infrastructure"
+    context: "A finding in a vendored library is not actionable the same way as a finding in your code. Scope the review before starting."
+
+limitations:
+  - id: static-analysis-only
+    title: "Secure is static analysis — it cannot find runtime-only vulnerabilities"
+    context: "Race conditions, timing attacks, and session fixation in production require DAST (dream-studio:dast). Secure only reads code."
+
 deprecated: []

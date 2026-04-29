@@ -1,4 +1,4 @@
----
+﻿---
 name: dast
 description: "Web application dynamic testing — generate ZAP/Nuclei configs, ingest DAST results, score web-specific vulnerabilities. Trigger on dast:, web scan, pen test web, zap scan."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: security
 ---
 
 # DAST — Web Application Dynamic Testing
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `dast:`, `web scan`, `pen test web`, `zap scan`, `/dast`

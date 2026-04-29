@@ -1,16 +1,44 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: skip-spec-before-code-review
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never review code quality before verifying spec compliance"
+    context: "Code that passes linting and tests can still implement the wrong thing. Reviewing code style first anchors attention on implementation, causing spec violations to be missed."
+    fix: "Always do spec compliance first. Only proceed to code quality review after spec compliance passes."
 
-# Best PRACTICES
-best_practices: []
+  - id: close-enough-on-spec
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never accept 'close enough' on spec compliance"
+    context: "Partial spec compliance accumulates. Each 'close enough' decision shifts what the system actually does away from what was specified. Spec violations are tech debt from day 0."
+    fix: "A spec item either passes or fails. If it fails, the implementer fixes it — no exceptions, no 'we can do it later'."
 
-# Edge CASES handled
-edge_cases: []
+  - id: review-without-diff
+    severity: high
+    discovered: 2026-04-29
+    title: "Never review a task without a concrete diff or file list"
+    context: "Reviewing against a description of what was changed is not a code review. It's a trust exercise."
+    fix: "Get the actual diff (base..head SHA). If the implementer only provides a description, ask for the diff explicitly."
 
-# Known LIMITATIONS
-limitations: []
+best_practices:
+  - id: two-stage-order
+    title: "Review order: spec compliance → code quality (never reversed)"
+    context: "Spec compliance gate ensures you're reviewing the right thing. Code quality gate ensures it's implemented well."
 
-# DEPRECATIONS
+  - id: file-line-references
+    title: "Always cite file:line references for any issue found"
+    context: "Vague feedback ('the auth module looks off') can't be actioned. Specific references can be fixed immediately."
+
+edge_cases:
+  - id: review-after-drift
+    title: "When reviewing after a drift event, re-read the original spec first"
+    context: "Post-drift changes may have moved the implementation away from the original spec in ways the plan doesn't reflect."
+
+limitations:
+  - id: no-runtime-review
+    title: "Code review cannot catch runtime-only failures"
+    context: "Race conditions, environment-specific bugs, and integration failures require verify (not review). Don't conflate the two."
+
 deprecated: []

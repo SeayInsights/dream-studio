@@ -1,10 +1,13 @@
----
+﻿---
 name: career-scan
 description: "Scan job portals for new offers, deduplicate against history, add to pipeline. Always runs as subagent (long-running, Playwright-dependent). Trigger via /career-ops scan."
 pack: career
 ---
 
 # Career-Scan — Portal Discovery
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 Read `~/.dream-studio/career-ops/config.yml` to get `career_studio_path`.

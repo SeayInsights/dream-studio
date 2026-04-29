@@ -62,6 +62,21 @@ agent-dispatch:
     strategy: single-analyst
     output: coach-report
 
+route-classify:
+  status: active
+  description: "Classify ambiguous intent against all skill triggers — invoked by CLAUDE.md routing fallback when no keyword matched"
+  analysts:
+    - route-classifier
+  quick_analysts:
+    - route-classifier
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: true
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: coach-report
+
 full-audit:
   status: experimental
   description: "All four dimensions in parallel — comprehensive workflow audit"

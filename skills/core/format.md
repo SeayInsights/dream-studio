@@ -151,7 +151,7 @@ Traceability: 5 of 8 requirements verified (62.5%)
 
 **Use for:** Verification status, test coverage, requirement progress
 
-### Checkpoint format
+### Checkpoint format (wave-level)
 ```
 ## Checkpoint (after task 3/10)
 - Completed: 3 tasks
@@ -161,7 +161,18 @@ Traceability: 5 of 8 requirements verified (62.5%)
 - Context: 45% used
 ```
 
-**Use for:** Build progress updates every 3 tasks or 30min
+**Use for:** Multi-task wave summaries
+
+### Checkpoint format (task-level)
+```
+## Task Checkpoint — Task N: [task name]
+Status: COMPLETE
+Commit: [short SHA] — [one-line commit message]
+Next: Task N+1 — [next task name]
+Context: ~X% used
+```
+
+**Use for:** Per-task checkpoints when `max_tasks_before_checkpoint: 1` (default). Write to `.sessions/YYYY-MM-DD/checkpoint-<topic>.md` in append mode. Use wave-level format for multi-task summaries.
 
 ### Ship gate format
 ```

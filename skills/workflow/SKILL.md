@@ -1,10 +1,13 @@
----
+﻿---
 name: workflow
 description: YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 pack: meta
 ---
 
 # Workflow — YAML Pipeline Orchestration
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `workflow: <name>`, `workflow list`, `workflow status`, `workflow resume`, `workflow abort`
@@ -230,7 +233,7 @@ py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
 
 ## Error Handling
 
-**Node failure:** Retry up to 3× with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
+**Node failure:** Retry up to 3Ã— with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
 
 **Dependency failure by trigger rule:**
 - `all_success` → skip the dependent node

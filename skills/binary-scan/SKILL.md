@@ -1,4 +1,4 @@
----
+﻿---
 name: binary-scan
 description: "Binary/executable analysis — checksec hardening, YARA malware signatures, PE/ELF metadata extraction. Trigger on binary-scan:, scan binary, analyze exe, checksec."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: security
 ---
 
 # Binary Scan — Executable Analysis
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `binary-scan:`, `scan binary`, `analyze exe`, `checksec`, `/binary-scan`

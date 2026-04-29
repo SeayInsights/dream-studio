@@ -1,10 +1,13 @@
----
+﻿---
 name: plan
 description: Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. Trigger on `plan:` or after `think` is approved.
 pack: core
 ---
 
 # Plan — Break Spec Into Steps
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
 - core/git.md — branch operations
@@ -73,7 +76,7 @@ Output: .planning/specs/user-auth/
 ├── plan.md — Technical context, React 19 + Cloudflare Workers + D1
 ├── tasks.md — 16 tasks organized by user story
 │   Phase 2: Foundational (T001-T003)
-│   Phase 3: User Story 1 - Email/Password (T004-T008) 🎯 MVP
+│   Phase 3: User Story 1 - Email/Password (T004-T008) ðŸŽ¯ MVP
 │   Phase 4: User Story 2 - Password Reset (T009-T012)
 │   Phase 5: User Story 3 - OAuth (T013-T016)
 

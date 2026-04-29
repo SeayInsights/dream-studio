@@ -6,8 +6,24 @@ pack: domains
 
 # Client Work — Full Lifecycle
 
+## Before you start
+Read these files first — every time:
+1. `gotchas.yml` — what NOT to do (mandatory)
+2. `powerbi/pbip-format.md` — for any .pbip / TMDL work
+3. `powerbi/storytelling-framework.yml` — for report design
+4. `powerbi/accessibility-checklist.yml` — before any report delivery
+
+## Imports
+- domains/bi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
+- domains/bi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
+
 ## Trigger
 `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
+
+## Dispatch: bi-developer subagent
+For any Power BI work involving `.pbip` files, TMDL format, semantic model validation, complex DAX debugging, M-query troubleshooting, or Dataverse schema — dispatch a `bi-developer` subagent. Do not handle inline.
+
+Dispatch triggers: editing `.pbip`/`.tmdl` files, DAX error diagnosis, semantic model failures, M-query refresh errors, Dataverse schema changes, RLS implementation.
 
 ## Lifecycle
 1. **Intake** — Read the project tracker (Notion, Jira, etc.), understand the business question, surface assumptions
@@ -18,23 +34,24 @@ pack: domains
 
 ## Power BI
 
-### Data modeling
-- Star schema: fact tables + dimension tables, no wide flat tables
-- Naming: dim_[entity], fact_[process], bridge_[relationship]
-- Date table: always create a dedicated date dimension
-- Avoid bi-directional relationships unless absolutely necessary
+### Data modeling + DAX
+**See:** `domains/bi/dax-patterns.md` — star schema, naming conventions, VAR patterns, time intelligence, RLS, DAX error reference
 
-### DAX
-- Always use VAR for multi-step measures — never nested CALCULATE without reason
-- Pattern: `VAR result = CALCULATE(...) RETURN result`
-- Time intelligence: use DATEADD, SAMEPERIODLASTYEAR with the dedicated date table
-- Row-level security: implement per client requirement, test with "View As"
+### M Query + query folding
+**See:** `domains/bi/m-query-patterns.md` — folding rules, parameter tables, error handling, M-query error reference, semantic model validation
 
-### M Query
-- Fold to source when possible — check query folding indicator
-- Document manual steps that break folding
-- Parameter tables for dynamic data sources
-- Error handling: `try...otherwise` for unreliable sources
+### .pbip format
+**See:** `powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
+
+## Power BI Verify
+
+After any build or change, verify in this order:
+1. **Open in Power BI Desktop** — no red error indicators in the field list or data pane
+2. **Refresh data** — completes without errors; check refresh history
+3. **Measure spot-check** — create a matrix/table visual with key measures; compare to expected values
+4. **RLS** — use "Modeling → View As Role" for each role; confirm data filters correctly
+5. **All pages** — click through every report page; no blank visuals, no "Can't display visual" errors
+6. **Publish to dev workspace** — confirm report loads in browser at app.powerbi.com
 
 ## Power Apps
 

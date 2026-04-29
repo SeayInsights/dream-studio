@@ -1,10 +1,15 @@
----
+﻿---
 name: think
 description: Clarify an idea, explore 2-3 approaches with trade-offs, write a spec, and get approval before any code. Trigger on `think:`, `spec:`, `shape ux:`, `design brief:`, `research:`.
 pack: core
 ---
 
 # Think — Design Before Building
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+If the project has `.planning/GOTCHAS.md` — read it before starting.
+If the project has `.planning/CONSTITUTION.md` — read it before starting.
 
 ## Trigger
 `think:`, `spec:`, `shape ux:`, `design brief:`, `research:`
@@ -30,7 +35,7 @@ Use the spec template to structure your thinking. The template provides:
 - **Assumptions** — Explicit defaults when requirements are unclear
 
 ## Steps
-1. **Clarify** — Restate what's being built and why. Surface assumptions. Ask Director if anything is unclear.
+1. **Clarify** — Restate what's being built and why. Surface assumptions. Ask Director if anything is unclear. If `.planning/CONSTITUTION.md` exists, read it before writing any spec — surface any conflicts with existing architectural decisions.
 2. **Explore** — 2-3 approaches with trade-offs. Pros, cons, complexity, risk for each.
 3. **Recommend** — Pick one approach with rationale.
 4. **Spec** — Use `spec-template.md` to write to `.planning/specs/<topic>/spec.md` with:

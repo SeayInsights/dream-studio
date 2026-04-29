@@ -1,4 +1,4 @@
----
+﻿---
 name: analyze
 description: "Multi-perspective analysis engine — parallel analyst subagents evaluate input from different angles, then synthesis resolves conflicts into a decision memo. Trigger on /analyze or analyze:."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: analyze
 ---
 
 # Analyze — Multi-Perspective Decision Engine
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `/analyze <mode> <input>`, `analyze:`, or invoked by other skills (e.g., career-evaluate)
@@ -177,7 +180,7 @@ Map each analyst's signal to numeric value:
 
 For each analyst, compute weighted score:
 ```
-weighted_score = numeric_signal × confidence × weight
+weighted_score = numeric_signal Ã— confidence Ã— weight
 ```
 
 Compute aggregate:
@@ -232,6 +235,9 @@ This prevents domain-bleed in modes like evaluate-strategy where C-level analyst
 
 ```markdown
 # Analysis: {mode} — {input_summary}
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Recommendation: {aggregate_signal} (confidence: {avg_confidence})
 
@@ -375,6 +381,9 @@ report: {report_path}
 ---
 
 # Lessons: {topic_slug} Repo Audit
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Top Risk Clusters
 {top 3 risk findings from repo-risk analyst, one bullet each}

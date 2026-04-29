@@ -1,4 +1,4 @@
----
+﻿---
 name: comply
 description: "Map findings to SOC 2, NIST CSF, OWASP ASVS controls. Identify coverage gaps. Generate audit-ready evidence. Trigger on comply:, compliance map, audit evidence."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: quality
 ---
 
 # Comply — Compliance Framework Mapping
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `comply:`, `compliance map`, `audit evidence`, `/comply`
@@ -100,7 +103,7 @@ For each finding in the flat list:
 1. Look up `cwe` values in the control lookup. Collect all matching control IDs.
 2. Look up `owasp` values in the control lookup. Collect all matching control IDs (union).
 3. Look up `rule_id` against `mapped_rule_patterns` in each framework definition (glob match).
-4. Produce a row per (finding × control) pair.
+4. Produce a row per (finding Ã— control) pair.
 
 #### Step M2: Write compliance.csv
 

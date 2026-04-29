@@ -1,10 +1,13 @@
----
+﻿---
 name: career-evaluate
 description: "Evaluate job offers, freelance gigs, or compare multiple opportunities. Modes: auto-pipeline, oferta, ofertas, gig, proposal, sow. Trigger via /career-ops routing."
 pack: career
 ---
 
 # Career-Evaluate — Offer Assessment Engine
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 Read `~/.dream-studio/career-ops/config.yml` to get `career_studio_path`.

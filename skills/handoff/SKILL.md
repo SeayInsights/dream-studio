@@ -1,10 +1,13 @@
----
+﻿---
 name: handoff
 description: Session continuity — capture structured state (current task, progress, phase, decisions, active files, next action) to both markdown and JSON. A fresh session resumes from the file alone. Trigger on `handoff:`, at compact threshold, or session end with WIP.
 pack: core
 ---
 
 # Handoff — Session Continuity
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `handoff:`, auto-triggered by `on-context-threshold` at compact threshold, or when session is ending with work in progress

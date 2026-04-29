@@ -1,16 +1,44 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: spec-before-constitution
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never write a spec without reading CONSTITUTION.md first"
+    context: "A spec that contradicts existing architectural decisions creates conflict at build time — the implementer has two sources of truth. If the project has .planning/CONSTITUTION.md, it must be read before writing any spec."
+    fix: "Step 1 (Clarify): if .planning/CONSTITUTION.md exists, read it. Surface any conflicts in the spec before recommending an approach."
 
-# Best PRACTICES
-best_practices: []
+  - id: single-approach-spec
+    severity: high
+    discovered: 2026-04-29
+    title: "Never write a spec with only one approach"
+    context: "A single-approach spec is a decision disguised as exploration. The Director has no real choice to make, and alternative approaches that might be better never surface."
+    fix: "Always explore 2-3 approaches with honest trade-offs. The recommendation is one of them — not the only one."
 
-# Edge CASES handled
-edge_cases: []
+  - id: code-before-approval
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never write or imply code before the spec is explicitly approved"
+    context: "Starting implementation before approval wastes work if the approach changes. The approval gate exists to prevent this."
+    fix: "End every think with: spec document path + 'Waiting for Director approval before plan.' No code, no plan, no implementation hints."
 
-# Known LIMITATIONS
-limitations: []
+best_practices:
+  - id: p1-p2-p3-by-value
+    title: "Prioritize user stories P1/P2/P3 by user value, not implementation complexity"
+    context: "P1 = what the user can't live without. Prioritizing by 'what's easiest to build first' produces an MVP that solves the wrong problem."
 
-# DEPRECATIONS
+  - id: measurable-success-criteria
+    title: "Success criteria must be measurable and binary (pass/fail)"
+    context: "'System feels fast' is not a success criterion. 'P99 latency < 200ms on the golden path' is."
+
+edge_cases:
+  - id: research-mode
+    title: "For research: tasks, output a recommendation + 2-3 sources — not a full spec"
+    context: "Research tasks (market analysis, tech comparison) don't need the full spec format. Output: question answered + recommendation + evidence."
+
+limitations:
+  - id: spec-not-architecture
+    title: "Think produces a spec, not an architecture diagram"
+    context: "For system-level architecture, use the think spec to capture the decision, then link to a separate architecture doc. SKILL.md has a spec template, not an architecture template."
+
 deprecated: []

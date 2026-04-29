@@ -1,10 +1,13 @@
----
+﻿---
 name: design
 description: Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative art (p5.js), theme application to projects, and ad-creative guidance. Trigger on `design art:`, `design poster:`, `canvas:`, `generative art:`, `apply theme:`, `brand:`, `ad creative:`, and related commands.
 pack: domains
 ---
 
 # Design — Visual Design Capability
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `design art:`, `design poster:`, `canvas:`, `design gen:`, `generative art:`, `algorithmic art:`, `apply theme:`, `theme:`, `brand:`, `apply brand:`, `ad creative:`, `ad copy:`, `generate ads:`
@@ -75,7 +78,7 @@ Create `assets/<brand>/brand-spec.md` with logo paths, image paths, color palett
 Quick reference:
 - **Info Architecture:** Pentagram, Stamen, Information Architects, Fathom
 - **Motion:** Locomotive, Active Theory, Field.io, Resn
-- **Experimental:** Experimental Jetset, Müller-Brockmann, Build, Sagmeister
+- **Experimental:** Experimental Jetset, MÃ¼ller-Brockmann, Build, Sagmeister
 - **Computational:** Zach Lieberman, Raven Kwok, Ash Thorp, Territory Studio
 - **Material:** Takram, Kenya Hara, Irma Boom, Neo Shen
 
@@ -97,7 +100,7 @@ When approved: refine typography, spacing, contrast, timing, edges.
 ### Pass 4: Verify + Deliver
 Verify (links, responsive, a11y), export, document handoff.
 
-**Why:** Fix misunderstandings early (100× cheaper than late).
+**Why:** Fix misunderstandings early (100Ã— cheaper than late).
 
 ## Brand tokens
 Define your own brand tokens at the top of the project's design config. Example template:

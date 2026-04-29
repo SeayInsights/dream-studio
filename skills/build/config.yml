@@ -1,6 +1,6 @@
 # Thresholds
 thresholds:
-  max_tasks_before_checkpoint: 3
+  max_tasks_before_checkpoint: 1
   checkpoint_interval_minutes: 30
 
 # Model defaults

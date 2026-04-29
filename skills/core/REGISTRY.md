@@ -75,6 +75,30 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
+### core/repo-map.md
+**Used by:** build
+
+**Patterns:**
+- Compact symbol map generation (find + grep)
+- Pre-inline into subagent context as static prefix
+- Enables structural awareness without full file reads
+
+**Change impact:** 1 skill affected (build)
+
+---
+
+## External Subagent Dependencies
+
+Skills that dispatch non-standard subagent types (outside the Haiku/Sonnet/Opus set):
+
+| Skill | Subagent type | Dispatch trigger |
+|-------|--------------|-----------------|
+| client-work | `bi-developer` | Any `.pbip`/`.tmdl` work, DAX debugging, M-query errors, Dataverse schema changes, RLS implementation |
+
+**Impact:** If the `bi-developer` agent type is unavailable or slow, client-work will fail silently on Power BI deep work. Always verify agent availability before dispatching client-work on complex Power BI tasks.
+
+---
+
 ## Skills by Module Count
 
 | Skill | Modules Used | Core Modules |
@@ -107,6 +131,15 @@ When modifying a core module:
 3. Update module version/changelog if needed
 
 ## Version History
+
+- **2026-04-29**: Enforcement + gap closure
+  - Added "External Subagent Dependencies" section (client-work → bi-developer)
+  - All 37 SKILL.md files received "Before you start" preload block
+  - debug/build got project GOTCHAS.md/CONSTITUTION.md step-0 check
+  - think got CONSTITUTION.md check in Step 1 (Clarify)
+  - harden now scaffolds CLAUDE.md + CONSTITUTION.md + GOTCHAS.md first
+  - Global ~/.claude/CLAUDE.md routing table expanded to cover all 37 skills
+  - sync-cache.ps1 created; all 37 skills synced to plugin cache
 
 - **2026-04-28**: Architecture enhancement Phase 2
   - Added metadata.yml, gotchas.yml, config.yml to all 37 skills

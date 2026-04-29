@@ -1,6 +1,6 @@
 # Required fields
 name: client-work
-version: 1.0.0
+version: 1.1.0
 pack: domains
 created_at: 2026-04-28
 updated_at: 2026-04-28
@@ -8,34 +8,42 @@ updated_at: 2026-04-28
 # Evolution tracking
 origin: imported
 parent_skills: []
-generation: 0
+generation: 1
 created_by: human
 
 # Quality & Health
 status: tested
 health: active
-tested_with_models: [sonnet]
+tested_with_models: [sonnet, bi-developer]
 tested_with_hosts: [claude-code]
 
 # Performance metrics
 quality_metrics:
-  times_used: 0
-  success_rate: 0.0
+  times_used: 3
+  success_rate: 0.7
   avg_token_usage: 0
   avg_execution_time_seconds: 0
-  last_success: null
-  last_failure: null
+  last_success: 2026-04-28
+  last_failure: 2026-04-28
 
 # Failure patterns
-common_failures: []
+common_failures:
+  - "Handling .pbip / TMDL inline instead of dispatching bi-developer"
+  - "Missing powerbi/ reference files — stuffing format content into SKILL.md"
+  - "Not reading gotchas.yml before Power BI work"
 
 # Dependencies
 dependencies:
   core_modules: []
   tools_required: []
   env_vars_required: []
-  files_required: []
+  files_required:
+    - powerbi/pbip-format.md
+    - powerbi/storytelling-framework.yml
+    - powerbi/accessibility-checklist.yml
+    - powerbi/design-hacks.yml
   calls_skills: []
+  calls_subagents: [bi-developer]
 
 # Compatibility
 compatibility:
@@ -45,7 +53,17 @@ compatibility:
   platforms: [windows, macos, linux]
 
 # Discovery
-tags: [analysis]
-category: workflow
-triggers: []
-description: "Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:`."
+tags: [power-bi, power-apps, power-automate, pbip, tmdl, dax, m-query, client-work, bi]
+category: domain
+triggers:
+  - intake:
+  - sow:
+  - proposal:
+  - build report:
+  - review powerbi:
+  - optimize dax:
+  - build flow:
+  - build app:
+  - client handoff:
+  - document:
+description: "Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, .pbip/TMDL format, and flow error handling."
