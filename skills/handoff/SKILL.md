@@ -21,7 +21,7 @@ Capture the minimum context needed for the next session to continue without re-e
 3. **Progress** — What's done, what's in progress, what's not started?
 4. **State** — What's working? What's broken? Any pending Director decisions?
 5. **Files** — Which files are actively being touched?
-6. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`
+6. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`. For `project_root` in the JSON, use the absolute path of the current working directory (the project root, not a subdirectory).
 7. **Auto-draft** — After writing both files, scan the "What's broken / blocked" section for items that have an identified root cause — specifically patterns that are non-obvious and would recur in future sessions. If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
    - `Source: auto-harvest (handoff)`
    - `Confidence: medium` (root cause is identified but not yet validated by outcome)
@@ -66,6 +66,7 @@ Read [plan path] — resume at Phase [N], Task [N.N]
 {
   "topic": "feature-name",
   "date": "YYYY-MM-DD",
+  "project_root": "/absolute/path/to/project",
   "plan_path": "docs/plans/plan-file.md",
   "pipeline_phase": "build",
   "current_task_id": "3.2",

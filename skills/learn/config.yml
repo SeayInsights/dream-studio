@@ -22,6 +22,6 @@ budgets:
 # Harvest configuration
 harvest:
   # Root directory to auto-discover projects. Any subdir with a .sessions/ folder is scanned.
-  projects_root: "C:\\Users\\Dannis Seay\\builds"
+  projects_root: ""
   # One-off paths outside projects_root (e.g. a client repo in a different location)
   extra_paths: []

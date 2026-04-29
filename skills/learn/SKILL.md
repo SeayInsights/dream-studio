@@ -54,6 +54,10 @@ Status: DRAFT
 ### Purpose
 Batch-scan all historical sources for reusable patterns. Surface the draft backlog for promotion. No skill files are modified until Director explicitly approves each change.
 
+### Config check
+Before running any scan, verify `~/.dream-studio/config.json` exists and `harvest.projects_root` is non-empty.
+If missing or empty: stop and output — "Harvest not configured. Run `workflow: run studio-onboard` to set your projects root, then retry."
+
 ### Scan protocol (run in this order)
 
 **Step 1 — Backlog first**
@@ -84,7 +88,8 @@ Tag each extracted pattern with its source project path so domain-specific lesso
 Scan `skills/*/gotchas.yml`. For each candidate pattern from Step 2, grep existing entries. If the insight already exists → log "already captured in skills/[skill]/gotchas.yml" and skip.
 
 **Step 4 — Memory cross-reference**
-Scan `~/.claude/projects/C--Users-Dannis-Seay/memory/feedback_*.md`. Look for feedback entries that have no corresponding gotchas.yml entry and could be generalized into a reusable skill rule.
+Read `claude_memory_path` from `~/.dream-studio/config.json`. Scan `<claude_memory_path>/feedback_*.md` for feedback entries that have no corresponding gotchas.yml entry and could be generalized into a reusable skill rule.
+If `claude_memory_path` is not set in config.json, skip this step and note "memory scan skipped — run `workflow: run studio-onboard` to configure."
 
 ### Anti-bloat rules (enforced — see gotchas.yml)
 - **Dedup first**: never draft a lesson that already exists in any gotchas.yml
