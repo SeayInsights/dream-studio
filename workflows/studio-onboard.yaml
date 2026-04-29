@@ -23,8 +23,66 @@ gates:
 
 nodes:
 
-  # ── PHASE 0: ENVIRONMENT DISCOVERY ───────────────────────────────────────
+  # ── PHASE 0: USER CONFIG SETUP ───────────────────────────────────────────
+  - id: config-setup
+    command: |
+      MISSION: Establish the user's personal config before any environment scan runs.
+
+      This step is idempotent — safe to re-run. It updates changed values and
+      leaves existing correct values untouched.
+
+      ## Step 1 — Read current config
+      Check if `~/.dream-studio/config.json` exists.
+      If it exists, read and display the current values for:
+        - director_name, domain, primary_use (existing onboarding fields)
+        - harvest.projects_root
+        - claude_memory_path
+
+      ## Step 2 — Collect harvest.projects_root
+      If `harvest.projects_root` is already set and non-empty:
+        Show the current value and ask: "Keep this as your projects root? (yes / enter new path)"
+        If yes: keep as-is. If new path: use the new value.
+      If not set or empty:
+        Detect a smart default: use the parent directory of the current working directory.
+        Ask: "Where do you keep your builds/projects? [default: <detected-parent>]"
+        Accept Enter to use the default, or let the user type a different path.
+
+      ## Step 3 — Auto-detect claude_memory_path
+      Compute the Claude memory path using the deterministic encoding rule:
+        - Take the absolute path of the dream-studio repo directory (current working directory)
+        - Replace all path separators (\ and /) with hyphens (-)
+        - Remove colons (:)
+        - Result: the encoded directory name under ~/.claude/projects/
+        - Full path: ~/.claude/projects/<encoded-name>/memory
+
+      Example: C:\Users\Dannis Seay\builds\dream-studio
+           →   C--Users-Dannis-Seay-builds-dream-studio
+           →   ~/.claude/projects/C--Users-Dannis-Seay-builds-dream-studio/memory
+
+      Verify the computed path exists on disk. If it does not exist:
+        - Note "memory path not found at computed location"
+        - Ask the user to confirm or provide the correct path
+        - If user skips: write null for claude_memory_path and note it can be set later
+
+      ## Step 4 — Write to ~/.dream-studio/config.json
+      Merge the new values into the existing config.json (preserve all other existing keys).
+      Write the following keys under a "harvest" object:
+        - harvest.projects_root: <confirmed path>
+        - claude_memory_path: <detected or confirmed path>
+
+      If config.json does not exist: create it with these keys plus empty strings for
+      director_name, domain, primary_use so the structure is complete.
+
+      Show the final written config (harvest section only) and confirm success.
+
+      End with: VERDICT: config-setup complete — projects_root: <path>, memory_path: <path>
+    model: sonnet
+    context: inherit
+    timeout_seconds: 120
+
+  # ── PHASE 0b: ENVIRONMENT DISCOVERY ─────────────────────────────────────
   - id: discovery
+    depends_on: [config-setup]
     gate: post-discovery
     command: |
       MISSION: Full environment inventory — map everything that exists before touching anything.

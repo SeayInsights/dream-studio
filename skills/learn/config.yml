@@ -18,3 +18,11 @@ budgets:
   max_tokens: 100000
   max_time_seconds: 600
   max_context_percent: 80
+
+# Harvest configuration
+harvest:
+  # Root directory to auto-discover projects. Any subdir with a .sessions/ folder is scanned.
+  projects_root: "C:\\Users\\Dannis Seay\\builds"
+  # One-off paths outside projects_root (e.g. a client repo in a different location)
+  extra_paths:
+    - "C:\\Users\\Dannis Seay\\dannis-naomi"

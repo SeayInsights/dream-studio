@@ -1,7 +1,9 @@
 # Draft Lesson: Check that CI steps exist before adding them
 Date: 2026-04-19
 Source: dreamysuite ESLint/CI repair session (handoff-lessons-eslint.md)
-Status: DRAFT
+Status: PROMOTED
+Promoted: 2026-04-29
+Promoted-to: skills/ship/gotchas.yml
 
 ## What happened
 A `npm test` (vitest) step was added to the CI pipeline when zero test files

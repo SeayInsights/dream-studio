@@ -1,16 +1,31 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: downgrade-lint-to-pass-ci
+    severity: critical
+    discovered: 2026-04-19
+    title: "Never lower lint/TS rules from error to warn to get CI green"
+    context: "Downgrading rules hides real violations. CI green does not mean code is healthy. In dreamysuite, downgrading no-explicit-any hid 89 real type-safety violations."
+    fix: "Fix the errors. If a rule must be relaxed, scope it narrowly with an inline comment and create a follow-up task immediately."
 
-# Best PRACTICES
+  - id: push-before-local-validation
+    severity: critical
+    discovered: 2026-04-19
+    title: "Never push CI-touching code without running the full local validation chain first"
+    context: "6 consecutive CI failures in a dreamysuite session were all catchable locally in seconds. Every push-and-wait cycle wastes minutes."
+    fix: "Before any push touching build/lint/deps: run `npm run lint && npx tsc --noEmit && npm run build` (or equivalent). Only push after local validation passes."
+
+  - id: add-ci-step-before-verifying-it-works
+    severity: high
+    discovered: 2026-04-19
+    title: "Never add a CI step without first running that command locally"
+    context: "Adding a vitest step before any test files existed caused every CI run to fail immediately. A step that can never pass is worse than no step."
+    fix: "Run the CI command locally first. If it exits non-zero or finds nothing to run, create the prerequisite first or omit the step entirely."
+
 best_practices: []
 
-# Edge CASES handled
 edge_cases: []
 
-# Known LIMITATIONS
 limitations: []
 
-# DEPRECATIONS
 deprecated: []

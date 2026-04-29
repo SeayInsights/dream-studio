@@ -15,6 +15,15 @@ Read `gotchas.yml` in this directory before every invocation.
 ## Purpose
 Single decision tree replacing individual layout, typography, color, animation, copy, responsive, and edge case skills. One invocation, not fifteen.
 
+## Checklists
+Domain-specific validation checklists live in `checklists/`:
+- `web-design.yml` — 8-dimension UI evaluation (typography, color, layout, spacing, images, shadows, accessibility, visual hierarchy)
+- `fluent-design-compliance.yml` — 4px spacing, semantic colors, WCAG AA, focus indicators
+- `material-design-compliance.yml` — 8dp grid, elevation, typography scale, 48x48dp touch targets
+- `data-viz-accessibility.yml` — color contrast ≥4.5:1, alternatives to color, data table fallback
+
+Load the relevant checklist(s) in Step 2 when fixing dimensions.
+
 ## Flow
 
 ### Step 1: Critique (score current state)

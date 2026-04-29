@@ -30,18 +30,15 @@ def main() -> None:
         return
 
     print(
-        "\n[dream-studio] Welcome! It looks like this is your first session.\n"
-        "To personalise dream-studio, please ask the user the following questions\n"
-        "and write the answers to ~/.dream-studio/config.json:\n\n"
-        "  1. What is your name? (director_name)\n"
-        "  2. What is your primary domain? e.g. Power BI, SaaS, game dev, security (domain)\n"
-        "  3. What will you mainly use dream-studio for? (primary_use)\n\n"
-        "Example config.json additions:\n"
-        '  "director_name": "Dannis",\n'
-        '  "domain": "Power BI",\n'
-        '  "primary_use": "client reporting and security dashboards"\n\n'
-        "Once config.json is updated, this message will not appear again.\n"
-        "You can also run `workflow: run studio-onboard` for a full setup walkthrough.\n",
+        "\n[dream-studio] Welcome! Setup is not complete yet.\n\n"
+        "To finish onboarding correctly:\n\n"
+        "  1. Close this session\n"
+        "  2. Open a NEW Claude Code session\n"
+        "  3. Run: workflow: run studio-onboard\n\n"
+        "The onboarding workflow will configure your Director profile, projects root,\n"
+        "and Claude memory path — then audit your environment for any gaps.\n\n"
+        "Why a new session? The onboarding workflow needs fresh context to run correctly.\n"
+        "This message will not appear again once setup is complete.\n",
         flush=True,
     )
 

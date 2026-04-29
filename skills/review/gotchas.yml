@@ -22,6 +22,13 @@ avoid:
     context: "Reviewing against a description of what was changed is not a code review. It's a trust exercise."
     fix: "Get the actual diff (base..head SHA). If the implementer only provides a description, ask for the diff explicitly."
 
+  - id: consume-unresolved-audit-reports
+    severity: high
+    discovered: 2026-04-19
+    title: "Never consume an audit report that has no resolution tracking"
+    context: "Resuming a review from a report with no [FIXED] annotations leads to re-reviewing already-resolved findings and missing net-new issues."
+    fix: "When given an audit report to act on, check for [FIXED: sha] markers. If missing, either request an annotated version or scan current file state before acting."
+
 best_practices:
   - id: two-stage-order
     title: "Review order: spec compliance → code quality (never reversed)"

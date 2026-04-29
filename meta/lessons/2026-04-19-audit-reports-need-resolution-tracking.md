@@ -1,7 +1,9 @@
 # Draft Lesson: Audit reports need resolution tracking
 Date: 2026-04-19
 Source: dreamysuite ESLint/CI repair session (handoff-lessons-eslint.md)
-Status: DRAFT
+Status: PROMOTED
+Promoted: 2026-04-29
+Promoted-to: skills/secure/gotchas.yml, skills/review/gotchas.yml
 
 ## What happened
 An audit report with no resolution markers caused already-fixed findings to be

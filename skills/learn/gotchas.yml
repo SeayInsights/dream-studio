@@ -1,7 +1,27 @@
 version: 1.0
 
 # Things to AVOID
-avoid: []
+avoid:
+  - id: no-auto-promote
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never write harvest output directly to skills/*/gotchas.yml or memory files"
+    context: "Harvest runs with broad context across sessions and projects. Auto-promoting findings without Director review risks writing incorrect, stale, or domain-specific patterns into core skill files that affect every future session."
+    fix: "All harvest output goes to meta/draft-lessons/ first. Director must explicitly say 'promote this' in conversation before any gotchas.yml or memory file is written."
+
+  - id: dedup-before-draft
+    severity: high
+    discovered: 2026-04-29
+    title: "Always check existing gotchas.yml files for the same insight before drafting a new lesson"
+    context: "Harvest scans multiple sources. Without a dedup check, the same pattern gets drafted multiple times across sessions, creating noise that erodes trust in the draft backlog."
+    fix: "Before writing any draft lesson, grep all skills/*/gotchas.yml files for the key concept. If found in any existing entry, log 'already captured in skills/X/gotchas.yml' and skip. Do not re-draft."
+
+  - id: cap-at-five
+    severity: high
+    discovered: 2026-04-29
+    title: "Never produce more than 5 new draft lessons in a single harvest run"
+    context: "Uncapped harvest output overwhelms the Director review queue. If 15 patterns are found but only 3 get reviewed, the other 12 become stale drafts — the exact problem harvest is meant to solve."
+    fix: "If more than 5 patterns are found in a harvest run, rank by evidence strength (number of distinct sources) and draft the top 5 only. Document the others in the harvest summary as 'deferred — insufficient evidence'."
 
 # Best PRACTICES
 best_practices: []

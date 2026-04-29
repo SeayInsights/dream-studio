@@ -77,3 +77,6 @@ Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) Â· `~/.config/C
 - Window management: single main window with panel routing, not multiple windows
 - System tray: minimal — show/hide toggle + quit
 - Auto-update: Tauri updater plugin for release builds
+
+## Depth Status
+JIT-pending — examples and gotchas will be added from the first real Tauri dashboard build that uses this skill.

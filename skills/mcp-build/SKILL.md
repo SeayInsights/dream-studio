@@ -73,3 +73,6 @@ Never throw unhandled exceptions. Always return structured error responses.
 - Package name: `@<your-scope>/mcp-<domain>` for internal servers (pick a scope that matches your org or GitHub handle)
 - Always include a README with: purpose, setup, available tools, example usage
 - Pin dependency versions — no `^` or `~` ranges for MCP SDK
+
+## Depth Status
+JIT-pending — examples and gotchas will be added from the first real MCP build that uses this skill.
