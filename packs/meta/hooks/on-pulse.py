@@ -213,7 +213,6 @@ def check_stale_agents(plugin_root: Path) -> list[str]:
 
 def generate_pulse() -> tuple[str, dict]:
     date = utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    plugin_root = Path(__file__).resolve().parents[3]
     repo = _github_repo()
 
     if repo:
@@ -228,7 +227,7 @@ def generate_pulse() -> tuple[str, dict]:
     pending_drafts = check_pending_drafts()
     corrections_count, last_correction = check_corrections_growth()
     open_escalations = check_open_escalations()
-    stale_agents = check_stale_agents(plugin_root)
+    stale_agents = check_stale_agents(Path(__file__).resolve().parents[3])
     drafts_overflow = len(pending_drafts) > MAX_PENDING_DRAFTS
 
     issues = len(stale_branches) + len(overdue_ms) + len(open_escalations) + len(stale_agents)
