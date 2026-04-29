@@ -23,6 +23,7 @@ mod = _load("workflow_engine")
 _evaluate = mod._evaluate
 _resolve_ref = mod._resolve_ref
 _coerce = mod._coerce
+_compute_ready_nodes = mod._compute_ready_nodes
 
 
 def _wf(nodes: dict) -> dict:
@@ -107,6 +108,75 @@ class TestEvaluate:
     def test_no_operator_empty_is_false(self):
         wf = _wf({"n": {"output": ""}})
         assert _evaluate("{{n.output}}", wf) is False
+
+
+class TestComputeReadyNodes:
+    def _state(self, **kwargs):
+        return {nid: {"status": status} for nid, status in kwargs.items()}
+
+    def test_no_deps_is_ready(self):
+        yaml_nodes = {"a": {}}
+        state_nodes = {"a": {"status": "pending"}}
+        ready, skipped = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert ready == ["a"]
+        assert skipped == []
+
+    def test_completed_dep_unblocks_node(self):
+        yaml_nodes = {"b": {"depends_on": ["a"]}}
+        state_nodes = {"a": {"status": "completed"}, "b": {"status": "pending"}}
+        ready, skipped = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "b" in ready
+
+    def test_pending_dep_blocks_node(self):
+        yaml_nodes = {"b": {"depends_on": ["a"]}}
+        state_nodes = {"a": {"status": "pending"}, "b": {"status": "pending"}}
+        ready, _ = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "b" not in ready
+
+    def test_non_pending_node_is_skipped(self):
+        yaml_nodes = {"a": {}}
+        state_nodes = {"a": {"status": "completed"}}
+        ready, skipped = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "a" not in ready
+        assert "a" not in skipped
+
+    def test_trigger_rule_all_done(self):
+        yaml_nodes = {"b": {"depends_on": ["a"], "trigger_rule": "all_done"}}
+        state_nodes = {"a": {"status": "failed"}, "b": {"status": "pending"}}
+        ready, _ = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "b" in ready
+
+    def test_trigger_rule_one_success(self):
+        yaml_nodes = {"c": {"depends_on": ["a", "b"], "trigger_rule": "one_success"}}
+        state_nodes = {
+            "a": {"status": "failed"},
+            "b": {"status": "completed"},
+            "c": {"status": "pending"},
+        }
+        ready, _ = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "c" in ready
+
+    def test_condition_false_skips_node(self):
+        yaml_nodes = {"a": {"condition": "{{score.value}} >= 90"}}
+        state_nodes = {"a": {"status": "pending"}}
+        wf = {"nodes": {"score": {"value": "50"}}}
+        ready, skipped = _compute_ready_nodes(yaml_nodes, state_nodes, wf)
+        assert "a" not in ready
+        assert "a" in skipped
+
+    def test_condition_true_allows_node(self):
+        yaml_nodes = {"a": {"condition": "{{score.value}} >= 40"}}
+        state_nodes = {"a": {"status": "pending"}}
+        wf = {"nodes": {"score": {"value": "50"}}}
+        ready, skipped = _compute_ready_nodes(yaml_nodes, state_nodes, wf)
+        assert "a" in ready
+        assert "a" not in skipped
+
+    def test_string_dep_normalised_to_list(self):
+        yaml_nodes = {"b": {"depends_on": "a"}}
+        state_nodes = {"a": {"status": "completed"}, "b": {"status": "pending"}}
+        ready, _ = _compute_ready_nodes(yaml_nodes, state_nodes, {"nodes": {}})
+        assert "b" in ready
 
 
 class TestTraceabilityFileSizeLimit:
