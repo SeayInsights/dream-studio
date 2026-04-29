@@ -1,16 +1,44 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: implicit-dependencies
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never create tasks with implicit file/state dependencies"
+    context: "If task 3 needs the output of task 2 but that dependency isn't captured, the build wave will dispatch them in parallel and task 3 will silently operate on stale state."
+    fix: "For every task, list explicit dependencies (by task number). If two tasks share a file, they must be sequential — same dependency."
 
-# Best PRACTICES
-best_practices: []
+  - id: tasks-sharing-file
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never put two tasks in the same wave if they write to the same file"
+    context: "Parallel subagents writing to the same file create race conditions. The plan is the last safe place to catch this — build won't."
+    fix: "Check every task's file list. If two tasks in the same wave touch the same file, make one depend on the other."
 
-# Edge CASES handled
-edge_cases: []
+  - id: plan-without-spec
+    severity: high
+    discovered: 2026-04-29
+    title: "Never start planning without an approved spec"
+    context: "A plan built on an unapproved or missing spec will be partially or fully invalidated when the spec changes. Planning before approval wastes both the planning and the re-planning."
+    fix: "Verify the spec exists and has explicit Director approval before writing the first task."
 
-# Known LIMITATIONS
-limitations: []
+best_practices:
+  - id: single-acceptance-per-task
+    title: "Every task must have exactly one acceptance criterion"
+    context: "Multiple acceptance criteria per task make it hard to know when the task is done. One criterion = one proof = one commit."
 
-# DEPRECATIONS
+  - id: task-owns-files
+    title: "Each task should own a distinct set of files"
+    context: "File ownership per task enables safe parallel execution and clear blame when something breaks. Shared file ownership is a dependency in disguise."
+
+edge_cases:
+  - id: migration-tasks
+    title: "Database migration tasks must always run before tasks that depend on the new schema"
+    context: "Schema dependencies are easy to miss in dependency analysis. Any task that reads/writes a new column must depend on the migration task."
+
+limitations:
+  - id: plan-cant-predict-drift
+    title: "Plans cannot account for mid-build architectural discoveries"
+    context: "If a task reveals that the architecture needs to change, stop and update the plan. Don't continue executing the old plan against the new architecture."
+
 deprecated: []

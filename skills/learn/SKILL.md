@@ -1,10 +1,13 @@
----
+﻿---
 name: learn
 description: Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. Trigger on `learn:`, `capture lesson:`, or when something notably works or breaks.
 pack: quality
 ---
 
 # Learn — Pattern Capture and Promotion
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `learn:`, `capture lesson:`, or when something notably works or breaks during a build

@@ -1,10 +1,13 @@
----
+﻿---
 name: game-dev
 description: Godot 4 consolidated patterns — 2D/3D player controllers, scene hierarchies, CSG blockouts, Blender→GLB pipeline with QA gates, two-tier automated/manual QA, and game design scaffolding. Trigger on any game build, review, QA, design, or asset-pipeline command.
 pack: domains
 ---
 
 # Game Dev — Godot 4 Consolidated Patterns
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 Any game build, review, QA, design, or asset pipeline command.
@@ -14,7 +17,7 @@ Any game build, review, QA, design, or asset pipeline command.
 - **Autoload singletons** for shared managers (ResourceLedger, SettlementManager, FactionManager, etc.)
 - **game_state.gd** as single source of truth for serialization
 - **godot-mcp** over shell-mcp. **blender-mcp** over shell-mcp.
-- Structure: `scenes/ · scripts/ · assets/ · tests/ · design/`
+- Structure: `scenes/ Â· scripts/ Â· assets/ Â· tests/ Â· design/`
 
 ## Path-Scoped Coding Rules
 

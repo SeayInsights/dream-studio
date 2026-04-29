@@ -1,16 +1,55 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: pbip-inline-edit
+    severity: critical
+    discovered: 2026-04-28
+    title: "Never embed .pbip / TMDL reference content in SKILL.md"
+    context: "Embedded content bloats the skill and makes it hard to update. .pbip format belongs in powerbi/pbip-format.md."
+    fix: "Reference the file: 'See: powerbi/pbip-format.md' — don't copy the content inline."
 
-# Best PRACTICES
-best_practices: []
+  - id: bi-work-inline
+    severity: critical
+    discovered: 2026-04-28
+    title: "Never handle Power BI .pbip, TMDL, or semantic model work inline"
+    context: "bi-developer subagent has Power BI, DAX, M-query, Dataverse expertise. Inline handling produces errors."
+    fix: "Dispatch bi-developer subagent for any .pbip editing, TMDL syntax, DAX diagnosis, or semantic model validation."
 
-# Edge CASES handled
-edge_cases: []
+  - id: report-json-edit
+    severity: critical
+    discovered: 2026-04-28
+    title: "Never manually edit report.json in a .pbip project"
+    context: "Power BI generates and owns report.json. Manual edits corrupt the file."
+    fix: "Only edit .tmdl files, .pbip, .pbir, and .pbism. Let Power BI Desktop own report.json."
 
-# Known LIMITATIONS
-limitations: []
+  - id: tmdl-tabs
+    severity: high
+    discovered: 2026-04-28
+    title: "TMDL indentation must be 2 spaces — never tabs"
+    context: "TMDL is whitespace-sensitive. Tab characters cause silent parse failures when Power BI Desktop opens the file."
+    fix: "Always use 2-space indentation in .tmdl files. Check editor settings before writing TMDL."
 
-# DEPRECATIONS
+best_practices:
+  - id: verify-order
+    title: "Always verify in this order: Desktop open → Refresh → Spot-check → RLS → All pages → Publish"
+    context: "Skipping the order causes false confidence — a model can look fine in Desktop but fail on publish."
+
+  - id: read-skill-files-first
+    title: "Read gotchas.yml and powerbi/ reference files before every Power BI engagement"
+    context: "Reference content lives in powerbi/ subfolder. SKILL.md is behavior only."
+
+edge_cases:
+  - id: tmdl-multiline-measure
+    title: "TMDL multiline measure expressions"
+    context: "Measure expression can be single-line OR multiline. Multiline: expression starts on the NEXT line after the measure name, indented 2 more spaces."
+    example: |
+      measure 'Total Sales' =
+        VAR x = SUM(FactSales[SalesAmount])
+        RETURN x
+
+limitations:
+  - id: no-report-json
+    title: "Cannot generate report.json from scratch"
+    context: "report.json schema is complex and Power BI-version-specific. Always let Power BI Desktop generate it."
+
 deprecated: []

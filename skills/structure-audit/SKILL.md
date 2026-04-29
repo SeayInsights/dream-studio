@@ -10,6 +10,9 @@ conventions and produce a scored, path-specific report with actionable fixes.
 
 ---
 
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+
 ## When to Use
 
 - Starting a new project (audit before writing any code)

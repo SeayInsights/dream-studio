@@ -1,10 +1,13 @@
----
+﻿---
 name: dashboard-dev
 description: Tauri + React desktop dashboard patterns — feed contract (hooks write JSON, dashboard reads), multi-panel architecture, additive schema evolution. Trigger on `dashboard:`, `feed contract:`, or related dashboard-dev commands.
 pack: domains
 ---
 
 # Dashboard Dev — Patterns for Hook-Driven Desktop Dashboards
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `dashboard:`, `feed contract:`, `build dashboard:`, `dashboard feature:`
@@ -15,7 +18,7 @@ pack: domains
 - **Multi-panel** — dashboard, activity feed, session status, build history, health pulse
 
 ## Feed contract
-Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) · `~/.config/Claude/<plugin-name>-feed.json` (Linux) · `~/Library/Application Support/Claude/<plugin-name>-feed.json` (macOS)
+Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) Â· `~/.config/Claude/<plugin-name>-feed.json` (Linux) Â· `~/Library/Application Support/Claude/<plugin-name>-feed.json` (macOS)
 
 ```json
 {

@@ -1,4 +1,4 @@
----
+﻿---
 name: mitigate
 description: "Per-finding fix recommendations with code before/after, verification tests, effort estimates. Trigger on mitigate:, how to fix, generate mitigations."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: quality
 ---
 
 # Mitigate — Per-Finding Fix Recommendations
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `mitigate:`, `how to fix`, `generate mitigations`, `/mitigate`
@@ -119,7 +122,7 @@ For each finding, in batches of up to 10 (process all findings — no cap):
 1. Look up by `ruleId` in template index. If no match, try `cwe`. If no match, try normalized `message.text` (lowercase, hyphens).
 2. If match found: fill the output schema from the template. Substitute `{repo}`, `{file}`, `{line}` from the finding. Set `template_matched` to `{filename}#{rule_pattern}`.
 3. Infer `sprint_label`: CRITICAL/HIGH → `security-blocker`, MEDIUM → `security-backlog`, LOW → `security-nice-to-have`.
-4. Map `compliance_impact` from client `compliance.frameworks` × finding `owasp_category` / `cwe`.
+4. Map `compliance_impact` from client `compliance.frameworks` Ã— finding `owasp_category` / `cwe`.
 
 **Complex match (no template or template flags `requires_context: true`):**
 1. Spawn a sonnet subagent per finding with this prompt:

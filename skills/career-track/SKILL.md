@@ -1,10 +1,13 @@
----
+﻿---
 name: career-track
 description: "Pipeline management, application tracking, pattern analysis, and follow-up cadence. Modes: tracker, pipeline, patterns, followup. Trigger via /career-ops tracker|pipeline|patterns|followup."
 pack: career
 ---
 
 # Career-Track — Pipeline Intelligence
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 Read `~/.dream-studio/career-ops/config.yml` to get `career_studio_path`.

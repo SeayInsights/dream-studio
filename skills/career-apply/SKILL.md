@@ -1,10 +1,13 @@
----
+﻿---
 name: career-apply
 description: "Live application assistant (form fill + answer generation) and batch processing. Modes: apply (single), batch (parallel workers). Trigger via /career-ops apply or /career-ops batch."
 pack: career
 ---
 
 # Career-Apply — Application Engine
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Paths
 Read `~/.dream-studio/career-ops/config.yml` to get `career_studio_path`.

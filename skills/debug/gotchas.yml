@@ -1,16 +1,51 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: shotgun-debug
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never change multiple things between tests"
+    context: "Changing 2+ variables at once makes it impossible to know which change fixed (or broke) the issue. The debug log becomes meaningless."
+    fix: "One hypothesis, one change, one test. If you must try multiple things, document each as a separate hypothesis with its own result."
 
-# Best PRACTICES
-best_practices: []
+  - id: skip-reproduction
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never skip the reproduction step"
+    context: "'I think I know what it is' is the most common cause of wasted debug time. An assumed fix for an unconfirmed bug often fixes the wrong thing."
+    fix: "Always confirm the bug is reproducible with exact steps before forming any hypothesis."
 
-# Edge CASES handled
-edge_cases: []
+  - id: skip-gotchas-check
+    severity: high
+    discovered: 2026-04-29
+    title: "Never form hypotheses before reading project GOTCHAS.md"
+    context: "If the bug is a known pattern (e.g., double-transform, flow/absolute mismatch in DreamySuite), the GOTCHAS.md will short-circuit the entire debug loop."
+    fix: "Step 0: check for .planning/GOTCHAS.md and read it. Known failure patterns are free hypotheses."
 
-# Known LIMITATIONS
-limitations: []
+  - id: repeat-failed-hypothesis
+    severity: high
+    discovered: 2026-04-29
+    title: "Never retry a hypothesis that was already ruled out in a previous session"
+    context: "Without a debug log, each session starts from scratch. Repeating ruled-out hypotheses wastes time and erodes trust."
+    fix: "Before forming hypotheses, search conversation for previous debug attempts on this symptom."
 
-# DEPRECATIONS
+best_practices:
+  - id: five-hypothesis-escalate
+    title: "If 3+ hypotheses fail, re-read the error from scratch"
+    context: "3 failures usually means the initial framing was wrong, not that more variations of the same frame will work."
+
+  - id: document-ruled-out
+    title: "Record ruled-out hypotheses even when they seem obvious"
+    context: "What seems obvious now isn't obvious in the next session. The debug log should prevent repeating any test, not just non-obvious ones."
+
+edge_cases:
+  - id: flaky-reproduction
+    title: "Intermittent bugs: reproduce 3 times before forming hypotheses"
+    context: "A bug that only reproduces 1 in 3 runs is likely timing/state-dependent. Single-run reproduction leads to false hypotheses."
+
+limitations:
+  - id: no-prod-debugging
+    title: "Debug skill is for local/test environments only"
+    context: "Debugging in production requires different tooling (logs, APM, feature flags). This skill assumes you can reproduce locally."
+
 deprecated: []

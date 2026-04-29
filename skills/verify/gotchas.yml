@@ -1,16 +1,44 @@
 version: 1.0
 
-# Things to AVOID
-avoid: []
+avoid:
+  - id: tests-pass-means-works
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never equate 'tests pass' with 'feature works'"
+    context: "Tests verify that code behaves as written. They don't verify that the feature works for a real user on the golden path. Functional bugs ship through green test suites constantly."
+    fix: "Run the actual feature in the actual environment. Click through it. Verify the user story SC-001 passes — not just the unit test."
 
-# Best PRACTICES
-best_practices: []
+  - id: agent-report-as-evidence
+    severity: critical
+    discovered: 2026-04-29
+    title: "Never accept an agent's self-report as verification evidence"
+    context: "'I ran the tests and they passed' from a subagent is not evidence. Agents can misread output, hallucinate results, or test the wrong path."
+    fix: "Run the verification yourself or get concrete artifacts (screenshot, log output, HTTP response). Evidence must be observable."
 
-# Edge CASES handled
-edge_cases: []
+  - id: skip-edge-cases
+    severity: high
+    discovered: 2026-04-29
+    title: "Never verify only the golden path"
+    context: "Specs define edge cases for a reason. A feature that works on happy path but fails on empty state, error state, or concurrent use is not verified."
+    fix: "For every feature, test: golden path, empty/null inputs, error state, and at least one edge case from the spec."
 
-# Known LIMITATIONS
-limitations: []
+best_practices:
+  - id: verify-by-sc
+    title: "Map each success criterion (SC-001, SC-002) to a concrete test run"
+    context: "If the spec has SCs, verify is just checking each one. If it doesn't, write the acceptance criteria before starting verify."
 
-# DEPRECATIONS
+  - id: regression-after-fix
+    title: "After any fix, re-verify the features adjacent to the fix"
+    context: "Bug fixes frequently break adjacent behavior. The fix area is not the only thing that needs verification."
+
+edge_cases:
+  - id: ui-verify-requires-browser
+    title: "UI/frontend verify requires real browser — type checking is insufficient"
+    context: "TypeScript compiles, Tailwind builds, but layout, interactions, and visual regressions are only visible in a real browser."
+
+limitations:
+  - id: cannot-verify-external-services
+    title: "Verify skill cannot test third-party integrations in most environments"
+    context: "Stripe webhooks, email delivery, OAuth flows — these require real credentials and sandbox environments that may not be available."
+
 deprecated: []

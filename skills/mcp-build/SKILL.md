@@ -1,10 +1,13 @@
----
+﻿---
 name: mcp-build
 description: 4-phase MCP server development — research, implement (Zod schemas, structured errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. Trigger on `build mcp:`, `new mcp:`, `extend mcp:`.
 pack: domains
 ---
 
 # MCP Build — Server Development
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `build mcp:`, `new mcp:`, `extend mcp:`

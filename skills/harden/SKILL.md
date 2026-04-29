@@ -1,10 +1,24 @@
----
+﻿---
 name: harden
 description: Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml, UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit, etc.) and fills gaps from templates. Trigger on `/harden`, `/harden audit`, `/harden fix tier1`, `/harden fix #N`.
 pack: quality
 ---
 
 # Harden — Project Standards Audit & Fix
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+
+## Project memory system (always first)
+Before any other hardening work, check for these three files:
+- `CLAUDE.md` in the project root
+- `.planning/CONSTITUTION.md`
+- `.planning/GOTCHAS.md`
+
+If any are missing, create them now. These are the project memory system — without them, Claude has no persistent context between sessions. Use these stubs:
+- `CLAUDE.md`: `# READ FIRST\n[project name] — [one line description]\n\nSee .planning/CONSTITUTION.md for architecture decisions.`
+- `.planning/CONSTITUTION.md`: `# Constitution\n\n## SSOT Map\n[Fill in: key files and what they own]\n\n## Key Decisions\n[Fill in: architectural choices and why]\n\n## Forbidden Patterns\n[Fill in: anti-patterns to avoid]`
+- `.planning/GOTCHAS.md`: `# Gotchas\n\n[Empty — update when something breaks]`
 
 ## Trigger
 `/harden` — runs full audit by default

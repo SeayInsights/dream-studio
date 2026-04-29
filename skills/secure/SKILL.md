@@ -1,4 +1,4 @@
----
+﻿---
 name: secure
 description: "Security review — parallel OWASP+STRIDE analyst subagents produce severity-tagged findings with specific fixes. Trigger on secure:, /secure, check security, review architecture, or PRs touching auth/payments/user data/APIs."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: quality
 ---
 
 # Secure — Parallel Security Review
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `secure:`, `/secure`, `check security`, `review architecture`, or on any PR touching auth, payments, user data, API endpoints

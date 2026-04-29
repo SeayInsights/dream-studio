@@ -1,7 +1,7 @@
 # Dream-Studio Skill Catalog
 
-**Generated:** 2026-04-27 21:01
-**Total Skills:** 37
+**Generated:** 2026-04-29 07:03
+**Total Skills:** 38
 
 ---
 
@@ -32,9 +32,13 @@
 - **career-track** (v1.0.0) — tested, active ✅
   Pipeline management, application tracking, pattern analysis, and follow-up cadence. Modes: tracker, pipeline, patterns, followup. Trigger via /career-ops tracker|pipeline|patterns|followup.
 
-### Core Pack (8 skills)
+### Core Pack (9 skills)
 - **build** (v1.0.0) — tested, active ✅
   Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`.
+
+- **explain** (v1.0.0) — draft, active ✅
+  Trace how X works — from entry point through layers to output, at the depth the Director needs.
+  Triggers: "explain:", "how does", "walk me through"
 
 - **handoff** (v1.0.0) — tested, active ✅
   Session continuity — capture structured state (current task, progress, phase, decisions, active files, next action) to both markdown and JSON. A fresh session resumes from the file alone. Trigger on `handoff:`, at compact threshold, or session end with WIP.
@@ -58,8 +62,9 @@
   Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. Trigger on `verify:`, `prove it:`, or after `review` passes.
 
 ### Domains Pack (6 skills)
-- **client-work** (v1.0.0) — tested, active ✅
-  Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:`.
+- **client-work** (v1.1.0) — tested, active ✅
+  Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, .pbip/TMDL format, and flow error handling.
+  Success: 70% (3 uses) | Tokens: 0 avg
 
 - **dashboard-dev** (v1.0.0) — tested, active ✅
   Tauri + React desktop dashboard patterns — feed contract (hooks write JSON, dashboard reads), multi-panel architecture, additive schema evolution. Trigger on `dashboard:`, `feed contract:`, or related dashboard-dev commands.
@@ -128,7 +133,14 @@
 ---
 
 ## Quality Metrics
-*No usage data yet*
+### Top 10 by Success Rate
+1. **client-work** — 70% (3 uses) ⚠️
+
+### Top 10 by Token Usage (avg)
+1. **client-work** — 0 tokens (light)
+
+### Top 10 by Usage Count
+1. **client-work** — 3 uses
 
 
 ---
@@ -150,7 +162,7 @@
 
 ## Health Dashboard
 ### By Health Status
-- Active: 37 skills ✅
+- Active: 38 skills ✅
 - Maintenance: 0 skills ⚠️
 - Deprecated: 0 skills ❌
 

@@ -1,10 +1,13 @@
----
+﻿---
 name: ship
 description: Pre-deploy gate — audit (a11y, perf, technical), harden (error/empty/loading states), optimize (bundle/render/animation/images), test (Playwright + regression). Any FAIL blocks deploy. Trigger on `ship:`, `pre-deploy:`, `deploy:`, or before any deployment command.
 pack: core
 ---
 
 # Ship — Pre-Deploy Gate
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
 - core/git.md — check for uncommitted changes, pre-push validation
