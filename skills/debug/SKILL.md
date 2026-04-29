@@ -1,4 +1,4 @@
-﻿---
+---
 name: debug
 description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure.
 pack: quality
@@ -19,6 +19,12 @@ Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgu
 
 ## Steps
 0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
+0.5. **Triage** — Before reproducing, classify the issue in one line. Log as: `Triage: [severity] | [type] | [scope]`
+   - **Severity:** P0 (production down / data loss) | P1 (major feature broken) | P2 (degraded / workaround exists) | P3 (minor / cosmetic)
+   - **Type:** logic error | UI rendering | performance | data | integration | environment
+   - **Scope:** single file | cross-module | infrastructure | external dependency
+   
+   Triage takes 30 seconds and prevents over-investing in P3 issues or under-responding to P0s.
 1. **Reproduce** — Confirm the bug exists. Get exact steps, error messages, stack traces.
 1.5. **Capture** — Encode the reproduction as a failing artifact:
    - **If unit-testable:** Write a minimal failing test that encodes the exact reproduction steps. This test becomes the fix's acceptance criterion and is used by `verify` as the red-green check.
@@ -52,6 +58,25 @@ Track in conversation to prevent retrying failed approaches:
 ### Verified
 [evidence the fix works + no regressions]
 ```
+
+## React / Next.js projects
+
+When the project uses React or Next.js and the app is running, use `next-browser` before forming hypotheses:
+
+```bash
+# Pull live React errors (replaces reading console logs manually)
+next-browser errors
+
+# Inspect component tree at the failing point
+next-browser snapshot
+
+# Trace failed network requests
+next-browser network
+```
+
+These three commands replace manual log-reading for React bugs. Run them as part of Step 1 (Reproduce) to get structured, machine-readable state instead of raw logs.
+
+**Requirement:** `next-browser` daemon must be running. Start with `next-browser start` if not already active.
 
 ## Rules
 - Never shotgun debug (changing multiple things at once)
