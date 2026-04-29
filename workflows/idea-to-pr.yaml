@@ -122,9 +122,25 @@ nodes:
       backoff_seconds: 15
     input: "{{synthesize.output}}"
 
+  - id: triage-security
+    skill: secure
+    depends_on: [synthesize]
+    condition: "{{synthesize.security_signal}} == blocked or {{synthesize.security_signal}} == strong_reject"
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: mitigate-findings
+    skill: mitigate
+    depends_on: [triage-security]
+    condition: "{{synthesize.security_signal}} == blocked or {{synthesize.security_signal}} == strong_reject"
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
   - id: verify
     skill: verify
-    depends_on: [synthesize, fix-findings]
+    depends_on: [synthesize, fix-findings, mitigate-findings]
     trigger_rule: all_done
     gate: evidence-required
     model: sonnet
