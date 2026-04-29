@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import paths, state  # noqa: E402
+from lib.memory_search import MemorySearch  # noqa: E402
 from lib.time_utils import utcnow  # noqa: E402
 
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
@@ -244,6 +245,28 @@ def collect_memory_stats() -> dict:
         return {}
 
 
+def _run_memory_maintenance() -> None:
+    """Archive stale memories, prune MEMORY.md, and enforce the active-count cap."""
+    try:
+        mem_dir = paths.memory_dir()
+        if not mem_dir.exists():
+            return
+        ms = MemorySearch(mem_dir)
+        archived_count = ms.archive_stale(days=90)
+        if archived_count > 0:
+            archive_dir = mem_dir / "archive"
+            archived_paths = list(archive_dir.glob("*.md")) if archive_dir.exists() else []
+            ms.prune_memory_md(archived_paths)
+            print(
+                f"[on-pulse] Archived {archived_count} stale memory file(s) → memory/archive/",
+                flush=True,
+            )
+        ms.enforce_limit(max_active=90)
+        ms.close()
+    except Exception:
+        pass
+
+
 def generate_pulse() -> tuple[str, dict]:
     date = utcnow().strftime("%Y-%m-%d %H:%M UTC")
     repo = _github_repo()
@@ -257,6 +280,7 @@ def generate_pulse() -> tuple[str, dict]:
         stale_branches, overdue_ms, open_prs, ci_status = [], [], [], "no github_repo configured"
 
     archived = auto_archive_stale_drafts()
+    _run_memory_maintenance()
     pending_drafts = check_pending_drafts()
     corrections_count, last_correction = check_corrections_growth()
     open_escalations = check_open_escalations()
