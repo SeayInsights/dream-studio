@@ -4,9 +4,9 @@
 [![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-73%25-green.svg)](pyproject.toml)
+[![Coverage](https://img.shields.io/badge/coverage-74%25-green.svg)](pyproject.toml)
 
-An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**, automated hooks, agent personas, and a context-aware status bar — portable across every project.
+An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**, automated hooks, semantic memory retrieval, CI gate, and a context-aware status bar — portable across every project.
 
 ---
 
@@ -66,38 +66,26 @@ py scripts/benchmark_tokens.py --run-label <your-session-label> --publish
 
 ## Installation
 
-**From GitHub (recommended — works now):**
-
 ```bash
 claude plugin install github:SeayInsights/dream-studio
 ```
 
-**From source (local clone):**
+> **Note:** dream-studio is a community plugin — not affiliated with or endorsed by Anthropic.
+
+That's it. Open any Claude Code session after installing — the `on-first-run` hook fires automatically and walks you through the onboarding workflow (`Director profile`, `projects root`, `memory path`).
+
+**First-time setup** (run once to merge hooks into your global settings and create your memory directory):
 
 ```bash
-git clone https://github.com/SeayInsights/dream-studio.git
-claude plugin install file://path/to/dream-studio
+make setup          # any OS
+# or: bash install.sh       # Mac/Linux
+# or: .\install.ps1         # Windows
 ```
 
-> **Note:** dream-studio is a community plugin — install via GitHub (above). It is not affiliated with or endorsed by Anthropic.
-
-**After installing, merge the project hooks into your global settings:**
-
-The `.claude/settings.json` in this repo contains PreToolUse guard hooks (blocks direct pushes to main, force-push, and wrangler deploy). Merge these into your global `~/.claude/settings.json` so they apply across all your projects:
-
-```bash
-# View the hooks to add:
-cat path/to/dream-studio/.claude/settings.json
-# Then manually merge the "hooks" block into ~/.claude/settings.json
-```
-
-Skill usage metrics are collected automatically via `hooks/hooks.json` at the plugin level — no extra setup needed.
-
-**Install dev dependencies (for contributing):**
+**For contributors:**
 
 ```bash
 make install-dev
-# or: pip install -r requirements-dev.txt
 ```
 
 ---
