@@ -1,7 +1,7 @@
 # dream-studio
 
 [![CI](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-green.svg)](pyproject.toml)
@@ -66,8 +66,7 @@ git clone https://github.com/SeayInsights/dream-studio.git
 claude plugin install file://path/to/dream-studio
 ```
 
-> **Note:** dream-studio is not yet listed in the official Claude Code plugin registry.
-> Use the GitHub install command above. Registry install (`claude plugin install dream-studio`) will not work until the plugin is submitted to Anthropic.
+> **Note:** dream-studio is a community plugin — install via GitHub (above). It is not affiliated with or endorsed by Anthropic.
 
 **After installing, merge the project hooks into your global settings:**
 
@@ -87,6 +86,36 @@ Skill usage metrics are collected automatically via `hooks/hooks.json` at the pl
 make install-dev
 # or: pip install -r requirements-dev.txt
 ```
+
+---
+
+## Bundled Specialists
+
+dream-studio ships with 9 synthesized specialist agents in the `agents/` directory. Copy them to Claude Code's agent directory and they auto-invoke on matching tasks:
+
+**Unix / macOS**
+```bash
+cp agents/* ~/.claude/agents/
+```
+
+**Windows (PowerShell)**
+```powershell
+Copy-Item agents\* $HOME\.claude\agents\
+```
+
+| Agent | Domain | Keywords |
+|---|---|---|
+| `kubernetes-expert` | Infrastructure | k8s, pod, helm, kubectl, cluster |
+| `devops-engineer` | Infrastructure | GitHub Actions, CI/CD, OIDC, Docker |
+| `terraform-architect` | Infrastructure | Terraform, IaC, state, modules |
+| `mobile-developer` | Mobile | iOS, Android, React Native, Flutter |
+| `data-engineer` | Data | dbt, Snowflake, BigQuery, Airflow |
+| `research-analyst` | Research | market research, competitive analysis |
+| `idea-validator` | Research | idea validation, go/no-go, fatal flaw |
+| `accessibility-expert` | Quality | WCAG, ARIA, screen reader, a11y |
+| `technical-writer` | Quality | docs, Diataxis, API reference |
+
+Stale agents are flagged by the on-pulse hook. Re-synthesize with `workflow: domain-refresh`.
 
 ---
 

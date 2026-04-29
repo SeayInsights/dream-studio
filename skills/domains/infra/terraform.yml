@@ -1,0 +1,310 @@
+# Terraform Infrastructure Patterns
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: remote-state-with-locking
+    title: Remote state with DynamoDB locking (AWS) or GCS locking (GCP)
+    description: >
+      Never use local state in a team environment. Remote state enables collaboration
+      and state locking prevents concurrent applies from corrupting the state file.
+      S3 + DynamoDB is the canonical AWS backend. State must be versioned so
+      corrupted state can be rolled back.
+    example: |
+      # backend.tf
+      terraform {
+        backend "s3" {
+          bucket         = "my-terraform-state-prod"
+          key            = "services/api/terraform.tfstate"
+          region         = "us-east-1"
+          encrypt        = true
+          dynamodb_table = "terraform-state-lock"
+        }
+        required_version = ">= 1.5.0"
+        required_providers {
+          aws = {
+            source  = "hashicorp/aws"
+            version = "~> 5.0"
+          }
+        }
+      }
+
+  - id: workspace-strategy
+    title: Workspaces for environment isolation, not feature branches
+    description: >
+      Terraform workspaces isolate state per environment (dev/staging/prod) within
+      the same configuration. Use workspaces when infra is structurally identical
+      across environments and only variable values differ. For fundamentally different
+      infra (e.g., prod has multi-AZ, dev does not), use separate root modules instead.
+    example: |
+      # Create and switch workspace
+      terraform workspace new staging
+      terraform workspace select staging
+
+      # Reference workspace in config
+      locals {
+        env = terraform.workspace
+        instance_type = {
+          dev     = "t3.micro"
+          staging = "t3.medium"
+          prod    = "m5.large"
+        }[local.env]
+      }
+
+  - id: module-versioning
+    title: Pin module versions with semantic version constraints
+    description: >
+      Unpinned modules (source = "terraform-aws-modules/vpc/aws") pull the latest
+      version on every init, causing non-deterministic plans. Pin with a version
+      constraint. Use pessimistic constraint (~>) to allow patch updates but not
+      breaking major/minor bumps.
+    example: |
+      module "vpc" {
+        source  = "terraform-aws-modules/vpc/aws"
+        version = "~> 5.1"
+
+        name = "production-vpc"
+        cidr = "10.0.0.0/16"
+        azs  = ["us-east-1a", "us-east-1b", "us-east-1c"]
+        private_subnets = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+        public_subnets  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+        enable_nat_gateway = true
+      }
+
+  - id: for-each-over-count
+    title: Prefer for_each over count for resource collections
+    description: >
+      count creates resources indexed by integer (aws_instance.server[0]).
+      Removing an item from the middle shifts all subsequent indices, causing
+      Terraform to destroy and recreate resources that did not change. for_each
+      keys resources by a stable string key so removals are surgical.
+    example: |
+      # Good -- removing "staging" only destroys that one bucket
+      variable "environments" {
+        default = ["dev", "staging", "prod"]
+      }
+
+      resource "aws_s3_bucket" "env_buckets" {
+        for_each = toset(var.environments)
+        bucket   = "myapp-${each.key}-artifacts"
+      }
+
+      # Bad -- removing "staging" shifts prod from index 2 to 1, triggering destroy/recreate
+      # resource "aws_s3_bucket" "env_buckets" {
+      #   count  = length(var.environments)
+      #   bucket = "myapp-${var.environments[count.index]}-artifacts"
+      # }
+
+  - id: data-sources-for-existing-resources
+    title: Use data sources to reference resources not owned by this module
+    description: >
+      Never hardcode ARNs or IDs for resources owned by another Terraform root module
+      or by hand. Use data sources so the reference stays live and plan output shows
+      the actual resolved value. Remote state outputs are the preferred alternative
+      for cross-module references.
+    example: |
+      # Reference a VPC created in another root module
+      data "terraform_remote_state" "networking" {
+        backend = "s3"
+        config = {
+          bucket = "my-terraform-state-prod"
+          key    = "networking/terraform.tfstate"
+          region = "us-east-1"
+        }
+      }
+
+      resource "aws_security_group" "app" {
+        vpc_id = data.terraform_remote_state.networking.outputs.vpc_id
+        # ...
+      }
+
+  - id: import-blocks-tf-1-5
+    title: Use import blocks (TF 1.5+) for bringing existing resources under management
+    description: >
+      The 'terraform import' CLI command requires running import before plan/apply and
+      does not generate config. TF 1.5+ import blocks let you declare the import
+      alongside config so it runs as part of apply. TF 1.6+ can also auto-generate
+      config with 'terraform plan -generate-config-out=generated.tf'.
+    example: |
+      # import.tf (TF 1.5+)
+      import {
+        to = aws_s3_bucket.legacy_bucket
+        id = "my-existing-bucket-name"
+      }
+
+      resource "aws_s3_bucket" "legacy_bucket" {
+        bucket = "my-existing-bucket-name"
+        # fill in attributes matching current state
+      }
+
+      # Then run: terraform plan
+      # Terraform shows import + diff without separate import command
+
+  - id: provider-version-pinning
+    title: Pin provider versions in required_providers
+    description: >
+      Provider minor/patch releases frequently introduce behavioral changes or new
+      required attributes. Pin with ~> to allow patch updates but block breaking
+      minor bumps. Run 'terraform init -upgrade' deliberately when ready to upgrade,
+      and always review the provider changelog.
+    example: |
+      terraform {
+        required_providers {
+          aws = {
+            source  = "hashicorp/aws"
+            version = "~> 5.31"
+          }
+          kubernetes = {
+            source  = "hashicorp/kubernetes"
+            version = "~> 2.25"
+          }
+          random = {
+            source  = "hashicorp/random"
+            version = "~> 3.6"
+          }
+        }
+      }
+
+  - id: depends-on-sparingly
+    title: Use depends_on only for hidden dependencies
+    description: >
+      Terraform infers dependencies from resource attribute references. depends_on
+      creates an opaque dependency that Terraform cannot optimize away -- it forces
+      sequential apply even when parallel would be safe. Use depends_on only when
+      a resource has a side effect not captured in its attributes (e.g., an IAM
+      policy must exist before an assume-role can succeed, but the ARN is not
+      referenced in the resource block).
+    example: |
+      # Only needed when IAM propagation must complete before Lambda invoke
+      resource "aws_lambda_function" "processor" {
+        # ...
+        depends_on = [aws_iam_role_policy_attachment.lambda_policy]
+      }
+
+anti_patterns:
+  - id: local-state-in-team
+    title: Committing terraform.tfstate to version control
+    description: >
+      State files contain plaintext sensitive values (passwords, keys, certificates).
+      Concurrent applies on local state corrupt the file -- the last writer wins
+      and silently drops the other's changes. Remote state with locking is mandatory
+      for any team usage.
+
+  - id: hardcoded-credentials-in-provider
+    title: Hardcoding cloud credentials in provider blocks
+    description: >
+      access_key and secret_key in the AWS provider block (or equivalent) end up in
+      the Terraform config, .terraform directory, and potentially plan files. Use
+      environment variables (AWS_ACCESS_KEY_ID), instance profiles, OIDC federation,
+      or workload identity instead. Provider blocks must have zero credential fields.
+
+  - id: count-for-mutable-sets
+    title: Using count for sets of resources that change over time
+    description: >
+      When items are added or removed from the middle of a count-indexed list, all
+      higher-indexed resources get a new index. Terraform interprets this as
+      destroy-old-index + create-new-index, not a move. A list reorder destroys and
+      recreates production databases. Use for_each with a stable string key.
+
+  - id: no-version-constraints
+    title: Omitting Terraform and provider version constraints
+    description: >
+      Without version constraints, 'terraform init' installs whatever is latest.
+      Provider 5.x may not be compatible with configs written for 4.x. A new team
+      member running init after a major provider release gets a different provider
+      than CI, causing "inconsistent dependency lock file" errors and potential
+      plan drift.
+
+  - id: single-root-module-all-environments
+    title: Managing all environments from one root module with variables
+    description: >
+      Sharing one state file across dev/staging/prod means a botched plan for dev
+      can destroy prod resources. Separate root modules (or workspaces) per
+      environment provide blast-radius isolation. A mistake in dev state never
+      touches prod state.
+
+  - id: ignore-plan-output
+    title: Running terraform apply without reviewing the plan
+    description: >
+      'terraform apply' without '-plan=<planfile>' re-runs planning. If infra changed
+      between plan and apply, you apply a different plan than reviewed. Always save
+      the plan: 'terraform plan -out=tfplan' then 'terraform apply tfplan'. In CI,
+      treat the plan file as an artifact and fail the pipeline if apply does not
+      use it.
+
+gotchas:
+  - id: state-corruption-on-interrupt
+    title: Interrupted apply can leave state in partial/corrupt state
+    description: >
+      If 'terraform apply' is killed mid-run (Ctrl+C, CI timeout, network drop),
+      some resources may be created but not recorded in state, or state may reference
+      resources that failed to create. The next plan will show unexpected changes.
+      DynamoDB locking releases on clean exit but NOT on hard kill -- a stale lock
+      may block the next apply.
+    fix: >
+      Check for stale lock: terraform force-unlock <LOCK_ID> (get ID from error msg).
+      Reconcile state: terraform plan to see drift, then terraform import or
+      terraform state rm to repair. Never edit .tfstate directly.
+
+  - id: terraform-destroy-ordering
+    title: terraform destroy reverses dependency order but some resources resist
+    description: >
+      Destroy proceeds in reverse dependency order, but resources with deletion
+      protection (RDS, S3 with objects, ECR with images) will fail mid-destroy,
+      leaving the state partially destroyed. Non-empty S3 buckets block bucket
+      deletion. The apply half-succeeds, leaving orphaned resources.
+    fix: >
+      For S3: set force_destroy = true in resource config before running destroy.
+      For RDS: set deletion_protection = false and apply before destroy.
+      Review destroy plan carefully before confirming.
+
+  - id: tainted-resources
+    title: Tainted resources are destroyed and recreated on next apply
+    description: >
+      A resource is marked tainted when apply partially fails during creation.
+      The next plan shows it as destroy+create, not update. Tainted production
+      databases will be destroyed. Review tainted resources: 'terraform state list'
+      and 'terraform show' before any apply following a failed run.
+    fix: >
+      terraform state list | grep tainted  (look for -tainted suffix)
+      terraform untaint <resource_address>  (TF 1.x uses 'terraform taint' to add,
+      remove with 'terraform untaint')
+
+  - id: sensitive-values-in-state
+    title: Sensitive outputs and resource attributes are stored in plaintext state
+    description: >
+      Even when a variable or output is marked sensitive = true, its value is stored
+      in plaintext in the state file. S3 backend encryption (encrypt = true) encrypts
+      at rest, but the state is decrypted by anyone with s3:GetObject on the bucket.
+      Database passwords, API keys, and certificates in state must be protected by
+      strict IAM policies on the state bucket.
+    fix: >
+      Minimize secrets in state: use data sources to read secrets at apply time from
+      Secrets Manager rather than storing them as resource attributes. Restrict
+      state bucket access to CI role and operators only.
+
+  - id: refresh-vs-plan-divergence
+    title: terraform plan output depends on whether refresh is included
+    description: >
+      By default, 'terraform plan' runs a refresh (queries cloud APIs for current
+      state) before computing the diff. 'terraform plan -refresh=false' skips refresh
+      and diffs against cached state only. In CI, -refresh=false is faster but misses
+      out-of-band changes. The plan file from -refresh=false may be stale by apply
+      time.
+    fix: >
+      Always run with refresh enabled in CI unless you explicitly want speed over
+      accuracy. Use terraform apply -refresh-only periodically to sync state without
+      making changes.
+
+  - id: provider-upgrade-breaking-changes
+    title: Provider major version upgrades frequently require config rewrites
+    description: >
+      The AWS provider v4 -> v5 removed the aws_s3_bucket all-in-one resource in
+      favor of separate sub-resources (aws_s3_bucket_versioning, etc.). Upgrading
+      the provider version constraint without reading the CHANGELOG causes 'An
+      argument named X is not expected here' errors and requires config migration
+      before plan will succeed.
+    fix: >
+      Before bumping provider version in required_providers: read provider CHANGELOG
+      for the version range being crossed. Run: terraform init -upgrade, then
+      terraform plan to surface breaking changes. Address each one before applying.

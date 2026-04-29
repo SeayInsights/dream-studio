@@ -1,0 +1,279 @@
+# Accessibility Domain
+# Source: synthesized from WCAG 2.2, ARIA Authoring Practices Guide, and production repositories
+version: 1
+
+patterns:
+  - id: semantic-html-first
+    title: Semantic HTML over ARIA
+    description: >
+      Use native HTML elements before reaching for ARIA. Buttons, links, headings,
+      lists, and form controls carry implicit roles and behaviors that browsers and
+      assistive technologies understand natively. ARIA is a fallback for when no
+      native element fits, not a first choice.
+    example: |
+      <!-- Good: native button carries role, keyboard, and focus behavior -->
+      <button type="button" onclick="openMenu()">Open Menu</button>
+
+      <!-- Bad: custom element needs ARIA role + tabindex + keyboard handler -->
+      <div role="button" tabindex="0" onclick="openMenu()" onkeydown="...">Open Menu</div>
+
+  - id: focus-management-spa
+    title: Focus management in SPAs
+    description: >
+      When a route change or panel open/close occurs, move focus programmatically so
+      screen reader users are not stranded at the old location. For modals, trap focus
+      inside the dialog while it is open. Restore focus to the trigger element when the
+      modal closes.
+    example: |
+      // On route change -- move focus to the new page heading
+      useEffect(() => {
+        document.getElementById('page-heading')?.focus();
+      }, [location.pathname]);
+
+      // On modal close -- restore focus to the element that opened it
+      function closeModal() {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+
+  - id: keyboard-nav-visual-order
+    title: Keyboard navigation matches visual order
+    description: >
+      The DOM order of focusable elements should match the visual reading order.
+      Users navigating by Tab expect to move left-to-right, top-to-bottom in the
+      same sequence they see on screen. CSS layout (grid, flexbox, position) can
+      visually reorder elements while the DOM order stays incorrect.
+    example: |
+      <!-- DOM order matches visual left-to-right, top-to-bottom layout -->
+      <nav>...</nav>
+      <main>
+        <h1>Page Title</h1>
+        <article>...</article>
+        <aside>...</aside>
+      </main>
+      <footer>...</footer>
+
+  - id: color-contrast-ratios
+    title: Minimum color contrast ratios (WCAG 2.2 AA)
+    description: >
+      Normal text (below 18pt or 14pt bold) requires a contrast ratio of at least
+      4.5:1 against its background. Large text (18pt or 14pt bold and above) requires
+      3:1. UI components and graphical objects require 3:1 against adjacent colors.
+      Use a contrast checker during design, not as an afterthought.
+    example: |
+      /* Good: #1a1a1a on #ffffff = 19.1:1 ratio */
+      body { color: #1a1a1a; background: #ffffff; }
+
+      /* Bad: #767676 on #ffffff = 4.48:1 -- fails by a hair for normal text */
+      .muted { color: #767676; background: #ffffff; }
+
+  - id: touch-target-size
+    title: Touch target minimum 44x44px
+    description: >
+      Interactive elements on touch devices must have a minimum tap target of 44x44 CSS
+      pixels per WCAG 2.2 SC 2.5.8. Use padding to enlarge small icons without changing
+      their visual size. Spacing between adjacent targets can substitute for larger
+      individual targets (WCAG 2.2 allows 24x24 with at least 24px offset).
+    example: |
+      /* Icon button: visually 24px, touch target 44px via padding */
+      .icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 10px;        /* 24 + 20 = 44px tap area */
+        box-sizing: content-box;
+      }
+
+  - id: alt-text-strategy
+    title: Alt text strategy for images
+    description: >
+      Decorative images get alt="" so screen readers skip them. Informative images get
+      a concise description of their content. Functional images (icons inside buttons)
+      get alt text that describes the action, not the image itself. Never use file names
+      or "image of" as alt text.
+    example: |
+      <!-- Decorative: skip it -->
+      <img src="divider.svg" alt="" role="presentation">
+
+      <!-- Informative: describe content -->
+      <img src="chart.png" alt="Bar chart showing Q1 sales up 12% year over year">
+
+      <!-- Functional: describe action -->
+      <button><img src="search-icon.svg" alt="Search"></button>
+
+  - id: form-labeling
+    title: Explicit form labeling
+    description: >
+      Every form control needs a programmatically associated label. Prefer explicit
+      <label for="id"> pairing. Use aria-label when a visible label would be redundant
+      (search input next to a Search button). Use aria-labelledby to point to existing
+      visible text. Never rely on placeholder text as the sole label.
+    example: |
+      <!-- Explicit label: preferred -->
+      <label for="email">Email address</label>
+      <input type="email" id="email" name="email">
+
+      <!-- aria-label: acceptable when no visible text needed -->
+      <input type="search" aria-label="Search products" placeholder="Search...">
+
+      <!-- aria-labelledby: reuse existing heading text -->
+      <h2 id="billing-heading">Billing address</h2>
+      <input type="text" aria-labelledby="billing-heading" name="billing-street">
+
+  - id: skip-navigation
+    title: Skip navigation links
+    description: >
+      Provide a "Skip to main content" link as the first focusable element on the page.
+      This allows keyboard and screen reader users to bypass repeated navigation blocks.
+      The link can be visually hidden until focused. It must be focusable and must point
+      to the main landmark or heading.
+    example: |
+      <a class="skip-link" href="#main-content">Skip to main content</a>
+      <nav>...</nav>
+      <main id="main-content" tabindex="-1">...</main>
+
+      /* CSS: visually hidden until focused */
+      .skip-link { position: absolute; top: -40px; }
+      .skip-link:focus { top: 0; }
+
+  - id: live-regions
+    title: Live regions for dynamic content
+    description: >
+      Use aria-live to announce dynamic changes to screen readers without moving focus.
+      aria-live="polite" waits for the user to be idle -- use for status messages,
+      search results, and form feedback. aria-live="assertive" interrupts immediately --
+      use only for critical errors or time-sensitive alerts. Keep live region content
+      concise and inject only the changed text.
+    example: |
+      <!-- Polite: status message after form submit -->
+      <div aria-live="polite" aria-atomic="true" class="sr-only" id="status"></div>
+
+      <!-- Assertive: critical error -->
+      <div role="alert" aria-live="assertive" id="error-announce"></div>
+
+      // Inject message after action
+      document.getElementById('status').textContent = 'Form submitted successfully.';
+
+anti_patterns:
+  - id: color-only-information
+    title: Using color alone to convey information
+    description: >
+      Do not rely solely on color to distinguish states, errors, or categories. Users
+      with color vision deficiency (about 8% of males) will miss the information.
+      Always pair color with a secondary indicator: icon, pattern, label, or shape.
+      WCAG SC 1.4.1 prohibits color as the sole visual means of conveying information.
+
+  - id: placeholder-as-label
+    title: Placeholder text as label replacement
+    description: >
+      Placeholder text disappears when the user starts typing, leaving them with no
+      reminder of what the field requires. Screen readers do not consistently expose
+      placeholder as an accessible name. Always use a real <label> element. Placeholder
+      is acceptable as supplemental hint text only when a visible label is already present.
+
+  - id: positive-tabindex
+    title: tabindex > 0
+    description: >
+      Setting tabindex="1" or any positive integer removes an element from the natural
+      DOM tab order and creates a parallel focus sequence that breaks keyboard navigation.
+      Positive tabindex values cause the element to receive focus before all tabindex="0"
+      elements regardless of position. Use tabindex="0" to add an element to natural order
+      or tabindex="-1" to make it programmatically focusable only.
+
+  - id: display-none-for-sr-content
+    title: Hiding content with display:none that should be screen-reader-visible
+    description: >
+      display:none and visibility:hidden both remove content from the accessibility tree.
+      Use them only when content should be hidden from everyone. To visually hide content
+      while keeping it available to screen readers, use the sr-only CSS pattern (clip, not
+      display:none). To hide content from screen readers but show it visually, use
+      aria-hidden="true".
+
+  - id: aria-role-override
+    title: ARIA roles that override correct implicit HTML semantics
+    description: >
+      Assigning role="presentation" or role="none" to a semantic element strips its
+      meaning from the accessibility tree. Adding role="button" to an <a> element
+      changes how assistive technology announces it without preserving link behavior.
+      Adding ARIA landmark roles to <div> when a native landmark element (<nav>, <main>,
+      <aside>) exists adds noise. Use ARIA roles only when no native element matches.
+
+gotchas:
+  - id: nvda-chrome-vs-jaws-ie
+    title: NVDA+Chrome vs JAWS behavior differences
+    description: >
+      NVDA with Chrome and JAWS with older IE/Edge do not expose ARIA identically.
+      JAWS reads aria-label on container elements differently than NVDA does. Dynamic
+      content injected into live regions fires inconsistently across combinations.
+      Testing with a single screen reader is insufficient for a production release.
+    fix: >
+      Test the critical happy path with at least two screen reader combinations:
+      NVDA+Chrome and JAWS+Chrome (or JAWS+Edge). Document which combination was used
+      in QA notes. Reference the a11y support matrix at https://a11ysupport.io before
+      using any ARIA feature.
+
+  - id: voiceover-ios-vs-macos
+    title: VoiceOver on iOS vs macOS differences
+    description: >
+      VoiceOver on iOS uses swipe gestures for navigation and does not expose all ARIA
+      patterns the same way the macOS VoiceOver does. Custom component interactions that
+      work on desktop may be completely broken on iOS because touch events and keyboard
+      events are handled differently.
+    fix: >
+      Test interactive components (carousels, custom dropdowns, date pickers) on an
+      actual iOS device with VoiceOver, not just macOS. Key differences: swipe navigation
+      skips elements that only handle keydown events; focus trapping in modals requires
+      specific iOS VoiceOver patterns.
+
+  - id: dynamic-content-not-announced
+    title: Dynamic content that does not announce to screen readers
+    description: >
+      Injecting new content into the DOM after a user action (search results, filtered
+      lists, toast notifications) will be silently ignored by screen readers unless the
+      injection target has an aria-live attribute or focus is moved to the new content.
+    fix: >
+      For search results and filtered content: either move focus to the result count
+      heading or use an aria-live="polite" region that announces the count. For
+      toast/notification messages: use role="status" or role="alert" depending on urgency.
+
+  - id: modal-focus-trap
+    title: Modal dialogs that do not trap focus
+    description: >
+      Without a focus trap, Tab key navigation leaves the modal and cycles through the
+      obscured background content. Screen reader users can also navigate out of the dialog
+      using virtual cursor mode. This breaks the modal contract and allows interaction
+      with inert background elements.
+    fix: >
+      Implement focus trapping: on modal open, intercept Tab and Shift+Tab to cycle focus
+      within the dialog. Apply inert attribute (or aria-hidden="true") to the background
+      content container. On close, remove inert and restore focus to the trigger. Use a
+      tested library (focus-trap-react, Headless UI) rather than a custom implementation.
+
+  - id: custom-dropdown-keyboard
+    title: Custom dropdowns that break keyboard navigation
+    description: >
+      Custom select/combobox components often handle click events but miss full keyboard
+      support: arrow keys to navigate options, Enter/Space to select, Escape to close,
+      Home/End to jump to first/last, and type-ahead character search. The ARIA Combobox
+      pattern specifies all required keyboard interactions.
+    fix: >
+      Follow the ARIA Authoring Practices Guide combobox pattern exactly. Prefer native
+      <select> for simple single-value selection. Use a battle-tested headless component
+      (Radix UI, Headless UI, Downshift) for complex combo boxes.
+
+  - id: missing-aria-required-attributes
+    title: ARIA required attributes missing
+    description: >
+      Many ARIA roles require companion attributes to be valid and useful. role="button"
+      on a toggle needs aria-pressed. A disclosure widget needs aria-expanded. An element
+      that controls another panel needs aria-controls pointing to the controlled element's
+      id. Missing required attributes cause validators to flag errors and screen readers
+      to announce incomplete state.
+    fix: >
+      Before shipping any custom interactive component, run axe-core or Lighthouse
+      accessibility audit. Check the ARIA spec for the role's required states and
+      properties. Add aria-expanded, aria-controls, aria-pressed, aria-selected, or
+      aria-checked as the role demands. Keep these attributes updated in sync with
+      visual state via JavaScript.

@@ -1,0 +1,146 @@
+name: domain-refresh
+description: Automated stale domain agent re-synthesis — reads ingest-log, re-runs phases 1-3 of domain-ingest for overdue entries, updates dates, commits
+version: 1
+on_failure: abort
+
+nodes:
+
+  # ── NODE 1: SCAN FOR STALE AGENTS ────────────────────────────────────────
+  - id: scan
+    command: |
+      MISSION: Scan skills/domains/ingest-log.yml for stale agent entries.
+
+      Step 1 - Read the ingest-log:
+        Read the file: skills/domains/ingest-log.yml
+        If the file does not exist or cannot be parsed, output:
+          VERDICT: BLOCKED: ingest-log missing or malformed
+        and stop.
+
+      Step 2 - Get today's date in YYYY-MM-DD format.
+
+      Step 3 - Find stale entries:
+        An entry is stale if ALL of these are true:
+          - It has a non-null persona_md_path field (agent-type entry)
+          - Its refresh_due date is less than today's date (i.e., overdue)
+
+      Step 4 - Report findings:
+        If no stale entries are found:
+          Output: VERDICT: PASSED: no stale agents found
+        If stale entries are found:
+          List each stale entry with: repo_name (or domain), persona_md_path, refresh_due date
+          Output: VERDICT: PASSED: N stale agents -- [domain1, domain2, ...]
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  # ── NODE 2: RE-SYNTHESIZE STALE AGENTS ───────────────────────────────────
+  - id: re-synthesize
+    depends_on: [scan]
+    condition: "{{scan.output}} != VERDICT: PASSED: no stale agents found"
+    command: |
+      MISSION: Re-synthesize each stale domain agent identified in the scan output.
+
+      Scan results:
+      {{scan.output}}
+
+      For each stale domain listed in the scan output, perform phases 1-3 of domain-ingest inline:
+
+      PHASE 1 - Find updated sources:
+        Using mcp__github__search_code, search for updated agent or skill files for the domain.
+        Record any new or updated candidates found since the last ingest.
+
+      PHASE 2 - Re-score candidates:
+        Read skills/domains/eval-rubric.yml for the scoring rubric.
+        Score each candidate against the 8 rubric signals.
+        If quality has not improved (all new candidates score lower than existing quality_score in ingest-log),
+        skip re-synthesis for that domain and note it.
+
+      PHASE 3 - Re-synthesize if quality improved:
+        For domains where quality has improved (at least one candidate scores higher than existing quality_score):
+          a. Write updated skills/domains/<domain>/patterns.yml with new patterns
+          b. Write updated agents/<domain>-expert.md with improved persona
+          c. Strip all generic persona framing; use domain patterns, gotchas, anti-patterns, concrete commands
+
+      Do NOT run Phase 4 (register gate) -- this is a refresh, not a new ingest.
+      Process each domain sequentially.
+
+      After processing all domains, report:
+        - How many domains were re-synthesized
+        - How many were skipped (no quality improvement)
+        - List any failures
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 900
+
+  # ── NODE 3: UPDATE INGEST-LOG DATES ──────────────────────────────────────
+  - id: update-dates
+    depends_on: [re-synthesize]
+    trigger_rule: all_done
+    command: |
+      MISSION: Update refresh_due and last_updated in ingest-log.yml for re-synthesized domains.
+
+      Re-synthesis results:
+      {{re-synthesize.output}}
+
+      Step 1 - Identify successfully re-synthesized domains from the re-synthesize output.
+
+      Step 2 - Read the current ingest-log:
+        Read: skills/domains/ingest-log.yml
+
+      Step 3 - For each successfully re-synthesized domain, update its ingest-log entry:
+        - Set refresh_due = today's date + 90 days (ISO format: YYYY-MM-DD)
+        - If the entry has a last_updated field, update it to today's date
+        - If the entry does not have a last_updated field, add it set to today's date
+        - Leave all other fields on the entry unchanged
+        - Leave all other entries in the file unchanged
+
+      Step 4 - Write the updated file back to skills/domains/ingest-log.yml.
+
+      Step 5 - Report how many entries were updated.
+
+      If no domains were successfully re-synthesized (all skipped or failed):
+        Output: VERDICT: PASSED: no entries to update (all domains skipped or failed)
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  # ── NODE 4: COMMIT CHANGES ────────────────────────────────────────────────
+  - id: commit
+    depends_on: [update-dates]
+    command: |
+      MISSION: Commit all changes made during the domain refresh.
+
+      Update-dates results:
+      {{update-dates.output}}
+      Re-synthesis results:
+      {{re-synthesize.output}}
+
+      Step 1 - Determine the list of refreshed domains from the re-synthesize and update-dates output.
+
+      Step 2 - Stage changed files:
+        git add skills/domains/ingest-log.yml
+        git add agents/ (any modified agent files)
+        git add skills/domains/ (any modified domain pattern files)
+
+      Step 3 - Check if there is anything staged:
+        Run: git status
+        If nothing to commit:
+          Output: VERDICT: PASSED: nothing to commit
+          and stop.
+
+      Step 4 - Commit with the message:
+        chore(domain-refresh): re-synthesize stale domain agents -- [list of domain names]
+        Do NOT add Co-Authored-By to the commit message.
+
+      Step 5 - Report the commit SHA.
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120

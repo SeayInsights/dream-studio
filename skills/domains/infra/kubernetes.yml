@@ -1,0 +1,399 @@
+# Kubernetes Production Patterns
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: resource-requests-limits
+    title: Always set resource requests and limits
+    description: >
+      Every container must declare CPU/memory requests (scheduler uses these to place
+      pods) and limits (enforced at runtime). Missing requests cause unpredictable
+      scheduling; missing limits cause noisy-neighbor OOMKill cascades.
+    example: |
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+  - id: liveness-vs-readiness-vs-startup
+    title: Use the correct probe type for each purpose
+    description: >
+      Liveness probes restart a container when it deadlocks. Readiness probes remove
+      a pod from Service endpoints when it cannot handle traffic. Startup probes give
+      slow-starting containers time before liveness kicks in (k8s 1.20+). Using
+      liveness where readiness is needed causes thundering-herd restarts.
+    example: |
+      startupProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        failureThreshold: 30
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8080
+        initialDelaySeconds: 5
+        periodSeconds: 5
+      livenessProbe:
+        httpGet:
+          path: /healthz
+          port: 8080
+        initialDelaySeconds: 15
+        periodSeconds: 20
+
+  - id: rbac-least-privilege
+    title: RBAC with least-privilege service accounts
+    description: >
+      Create a dedicated ServiceAccount per workload. Bind only the verbs and
+      resources the workload actually needs. Never mount the default service account
+      token in pods that do not need API access. Use automountServiceAccountToken: false
+      on the ServiceAccount to opt out by default.
+    example: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: api-server
+        namespace: production
+      automountServiceAccountToken: false
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: api-server-role
+        namespace: production
+      rules:
+      - apiGroups: [""]
+        resources: ["configmaps"]
+        verbs: ["get", "list"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: api-server-binding
+        namespace: production
+      subjects:
+      - kind: ServiceAccount
+        name: api-server
+      roleRef:
+        kind: Role
+        name: api-server-role
+        apiGroup: rbac.authorization.k8s.io
+
+  - id: network-policy-default-deny
+    title: Default-deny NetworkPolicy with explicit allow rules
+    description: >
+      Apply a default-deny ingress and egress policy to every namespace, then
+      explicitly allow only required traffic. This is defense-in-depth -- a
+      compromised pod cannot reach arbitrary cluster services without an explicit
+      NetworkPolicy allowing it.
+    example: |
+      # Default deny all ingress and egress
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: default-deny-all
+        namespace: production
+      spec:
+        podSelector: {}
+        policyTypes:
+        - Ingress
+        - Egress
+      ---
+      # Allow api-server to reach postgres on 5432
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: allow-api-to-postgres
+        namespace: production
+      spec:
+        podSelector:
+          matchLabels:
+            app: postgres
+        ingress:
+        - from:
+          - podSelector:
+              matchLabels:
+                app: api-server
+          ports:
+          - port: 5432
+
+  - id: pod-disruption-budget
+    title: PodDisruptionBudget for every stateful or critical workload
+    description: >
+      PDBs prevent cluster operations (node drain, upgrades) from removing too
+      many replicas simultaneously. Without a PDB, a rolling node upgrade can
+      take down all replicas of a Deployment at once if they happen to share a node.
+    example: |
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata:
+        name: api-server-pdb
+        namespace: production
+      spec:
+        minAvailable: 2
+        selector:
+          matchLabels:
+            app: api-server
+
+  - id: hpa-cpu-memory
+    title: HorizontalPodAutoscaler with both CPU and memory metrics
+    description: >
+      HPA v2 (k8s 1.23+) supports multiple metrics. Set CPU and memory targets
+      to prevent thrashing. Always set minReplicas >= 2 for availability. Set
+      stabilizationWindowSeconds to avoid rapid scale-down after traffic spikes.
+    example: |
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: api-server-hpa
+        namespace: production
+      spec:
+        scaleTargetRef:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: api-server
+        minReplicas: 2
+        maxReplicas: 20
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 70
+        - type: Resource
+          resource:
+            name: memory
+            target:
+              type: Utilization
+              averageUtilization: 80
+        behavior:
+          scaleDown:
+            stabilizationWindowSeconds: 300
+
+  - id: rolling-update-strategy
+    title: Configure rolling update strategy explicitly
+    description: >
+      Default maxSurge=25% and maxUnavailable=25% may not suit production. For
+      zero-downtime deployments set maxUnavailable: 0 and maxSurge: 1. Always
+      combine with readiness probes so new pods receive traffic only when ready.
+    example: |
+      spec:
+        strategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 1
+            maxUnavailable: 0
+        template:
+          spec:
+            containers:
+            - name: api-server
+              readinessProbe:
+                httpGet:
+                  path: /ready
+                  port: 8080
+                initialDelaySeconds: 5
+                periodSeconds: 3
+
+  - id: secrets-from-external-store
+    title: Mount secrets from external store, not k8s Secrets
+    description: >
+      Kubernetes Secrets are base64-encoded, not encrypted at rest by default (unless
+      etcd encryption is configured). Use External Secrets Operator (ESO) to sync from
+      AWS Secrets Manager, HashiCorp Vault, or GCP Secret Manager. The Secret object
+      in k8s becomes a write-only cache populated by ESO.
+    example: |
+      # External Secrets Operator v0.9+
+      apiVersion: external-secrets.io/v1beta1
+      kind: ExternalSecret
+      metadata:
+        name: db-credentials
+        namespace: production
+      spec:
+        refreshInterval: 1h
+        secretStoreRef:
+          name: aws-secretsmanager
+          kind: ClusterSecretStore
+        target:
+          name: db-credentials
+          creationPolicy: Owner
+        data:
+        - secretKey: DB_PASSWORD
+          remoteRef:
+            key: production/db
+            property: password
+
+  - id: namespace-isolation
+    title: Separate workloads into namespaces with resource quotas
+    description: >
+      Use namespaces to enforce blast-radius isolation and resource fairness.
+      Apply ResourceQuota and LimitRange to every non-system namespace so a
+      runaway workload cannot starve the cluster.
+    example: |
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata:
+        name: production-quota
+        namespace: production
+      spec:
+        hard:
+          requests.cpu: "10"
+          requests.memory: "20Gi"
+          limits.cpu: "20"
+          limits.memory: "40Gi"
+          pods: "50"
+      ---
+      apiVersion: v1
+      kind: LimitRange
+      metadata:
+        name: default-limits
+        namespace: production
+      spec:
+        limits:
+        - default:
+            cpu: "500m"
+            memory: "512Mi"
+          defaultRequest:
+            cpu: "100m"
+            memory: "128Mi"
+          type: Container
+
+anti_patterns:
+  - id: latest-image-tag
+    title: Using 'latest' image tag in production
+    description: >
+      The 'latest' tag is mutable -- the same tag can point to different image digests
+      at different times. A node pull after an image push can run a different version
+      than other nodes, causing split-brain deployments. Always pin to a specific
+      digest or immutable semver tag. ImagePullPolicy: Always with 'latest' makes this
+      worse by pulling on every pod restart.
+
+  - id: no-resource-limits
+    title: Deploying containers without resource limits
+    description: >
+      Without limits, a container with a memory leak or runaway loop consumes all
+      node memory, triggering the OOM killer to kill other pods on the same node.
+      The node may then become NotReady. CPU starvation causes latency spikes across
+      all co-located workloads.
+
+  - id: readiness-as-liveness
+    title: Using the same endpoint for both liveness and readiness
+    description: >
+      If the liveness probe hits the same endpoint as readiness, a temporarily
+      overloaded pod (should be removed from load balancer) triggers container
+      restarts instead. CrashLoopBackOff follows, compounding the outage. Liveness
+      must test only "is the process alive"; readiness tests "can I handle requests".
+
+  - id: privileged-containers
+    title: Running containers as privileged or as root
+    description: >
+      privileged: true gives the container full host kernel access -- equivalent to
+      root on the node. Running as UID 0 allows container escapes via known CVEs.
+      Always set runAsNonRoot: true, readOnlyRootFilesystem: true, and
+      allowPrivilegeEscalation: false in the securityContext.
+
+  - id: cluster-admin-for-workloads
+    title: Binding cluster-admin to application service accounts
+    description: >
+      ClusterRoleBinding with cluster-admin to an application SA means a compromised
+      pod has full control of the cluster -- can read all secrets, exec into any pod,
+      delete any resource. Workloads never need cluster-admin. Scope bindings to
+      namespaced Roles with minimal verbs.
+
+  - id: missing-pod-disruption-budget
+    title: Skipping PodDisruptionBudget on multi-replica workloads
+    description: >
+      During node upgrades or voluntary evictions (kubectl drain), Kubernetes will
+      evict pods without any regard for availability if no PDB exists. Two-replica
+      Deployments can briefly drop to zero, causing downtime during routine maintenance.
+
+gotchas:
+  - id: oomkill-vs-crashloopbackoff
+    title: OOMKill and CrashLoopBackOff have different root causes
+    description: >
+      OOMKill (exit code 137) means the container exceeded its memory limit -- the
+      Linux OOM killer terminated it. CrashLoopBackOff means the container is
+      repeatedly exiting (any non-zero exit code) and k8s is applying exponential
+      backoff (10s, 20s, 40s, up to 5 min). OOMKill often looks like CrashLoopBackOff
+      in describe output because the restart count climbs. Check
+      'kubectl describe pod' for 'OOMKilled' in Last State before tuning probes.
+    fix: >
+      Run: kubectl describe pod <name> | grep -A5 "Last State"
+      If OOMKilled: increase memory limit or fix memory leak.
+      If non-OOM CrashLoop: kubectl logs <pod> --previous to see last exit output.
+
+  - id: probe-timing-startup-race
+    title: Liveness probe fires before app is ready on first start
+    description: >
+      If initialDelaySeconds is too low for liveness, the probe fails during app
+      startup, triggering a restart before the app ever serves traffic. This loops
+      forever. The fix in k8s 1.20+ is to use a startupProbe with a high
+      failureThreshold (e.g., 30 x 10s = 5 min budget) -- liveness does not start
+      until the startup probe succeeds.
+    fix: >
+      Add startupProbe with failureThreshold * periodSeconds >= max startup time.
+      Remove initialDelaySeconds from livenessProbe when startupProbe is present.
+
+  - id: pending-pods-resource-pressure
+    title: Pods stuck in Pending due to insufficient node resources
+    description: >
+      A pod in Pending with no node assignment means the scheduler could not find a
+      node satisfying requests + affinity rules. This is NOT a pod bug -- the cluster
+      is undersized or requests are too high. 'kubectl describe pod' shows
+      FailedScheduling events with the reason (Insufficient cpu, Insufficient memory,
+      node(s) didn't match Pod's node affinity).
+    fix: >
+      kubectl describe pod <name> | grep -A10 Events
+      Options: scale node pool, reduce requests, relax affinity, add node labels.
+
+  - id: imagepullbackoff-causes
+    title: ImagePullBackOff has four distinct root causes
+    description: >
+      ImagePullBackOff means the kubelet cannot pull the image. Causes: (1) image
+      does not exist at that tag/digest, (2) registry requires authentication and
+      imagePullSecrets is missing, (3) network policy blocks egress to the registry,
+      (4) registry rate limiting (Docker Hub 100 pulls/6h for anonymous). Each needs
+      a different fix. Check Events in describe pod for the exact error message.
+    fix: >
+      kubectl describe pod <name> | grep -A5 "Failed to pull"
+      For auth: create docker-registry secret and reference in imagePullSecrets.
+      For rate limits: use a registry mirror or authenticated pulls.
+
+  - id: rbac-deny-by-default
+    title: RBAC is deny-by-default -- missing rules silently block
+    description: >
+      If a ServiceAccount attempts an API call not covered by any Role/ClusterRole
+      binding, the API server returns 403 Forbidden with no log by default. The
+      workload just fails with a cryptic error. Enable audit logging or use
+      'kubectl auth can-i <verb> <resource> --as=system:serviceaccount:<ns>:<sa>'
+      to test before deploying.
+    fix: >
+      kubectl auth can-i get pods --as=system:serviceaccount:production:api-server -n production
+      Add missing rules incrementally; never grant wildcard verbs to fix quickly.
+
+  - id: service-account-token-auto-mount
+    title: Default ServiceAccount token is mounted in every pod
+    description: >
+      Unless automountServiceAccountToken: false is set on the ServiceAccount or pod
+      spec, every pod gets a projected token for the 'default' ServiceAccount at
+      /var/run/secrets/kubernetes.io/serviceaccount/token. In k8s 1.24+ these are
+      time-limited tokens, but they still allow unauthenticated pods to query the
+      API server. Compromised pods can enumerate cluster resources.
+    fix: >
+      Set automountServiceAccountToken: false on the ServiceAccount definition.
+      Override to true only on pods that genuinely need API access.
+
+  - id: hpa-missing-requests
+    title: HPA does not work without resource requests
+    description: >
+      HPA calculates utilization as (current usage / request). If requests are not
+      set, HPA cannot compute a utilization percentage and the HPA object shows
+      'unknown' for current metrics. Scale events never fire. This is a common
+      "HPA isn't scaling" confusion.
+    fix: >
+      kubectl describe hpa <name> -- look for "unknown" in TARGETS column.
+      Fix: add resource requests to all containers in the Deployment.

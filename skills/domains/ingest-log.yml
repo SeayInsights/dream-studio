@@ -1,18 +1,49 @@
 # Ingest Log — External Knowledge Registry
 # Tracks every external repo or resource that has been analyzed and integrated
-# into the skills/domains/ knowledge base.
+# into the skills/domains/ knowledge base. Supports two entry types:
+#   repo-type  — external repository analyzed for domain patterns (default; no persona_md_path)
+#   agent-type — synthesized specialist agent bundled in agents/ (has persona_md_path)
 #
-# Schema per entry:
-#   repo_name: human-readable name
-#   url: source URL
-#   stars: star count at time of analysis (approximate)
-#   domain: which skills/domains/ folder received the patterns
-#   files_touched: list of domain YAML files updated
-#   analyzed_date: date the repo was analyzed (YYYY-MM-DD)
-#   refresh_due: date to re-analyze for new patterns (default: 6 months)
-#   notes: optional — why this was chosen, what was skipped
+# --- Schema: repo-type entry ---
+#   repo_name:      human-readable name
+#   url:            source URL
+#   stars:          star count at time of analysis (approximate)
+#   domain:         which skills/domains/ folder received the patterns
+#   files_touched:  list of domain YAML files updated
+#   analyzed_date:  date analyzed (YYYY-MM-DD)
+#   refresh_due:    date to re-analyze (default: 6 months)
+#   notes:          optional — why chosen, what was skipped
+#
+# --- Schema: agent-type entry (added schema_version 2) ---
+# All repo-type fields apply, plus the following required additions:
+#
+#   keywords:         terms route-classify uses to match this agent to user intent
+#                     example: [kubernetes, k8s, pod, helm, kubectl, cluster]
+#
+#   persona_md_path:  path to the agent file relative to repo root
+#                     presence of this field marks the entry as agent-type
+#                     example: agents/kubernetes-expert.md
+#
+#   quality_score:    integer 0–8 from eval-rubric.yml
+#                     threshold: ≥5 to bundle as agent, ≥4 for domain YAML extraction only
+#                     example: 7
+#
+#   sources_evaluated: candidate sources scored during synthesis
+#     - repo:           source repo identifier (owner/name)
+#       path:           file path within that repo
+#       score:          integer 0–8 from eval-rubric.yml
+#       contributed:    patterns extracted from this source
+#                       example: [deployment_patterns, health_checks, anti_patterns]
+#
+#   enhancement_notes: what was added beyond the source material
+#                      example: "Added 4 production gotchas, k8s 1.28+ guidance, anti-patterns from incident log"
+#
+# --- Entry type detection ---
+# on-pulse.py and domain-refresh.yaml identify agent-type entries by:
+#   persona_md_path is not null
+# No explicit "type:" field needed.
 
-schema_version: 1
+schema_version: 2
 
 entries:
   - repo_name: "backend-best-practices"
@@ -133,6 +164,180 @@ entries:
     refresh_due: "2026-10-28"
     notes: "Binary analysis patterns feed into binary-scan skill. No domain YAML yet — security domain uses SKILL.md directly."
 
+  # --- Agent-type entries (schema_version 2) ---
+
+  - repo_name: "kubernetes-expert"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "infra"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [kubernetes, k8s, pod, helm, kubectl, cluster, deployment, ingress, rbac, hpa]
+    persona_md_path: "agents/kubernetes-expert.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/03-infrastructure/kubernetes-expert.md"
+        score: 5
+        contributed: [scheduling_patterns, health_checks, rbac]
+      - repo: "kubernetes/kubernetes"
+        path: "docs/concepts/"
+        score: 7
+        contributed: [version_specifics, pdb_patterns, hpa_v2]
+    enhancement_notes: "Added OOMKill vs CrashLoopBackOff diagnosis gotchas, probe timing anti-patterns, k8s 1.28 sidecar containers."
+
+  - repo_name: "devops-engineer"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "infra"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [github-actions, ci-cd, devops, pipeline, oidc, docker, release, workflow, deployment]
+    persona_md_path: "agents/devops-engineer.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "sdras/awesome-actions"
+        path: "README.md"
+        score: 6
+        contributed: [oidc_patterns, sha_pinning, reusable_workflows]
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/03-infrastructure/devops-engineer.md"
+        score: 5
+        contributed: [pipeline_design, artifact_caching]
+    enhancement_notes: "Added GITHUB_TOKEN scope limits gotcha, fork PR secrets gap, concurrent workflow conflict pattern."
+
+  - repo_name: "terraform-architect"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "infra"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [terraform, tf, infrastructure, iac, state, module, provider, plan, apply, workspace]
+    persona_md_path: "agents/terraform-architect.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "hashicorp/terraform"
+        path: "website/docs/"
+        score: 7
+        contributed: [import_blocks, for_each_patterns, remote_state]
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/03-infrastructure/terraform-architect.md"
+        score: 5
+        contributed: [module_versioning, workspace_strategy]
+    enhancement_notes: "Added state file corruption on interrupted apply gotcha, TF 1.5+ import block patterns, sensitive values in state warning."
+
+  - repo_name: "mobile-developer"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "mobile"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [ios, android, swift, kotlin, react-native, flutter, mobile, swiftui, jetpack-compose]
+    persona_md_path: "agents/mobile-developer.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/mobile/mobile-developer.md"
+        score: 5
+        contributed: [cross_platform_decisions, store_submission]
+      - repo: "apple/swift-evolution"
+        path: "proposals/"
+        score: 6
+        contributed: [swiftui_state_patterns, swift_concurrency]
+    enhancement_notes: "Added iOS simulator vs device gotchas, Metro bundler cache corruption fix, App Transport Security blocking HTTP."
+
+  - repo_name: "data-engineer"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "data"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [dbt, data-pipeline, warehouse, snowflake, bigquery, redshift, airflow, dagster, etl, cdc]
+    persona_md_path: "agents/data-engineer.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "dbt-labs/dbt-core"
+        path: "docs/"
+        score: 7
+        contributed: [incremental_models, source_freshness, schema_tests]
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/data/data-engineer.md"
+        score: 5
+        contributed: [warehouse_optimization, orchestration_patterns]
+    enhancement_notes: "Added BigQuery slot contention gotcha, Snowflake auto-suspend trap, dbt incremental late-arriving data gap."
+
+  - repo_name: "research-analyst"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "research"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [research, analysis, market-research, competitive-analysis, sourcing, triangulation]
+    persona_md_path: "agents/research-analyst.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/research/research-analyst.md"
+        score: 5
+        contributed: [source_hierarchy, triangulation_method]
+      - repo: "VoltAgent/awesome-agent-skills"
+        path: "skills/research/"
+        score: 4
+        contributed: [bias_identification, output_format]
+    enhancement_notes: "Added LLM research loop gotcha, vendor incentive bias, anti-sycophancy stance (disconfirming evidence first)."
+
+  - repo_name: "idea-validator"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "research"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [idea-validation, product-validation, go-no-go, market-fit, startup, fatal-flaw]
+    persona_md_path: "agents/idea-validator.md"
+    quality_score: 7
+    sources_evaluated:
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/research/project-idea-validator.md"
+        score: 7
+        contributed: [fatal_flaw_hunt, assumption_inventory, go_no_go_criteria]
+      - repo: "VoltAgent/awesome-agent-skills"
+        path: "skills/validation/"
+        score: 4
+        contributed: [tam_methodology, moat_analysis]
+    enhancement_notes: "Preserved anti-sycophancy signals. Added proof-demanding stance, CONDITIONAL verdict category, moat durability check."
+
+  - repo_name: "accessibility-expert"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "quality"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [accessibility, a11y, wcag, aria, screen-reader, keyboard-nav, contrast, focus-management]
+    persona_md_path: "agents/accessibility-expert.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "w3c/wcag"
+        path: "understanding/"
+        score: 8
+        contributed: [wcag_2_2_criteria, contrast_ratios, touch_targets]
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/quality/accessibility-expert.md"
+        score: 5
+        contributed: [audit_checklist, screen_reader_testing]
+    enhancement_notes: "Added NVDA vs JAWS behavior differences, VoiceOver iOS vs macOS gaps, focus trap in modal gotcha."
+
+  - repo_name: "technical-writer"
+    url: "https://github.com/VoltAgent/awesome-claude-code-subagents"
+    domain: "quality"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-07-28"
+    keywords: [documentation, technical-writing, docs, readme, api-docs, diataxis, changelog]
+    persona_md_path: "agents/technical-writer.md"
+    quality_score: 6
+    sources_evaluated:
+      - repo: "testthedocs/awesome-docs"
+        path: "README.md"
+        score: 6
+        contributed: [diataxis_framework, style_guide_patterns]
+      - repo: "VoltAgent/awesome-claude-code-subagents"
+        path: "categories/quality/technical-writer.md"
+        score: 4
+        contributed: [review_checklist, tooling_commands]
+    enhancement_notes: "Added anchor link rot gotcha, broken example drift pattern, keep-a-changelog format, vale/markdownlint commands."
+
 # --- Refresh tracking ---
-# Run `workflow: repo-ingest refresh` to check entries with refresh_due <= today
-# Add new entries via `workflow: repo-ingest <url>`
+# Run `workflow: domain-refresh` to re-synthesize agents whose refresh_due has passed
+# Run `workflow: repo-ingest <url>` to add a new repo-type entry
+# Add agent-type entries via `workflow: domain-ingest domain: <name>`
