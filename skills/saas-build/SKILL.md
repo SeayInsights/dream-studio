@@ -72,3 +72,6 @@ export async function up(db: Kysely<any>): Promise<void> {
 - Push to GitHub only — CI handles deploys
 - Environment variables: set in Cloudflare dashboard, never in code
 - Preview deployments: PR branches get preview URLs automatically
+
+## Depth Status
+JIT-pending — examples and gotchas will be added from the first real SaaS feature build that uses this skill.

@@ -1,0 +1,138 @@
+# Ingest Log — External Knowledge Registry
+# Tracks every external repo or resource that has been analyzed and integrated
+# into the skills/domains/ knowledge base.
+#
+# Schema per entry:
+#   repo_name: human-readable name
+#   url: source URL
+#   stars: star count at time of analysis (approximate)
+#   domain: which skills/domains/ folder received the patterns
+#   files_touched: list of domain YAML files updated
+#   analyzed_date: date the repo was analyzed (YYYY-MM-DD)
+#   refresh_due: date to re-analyze for new patterns (default: 6 months)
+#   notes: optional — why this was chosen, what was skipped
+
+schema_version: 1
+
+entries:
+  - repo_name: "backend-best-practices"
+    url: "https://github.com/futurice/backend-best-practices"
+    stars: 2275
+    domain: "backend"
+    files_touched: []
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Production API patterns. No domain YAML created yet — backend domain pending."
+
+  - repo_name: "awesome-actions (sdras)"
+    url: "https://github.com/sdras/awesome-actions"
+    stars: 21700
+    domain: "devops"
+    files_touched:
+      - "domains/devops/github-actions-patterns.yml"
+      - "domains/devops/REFERENCES.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "GitHub Actions security and workflow patterns. OIDC, secret management, SHA pinning."
+
+  - repo_name: "awesome-playwright (mxschmitt)"
+    url: "https://github.com/mxschmitt/awesome-playwright"
+    stars: 1400
+    domain: "testing"
+    files_touched:
+      - "domains/testing/playwright-patterns.yml"
+      - "domains/testing/REFERENCES.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Page Object Model, locator strategies (data-testid), parallel execution patterns."
+
+  - repo_name: "awesome-docs (testthedocs)"
+    url: "https://github.com/testthedocs/awesome-docs"
+    stars: 824
+    domain: "documentation"
+    files_touched:
+      - "domains/documentation/technical-writing-standards.yml"
+      - "domains/documentation/REFERENCES.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Diataxis framework (tutorials/how-to/reference/explanation), Google + Microsoft style guides."
+
+  - repo_name: "microsoft/fluentui"
+    url: "https://github.com/microsoft/fluentui"
+    stars: 18000
+    domain: "design"
+    files_touched:
+      - "domains/design/fluent-design-system.yml"
+      - "domains/design/typography-standards.yml"
+      - "domains/design/color-standards.yml"
+      - "domains/design/layout-standards.yml"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Fluent Design principles: Light, Depth, Motion, Material, Scale. 4px spacing grid."
+
+  - repo_name: "material-components/material-web"
+    url: "https://github.com/material-components/material-web"
+    stars: 10000
+    domain: "design"
+    files_touched:
+      - "domains/design/material-design-system.yml"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Material Design 3 principles, 8dp grid, elevation, touch targets 48x48dp."
+
+  - repo_name: "DaxDateTemplate"
+    url: "https://github.com/sql-bi/DaxDateTemplate"
+    stars: 288
+    domain: "bi"
+    files_touched:
+      - "domains/bi/dax-patterns.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Power BI date table patterns. Medium confidence (288 stars) — validate before using."
+
+  - repo_name: "virajbhutada/bi-projects-collection"
+    url: "https://github.com/virajbhutada/bi-projects-collection"
+    stars: 159
+    domain: "bi"
+    files_touched:
+      - "domains/bi/m-query-patterns.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Dashboard inspiration. Reference tier (not high-confidence)."
+
+  - repo_name: "github/spec-kit"
+    url: "https://github.com/github/spec-kit"
+    stars: 91300
+    domain: "planning"
+    files_touched:
+      - "skills/think/templates/spec-template.md"
+      - "skills/plan/templates/plan-template.md"
+      - "skills/plan/templates/tasks-template.md"
+      - ".planning/templates/constitution-template.md"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Spec-Driven Development — maps 1:1 to think→plan→build pipeline. Templates adapted for dream-studio conventions."
+
+  - repo_name: "web-design-rules-and-guidelines"
+    url: "https://github.com/bradtraversy/web-design-rules-and-guidelines"
+    stars: 5
+    domain: "design"
+    files_touched:
+      - "domains/data-visualization/design-standards.yml"
+      - "domains/data-visualization/accessibility-standards.yml"
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "7-dimension UI evaluation. Low stars but unique content. Scrutinize before adding new patterns."
+
+  - repo_name: "awesome-executable-packing"
+    url: "https://github.com/dhondta/awesome-executable-packing"
+    stars: 1572
+    domain: "security"
+    files_touched: []
+    analyzed_date: "2026-04-28"
+    refresh_due: "2026-10-28"
+    notes: "Binary analysis patterns feed into binary-scan skill. No domain YAML yet — security domain uses SKILL.md directly."
+
+# --- Refresh tracking ---
+# Run `workflow: repo-ingest refresh` to check entries with refresh_due <= today
+# Add new entries via `workflow: repo-ingest <url>`

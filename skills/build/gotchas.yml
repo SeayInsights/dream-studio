@@ -45,6 +45,10 @@ best_practices:
     title: "Output a checkpoint after every 3 tasks or 30 minutes"
     context: "Long builds lose state silently. Checkpoints surface drift and context growth before they become unrecoverable."
 
+  - id: compact-at-75-percent
+    title: "Run /compact proactively after each wave when context approaches 75%"
+    context: "Sessions consistently hit the auto-handoff threshold at 75-80%. By then it's too late — the handoff interrupts mid-build. Running /compact between waves (after every 3-4 tasks) keeps context healthy and prevents forced handoffs."
+
 edge_cases:
   - id: simple-vs-subagent-threshold
     title: "<=3 tightly coupled tasks: simple mode. >=4 or independent tasks: subagent mode"

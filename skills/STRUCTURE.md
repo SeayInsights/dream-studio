@@ -424,5 +424,34 @@ grep "review" dream-studio-catalog.md
 
 ---
 
-**Last updated:** 2026-04-28  
-**Architecture version:** 2.0 (Phase 2 enhancement complete)
+## Skill Depth Policy
+
+### JIT Enrichment — No Sprint
+
+Skills are enriched **just-in-time**, not in advance. A skill that hasn't been used in a real build has no meaningful lessons to capture yet.
+
+**Rule:** Enrich a skill (add examples, update gotchas.yml) the first time it is used for a real build. Not before.
+
+**Why:** Premature enrichment produces generic examples and speculative gotchas. Real builds produce real failure modes.
+
+**Ongoing depth builders:**
+- `learn: harvest` — batch-scans session history for patterns, surfaces them for Director review
+- `workflow: repo-ingest` — formalizes external knowledge intake into domain YAMLs
+- `gotchas.yml` — updated immediately after any build that reveals a non-obvious failure
+
+**Sprint enrichment is explicitly prohibited.** Do not schedule sessions to enrich thin skills across the board.
+
+### Skill Tiers
+
+| Tier | Skills | Depth |
+|------|--------|-------|
+| Enhanced | build, plan, review, verify, ship | Examples + templates + smoke tests + core-imports |
+| Standard | analyze, comply, dast, game-dev, mitigate, netcompat, secure, security-dashboard, workflow | Rich SKILL.md (10K+ chars) |
+| JIT-pending | mcp-build, dashboard-dev, saas-build, polish, career suite | Core patterns documented; enriches on first real use |
+
+**JIT-pending skills are fully functional.** They have correct SKILL.md instructions and gotchas.yml. They just lack worked examples — which will be added from the first real build.
+
+---
+
+**Last updated:** 2026-04-29  
+**Architecture version:** 2.1 (JIT enrichment policy + ARCHITECTURE.md layer separation)

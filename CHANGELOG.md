@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-04-29
+
+### Added
+- **ARCHITECTURE.md** — Documents the two-layer design: `packs/` (Python hook runtime) vs `skills/` (Claude guidance), key paths, how they connect, and the full new-skill checklist
+- **skills/domains/ingest-log.yml** — External knowledge registry tracking every repo analyzed: URL, stars, domain, files touched, analysis date, refresh-due date. Backfilled with 11 repos from the 2026-04-28 integration
+- **`workflow: repo-ingest`** node in `skills/workflow/SKILL.md` — Formalizes external repo intake: domain detection, dedup check, ≤10 pattern extraction, domain YAML write, ingest-log entry. Replaces ad-hoc ingestion with a tracked, repeatable workflow
+- **`.planning/specs/infra-lessons-ingest/`** — Plan and tasks for this release
+
+### Fixed
+- **`~/.dream-studio/config.json`** — Now includes `director_name` and `claude_memory_path`; silences the "Setup not complete" warning that fired every session
+- **`skills/learn/config.yml`** — `harvest.projects_root` now set to `builds/`; enables `learn: harvest` to auto-discover projects
+
+### Changed
+- **skills/build/gotchas.yml** — Added `compact-at-75-percent` best practice: run `/compact` proactively between waves before context approaches 75% (promoted from 26 pending draft lessons)
+- **skills/STRUCTURE.md** — Added Skill Depth Policy section: JIT enrichment only, no sprint; skill tier table (Enhanced / Standard / JIT-pending)
+- **skills/polish/SKILL.md** — Now references `checklists/` directory with all 4 checklists named inline
+- **skills/mcp-build/SKILL.md**, **dashboard-dev/SKILL.md**, **saas-build/SKILL.md** — Added `## Depth Status` section marking each as JIT-pending
+- **skills/workflow/SKILL.md** — `repo-ingest` built-in workflow node added (see Added above)
+
+### Meta
+- 26 pending draft lessons triaged: 22 rejected (context-threshold noise + sonnet-theme), 4 high-context theme promoted to `build/gotchas.yml`
+- Draft lesson queue cleared to 0
+
 ## [0.8.0] — 2026-04-29
 
 ### Added — Skill & Workflow Improvements (TR-001–TR-013)

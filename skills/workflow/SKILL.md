@@ -239,3 +239,73 @@ py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
 - `all_success` → skip the dependent node
 - `all_done` → run it anyway
 - `one_success` → run if any dep succeeded
+
+---
+
+## Built-in Workflow: `repo-ingest`
+
+### Trigger
+`workflow: repo-ingest <url-or-path>`
+
+### Purpose
+Formalize external knowledge intake — extract reusable patterns from a repo or resource and write them into the correct `skills/domains/` YAML. Prevents ad-hoc, untracked ingestion.
+
+### 5-Step Process
+
+**Step 1 — Identify domain**
+Scan the repo README and top-level structure. Map to a domain from the routing table below.
+If no existing domain fits, propose a new one to Director before proceeding.
+
+**Step 2 — Dedup check**
+Read the relevant `skills/domains/<domain>/*.yml` file. Grep for key terms from the repo.
+If ≥80% of patterns already exist → report "already captured" and stop. Do not create duplicate entries.
+
+**Step 3 — Extract patterns (≤10 per run)**
+Read the repo's most authoritative source (README, best-practices doc, or primary config files).
+Extract patterns as YAML entries using the existing file's structure as the template.
+Rank by: most battle-tested (highest star count / most referenced) first.
+Cap at 10 new patterns per ingestion run — prioritize quality over completeness.
+
+**Step 4 — Write to domain YAML**
+Append extracted patterns to `skills/domains/<domain>/<file>.yml`.
+Preserve existing structure. Do not restructure the file.
+
+**Step 5 — Log the ingestion**
+Add an entry to `skills/domains/ingest-log.yml`:
+```yaml
+- repo_name: "<name>"
+  url: "<url>"
+  stars: <count>
+  domain: "<domain>"
+  files_touched:
+    - "domains/<domain>/<file>.yml"
+  analyzed_date: "<YYYY-MM-DD>"
+  refresh_due: "<YYYY-MM-DD>"  # 6 months from analyzed_date
+  notes: "<what was extracted, what was skipped>"
+```
+
+### Domain Routing Table
+
+| Repo type | Target domain folder |
+|-----------|---------------------|
+| GitHub Actions, CI/CD, DevOps | `domains/devops/` |
+| Testing, E2E, unit testing | `domains/testing/` |
+| Technical writing, docs | `domains/documentation/` |
+| Power BI, DAX, M-query | `domains/bi/` or `domains/powerbi/` |
+| UI design systems, CSS, layout | `domains/design/` |
+| Data visualization, charts | `domains/data-visualization/` |
+| API patterns, backend | `domains/` (create `backend/` if needed) |
+| Security tools, binary analysis | skills/binary-scan or skills/scan SKILL.md directly |
+| Planning, spec-driven dev | skills/think or skills/plan templates |
+
+### Anti-bloat Rules
+- Never ingest a repo with <100 stars unless it has unique content not found elsewhere
+- ≤10 patterns per run — rank by evidence count, take top 10
+- Dedup before writing — if the pattern already exists in any form, skip it
+- Domain-specific lessons stay in the domain YAML — never promote to core modules
+- If the repo is stale (no commits in 1+ year), flag it to Director before ingesting
+
+### Output
+- Updated `skills/domains/<domain>/<file>.yml` with new patterns appended
+- New entry in `skills/domains/ingest-log.yml`
+- Summary to Director: N patterns extracted, M skipped (already existed), refresh due date
