@@ -43,6 +43,7 @@ from lib.workflow_engine import (                            # noqa: E402
 )
 
 SCHEMA_VERSION = 1
+_TERMINAL = frozenset({"completed", "completed_with_failures", "aborted"})
 
 
 # ── State I/O ─────────────────────────────────────────────────────────
@@ -103,6 +104,17 @@ def _get_workflow(data: dict, key: str) -> dict:
         print(f"Error: workflow '{key}' not found", file=sys.stderr)
         sys.exit(1)
     return wf
+
+
+def _try_archive_and_prune(data: dict, key: str, wf: dict) -> None:
+    """Archive wf to studio.db, then prune from JSON. Skips silently on any error."""
+    try:
+        from lib.studio_db import archive_workflow
+    except ImportError:
+        return
+    if archive_workflow(key, wf):
+        data.get("active_workflows", {}).pop(key, None)
+        _write_state(data)
 
 
 # ── Commands ──────────────────────────────────────────────────────────
@@ -209,6 +221,8 @@ def cmd_update(args: argparse.Namespace) -> None:
             wf["status"] = "completed_with_failures"
 
         _write_state(data)
+        if wf.get("status") in _TERMINAL:
+            _try_archive_and_prune(data, args.key, wf)
     _write_checkpoint(args.key, args.node_id, args.status)
 
     done = sum(1 for s in statuses if s in ("completed", "skipped"))
@@ -264,6 +278,7 @@ def cmd_abort(args: argparse.Namespace) -> None:
 
         wf["status"] = "aborted"
         _write_state(data)
+        _try_archive_and_prune(data, args.key, wf)
     _write_checkpoint(args.key, wf.get("current_node"), "aborted")
     print(f"[workflow] {wf['workflow']} — ABORTED")
 

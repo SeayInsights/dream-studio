@@ -47,8 +47,8 @@ def test_archive_workflow_round_trip(tmp_path):
         "nodes": {
             "n1": {
                 "status": "completed",
-                "started_at": None,
-                "finished_at": None,
+                "started": None,
+                "finished": None,
                 "duration_s": None,
                 "output": None,
             }

@@ -31,10 +31,10 @@ def archive_workflow(run_key: str, wf: dict, db_path: Path | None = None) -> boo
         with _connect(db_path) as c:
             c.execute("INSERT INTO raw_workflow_runs(run_key,workflow,yaml_path,status,started_at,node_count,nodes_done) VALUES(?,?,?,?,?,?,?)",
                       (run_key, wf["workflow"], wf["yaml_path"], wf["status"], wf.get("started", _NOW()), len(nodes),
-                       sum(1 for n in nodes.values() if n.get("status") == "done")))
+                       sum(1 for n in nodes.values() if n.get("status") in ("completed", "skipped"))))
             for nid, nd in nodes.items():
                 c.execute("INSERT INTO raw_workflow_nodes(run_key,node_id,status,started_at,finished_at,duration_s,output) VALUES(?,?,?,?,?,?,?)",
-                          (run_key, nid, nd.get("status",""), nd.get("started_at"), nd.get("finished_at"), nd.get("duration_s"), nd.get("output")))
+                          (run_key, nid, nd.get("status",""), nd.get("started"), nd.get("finished"), nd.get("duration_s"), nd.get("output")))
         return True
     except Exception: return False
 
