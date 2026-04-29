@@ -29,7 +29,7 @@ Use coach when:
 - `context-health` — Is context being managed well? When should you start a new session?
 - `pr-hygiene` — Are PRs sized correctly? Commit message quality? Branch hygiene?
 - `agent-dispatch` — Are subagents being used at the right times? Model assignments correct?
-- `route-classify` — Classify ambiguous intent against all known dream-studio triggers. Returns top 3 skill matches with confidence scores and a recommended action. Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
+- `route-classify` — Classify ambiguous intent against all known dream-studio triggers. If the top match has confidence ≥ 0.8, **invoke the matched skill immediately via the Skill tool** — do not just name it. If confidence < 0.8, present the top 3 matches with scores and ask the Director to confirm before invoking. Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
 - `--quick` flag — Run the single most relevant analyst based on context
 
 ## Signal Scale

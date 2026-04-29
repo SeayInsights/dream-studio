@@ -69,6 +69,18 @@ claude plugin install file://path/to/dream-studio
 > **Note:** dream-studio is not yet listed in the official Claude Code plugin registry.
 > Use the GitHub install command above. Registry install (`claude plugin install dream-studio`) will not work until the plugin is submitted to Anthropic.
 
+**After installing, merge the project hooks into your global settings:**
+
+The `.claude/settings.json` in this repo contains PreToolUse guard hooks (blocks direct pushes to main, force-push, and wrangler deploy). Merge these into your global `~/.claude/settings.json` so they apply across all your projects:
+
+```bash
+# View the hooks to add:
+cat path/to/dream-studio/.claude/settings.json
+# Then manually merge the "hooks" block into ~/.claude/settings.json
+```
+
+Skill usage metrics are collected automatically via `hooks/hooks.json` at the plugin level — no extra setup needed.
+
 **Install dev dependencies (for contributing):**
 
 ```bash
@@ -81,6 +93,14 @@ make install-dev
 ## Quick Start
 
 Once installed, dream-studio activates automatically in every Claude Code session.
+
+**First time? Run the onboarding walkthrough:**
+
+```
+workflow: run studio-onboard
+```
+
+This audits your setup, customises dream-studio to your project, and walks you through the Director profile (name, domain, primary use). Run it once after install — subsequent sessions skip it automatically once your profile is set.
 
 ```
 /think   Shape a feature idea into a spec

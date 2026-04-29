@@ -102,3 +102,25 @@ def write_pulse(data: Dict[str, Any]) -> Path:
     path = _pulse_path()
     _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
     return path
+
+
+def get_quiet_mode() -> int:
+    """Return the number of turns advisory hooks should remain suppressed (0 = normal)."""
+    try:
+        return int(read_config().get("quiet_mode", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def set_quiet_mode(turns: int) -> None:
+    """Set how many turns advisory hooks should be suppressed.
+
+    Hooks call this to decrement the counter each turn:
+        remaining = get_quiet_mode()
+        if remaining > 0:
+            set_quiet_mode(remaining - 1)
+            return  # suppressed this turn
+    """
+    cfg = read_config()
+    cfg["quiet_mode"] = max(0, int(turns))
+    write_config(cfg)

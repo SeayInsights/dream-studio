@@ -28,7 +28,7 @@ Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgu
 3. **Test** — Test the most likely hypothesis first. One variable at a time.
 4. **Narrow** — Eliminate hypotheses based on results. Add new ones if needed.
 5. **Fix** — Apply the fix. Verify it resolves the issue without introducing new ones.
-6. **Document** — Record what was tried and ruled out so the next session doesn't repeat. If the fix required more than 3 hypothesis iterations, or revealed a reusable pattern (a class of bug, a hidden invariant, a surprising interaction), invoke `learn:` to capture it — describe what happened and why the standard approach failed.
+6. **Document** — Record what was tried and ruled out so the next session doesn't repeat. **Mandatory:** After any debug session that required ≥ 3 hypothesis iterations OR revealed a reusable pattern (a class of bug, a hidden invariant, a surprising interaction), invoke `learn:` before closing the session. This is not optional — draft lessons are the input to dream-studio's self-improvement loop. Include the debug log summary and why the standard approach failed as the lesson input.
 
 ## Debug log format
 Track in conversation to prevent retrying failed approaches:
