@@ -43,6 +43,8 @@ Dispatch fresh subagent per task with isolated context.
 If `.planning/GOTCHAS.md` exists, read it now. If `.planning/CONSTITUTION.md` exists, read it now. These contain known failure patterns and architectural decisions that must constrain every task in the build.
 Read the plan file ONCE. Extract ALL tasks with full text. Don't re-read the plan per task.
 
+**Generate repo map** (see core/repo-map.md for commands): Run the find+grep commands to extract exported symbols from source files. Store as `$REPO_MAP`. This string is pasted identically into every subagent dispatch in the session as the static prefix — do NOT regenerate per task. For large codebases, filter to the relevant subtree (e.g., `skills/` for skill edits, `src/` for app code).
+
 ### Step 1: Dependency analysis
 **See:** core/orchestration.md — Dependency analysis for parallel execution
 
