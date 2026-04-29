@@ -49,3 +49,7 @@ jobs:
         shell: bash
         run: |
           pytest tests/ -v --cov=hooks/lib --cov=packs/domains/domain_lib --cov-report=term-missing
+
+      - name: Validate coach analyst coverage
+        shell: bash
+        run: python scripts/validate_analysts.py
