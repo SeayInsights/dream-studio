@@ -10,72 +10,45 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 - **"research", "dig into", "explore options"** → If scoped to a codebase question, use Explore. If it needs design thinking or spec work, escalate to `dream-studio:think` with the `research:` trigger.
 - **"go find", "where is", "search for"** → Explore subagent or direct Grep/Glob — no skill needed.
 
+<!-- BEGIN AUTO-ROUTING -->
 ### Build Pipeline (sequential: think → plan → build → review → verify → ship)
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| Spec / design before code | `dream-studio:think` | think:, spec:, shape ux:, design brief:, research: |
-| Break spec into tasks | `dream-studio:plan` | plan:, make a plan, /plan |
-| Execute a plan | `dream-studio:build` | build:, execute plan: |
-| Code review | `dream-studio:review` | review:, review code, review commits, review PR: |
-| Prove it works | `dream-studio:verify` | verify:, prove it: |
-| Pre-deploy gate | `dream-studio:ship` | ship:, pre-deploy: |
+| Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. | `dream-studio:build` | build:, execute plan: |
+| Trace how X works — from entry point through layers to output, at the depth the Director needs | `dream-studio:explain` | explain:, how does, walk me through, what is this doing, why does |
+| Session continuity — capture structured state (current task, progress, phase, decisions, active files, next action) to both markdown and JSON. A fresh session resumes from the file alone. | `dream-studio:handoff` | handoff: |
+| Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. | `dream-studio:plan` | plan:, /plan |
+| Capture structured build memory — what was built, decisions, risks, stack, remaining work, next step — to `.sessions/YYYY-MM-DD/recap-<topic>.md`. | `dream-studio:recap` | recap:, session recap: |
+| Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. | `dream-studio:review` | review:, review code, review PR: |
+| Pre-deploy gate — audit (a11y, perf, technical), harden (error/empty/loading states), optimize (bundle/render/animation/images), test (Playwright + regression). Any FAIL blocks deploy. | `dream-studio:ship` | ship:, pre-deploy:, deploy: |
+| Clarify an idea, explore 2-3 approaches with trade-offs, write a spec, and get approval before any code. | `dream-studio:think` | think:, spec:, shape ux:, design brief:, research: |
+| Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. | `dream-studio:verify` | verify:, prove it: |
 
 ### Quality & Learning
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| Systematic debugging | `dream-studio:debug` | debug:, diagnose: |
-| Explain code / system | `dream-studio:explain` | explain:, how does X work, walk me through, what is this doing |
-| UI polish | `dream-studio:polish` | polish ui:, clean up ui:, critique design:, redesign:, make it premium: |
-| Security review | `dream-studio:secure` | secure:, check security, review architecture |
-| Project hardening | `dream-studio:harden` | /harden, harden audit |
-| Capture lessons | `dream-studio:learn` | learn:, capture lesson: |
-| Workflow coaching | `dream-studio:coach` | /coach, coach: |
-| Structure audit | `dream-studio:structure-audit` | /structure-audit |
-
-### Security Pack
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Scan org, security scan, generate rules | `dream-studio:scan` | scan org:, run security scan, generate scan rules |
-| Mitigate findings, how to fix | `dream-studio:mitigate` | mitigate:, how to fix, generate mitigations |
-| Compliance map, audit evidence | `dream-studio:comply` | comply:, compliance map, audit evidence, framework map |
-| Zscaler compat, proxy check | `dream-studio:netcompat` | netcompat:, zscaler check, proxy compat |
-| Security dashboard, export dataset | `dream-studio:security-dashboard` | security dashboard:, refresh dashboard, export dataset |
-| DAST, web scan, pen test web | `dream-studio:dast` | dast:, web scan, pen test web, zap scan |
-| Binary analysis, scan exe | `dream-studio:binary-scan` | binary-scan:, scan binary, analyze exe, checksec |
+| Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. | `dream-studio:debug` | debug:, diagnose: |
+| Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml, UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit, etc.) and fills gaps from templates. | `dream-studio:harden` | /harden, /harden audit, /harden fix tier1, /harden fix #N |
+| Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. | `dream-studio:learn` | meta/draft-lessons/, meta/lessons/, learn:, capture lesson: |
 
 ### Visual & Design
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| Visual design / branding / direction | `dream-studio:design` | design art:, brand:, apply theme:, ad creative:, design direction:, visual identity: |
-| HTML prototypes / slides / animations | `huashu-design` | prototype:, mockup:, slides:, deck:, animate:, motion:, export pptx:, export mp4: |
-
-**Design skill routing:**
-- **dream-studio:design** — Brand asset acquisition, design direction advisory, visual identity, theme application, generative art (p5.js), ad creative. Creates brand-spec.md with logo/images/colors.
-- **huashu-design** — Interactive prototypes (iOS/Android), slide decks (HTML + editable PPTX), motion design (MP4/GIF with 60fps), design variations with Tweaks, infographics (PDF/PNG/SVG).
-- **Workflow:** dream-studio:design establishes brand assets → huashu-design produces deliverables using those assets.
+| Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative art (p5.js), theme application to projects, and ad-creative guidance. | `dream-studio:design` | design art:, design poster:, canvas:, generative art:, apply theme:, brand:, ad creative: |
+| UI quality decision tree — critique seven dimensions (layout, typography, color, animation, copy, responsive, edge cases), score 1-5, fix by priority, re-score. | `dream-studio:polish` | polish ui:, critique design:, redesign:, make it premium:, build page:, build component: |
 
 ### Domain Builders
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| SaaS features | `dream-studio:saas-build` | build feature:, build api:, build page:, build component: |
-| Godot game dev | `dream-studio:game-dev` | game build, game review, game QA |
-| MCP server dev | `dream-studio:mcp-build` | build mcp:, new mcp:, extend mcp: |
-| Dashboard / Tauri | `dream-studio:dashboard-dev` | dashboard:, build dashboard: |
-| Power Platform / client | `dream-studio:client-work` | intake:, sow:, review powerbi:, optimize dax:, build flow: |
-| Real estate domain | `dream-studio:domain-re` | /domain-re, re: |
-
-### Analysis & Career
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Multi-perspective analysis | `dream-studio:analyze` | /analyze, analyze: |
-| Career command center | `dream-studio:career-ops` | /career-ops |
+| Tauri + React desktop dashboard patterns — feed contract (hooks write JSON, dashboard reads), multi-panel architecture, additive schema evolution. | `dream-studio:dashboard-dev` | dashboard:, feed contract: |
+| 4-phase MCP server development — research, implement (Zod schemas, structured errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. | `dream-studio:mcp-build` | build mcp:, new mcp:, extend mcp: |
+| React 19 + React Router 7 + Cloudflare Workers + D1/Kysely stack patterns for SaaS builds — API contract-first, loaders/actions, migrations, CI-only deploys. | `dream-studio:saas-build` | build feature:, build api:, build page:, deploy:, build supabase: |
 
 ### Session Management
 | Intent | Skill | Triggers |
 |--------|-------|----------|
-| Session handoff | `dream-studio:handoff` | handoff: |
-| Session recap | `dream-studio:recap` | recap:, session recap: |
-| YAML workflow orchestration | `dream-studio:workflow` | workflow:, workflow list |
+| YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. | `dream-studio:workflow` | workflow: |
+<!-- END AUTO-ROUTING -->
 
 ### Routing Fallback
 

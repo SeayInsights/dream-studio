@@ -47,5 +47,5 @@ compatibility:
 # Discovery
 tags: [analysis, implementation]
 category: workflow
-triggers: []
+triggers: ["build:", "execute plan:"]
 description: "Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`."
