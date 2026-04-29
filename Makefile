@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts
+.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts setup
 
 test:
 	py -3.12 -m pytest tests/ --cov=hooks/lib --cov=packs/domains/domain_lib --cov-fail-under=70 -q
@@ -32,3 +32,6 @@ sync-cache:
 
 validate-analysts:
 	py scripts/validate_analysts.py
+
+setup:
+	py -3.12 scripts/setup.py
