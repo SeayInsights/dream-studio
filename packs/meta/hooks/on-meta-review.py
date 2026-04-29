@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import paths  # noqa: E402
+from lib.lesson_threshold import get_escalation_candidates  # noqa: E402
 from lib.time_utils import utcnow  # noqa: E402
 
 THEME_DRAFT_THRESHOLD = 3
@@ -314,6 +315,19 @@ def main() -> None:
         review += "\n## Pending Draft Lessons\n\nNone pending.\n"
 
     review_path.write_text(review, encoding="utf-8")
+
+    # Lesson threshold escalation: surface skills accumulating unreviewed lessons
+    try:
+        escalations = get_escalation_candidates(threshold=3)
+        for candidate in escalations:
+            print(
+                f"\n[dream-studio] ⚠️  Skill '{candidate['skill']}' has "
+                f"{candidate['lesson_count']} draft lessons — consider a skill update. "
+                f"Run: learn: promote {candidate['skill']}\n",
+                flush=True,
+            )
+    except Exception:
+        pass  # Never block meta-review on threshold check failure
 
     print(
         f"\n[dream-studio] Weekly meta-review complete — {len(sessions)} sessions analyzed\n"

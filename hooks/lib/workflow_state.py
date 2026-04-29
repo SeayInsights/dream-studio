@@ -103,6 +103,15 @@ def _get_workflow(data: dict, key: str) -> dict:
 # ── Commands ──────────────────────────────────────────────────────────
 
 
+def _find_resumable(data: dict, name: str) -> tuple[str, dict] | None:
+    """Return (key, workflow) for an existing non-terminal workflow with matching name."""
+    terminal = {"completed", "completed_with_failures", "aborted"}
+    for key, wf in data.get("active_workflows", {}).items():
+        if wf.get("workflow") == name and wf.get("status") not in terminal:
+            return key, wf
+    return None
+
+
 def cmd_start(args: argparse.Namespace) -> None:
     yaml_path = args.yaml_path
     if not Path(yaml_path).is_file():
@@ -114,11 +123,26 @@ def cmd_start(args: argparse.Namespace) -> None:
         print(f"Error: no nodes found in {yaml_path}", file=sys.stderr)
         sys.exit(1)
 
-    key = f"{args.name}-{int(time.time())}"
-    now = datetime.now(timezone.utc).isoformat()
-
     with _state_lock():
         data = _read_state()
+
+        # Resume existing workflow if one is already in progress
+        resumable = _find_resumable(data, args.name)
+        if resumable:
+            key, wf = resumable
+            nodes = wf.get("nodes", {})
+            done = sum(1 for n in nodes.values() if n.get("status") in ("completed", "skipped"))
+            _write_state(data)
+            _write_checkpoint(key, wf.get("current_node"), "running")
+            print(key)
+            print(
+                f"[workflow] {args.name} resumed — {done}/{len(nodes)} nodes already complete. "
+                f"Run `workflow_state next {key}` to continue."
+            )
+            return
+
+        key = f"{args.name}-{int(time.time())}"
+        now = datetime.now(timezone.utc).isoformat()
         data.setdefault("active_workflows", {})[key] = {
             "workflow": args.name,
             "started": now,
@@ -126,6 +150,7 @@ def cmd_start(args: argparse.Namespace) -> None:
             "current_node": None,
             "yaml_path": str(Path(yaml_path).resolve()),
             "nodes": {nid: {"status": "pending"} for nid in node_ids},
+            "completed_nodes": [],
             "gates_passed": [],
             "gates_pending": [],
         }
@@ -154,6 +179,10 @@ def cmd_update(args: argparse.Namespace) -> None:
             node["started"] = now
         if args.status in ("completed", "failed", "skipped"):
             node["finished"] = now
+        if args.status == "completed":
+            completed = wf.setdefault("completed_nodes", [])
+            if args.node_id not in completed:
+                completed.append(args.node_id)
         if args.output is not None:
             node["output"] = args.output
         if args.duration is not None:

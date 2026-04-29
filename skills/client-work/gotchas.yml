@@ -29,6 +29,41 @@ avoid:
     context: "TMDL is whitespace-sensitive. Tab characters cause silent parse failures when Power BI Desktop opens the file."
     fix: "Always use 2-space indentation in .tmdl files. Check editor settings before writing TMDL."
 
+  - id: page-visibility-invalid
+    severity: critical
+    discovered: 2026-04-29
+    title: "Do NOT add 'visibility' to page.json — invalid in page/2.0.0/schema.json"
+    context: "Adding 'visibility': 'HiddenInNavigationPane' to page.json causes a schema validation error and PBI Desktop refuses to load the report."
+    fix: "To hide a page: open PBI Desktop, right-click the page tab → 'Hide page'. PBI writes the correct config itself."
+
+  - id: sortbycol-circular
+    severity: high
+    discovered: 2026-04-29
+    title: "sortByColumn creates circular dependency if the sort column is derived from the same column"
+    context: "Setting sortByColumn to a calculated column (e.g. 'Severity Sort = SWITCH([severity], ...)') that references the sorted column creates a cycle PBI refuses to load. The Age Bucket Sort pattern works because it sorts a different base column."
+    fix: "Remove sortByColumn from the data model. Use sortDefinition in the visual JSON instead — sort by the sort column in the visual query, not in the model."
+
+  - id: filterconfig-manual
+    severity: medium
+    discovered: 2026-04-29
+    title: "Never write filterConfig manually in visual JSON — PBI auto-manages it"
+    context: "PBI Desktop appends filterConfig to every visual when the user saves. Hand-written filterConfig can conflict with PBI's auto-generated version."
+    fix: "Omit filterConfig from all hand-authored visual JSON. PBI will add it automatically on first save."
+
+  - id: pbi-auto-save-overwrites
+    severity: high
+    discovered: 2026-04-29
+    title: "PBI Desktop modifies visual JSONs on save — never overwrite PBI-saved files with hand-edited versions"
+    context: "After the user saves from PBI Desktop, visual JSONs contain fractional coordinates and filterConfig written by PBI. Overwriting with integer-coord hand-edited versions drops PBI's metadata."
+    fix: "Always READ visual JSON files before editing if PBI Desktop has been open. Merge your changes into the PBI-saved version, not the other way around."
+
+  - id: drillthrough-via-json
+    severity: high
+    discovered: 2026-04-29
+    title: "Drill-through page configuration cannot be reliably authored via JSON"
+    context: "PBI's drill-through schema is internal and undocumented for manual authoring. Attempting to wire it via JSON is error-prone."
+    fix: "Build page visuals via JSON as normal, then configure drill-through in PBI Desktop GUI: go to target page → Visualizations pane → Fields tab → drag field to 'Drill through' well. Takes ~1 minute and is authoritative."
+
 best_practices:
   - id: verify-order
     title: "Always verify in this order: Desktop open → Refresh → Spot-check → RLS → All pages → Publish"
@@ -38,6 +73,15 @@ best_practices:
     title: "Read gotchas.yml and powerbi/ reference files before every Power BI engagement"
     context: "Reference content lives in powerbi/ subfolder. SKILL.md is behavior only."
 
+  - id: layout-single-horizontal-band
+    title: "Put all top-row visuals in ONE horizontal band at the same y — never rely on small y-gaps between rows"
+    context: "PBI uses fractional pixel coordinates internally and repositions visuals on load. Stacked rows with small gaps (< 20px) collapse into overlaps after PBI repositions. Discovered 2026-04-29."
+    fix: "All top-row elements: same y value, side by side. Leave ≥ 20px gap between rows. Example: top row y=10 h=100, next section y=120."
+
+  - id: tmdl-column-ordering
+    title: "PBI Desktop reorders calculated columns on save — do not fight it"
+    context: "PBI moves calculated columns to the end of the column list when it saves. This is cosmetic only and does not affect functionality. Discovered 2026-04-29."
+
 edge_cases:
   - id: tmdl-multiline-measure
     title: "TMDL multiline measure expressions"
@@ -46,6 +90,16 @@ edge_cases:
       measure 'Total Sales' =
         VAR x = SUM(FactSales[SalesAmount])
         RETURN x
+
+  - id: slicer-empty-on-open
+    title: "Slicer (and all visuals) show empty after externally editing .pbip — not a config bug"
+    context: "When a .pbip is edited outside PBI Desktop and reopened, PBI has not loaded the data source yet. All visuals appear blank until refresh."
+    fix: "Click Home → Refresh in PBI Desktop after opening any externally-edited .pbip file."
+
+  - id: barchart-series-stacks
+    title: "Adding a Series bucket to barChart makes it stacked, not grouped"
+    context: "A barChart with only Category + Y produces one bar per category (clustered/grouped). Adding a Series bucket converts it to a stacked bar chart."
+    fix: "For individual bars per category: use only Category + Y buckets. Leave Series empty."
 
 limitations:
   - id: no-report-json

@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib import pack_context  # noqa: E402
 from domain_lib.game_validate import (  # noqa: E402
     GAME_FILE_EXTENSIONS,
     MAX_WARNINGS_DISPLAYED,
@@ -47,6 +48,10 @@ from domain_lib.game_validate import (  # noqa: E402
 
 
 def main() -> None:
+    # Config-level killswitch: skip if the domains pack is explicitly disabled
+    if not pack_context.is_pack_active("domains"):
+        return
+
     try:
         payload = json.loads(sys.stdin.read())
     except Exception:

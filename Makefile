@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache
+.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts
 
 test:
 	py -3.12 -m pytest tests/ --cov=hooks/lib --cov=packs/domains/domain_lib --cov-fail-under=70 -q
@@ -29,3 +29,6 @@ docs:
 
 sync-cache:
 	powershell.exe -ExecutionPolicy Bypass -File scripts/sync-cache.ps1
+
+validate-analysts:
+	py scripts/validate_analysts.py
