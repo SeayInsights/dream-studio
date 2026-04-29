@@ -30,6 +30,7 @@ Use coach when:
 - `pr-hygiene` — Are PRs sized correctly? Commit message quality? Branch hygiene?
 - `agent-dispatch` — Are subagents being used at the right times? Model assignments correct?
 - `route-classify` — Classify ambiguous intent against all known dream-studio triggers. If the top match has confidence ≥ 0.8, **invoke the matched skill immediately via the Skill tool** — do not just name it. If confidence < 0.8, present the top 3 matches with scores and ask the Director to confirm before invoking. Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
+- `zoom-out` — Scope health check: are we still solving the right problem? Detects scope creep, goal drift, and solution-problem mismatch. Run when a build feels larger than the original spec, or when you suspect the original goal has shifted. Dispatches the `analysts/zoom-out.yml` analyst.
 - `--quick` flag — Run the single most relevant analyst based on context
 
 ## Signal Scale
@@ -111,6 +112,8 @@ Standard dispatch pattern. Each analyst evaluates one dimension of workflow qual
 All analysts use the same 5-point signal scale. A `reject` from any analyst is a flag to address before continuing.
 
 Validate responses (BP3). Write checkpoint after each wave.
+
+For `zoom-out` mode: dispatch `analysts/zoom-out.yml`. It asks 5 scope-health questions against the current session context and returns a signal (strong-accept = scope clean, strong-reject = fundamental misalignment, stop and re-align with Director).
 
 ### Step 5: Quorum Check (BP2)
 
