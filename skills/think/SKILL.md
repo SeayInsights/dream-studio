@@ -36,6 +36,15 @@ Use the spec template to structure your thinking. The template provides:
 
 ## Steps
 1. **Clarify** — Restate what's being built and why. Surface assumptions. Ask Director if anything is unclear. If `.planning/CONSTITUTION.md` exists, read it before writing any spec — surface any conflicts with existing architectural decisions.
+
+   **Clarify Questions** — Before writing the spec, ask 3-5 targeted questions to surface hidden constraints. Examples:
+   - "Who is the primary user and what's their context when they hit this?"
+   - "What's the definition of done — what does success look like in 30 days?"
+   - "Are there constraints I should know about (performance, platform, existing patterns)?"
+   - "What's explicitly out of scope for this?"
+   - "Is there existing code/design I should read before speccing this?"
+   Only ask questions where the answer would change the spec. Don't ask for its own sake.
+
 2. **Explore** — 2-3 approaches with trade-offs. Pros, cons, complexity, risk for each.
 3. **Recommend** — Pick one approach with rationale.
 4. **Spec** — Use `spec-template.md` to write to `.planning/specs/<topic>/spec.md` with:
@@ -61,6 +70,11 @@ Output: .planning/specs/user-auth/spec.md
 
 ## Output
 Spec document at `.planning/specs/<topic>/spec.md`. Director approval in conversation.
+
+For complex features (new systems, cross-cutting changes, or anything requiring architecture decisions), also output a design document:
+- Use `templates/design-template.md`
+- Write to `.planning/specs/<topic>/design.md`
+- The design doc covers architecture decisions, component breakdown, and integration points — separate from the requirements in spec.md
 
 ## Next in pipeline
 → `plan` (break spec into executable steps)
