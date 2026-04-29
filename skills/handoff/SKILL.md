@@ -22,7 +22,12 @@ Capture the minimum context needed for the next session to continue without re-e
 4. **State** — What's working? What's broken? Any pending Director decisions?
 5. **Files** — Which files are actively being touched?
 6. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`
-7. **Print** — Print the handoff file path so Director can pass it to the next session
+7. **Auto-draft** — After writing both files, scan the "What's broken / blocked" section for items that have an identified root cause — specifically patterns that are non-obvious and would recur in future sessions. If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
+   - `Source: auto-harvest (handoff)`
+   - `Confidence: medium` (root cause is identified but not yet validated by outcome)
+   - Fill "What happened" from the blocked item, "Lesson" from the root cause, "Evidence" from the handoff context
+   If "What's broken / blocked" is empty or all items lack root causes: skip silently.
+8. **Print** — Print the handoff file path so Director can pass it to the next session
 
 ## Markdown output: `.sessions/YYYY-MM-DD/handoff-<topic>.md`
 ```markdown
@@ -99,3 +104,5 @@ When context is growing large:
 - Always write BOTH .md and .json files
 - The "Resume command" field is the single line the next session needs
 - A fresh session should be able to resume using ONLY the handoff file
+- Auto-draft triggers only on non-obvious root causes in "What's broken" — not every blocked item qualifies
+- Auto-drafts are flagged `Source: auto-harvest (handoff)` and require Director approval before promotion

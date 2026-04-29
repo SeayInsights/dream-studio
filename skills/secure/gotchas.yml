@@ -22,6 +22,20 @@ avoid:
     context: "Secure outputs findings. Fix recommendations belong in dream-studio:mitigate. Mixing them bloats the report and conflates discovery with remediation."
     fix: "Secure outputs: what's broken, severity, evidence. Run dream-studio:mitigate separately for fix recommendations."
 
+  - id: fix-stale-audit-findings
+    severity: high
+    discovered: 2026-04-19
+    title: "Always verify a finding still exists before attempting to fix it"
+    context: "Audit reports go stale within hours. Findings already resolved in code will still appear as open if the report has no resolution markers — causing wasted re-fix work."
+    fix: "Before touching any file listed in a finding, grep or read the file to confirm the issue is still present in current code."
+
+  - id: annotate-findings-when-fixed
+    severity: medium
+    discovered: 2026-04-19
+    title: "Annotate audit report findings with fix commit SHA when resolved"
+    context: "A finding with no resolution marker misleads the next session into re-fixing already-committed work."
+    fix: "Immediately after a finding is fixed, add [FIXED: <commit-sha>] to the finding in the source report before continuing."
+
 best_practices:
   - id: fresh-subagents-per-lens
     title: "Use fresh subagents for each analyst lens — never inherit review session history"

@@ -1,7 +1,9 @@
 # Draft Lesson: Never lower ESLint/TS rules to pass CI
 Date: 2026-04-19
 Source: dreamysuite ESLint/CI repair session (handoff-lessons-eslint.md)
-Status: DRAFT
+Status: PROMOTED
+Promoted: 2026-04-29
+Promoted-to: skills/ship/gotchas.yml, skills/build/gotchas.yml
 
 ## What happened
 To get CI green quickly, `@typescript-eslint/no-explicit-any` and

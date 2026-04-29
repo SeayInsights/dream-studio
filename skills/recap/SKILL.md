@@ -28,6 +28,14 @@ Record what happened in a build so future sessions and the Improvement Loop (Eng
 4. **Stack** — What technologies/patterns were used?
 5. **Remaining** — What's left undone? What's the logical next step?
 6. **Write** — Output to `.sessions/YYYY-MM-DD/recap-<topic>.md`
+7. **Auto-draft** — After writing the recap file, scan what was captured for:
+   - Any Director correction or approach override during the session
+   - Any "Risk flags" entry that has an identified root cause (not just "risk exists" but "why it happened")
+   If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` using the standard draft lesson format, with:
+   - `Source: auto-harvest (recap)`
+   - `Confidence: high` (session context is still active — this is the richest capture moment)
+   - Pre-fill "What happened", "Lesson", "Evidence", and "Applies to" from the recap content
+   If nothing qualifies: skip silently — do not create an empty draft file.
 
 ## Output format
 ```markdown
@@ -60,3 +68,5 @@ Session: [session context if available]
 - Be specific: file paths, commit hashes, decision rationale
 - Keep it concise — this is a structured record, not a narrative
 - The "Next step" field is critical — it's what the next session reads first
+- Auto-drafts are flagged `Source: auto-harvest (recap)` — Director still decides whether to promote them
+- Never create a draft lesson file if no correction or root-cause risk was captured — empty drafts pollute the backlog

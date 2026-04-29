@@ -29,6 +29,13 @@ avoid:
     context: "Major drift (new dependency, scope change, architecture change) that proceeds silently compounds — later tasks build on the drifted state and become hard to undo."
     fix: "Stop on major drift. Output: 'Drift detected: [what and why]. Adjust plan or revert?' Wait for answer."
 
+  - id: downgrade-lint-during-build
+    severity: high
+    discovered: 2026-04-19
+    title: "Never downgrade lint/TS rules to unblock a build task"
+    context: "Lowering rules mid-build passes the task check but poisons the codebase. Later tasks inherit the false-green state."
+    fix: "If lint errors block a build task, stop and fix the errors in a sub-task. Never trade rule integrity for task completion speed."
+
 best_practices:
   - id: commit-per-task
     title: "Commit after every task, not after every wave"

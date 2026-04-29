@@ -1,7 +1,9 @@
 # Draft Lesson: Validate locally before pushing to CI
 Date: 2026-04-19
 Source: dreamysuite ESLint/CI repair session (handoff-lessons-eslint.md)
-Status: DRAFT
+Status: PROMOTED
+Promoted: 2026-04-29
+Promoted-to: skills/ship/gotchas.yml
 
 ## What happened
 6 consecutive CI runs failed during the dreamysuite session. Every failure was

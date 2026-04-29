@@ -1,6 +1,6 @@
 ﻿---
 name: learn
-description: Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. Trigger on `learn:`, `capture lesson:`, or when something notably works or breaks.
+description: Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. Trigger on `learn:`, `capture lesson:`, or `learn: harvest` for cross-project batch extraction.
 pack: quality
 ---
 
@@ -10,7 +10,7 @@ pack: quality
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
-`learn:`, `capture lesson:`, or when something notably works or breaks during a build
+`learn:`, `capture lesson:`, or when something notably works or breaks during a build. Use `learn: harvest` for cross-project batch extraction from session history.
 
 ## Purpose
 Extract lessons from builds and promote them to studio knowledge.
@@ -45,6 +45,58 @@ Status: DRAFT
    - Skill updates (if pattern should change a skill's instructions)
    - Agent updates (if behavior should change an agent's config)
 5. **Archive** — Promoted drafts move to `meta/lessons/` with status: PROMOTED
+
+## Harvest Mode
+
+### Trigger
+`learn: harvest`
+
+### Purpose
+Batch-scan all historical sources for reusable patterns. Surface the draft backlog for promotion. No skill files are modified until Director explicitly approves each change.
+
+### Scan protocol (run in this order)
+
+**Step 1 — Backlog first**
+Scan `meta/draft-lessons/`. For each file, present inline:
+```
+Draft: [title]
+File: meta/draft-lessons/[filename]
+Lesson: [one-line summary]
+Target: skills/[skill]/gotchas.yml → [avoid|best_practices|edge_cases]
+Action? [promote / reject / defer]
+```
+Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml. On "reject" → move file to `meta/lessons/` with `Status: REJECTED`. On "defer" → leave as-is.
+
+**Step 2 — Session history**
+Scan `.sessions/**/*.md` (handoffs and recaps). Extract:
+- "What's broken / blocked" sections with identified root causes
+- "Director correction" mentions
+- Patterns that appear in 2+ different session files
+
+**Step 3 — Dedup check**
+Scan `skills/*/gotchas.yml`. For each candidate pattern from Step 2, grep existing entries. If the insight already exists → log "already captured in skills/[skill]/gotchas.yml" and skip.
+
+**Step 4 — Memory cross-reference**
+Scan `~/.claude/projects/C--Users-Dannis-Seay/memory/feedback_*.md`. Look for feedback entries that have no corresponding gotchas.yml entry and could be generalized into a reusable skill rule.
+
+### Anti-bloat rules (enforced — see gotchas.yml)
+- **Dedup first**: never draft a lesson that already exists in any gotchas.yml
+- **≥2 sources**: only draft lessons with evidence from ≥2 distinct sources
+- **≤5 cap**: draft at most 5 new lessons per run — rank by evidence count, take top 5
+- **Domain tagging**: domain-specific lessons (Kroger, Power BI client-specific, etc.) must be tagged with the target skill and never promoted to core skill gotchas
+
+### Auto-harvest draft format
+Auto-harvested drafts use an extended format with two additional fields:
+```
+Source: auto-harvest
+Confidence: [low|medium|high]  # based on number of distinct sources found
+```
+- high = 3+ distinct source confirmations
+- medium = 2 distinct sources
+- low = 1 source (these should rarely be drafted — requires strong evidence)
+
+### No-harvest conditions
+If harvest finds nothing new: output "No new patterns found. [N] drafts reviewed." Do not create empty draft files. Do not re-draft lessons already in a gotchas.yml.
 
 ## When to capture
 - A debugging session reveals a non-obvious root cause
