@@ -83,3 +83,47 @@ def test_capture_exception_with_dsn_but_no_sdk(monkeypatch):
         pass
     finally:
         sys.modules.pop("sentry_sdk", None)
+
+
+# ── audit: effectiveness_score branch (line 42) ────────────────────────
+
+
+def test_log_event_includes_effectiveness_score(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    log_event("scored_event", {"tool_name": "Bash"}, effectiveness_score=0.85)
+    record = json.loads((tmp_path / ".dream-studio" / "audit.jsonl").read_text(encoding="utf-8").strip())
+    assert "effectiveness_score" in record
+    assert record["effectiveness_score"] == 0.85
+
+
+# ── audit: outer except (lines 45-46) ─────────────────────────────────
+
+
+def test_log_event_write_failure_swallowed(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    ds_dir = tmp_path / ".dream-studio"
+    ds_dir.mkdir(parents=True, exist_ok=True)
+    (ds_dir / "audit.jsonl").mkdir()  # directory where file would be → open raises
+    log_event("test_event", {})  # must not raise
+
+
+# ── telemetry: sentry_sdk actually callable (lines 17, 25) ────────────
+
+
+def test_init_sentry_calls_sdk_when_dsn_set(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_sdk = MagicMock()
+    monkeypatch.setenv("SENTRY_DSN", "https://fake@sentry.io/1")
+    monkeypatch.setitem(sys.modules, "sentry_sdk", mock_sdk)
+    init_sentry()
+    mock_sdk.init.assert_called_once_with(dsn="https://fake@sentry.io/1", traces_sample_rate=0.1)
+
+
+def test_capture_exception_calls_sdk_when_dsn_set(monkeypatch):
+    from unittest.mock import MagicMock
+    mock_sdk = MagicMock()
+    exc = ValueError("something went wrong")
+    monkeypatch.setenv("SENTRY_DSN", "https://fake@sentry.io/1")
+    monkeypatch.setitem(sys.modules, "sentry_sdk", mock_sdk)
+    capture_exception(exc)
+    mock_sdk.capture_exception.assert_called_once_with(exc)

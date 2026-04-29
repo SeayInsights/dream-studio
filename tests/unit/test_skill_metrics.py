@@ -48,3 +48,22 @@ class TestSkillMetricsMain:
         record = json.loads(_log(tmp_path).read_text())
         assert record["skill"] == "ship"
         assert record["model"] == "unknown"
+
+
+# ── __main__ guard (lines 35-38) ──────────────────────────────────────
+
+
+_SKILL_METRICS_PATH = str(Path(__file__).resolve().parents[2] / "hooks" / "lib" / "skill_metrics.py")
+
+
+def test_main_guard_happy_path(tmp_path: Path) -> None:
+    import runpy
+    with patch.object(Path, "home", return_value=tmp_path):
+        runpy.run_path(_SKILL_METRICS_PATH, run_name="__main__")
+    assert _log(tmp_path).exists()
+
+
+def test_main_guard_exception_swallowed() -> None:
+    import runpy
+    with patch.object(Path, "mkdir", side_effect=OSError("disk full")):
+        runpy.run_path(_SKILL_METRICS_PATH, run_name="__main__")  # must not raise

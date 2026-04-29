@@ -337,3 +337,21 @@ class TestMain:
         out = capsys.readouterr().out
         assert "1 nodes" in out
         assert "1 gates" in out
+
+    def test_main_guard_runs_as_main(self, tmp_path: Path) -> None:
+        import runpy
+        skill_dir = tmp_path / "skills" / "lint"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("# lint")
+        wf = tmp_path / "workflow.yaml"
+        wf.write_text(
+            "name: ok\n"
+            "nodes:\n"
+            "  - id: n1\n"
+            "    skill: lint\n",
+            encoding="utf-8",
+        )
+        with patch("sys.argv", ["workflow_validate", str(wf), "--plugin-root", str(tmp_path)]):
+            with pytest.raises(SystemExit) as exc:
+                runpy.run_path(str(_VALIDATE_PY), run_name="__main__")
+        assert exc.value.code == 0

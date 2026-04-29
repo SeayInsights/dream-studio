@@ -182,3 +182,56 @@ def test_check_for_update_network_failure_swallowed(tmp_path, monkeypatch):
     monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
     with patch("urllib.request.urlopen", side_effect=OSError("network unreachable")):
         lp.check_for_update()  # must not raise
+
+
+def test_check_for_update_empty_tag_returns_early(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock, patch
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    response_data = json.dumps({"tag_name": ""}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        lp.check_for_update()  # empty tag_name → early return (line 159)
+
+
+def test_check_for_update_invalid_version_handles_valueerror(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock, patch
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    response_data = json.dumps({"tag_name": "v2.x.0"}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        lp.check_for_update()  # "2.x.0" → ValueError in _ver → (0,) ≤ (1,0,0) → no update
+
+
+def test_check_for_update_repo_parse_exception_and_root_fallback(tmp_path, monkeypatch, capsys):
+    from unittest.mock import MagicMock, patch
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+
+    call_count = [0]
+
+    def flaky_plugin_root():
+        call_count[0] += 1
+        if call_count[0] > 1:
+            raise RuntimeError("plugin root not found")
+        return tmp_path  # first call: no plugin.json → manifest.read_text raises
+
+    monkeypatch.setattr(lp, "plugin_root", flaky_plugin_root)
+    response_data = json.dumps({"tag_name": "v2.0.0"}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        lp.check_for_update()
+
+    captured = capsys.readouterr()
+    assert "Update available" in captured.err      # notice was printed
+    assert "your dream-studio directory" in captured.err  # fallback root (lines 172-173)
