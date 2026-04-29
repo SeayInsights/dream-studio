@@ -60,14 +60,21 @@ def main(payload: dict) -> None:
     else:
         model, prompt_t, completion_t, total_t = extract_usage_from_transcript(transcript_path)
 
+    hook_output_bytes = payload.get("hook_output_bytes", 0)
+    hook_overhead_est = payload.get("hook_overhead_est", 0)
+
     log_path = paths.meta_dir() / "token-log.md"
-    row = f"| {timestamp} | {session_name} | {model} | {prompt_t} | {completion_t} | {total_t} |\n"
+    row = (
+        f"| {timestamp} | {session_name} | {model} | {prompt_t} | {completion_t}"
+        f" | {total_t} | {hook_output_bytes} | {hook_overhead_est} |\n"
+    )
     try:
         if not log_path.exists():
             log_path.write_text(
                 "# Token Log\n\n"
-                "| Timestamp | Session | Model | Prompt | Completion | Total |\n"
-                "|---|---|---|---|---|---|\n",
+                "| Timestamp | Session | Model | Prompt | Completion | Total"
+                " | HookOutputBytes | HookOverheadEst |\n"
+                "|---|---|---|---|---|---|---|---|\n",
                 encoding="utf-8",
             )
         with log_path.open("a", encoding="utf-8") as f:
@@ -83,6 +90,8 @@ def main(payload: dict) -> None:
                 "session_name": session_name,
                 "model": model,
                 "total_tokens": total_t,
+                "hook_output_bytes": hook_output_bytes,
+                "hook_overhead_est": hook_overhead_est,
             }
         )
     )

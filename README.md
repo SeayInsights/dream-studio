@@ -13,6 +13,7 @@ An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**,
 ## Table of Contents
 
 - [What it does](#what-it-does)
+- [Token Overhead](#token-overhead)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -36,6 +37,18 @@ dream-studio wraps Claude Code with a structured developer workflow:
 - **Session memory** — structured handoff notes and recaps written automatically to `.sessions/<date>/`
 - **Project health** — pulse checks, CI status, stale branch detection, and a draft lesson queue
 - **Domain skills** — Godot 4, SaaS (React 19 + Cloudflare Workers), Power Platform, MCP servers, career ops
+
+---
+
+## Token Overhead
+
+dream-studio injects context each session (routing table, memories, skills, hooks). The [`docs/token-overhead.md`](docs/token-overhead.md) report breaks down the per-category cost.
+
+To measure overhead for your sessions:
+
+```bash
+py scripts/benchmark_tokens.py --run-label <your-session-label> --publish
+```
 
 ---
 
