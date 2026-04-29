@@ -86,9 +86,9 @@ microcopy:
 
   examples:
     plain_language: "Use email instead of electronic mail address"
-    active_voice: "We sent your confirmation" not "Your confirmation has been sent"
-    second_person: "You have 3 invites pending" instead of "3 invites pending"
-    specific: "Saved 5 seconds ago" instead of "Recently saved"
+    active_voice: '"We sent your confirmation" not "Your confirmation has been sent"'
+    second_person: '"You have 3 invites pending" instead of "3 invites pending"'
+    specific: '"Saved 5 seconds ago" instead of "Recently saved"'
 
   label_patterns:
     toggles: "Do X / Don't do X — clear what toggling does"
@@ -104,21 +104,21 @@ avoid:
     - "OK"
 
   passive_voice:
-    - "Errors will be fixed" → "We're fixing errors"
-    - "Data has been saved" → "Your data is saved"
-    - "Could not complete action" → "We couldn't save your changes"
+    - '"Errors will be fixed" → "We''re fixing errors"'
+    - '"Data has been saved" → "Your data is saved"'
+    - '"Could not complete action" → "We couldn''t save your changes"'
 
   tech_jargon:
-    - "API endpoint" → "connection" or describe what it does
-    - "Cache cleared" → "Refreshed your view"
-    - "404 error" → "Page not found"
-    - "Parse error" → "We couldn't read that file"
+    - '"API endpoint" → "connection" or describe what it does'
+    - '"Cache cleared" → "Refreshed your view"'
+    - '"404 error" → "Page not found"'
+    - '"Parse error" → "We couldn''t read that file"'
 
   negativity:
-    - "You don't have permission" → "Only project owners can do this"
-    - "Cannot delete" → "This item is protected"
-    - "Forbidden" → "You don't have access"
-    - "Invalid" → be specific about what's wrong
+    - '"You don''t have permission" → "Only project owners can do this"'
+    - '"Cannot delete" → "This item is protected"'
+    - '"Forbidden" → "You don''t have access"'
+    - '"Invalid" → be specific about what''s wrong'
 
   overexplanation:
     - Too many sentences in error messages

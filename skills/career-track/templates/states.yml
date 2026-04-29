@@ -1,0 +1,35 @@
+# Canonical job application statuses for the career-track skill
+# Used to normalize status values across all job tracking operations
+
+statuses:
+  - name: Evaluated
+    description: Researched the role; not yet applied
+    terminal: false
+
+  - name: Applied
+    description: Application submitted
+    terminal: false
+
+  - name: Responded
+    description: Heard back — screening or interest confirmed
+    terminal: false
+
+  - name: Interview
+    description: Active in interview process (any round)
+    terminal: false
+
+  - name: Offer
+    description: Offer received
+    terminal: false
+
+  - name: Rejected
+    description: Rejected by the company
+    terminal: true
+
+  - name: Discarded
+    description: Removed from tracking (role no longer relevant, withdrew)
+    terminal: true
+
+  - name: SKIP
+    description: Flagged to skip — not worth pursuing
+    terminal: true
