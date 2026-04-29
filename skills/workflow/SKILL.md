@@ -150,6 +150,43 @@ py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> running
 2. `context: fresh` → spawn as new agent via Task tool (isolated context). `context: inherit` → current session.
 3. **Output contract:** The agent's final line of output MUST be one of the standard verdicts (see Output Contract below). Include this instruction in the agent's prompt.
 
+**Specialist node** (`type: specialist` in workflow YAML):
+
+A specialist node dispatches a Claude Code sub-agent from the `~/.claude/agents/` directory.
+Specialists are resolved by name against `skills/domains/ingest-log.yml`.
+
+Resolution:
+1. Find plugin root (two directories up from skills/workflow/)
+2. Read `<plugin-root>/skills/domains/ingest-log.yml`
+3. Find entry where `persona_md_path` matches the node's `specialist:` field (by basename or full path)
+4. Confirm `~/.claude/agents/<basename>` exists on the local filesystem
+
+Dispatch (agent present):
+- Read the agent file from `~/.claude/agents/<basename>`
+- Spawn via Task tool: agent file content + node `input` field + any `config` key-values
+- Record output and verdict per standard node protocol (3d)
+
+Graceful failure (agent NOT installed):
+- Do NOT fail the workflow silently
+- Pause the workflow: `workflow_state.py pause <key> <node-id> agent-not-installed`
+- Surface the install command to Director:
+  `cp <plugin-root>/<persona_md_path> ~/.claude/agents/<basename>`
+- Print: "Specialist '<name>' not installed. Install it, then run `workflow resume`."
+
+YAML syntax for a specialist node:
+  - id: infra-audit
+    type: specialist
+    specialist: kubernetes-expert
+    depends_on: [plan]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    input: "{{plan.output}}"
+
+Note: `specialist:` names the agent by its ingest-log entry identifier (matches
+`repo_name` in ingest-log). Do NOT use the `agent:` field — that field sets a persona
+hint for skill nodes and is unrelated to specialist dispatch.
+
 **For parallel review/secure nodes:** include in each agent's prompt:
 > "Write your complete findings to `review-<node-id>-findings.md` in the project root. Your final line of output must be exactly PASSED or BLOCKED."
 
