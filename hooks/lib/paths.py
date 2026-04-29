@@ -123,7 +123,9 @@ def warn_version_mismatch() -> None:
             for version_dir in sorted(cache_root.glob("*/*/plugin.json")):
                 try:
                     import json as _json
-                    cache_ver = str(_json.loads(version_dir.read_text(encoding="utf-8")).get("version", ""))
+                    cache_ver = str(
+                        _json.loads(version_dir.read_text(encoding="utf-8")).get("version", "")
+                    )
                     if cache_ver and cache_ver != source_ver:
                         print(
                             f"[dream-studio] Version mismatch: source={source_ver}, "

@@ -77,8 +77,8 @@ def main() -> None:
     for skill in sorted(missing):
         print(f"  - {skill}")
     print(
-        f"\nAdd these skills to skills/coach/analysts/route-classifier.yml "
-        f"(or another analyst YAML) to fix this."
+        "\nAdd these skills to skills/coach/analysts/route-classifier.yml "
+        "(or another analyst YAML) to fix this."
     )
     sys.exit(1)
 

@@ -118,7 +118,7 @@ def write_handoff(cwd: Path, kb: float, session_id: str | None, is_pct: bool = F
     last_commit = git(["log", "--oneline", "-1"], cwd) or "unknown"
     files = active_files(cwd)
     files_lines = (
-        "\n".join(f"- `{p}`: {l}" for l, p in files) if files else "- (working tree clean)"
+        "\n".join(f"- `{p}`: {ln}" for ln, p in files) if files else "- (working tree clean)"
     )
 
     career_section = checkpoint_career_ops(session_id) or ""
@@ -164,7 +164,7 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
     files = active_files(cwd)
 
     commits_lines = "\n".join(f"  - {c}" for c in commits) if commits else "  - (no recent commits)"
-    changed_lines = "\n".join(f"- `{p}`: {l}" for l, p in files) if files else "- (working tree clean)"
+    changed_lines = "\n".join(f"- `{p}`: {ln}" for ln, p in files) if files else "- (working tree clean)"
     next_step = (
         f"Read `{handoff_path}` to resume." if handoff_path
         else f"Continue work on branch `{branch}`."

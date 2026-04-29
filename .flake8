@@ -1,0 +1,17 @@
+[flake8]
+max-line-length = 100
+# E501 line length is enforced by black; flake8 owns logic/naming errors
+extend-ignore = E501
+exclude =
+    .venv,
+    .git,
+    __pycache__,
+    .planning,
+    templates,
+    packs/domains/templates,
+    packs/domains/domain_lib/game_validate.py
+per-file-ignores =
+    tests/*:F401
+    hooks/lib/workflow_state.py:F401
+    packs/core/hooks/on-stop-handoff.py:F401
+    packs/domains/hooks/on-game-validate.py:F401

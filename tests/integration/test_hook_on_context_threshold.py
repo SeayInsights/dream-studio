@@ -76,7 +76,9 @@ def test_warn_fires_once_per_5pp(isolated_home, monkeypatch, capsys, handler):
     _write_jsonl(projects, "sw", kb=1800)
     (projects / "sw.jsonl").touch()
 
-    import tempfile, json as _json, time
+    import json as _json
+    import tempfile
+    import time
     from pathlib import Path
 
     session_id = "sw"

@@ -154,7 +154,7 @@ def check_corrections_growth() -> tuple[int, str]:
     log_path = paths.meta_dir() / "corrections.log"
     if not log_path.exists():
         return 0, ""
-    lines = [l for l in log_path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    lines = [ln for ln in log_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     if not lines:
         return 0, ""
     last = lines[-1].split("\t")
