@@ -10,15 +10,19 @@ pack: quality
 Read `gotchas.yml` in this directory before every invocation.
 
 ## Project memory system (always first)
-Before any other hardening work, check for these three files:
+Before any other hardening work, check for these four files:
 - `CLAUDE.md` in the project root
 - `.planning/CONSTITUTION.md`
 - `.planning/GOTCHAS.md`
+- `CONTEXT.md` in the project root
 
 If any are missing, create them now. These are the project memory system — without them, Claude has no persistent context between sessions. Use these stubs:
 - `CLAUDE.md`: `# READ FIRST\n[project name] — [one line description]\n\nSee .planning/CONSTITUTION.md for architecture decisions.`
 - `.planning/CONSTITUTION.md`: `# Constitution\n\n## SSOT Map\n[Fill in: key files and what they own]\n\n## Key Decisions\n[Fill in: architectural choices and why]\n\n## Forbidden Patterns\n[Fill in: anti-patterns to avoid]`
 - `.planning/GOTCHAS.md`: `# Gotchas\n\n[Empty — update when something breaks]`
+- `CONTEXT.md`: `# Context\n\n## Domain Terms\n[Fill in: project-specific vocabulary — what words mean in THIS codebase]\n\nSee \`skills/harden/templates/context-template.md\` for full template.`
+
+CONTEXT.md is the shared domain vocabulary — it defines what project-specific terms mean and prevents AI verbosity and drift across sessions.
 
 ## Trigger
 `/harden` — runs full audit by default
