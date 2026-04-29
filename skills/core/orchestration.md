@@ -147,8 +147,8 @@ You are implementing Task N: [task name]
 ## Project Context (static — same for every task in this session)
 - Project: [project description]
 - Architecture: [key patterns]
-- Repo Map:
-  [paste compact repo map from core/repo-map.md — one line per symbol]
+- Repo Map (see core/repo-map.md for generation):
+  [paste compact repo map — one line per symbol, generated once at build Step 0]
 
 ## Working directory
 [absolute path]
