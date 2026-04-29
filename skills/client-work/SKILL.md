@@ -9,14 +9,14 @@ pack: domains
 ## Before you start
 Read these files first — every time:
 1. `gotchas.yml` — what NOT to do (mandatory)
-2. `powerbi/pbip-format.md` — for any .pbip / TMDL work
-3. `powerbi/storytelling-framework.yml` — for report design
-4. `powerbi/accessibility-checklist.yml` — before any report delivery
+2. `domains/powerbi/pbip-format.md` — for any .pbip / TMDL work
+3. `domains/powerbi/storytelling-framework.yml` — for report design
+4. `domains/powerbi/accessibility-checklist.yml` — before any report delivery
 
 ## Imports
-- domains/bi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
-- domains/bi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
-- powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
+- domains/powerbi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
+- domains/powerbi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
+- domains/powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
 
 ## Trigger
 `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
@@ -31,7 +31,7 @@ Dispatch triggers: editing `.pbip`/`.tmdl` files, DAX error diagnosis, semantic 
 Before writing or editing any TMDL, DAX, or M-query — complete every item:
 
 - [ ] **Detect PBIP_DIR** — locate the `*.SemanticModel` folder dynamically (e.g., `glob("*.SemanticModel")`). Never hardcode `.SemanticModel`.
-- [ ] **Read TMDL rules** — confirm `powerbi/pbip-format.md` and `powerbi/tmdl-authoring.md` are loaded for this session.
+- [ ] **Read TMDL rules** — confirm `domains/powerbi/pbip-format.md` and `domains/powerbi/tmdl-authoring.md` are loaded for this session.
 - [ ] **State blast radius** — list which tables, measures, and relationships will be affected by this change.
 - [ ] **Identify SSOT** — confirm which `.tmdl` file is the authoritative source for the object being modified.
 
@@ -52,13 +52,13 @@ Before writing or editing any TMDL, DAX, or M-query — complete every item:
 ## Power BI
 
 ### Data modeling + DAX
-**See:** `domains/bi/dax-patterns.md` — star schema, naming conventions, VAR patterns, time intelligence, RLS, DAX error reference
+**See:** `domains/powerbi/dax-patterns.md` — star schema, naming conventions, VAR patterns, time intelligence, RLS, DAX error reference
 
 ### M Query + query folding
-**See:** `domains/bi/m-query-patterns.md` — folding rules, parameter tables, error handling, M-query error reference, semantic model validation
+**See:** `domains/powerbi/m-query-patterns.md` — folding rules, parameter tables, error handling, M-query error reference, semantic model validation
 
 ### .pbip format
-**See:** `powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
+**See:** `domains/powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
 
 ## Power BI Verify
 
