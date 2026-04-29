@@ -14,6 +14,8 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+    # Estimated prompt + completion tokens for this node
+    estimated_tokens: 2000
 
   - id: build
     skill: build
@@ -25,6 +27,7 @@ nodes:
       max: 1
       backoff_seconds: 15
     input: "{{debug.output}}"
+    estimated_tokens: 3000
 
   - id: verify
     skill: verify
@@ -36,6 +39,7 @@ nodes:
     retry:
       max: 1
       backoff_seconds: 15
+    estimated_tokens: 1500
 
   - id: ship
     skill: ship
@@ -43,6 +47,7 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 600
+    estimated_tokens: 1000
 
   - id: record
     depends_on: [ship]
