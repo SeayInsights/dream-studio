@@ -119,3 +119,66 @@ def test_warn_version_mismatch_outer_exception_swallowed(tmp_path, monkeypatch):
         raise RuntimeError("state dir unavailable")
     monkeypatch.setattr(lp, "state_dir", fail_state)
     warn_version_mismatch()  # outer except must swallow the RuntimeError
+
+
+# ── check_for_update ──────────────────────────────────────────────────────
+
+
+def test_check_for_update_unknown_version_returns_early(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "unknown")
+    lp.check_for_update()  # must not make any network call or raise
+
+
+def test_check_for_update_sentinel_skips_request(tmp_path, monkeypatch):
+    import datetime
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    today = datetime.date.today().isoformat()
+    state = tmp_path / ".dream-studio" / "state"
+    state.mkdir(parents=True)
+    (state / f".update-checked-{today}").write_text("", encoding="utf-8")
+    # If this makes a real network call it would fail — sentinel prevents it
+    lp.check_for_update()
+
+
+def test_check_for_update_no_newer_version(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock, patch
+    import json
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    response_data = json.dumps({"tag_name": "v1.0.0"}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        lp.check_for_update()
+    sentinel = tmp_path / ".dream-studio" / "state"
+    assert any(f.name.startswith(".update-checked-") for f in sentinel.iterdir())
+
+
+def test_check_for_update_newer_version_prints_notice(tmp_path, monkeypatch, capsys):
+    from unittest.mock import MagicMock, patch
+    import json
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    response_data = json.dumps({"tag_name": "v1.1.0"}).encode()
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_data
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        lp.check_for_update()
+    captured = capsys.readouterr()
+    assert "Update available" in captured.err
+    assert "v1.1.0" in captured.err
+    assert "git pull" in captured.err
+
+
+def test_check_for_update_network_failure_swallowed(tmp_path, monkeypatch):
+    from unittest.mock import patch
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
+    with patch("urllib.request.urlopen", side_effect=OSError("network unreachable")):
+        lp.check_for_update()  # must not raise
