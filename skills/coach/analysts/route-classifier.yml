@@ -99,6 +99,34 @@ known_skills:
     triggers: ["workflow:", "workflow list", "workflow status", "run workflow"]
     description: YAML workflow orchestration
 
+  - skill: scan
+    triggers: ["scan org:", "run security scan", "generate scan rules", "scan:"]
+    description: Org-wide security scan and rule generation
+
+  - skill: mitigate
+    triggers: ["mitigate:", "how to fix findings", "generate mitigations", "remediate:"]
+    description: Finding mitigation and remediation guidance
+
+  - skill: comply
+    triggers: ["comply:", "compliance map", "audit evidence", "framework map", "soc 2", "nist"]
+    description: Compliance mapping and audit evidence generation
+
+  - skill: netcompat
+    triggers: ["netcompat:", "zscaler check", "proxy compat", "proxy compatibility"]
+    description: Network/proxy compatibility analysis
+
+  - skill: security-dashboard
+    triggers: ["security dashboard:", "refresh dashboard", "export dataset", "security metrics"]
+    description: Security dashboard build and dataset export
+
+  - skill: dast
+    triggers: ["dast:", "web scan", "pen test web", "zap scan", "dynamic scan"]
+    description: Dynamic application security testing
+
+  - skill: binary-scan
+    triggers: ["binary-scan:", "scan binary", "analyze exe", "checksec", "static binary"]
+    description: Binary and executable security analysis
+
 analyst_instructions: |
   You are the route-classifier analyst. The user's message did not match any known trigger keyword.
 
