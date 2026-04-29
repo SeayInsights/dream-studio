@@ -1,6 +1,6 @@
 ---
 name: client-work
-description: Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:`.
+description: Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:`, `add measure:`, `create measure:`, `build measure:`, `add column:`, `create report:`, `DAX error:`, `M-query error:`, `refresh fails:`, `TMDL:`, `pbip:`, `semantic model:`, `RLS:`, `star schema:`, `data model:`.
 pack: domains
 ---
 
@@ -16,6 +16,7 @@ Read these files first — every time:
 ## Imports
 - domains/bi/dax-patterns.md — data modeling, DAX patterns, DAX error reference
 - domains/bi/m-query-patterns.md — query folding, M-query patterns, error reference, semantic model validation
+- powerbi/tmdl-authoring.md — TMDL patterns, _measures table, relationship direction, rename chain, session workflow
 
 ## Trigger
 `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `review flow:`, `build app:`, `review app:`, `client handoff:`, `document:`
@@ -24,6 +25,22 @@ Read these files first — every time:
 For any Power BI work involving `.pbip` files, TMDL format, semantic model validation, complex DAX debugging, M-query troubleshooting, or Dataverse schema — dispatch a `bi-developer` subagent. Do not handle inline.
 
 Dispatch triggers: editing `.pbip`/`.tmdl` files, DAX error diagnosis, semantic model failures, M-query refresh errors, Dataverse schema changes, RLS implementation.
+
+## Power BI Pre-Build Checklist
+
+Before writing or editing any TMDL, DAX, or M-query — complete every item:
+
+- [ ] **Detect PBIP_DIR** — locate the `*.SemanticModel` folder dynamically (e.g., `glob("*.SemanticModel")`). Never hardcode `.SemanticModel`.
+- [ ] **Read TMDL rules** — confirm `powerbi/pbip-format.md` and `powerbi/tmdl-authoring.md` are loaded for this session.
+- [ ] **State blast radius** — list which tables, measures, and relationships will be affected by this change.
+- [ ] **Identify SSOT** — confirm which `.tmdl` file is the authoritative source for the object being modified.
+
+**⛔ STOP: if any item above is unchecked, do not proceed with any TMDL or DAX edits.**
+
+**Escalation pattern:**
+1. Attempt to solve the problem using reference files
+2. If that fails, retry once with a different approach
+3. If still blocked, ask one targeted question: "I need [specific missing info] to proceed — can you provide it?"
 
 ## Lifecycle
 1. **Intake** — Read the project tracker (Notion, Jira, etc.), understand the business question, surface assumptions
@@ -83,3 +100,17 @@ Every deliverable ships with:
 3. How to maintain it (refresh schedules, data source connections, who to contact)
 4. Known limitations and workarounds
 5. Next steps / future enhancements (if discussed)
+
+## Anti-patterns
+
+| ❌ Wrong | ✅ Correct |
+|---|---|
+| Hardcoding `.SemanticModel` in scripts | Detect `*.SemanticModel` dynamically — folder name matches the project name |
+| Adding `lineageTag` to new TMDL objects | Omit `lineageTag` when creating — Power BI generates these on first open |
+| Indenting TMDL with spaces | Tabs only — spaces cause parse errors in Power BI Desktop |
+| Using Windows `grep`/`findstr` to search TMDL files | Use Python with `open(path, encoding='utf-8')` — accented characters break shell tools |
+| Editing `report.json` directly | Never edit `report.json` — Power BI owns and regenerates this file |
+| Skipping Desktop validation after TMDL edits | Always open in Power BI Desktop after every TMDL change — parse errors surface immediately |
+| Placing descriptions as `description:` properties in TMDL body | Use `/// Description text` annotation above the object |
+| Adding measures after columns in a table block | Measures go above columns in TMDL table blocks |
+| Renaming a column in TMDL without checking the rename chain | Trace all 3 levels: source_name → pq_name → pbi_name before renaming |

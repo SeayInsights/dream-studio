@@ -1,4 +1,4 @@
----
+﻿---
 name: debug
 description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure.
 pack: quality
@@ -19,22 +19,12 @@ Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgu
 
 ## Steps
 0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
-0.5. **Triage** — Before reproducing, classify the issue in one line. Log as: `Triage: [severity] | [type] | [scope]`
-   - **Severity:** P0 (production down / data loss) | P1 (major feature broken) | P2 (degraded / workaround exists) | P3 (minor / cosmetic)
-   - **Type:** logic error | UI rendering | performance | data | integration | environment
-   - **Scope:** single file | cross-module | infrastructure | external dependency
-   
-   Triage takes 30 seconds and prevents over-investing in P3 issues or under-responding to P0s.
 1. **Reproduce** — Confirm the bug exists. Get exact steps, error messages, stack traces.
-1.5. **Capture** — Encode the reproduction as a failing artifact:
-   - **If unit-testable:** Write a minimal failing test that encodes the exact reproduction steps. This test becomes the fix's acceptance criterion and is used by `verify` as the red-green check.
-   - **If NOT unit-testable** (UI rendering, race condition, infrastructure): Capture a screenshot or log as the reproduction artifact instead.
-   - Set `testable: true/false` in debug output — the `fix-issue` workflow uses this to conditionally fire the `write-failing-test` node.
 2. **Hypothesize** — Form 2-3 hypotheses ranked by likelihood based on the error.
 3. **Test** — Test the most likely hypothesis first. One variable at a time.
 4. **Narrow** — Eliminate hypotheses based on results. Add new ones if needed.
 5. **Fix** — Apply the fix. Verify it resolves the issue without introducing new ones.
-6. **Document** — Record what was tried and ruled out so the next session doesn't repeat. **Mandatory:** After any debug session that required ≥ 3 hypothesis iterations OR revealed a reusable pattern (a class of bug, a hidden invariant, a surprising interaction), invoke `learn:` before closing the session. This is not optional — draft lessons are the input to dream-studio's self-improvement loop. Include the debug log summary and why the standard approach failed as the lesson input.
+6. **Document** — Record what was tried and ruled out so the next session doesn't repeat.
 
 ## Debug log format
 Track in conversation to prevent retrying failed approaches:
@@ -59,37 +49,19 @@ Track in conversation to prevent retrying failed approaches:
 [evidence the fix works + no regressions]
 ```
 
-## React / Next.js projects
-
-When the project uses React or Next.js and the app is running, use `next-browser` before forming hypotheses:
-
-```bash
-# Pull live React errors (replaces reading console logs manually)
-next-browser errors
-
-# Inspect component tree at the failing point
-next-browser snapshot
-
-# Trace failed network requests
-next-browser network
-```
-
-These three commands replace manual log-reading for React bugs. Run them as part of Step 1 (Reproduce) to get structured, machine-readable state instead of raw logs.
-
-**Requirement:** `next-browser` daemon must be running. Start with `next-browser start` if not already active.
-
-## Rules
-- Never shotgun debug (changing multiple things at once)
-- Never skip reproduction ("I think I know what it is")
-- Track every hypothesis — even obvious ones
-- If 3 hypotheses fail, re-read the error from scratch
-- If stuck after 5 hypotheses, escalate to Director with the full debug log
-
 ## Next in pipeline
 → back to `build` or `verify` (wherever the failure originated)
 
 ## Anti-patterns
-- "Let me try this" without stating a hypothesis
-- Changing multiple things between tests
-- Ignoring error messages and guessing
-- Repeating a failed approach from a previous session
+
+| ❌ Wrong | ✅ Correct |
+|---|---|
+| "Let me try this" without stating a hypothesis | State hypothesis before every test: "I think X because Y" |
+| Changing multiple things between tests | One variable per test — isolate the change |
+| Ignoring error messages and guessing | Read the full error message first; it usually names the cause |
+| Repeating a failed approach from a previous session | Read the debug log before forming hypotheses |
+| Shotgun debugging (changing 5 things at once) | Test the single most likely hypothesis first |
+| Skipping reproduction ("I think I know what it is") | Always reproduce with exact steps before hypothesizing |
+| Not tracking hypotheses | Log every hypothesis — even obvious ones — so the next session doesn't repeat |
+| Using shell grep or findstr to search TMDL/UTF-8 files on Windows | Use Python with `open(path, encoding='utf-8')` — shell tools break on accented characters |
+| Continuing past 5 failed hypotheses without escalating | After 5 failures, stop and escalate to Director with the full debug log |
