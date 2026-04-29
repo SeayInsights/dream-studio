@@ -8,7 +8,6 @@ Exits 0 always — metrics failure must not block skill execution.
 
 import sys
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
