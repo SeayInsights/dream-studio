@@ -1,4 +1,4 @@
-﻿---
+---
 name: workflow
 description: YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 pack: meta
@@ -16,35 +16,14 @@ Read `gotchas.yml` in this directory before every invocation.
 
 If the user invokes `/workflow` with no workflow name (or types just `workflow` or `workflow list`):
 
-1. Scan for YAML files in two locations, in this order:
-   - Project-local: `.workflows/*.yaml` relative to cwd (user custom workflows)
-   - Plugin: `<plugin-root>/workflows/*.yaml` (built-in workflows)
-2. Print a formatted list:
+1. Run the registry CLI and display its output:
+   ```
+   py "$PLUGIN/hooks/lib/workflow_registry.py"
+   ```
+   This prints a live table: Name, Description, Est. Tokens, Last Run, Run count.
+2. Then stop — do not proceed to execution.
 
-```
-Available workflows
-───────────────────────────────────────────────────────
-Built-in (plugin):
-  • comprehensive-review  Five-way parallel review with synthesis report
-  • feature-research      Deep research + native integration strategy
-  • fix-issue             Diagnose and resolve a bug or ticket
-  • game-feature          Design and implement a game mechanic or system
-  • hotfix                Fast-track critical fix straight to production
-  • idea-to-pr            Spec, plan, implement, and ship
-  • optimize              Profile, audit bloat, apply quick wins, verify improvement
-  • project-audit         Health, debt, security, and gap analysis
-  • prototype             Rapid proof-of-concept build
-  • safe-refactor         Test-guarded structural improvements
-  • studio-onboard        Assess and adopt project assets into dream-studio
-
-Project-local (.workflows/):
-  (none found)  ← or list any found
-
-Run a workflow:  workflow: <name>
-```
-
-3. Read the `description:` field from each YAML file for the summary text.
-4. Then stop — do not proceed to execution.
+The registry auto-discovers all `*.yaml` files in `$PLUGIN/workflows/` including any you just added.
 
 ## CLI Tools
 
@@ -270,7 +249,7 @@ py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
 
 ## Error Handling
 
-**Node failure:** Retry up to 3Ã— with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
+**Node failure:** Retry up to 3× with model upgrade. After exhaustion → `update <key> <node-id> failed`, pause workflow, tell Director.
 
 **Dependency failure by trigger rule:**
 - `all_success` → skip the dependent node
