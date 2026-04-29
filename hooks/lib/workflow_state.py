@@ -31,6 +31,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import paths                                        # noqa: E402
 from lib.workflow_validate import parse_workflow             # noqa: E402
+try:
+    from lib.workflow_cost import estimate_workflow_cost, format_cost_summary  # noqa: E402
+    _COST_AVAILABLE = True
+except ImportError:
+    _COST_AVAILABLE = False
 from lib.workflow_engine import (                            # noqa: E402
     _file_lock, _extract_node_ids,
     _evaluate, _resolve_ref, _coerce,
@@ -159,6 +164,13 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     print(key)
     print(f"[workflow] {args.name} started — {len(node_ids)} nodes initialized")
+    if _COST_AVAILABLE:
+        try:
+            yaml_data = parse_workflow(yaml_path)
+            cost = estimate_workflow_cost(yaml_data)
+            print(format_cost_summary(cost), flush=True)
+        except Exception:
+            pass
 
 
 def cmd_update(args: argparse.Namespace) -> None:
