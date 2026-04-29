@@ -1,10 +1,13 @@
----
+﻿---
 name: verify
 description: Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. Trigger on `verify:`, `prove it:`, or after `review` passes.
 pack: core
 ---
 
 # Verify — Prove It Works
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
 - core/git.md — get commit SHA
@@ -114,6 +117,19 @@ Date: YYYY-MM-DD
 
 ### Verdict: VERIFIED / FAILED ([details])
 ```
+
+## Bug Fix Verification (red-green cycle)
+
+When verifying a fix that came through `debug` → `fix-issue` workflow AND debug Step 1.5 produced a test file:
+
+1. **Red** — Run the failing test BEFORE confirming the fix is applied. Confirm it fails (exit non-zero).
+2. **Confirm fix applied** — `git diff` shows the fix is present.
+3. **Green** — Run the same test. Confirm it passes (exit 0).
+4. **Regression** — Run the full test suite. Confirm no new failures introduced.
+
+Evidence format: `[test name] pre-fix → FAIL (exit 1) | post-fix → PASS (exit 0)`
+
+If debug Step 1.5 produced a screenshot/log instead of a test (non-unit-testable bug), use the screenshot/log as reproduction evidence and verify the symptom is gone via golden-path verification instead.
 
 ## Next in pipeline
 → `ship` (if deploying) or done
