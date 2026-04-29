@@ -9,6 +9,9 @@ pack: domains
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Imports
+- canvas-patterns.md — DreamySuite visual builder patterns (zero-size inflation, overlay, responsive cascade, undo, AI pipeline)
+
 ## Trigger
 `dashboard:`, `feed contract:`, `build dashboard:`, `dashboard feature:`
 
@@ -77,6 +80,3 @@ Location: `%APPDATA%/Claude/<plugin-name>-feed.json` (Windows) Â· `~/.config/C
 - Window management: single main window with panel routing, not multiple windows
 - System tray: minimal — show/hide toggle + quit
 - Auto-update: Tauri updater plugin for release builds
-
-## Depth Status
-JIT-pending — examples and gotchas will be added from the first real Tauri dashboard build that uses this skill.

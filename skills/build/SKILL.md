@@ -37,28 +37,13 @@ Dispatch fresh subagent per task with isolated context.
 
 **Why subagents:** They get only task-specific state — no session history, no conversation baggage. This preserves your own context for coordination while ensuring each agent stays focused.
 
-**Worktree isolation (parallel dispatches):** For tasks running in parallel, add `isolation: "worktree"` to each Agent call. Claude Code creates an isolated git worktree per agent — last-writer-wins conflicts between parallel agents become structurally impossible. The worktree is auto-cleaned if the agent makes no changes. Sequential tasks in the same wave do NOT need worktree isolation.
-
-### TDD mode (`build:tdd` flag)
-For test-driven development. Activate by appending `:tdd` to the build trigger: `build:tdd <topic>`.
-
-Uses `templates/agent-prompts/tdd-loop.md` instead of `implementer.md` for each task dispatch.
-
-**Cycle per task:**
-1. Write a failing test that encodes the acceptance criterion — confirm RED (test exits non-zero)
-2. Implement minimum code to make the test pass — confirm GREEN (test exits zero)
-3. Refactor if needed — confirm still GREEN
-4. Commit: test file + implementation together in one commit
-
-**When to use:** When the acceptance criteria are clearly unit-testable. Skip for UI rendering tasks, infrastructure changes, or exploratory work where TDD adds friction without value.
-
 ## The Process
 
 ### Step 0: Load plan and project context
 If `.planning/GOTCHAS.md` exists, read it now. If `.planning/CONSTITUTION.md` exists, read it now. These contain known failure patterns and architectural decisions that must constrain every task in the build.
 Read the plan file ONCE. Extract ALL tasks with full text. Don't re-read the plan per task.
 
-**Generate repo map** (see core/repo-map.md for commands): Run the find+grep commands to extract exported symbols from source files. Store as `$REPO_MAP`. This string is pasted identically into every subagent dispatch in the session as the static prefix — do NOT regenerate per task. For large codebases, filter to the relevant subtree (e.g., `skills/` for skill edits, `src/` for app code).
+**⛔ STOP gate:** If the project has 5+ files AND `.planning/CONSTITUTION.md` or `.planning/GOTCHAS.md` are missing — STOP. Run `dream-studio:harden` first to scaffold these files. A build without a constitution is building blind.
 
 ### Step 1: Dependency analysis
 **See:** core/orchestration.md — Dependency analysis for parallel execution
@@ -76,11 +61,10 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - Any decisions made so far
 
 2. **Handle implementer response** — See: core/orchestration.md — Handling agent responses
-   Parse `result.signal` from the JSON response:
-   - `done` → proceed to review
-   - `done_with_concerns` → read `result.concerns[]`, address if correctness/scope, then review
-   - `needs_context` → read `result.missing[]`, provide info, re-dispatch
-   - `blocked` → read `result.blocker`, assess and re-dispatch or escalate
+   - `DONE` → proceed to review
+   - `DONE_WITH_CONCERNS` → read concerns, address if correctness/scope, then review
+   - `NEEDS_CONTEXT` → provide missing info, re-dispatch
+   - `BLOCKED` → assess and re-dispatch or escalate
 
 3. **Spec compliance review** — See: core/orchestration.md — Review loop pattern
    - Dispatch reviewer with task spec + implementer report
@@ -96,26 +80,21 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - With TR-IDs: `feat(task-3): implement login form [TR-001, TR-002]`
    - Without TR-IDs: `feat(task-3): implement login form`
 
-   5.5 **Spec-tracking** (when traceability active) — If this task implements a functional requirement, include the FR-ID in the commit message body: `Implements FR-003, FR-004`. This keeps the audit trail current without extra overhead.
-
 6. **Update traceability** (conditional) — See: core/traceability.md — Update TR-ID with commit
    - Check if `.planning/traceability.yaml` exists
    - If exists: validate → update commits + status → re-validate
    - If doesn't exist or invalid: skip
 
-7. **Mark complete** — Write task-level checkpoint to `.sessions/YYYY-MM-DD/checkpoint-<topic>.md` (append mode). Use the task-level checkpoint format from core/format.md: task number + name, COMPLETE status, commit SHA + message, next task, context % estimate.
+7. **Mark complete** — Write proof to disk (task status in plan file or state file)
 
 ### Step 3: Checkpoint
-**See:** core/format.md — Checkpoint format (task-level)
+**See:** core/format.md — Checkpoint format
 
-After every task (config: `max_tasks_before_checkpoint: 1`), write a task-level checkpoint.
-Include:
+After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
 - Tasks completed / total
 - Any drift from plan
 - Blockers or concerns
 - Context usage (if growing, consider handoff)
-
-**Auto-learn signal:** If any tasks in this wave resolved as `done_with_concerns` and concerns were addressed, append: "Concerns resolved — consider `learn: [topic]` to capture the pattern for future builds."
 
 ## Model Selection for Subagents
 
@@ -130,11 +109,7 @@ Use Haiku for mechanical tasks, Sonnet for integration, Opus for architecture/de
 Use the standard template with:
 - Full task text (pasted, never a file path)
 - Scene-setting context
-- JSON output format (signal, confidence, summary, concerns/missing/blocker)
-
-**Ordering rule (prompt caching):** Assemble the static prefix (project context + repo map +
-architecture) ONCE at Step 0. Prepend it identically to every dispatch in the session — Claude
-caches the longest common prefix automatically, reducing token cost across multi-task builds.
+- Expected output format (DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT)
 
 ## Drift detection
 - **Minor drift** (variable name, slight approach change) → note it, continue
@@ -147,11 +122,15 @@ Each task only advances after writing proof to disk. If context fills mid-task, 
 → `review` (quality check the completed work)
 
 ## Anti-patterns
-- Skipping evaluation ("it compiles, ship it")
-- Committing multiple tasks in one commit
-- Continuing past major drift without Director approval
-- Making subagents read plan files (provide full text)
-- Dispatching parallel agents that touch the same files
-- Ignoring subagent questions or escalations
-- Skipping spec compliance review and jumping to code quality
-- Accepting "close enough" on spec compliance
+
+| ❌ Wrong | ✅ Correct |
+|---|---|
+| Skipping spec compliance ("it compiles, ship it") | Always run spec compliance review before code quality review |
+| Committing multiple tasks in one commit | One task = one commit with task ID in message |
+| Continuing past major drift without approval | STOP and surface drift: "Drift detected: [what/why]. Adjust or revert?" |
+| Giving subagents a file path to read | Paste full text inline in the dispatch prompt |
+| Dispatching parallel agents that touch the same file | Check file ownership — shared files require sequential tasks |
+| Ignoring subagent escalations or concerns | Read every `done_with_concerns` — address correctness issues before review |
+| Skipping spec compliance and jumping to code quality | Spec compliance must pass first — in that order, always |
+| Accepting "close enough" on spec compliance | Either it meets the acceptance criterion or it doesn't — no partial credit |
+| Starting a build without CONSTITUTION.md on a 5+ file project | Run dream-studio:harden first to scaffold project constitution |
