@@ -10,9 +10,7 @@ Requirements: Python 3.11+, no third-party dependencies.
 
 from __future__ import annotations
 
-import io
 import json
-import os
 import platform
 import subprocess
 import sys
@@ -102,7 +100,8 @@ def step_venv_and_deps() -> StepResult:
                 return StepResult(
                     name,
                     False,
-                    f"pip not found and ensurepip failed: {(repair.stderr or repair.stdout or '').strip()}",
+                    "pip not found and ensurepip failed: "
+                    + (repair.stderr or repair.stdout or "").strip(),
                 )
 
         if not REQUIREMENTS.exists():

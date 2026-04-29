@@ -84,7 +84,7 @@ def check_tests(files: list[str]) -> tuple[str, int, str]:
 
 
 def check_debug(diff: str) -> tuple[str, int, str]:
-    added = [l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")]
+    added = [ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
     hits = []
     for line in added:
         for p in DEBUG_PATTERNS:
@@ -99,7 +99,7 @@ def check_debug(diff: str) -> tuple[str, int, str]:
 
 
 def check_secrets(diff: str) -> tuple[str, int, str]:
-    added = [l for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")]
+    added = [ln for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
     hits = []
     for line in added:
         for p in SECRET_PATTERNS:
@@ -190,7 +190,7 @@ def main() -> None:
     for name, (status, score, detail) in results.items():
         print(f"  {status:4s} {name:12s} {score:2d}/10  {detail}", flush=True)
     print(f"  {'':4s} {'OVERALL':12s} {overall_score}/10  — {label}", flush=True)
-    print(f"  Advisory only — Director decides.\n", flush=True)
+    print("  Advisory only — Director decides.\n", flush=True)
 
     try:
         score_path = paths.meta_dir() / "quality-score.json"

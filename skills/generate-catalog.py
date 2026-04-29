@@ -10,7 +10,6 @@ Reads all */metadata.yml files and generates dream-studio-catalog.md with:
 - Performance insights
 """
 
-import re
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
@@ -63,7 +62,6 @@ def parse_yaml_simple(content):
     """Simple YAML parser for metadata files."""
     result = {}
     current_key = None
-    indent_level = 0
 
     for line in content.split('\n'):
         # Skip comments and empty lines

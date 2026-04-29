@@ -29,7 +29,7 @@ def extract_frontmatter(content):
     if match:
         try:
             return parse_simple_yaml(match.group(1))
-        except:
+        except Exception:
             return {}
     return {}
 

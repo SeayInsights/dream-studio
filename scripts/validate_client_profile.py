@@ -20,9 +20,9 @@ except ImportError:
 # ── Enum definitions ─────────────────────────────────────────────────────────
 VALID_ENGAGEMENT_TYPES = {"vendor", "internal", "consulting"}
 VALID_ISOLATION_MODELS = {"multi-tenant", "single-tenant", "none"}
-VALID_PROXY_TYPES      = {"zscaler", "bluecoat", "palo-alto", "none"}
-VALID_SCAN_SCHEDULES   = {"nightly", "weekly", "on-push-only"}
-VALID_DASHBOARD_TOOLS  = {"powerbi", "none"}
+VALID_PROXY_TYPES = {"zscaler", "bluecoat", "palo-alto", "none"}
+VALID_SCAN_SCHEDULES = {"nightly", "weekly", "on-push-only"}
+VALID_DASHBOARD_TOOLS = {"powerbi", "none"}
 
 
 # ── Validation rules ─────────────────────────────────────────────────────────

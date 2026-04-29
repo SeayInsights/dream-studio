@@ -167,10 +167,10 @@ def check_pattern_accumulation(pattern: str, timestamp: str) -> None:
         f"it to a permanent Derived Rule in director-corrections.md.\n\n"
         f"## Evidence ({match_count} occurrences)\n\n"
         + "\n".join(evidence) + "\n\n"
-        f"## Director Action\n\n"
-        f"- [ ] Promote to Derived Rule\n"
-        f"- [ ] Edit and promote\n"
-        f"- [ ] Reject (delete this file)\n"
+        + "## Director Action\n\n"
+        + "- [ ] Promote to Derived Rule\n"
+        + "- [ ] Edit and promote\n"
+        + "- [ ] Reject (delete this file)\n"
     )
     draft_path.write_text(draft, encoding="utf-8")
     print(

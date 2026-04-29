@@ -11,6 +11,7 @@ _LIB_DIR = Path(__file__).resolve().parents[2] / "hooks" / "lib"
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR.parent))
 
+
 def _load(name: str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(name, _LIB_DIR / f"{name}.py")
     assert spec and spec.loader
@@ -18,6 +19,7 @@ def _load(name: str) -> types.ModuleType:
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
+
 
 mod = _load("workflow_engine")
 _evaluate = mod._evaluate

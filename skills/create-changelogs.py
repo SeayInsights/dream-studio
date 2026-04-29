@@ -33,6 +33,7 @@ CHANGELOG_TEMPLATE = """# {skill_name} — Changelog
 - Dependency graph documented
 """
 
+
 def create_changelog(skill_dir):
     """Create changelog.md for a skill."""
     skill_name = skill_dir.name
@@ -49,6 +50,7 @@ def create_changelog(skill_dir):
 
     print(f"DONE: {skill_name}: changelog.md created")
     return True
+
 
 def main():
     """Process all skills."""
@@ -74,6 +76,7 @@ def main():
     print(f"Processed: {processed} skills")
     print(f"Skipped: {skipped} skills")
     print(f"{'='*60}")
+
 
 if __name__ == "__main__":
     main()
