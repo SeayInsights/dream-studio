@@ -24,3 +24,15 @@ Workflows are declarative templates — they do not contain executable code and 
 - Gate nodes must define pass/fail conditions — no implicit success
 - Parallel node groups must have no data dependencies between them
 - Workflow state is persisted externally (not in these files) so templates remain stateless
+
+## Available workflows
+
+| Workflow | Purpose |
+|---|---|
+| `idea-to-pr.yaml` | Full build cycle: spec → plan → build → review → ship |
+| `domain-ingest.yaml` | Synthesize a new specialist agent from external sources |
+| `domain-refresh.yaml` | Re-score and re-synthesize stale agents |
+| `self-audit.yaml` | Run the self-improvement loop: scan → prioritize → fix |
+| `studio-onboard.yaml` | First-run setup and validation |
+| `project-audit.yaml` | Comprehensive project health check |
+| `security-audit.yaml` | Security posture review |

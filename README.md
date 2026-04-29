@@ -736,7 +736,7 @@ What fires automatically vs what requires a manual command:
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming conventions, commit format, and the PR checklist.
 
 ```bash
-make test        # run 167 tests with coverage (threshold: 70%)
+make test        # run 355 tests with coverage (threshold: 70%)
 make lint        # flake8
 make fmt         # black --check
 make security    # pip-audit for known vulnerabilities

@@ -22,3 +22,9 @@ py scripts/benchmark_tokens.py --run-label <label> --publish
 ```
 
 This reads `~/.dream-studio/meta/token-log.md`, computes the overhead table, and overwrites this file.
+
+## No data yet?
+
+The token log is written by `on-token-log.py` during live Claude Code sessions.
+Run a few sessions with dream-studio active, then re-run the benchmark command above.
+The `~/.dream-studio/meta/token-log.md` file is local to your machine and not committed to the repo.

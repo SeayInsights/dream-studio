@@ -1,10 +1,11 @@
 """
-scripts/setup.py — dream-studio first-run setup
+scripts/setup.py — dream-studio first-run setup and update
 
 Usage:
     py scripts/setup.py          (from repo root)
     python scripts/setup.py
 
+Re-run after `git pull` to sync settings and pick up any new hooks.
 Requirements: Python 3.11+, no third-party dependencies.
 """
 
