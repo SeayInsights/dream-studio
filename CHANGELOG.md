@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-04-29
+
+### Added — Skill & Workflow Improvements (TR-001–TR-013)
+- **skills/explain/** — New `explain` skill: traces entry point through layers to output, depth adapts to question; includes SKILL.md, metadata, gotchas, config, changelog
+- **skills/coach/analysts/route-classifier.yml** — Route-classifier analyst persona for mapping unmatched intents to nearest skill
+- **skills/coach/modes.yml** — `route-classify` mode entry for coach
+- **skills/core/repo-map.md** — New core module: repo-map generation patterns, registered in REGISTRY.md
+- **skills/domains/bi/dax-patterns.md** — DAX calculation patterns for Power BI domain knowledge base
+- **skills/domains/bi/m-query-patterns.md** — M-query data transformation recipes for Power BI
+- **skills/client-work/powerbi/pbip-format.md** — PBIP format reference for Power BI project files
+- **hooks/lib/skill_metrics.py** — Appends skill usage records (name, duration, tokens) to `~/.dream-studio/skill-metrics.jsonl` on every invocation
+- **scripts/sync-cache.ps1** — PowerShell cache sync utility
+
+### Changed
+- **CLAUDE.md** — Added routing fallback clause: unmatched intents route to `coach` with `route-classify` mode (TR-012)
+- **skills/coach/SKILL.md** — Added `route-classify` mode (TR-012)
+- **skills/build/SKILL.md** — Repo-map generation step at Step 0 (TR-006), per-task checkpoints at every step (TR-007), worktree isolation instruction for parallel dispatch (TR-008), auto-learn suggestion at checkpoint (TR-013)
+- **skills/debug/SKILL.md** — Step 1.5 failing-test capture gate (TR-011), auto-learn suggestion (TR-013)
+- **skills/verify/SKILL.md** — Red-green bug fix verification section (TR-011)
+- **skills/review/SKILL.md** — JSON reviewer schema for structured findings output (TR-003)
+- **skills/core/orchestration.md** — JSON agent schema, static-before-dynamic prompt ordering (TR-003/TR-004), repo-map field in implementer template (TR-006), pipeline gate check pattern (TR-009)
+- **skills/core/format.md** — Task-level checkpoint format variant (TR-007)
+- **skills/build/config.yml** — Checkpoint threshold set to 1 task (TR-007)
+- **workflows/fix-issue.yaml** — `create-issue` node after diagnose (TR-001), write-failing-test conditional node (TR-005)
+- **workflows/idea-to-pr.yaml** — Conditional security branch (TR-005)
+- **settings.json** — PostToolUse metrics hook for Skill tool (TR-010)
+- 30+ SKILL.md files updated with content improvements across all packs
+- Updated gotchas.yml for build, debug, plan, review, secure, think, verify
+- Regenerated `skills/dream-studio-catalog.md` — now covers 38 skills
+
 ## [0.7.0] — 2026-04-28
 
 ### Added — Skill Architecture Enhancement (Phase 2)

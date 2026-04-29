@@ -1,12 +1,12 @@
 # dream-studio
 
 [![CI](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-green.svg)](pyproject.toml)
 
-An opinionated Claude Code plugin that adds a **Build Pipeline**, **37 skills**, automated hooks, agent personas, and a context-aware status bar — portable across every project.
+An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**, automated hooks, agent personas, and a context-aware status bar — portable across every project.
 
 ---
 
@@ -125,6 +125,7 @@ Skills are invoked as `/skill-name` or via natural-language triggers listed belo
 | Skill | Trigger | What it does |
 |---|---|---|
 | `debug` | `/debug`, `debug:`, `diagnose:` | Reproduce → hypothesize → test one variable at a time → fix |
+| `explain` | `explain:`, `how does X work`, `walk me through` | Trace entry point through layers to output; depth adapts to the question |
 | `polish` | `/polish`, `polish ui:`, `critique design:` | Critique 7 UI dimensions (layout, typography, color…), scored 1–5 |
 | `secure` | `/secure`, `secure:`, `check security` | OWASP Top 10 checklist + STRIDE threat model |
 | `analyze` | `/analyze` | Parallel multi-perspective analyst subagents → synthesized decision memo |
@@ -162,6 +163,7 @@ Skills are invoked as `/skill-name` or via natural-language triggers listed belo
 | `workflow` | `workflow:`, `workflow status`, `workflow resume` | YAML DAG orchestration with gates and parallel node spawning |
 | `harden` | `/harden` | 20-item project audit + gap-fill from `templates/project-standards/` |
 | `structure-audit` | `/structure-audit` | Folder structure audit scored against FSC + architecture conventions |
+| `coach` | `/coach`, `coach:` | Workflow coaching — evaluates workflow-fit, context-health, pr-hygiene, agent-dispatch; `route-classify` mode maps unmatched intents to the nearest skill |
 
 ### Career Ops
 
@@ -193,6 +195,7 @@ Hooks run automatically on every session — no user action required.
 | `on-quality-score` | PostToolUse | Records quality scores per session |
 | `on-tool-activity` | PostToolUse | Tracks tool use; nudges `/harden` on first Edit/Write in an unhardened project |
 | `on-skill-load` | UserPromptSubmit | Logs skill invocations |
+| `on-skill-metrics` | PostToolUse | Appends skill usage records (name, duration, tokens) to `~/.dream-studio/skill-metrics.jsonl` |
 | `on-game-validate` | PostToolUse | Validates Godot scene/script changes |
 | `on-workflow-progress` | PostToolUse | Advances workflow DAG state |
 
@@ -525,13 +528,14 @@ dream-studio/
 │   ├── hooks.json                   # Hook event -> handler registrations
 │   ├── run.sh                       # Unix launcher (searches packs/*/hooks/)
 │   └── run.cmd                      # Windows launcher
-├── skills/                          # 37 skill definitions (each has SKILL.md with pack: field)
+├── skills/                          # 38 skill definitions (each has SKILL.md with pack: field)
 ├── workflows/                       # YAML workflow DAG definitions
 ├── packs.yaml                       # Pack manifest — defines all 6 packs and their members
 ├── scripts/
 │   ├── bom.py                       # Bill of materials
 │   ├── statusline-command.sh        # Status bar script (make install-statusline)
-│   └── sync_docs.py                 # Regenerate workflow table in README
+│   ├── sync_docs.py                 # Regenerate workflow table in README
+│   └── sync-cache.ps1               # PowerShell cache sync utility
 ├── tests/
 ├── CHANGELOG.md
 ├── Makefile
@@ -544,7 +548,7 @@ dream-studio/
 
 ## Skill Architecture
 
-As of **v0.7.0 (2026-04-28)**, all 37 skills follow a structured architecture with evolution tracking, quality metrics, and auto-generated documentation.
+As of **v0.8.0 (2026-04-29)**, all 38 skills follow a structured architecture with evolution tracking, quality metrics, and auto-generated documentation.
 
 ### Standardized Skill Structure
 
@@ -636,7 +640,8 @@ See `.planning/README.md` for complete workflow documentation and `.planning/spe
 | **testing** | playwright-patterns.yml | awesome-playwright (1.4k ⭐) — Page Object Model, locator strategies |
 | **documentation** | technical-writing-standards.yml | Diátaxis framework, Google/Microsoft style guides |
 | **design** | 5 standards (fluent, material, typography, color, layout) | Fluent Design, Material Design 3, WCAG 2.1 |
-| **powerbi** | 3 patterns (storytelling, accessibility, design) | Cole Nussbaumer Knaflic, Microsoft Power BI guidelines |
+| **bi** | dax-patterns.md, m-query-patterns.md | DAX calculation patterns, M-query data transformation recipes for Power BI |
+| **powerbi** | 3 patterns (storytelling, accessibility, design) + pbip-format.md | Cole Nussbaumer Knaflic, Microsoft Power BI guidelines, PBIP format reference |
 | **data-visualization** | 2 standards (accessibility, design) | WCAG for charts, data-ink ratio, chart selection |
 | **frontend** | (existing) | React, TypeScript, component patterns |
 | **backend** | (existing) | Node.js, API design, database patterns |
