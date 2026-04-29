@@ -46,7 +46,7 @@ SCHEMA_VERSION = 1
 _TERMINAL = frozenset({"completed", "completed_with_failures", "aborted"})
 
 
-# ── State I/O ─────────────────────────────────────────────────────────
+# ── State I/O ─────────────────────────────────────────────────────
 
 
 def _state_path() -> Path:
@@ -117,7 +117,7 @@ def _try_archive_and_prune(data: dict, key: str, wf: dict) -> None:
         _write_state(data)
 
 
-# ── Commands ──────────────────────────────────────────────────────────
+# ── Commands ────────────────────────────────────────────────────
 
 
 def _find_resumable(data: dict, name: str) -> tuple[str, dict] | None:
@@ -338,6 +338,20 @@ def cmd_eval(args: argparse.Namespace) -> None:
     sys.exit(0 if result else 1)
 
 
+def cmd_skill_correct(args: argparse.Namespace) -> None:
+    try:
+        from lib.studio_db import skill_correct
+    except ImportError:
+        print("Error: studio_db not available", file=sys.stderr)
+        sys.exit(1)
+    ok = skill_correct(args.telemetry_id, 1 if args.result == "success" else 0, args.reason)
+    if ok:
+        print(f"corrected: telemetry_id={args.telemetry_id} → {args.result}")
+    else:
+        print("Error: DB write failed", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_next(args: argparse.Namespace) -> None:
     data = _read_state()
     wf = _get_workflow(data, args.key)
@@ -426,7 +440,7 @@ def cmd_next(args: argparse.Namespace) -> None:
             print(f"  {nid}: {', '.join(parts)}")
 
 
-# ── CLI ───────────────────────────────────────────────────────────────
+# ── CLI ─────────────────────────────────────────────────────
 
 
 def main() -> None:
@@ -465,11 +479,16 @@ def main() -> None:
     p = sub.add_parser("next", help="List nodes ready to execute")
     p.add_argument("key")
 
+    p = sub.add_parser("skill-correct", help="Correct a skill telemetry signal")
+    p.add_argument("telemetry_id", type=int)
+    p.add_argument("result", choices=["success", "failure"])
+    p.add_argument("--reason", default="")
+
     args = parser.parse_args()
     cmds = {
         "start": cmd_start, "update": cmd_update, "pause": cmd_pause,
         "resume": cmd_resume, "abort": cmd_abort, "status": cmd_status,
-        "eval": cmd_eval, "next": cmd_next,
+        "eval": cmd_eval, "next": cmd_next, "skill-correct": cmd_skill_correct,
     }
     cmds[args.command](args)
 
