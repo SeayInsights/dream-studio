@@ -1,21 +1,20 @@
-﻿---
-name: debug
-description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure.
-pack: quality
 ---
-
-# Debug — Scientific Method
+name: debug
+description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging.
+pack: core
+triggers:
+  - debug:
+  - diagnose:
+---
 
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
-If the project has `.planning/GOTCHAS.md` — read it before starting.
-If the project has `.planning/CONSTITUTION.md` — read it before starting.
 
 ## Trigger
-`debug:`, `diagnose:`, on build failure, on verify failure, on agent retry
+`debug:`, `diagnose:`
 
 ## Purpose
-Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgun debugging.
+Diagnose and fix bugs using disciplined hypothesis testing. One variable at a time.
 
 ## Steps
 0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
@@ -25,6 +24,7 @@ Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgu
 4. **Narrow** — Eliminate hypotheses based on results. Add new ones if needed.
 5. **Fix** — Apply the fix. Verify it resolves the issue without introducing new ones.
 6. **Document** — Record what was tried and ruled out so the next session doesn't repeat.
+7. **Capture** — After any debug session that required ≥3 hypothesis iterations OR revealed a reusable pattern, invoke `learn:` before closing. This is not optional — draft lessons are the input to dream-studio's self-improvement loop. After the fix is committed and the GitHub issue is created, invoke `learn:` with the debug log summary as input.
 
 ## Debug log format
 Track in conversation to prevent retrying failed approaches:
@@ -32,12 +32,12 @@ Track in conversation to prevent retrying failed approaches:
 ## Debug: [symptom]
 
 ### Reproduce
-[exact steps + error output]
+[exact steps to reproduce]
 
 ### Hypothesis 1: [description] — LIKELY / RULED OUT
 - Test: [what you did]
 - Result: [what happened]
-- Conclusion: [confirmed / ruled out / inconclusive]
+- Conclusion: [ruled out / confirmed / need more data]
 
 ### Hypothesis 2: [description]
 ...
