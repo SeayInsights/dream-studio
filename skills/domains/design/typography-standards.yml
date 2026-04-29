@@ -56,3 +56,30 @@ rules:
   avoid_justified_text: true
   dont_center_long_text_blocks: true
   use_consistent_font_scale: true
+
+# === APPENDED: repo-integration 2026-04-29 ===
+
+font_pairing:
+  principle: "Pair a display/heading font with a body font. Max 2 typefaces per project."
+  display_font_role: "Headlines, hero text, pull quotes — expressive, distinctive"
+  body_font_role: "Body copy, UI labels, captions — readable, neutral"
+  contrast_rule: "Display and body fonts should have clear visual contrast (serif + sans, geometric + humanist)"
+  avoid: "Using only one font for everything, or mixing 3+ typefaces"
+
+type_scale:
+  minor_third: "1.25 ratio — compact UIs, data-dense interfaces"
+  perfect_fourth: "1.333 ratio — balanced, recommended default"
+  major_third: "1.25 ratio — similar to minor third, slightly more expressive"
+  usage: "Pick one ratio and apply consistently. Don't mix ratios."
+
+opentype_features:
+  tabular_nums: "Enable for data tables and numeric displays — prevents layout shift"
+  ligatures: "Enable contextual ligatures for body text quality"
+  old_style_figures: "Use in running text for readability, lining figures for UI"
+  avoid: "Decorative ligatures in UI copy — use only in display text"
+
+oklch_type_color:
+  principle: "When using OKLCH for color, derive text colors from the same hue as the surface"
+  light_surface: "Text: L<20, same hue as surface at C<0.05"
+  dark_surface: "Text: L>85, same hue as surface at C<0.05"
+  avoid: "Pure black (#000) or pure white (#fff) text — use slightly tinted neutrals"
