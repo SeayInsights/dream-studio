@@ -15,6 +15,7 @@ When a skill needs multi-agent orchestration, reference this module:
 - **Fresh subagent per task** — Never inherit session history
 - **Controller stays lean** — Delegate heavy lifting, preserve own context
 - **Pre-inline context** — Don't make agents Read files, provide full text
+- **Static before dynamic** — In every subagent prompt, put static content (core module text, project context, repo map) BEFORE dynamic content (task text, decisions so far). Claude caches the longest common prefix across consecutive calls; consistent ordering enables automatic caching of the static prefix.
 - **Model selection** — Right model for the task complexity
 
 ## Model Selection
@@ -94,15 +95,18 @@ const result2 = await Agent({
 ### Review loop pattern
 ```
 1. Dispatch implementer agent
-2. Implementer returns DONE or DONE_WITH_CONCERNS
+2. Parse result.signal:
+   - done → proceed to step 3
+   - done_with_concerns → address result.concerns if correctness/scope, then step 3
+   - needs_context / blocked → resolve, re-dispatch
 3. Dispatch spec compliance reviewer
-4. If reviewer finds issues:
-   - Re-dispatch implementer with fixes needed
-   - Go to step 3 (repeat until ✅)
+4. Parse reviewer result.signal:
+   - compliant → proceed to step 5
+   - non_compliant → re-dispatch implementer with result.issues, go to step 3
 5. Dispatch code quality reviewer
-6. If reviewer finds issues:
-   - Re-dispatch implementer with fixes needed
-   - Go to step 5 (repeat until ✅)
+6. Parse reviewer result.signal:
+   - compliant → commit
+   - non_compliant → re-dispatch implementer with result.issues, go to step 5
 7. Commit
 ```
 
@@ -132,33 +136,45 @@ analysts.forEach(analyst => {
 ```
 
 ### Implementer prompt template (build skill)
+
+**Ordering rule:** Static content FIRST, dynamic content LAST. Assemble the static prefix
+(project context + repo map + architecture) ONCE per session and prepend it identically to
+every dispatch — this enables Claude's automatic prompt caching on the common prefix.
+
 ```
 You are implementing Task N: [task name]
 
-## Context
+## Project Context (static — same for every task in this session)
 - Project: [project description]
 - Architecture: [key patterns]
-- Dependencies: [what this task depends on]
-- Plan: [link or full task text]
+- Repo Map:
+  [paste compact repo map from core/repo-map.md — one line per symbol]
 
-## Task
+## Working directory
+[absolute path]
+
+## Task (dynamic — specific to this dispatch)
 [Full task specification pasted here — not a file path]
 
 ## Acceptance criteria
 [How to verify this is done]
 
-## Working directory
-[absolute path]
+## Dependencies resolved
+[what prior tasks produced that this task needs]
 
 ## Decisions made so far
 [any architecture decisions that affect this task]
 
 ## Output format
-When done, respond with ONE of:
-- DONE — task complete, ready for review
-- DONE_WITH_CONCERNS — task complete but concerns noted (explain)
-- NEEDS_CONTEXT — missing information (specify what)
-- BLOCKED — cannot complete (explain why)
+Respond with a JSON object:
+{
+  "signal": "done | done_with_concerns | needs_context | blocked",
+  "confidence": 0.0-1.0,
+  "summary": "One sentence on what was completed or what the issue is",
+  "concerns": ["list if signal = done_with_concerns — specific, actionable"],
+  "missing": ["what context is needed if signal = needs_context"],
+  "blocker": "why blocked if signal = blocked — specific enough to act on"
+}
 ```
 
 ### Reviewer prompt template (review skill)
@@ -169,37 +185,48 @@ You are reviewing an implementation.
 [Full task specification]
 
 ## Implementation
-[Code changes or link to diff]
+[Code changes or diff — pasted inline, not a file path]
 
 ## Job
 Verify code matches spec. Read the actual code, not the implementer's report.
 
-Critical rule: Do not trust the report. The implementer finished suspiciously quickly.
+Critical rule: Do not trust the report. Verify independently.
 
 ## Output format
-✅ COMPLIANT — code matches spec exactly
-❌ NON-COMPLIANT — issues found
+Respond with a JSON object:
+{
+  "signal": "compliant | non_compliant",
+  "confidence": 0.0-1.0,
+  "summary": "One sentence verdict",
+  "issues": [
+    {
+      "requirement": "the requirement from spec",
+      "issue": "what is wrong",
+      "location": "file:line",
+      "fix": "specific, actionable fix"
+    }
+  ]
+}
 
-If non-compliant, list each issue with:
-- Requirement: [from spec]
-- Issue: [what's wrong]
-- Location: file:line
-- Fix: [what needs to change]
+issues array is empty when signal = compliant.
 ```
 
 ## Handling agent responses
 
-### DONE
+Parse `result.signal` from the JSON output.
+
+### done
 Proceed to review stage.
 
-### DONE_WITH_CONCERNS
-Read concerns. If they affect correctness or scope, address before review. If they're style/preference, proceed to review.
+### done_with_concerns
+Read `result.concerns[]`. If any concern affects correctness or scope, address before review.
+If style/preference only, proceed to review.
 
-### NEEDS_CONTEXT
-Provide missing information and re-dispatch with updated prompt.
+### needs_context
+Read `result.missing[]`. Provide the missing information and re-dispatch with updated prompt.
 
-### BLOCKED
-Assess blockers:
+### blocked
+Read `result.blocker`. Assess:
 - **Context problem:** Re-dispatch with more info
 - **Capability problem:** Re-dispatch with more capable model (Haiku → Sonnet → Opus)
 - **Task too large:** Break task into smaller pieces
