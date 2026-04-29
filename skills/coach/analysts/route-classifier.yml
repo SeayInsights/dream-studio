@@ -1,0 +1,117 @@
+name: route-classifier
+version: 1.0.0
+description: Classify ambiguous user intent against all known dream-studio skill triggers. Returns top 3 skill matches with confidence scores.
+
+signal_scale:
+  strong-accept: "High-confidence match — intent clearly maps to one skill"
+  accept: "Good match — intent fits with minor ambiguity"
+  neutral: "Partial match — multiple skills could apply"
+  reject: "Weak match — no skill fits well, clarification needed"
+  strong-reject: "No match — intent is outside dream-studio scope"
+
+output_schema:
+  signal: "strong-accept | accept | neutral | reject | strong-reject"
+  confidence: "0.0-1.0"
+  reasoning: "2-3 sentences explaining what the user is trying to do and why the top match fits"
+  key_factors:
+    - "Best match: dream-studio:<skill> — because [reason]. Trigger keyword: [keyword]"
+    - "Alternative: dream-studio:<skill> — if the intent is [variant]"
+    - "Alternative: dream-studio:<skill> — if the intent is [variant]"
+
+known_skills:
+  - skill: think
+    triggers: ["think:", "spec:", "how should we", "what if", "research:", "design brief:", "shape ux:"]
+    description: Spec and design before building
+
+  - skill: plan
+    triggers: ["plan:", "make a plan", "break down", "task list", "implementation strategy"]
+    description: Break spec into atomic tasks
+
+  - skill: build
+    triggers: ["build:", "implement", "execute plan:", "code it"]
+    description: Execute a plan with subagents
+
+  - skill: review
+    triggers: ["review:", "review code", "review commits", "review PR:", "check this code"]
+    description: Two-stage quality review
+
+  - skill: verify
+    triggers: ["verify:", "prove it:", "test it", "does it work"]
+    description: Evidence-based verification
+
+  - skill: ship
+    triggers: ["ship:", "pre-deploy:", "ready to deploy", "deploy:"]
+    description: Pre-deploy quality gate
+
+  - skill: debug
+    triggers: ["debug:", "diagnose:", "why is this broken", "fix this bug", "something is wrong"]
+    description: Systematic debugging
+
+  - skill: explain
+    triggers: ["explain:", "how does X work", "walk me through", "what is this doing", "why does"]
+    description: Trace how something works
+
+  - skill: polish
+    triggers: ["polish ui:", "clean up ui:", "make it look better", "critique design:", "redesign:"]
+    description: UI quality improvement
+
+  - skill: secure
+    triggers: ["secure:", "check security", "review architecture", "security audit"]
+    description: Security review (OWASP + STRIDE)
+
+  - skill: harden
+    triggers: ["/harden", "harden audit", "project setup", "best practices audit"]
+    description: Project hardening audit
+
+  - skill: learn
+    triggers: ["learn:", "capture lesson:", "what did we learn"]
+    description: Capture lessons from builds
+
+  - skill: coach
+    triggers: ["/coach", "coach:", "workflow coaching", "am I doing this right"]
+    description: Claude Code workflow advisor
+
+  - skill: analyze
+    triggers: ["/analyze", "analyze:", "multi-perspective", "help me decide"]
+    description: Multi-perspective decision analysis
+
+  - skill: handoff
+    triggers: ["handoff:", "pass context", "session state", "hand off to next session"]
+    description: Session continuity capture
+
+  - skill: recap
+    triggers: ["recap:", "session recap:", "summarize what we did", "what did we do"]
+    description: Session summary
+
+  - skill: client-work
+    triggers: ["intake:", "sow:", "build report:", "review powerbi:", "optimize dax:", "build flow:", "build app:", "client handoff:"]
+    description: Power Platform client lifecycle
+
+  - skill: saas-build
+    triggers: ["build feature:", "build api:", "build page:", "build component:"]
+    description: SaaS feature/API/page build
+
+  - skill: game-dev
+    triggers: ["game build", "game review", "game QA", "godot"]
+    description: Godot 4 game development
+
+  - skill: workflow
+    triggers: ["workflow:", "workflow list", "workflow status", "run workflow"]
+    description: YAML workflow orchestration
+
+analyst_instructions: |
+  You are the route-classifier analyst. The user's message did not match any known trigger keyword.
+
+  Your job: classify the intent and recommend the best dream-studio skill.
+
+  Process:
+  1. Read the user's message carefully. What are they actually trying to do?
+  2. Compare against the known_skills triggers list above.
+  3. Rank the top 3 matches by fit.
+  4. Return the JSON output schema above.
+
+  Rules:
+  - Be specific in reasoning — "the user wants to X, which is the core purpose of skill Y"
+  - If confidence < 0.5, recommend the user clarify rather than guessing
+  - Never invent a skill that doesn't exist in known_skills
+  - If truly no match (user asking something unrelated to software engineering), use strong-reject and say so directly
