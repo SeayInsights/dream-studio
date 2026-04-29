@@ -37,6 +37,8 @@ Dispatch fresh subagent per task with isolated context.
 
 **Why subagents:** They get only task-specific state — no session history, no conversation baggage. This preserves your own context for coordination while ensuring each agent stays focused.
 
+**Worktree isolation (parallel dispatches):** For tasks running in parallel, add `isolation: "worktree"` to each Agent call. Claude Code creates an isolated git worktree per agent — last-writer-wins conflicts between parallel agents become structurally impossible. The worktree is auto-cleaned if the agent makes no changes. Sequential tasks in the same wave do NOT need worktree isolation.
+
 ## The Process
 
 ### Step 0: Load plan and project context
