@@ -195,3 +195,90 @@ def test_rebuild_500_entries_completes(tmp_path: Path) -> None:
     elapsed_ms = (time.perf_counter() - start) * 1000
     assert elapsed_ms < 10_000, f"build_index took {elapsed_ms:.1f}ms (limit 10 000ms)"
     ms.close()
+
+
+# ---------------------------------------------------------------------------
+# prune_memory_md
+# ---------------------------------------------------------------------------
+
+
+def test_prune_memory_md_removes_archived_entries(mem_dir: Path) -> None:
+    ms = MemorySearch(mem_dir)
+    ms.build_index()
+
+    memory_md = mem_dir / "MEMORY.md"
+    memory_md.write_text(
+        "- [Power BI](power-bi.md) — BI notes\n"
+        "- [Godot](godot.md) — game notes\n"
+        "- [Career](career.md) — career notes\n",
+        encoding="utf-8",
+    )
+
+    # Simulate archiving power-bi.md
+    archive_dir = mem_dir / "archive"
+    archive_dir.mkdir()
+    archived = archive_dir / "power-bi.md"
+    archived.write_text("archived", encoding="utf-8")
+
+    removed = ms.prune_memory_md([archived])
+    assert removed == 1
+
+    remaining = memory_md.read_text(encoding="utf-8")
+    assert "power-bi.md" not in remaining
+    assert "godot.md" in remaining
+    assert "career.md" in remaining
+    ms.close()
+
+
+def test_prune_memory_md_tolerates_missing_file(mem_dir: Path) -> None:
+    ms = MemorySearch(mem_dir)
+    # No MEMORY.md in mem_dir — should return 0 without raising
+    fake_archived = mem_dir / "archive" / "nonexistent.md"
+    result = ms.prune_memory_md([fake_archived])
+    assert result == 0
+    ms.close()
+
+
+# ---------------------------------------------------------------------------
+# enforce_limit
+# ---------------------------------------------------------------------------
+
+
+def test_enforce_limit_archives_oldest_first(mem_dir: Path) -> None:
+    ms = MemorySearch(mem_dir)
+    ms.build_index()
+
+    # Two additional files so we have 5 total
+    (mem_dir / "extra1.md").write_text("# Extra 1\n\nContent.", encoding="utf-8")
+    (mem_dir / "extra2.md").write_text("# Extra 2\n\nContent.", encoding="utf-8")
+    ms.build_index()
+
+    # Set last_accessed for all 5 files with distinct timestamps
+    import sqlite3 as _sqlite3
+
+    conn = _sqlite3.connect(str(mem_dir / "memory.db"))
+    base_ts = time.time() - (200 * 86400)
+    for i, row in enumerate(conn.execute("SELECT path FROM memory_meta")):
+        conn.execute(
+            "UPDATE memory_meta SET last_accessed = ? WHERE path = ?",
+            (base_ts + i * 1000, row[0]),
+        )
+    conn.commit()
+    conn.close()
+
+    # Enforce limit of 3 — should archive the 2 oldest
+    archived = ms.enforce_limit(max_active=3)
+    assert archived == 2
+
+    active = list(ms._iter_md_files())
+    assert len(active) == 3
+    ms.close()
+
+
+def test_enforce_limit_skips_never_accessed(mem_dir: Path) -> None:
+    ms = MemorySearch(mem_dir)
+    ms.build_index()
+    # All files have last_accessed == 0 (default) — none should be archived
+    archived = ms.enforce_limit(max_active=0)
+    assert archived == 0
+    ms.close()

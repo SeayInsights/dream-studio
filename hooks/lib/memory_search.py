@@ -224,6 +224,86 @@ class MemorySearch:
         conn.commit()
         return count
 
+    def prune_memory_md(self, archived_paths: list[Path]) -> int:
+        """Remove MEMORY.md lines that reference files that have been archived.
+
+        Matches lines containing `](filename.md)` where filename is in archived_paths.
+        Returns count of lines removed. Silently returns 0 on any I/O error.
+        """
+        if not archived_paths:
+            return 0
+
+        memory_md = self.memory_dir / "MEMORY.md"
+        try:
+            text = memory_md.read_text(encoding="utf-8")
+        except OSError:
+            return 0
+
+        archived_names = {p.name for p in archived_paths}
+        lines = text.splitlines(keepends=True)
+        kept = []
+        removed = 0
+        for line in lines:
+            if any(f"]({name})" in line for name in archived_names):
+                removed += 1
+            else:
+                kept.append(line)
+
+        if removed > 0:
+            try:
+                memory_md.write_text("".join(kept), encoding="utf-8")
+            except OSError:
+                return 0
+
+        return removed
+
+    def enforce_limit(self, max_active: int = 90) -> int:
+        """Archive oldest-accessed memories until active count <= max_active.
+
+        Files with last_accessed == 0 (never retrieved) are exempt — they have
+        not been a retrieval hit and should not be penalised for inactivity.
+        Returns count of files archived.
+        """
+        conn = self._connect()
+        if not self._fts5_ok:
+            return 0
+
+        active_files = list(self._iter_md_files())
+        if len(active_files) <= max_active:
+            return 0
+
+        excess = len(active_files) - max_active
+        oldest_rows = conn.execute(
+            "SELECT path FROM memory_meta"
+            " WHERE last_accessed > 0 ORDER BY last_accessed ASC LIMIT ?",
+            (excess,),
+        ).fetchall()
+
+        if not oldest_rows:
+            return 0
+
+        archive_dir = self.memory_dir / "archive"
+        archive_dir.mkdir(exist_ok=True)
+        count = 0
+
+        for row in oldest_rows:
+            src = Path(row["path"])
+            if not src.exists():
+                continue
+            dest = archive_dir / src.name
+            if dest.exists():
+                dest = archive_dir / f"{src.stem}_{int(time.time())}{src.suffix}"
+            try:
+                shutil.move(str(src), str(dest))
+                conn.execute("DELETE FROM memory_fts WHERE path = ?", (str(src),))
+                conn.execute("DELETE FROM memory_meta WHERE path = ?", (str(src),))
+                count += 1
+            except OSError:
+                pass
+
+        conn.commit()
+        return count
+
     # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
