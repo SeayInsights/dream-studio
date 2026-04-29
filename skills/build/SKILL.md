@@ -86,7 +86,7 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - If exists: validate → update commits + status → re-validate
    - If doesn't exist or invalid: skip
 
-7. **Mark complete** — Write proof to disk (task status in plan file or state file)
+7. **Mark complete** — Write task-level checkpoint to `.sessions/YYYY-MM-DD/checkpoint-<topic>.md` (append mode). Use the task-level checkpoint format from core/format.md: task number + name, COMPLETE status, commit SHA + message, next task, context % estimate.
 
 ### Step 3: Checkpoint
 **See:** core/format.md — Checkpoint format
