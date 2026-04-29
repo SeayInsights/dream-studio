@@ -124,6 +124,64 @@ These are banned patterns. If you catch yourself reaching for any of these, stop
 - No drop shadows on everything
 - No low-contrast gray text
 
+## Design Reference Modules
+
+For deep guidance on any design dimension, consult the reference modules in `references/`:
+
+| Module | Use when... |
+|--------|-------------|
+| `references/typography.md` | Setting type scale, font pairing, line height, OpenType features |
+| `references/color-and-contrast.md` | OKLCH colors, dark mode tokens, contrast ratios, tinted neutrals |
+| `references/spatial-design.md` | Spacing scale, grid systems, visual hierarchy, density |
+| `references/motion-design.md` | Easing curves, animation timing, stagger, reduced-motion |
+| `references/interaction-design.md` | Forms, focus states, loading/error/empty states, touch targets |
+| `references/responsive-design.md` | Mobile-first approach, breakpoints, container queries |
+| `references/ux-writing.md` | Button labels, error messages, empty states, microcopy |
+| `references/anti-patterns.md` | Full list of banned patterns with fixes (superset of anti-slop rules above) |
+
+## `/critique` mode
+
+Run the design output against all 7 reference modules. Score each dimension 1-5. List violations with a citation to the relevant reference module.
+
+**Trigger:** `/critique` or `critique design:`
+
+**Process:**
+1. Open or review the design output
+2. For each reference module: check if the output follows the guidance. Flag violations.
+3. Score: Typography / Color / Spatial / Motion / Interaction / Responsive / Copy (each 1-5)
+4. Produce a prioritized fix list ordered by impact (contrast and a11y issues first)
+5. Output critique score + top 3 fixes
+
+**Output format:**
+```
+## Critique
+Typography: 4/5 — [note]
+Color: 3/5 — [violation: low contrast on secondary text]
+Spatial: 5/5
+Motion: 2/5 — [bounce easing on modal, no reduced-motion support]
+Interaction: 4/5
+Responsive: 3/5 — [layout breaks at 320px]
+Copy: 4/5
+Overall: 3.6/5
+Top fixes: [ranked list]
+```
+
+## `/animate` mode
+
+Apply motion design guidance from `references/motion-design.md` to an existing design or component.
+
+**Trigger:** `/animate` or `animate:`
+
+**Process:**
+1. Identify interactive and transitional elements (page load, hover, press, open/close, navigation)
+2. Apply entrance animations: fade + translate-Y (200-300ms, ease-out)
+3. Apply hover/press feedback on interactive elements (100-150ms, ease-in-out)
+4. Add loading state animations where async operations occur
+5. Check easing: replace any bounce/spring easing with standard curves
+6. Add `prefers-reduced-motion` media query to disable all motion for accessibility
+
+**Avoid:** Animating layout properties (width, height, top, left) — use transform instead.
+
 ## Visual design principles
 - **Contrast** — Create visual hierarchy through size, weight, and color contrast
 - **Whitespace** — Let elements breathe. Dense ≠ professional.
