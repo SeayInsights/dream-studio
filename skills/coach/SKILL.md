@@ -29,7 +29,18 @@ Use coach when:
 - `context-health` — Is context being managed well? When should you start a new session?
 - `pr-hygiene` — Are PRs sized correctly? Commit message quality? Branch hygiene?
 - `agent-dispatch` — Are subagents being used at the right times? Model assignments correct?
-- `route-classify` — Classify ambiguous intent against all known dream-studio triggers. If the top match has confidence ≥ 0.8, **invoke the matched skill immediately via the Skill tool** — do not just name it. If confidence < 0.8, present the top 3 matches with scores and ask the Director to confirm before invoking. Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
+- `route-classify` — Classify ambiguous intent against all known dream-studio triggers. Decision tree:
+  1. **Match against dream-studio skill triggers.**
+     - Confidence ≥ 0.8 → invoke the matched skill immediately via the Skill tool (do not just name it).
+     - Confidence < 0.8 → present top 3 matches with scores and ask the Director to confirm before invoking.
+  2. **No dream-studio skill match → check `skills/domains/ingest-log.yml`.**
+     - Find the plugin root (two directories up from `skills/coach/`).
+     - Read `<plugin-root>/skills/domains/ingest-log.yml`.
+     - For each entry where `persona_md_path` is not null: check if any keyword in `keywords[]` matches the user's intent.
+     - **Match found:** (a) check if `<plugin-root>/<persona_md_path>` exists locally; (b) if yes, output: `cp <plugin-root>/<persona_md_path> ~/.claude/agents/<filename>`; (c) tell the user "Once installed, Claude Code will auto-invoke this agent for matching tasks." Do NOT dispatch the agent yourself.
+     - **No match:** fall through to generic coach guidance and offer: "Run `workflow: domain-ingest domain: <detected-domain>` to synthesize a specialist for this domain."
+  3. **`ingest-log.yml` missing or malformed** → skip the check, fall through to generic guidance.
+  Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
 - `zoom-out` — Scope health check: are we still solving the right problem? Detects scope creep, goal drift, and solution-problem mismatch. Run when a build feels larger than the original spec, or when you suspect the original goal has shifted. Dispatches the `analysts/zoom-out.yml` analyst.
 - `--quick` flag — Run the single most relevant analyst based on context
 
