@@ -66,8 +66,7 @@ git clone https://github.com/SeayInsights/dream-studio.git
 claude plugin install file://path/to/dream-studio
 ```
 
-> **Note:** dream-studio is not yet listed in the official Claude Code plugin registry.
-> Use the GitHub install command above. Registry install (`claude plugin install dream-studio`) will not work until the plugin is submitted to Anthropic.
+> **Note:** dream-studio is a community plugin — install via GitHub (above). It is not affiliated with or endorsed by Anthropic.
 
 **After installing, merge the project hooks into your global settings:**
 
