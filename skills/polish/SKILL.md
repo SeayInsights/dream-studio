@@ -60,7 +60,7 @@ Work through priority fixes from critique. For each dimension scoring 3 or below
 
 **Typography** — Establish clear size scale (1.25 ratio), fix line heights (1.4-1.6 for body, 1.1-1.2 for headings), constrain line length, pair fonts (1 display + 1 body max).
 
-**Color** — Replace failing contrast, apply 60/30/10 rule, check anti-slop list (no purple gradients, no uniform corners, no drop shadows everywhere).
+**Color** — Replace failing contrast, apply 60/30/10 rule, check anti-slop list (no purple gradients, no uniform corners, no drop shadows everywhere). Also load `checklists/design-anti-patterns.yml` and run each check — flag any violations and add to the priority fix list.
 
 **Animation** — Add entrance animations for content (fade + translate, 200-400ms), add hover/press feedback on interactive elements, remove gratuitous motion.
 
