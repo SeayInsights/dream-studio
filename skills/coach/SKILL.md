@@ -1,4 +1,4 @@
----
+﻿---
 name: coach
 description: "Claude Code workflow coach — evaluates HOW you're using Claude Code, not WHAT you're building. Surfaces non-obvious best practices for context management, PR hygiene, agent dispatch, and skill routing. Trigger on /coach or coach:."
 user_invocable: true
@@ -8,6 +8,9 @@ pack: quality
 ---
 
 # Coach — Claude Code Workflow Advisor
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Trigger
 `/coach <mode>`, `coach:`, or invoked when you want meta-feedback on your Claude Code usage patterns
@@ -26,6 +29,7 @@ Use coach when:
 - `context-health` — Is context being managed well? When should you start a new session?
 - `pr-hygiene` — Are PRs sized correctly? Commit message quality? Branch hygiene?
 - `agent-dispatch` — Are subagents being used at the right times? Model assignments correct?
+- `route-classify` — Classify ambiguous intent against all known dream-studio triggers. Returns top 3 skill matches with confidence scores and a recommended action. Invoked automatically by the CLAUDE.md routing fallback when no trigger keyword matched.
 - `--quick` flag — Run the single most relevant analyst based on context
 
 ## Signal Scale
