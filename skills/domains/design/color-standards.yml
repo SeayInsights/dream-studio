@@ -46,3 +46,34 @@ color_psychology:
   yellow: "optimism, attention, warning"
   black: "sophistication, luxury, formality"
   white: "purity, simplicity, cleanliness"
+
+# === APPENDED: repo-integration 2026-04-29 ===
+
+oklch_color_space:
+  description: "OKLCH (Lightness, Chroma, Hue) — perceptually uniform, P3 wide-gamut support"
+  advantage: "Equal lightness steps look equal — predictable palette generation"
+  syntax: "oklch(L% C H) — L: 0-100, C: 0-0.4, H: 0-360"
+  recommended_for: "New projects targeting modern browsers (Chrome 111+, Safari 16.4+, Firefox 113+)"
+  fallback: "Provide hex fallback for older browsers using @supports"
+
+tinted_neutrals:
+  principle: "Neutrals should carry a slight tint of the brand's primary hue"
+  why: "Pure gray (#888) looks dead next to a colored brand — tinted neutrals feel cohesive"
+  implementation: "Use OKLCH with C: 0.01-0.03 at the brand hue for neutrals"
+  example: "Brand hue H:250 (blue) → neutral: oklch(50% 0.02 250)"
+
+dark_mode_tokens:
+  principle: "Use semantic tokens, not raw color values, in component styles"
+  token_structure:
+    surface: "Background of containers (not the page background)"
+    on-surface: "Text/icons on surface"
+    primary: "Brand accent for interactive elements"
+    on-primary: "Text/icons on primary color"
+  avoid: "Hardcoding light/dark color variants in components — components read tokens, themes set tokens"
+  implementation: "CSS custom properties with [data-theme='dark'] selector override"
+
+p3_wide_gamut:
+  description: "Display P3 gamut extends sRGB — more vivid blues, greens, reds available"
+  usage: "@media (color-gamut: p3) { color: oklch(...) }"
+  practical_gains: "Most impactful for primary brand colors and CTAs"
+  avoid: "Using P3 for text colors — subtle difference not worth the complexity"
