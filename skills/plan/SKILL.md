@@ -41,6 +41,11 @@ Use these templates to structure your plan:
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
 9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
+11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
+    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in tasks.md
+    - After creation, update tasks.md to add the issue number as a tag: `[#42]` after the task ID
+    - This links plan tasks to trackable GitHub issues for visibility outside the session
+    - Skip if: prototype work, personal project without a GitHub remote, or Director declines
 
 ## Traceability
 
