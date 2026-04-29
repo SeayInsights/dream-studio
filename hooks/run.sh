@@ -41,9 +41,14 @@ if [[ -z "${HANDLER_PATH}" ]]; then
 fi
 
 pick_python() {
-  for candidate in py python3 python; do
-    if command -v "${candidate}" >/dev/null 2>&1; then
-      echo "${candidate}"
+  # On Windows, bare `py` invokes the Python Launcher which may default to a
+  # version that doesn't have the project's dependencies installed. Try the
+  # version-pinned launcher first (matches Makefile / CI), then fall back.
+  for candidate in "py -3.12" "py -3.11" "py -3.10" python3 python py; do
+    # Split candidate into command + optional arg
+    set -- $candidate
+    if command -v "$1" >/dev/null 2>&1; then
+      echo "$candidate"
       return 0
     fi
   done
@@ -51,10 +56,11 @@ pick_python() {
 }
 
 PYTHON="$(pick_python)" || {
-  echo "run.sh: no Python interpreter found on PATH (tried: py, python3, python)" >&2
+  echo "run.sh: no Python interpreter found on PATH (tried: py -3.12, python3, python, py)" >&2
   exit 4
 }
 
 export CLAUDE_PLUGIN_ROOT="${PLUGIN_ROOT}"
 export PYTHONPATH="${PLUGIN_ROOT}/hooks:${PYTHONPATH:-}"
-exec "${PYTHON}" "${HANDLER_PATH}" "$@"
+# shellcheck disable=SC2086  # word-split intentional for "py -3.12" style values
+exec $PYTHON "${HANDLER_PATH}" "$@"
