@@ -1,10 +1,15 @@
----
+﻿---
 name: build
 description: Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`.
 pack: core
 ---
 
 # Build — Execute With Discipline
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+If the project has `.planning/GOTCHAS.md` — read it before starting.
+If the project has `.planning/CONSTITUTION.md` — read it before starting.
 
 ## Imports
 - core/git.md — commit formatting, diff reading, branch operations
@@ -34,7 +39,8 @@ Dispatch fresh subagent per task with isolated context.
 
 ## The Process
 
-### Step 0: Load plan
+### Step 0: Load plan and project context
+If `.planning/GOTCHAS.md` exists, read it now. If `.planning/CONSTITUTION.md` exists, read it now. These contain known failure patterns and architectural decisions that must constrain every task in the build.
 Read the plan file ONCE. Extract ALL tasks with full text. Don't re-read the plan per task.
 
 ### Step 1: Dependency analysis
@@ -53,10 +59,11 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - Any decisions made so far
 
 2. **Handle implementer response** — See: core/orchestration.md — Handling agent responses
-   - `DONE` → proceed to review
-   - `DONE_WITH_CONCERNS` → read concerns, address if correctness/scope, then review
-   - `NEEDS_CONTEXT` → provide missing info, re-dispatch
-   - `BLOCKED` → assess and re-dispatch or escalate
+   Parse `result.signal` from the JSON response:
+   - `done` → proceed to review
+   - `done_with_concerns` → read `result.concerns[]`, address if correctness/scope, then review
+   - `needs_context` → read `result.missing[]`, provide info, re-dispatch
+   - `blocked` → read `result.blocker`, assess and re-dispatch or escalate
 
 3. **Spec compliance review** — See: core/orchestration.md — Review loop pattern
    - Dispatch reviewer with task spec + implementer report
@@ -101,7 +108,11 @@ Use Haiku for mechanical tasks, Sonnet for integration, Opus for architecture/de
 Use the standard template with:
 - Full task text (pasted, never a file path)
 - Scene-setting context
-- Expected output format (DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT)
+- JSON output format (signal, confidence, summary, concerns/missing/blocker)
+
+**Ordering rule (prompt caching):** Assemble the static prefix (project context + repo map +
+architecture) ONCE at Step 0. Prepend it identically to every dispatch in the session — Claude
+caches the longest common prefix automatically, reducing token cost across multi-task builds.
 
 ## Drift detection
 - **Minor drift** (variable name, slight approach change) → note it, continue
