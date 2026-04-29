@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from lib import python_shim
@@ -48,3 +50,18 @@ def test_detect_python_custom_candidate_order(monkeypatch):
         lambda name: "/opt/" + name if name == "pypy3" else None,
     )
     assert python_shim.detect_python(("pypy3",)) == "/opt/pypy3"
+
+
+# ── _install_instructions: darwin and linux branches (lines 28-33) ────
+
+
+def test_install_instructions_darwin(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    instructions = python_shim._install_instructions()
+    assert "brew" in instructions.lower() or "homebrew" in instructions.lower()
+
+
+def test_install_instructions_linux(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    instructions = python_shim._install_instructions()
+    assert "apt" in instructions or "dnf" in instructions
