@@ -33,9 +33,22 @@ nodes:
     context: fresh
     timeout_seconds: 60
 
+  - id: write-failing-test
+    depends_on: [create-issue]
+    condition: "{{diagnose.testable}} == true"
+    command: |
+      Write a minimal failing test that encodes the reproduction steps from diagnose.
+      Place in: tests/<area>/<bug-slug>_test.<ext>
+      The test MUST fail before the fix is applied and pass after.
+      Commit the test file with message: "test: failing test for [bug slug] (pre-fix)"
+      Print the test file path.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
   - id: plan-fix
     skill: plan
-    depends_on: [create-issue]
+    depends_on: [write-failing-test]
     model: haiku
     context: fresh
     timeout_seconds: 300
