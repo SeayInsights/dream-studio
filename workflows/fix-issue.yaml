@@ -21,9 +21,21 @@ nodes:
     context: fresh
     timeout_seconds: 300
 
+  - id: create-issue
+    depends_on: [diagnose]
+    command: |
+      Create a GitHub issue for this bug using the diagnose output.
+      Run: gh issue create \
+        --title "[Bug] $(head -1 <<< '{{diagnose.summary}}')" \
+        --body "## Bug Report\n\n### Root Cause\n{{diagnose.root_cause}}\n\n### Debug Log\n{{diagnose.full_log}}\n\n### Reproduce\n{{diagnose.reproduce}}"
+      Print the issue URL so it can be referenced in the PR.
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
   - id: plan-fix
     skill: plan
-    depends_on: [diagnose]
+    depends_on: [create-issue]
     model: haiku
     context: fresh
     timeout_seconds: 300
