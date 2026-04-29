@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-04-29
+
+### Added
+- **agents/** directory with integration README — entry point for bundled specialist agents
+- **agents/data-engineer.md**, **mobile-developer.md**, **research-analyst.md**, **idea-validator.md**, **accessibility-expert.md**, **technical-writer.md**, **terraform-architect.md**, **kubernetes-expert.md**, **devops-engineer.md** — 9 bundled specialist agents synthesized from external repo patterns (infra, mobile, data, research, quality domains)
+- **skills/domains/infra/**, **mobile/**, **data/**, **research/**, **quality/** — 8 domain knowledge YAMLs (patterns, gotchas, synthesis eval rubric); all ASCII-clean, yaml.safe_load validated
+- **skills/domains/eval-rubric.yml** — 8 quality signals for domain synthesis assessment
+- **workflows/domain-ingest.yaml** — 4-phase domain synthesis pipeline: discover → extract → synthesize → register
+- **workflows/domain-refresh.yaml** — automated stale agent re-synthesis workflow
+- **`type: specialist`** node in workflow execution protocol (SKILL.md)
+- **On-pulse stale agent detection** — `hooks/on_pulse.py` now reports agents past their `refresh_due` date
+- **README Bundled Specialists section** — documents the 9 agents, domains covered, and install instructions
+
+### Changed
+- **skills/domains/ingest-log.yml** — schema extended with `agent_type` field; 9 domain agents backfilled as entries
+- **skills/coach/analysts/route-classifier.yml** — expanded with ingest-log agent install suggestion for unrecognized skill requests
+
 ## [0.9.0] — 2026-04-29
 
 ### Added
