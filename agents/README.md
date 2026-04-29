@@ -35,6 +35,8 @@ Copy-Item agents\* $HOME\.claude\agents\
 
 Run either command from the repo root. Re-run after pulling updates to refresh stale agents.
 
+> **Update notifications:** dream-studio checks GitHub releases once per day and prints an upgrade notice to stderr when a newer version is available. Follow the printed command to pull and re-run setup.
+
 ## Adding new specialists
 
 Run the `domain-ingest` workflow with the target domain name:

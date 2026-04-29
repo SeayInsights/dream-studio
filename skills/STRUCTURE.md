@@ -1,6 +1,7 @@
 # Dream-Studio Skill Architecture Guide
 
 This document defines the standardized structure for all dream-studio skills.
+Last updated: 2026-04-29 — 38 skills across 6 packs, 355 unit tests, 95% coverage.
 
 ## Overview
 
