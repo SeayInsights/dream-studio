@@ -1,0 +1,130 @@
+# eval-rubric.yml
+# Used by: domain-ingest workflow (Phase 2)
+# Purpose: Score candidate agent files from GitHub and VoltAgent catalog
+#          before synthesizing them into dream-studio's agents/ and skills/domains/.
+# When to use: Run this rubric against each candidate file BEFORE deciding
+#              whether to bundle it as an agent or extract domain YAML only.
+# Score = count of signals present (0–8). See thresholds block for cutoffs.
+
+scoring_guidance:
+  process:
+    - Read the candidate file top to bottom once
+    - For each signal in the signals block, check the how_to_score criteria
+    - Mark each signal as present (1) or absent (0)
+    - Sum the marks to get a total score (0–8)
+    - Apply the threshold from the thresholds block
+  notes:
+    - Signals are binary — present or absent, no partial credit
+    - When in doubt, mark absent — only mark present if the evidence is explicit
+    - Score reflects dream-studio fitness, not general agent quality
+    - A file scoring 8/8 on general polish but 2/8 here is still a reject
+
+signals:
+  - id: has_gotchas
+    description: >
+      Non-obvious failure modes, edge cases, or runtime traps are explicitly
+      documented. These are things that will bite a developer who skips the file
+      and tries to use the tool from memory alone.
+    how_to_score: >
+      Look for a "Gotchas", "Pitfalls", "Common errors", "Watch out", or
+      "Known issues" section, or inline warnings prefixed with NOTE/WARNING/CAUTION.
+      Generic disclaimers ("results may vary") do not count.
+    example_pass: '"Gotcha: Claude resets tool_choice to auto after the first tool call — always re-set it per turn."'
+    example_fail: '"This tool may not work in all environments."'
+
+  - id: has_anti_patterns
+    description: >
+      Explicit what-not-to-do guidance with concrete examples of wrong usage.
+      Covers patterns that appear reasonable but produce broken or unsafe output.
+    how_to_score: >
+      Look for sections titled "Anti-patterns", "Don't", "Avoid", "Bad example",
+      or inline ❌/✗ markers with explanatory text. Must name the pattern and
+      explain why it fails — listing it without explanation does not count.
+    example_pass: '"Anti-pattern: passing the full conversation history to every tool call — causes context bloat and token waste."'
+    example_fail: '"Avoid misuse of this API."'
+
+  - id: has_specific_commands
+    description: >
+      Real, runnable CLI commands or tool invocations are shown, not conceptual
+      descriptions of what a command does. Commands must be copy-pasteable.
+    how_to_score: >
+      Look for code blocks containing shell commands, API calls with real flags,
+      or SDK snippets with actual method signatures. Pseudocode, placeholder-only
+      examples ("run <your-command>"), and prose descriptions do not count.
+    example_pass: '"gh pr create --title \"fix: auth token refresh\" --body \"Fixes #42\" --base main"'
+    example_fail: '"Use the GitHub CLI to create a pull request with the appropriate title."'
+
+  - id: has_version_specifics
+    description: >
+      Current, pinned tool versions or API version numbers are cited, not
+      timeless prose that could apply to any version. Enables compatibility checks.
+    how_to_score: >
+      Look for explicit version numbers (e.g., "Node 20.x", "wrangler@3.78",
+      "claude-3-7-sonnet-20250219"). Date-stamped changelogs also count.
+      Phrases like "the latest version" or "modern Node" do not count.
+    example_pass: '"Tested with wrangler@3.78.0 and @cloudflare/workers-types@4.20250409.0."'
+    example_fail: '"Works with the latest version of Wrangler."'
+
+  - id: battle_tested
+    description: >
+      The file originates from or is referenced in a production repository, not
+      just a catalog, template gallery, or marketing page. Production origin
+      signals real-world validation.
+    how_to_score: >
+      Check file provenance metadata (source_repo, origin_url, or ingest-log.yml
+      entry). A GitHub repo with commits, issues, or release history counts.
+      A VoltAgent catalog entry with no linked repo does not count unless it
+      references a production deployment.
+    example_pass: "source_repo: github.com/cloudflare/workers-sdk — 2,400 stars, active issues"
+    example_fail: "source: VoltAgent catalog listing, no linked repository"
+
+  - id: workflow_integrable
+    description: >
+      The agent produces verifiable, structured artifacts (files, database rows,
+      structured JSON, PR URLs, test reports) that downstream steps can consume.
+      Pure advisory output (summaries, recommendations) does not count.
+    how_to_score: >
+      Look for output schemas, artifact declarations, or examples showing a file
+      path, URL, or structured payload produced by the agent. The output must
+      be something a subsequent workflow step could programmatically verify.
+    example_pass: '"Outputs: { pr_url: string, commit_sha: string, files_changed: number }"'
+    example_fail: '"The agent will provide recommendations for improving your codebase."'
+
+  - id: has_concrete_examples
+    description: >
+      Real input/output pairs are shown — not templates or placeholder text.
+      Examples demonstrate the actual behavior on a specific, realistic scenario.
+    how_to_score: >
+      Look for before/after code, sample prompts with actual responses, or
+      terminal transcripts showing real output. Placeholder text ("your input here",
+      "<example>") and synthetic lorem-ipsum content do not count.
+    example_pass: 'Input: "fix the auth bug" → Output: PR #88 opened at github.com/org/repo/pull/88'
+    example_fail: "Input: <your task description> → Output: <agent response>"
+
+  - id: maintained_recently
+    description: >
+      The file or its source repository was last updated within 90 days of the
+      ingest date. Signals that the content reflects current tool behavior.
+    how_to_score: >
+      Check the file's last_updated field, git log date for the source repo,
+      or the ingest-log.yml recorded_at timestamp. If no date is available,
+      mark absent. "Recently updated" claims without a date do not count.
+    example_pass: "last_updated: 2025-03-14 — within 90 days of ingest date 2025-04-29"
+    example_fail: "No date metadata present in file or source repository."
+
+thresholds:
+  bundle_as_agent:
+    min_score: 5
+    action: >
+      Synthesize a full agent YAML under agents/ and wire it into the skill
+      registry. This file is high-fidelity enough to drive automated behavior.
+  domain_yaml_only:
+    min_score: 4
+    action: >
+      Extract domain knowledge into skills/domains/ as reference YAML.
+      Do not create an agent entry. Use for reference and scoring context only.
+  reject:
+    max_score: 3
+    action: >
+      Do not ingest. Log the candidate in ingest-log.yml with status: rejected
+      and the score. Review again if the source file is updated.
