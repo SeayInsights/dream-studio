@@ -82,6 +82,24 @@ def state_dir() -> Path:
     return path
 
 
+def _project_slug(project_path: Path | None = None) -> str:
+    """Convert an absolute project path to a Claude project slug."""
+    raw = str((project_path or project_root()).resolve())
+    if len(raw) >= 2 and raw[1] == ":":
+        raw = raw[0] + raw[2:]
+    raw = raw.replace("\\", "/")
+    parts = [p for p in raw.split("/") if p]
+    return "-".join(parts).replace(" ", "-")
+
+
+def memory_dir(project_path: Path | None = None) -> Path:
+    """Return ~/.claude/projects/<slug>/memory/ for the given project (or cwd)."""
+    slug = _project_slug(project_path)
+    path = Path.home() / ".claude" / "projects" / slug / "memory"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def planning_dir() -> Path:
     """Per-user planning directory for spec/plan/handoff artifacts."""
     path = user_data_dir() / "planning"

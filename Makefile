@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts setup
+.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts setup ci-gate
 
 test:
 	py -3.12 -m pytest tests/ --cov=hooks/lib --cov=packs/domains/domain_lib --cov-fail-under=70 -q
@@ -35,3 +35,6 @@ validate-analysts:
 
 setup:
 	py -3.12 scripts/setup.py
+
+ci-gate:
+	py -3.12 scripts/ci_gate.py

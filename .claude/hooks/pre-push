@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Install: cp .claude/hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+make ci-gate
+if [ $? -ne 0 ]; then
+    echo "[dream-studio] CI gate failed — push blocked"
+    exit 1
+fi
