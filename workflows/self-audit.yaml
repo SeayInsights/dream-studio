@@ -1,0 +1,183 @@
+name: self-audit
+description: Audit dream-studio's own internals — find noisy hooks, dead routing rules, oversized SKILL.md files, and duplicated gotchas. Produces a ranked self-improvement backlog.
+version: 1
+on_failure: continue
+
+nodes:
+  # ── Stage 1: Collect signal data ────────────────────────────────────
+  - id: collect-signal
+    command: |
+      Collect signal data from dream-studio's runtime logs.
+
+      PLUGIN_ROOT: Find the dream-studio plugin root by looking for the
+      directory containing hooks/hooks.json. Check:
+        ~/.claude/plugins/dream-studio/
+        ~/builds/dream-studio/
+        (or wherever CLAUDE_PLUGIN_ROOT points)
+
+      1. SKILL USAGE — read ~/.dream-studio/state/skill-usage.jsonl
+         Count invocations per skill over the last 30 days.
+         Skills with 0 invocations in 30 days = low-signal candidates.
+
+      2. AUDIT LOG — read ~/.dream-studio/audit.jsonl (if exists)
+         Count hook events per hook name over the last 30 days.
+         Hooks with 0 audit entries = possible dead hooks.
+
+      3. DRAFT LESSONS — list ~/.dream-studio/meta/draft-lessons/*.md
+         Count unreviewed lessons (Status: DRAFT) per skill.
+
+      4. SESSION COUNT — count .sessions/ directories if present.
+
+      Write collected signal to: .sessions/<YYYY-MM-DD>/self-audit-signal.json
+      Format:
+      {
+        "skill_usage_30d": {"skill-name": count, ...},
+        "hook_events_30d": {"hook-name": count, ...},
+        "draft_lessons_by_skill": {"skill-name": count, ...},
+        "collection_date": "ISO-8601"
+      }
+
+      If a log file is missing, record 0s and note it — do not fail.
+      Print: "Signal collected — N skill records, M hook records"
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  # ── Stage 2: Parallel audits ────────────────────────────────────────
+  - id: audit-hooks
+    depends_on: [collect-signal]
+    command: |
+      HOOK NOISE AUDIT — find hooks producing no value.
+
+      Read: .sessions/<YYYY-MM-DD>/self-audit-signal.json
+
+      For each hook in hooks/hooks.json + packs/*/hooks/*.py:
+        1. Cross-reference with hook_events_30d from signal.
+        2. Flag hooks with 0 audit events in 30 days as SILENT.
+        3. Flag hooks that fire on every single event (no early-exit guard) as NOISY.
+        4. Flag hooks wired to PostToolUse Edit|Write that have no file-type guard as BROAD.
+
+      Known noisy patterns to flag:
+        - on-game-validate fires on Edit|Write with no active_packs check (confirmed gap)
+        - on-security-scan fires on all Edit|Write including markdown
+        - on-structure-check fires on all Edit|Write
+
+      Write findings to: .sessions/<YYYY-MM-DD>/self-audit-hooks.md
+      Format each finding as: [SILENT|NOISY|BROAD] hook-name — reason — recommendation
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  - id: audit-routing
+    depends_on: [collect-signal]
+    command: |
+      ROUTING DEAD-WEIGHT AUDIT — find trigger keywords that never fire.
+
+      Read: .sessions/<YYYY-MM-DD>/self-audit-signal.json
+      Read: CLAUDE.md routing table (the skills/CLAUDE.md or project CLAUDE.md)
+
+      For each skill in skill_usage_30d:
+        - Note its usage count.
+
+      Skills with 0 invocations in 30 days are DORMANT candidates.
+      Note: dormant does NOT mean unused forever — flag for Director review, not deletion.
+
+      Also scan CLAUDE.md trigger keywords:
+        - Any trigger keyword that is an unusual phrase unlikely to be typed naturally
+          (e.g. "shape ux:", "design brief:") — flag as OBSCURE_TRIGGER.
+        - Any two skills with overlapping triggers — flag as AMBIGUOUS_ROUTE.
+
+      Write findings to: .sessions/<YYYY-MM-DD>/self-audit-routing.md
+      Format: [DORMANT|OBSCURE_TRIGGER|AMBIGUOUS_ROUTE] skill/trigger — reason
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  - id: audit-skill-size
+    depends_on: [collect-signal]
+    command: |
+      SKILL SIZE AUDIT — find SKILL.md files that are too large for efficient context use.
+
+      For each skills/*/SKILL.md:
+        1. Count words (approximate: split on whitespace).
+        2. Flag any SKILL.md with > 800 words as OVERSIZED.
+        3. For oversized files, identify the largest section headers and note
+           which sections could be extracted to separate reference files.
+
+      Target: SKILL.md core instructions should be < 800 words.
+      Supporting material (examples, templates, checklists) should be in separate files.
+
+      Write findings to: .sessions/<YYYY-MM-DD>/self-audit-skill-size.md
+      Format: [OVERSIZED] skills/name/SKILL.md — word_count words — largest section: "Section Name" (N words)
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  - id: audit-gotchas
+    depends_on: [collect-signal]
+    command: |
+      GOTCHA DUPLICATION AUDIT — find patterns that appear in multiple skills' gotchas.yml.
+
+      For each skills/*/gotchas.yml:
+        1. Read the `avoid` list — extract each item's title and context.
+        2. Build a map: normalized_concept → [list of skills that mention it]
+        3. Flag any concept appearing in 3+ skills' gotchas as PROMOTE_TO_CORE.
+
+      Common candidates to check for:
+        - "never read files without checking they exist first"
+        - "never make parallel agents write to the same file"
+        - "always validate before modifying"
+        - "commit per task not per wave"
+
+      Write findings to: .sessions/<YYYY-MM-DD>/self-audit-gotchas.md
+      Format: [PROMOTE_TO_CORE] concept — appears in: skill-a, skill-b, skill-c — suggested core module: quality.md or format.md
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  # ── Stage 3: Synthesize ──────────────────────────────────────────────
+  - id: synthesize
+    depends_on: [audit-hooks, audit-routing, audit-skill-size, audit-gotchas]
+    trigger_rule: all_done
+    command: |
+      Synthesize all self-audit findings into a ranked improvement backlog for dream-studio itself.
+
+      Read all audit files:
+        .sessions/<YYYY-MM-DD>/self-audit-signal.json
+        .sessions/<YYYY-MM-DD>/self-audit-hooks.md
+        .sessions/<YYYY-MM-DD>/self-audit-routing.md
+        .sessions/<YYYY-MM-DD>/self-audit-skill-size.md
+        .sessions/<YYYY-MM-DD>/self-audit-gotchas.md
+
+      Rank findings using impact/effort:
+        P1 Quick Win: High impact, low effort (e.g. add a 3-line early-exit guard to a noisy hook)
+        P2 Major:    High impact, high effort (e.g. split an 1800-word SKILL.md)
+        P3 Minor:    Low impact, low effort (rename an obscure trigger)
+        P4 Defer:    Low impact, high effort
+
+      Output format:
+        # dream-studio Self-Audit — <YYYY-MM-DD>
+
+        ## Signal Summary
+        - Skill invocations (30d): N total, X skills active, Y dormant
+        - Hook events (30d): N total, X hooks active, Y silent
+        - Draft lessons pending: N
+
+        ## P1 Quick Wins
+        | # | Type | Item | Fix | Effort |
+        ...
+
+        ## P2 Major Improvements
+        ...
+
+        ## P3 Minor
+        ...
+
+        ## P4 Defer
+        ...
+
+      Save to: ~/.dream-studio/state/self-audit-<YYYY-MM-DD>.md
+      Print the save path and P1 count.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
