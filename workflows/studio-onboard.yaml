@@ -663,3 +663,52 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+
+  # ── PHASE 7: SCHEDULE SELF-AUDIT ─────────────────────────────────────
+  - id: schedule-self-audit
+    depends_on: [final-report]
+    command: |
+      MISSION: Seed the weekly self-audit schedule so dream-studio evolves automatically.
+
+      This step is idempotent — if a schedule is already registered, do nothing.
+
+      ## Step 1 — Check if already scheduled
+
+      Read ~/.dream-studio/state/self-audit-schedule.json (may not exist yet).
+      If it exists and has a "schedule" key set to "weekly-monday-9am":
+        Print: "Self-audit already scheduled — skipping registration."
+        End here.
+
+      ## Step 2 — Register the weekly cron
+
+      Use the CronCreate tool with these exact parameters:
+        cron:      "3 9 * * 1"
+        prompt:    "workflow: run self-audit"
+        recurring: true
+        durable:   true
+
+      Note: 9:03am Monday local time. Off-minute to avoid fleet congestion.
+      The self-audit workflow re-registers itself each run, so the chain
+      continues indefinitely even after CronCreate's 7-day auto-expiry.
+
+      ## Step 3 — Persist schedule metadata
+
+      Write to ~/.dream-studio/state/self-audit-schedule.json:
+        {
+          "schedule": "weekly-monday-9am",
+          "cron": "3 9 * * 1",
+          "registered": "<today ISO date>",
+          "last_run": null,
+          "last_issue_url": null
+        }
+
+      ## Step 4 — Confirm
+
+      Print:
+        "✓ Weekly self-audit scheduled — fires every Monday at 9:03am local."
+        "  Each run audits routing, hooks, skill size, and gotchas, then posts"
+        "  findings as a GitHub issue and reschedules the next run automatically."
+        "  Onboarding complete."
+    model: sonnet
+    context: fresh
+    timeout_seconds: 60
