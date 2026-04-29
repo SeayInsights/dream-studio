@@ -1,10 +1,13 @@
----
+﻿---
 name: review
 description: Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. Trigger on `review:`, `review code`, or after `build`.
 pack: core
 ---
 
 # Review — Two-Stage Quality Check
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
 
 ## Imports
 - core/git.md — read git diff, get commit SHA
@@ -65,6 +68,24 @@ When invoked with Haiku for fast scan:
 **See:** core/orchestration.md — Review loop pattern, reviewer prompt template
 
 Dispatch spec reviewer first, then code quality reviewer after spec passes. Review loops continue until all issues resolved.
+
+Each reviewer returns a JSON object matching the schema in core/orchestration.md:
+```json
+{
+  "signal": "compliant | non_compliant",
+  "confidence": 0.0-1.0,
+  "summary": "One sentence verdict",
+  "issues": [
+    {
+      "requirement": "the requirement from spec",
+      "issue": "what is wrong",
+      "location": "file:line",
+      "fix": "specific, actionable fix"
+    }
+  ]
+}
+```
+Parse `result.signal`: `compliant` → next stage. `non_compliant` → re-dispatch implementer with `result.issues`.
 
 ## Findings format
 
