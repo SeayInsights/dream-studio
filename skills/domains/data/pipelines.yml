@@ -1,0 +1,437 @@
+# Data Pipelines — dbt, Warehouses, Orchestration
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: dbt-project-structure
+    title: dbt layered project structure (staging/intermediate/marts)
+    description: >
+      Organize dbt models into three layers: staging (1:1 with sources, renaming and
+      light casting only), intermediate (joins, business logic, reusable building blocks),
+      and marts (final, audience-specific tables exposed to BI tools). Each layer has a
+      clear contract and single responsibility, making debugging and refactoring tractable.
+    example: |
+      models/
+        staging/
+          stg_orders.sql          -- raw rename + cast only
+          stg_customers.sql
+        intermediate/
+          int_orders_with_customers.sql   -- joins + enrichment
+        marts/
+          finance/
+            fct_orders.sql        -- fact table for finance team
+            dim_customers.sql
+        schema.yml                -- tests + docs per layer
+
+  - id: incremental-model-unique-key
+    title: Incremental model with unique_key and is_incremental()
+    description: >
+      Use incremental materialization for large tables where full refresh is too slow.
+      Define a unique_key so dbt can MERGE/UPSERT rather than append duplicates. Guard
+      the date filter with is_incremental() so full refreshes still work correctly.
+    example: |
+      {{
+        config(
+          materialized='incremental',
+          unique_key='order_id',
+          on_schema_change='sync_all_columns'
+        )
+      }}
+
+      select
+        order_id,
+        customer_id,
+        order_date,
+        total_amount
+      from {{ source('raw', 'orders') }}
+      {% if is_incremental() %}
+        where order_date > (select max(order_date) from {{ this }})
+      {% endif %}
+
+  - id: source-freshness-tests
+    title: Source freshness monitoring
+    description: >
+      Declare loaded_at_field and freshness thresholds on every source. Running
+      dbt source freshness before dbt run catches upstream ingestion failures early
+      and prevents stale data from silently propagating through the mart layer.
+    example: |
+      # schema.yml
+      sources:
+        - name: raw
+          database: my_database
+          schema: raw_data
+          freshness:
+            warn_after: {count: 6, period: hour}
+            error_after: {count: 24, period: hour}
+          loaded_at_field: _loaded_at
+          tables:
+            - name: orders
+            - name: customers
+
+  - id: schema-yml-contract-testing
+    title: schema.yml contract testing (not_null, unique, relationships)
+    description: >
+      Every mart model must declare at minimum not_null and unique on its primary key,
+      plus relationships tests for all foreign keys. This creates a living contract that
+      catches data quality regressions before they reach dashboards.
+    example: |
+      models:
+        - name: fct_orders
+          columns:
+            - name: order_id
+              tests:
+                - not_null
+                - unique
+            - name: customer_id
+              tests:
+                - not_null
+                - relationships:
+                    to: ref('dim_customers')
+                    field: customer_id
+            - name: status
+              tests:
+                - accepted_values:
+                    values: ['placed', 'shipped', 'delivered', 'cancelled']
+
+  - id: jinja-macros-dry-sql
+    title: Jinja macros for DRY SQL logic
+    description: >
+      Extract repeated SQL patterns (date spine generation, fiscal calendar logic,
+      currency conversion, surrogate key generation) into macros in the macros/ directory.
+      Macros are compiled at parse time and reduce copy-paste drift across hundreds of models.
+    example: |
+      -- macros/generate_surrogate_key.sql
+      {% macro generate_surrogate_key(field_list) %}
+        {{ dbt_utils.generate_surrogate_key(field_list) }}
+      {% endmacro %}
+
+      -- macros/fiscal_year.sql
+      {% macro fiscal_year(date_col) %}
+        case
+          when month({{ date_col }}) >= 10
+            then year({{ date_col }}) + 1
+          else year({{ date_col }})
+        end
+      {% endmacro %}
+
+      -- usage in a model
+      select
+        {{ generate_surrogate_key(['order_id', 'line_item_id']) }} as surrogate_key,
+        {{ fiscal_year('order_date') }} as fiscal_year
+      from {{ ref('stg_orders') }}
+
+  - id: snowflake-clustering-keys
+    title: Snowflake clustering keys for large tables
+    description: >
+      For Snowflake tables exceeding ~500 GB with common filter patterns, define a
+      cluster_by key matching the most selective filter column (often a date or tenant ID).
+      Clustering reduces micro-partition pruning overhead on repeated queries. Avoid
+      clustering on high-cardinality columns like UUID -- use a truncated date instead.
+    example: |
+      {{
+        config(
+          materialized='incremental',
+          unique_key='event_id',
+          cluster_by=['event_date', 'tenant_id']
+        )
+      }}
+
+      select * from {{ ref('int_events_enriched') }}
+
+  - id: bigquery-partition-pruning
+    title: BigQuery partition pruning and clustering
+    description: >
+      Partition large BigQuery tables on a DATE or TIMESTAMP column that appears in
+      most WHERE clauses. Add clustering on 1-4 additional high-selectivity columns.
+      Always filter on the partition column in queries -- without it, BigQuery scans the
+      full table and slot costs spike.
+    example: |
+      {{
+        config(
+          materialized='incremental',
+          partition_by={
+            "field": "event_date",
+            "data_type": "date",
+            "granularity": "day"
+          },
+          cluster_by=["user_id", "event_type"],
+          require_partition_filter=true
+        )
+      }}
+
+      select * from {{ ref('int_events') }}
+      {% if is_incremental() %}
+        where event_date >= date_sub(current_date(), interval 3 day)
+      {% endif %}
+
+  - id: redshift-distribution-keys
+    title: Redshift distribution and sort keys
+    description: >
+      Choose DISTKEY on the join column used in your most frequent and expensive queries.
+      Use SORTKEY on the primary filter column (usually a date). For dimension tables
+      under 1 MB use DISTSTYLE ALL to broadcast to every node. Mismatched distkeys cause
+      data redistribution at query time, the most common Redshift performance killer.
+    example: |
+      {{
+        config(
+          materialized='table',
+          dist='customer_id',
+          sort=['order_date']
+        )
+      }}
+
+      select
+        customer_id,
+        order_date,
+        sum(total_amount) as revenue
+      from {{ ref('stg_orders') }}
+      group by 1, 2
+
+  - id: dbt-expectations-data-quality
+    title: dbt-expectations for advanced data quality
+    description: >
+      Use the dbt-expectations package (port of Great Expectations) for statistical
+      and range-based tests that built-in dbt tests cannot express: row count bounds,
+      column value distributions, regex patterns, and referential integrity across
+      sources not in the same dbt project.
+    example: |
+      # packages.yml
+      packages:
+        - package: calogica/dbt_expectations
+          version: [">=0.10.0", "<0.11.0"]
+
+      # schema.yml
+      models:
+        - name: fct_orders
+          tests:
+            - dbt_expectations.expect_table_row_count_to_be_between:
+                min_value: 1000
+                max_value: 10000000
+          columns:
+            - name: total_amount
+              tests:
+                - dbt_expectations.expect_column_values_to_be_between:
+                    min_value: 0
+                    max_value: 1000000
+            - name: email
+              tests:
+                - dbt_expectations.expect_column_values_to_match_regex:
+                    regex: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+
+  - id: airflow-sensor-pattern
+    title: Airflow sensor pattern for upstream dependency gating
+    description: >
+      Use ExternalTaskSensor or FileSensor to gate a DAG on upstream completion
+      rather than hardcoding time-based schedules. This makes pipelines resilient to
+      upstream delays and prevents partial data loads from silently propagating.
+    example: |
+      from airflow.sensors.external_task import ExternalTaskSensor
+      from airflow.operators.bash import BashOperator
+      from airflow import DAG
+      from datetime import datetime, timedelta
+
+      with DAG(
+          dag_id="transform_orders",
+          start_date=datetime(2024, 1, 1),
+          schedule_interval="@daily",
+          catchup=False,
+      ) as dag:
+
+          wait_for_ingest = ExternalTaskSensor(
+              task_id="wait_for_raw_orders",
+              external_dag_id="ingest_orders",
+              external_task_id="load_complete",
+              timeout=3600,
+              poke_interval=60,
+              mode="reschedule",
+          )
+
+          run_dbt = BashOperator(
+              task_id="run_dbt_models",
+              bash_command="dbt run --select tag:orders",
+          )
+
+          wait_for_ingest >> run_dbt
+
+  - id: cdc-debezium-pattern
+    title: CDC with Debezium for change data capture
+    description: >
+      Use Debezium to stream row-level changes from a source OLTP database into Kafka
+      topics. Consume those topics into your warehouse using a Kafka connector or
+      streaming processor. Each event carries op (c/u/d), before, and after fields --
+      use before+after to reconstruct SCD2 history or apply MERGE logic in the warehouse.
+    example: |
+      # Debezium connector config (REST API)
+      {
+        "name": "postgres-connector",
+        "config": {
+          "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+          "database.hostname": "postgres",
+          "database.port": "5432",
+          "database.user": "debezium",
+          "database.password": "${file:/secrets/debezium.properties:password}",
+          "database.dbname": "production",
+          "table.include.list": "public.orders,public.customers",
+          "plugin.name": "pgoutput",
+          "slot.name": "debezium_slot",
+          "publication.name": "debezium_pub",
+          "transforms": "unwrap",
+          "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+          "transforms.unwrap.add.fields": "op,ts_ms"
+        }
+      }
+
+      -- dbt model consuming CDC events (Snowflake target)
+      {{
+        config(
+          materialized='incremental',
+          unique_key='order_id',
+          incremental_strategy='merge'
+        )
+      }}
+      select
+        order_id,
+        customer_id,
+        status,
+        __op as cdc_operation,
+        to_timestamp(__ts_ms / 1000) as cdc_timestamp
+      from {{ source('kafka', 'orders_cdc') }}
+      {% if is_incremental() %}
+        where __ts_ms > (select max(__ts_ms) from {{ this }})
+      {% endif %}
+
+anti_patterns:
+  - id: select-star-dbt-models
+    title: SELECT * in dbt models
+    description: >
+      Never use SELECT * in dbt models. It hides schema changes from downstream
+      consumers, breaks column-level lineage in dbt docs, and causes silent failures
+      when source schemas change. Always enumerate columns explicitly. If a source
+      table adds a column, the model should intentionally decide to include it.
+
+  - id: full-refresh-large-incremental
+    title: Full refresh on large incremental models
+    description: >
+      Running dbt run --full-refresh on a 100M+ row incremental model rebuilds the
+      entire table from scratch, consuming massive warehouse credits and blocking
+      dependent models for hours. Reserve full refresh for schema migrations or
+      backfills -- and schedule them during off-peak windows with explicit stakeholder
+      sign-off.
+
+  - id: hardcoded-dates-transformations
+    title: Hardcoded dates in transformation logic
+    description: >
+      Never hardcode dates like WHERE event_date > '2023-01-01' in dbt models.
+      Hardcoded dates cause models to silently under-count data after the cutoff
+      passes with no error. Use relative expressions (current_date - interval 90 day)
+      or dbt variables passed at runtime for backfill windows.
+
+  - id: skipping-source-tests
+    title: Skipping source-layer tests
+    description: >
+      Omitting tests at the staging layer means data quality failures propagate
+      silently into marts and dashboards. Source tables can change schema, introduce
+      NULLs in required fields, or deliver duplicate keys. Define at minimum not_null
+      and unique on every primary key at the staging layer, and run dbt test on every
+      CI run.
+
+  - id: business-logic-in-staging
+    title: Mixing business logic into staging models
+    description: >
+      Staging models should be thin wrappers: rename columns, cast data types, and
+      do nothing else. Placing CASE WHEN status = 1 THEN 'active' END or revenue
+      calculations in staging creates a hidden coupling between raw source semantics
+      and business definitions. Business logic belongs in intermediate or mart models
+      where it is visible, named, and tested.
+
+  - id: no-orchestration-dependencies
+    title: Time-based scheduling without dependency gating
+    description: >
+      Scheduling dbt runs on a fixed cron (e.g., every hour at :30) without checking
+      upstream ingestion completion creates a race condition. If the source load runs
+      long, dbt transforms partial data and downstream reports show incorrect numbers.
+      Use sensors or explicit dependency checks before triggering any transformation run.
+
+gotchas:
+  - id: incremental-late-arriving-data
+    title: Incremental model misses late-arriving data
+    description: >
+      The standard is_incremental() filter (where event_date > max(event_date)) will
+      miss rows that arrive late with a past timestamp. Event streams, mobile clients,
+      and CDC replication can all deliver late data days after the event occurred.
+    fix: >
+      Use a lookback window in the incremental filter:
+      where event_date >= dateadd(day, -3, (select max(event_date) from {{ this }})).
+      Combine with a unique_key and merge strategy so re-processed rows update rather
+      than duplicate. Document the max expected latency SLA in the model's description.
+
+  - id: bigquery-slot-contention
+    title: BigQuery slot contention during peak hours
+    description: >
+      On-demand BigQuery pricing shares slot capacity across all projects in the
+      organization. Heavy batch jobs scheduled at the top of the hour compete with
+      interactive dashboard queries, causing both to slow down or fail with resource
+      exceeded errors.
+    fix: >
+      Use BigQuery reservations to allocate dedicated slots to batch workloads and
+      isolate them from interactive queries. Stagger heavy batch schedules to avoid
+      the top-of-hour spike. Monitor slot utilization with INFORMATION_SCHEMA.JOBS_BY_PROJECT.
+
+  - id: snowflake-auto-suspend-kills-queries
+    title: Snowflake warehouse auto-suspend terminates long-running queries
+    description: >
+      If auto_suspend is set too aggressively (e.g., 60 seconds), a warehouse can
+      suspend mid-query during a slow dbt incremental run, especially on the first
+      model after a cold start. The query is killed with no meaningful error message.
+    fix: >
+      Set auto_suspend to at least 300 seconds for warehouses running dbt. Use a
+      separate warehouse for long-running batch models vs. interactive BI queries.
+      Add retry logic in your orchestrator for transient warehouse suspension errors.
+
+  - id: dbt-compile-vs-run
+    title: dbt compile succeeds but dbt run fails
+    description: >
+      dbt compile only validates Jinja templating and ref/source resolution -- it
+      does not execute SQL against the warehouse. A model can compile cleanly but
+      fail at runtime due to type mismatches, missing permissions, or warehouse-specific
+      syntax (e.g., QUALIFY in BigQuery vs Snowflake).
+    fix: >
+      Always run dbt run --select <model> in a dev environment before promoting to
+      CI. Use dbt build (runs + tests in dependency order) for full validation. Add
+      warehouse-specific syntax tests to CI.
+
+  - id: source-and-ref-same-model
+    title: Mixing source() and ref() for the same logical table
+    description: >
+      Using source('raw', 'orders') in one model and ref('stg_orders') in another
+      to access the same underlying data creates two unrelated lineage paths. dbt
+      docs will show broken or forked lineage, and freshness checks will not propagate
+      correctly through the DAG.
+    fix: >
+      Always access raw tables exclusively via source() -- only in staging models.
+      Every downstream model must use ref() pointing to the staging model. This is
+      the foundational rule of the staging layer contract.
+
+  - id: airflow-task-id-uniqueness
+    title: Airflow task_id must be unique within a DAG
+    description: >
+      Airflow raises a DuplicateTaskIdFound error at parse time if any two tasks in
+      the same DAG share a task_id. This commonly occurs when tasks are generated
+      in a loop using a non-unique ID (e.g., using the same prefix without the loop
+      variable).
+    fix: >
+      When generating tasks programmatically, always include the unique loop variable
+      in the task_id: task_id=f"run_dbt_{table_name}". Use consistent naming
+      conventions: {layer}_{action}_{entity} (e.g., staging_run_orders).
+
+  - id: dagster-asset-partition-backfill-cost
+    title: Dagster partitioned asset backfills can trigger warehouse storms
+    description: >
+      Launching a full backfill on a Dagster partitioned asset (e.g., daily partitions
+      for 2 years = 730 runs) will attempt to materialize all partitions concurrently
+      up to the concurrency limit, potentially flooding the warehouse with hundreds of
+      simultaneous queries.
+    fix: >
+      Use dagster's backfill concurrency limit (--concurrency flag or BackfillPolicy)
+      and schedule large backfills during off-peak hours. Start with a small partition
+      range to validate cost before running the full history.
