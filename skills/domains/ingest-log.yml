@@ -164,6 +164,65 @@ entries:
     refresh_due: "2026-10-28"
     notes: "Binary analysis patterns feed into binary-scan skill. No domain YAML yet — security domain uses SKILL.md directly."
 
+  - repo_name: "arpit-mittal-ds/Data-Architect"
+    url: "https://github.com/arpit-mittal-ds/Data-Architect"
+    stars: 0
+    domain: "data"
+    files_touched:
+      - "domains/data/data-modeling.md"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "Dimensional modeling reference — Inmon vs Kimball, star schema anatomy, governance patterns. Personal portfolio repo; validate patterns against official Kimball Group docs."
+
+  - repo_name: "hoangsonww/End-to-End-Data-Pipeline"
+    url: "https://github.com/hoangsonww/End-to-End-Data-Pipeline"
+    stars: 0
+    domain: "data"
+    files_touched:
+      - "domains/data/data-modeling.md"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "Star schema DDL (PostgreSQL + Snowflake), Airflow load-order DAG, SCD Type 2, Snowflake GENERATOR date spine, fact clustering, four BI query shapes. Portfolio demo — patterns structurally sound but not battle-tested at scale."
+
+  - repo_name: "ANUXR4G/Mage-UI"
+    url: "https://github.com/ANUXR4G/Mage-UI"
+    stars: 0
+    domain: "saas-build"
+    files_touched:
+      - "domains/saas-build/component-library.md"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "shadcn-style React UI component library — primitives, page layout, file-based registry pattern. General web/SaaS UI, not dashboard-specific."
+
+  - repo_name: "meetdarji006/meet-ui"
+    url: "https://github.com/meetdarji006/meet-ui"
+    stars: 0
+    domain: "saas-build"
+    files_touched:
+      - "domains/saas-build/animation-patterns.md"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "56 animation components — text reveals, cursor effects, card morphing. Framer Motion + CSS. Marketing/portfolio oriented. Disable cursor effects on mobile."
+
+  - repo_name: "Yashchauhan008/portfolio-3d"
+    url: "https://github.com/Yashchauhan008/portfolio-3d"
+    stars: 0
+    domain: "saas-build"
+    files_touched:
+      - "domains/saas-build/animation-patterns.md"
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "Reference tier — GSAP + ScrollTrigger scroll-pinned timeline patterns. Pin, scrub, stagger, horizontal scroll. Extracted as GSAP section in animation-patterns.md."
+
+  - repo_name: "Skunkworks-Labs/data-management"
+    url: "https://github.com/Skunkworks-Labs/data-management"
+    stars: 0
+    domain: "data"
+    files_touched: []
+    analyzed_date: "2026-04-29"
+    refresh_due: "2026-10-29"
+    notes: "Reference tier — SVG radial mind-map visualization pattern. No domain YAML created. Pattern noted for future dashboard-dev or data visualization domain work."
+
   # --- Agent-type entries (schema_version 2) ---
 
   - repo_name: "kubernetes-expert"
