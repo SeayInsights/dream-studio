@@ -1,10 +1,15 @@
----
+﻿---
 name: debug
 description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure.
 pack: quality
 ---
 
 # Debug — Scientific Method
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+If the project has `.planning/GOTCHAS.md` — read it before starting.
+If the project has `.planning/CONSTITUTION.md` — read it before starting.
 
 ## Trigger
 `debug:`, `diagnose:`, on build failure, on verify failure, on agent retry
@@ -13,12 +18,17 @@ pack: quality
 Systematic problem solving. Reproduce, hypothesize, test, narrow, fix. No shotgun debugging.
 
 ## Steps
+0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
 1. **Reproduce** — Confirm the bug exists. Get exact steps, error messages, stack traces.
+1.5. **Capture** — Encode the reproduction as a failing artifact:
+   - **If unit-testable:** Write a minimal failing test that encodes the exact reproduction steps. This test becomes the fix's acceptance criterion and is used by `verify` as the red-green check.
+   - **If NOT unit-testable** (UI rendering, race condition, infrastructure): Capture a screenshot or log as the reproduction artifact instead.
+   - Set `testable: true/false` in debug output — the `fix-issue` workflow uses this to conditionally fire the `write-failing-test` node.
 2. **Hypothesize** — Form 2-3 hypotheses ranked by likelihood based on the error.
 3. **Test** — Test the most likely hypothesis first. One variable at a time.
 4. **Narrow** — Eliminate hypotheses based on results. Add new ones if needed.
 5. **Fix** — Apply the fix. Verify it resolves the issue without introducing new ones.
-6. **Document** — Record what was tried and ruled out so the next session doesn't repeat.
+6. **Document** — Record what was tried and ruled out so the next session doesn't repeat. If the fix required more than 3 hypothesis iterations, or revealed a reusable pattern (a class of bug, a hidden invariant, a surprising interaction), invoke `learn:` to capture it — describe what happened and why the standard approach failed.
 
 ## Debug log format
 Track in conversation to prevent retrying failed approaches:
