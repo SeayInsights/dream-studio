@@ -1,18 +1,49 @@
 # Ingest Log — External Knowledge Registry
 # Tracks every external repo or resource that has been analyzed and integrated
-# into the skills/domains/ knowledge base.
+# into the skills/domains/ knowledge base. Supports two entry types:
+#   repo-type  — external repository analyzed for domain patterns (default; no persona_md_path)
+#   agent-type — synthesized specialist agent bundled in agents/ (has persona_md_path)
 #
-# Schema per entry:
-#   repo_name: human-readable name
-#   url: source URL
-#   stars: star count at time of analysis (approximate)
-#   domain: which skills/domains/ folder received the patterns
-#   files_touched: list of domain YAML files updated
-#   analyzed_date: date the repo was analyzed (YYYY-MM-DD)
-#   refresh_due: date to re-analyze for new patterns (default: 6 months)
-#   notes: optional — why this was chosen, what was skipped
+# --- Schema: repo-type entry ---
+#   repo_name:      human-readable name
+#   url:            source URL
+#   stars:          star count at time of analysis (approximate)
+#   domain:         which skills/domains/ folder received the patterns
+#   files_touched:  list of domain YAML files updated
+#   analyzed_date:  date analyzed (YYYY-MM-DD)
+#   refresh_due:    date to re-analyze (default: 6 months)
+#   notes:          optional — why chosen, what was skipped
+#
+# --- Schema: agent-type entry (added schema_version 2) ---
+# All repo-type fields apply, plus the following required additions:
+#
+#   keywords:         terms route-classify uses to match this agent to user intent
+#                     example: [kubernetes, k8s, pod, helm, kubectl, cluster]
+#
+#   persona_md_path:  path to the agent file relative to repo root
+#                     presence of this field marks the entry as agent-type
+#                     example: agents/kubernetes-expert.md
+#
+#   quality_score:    integer 0–8 from eval-rubric.yml
+#                     threshold: ≥5 to bundle as agent, ≥4 for domain YAML extraction only
+#                     example: 7
+#
+#   sources_evaluated: candidate sources scored during synthesis
+#     - repo:           source repo identifier (owner/name)
+#       path:           file path within that repo
+#       score:          integer 0–8 from eval-rubric.yml
+#       contributed:    patterns extracted from this source
+#                       example: [deployment_patterns, health_checks, anti_patterns]
+#
+#   enhancement_notes: what was added beyond the source material
+#                      example: "Added 4 production gotchas, k8s 1.28+ guidance, anti-patterns from incident log"
+#
+# --- Entry type detection ---
+# on-pulse.py and domain-refresh.yaml identify agent-type entries by:
+#   persona_md_path is not null
+# No explicit "type:" field needed.
 
-schema_version: 1
+schema_version: 2
 
 entries:
   - repo_name: "backend-best-practices"
