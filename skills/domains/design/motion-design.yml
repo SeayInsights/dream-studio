@@ -1,0 +1,122 @@
+# Motion Design Standards
+# Sources: Material Design, Apple HIG, Framer Motion, Web Animation Best Practices
+
+easing_curves:
+  standard_easing: "cubic-bezier(0.4, 0.0, 0.2, 1.0)"  # ease-in-out: most UI transitions
+  entrance_easing: "cubic-bezier(0.0, 0.0, 0.2, 1.0)"  # ease-out: elements entering screen
+  exit_easing: "cubic-bezier(0.4, 0.0, 1.0, 1.0)"  # ease-in: elements leaving screen
+
+  easing_reference:
+    ease_in_out: "Default for interactions, property changes, state transitions"
+    ease_out: "Entrance animations, fade-in, slide-in from edges"
+    ease_in: "Exit animations, fade-out, slide-out to edges"
+    linear: "Avoid except for continuous rotations (loading spinners)"
+
+timing_budgets:
+  micro:
+    min_ms: 100
+    max_ms: 200
+    use_cases:
+      - "Button hover states"
+      - "Icon changes"
+      - "Single property tweaks"
+
+  standard:
+    min_ms: 200
+    max_ms: 400
+    use_cases:
+      - "Modal open/close"
+      - "Collapse/expand sections"
+      - "Page transitions"
+      - "Multi-element group animations"
+
+  emphasis:
+    min_ms: 500
+    max_ms: 700
+    use_cases:
+      - "Hero animations"
+      - "Onboarding sequences"
+      - "Attention-grabbing effects"
+      - "Complex choreography"
+
+stagger_patterns:
+  sequential_stagger_ms: 50  # 50-100ms between elements
+  sequential_stagger_max_ms: 100
+
+  stagger_guidance:
+    recommended_range: "50-100ms between successive elements"
+    total_duration_ms: "Calculate as base_duration + (element_count - 1) × stagger_delay"
+    example: "4 elements @ 300ms base + 75ms stagger = 925ms total"
+
+  stagger_use_cases:
+    list_items: "Stagger list item entrances"
+    form_fields: "Stagger field focus states"
+    card_grids: "Stagger grid item reveals"
+    dropdown_items: "Stagger menu item appearances"
+
+reduced_motion_support:
+  media_query: "@media (prefers-reduced-motion: reduce)"
+  behavior: "All animations must respect prefers-reduced-motion"
+
+  implementation:
+    duration: "Set all durations to 0ms or remove animation"
+    transitions: "Keep instant state changes (no animation delays)"
+    approach_1: "CSS: @media (prefers-reduced-motion: reduce) { * { animation-duration: 0s !important; transition-duration: 0s !important; } }"
+    approach_2: "JavaScript: if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { disable animations }"
+
+  testing_checklist:
+    - "Enable prefers-reduced-motion in OS settings"
+    - "Verify animations are instant or disabled"
+    - "Check that UI still functions without motion"
+    - "Confirm no visual regressions"
+
+animation_best_practices:
+  do:
+    - "Use CSS animations for simple, performant transitions (transform, opacity)"
+    - "Keep animations under 600ms for most UI patterns"
+    - "Stagger sequential animations (50-100ms apart)"
+    - "Use ease-out for entrances, ease-in for exits"
+    - "Test on lower-end devices (mobile, older CPU)"
+    - "Provide prefers-reduced-motion fallback"
+    - "Keep animations on GPU-friendly properties (transform, opacity)"
+
+  avoid:
+    - "Bounce or elastic easing (except rare playful contexts)"
+    - "Infinite spinners on multiple elements simultaneously"
+    - "Animations longer than 700ms without user justification"
+    - "Simultaneous animations on 10+ elements (jank risk)"
+    - "Animating layout properties (width, height, position) — use transform instead"
+    - "Flash-heavy animations (can trigger photosensitive issues)"
+    - "Overlapping entrance/exit animations on the same element"
+
+performance_considerations:
+  gpu_friendly_properties:
+    - "transform: translate, rotate, scale"
+    - "opacity"
+
+  avoid_animating:
+    - "width, height, top, left, right, bottom (use transform instead)"
+    - "box-shadow (very expensive)"
+    - "filter (use sparingly, test performance)"
+
+  testing:
+    - "Run Chrome DevTools Performance tab during animations"
+    - "Ensure 60fps on target devices (check frame drops)"
+    - "Test on devices with <4GB RAM"
+    - "Use will-change sparingly (creates new stacking context)"
+
+animation_choreography:
+  entrance_sequence:
+    - "Stagger multiple elements by 50-100ms"
+    - "Use ease-out timing"
+    - "Keep individual durations 200-300ms"
+
+  exit_sequence:
+    - "Reverse entrance pattern (optional)"
+    - "Use ease-in timing"
+    - "Can run faster than entrance (200ms)"
+
+  state_transition:
+    - "Morph old state → new state"
+    - "Use standard ease-in-out"
+    - "Keep duration 200-400ms"
