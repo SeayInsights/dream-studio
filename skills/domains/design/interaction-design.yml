@@ -1,0 +1,106 @@
+# Interaction & Feedback Standards
+# Sources: WCAG 2.1, iOS Human Interface Guidelines, Material Design, NN/g Research
+
+focus_states:
+  visibility: required  # Must be visible on all interactive elements
+  minimum_outline_width: 2px
+  outline_color_contrast: "WCAG AA minimum (4.5:1 for text, 3:1 for graphics)"
+  outline_removal_policy: "Never remove outline without replacement visual feedback"
+  custom_focus_indicators:
+    preferred: "Colored outline (2-4px, brand-aware)"
+    acceptable: "Background color change + outline"
+    avoid: "Outline-only removal or color inversion without outline"
+
+touch_targets:
+  minimum_size: 44x44px  # WCAG AAA minimum
+  recommended_size: 48x48px
+  spacing_between_targets: 8px  # Minimum safe spacing to avoid mis-taps
+  mobile_web_buttons: "48x48px minimum"
+  icon_buttons: "44x44px minimum (padding included)"
+  link_text_targets: "Expandable touch area via padding; min 44x44px"
+
+form_interaction:
+  inline_validation:
+    timing: "On blur or after 500ms of inactivity (progressive disclosure)"
+    feedback_style: "Color-coded border (red error, green success) + icon + message"
+    message_placement: "Below input, within 8px of field"
+    message_max_width: "Match input width or less"
+
+  error_messages:
+    placement: "Immediately below field (not placeholder, not separate section)"
+    color: "Error color (WCAG AA contrast vs. field background)"
+    icon: "Optional (exclamation, X, or warning icon)"
+    assistance_text: "Helpful, specific, actionable copy"
+
+  label_positioning:
+    preferred: "Above input (persistent, not floating)"
+    floating_labels: "Acceptable if implemented accessibly (aria-label retained)"
+    placeholder_text: "Never as substitute for label; use for hints only"
+    required_indicator: "Asterisk (*) + aria-required, visible always"
+
+  disabled_state:
+    cursor: "not-allowed (not default)"
+    opacity: "60-70% or lower brightness"
+    color: "Gray with reduced contrast to indicate unavailability"
+
+loading_states:
+  skeleton_screens:
+    preferred: true  # Use for content-heavy sections
+    placeholder_style: "Neutral gray 20% background, shimmer animation optional"
+    timing: "Show immediately on load (no delay)"
+
+  spinners_loaders:
+    use_case: "Use only for non-content actions (form submission, data fetch <500ms)"
+    avoid_case: "Never for initial page load with content (use skeleton instead)"
+
+  feedback_timing:
+    max_delay_before_indicator: 200ms  # Per NN/g research
+    instant_feedback: "Show visual state change within 100ms, indicator by 200ms"
+    abort_option: "Provide if action takes >2s"
+
+hover_and_press_feedback:
+  cursor_changes:
+    default: "default cursor (arrows)"
+    clickable: "pointer (hand icon)"
+    text_selectable: "text (I-beam)"
+    not_allowed: "not-allowed (circle-slash)"
+    resize: "resize cursors (ns-resize, ew-resize, etc.)"
+
+  visual_feedback:
+    hover_state:
+      timing: "Within 100ms of mouse enter"
+      feedback: "Background color shift, opacity change, or shadow elevation"
+      contrast: "Ensure against text and backgrounds"
+
+    press_state:
+      timing: "Immediate (0-50ms) on mousedown/pointerdown"
+      feedback: "Darker or lighter shade, reduced shadow (pressed appearance)"
+      scale: "Optional 2-4% scale reduction for button press"
+
+    active_state:
+      maintained_until: "Mouse/pointer release or focus loss"
+      visual_difference: "Distinct from normal + hover states"
+
+transition_timing:
+  hover_to_normal: 150-200ms  # Smooth return
+  press_to_normal: 100ms  # Snappy release
+  state_changes: "Minimum 100ms, maximum 300ms for all interactive feedback"
+  avoid_instantaneous: "No zero-duration transitions; users won't perceive state change"
+
+accessibility_integration:
+  aria_attributes:
+    button_state: "aria-pressed (toggles), aria-expanded (disclosure)"
+    form_errors: "aria-invalid, aria-describedby (link to error message)"
+    loading: "aria-busy (during async operations)"
+    disabled: "aria-disabled, disabled attribute (both)"
+
+  keyboard_support:
+    focus_order: "Logical tab order, skip redundant elements"
+    enter_key: "Activates buttons, submits forms"
+    space_key: "Activates buttons, toggles checkboxes"
+    escape_key: "Close modals, cancel operations"
+
+  screen_reader_announcements:
+    state_changes: "Announce via aria-live or aria-label updates"
+    loading_progress: "Announce start/complete, avoid constant updates (max 1/sec)"
+    error_focus: "Focus error message on submit failure; announce via aria-live"
