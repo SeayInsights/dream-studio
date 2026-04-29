@@ -39,6 +39,19 @@ Dispatch fresh subagent per task with isolated context.
 
 **Worktree isolation (parallel dispatches):** For tasks running in parallel, add `isolation: "worktree"` to each Agent call. Claude Code creates an isolated git worktree per agent — last-writer-wins conflicts between parallel agents become structurally impossible. The worktree is auto-cleaned if the agent makes no changes. Sequential tasks in the same wave do NOT need worktree isolation.
 
+### TDD mode (`build:tdd` flag)
+For test-driven development. Activate by appending `:tdd` to the build trigger: `build:tdd <topic>`.
+
+Uses `templates/agent-prompts/tdd-loop.md` instead of `implementer.md` for each task dispatch.
+
+**Cycle per task:**
+1. Write a failing test that encodes the acceptance criterion — confirm RED (test exits non-zero)
+2. Implement minimum code to make the test pass — confirm GREEN (test exits zero)
+3. Refactor if needed — confirm still GREEN
+4. Commit: test file + implementation together in one commit
+
+**When to use:** When the acceptance criteria are clearly unit-testable. Skip for UI rendering tasks, infrastructure changes, or exploratory work where TDD adds friction without value.
+
 ## The Process
 
 ### Step 0: Load plan and project context
@@ -82,6 +95,8 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
 5. **Commit** — See: core/git.md — Commit referencing plan task
    - With TR-IDs: `feat(task-3): implement login form [TR-001, TR-002]`
    - Without TR-IDs: `feat(task-3): implement login form`
+
+   5.5 **Spec-tracking** (when traceability active) — If this task implements a functional requirement, include the FR-ID in the commit message body: `Implements FR-003, FR-004`. This keeps the audit trail current without extra overhead.
 
 6. **Update traceability** (conditional) — See: core/traceability.md — Update TR-ID with commit
    - Check if `.planning/traceability.yaml` exists
