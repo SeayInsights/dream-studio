@@ -24,6 +24,7 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 | Intent | Skill | Triggers |
 |--------|-------|----------|
 | Systematic debugging | `dream-studio:debug` | debug:, diagnose: |
+| Explain code / system | `dream-studio:explain` | explain:, how does X work, walk me through, what is this doing |
 | UI polish | `dream-studio:polish` | polish ui:, clean up ui:, critique design:, redesign:, make it premium: |
 | Security review | `dream-studio:secure` | secure:, check security, review architecture |
 | Project hardening | `dream-studio:harden` | /harden, harden audit |
