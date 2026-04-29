@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline status docs sync-cache validate-analysts setup ci-gate
+.PHONY: test lint fmt security install-dev install-statusline install status docs sync-cache validate-analysts setup ci-gate
 
 ifeq ($(OS),Windows_NT)
 	PYTHON := py -3.12
@@ -44,3 +44,6 @@ setup:
 
 ci-gate:
 	$(PYTHON) scripts/ci_gate.py
+
+install:
+	$(PYTHON) scripts/generate_routing.py
