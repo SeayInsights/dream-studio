@@ -1,0 +1,169 @@
+# Design Anti-Patterns Checklist
+# Patterns to avoid in UI/UX design
+# Format: Each entry has id, category, description, check (what to look for), fix (what to do instead)
+
+typography_anti_patterns:
+  - id: inter-only
+    category: typography
+    description: "Using only Inter without a display font pair"
+    check: "Is the same font used for both headings and body text?"
+    fix: "Pair Inter (body) with a display font — e.g., Fraunces, Playfair, or Cabinet Grotesk for headings"
+    severity: medium
+
+  - id: too-many-typefaces
+    category: typography
+    description: "Using more than two typefaces in a single design"
+    check: "Count unique font families across all text elements. Are there 3 or more?"
+    fix: "Limit to one sans-serif (body) + one serif or display font (headings). If more variety needed, use weights/scales instead"
+    severity: medium
+
+  - id: inconsistent-type-scale
+    category: typography
+    description: "Heading sizes jump erratically instead of following a scale"
+    check: "Do H1, H2, H3 sizes follow a consistent ratio (e.g., 1.5x between sizes)?"
+    fix: "Use a typographic scale tool or define: H1 48px, H2 32px, H3 24px. Use 1.5x multiplier for consistent progression"
+    severity: low
+
+  - id: justified-body-text
+    category: typography
+    description: "Justifying body text without proper hyphenation"
+    check: "Is body text justified? Are there large gaps or ragged word spacing?"
+    fix: "Use left-aligned text with proper line-height (1.5-2). Justified text is hard to read; use only for print"
+    severity: low
+
+color_anti_patterns:
+  - id: pure-black-text
+    category: color
+    description: "Pure black (#000000) text on white creates eye strain"
+    check: "Is the text color exactly #000000? Is it on a light background?"
+    fix: "Use dark gray (#2D2D2D or similar) instead. Reduces contrast glare and improves readability"
+    severity: low
+
+  - id: gray-on-color
+    category: color
+    description: "Gray text on colored backgrounds fails contrast requirements"
+    check: "Is gray text placed on a colored button, banner, or background? Can you read it easily?"
+    fix: "Use white or very dark text on color. Ensure WCAG AA contrast (4.5:1 minimum for text)"
+    severity: high
+
+  - id: low-contrast-gray
+    category: color
+    description: "Light gray text (#CCCCCC or lighter) fails accessibility standards"
+    check: "Is secondary text very light gray? Do you squint to read it?"
+    fix: "Use #666666 or darker for body text. #999999 minimum for supporting text. Test with WebAIM contrast checker"
+    severity: high
+
+  - id: purple-gradient-default
+    category: color
+    description: "Generic purple-to-pink gradient as the default color scheme (Web 2.0 relic)"
+    check: "Does the design use a trendy gradient as the primary brand color?"
+    fix: "Choose a specific brand color with purpose. Use gradients sparingly for accents only, not core identity"
+    severity: medium
+
+  - id: rainbow-palette
+    category: color
+    description: "Too many colors in the palette — looks chaotic instead of intentional"
+    check: "Are there 8+ colors used throughout the design? Do they lack clear hierarchy?"
+    fix: "Use 1 brand color + 1 accent + 1 neutral palette (black/grays/white). Additional colors only for data viz/status"
+    severity: medium
+
+layout_anti_patterns:
+  - id: centered-everything
+    category: layout
+    description: "Centering all content, including body text, reduces scannability"
+    check: "Is all text center-aligned? Are paragraphs centered on the page?"
+    fix: "Use left-aligned body text for readability. Center only headers and CTAs. Apply left alignment to maximize line length efficiency"
+    severity: medium
+
+  - id: uniform-border-radius
+    category: layout
+    description: "Using the same border-radius (e.g., 8px) on all elements regardless of size"
+    check: "Do buttons, cards, and inputs all have identical border-radius?"
+    fix: "Scale radius with size: small buttons 4px, medium cards 8px, large containers 12px. Larger elements need slightly more radius"
+    severity: low
+
+  - id: drop-shadows-everywhere
+    category: layout
+    description: "Adding drop shadows to every element dilutes their effect and adds visual noise"
+    check: "Are there shadows on multiple elements (buttons, cards, text)? Does it feel heavy?"
+    fix: "Use shadows sparingly. Reserve them for floating/layered elements only. One shadow per element max"
+    severity: low
+
+  - id: excessive-card-nesting
+    category: layout
+    description: "Cards inside cards inside cards creates visual confusion"
+    check: "Are there 3+ levels of nested card styling? Is the hierarchy unclear?"
+    fix: "Limit nesting to 2 levels. Use whitespace and borders instead. Reserve inner cards for secondary content only"
+    severity: medium
+
+  - id: generic-hero-section
+    category: layout
+    description: "Stock photo + centered headline + generic CTA (unsustainable design pattern)"
+    check: "Does the hero have: generic stock image + centered text + 'Learn More' CTA?"
+    fix: "Create a hero with: real brand imagery, asymmetric layout, specific value prop, and primary action (e.g., 'Start Free Trial')"
+    severity: medium
+
+motion_anti_patterns:
+  - id: bounce-easing
+    category: motion
+    description: "Bouncy easing (cubic-bezier with overshoot) on every animation"
+    check: "Do animations bounce/overshoot? Does it feel playful but juvenile?"
+    fix: "Reserve bounce for delight moments (form success, game-like UI). Use ease-out or ease-in-out for primary interactions"
+    severity: low
+
+  - id: simultaneous-animations
+    category: motion
+    description: "Multiple animations triggering at once on page load (overwhelming)"
+    check: "Do multiple elements animate in at the same time when the page loads?"
+    fix: "Stagger animations with 50-100ms delays. Let users focus on one element at a time. Use entrance animations for emphasis only"
+    severity: low
+
+  - id: no-reduced-motion
+    category: motion
+    description: "Animations play regardless of prefers-reduced-motion setting"
+    check: "Do animations play even when OS accessibility setting is 'reduce motion'?"
+    fix: "Wrap animations in @media (prefers-reduced-motion: reduce) { animation: none; }. Always respect user accessibility"
+    severity: high
+
+  - id: decorative-infinite-animation
+    category: motion
+    description: "Infinite animations on background/decorative elements distract from content"
+    check: "Are there spinning icons, floating shapes, or infinite transitions in the background?"
+    fix: "Remove infinite decorative animations. Use animations only for user interactions or intentional emphasis"
+    severity: low
+
+copy_anti_patterns:
+  - id: click-here-cta
+    category: copy
+    description: "'Click Here' or 'Submit' as CTA button text (vague and outdated)"
+    check: "Does the button say 'Click Here', 'Submit', 'Go', or 'OK'?"
+    fix: "Use action-specific labels: 'Create Account', 'Download Report', 'Save Changes', 'Get Started'"
+    severity: medium
+
+  - id: passive-error-messages
+    category: copy
+    description: "Error messages that blame the user or lack guidance"
+    check: "Does the error message say 'Invalid input' or 'Error 400'? Does it not suggest a fix?"
+    fix: "Be specific and helpful: 'Email must include @. Example: user@domain.com' or 'Password needs at least 8 characters and one number'"
+    severity: high
+
+  - id: submit-button-label
+    category: copy
+    description: "'Submit' as the primary call-to-action (generic and uninspiring)"
+    check: "Does the form button say 'Submit'?"
+    fix: "Use context-specific labels: 'Create Account', 'Save Profile', 'Send Message', 'Subscribe', 'Publish Post'"
+    severity: medium
+
+  - id: empty-state-no-action
+    category: copy
+    description: "Empty state that only says 'No results' without guidance on what to do"
+    check: "When there's no data, does the empty state only show 'No items' or 'Nothing here'?"
+    fix: "Guide the user: 'No projects yet. Create your first project to get started' + a button to create one"
+    severity: medium
+
+  - id: jargon-in-ui
+    category: copy
+    description: "Technical or internal jargon in user-facing UI labels"
+    check: "Are there labels like 'API Key', 'Cache Invalidation', 'POST Endpoint', 'OWASP Ruleset'?"
+    fix: "Translate to user language: 'API Key' → 'Integration Code', 'Cache' → 'Speed up loading', technical codes → human-readable descriptions"
+    severity: high
