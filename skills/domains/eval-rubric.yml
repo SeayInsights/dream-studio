@@ -4,18 +4,18 @@
 #          before synthesizing them into dream-studio's agents/ and skills/domains/.
 # When to use: Run this rubric against each candidate file BEFORE deciding
 #              whether to bundle it as an agent or extract domain YAML only.
-# Score = count of signals present (0–8). See thresholds block for cutoffs.
+# Score = count of signals present (0-8). See thresholds block for cutoffs.
 
 scoring_guidance:
   process:
     - Read the candidate file top to bottom once
     - For each signal in the signals block, check the how_to_score criteria
     - Mark each signal as present (1) or absent (0)
-    - Sum the marks to get a total score (0–8)
+    - Sum the marks to get a total score (0-8)
     - Apply the threshold from the thresholds block
   notes:
-    - Signals are binary — present or absent, no partial credit
-    - When in doubt, mark absent — only mark present if the evidence is explicit
+    - Signals are binary  -  present or absent, no partial credit
+    - When in doubt, mark absent  -  only mark present if the evidence is explicit
     - Score reflects dream-studio fitness, not general agent quality
     - A file scoring 8/8 on general polish but 2/8 here is still a reject
 
@@ -29,7 +29,7 @@ signals:
       Look for a "Gotchas", "Pitfalls", "Common errors", "Watch out", or
       "Known issues" section, or inline warnings prefixed with NOTE/WARNING/CAUTION.
       Generic disclaimers ("results may vary") do not count.
-    example_pass: '"Gotcha: Claude resets tool_choice to auto after the first tool call — always re-set it per turn."'
+    example_pass: '"Gotcha: Claude resets tool_choice to auto after the first tool call  -  always re-set it per turn."'
     example_fail: '"This tool may not work in all environments."'
 
   - id: has_anti_patterns
@@ -38,9 +38,9 @@ signals:
       Covers patterns that appear reasonable but produce broken or unsafe output.
     how_to_score: >
       Look for sections titled "Anti-patterns", "Don't", "Avoid", "Bad example",
-      or inline ❌/✗ markers with explanatory text. Must name the pattern and
-      explain why it fails — listing it without explanation does not count.
-    example_pass: '"Anti-pattern: passing the full conversation history to every tool call — causes context bloat and token waste."'
+      or inline [x]/[x] markers with explanatory text. Must name the pattern and
+      explain why it fails  -  listing it without explanation does not count.
+    example_pass: '"Anti-pattern: passing the full conversation history to every tool call  -  causes context bloat and token waste."'
     example_fail: '"Avoid misuse of this API."'
 
   - id: has_specific_commands
@@ -75,7 +75,7 @@ signals:
       entry). A GitHub repo with commits, issues, or release history counts.
       A VoltAgent catalog entry with no linked repo does not count unless it
       references a production deployment.
-    example_pass: "source_repo: github.com/cloudflare/workers-sdk — 2,400 stars, active issues"
+    example_pass: "source_repo: github.com/cloudflare/workers-sdk  -  2,400 stars, active issues"
     example_fail: "source: VoltAgent catalog listing, no linked repository"
 
   - id: workflow_integrable
@@ -92,14 +92,14 @@ signals:
 
   - id: has_concrete_examples
     description: >
-      Real input/output pairs are shown — not templates or placeholder text.
+      Real input/output pairs are shown  -  not templates or placeholder text.
       Examples demonstrate the actual behavior on a specific, realistic scenario.
     how_to_score: >
       Look for before/after code, sample prompts with actual responses, or
       terminal transcripts showing real output. Placeholder text ("your input here",
       "<example>") and synthetic lorem-ipsum content do not count.
-    example_pass: 'Input: "fix the auth bug" → Output: PR #88 opened at github.com/org/repo/pull/88'
-    example_fail: "Input: <your task description> → Output: <agent response>"
+    example_pass: 'Input: "fix the auth bug" -> Output: PR #88 opened at github.com/org/repo/pull/88'
+    example_fail: "Input: <your task description> -> Output: <agent response>"
 
   - id: maintained_recently
     description: >
@@ -109,7 +109,7 @@ signals:
       Check the file's last_updated field, git log date for the source repo,
       or the ingest-log.yml recorded_at timestamp. If no date is available,
       mark absent. "Recently updated" claims without a date do not count.
-    example_pass: "last_updated: 2025-03-14 — within 90 days of ingest date 2025-04-29"
+    example_pass: "last_updated: 2025-03-14  -  within 90 days of ingest date 2025-04-29"
     example_fail: "No date metadata present in file or source repository."
 
 thresholds:
