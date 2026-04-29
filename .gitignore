@@ -17,6 +17,7 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
 
 # Node
