@@ -47,5 +47,5 @@ compatibility:
 # Discovery
 tags: [analysis]
 category: workflow
-triggers: []
+triggers: ["review:", "review code", "review PR:"]
 description: "Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. Trigger on `review:`, `review code`, or after `build`."

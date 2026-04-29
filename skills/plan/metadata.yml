@@ -47,5 +47,5 @@ compatibility:
 # Discovery
 tags: [workflow]
 category: workflow
-triggers: []
+triggers: ["plan:", "/plan"]
 description: "Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. Trigger on `plan:` or after `think` is approved."

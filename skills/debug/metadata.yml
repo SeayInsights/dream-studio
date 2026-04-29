@@ -47,5 +47,5 @@ compatibility:
 # Discovery
 tags: [debugging]
 category: workflow
-triggers: []
+triggers: ["debug:", "diagnose:"]
 description: "Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. Trigger on `debug:`, `diagnose:`, or on build/verify failure."
