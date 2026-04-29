@@ -20,9 +20,12 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+    # Estimated prompt + completion tokens for this node
+    estimated_tokens: 2000
 
   - id: create-issue
     depends_on: [diagnose]
+    estimated_tokens: 500
     command: |
       Create a GitHub issue for this bug using the diagnose output.
       Run: gh issue create \
@@ -36,6 +39,7 @@ nodes:
   - id: write-failing-test
     depends_on: [create-issue]
     condition: "{{diagnose.testable}} == true"
+    estimated_tokens: 1500
     command: |
       Write a minimal failing test that encodes the reproduction steps from diagnose.
       Place in: tests/<area>/<bug-slug>_test.<ext>
@@ -52,6 +56,7 @@ nodes:
     model: haiku
     context: fresh
     timeout_seconds: 300
+    estimated_tokens: 1000
     input: "{{diagnose.output}}"
 
   - id: implement-fix
@@ -64,6 +69,7 @@ nodes:
     retry:
       max: 1
       backoff_seconds: 15
+    estimated_tokens: 4000
     input: "{{plan-fix.output}}"
 
   - id: review
@@ -73,6 +79,7 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+    estimated_tokens: 2000
 
   - id: verify
     skill: verify
@@ -84,9 +91,11 @@ nodes:
     retry:
       max: 1
       backoff_seconds: 15
+    estimated_tokens: 1500
 
   - id: report
     depends_on: [verify]
+    estimated_tokens: 500
     command: |
       Summarize the fix: what was wrong, what changed, how it was verified.
       Include file paths and commit references.

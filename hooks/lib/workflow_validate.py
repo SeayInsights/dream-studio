@@ -193,6 +193,13 @@ def validate(data: dict, plugin_root: Path) -> list[str]:
                 elif not isinstance(max_val, int) or max_val <= 0:
                     errors.append(f"Node \"{nid}\": retry.max must be a positive integer")
 
+        estimated_tokens = n.get("estimated_tokens")
+        if estimated_tokens is not None:
+            if not isinstance(estimated_tokens, int) or estimated_tokens < 0:
+                errors.append(
+                    f"Node \"{nid}\": estimated_tokens must be a non-negative integer"
+                )
+
     # Cycle detection — Kahn's algorithm
     in_degree = {nid: 0 for nid in node_ids}
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
