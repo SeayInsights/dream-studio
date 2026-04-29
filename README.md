@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-74%25-green.svg)](pyproject.toml)
+[![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](pyproject.toml)
 
 An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**, automated hooks, semantic memory retrieval, CI gate, and a context-aware status bar — portable across every project.
 
