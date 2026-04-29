@@ -19,6 +19,8 @@ _LIB_DIR = Path(__file__).resolve().parents[2] / "hooks" / "lib"
 if str(_LIB_DIR.parent) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR.parent))
 
+from lib.context_handoff import HANDOFF_PCT, URGENT_PCT  # noqa: E402
+
 
 def _load(name: str) -> types.ModuleType:
     spec = importlib.util.spec_from_file_location(name, _LIB_DIR / f"{name}.py")
@@ -149,7 +151,6 @@ class TestCheckContextBudget:
             assert eng._check_context_budget(1) is None
 
     def test_urgent_pct_returns_block(self, tmp_path: Path) -> None:
-        from lib.context_handoff import URGENT_PCT
         (tmp_path / "context.json").write_text(
             json.dumps({"pct": URGENT_PCT + 1}), encoding="utf-8"
         )
@@ -158,7 +159,6 @@ class TestCheckContextBudget:
         assert result == "block"
 
     def test_handoff_pct_non_interactive_blocks(self, tmp_path: Path) -> None:
-        from lib.context_handoff import HANDOFF_PCT, URGENT_PCT
         mid = (HANDOFF_PCT + URGENT_PCT) / 2
         (tmp_path / "context.json").write_text(json.dumps({"pct": mid}), encoding="utf-8")
         with patch("lib.workflow_engine.paths.state_dir", return_value=tmp_path):
