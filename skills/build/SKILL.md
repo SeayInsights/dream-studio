@@ -91,13 +91,16 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
 7. **Mark complete** — Write task-level checkpoint to `.sessions/YYYY-MM-DD/checkpoint-<topic>.md` (append mode). Use the task-level checkpoint format from core/format.md: task number + name, COMPLETE status, commit SHA + message, next task, context % estimate.
 
 ### Step 3: Checkpoint
-**See:** core/format.md — Checkpoint format
+**See:** core/format.md — Checkpoint format (task-level)
 
-After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
+After every task (config: `max_tasks_before_checkpoint: 1`), write a task-level checkpoint.
+Include:
 - Tasks completed / total
 - Any drift from plan
 - Blockers or concerns
 - Context usage (if growing, consider handoff)
+
+**Auto-learn signal:** If any tasks in this wave resolved as `done_with_concerns` and concerns were addressed, append: "Concerns resolved — consider `learn: [topic]` to capture the pattern for future builds."
 
 ## Model Selection for Subagents
 
