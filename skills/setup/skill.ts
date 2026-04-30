@@ -55,12 +55,48 @@ export async function isFirstRun(): Promise<boolean> {
 
 /**
  * Display first-run prompt and capture user choice
- * To be implemented in T005
+ * Implemented in T005
  */
 export async function promptForSetupPath(): Promise<"wizard" | "as-needed" | "read-docs"> {
-  // TODO: Display prompt with three options
-  // Return user's choice
-  throw new Error("Not implemented - see T005");
+  const readline = await import("readline");
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  console.log("\n🎉 First time using dream-studio!\n");
+  console.log("Choose your setup path:\n");
+  console.log("  [1] wizard      - Full interactive setup (detects tools, offers installation)");
+  console.log("  [2] as-needed   - Just-in-time prompts when skills need missing tools");
+  console.log("  [3] read-docs   - No prompts, I'll read README and install manually\n");
+
+  const validChoices = new Map<string, "wizard" | "as-needed" | "read-docs">([
+    ["1", "wizard"],
+    ["wizard", "wizard"],
+    ["2", "as-needed"],
+    ["as-needed", "as-needed"],
+    ["3", "read-docs"],
+    ["read-docs", "read-docs"],
+  ]);
+
+  const getUserChoice = (): Promise<"wizard" | "as-needed" | "read-docs"> => {
+    return new Promise((resolve) => {
+      rl.question("Enter your choice [1/2/3 or wizard/as-needed/read-docs]: ", (answer) => {
+        const normalized = answer.trim().toLowerCase();
+        const choice = validChoices.get(normalized);
+
+        if (choice) {
+          rl.close();
+          resolve(choice);
+        } else {
+          console.log(`\n❌ Invalid choice: "${answer}". Please enter 1, 2, 3, wizard, as-needed, or read-docs.\n`);
+          resolve(getUserChoice());
+        }
+      });
+    });
+  };
+
+  return getUserChoice();
 }
 
 /**
