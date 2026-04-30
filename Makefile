@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline install status docs sync-cache validate-analysts setup ci-gate workflows analytics
+.PHONY: test lint fmt security install-dev install-statusline install status docs sync-cache validate-analysts setup ci-gate workflows analytics adapters
 
 ifeq ($(OS),Windows_NT)
 	PYTHON := py -3.12
@@ -53,3 +53,6 @@ workflows:
 
 analytics:
 	$(PYTHON) scripts/ds_analytics/main.py
+
+adapters:
+	$(PYTHON) scripts/build_adapters.py $(if $(PLATFORM),--platform $(PLATFORM),)
