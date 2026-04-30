@@ -183,3 +183,58 @@ def load_domains() -> list[dict]:
 
     results.sort(key=lambda d: d["name"])
     return results
+
+
+def estimate_tokens(text: str) -> int:
+    """Estimate token count for a text string.
+
+    Uses tiktoken for precise counting when available, otherwise falls back
+    to a simple len/4 approximation.
+    """
+    try:
+        import tiktoken
+
+        enc = tiktoken.encoding_for_model("gpt-4")
+        return len(enc.encode(text))
+    except ImportError:
+        return len(text) // 4
+
+
+def truncate_to_budget(
+    skills: list[dict],
+    domains: list[dict],
+    budget: int = 8000,
+) -> tuple[list[dict], list[dict]]:
+    """Truncate skills and domains to fit within a token budget.
+
+    Strategy (applied in order until under budget):
+    1. Strip gotchas from each skill.
+    2. Truncate workflow_steps to first 3 per skill.
+
+    Args:
+        skills: Mutable list of skill dicts (will be modified in place).
+        domains: List of domain dicts (passed through unchanged).
+        budget: Target token count.
+
+    Returns:
+        Tuple of (skills, domains) — potentially truncated.
+    """
+    def _total_tokens() -> int:
+        blob = "\n".join(
+            str(s) for s in skills
+        ) + "\n".join(
+            str(d) for d in domains
+        )
+        return estimate_tokens(blob)
+
+    # Pass 1: strip gotchas
+    if _total_tokens() > budget:
+        for skill in skills:
+            skill["gotchas"] = []
+
+    # Pass 2: truncate workflow_steps to first 3
+    if _total_tokens() > budget:
+        for skill in skills:
+            skill["workflow_steps"] = skill.get("workflow_steps", [])[:3]
+
+    return skills, domains
