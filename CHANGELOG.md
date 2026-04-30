@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Onboarding skill** (`dream-studio:setup`) — wizard, status, and JIT modes for guided tool installation and project setup (#46)
+- **Web access module** (`skills/core/web.md`) — 3-tier fallback chain (Firecrawl → scraper-mcp → WebSearch/WebFetch) with JIT install prompts
+- **Tool registry** (`skills/setup/tool-registry.yml`) — metadata for 6 optional tools with detect/install/upgrade commands
+- **Tool reference** (`docs/tool-reference.md`) — per-tool documentation with skill benefit tables and setup profiles
+
+### Changed
+- **Workflow coverage** — token efficiency improvements and feature activation gates (#48)
+- **Linux gh install** — corrected install command; Mac Python symlink fix (#47)
+
 ## [0.11.0] — 2026-04-30
 
 ### Changed

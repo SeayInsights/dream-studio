@@ -1,253 +1,208 @@
 # dream-studio — Project Structure
 
-**Version**: 2.0 (Repository Integration v2)  
-**Last Updated**: 2026-04-27
+**Version**: 3.0 (Pack Consolidation)
+**Last Updated**: 2026-04-30
 
 ## Overview
 
-dream-studio is a modular agent framework built around a skill-based pipeline: **think → plan → build → review → verify → ship**. Each component has a specific responsibility and clear interfaces.
+dream-studio is a modular Claude Code plugin built around a skill-based pipeline: **think → plan → build → review → verify → ship**. Skills are organized into 7 packs, each a single discoverable skill with multiple modes.
 
 ## Directory Organization
 
 ```
 dream-studio/
-├── .planning/                   # Project planning and architecture
-│   ├── README.md
-│   ├── templates/               # Reusable spec/plan templates
-│   │   ├── spec-template.md
-│   │   ├── plan-template.md
-│   │   ├── tasks-template.md
-│   │   └── constitution-template.md
-│   ├── specs/                   # Feature specifications (v2 structure)
-│   │   └── <feature-name>/
-│   │       ├── spec.md          # User stories, requirements
-│   │       ├── plan.md          # Architecture, tech decisions
-│   │       ├── tasks.md         # Task breakdown
-│   │       └── ...              # Optional: research, contracts
-│   └── *.md                     # Legacy specs (backwards compatible)
-│
-├── skills/                      # Core capabilities
-│   ├── think/                   # Spec generation, design thinking
-│   │   ├── SKILL.md
-│   │   ├── skill.ts
-│   │   └── templates/
-│   │       └── spec-template.md
-│   ├── plan/                    # Implementation planning
-│   │   ├── SKILL.md
-│   │   ├── skill.ts
-│   │   └── templates/
-│   │       ├── plan-template.md
-│   │       └── tasks-template.md
-│   ├── build/                   # Task execution
-│   ├── review/                  # Code review
-│   ├── verify/                  # Testing and validation
-│   ├── ship/                    # Pre-deploy quality gate
-│   ├── debug/                   # Systematic debugging
-│   ├── polish/                  # UI/UX refinement
-│   │   └── checklists/
-│   │       ├── web-design.yml
-│   │       ├── fluent-design-compliance.yml
-│   │       ├── material-design-compliance.yml
-│   │       └── data-viz-accessibility.yml
-│   ├── secure/                  # Security review
-│   ├── design/                  # Visual design
-│   ├── harden/                  # Project hardening
-│   ├── client-work/             # Power Platform workflows
-│   │   └── powerbi/
-│   │       ├── storytelling-framework.yml
-│   │       ├── accessibility-checklist.yml
-│   │       └── design-hacks.yml
-│   ├── saas-build/              # SaaS feature builder
-│   ├── game-dev/                # Godot game development
-│   ├── mcp-build/               # MCP server development
-│   ├── dashboard-dev/           # Tauri dashboard builder
-│   └── domains/                 # Domain knowledge library
-│       ├── devops/
-│       │   ├── github-actions-patterns.yml
-│       │   └── REFERENCES.md
-│       ├── testing/
-│       │   ├── playwright-patterns.yml
-│       │   └── REFERENCES.md
-│       ├── documentation/
-│       │   ├── technical-writing-standards.yml
-│       │   └── REFERENCES.md
-│       ├── design/
-│       │   ├── fluent-design-system.yml
-│       │   ├── material-design-system.yml
-│       │   ├── typography-standards.yml
-│       │   ├── color-standards.yml
-│       │   ├── layout-standards.yml
-│       │   └── REFERENCES.md
-│       ├── powerbi/
-│       │   ├── storytelling-patterns.yml
-│       │   ├── accessibility-checklist.yml
-│       │   ├── design-best-practices.yml
-│       │   └── REFERENCES.md
-│       ├── data-visualization/
-│       │   ├── accessibility-standards.yml
-│       │   ├── design-standards.yml
-│       │   └── REFERENCES.md
-│       ├── frontend/
-│       ├── backend/
-│       └── security/
-│
-├── core/                        # Shared building blocks
-│   ├── git.md
-│   ├── traceability.md
-│   ├── format.md
-│   └── ...
-│
-└── packs/                       # Skill collections
-    ├── core/
-    ├── security/
-    ├── visual/
-    ├── domain-builders/
-    ├── power-platform/
-    └── analysis/
+├── .claude/                         # Claude Code project settings
+│   └── settings.json
+├── .claude-plugin/                  # Plugin manifest
+│   ├── plugin.json
+│   └── marketplace.json
+├── .github/
+│   ├── workflows/ci.yml             # CI: test matrix, ci-gate, audit
+│   └── PULL_REQUEST_TEMPLATE.md
+├── agents/                          # 9 bundled specialist agents
+├── docs/                            # Reference documentation
+│   ├── tool-reference.md            # Per-tool install guides
+│   └── token-overhead.md            # Context cost analysis
+├── hooks/                           # Hook infrastructure
+│   └── lib/                         # Shared Python hook library
+├── meta/                            # Lessons and observability
+├── packs/                           # Pack-specific context and config
+│   └── <pack>/
+│       ├── hooks/                   # Pack-level hooks
+│       ├── context/                 # Injected session context
+│       └── agents/                  # Pack-level agent personas
+├── scripts/                         # Utility scripts
+├── skills/                          # Skill definitions (see below)
+├── templates/                       # Shared templates
+├── tests/                           # Test suite
+├── workflows/                       # YAML DAG workflow definitions
+├── ARCHITECTURE.md                  # Two-layer design doc
+├── CHANGELOG.md
+├── CLAUDE.md                        # Skill routing table
+├── CONTEXT.md                       # Domain terminology
+├── CONTRIBUTING.md
+├── README.md
+├── SECURITY.md
+├── STRUCTURE.md                     # This file
+├── packs.yaml                       # Pack registry
+├── pyproject.toml                   # Python tooling config
+├── requirements.txt
+└── requirements-dev.txt
 ```
+
+## Skills Directory
+
+Skills are organized into **packs**. Each pack is a single discoverable skill with a router that dispatches to modes.
+
+```
+skills/
+├── core/                            # dream-studio:core — Build Lifecycle
+│   ├── SKILL.md                     # Pack router
+│   ├── REGISTRY.md                  # Tool registry reference
+│   ├── git.md                       # Shared: branch ops, commit format
+│   ├── format.md                    # Shared: output formatting
+│   ├── quality.md                   # Shared: build commands, test execution
+│   ├── orchestration.md             # Shared: subagent spawning, model selection
+│   ├── traceability.md              # Shared: TR-ID validation
+│   ├── repo-map.md                  # Shared: repository structure mapping
+│   ├── web.md                       # Shared: web access fallback chain
+│   └── modes/
+│       ├── think/SKILL.md           # Spec generation, design thinking
+│       ├── plan/SKILL.md            # Implementation planning
+│       ├── build/SKILL.md           # Task execution with subagents
+│       ├── review/SKILL.md          # Two-stage code review
+│       ├── verify/SKILL.md          # Evidence-based verification
+│       ├── ship/SKILL.md            # Pre-deploy quality gate
+│       ├── handoff/SKILL.md         # Session state capture
+│       ├── recap/SKILL.md           # Session memory snapshot
+│       └── explain/SKILL.md         # Code walkthrough
+│
+├── quality/                         # dream-studio:quality — Code Quality
+│   ├── SKILL.md
+│   └── modes/
+│       ├── debug/SKILL.md           # Systematic debugging
+│       ├── polish/SKILL.md          # UI critique and refinement
+│       ├── harden/SKILL.md          # Project audit and scaffolding
+│       ├── secure/SKILL.md          # OWASP + STRIDE security review
+│       ├── structure-audit/SKILL.md # Folder structure scoring
+│       ├── learn/SKILL.md           # Lesson capture and promotion
+│       └── coach/SKILL.md           # Workflow coaching
+│
+├── security/                        # dream-studio:security — Enterprise Security
+│   ├── SKILL.md
+│   └── modes/
+│       ├── scan/SKILL.md            # SAST scanning (Semgrep)
+│       ├── dast/SKILL.md            # DAST scanning (ZAP + Nuclei)
+│       ├── binary-scan/SKILL.md     # Binary analysis (checksec + YARA)
+│       ├── mitigate/SKILL.md        # Fix generation + effort estimates
+│       ├── comply/SKILL.md          # SOC 2, NIST CSF, OWASP ASVS mapping
+│       ├── netcompat/SKILL.md       # Proxy/TLS compatibility checks
+│       └── dashboard/SKILL.md       # Power BI dataset export
+│
+├── domains/                         # dream-studio:domains — Stack Builders
+│   ├── SKILL.md
+│   ├── modes/
+│   │   ├── game-dev/SKILL.md        # Godot 4 development
+│   │   ├── saas-build/SKILL.md      # React 19 + Cloudflare Workers
+│   │   ├── mcp-build/SKILL.md       # MCP server development
+│   │   ├── dashboard-dev/SKILL.md   # Tauri + React dashboards
+│   │   ├── client-work/SKILL.md     # Power BI, Power Apps, Power Automate
+│   │   └── design/SKILL.md          # Brand, generative art, ad creative
+│   └── <domain>/                    # Domain knowledge library
+│       ├── powerbi/                 # Power BI patterns + checklists
+│       ├── design/                  # Design systems (Fluent, Material)
+│       ├── devops/                  # CI/CD, GitHub Actions
+│       ├── testing/                 # Playwright, test patterns
+│       ├── documentation/           # Technical writing standards
+│       ├── data-visualization/      # Chart selection, accessibility
+│       └── ...                      # infra, mobile, research, etc.
+│
+├── career/                          # dream-studio:career — Career Pipeline
+│   ├── SKILL.md
+│   └── modes/
+│       ├── ops/SKILL.md             # Pipeline management hub
+│       ├── scan/SKILL.md            # Job portal scraping
+│       ├── evaluate/SKILL.md        # Offer/gig scoring
+│       ├── apply/SKILL.md           # Form fill + answer generation
+│       ├── track/SKILL.md           # Pipeline + follow-up cadence
+│       └── pdf/SKILL.md             # ATS-optimized resume generation
+│
+├── analyze/                         # dream-studio:analyze — Analysis Engine
+│   ├── SKILL.md
+│   ├── analysts/                    # 27 analyst personas
+│   └── modes/
+│       ├── multi/SKILL.md           # Multi-perspective analysis
+│       └── domain-re/SKILL.md       # Real estate evaluation
+│
+├── setup/                           # dream-studio:setup — Onboarding
+│   ├── SKILL.md
+│   ├── tool-registry.yml            # Tool metadata (detect, install, verify)
+│   └── modes/
+│       ├── wizard/SKILL.md          # Interactive setup walkthrough
+│       ├── status/SKILL.md          # Installed tool status report
+│       └── jit/SKILL.md             # Just-in-time tool install prompts
+│
+├── workflow/                        # dream-studio:workflow — Orchestration
+│   └── SKILL.md
+│
+└── templates/                       # Shared skill templates
+```
+
+## Pack Summary
+
+| Pack | Skill | Modes | Purpose |
+|---|---|---|---|
+| core | `dream-studio:core` | 9 | Build lifecycle pipeline |
+| quality | `dream-studio:quality` | 7 | Code quality and learning |
+| security | `dream-studio:security` | 7 | Enterprise security analysis |
+| domains | `dream-studio:domains` | 6 | Stack-specific builders |
+| career | `dream-studio:career` | 6 | Career pipeline |
+| analyze | `dream-studio:analyze` | 2 | Multi-perspective analysis |
+| setup | `dream-studio:setup` | 3 | Onboarding and tool management |
+
+**Total: 7 packs, 40 modes**
+
+## Two-Layer Architecture
+
+See `ARCHITECTURE.md` for full details.
+
+- **Layer 1 — Python Hook Runtime** (`packs/`): Live hooks that execute on Claude Code events
+- **Layer 2 — Claude Skill Guidance** (`skills/`): Markdown instructions Claude follows when a skill is invoked
 
 ## Skill Pipeline
 
-### 1. think → Specification
-**Skill**: `dream-studio:think`  
-**Template**: `skills/think/templates/spec-template.md`  
-**Output**: `.planning/specs/<feature>/spec.md`
+```
+think → plan → build → review → verify → ship → handoff
+```
 
-Generates feature specification with:
-- User stories prioritized by value (P1, P2, P3)
-- Functional requirements (FR-001, FR-002...)
-- Success criteria (SC-001, SC-002...)
-- Edge cases and assumptions
+Each mode has:
+- `SKILL.md` — Instructions Claude follows
+- `gotchas.yml` — Known failure patterns (read before every invocation)
+- `config.yml` — Mode-specific thresholds and defaults
+- `templates/` — Reusable output templates
 
-**Trigger**: `think:`, `spec:`, `research:`
+## Planning Structure
 
-### 2. plan → Implementation Strategy
-**Skill**: `dream-studio:plan`  
-**Templates**: 
-- `skills/plan/templates/plan-template.md`
-- `skills/plan/templates/tasks-template.md`
+```
+.planning/specs/<feature>/
+├── spec.md              # User stories, requirements (think output)
+├── plan.md              # Architecture, tech decisions (plan output)
+├── tasks.md             # Task breakdown (plan output)
+└── ...                  # Optional: research, contracts, design
+```
 
-**Output**: `.planning/specs/<feature>/plan.md` and `tasks.md`
-
-Generates implementation plan with:
-- Technical context (language, dependencies, platform)
-- Task breakdown organized by user story
-- Dependencies and [P] parallel markers
-- Traceability matrix (optional, for 4+ task features)
-
-**Trigger**: `plan:`, after `think` approval
-
-### 3. build → Execution
-**Skill**: `dream-studio:build`  
-**Input**: `.planning/specs/<feature>/tasks.md`
-
-Executes tasks in dependency order with parallel execution where marked [P].
-
-### 4-6. review → verify → ship
-Quality gates:
-- **review**: Code quality, spec compliance
-- **verify**: Test execution, proof of functionality
-- **ship**: Pre-deploy audit (a11y, perf, e2e)
+Traceability (`.planning/traceability.yaml`) activates for 4+ task features.
 
 ## Domain Knowledge Library
 
-**Location**: `skills/domains/`
+**Location**: `skills/domains/<domain>/`
 
-9 domain areas with curated patterns and references:
-
-| Domain | Purpose | Key Files |
-|--------|---------|-----------|
-| **devops** | CI/CD, GitHub Actions, containerization | github-actions-patterns.yml |
-| **testing** | E2E testing, Playwright, test patterns | playwright-patterns.yml |
-| **documentation** | Technical writing, Diátaxis framework | technical-writing-standards.yml |
-| **design** | Design systems (Fluent, Material), typography, color | 5 standards + fluent/material systems |
-| **powerbi** | Power BI storytelling, accessibility, design | 3 patterns |
-| **data-visualization** | Chart selection, accessibility, storytelling | 2 standards |
-| **frontend** | React, TypeScript, component patterns | (existing) |
-| **backend** | Node.js, API design, database patterns | (existing) |
-| **security** | OWASP, authentication, cryptography | (existing) |
-
-Each domain includes:
-- **Pattern YML files**: Structured rules and checklists
-- **REFERENCES.md**: Curated external resources (awesome-* repos, style guides)
-
-## Template Usage
-
-### When to Use spec-template.md
-- Building a new feature
-- Major refactor requiring design exploration
-- Complex bug fix needing multiple approaches
-- User stories must be independently testable
-
-### When to Use plan-template.md + tasks-template.md
-- Approved spec ready for implementation
-- Need atomic task breakdown
-- Multiple developers working in parallel
-- Traceability required (4+ tasks, audit trail)
-
-### When to Skip Templates
-- Simple config change (summary sufficient)
-- Trivial bug fix (problem statement + approach)
-- Prototype/exploratory work
-
-## Traceability
-
-**File**: `.planning/traceability.yaml`
-
-Activated when:
-- 4+ tasks with distinct requirements
-- Audit trail needed for compliance
-- User explicitly requests tracking
-
-Links requirements (TR-IDs) → tasks → implementation status.
-
-See `core/traceability.md` for full spec.
-
-## Packs
-
-Skills are organized into packs for cohesion:
-
-- **core**: think, plan, build, review, verify, ship
-- **security**: secure, scan, mitigate, comply, netcompat, dast, binary-scan
-- **visual**: design, polish, huashu-design
-- **domain-builders**: saas-build, game-dev, mcp-build, dashboard-dev, client-work
-- **power-platform**: client-work (Power BI, Power Apps, Power Automate)
-- **analysis**: analyze, career-ops
-
-## Architectural Validation
-
-This structure is validated by [spec-kit](https://github.com/github/spec-kit), GitHub's internal specification framework. We've adapted their templates for dream-studio's modular architecture and added:
-
-- **[P] parallel markers** for concurrent task execution
-- **User story prioritization** (P1 MVP → P2 → P3 incremental)
-- **dream-studio skill integration** (think → plan → build pipeline)
-- **Domain knowledge library** (9 curated domains)
-
-## Changelog
-
-### v2.0 — Repository Integration (2026-04-27)
-
-**Added**:
-- `.planning/templates/` — spec, plan, tasks, constitution templates from spec-kit
-- `skills/think/templates/spec-template.md` — User story prioritization (P1/P2/P3)
-- `skills/plan/templates/` — plan-template.md, tasks-template.md with [P] markers
-- **3 new domains**: devops, testing, documentation
-- **Expanded domains**: design (+5 files), powerbi (+3 files), data-visualization (+2 files)
-- `skills/polish/checklists/` — 4 design compliance checklists (web, fluent, material, data-viz)
-- `skills/client-work/powerbi/` — 3 Power BI checklists (storytelling, accessibility, design)
-- `.planning/README.md` — Workflow documentation
-- This file (STRUCTURE.md)
-
-**Updated**:
-- `skills/think/SKILL.md` — References spec-template.md, example usage
-- `skills/plan/SKILL.md` — References plan/tasks templates, [P] markers, user story organization
-
-**Architectural validation**: Templates adapted from GitHub's spec-kit with dream-studio conventions
-
-### v1.0 — Initial Structure
-
-Core pipeline skills, domain library foundation, pack organization.
-
----
-
-**Credits**: spec-kit (GitHub), dream-studio core team
+| Domain | Key Files |
+|---|---|
+| powerbi | storytelling, accessibility, design patterns |
+| design | Fluent, Material, typography, color, layout |
+| devops | GitHub Actions patterns |
+| testing | Playwright patterns |
+| documentation | Technical writing standards |
+| data-visualization | Chart selection, accessibility |
+| infra, mobile, research, quality | Specialist patterns |
