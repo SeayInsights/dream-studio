@@ -8,8 +8,6 @@ Includes pre-run cost gate for informed workflow launch decisions.
 from __future__ import annotations
 
 import argparse
-import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -121,10 +119,13 @@ def pre_run_cost_gate(
     bar = "─" * (col_width + model_col + 22)
     lines = [f"┌─ Pre-Run Cost Gate {bar}┐"]
 
+    yaml_by_id = {n["id"]: n for n in nodes if "id" in n}
+
     total = 0
-    for cn, yn in zip(cost_nodes, nodes):
+    for cn in cost_nodes:
         nid = cn["id"]
         tokens = cn["estimated_tokens"]
+        yn = yaml_by_id.get(nid, {})
         skill = yn.get("skill", "")
         yaml_model = yn.get("model", "")
 

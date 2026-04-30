@@ -186,6 +186,30 @@ def _check_root_cause_found() -> bool:
     return False
 
 
+def _check_debug_iterations_gte(threshold: int) -> bool:
+    usage_path = Path.home() / ".dream-studio" / "state" / "skill-usage.jsonl"
+    if not usage_path.exists():
+        return False
+    count = 0
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        for line in usage_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except Exception:
+                continue
+            if record.get("skill") != "debug":
+                continue
+            ts = record.get("ts", "")
+            if ts.startswith(today):
+                count += 1
+    except Exception:
+        return False
+    return count >= threshold
+
+
 def _evaluate_condition(condition: str) -> bool:
     if condition == "always":
         return True
@@ -199,6 +223,8 @@ def _evaluate_condition(condition: str) -> bool:
         return _check_root_cause_found()
     if condition == "clean":
         return not _check_findings_found()
+    if condition == "debug_iterations_gte_3":
+        return _check_debug_iterations_gte(3)
     return False
 
 

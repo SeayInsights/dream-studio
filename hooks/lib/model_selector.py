@@ -15,7 +15,7 @@ from pathlib import Path
 TIERS: list[str] = ["haiku", "sonnet", "opus"]
 
 # Keywords that mandate opus as the minimum floor (never go below sonnet for these)
-_COMPLEX_KEYWORDS: tuple[str, ...] = ("think", "secure", "analyze", "review")
+_COMPLEX_SKILLS: frozenset[str] = frozenset({"think", "secure", "analyze", "review"})
 
 _SUCCESS_RATE_HIGH = 0.95   # >= this on haiku → recommend haiku
 _SUCCESS_RATE_LOW  = 0.80   # <  this on current tier → upgrade
@@ -93,8 +93,7 @@ def _most_used_tier(stats: dict[str, dict]) -> str | None:
 
 
 def _is_complex_skill(skill: str) -> bool:
-    lower = skill.lower()
-    return any(kw in lower for kw in _COMPLEX_KEYWORDS)
+    return skill.lower().strip() in _COMPLEX_SKILLS
 
 
 def recommend_model(skill: str, default: str = "sonnet") -> str:
