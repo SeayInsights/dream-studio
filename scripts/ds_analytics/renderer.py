@@ -35,6 +35,7 @@ def render_dashboard(data: dict, output_path: Path | None = None) -> Path:
         data = {**data, "skill_velocity": sv.to_dict("records")}
 
     data.setdefault("git_metrics", None)
+    data.setdefault("all_git_metrics", None)
     data.setdefault("project_name", None)
 
     html = template.render(**data)

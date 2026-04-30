@@ -64,9 +64,30 @@ def harvest_git_metrics(project_path: Path) -> dict | None:
     branch_count = len([b for b in branch_output.splitlines() if b.strip()]) if branch_output else 0
 
     return {
+        "project_name": project_path.name,
         "weeks_labels": list(weeks.keys()),
         "commits_per_week": commits_list,
         "total_commits_90d": total,
         "avg_commits_per_week": round(total / max(active_weeks, 1), 1),
         "branch_count": branch_count,
     }
+
+
+def discover_projects(projects_dir: Path) -> list[Path]:
+    """Return all git-repo subdirectories in projects_dir."""
+    if not projects_dir.is_dir():
+        return []
+    return sorted(
+        d for d in projects_dir.iterdir()
+        if d.is_dir() and (d / ".git").exists()
+    )
+
+
+def harvest_all_projects(projects_dir: Path) -> list[dict]:
+    """Harvest git metrics from every git project in a directory."""
+    results = []
+    for project in discover_projects(projects_dir):
+        metrics = harvest_git_metrics(project)
+        if metrics:
+            results.append(metrics)
+    return results
