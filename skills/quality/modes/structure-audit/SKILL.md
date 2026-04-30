@@ -1,4 +1,6 @@
 ---
+name: structure-audit
+description: "Audit a project's folder/file structure against FSC and architecture conventions. Trigger on `/structure-audit`, `structure-audit:`, or `/structure-audit --quick`."
 pack: quality
 chain_suggests:
   - condition: "findings_found"

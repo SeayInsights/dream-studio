@@ -20,6 +20,7 @@ An opinionated Claude Code plugin that adds a **Build Pipeline**, **7 pack skill
 - [Quick Start](#quick-start)
 - [Skills](#skills)
 - [Hooks](#hooks)
+- [Analytics](#analytics)
 - [Status Bar](#status-bar)
 - [Workflows](#workflows)
 - [Configuration](#configuration)
@@ -887,17 +888,41 @@ What fires automatically vs what requires a manual command:
 
 ---
 
-## IDE & Editor Support
+## Analytics
 
-### Using Cursor or Copilot?
-
-dream-studio includes platform-specific configuration adapters for Cursor and GitHub Copilot. After setup, generate your editor's config:
+dream-studio includes a built-in analytics pipeline that harvests operational data, computes trends, and renders a standalone HTML dashboard.
 
 ```bash
-make adapters
+make analytics
 ```
 
-This generates adapter files under `adapters/` for your IDE. See `adapters/README.md` for details on available adapters and manual setup options.
+This runs the full pipeline: harvest pulse snapshots, scan planning specs, detect orphaned specs, aggregate skill telemetry, compute trends via linear regression, and render a Chart.js dashboard to `~/.dream-studio/analytics/dashboard.html`.
+
+**What it tracks:**
+- **Pulse health trend** — health score over time with linear regression
+- **Skill velocity** — invocation counts and success rates per skill per week
+- **Spec conversion rate** — how many planning specs result in actual build commits
+- **Orphan detection** — specs with no build commit within 14 days
+
+---
+
+## IDE & Editor Support
+
+dream-studio's 38 skills and domain knowledge are portable to other AI coding platforms via auto-generated adapter files.
+
+```bash
+make adapters                    # build all adapters
+make adapters PLATFORM=cursor    # build one platform only
+```
+
+| Platform | Output | Format | Domains |
+|----------|--------|--------|---------|
+| Cursor | `dist/adapters/cursor/.cursorrules` | XML `<rule>` blocks | No |
+| Copilot | `dist/adapters/copilot/.github/copilot-instructions.md` | Flat markdown | Yes |
+| Windsurf | `dist/adapters/windsurf/.windsurfrules` | Markdown with YAML frontmatter | Yes |
+| Generic | `dist/adapters/system-prompt/system-prompt.md` | Dense markdown (<8K tokens) | Yes |
+
+**Adding a new platform:** Create one `.j2` template in `scripts/adapter_templates/` and add one entry to `scripts/adapters_config.yml`. No script edits needed. See `scripts/adapter_templates/README.md`.
 
 ---
 
@@ -910,6 +935,9 @@ make test        # run 355 tests with coverage (threshold: 70%)
 make lint        # flake8
 make fmt         # black --check
 make security    # pip-audit for known vulnerabilities
+make analytics   # harvest data + render analytics dashboard
+make adapters    # generate IDE adapter files
+make setup       # first-time project setup
 ```
 
 Bugs and security issues: see [SECURITY.md](SECURITY.md).
