@@ -1,0 +1,109 @@
+tools:
+  gh:
+    name: GitHub CLI
+    description: "Official GitHub command-line interface for managing repositories, issues, PRs, and workflows"
+    detect_command:
+      windows: "where gh"
+      mac: "which gh"
+      linux: "which gh"
+    version_command: "gh --version"
+    install_command:
+      windows: "choco install gh -y"
+      mac: "brew install gh"
+      linux: "sudo apt-get install gh"
+    what_it_unlocks:
+      - dream-studio:core (git workflows, PR creation/review)
+      - dream-studio:domains (client-work with GitHub integration)
+      - GitHub API access (fallback when API key needed)
+    docs_url: "https://cli.github.com/manual"
+
+  firecrawl:
+    name: Firecrawl
+    description: "Web scraping and LLM-ready web data extraction with JavaScript support"
+    detect_command:
+      windows: "where firecrawl"
+      mac: "which firecrawl"
+      linux: "which firecrawl"
+    version_command: "firecrawl --version"
+    install_command:
+      windows: "pip install firecrawl-py"
+      mac: "pip install firecrawl-py"
+      linux: "pip install firecrawl-py"
+    what_it_unlocks:
+      - dream-studio:core (web research, web.md content extraction)
+      - dream-studio:domains (web scraping for client work)
+      - dream-studio:security (DAST findings extraction)
+    docs_url: "https://github.com/mendableai/firecrawl"
+
+  playwright:
+    name: Playwright
+    description: "Browser automation framework for headless testing, screenshot capture, and dynamic content interaction"
+    detect_command:
+      windows: "where playwright"
+      mac: "which playwright"
+      linux: "which playwright"
+    version_command: "playwright --version"
+    install_command:
+      windows: "pip install playwright && playwright install"
+      mac: "pip install playwright && playwright install"
+      linux: "pip install playwright && playwright install"
+    what_it_unlocks:
+      - dream-studio:quality (UI testing, screenshot verification)
+      - dream-studio:security (DAST browser-based testing)
+      - dream-studio:domains (UI automation testing)
+    docs_url: "https://playwright.dev"
+
+  npm:
+    name: Node Package Manager
+    description: "JavaScript/TypeScript package manager for installing, managing, and running Node.js dependencies"
+    detect_command:
+      windows: "where npm"
+      mac: "which npm"
+      linux: "which npm"
+    version_command: "npm --version"
+    install_command:
+      windows: "choco install nodejs -y"
+      mac: "brew install node"
+      linux: "sudo apt-get install nodejs npm"
+    what_it_unlocks:
+      - dream-studio:domains (SaaS builds, frontend frameworks)
+      - dream-studio:workflow (package scripts execution)
+      - All Node.js based skills and scripts
+    docs_url: "https://docs.npmjs.com"
+
+  python:
+    name: Python
+    description: "Python interpreter and runtime for executing Python scripts and packages across dream-studio"
+    detect_command:
+      windows: "where py"
+      mac: "which python3"
+      linux: "which python3"
+    version_command: "python --version"
+    install_command:
+      windows: "choco install python -y"
+      mac: "brew install python@3.12"
+      linux: "sudo apt-get install python3.12 python3.12-venv"
+    what_it_unlocks:
+      - dream-studio:core (all Python-based skills)
+      - dream-studio:quality (linting, formatting, testing)
+      - dream-studio:security (vulnerability scanning, binary analysis)
+      - All dream-studio skills (core runtime dependency)
+    docs_url: "https://www.python.org/downloads"
+
+  node:
+    name: Node.js
+    description: "JavaScript runtime for executing Node.js scripts, CLI tools, and server applications"
+    detect_command:
+      windows: "where node"
+      mac: "which node"
+      linux: "which node"
+    version_command: "node --version"
+    install_command:
+      windows: "choco install nodejs -y"
+      mac: "brew install node"
+      linux: "sudo apt-get install nodejs"
+    what_it_unlocks:
+      - dream-studio:domains (SaaS builds, web development)
+      - dream-studio:workflow (package scripts, CLI execution)
+      - Frontend tooling and build systems
+    docs_url: "https://nodejs.org/en/download"
