@@ -87,6 +87,19 @@ Before changing a core module, check this registry to see which skills will be a
 
 ---
 
+### core/web.md
+**Used by:** career-scan, career-ops, analyze, security-dast, domains-client-work (research phase)
+
+**Patterns:**
+- Web access fallback chain (Firecrawl → scraper-mcp → WebSearch/WebFetch)
+- Tool detection logic
+- Silent degradation (TR-014)
+- Capability matrix for tool selection
+
+**Change impact:** 5 skills affected
+
+---
+
 ## External Subagent Dependencies
 
 Skills that dispatch non-standard subagent types (outside the Haiku/Sonnet/Opus set):

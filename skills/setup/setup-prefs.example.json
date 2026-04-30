@@ -1,0 +1,48 @@
+{
+  "onboarding_path": "wizard",
+  "first_run_complete": false,
+  "tools": {
+    "gh": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    },
+    "firecrawl": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    },
+    "playwright": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    },
+    "npm": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    },
+    "python": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    },
+    "node": {
+      "installed": false,
+      "version": null,
+      "path": null,
+      "skipped": false,
+      "never_prompt": false
+    }
+  }
+}

@@ -16,6 +16,7 @@ An opinionated Claude Code plugin that adds a **Build Pipeline**, **7 pack skill
 - [Token Overhead](#token-overhead)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Setup](#setup)
 - [Quick Start](#quick-start)
 - [Skills](#skills)
 - [Hooks](#hooks)
@@ -117,6 +118,146 @@ Copy-Item agents\* $HOME\.claude\agents\
 | `technical-writer` | Quality | docs, Diataxis, API reference |
 
 Stale agents are flagged by the on-pulse hook. Re-synthesize with `workflow: domain-refresh`.
+
+---
+
+## Setup
+
+dream-studio works out of the box with zero external tools installed. Optional tools unlock additional capabilities. Choose the profile that matches your needs.
+
+> **Interactive setup:** Run `dream-studio:setup wizard` to auto-detect installed tools and walk through each install step.  
+> **Check current state:** Run `dream-studio:setup status` to see which tools are installed and what each unlocks.
+
+---
+
+### Minimal Profile — Zero Install
+
+No external tools required. Skills fall back to built-in Claude Code capabilities (WebSearch, WebFetch). Best for trying dream-studio or working in restricted environments.
+
+**What works:**
+- All `dream-studio:core` modes (think, plan, build, review, verify, ship, handoff, recap, explain)
+- All `dream-studio:quality` modes (debug, polish, harden, secure, structure-audit, learn, coach)
+- All `dream-studio:analyze` modes
+- `dream-studio:domains` — all modes except browser automation steps
+- `dream-studio:career` — all modes
+
+**What requires additional tools:**
+- GitHub workflows (`gh` CLI) — see Standard profile
+- Web scraping and DAST scanning (Firecrawl, Playwright) — see Full profile
+
+No install steps needed. Just install dream-studio and start using it.
+
+---
+
+### Standard Profile — GitHub + Runtime Tools
+
+Adds the GitHub CLI, Node.js, npm, and Python. Unlocks the full Issue → PR workflow, Node and Python script execution, and GitHub-integrated workflows.
+
+**What this unlocks:**
+- `gh` CLI: GitHub Issues, PRs, branch management, CI status checks
+- `node` / `npm`: Node.js script execution in `saas-build` and `mcp-build` modes
+- `python` / `py`: Python script execution, local hook development, `make test`
+
+#### Install `gh` (GitHub CLI)
+
+| Platform | Command |
+|---|---|
+| **Windows** | `winget install GitHub.cli` or download from [cli.github.com](https://cli.github.com) |
+| **macOS** | `brew install gh` |
+| **Linux (apt)** | `sudo apt install gh` (Ubuntu 22.04+) or see [cli.github.com/manual/installation](https://cli.github.com/manual/installation) |
+
+After install, authenticate:
+```bash
+gh auth login
+```
+
+#### Install Node.js + npm
+
+| Platform | Command |
+|---|---|
+| **Windows** | `winget install OpenJS.NodeJS.LTS` or download from [nodejs.org](https://nodejs.org) |
+| **macOS** | `brew install node` |
+| **Linux** | `sudo apt install nodejs npm` or use [nvm](https://github.com/nvm-sh/nvm): `nvm install --lts` |
+
+Verify:
+```bash
+node --version    # v20+ recommended
+npm --version
+```
+
+#### Install Python
+
+| Platform | Command |
+|---|---|
+| **Windows** | `winget install Python.Python.3.12` or download from [python.org](https://python.org) |
+| **macOS** | `brew install python@3.12` |
+| **Linux** | `sudo apt install python3.12 python3-pip` |
+
+> Python 3.12 recommended. Python 3.14+ is not supported — use 3.10, 3.11, or 3.12.
+
+Verify:
+```bash
+python --version    # or: py --version (Windows)
+```
+
+---
+
+### Full Profile — Everything
+
+Adds Firecrawl and Playwright on top of the Standard profile. Unlocks web scraping, browser automation, DAST scanning, and the full `dream-studio:security` dast mode.
+
+**What this unlocks:**
+- **Firecrawl**: Web scraping in `dream-studio:career scan` (job portal scraping), `dream-studio:security dast` (site crawling), and `dream-studio:domains saas-build` (competitive research)
+- **Playwright**: Browser automation in `dream-studio:core verify` (screenshot evidence), `dream-studio:security dast` (dynamic testing), and `dream-studio:domains game-dev` (automated QA)
+
+#### Install Firecrawl
+
+Firecrawl requires an API key from [firecrawl.dev](https://firecrawl.dev).
+
+| Platform | Command |
+|---|---|
+| **Windows / macOS / Linux** | `npm install -g @mendableai/firecrawl-cli` |
+
+Set your API key:
+
+**Windows (PowerShell)**
+```powershell
+$env:FIRECRAWL_API_KEY = "fc-your-key-here"
+# To persist: add to your PowerShell profile or System Environment Variables
+```
+
+**macOS / Linux**
+```bash
+export FIRECRAWL_API_KEY="fc-your-key-here"
+# To persist: add to ~/.bashrc or ~/.zshrc
+```
+
+#### Install Playwright
+
+| Platform | Command |
+|---|---|
+| **Windows / macOS / Linux** | `npm install -g playwright` then `playwright install` |
+
+Playwright downloads browser binaries (~300 MB). To install only Chromium:
+```bash
+playwright install chromium
+```
+
+Verify:
+```bash
+playwright --version
+```
+
+#### Full profile verification
+
+```bash
+gh --version
+node --version
+python --version    # or: py --version (Windows)
+playwright --version
+```
+
+All four commands should return version numbers. Run `dream-studio:setup status` to see dream-studio's view of your installed tools.
 
 ---
 
@@ -733,6 +874,20 @@ What fires automatically vs what requires a manual command:
 | Workflow gating | **Manual** | `/workflow run <name>` |
 
 > Run `/harden audit` to get a scored gap report for any project. Items marked Manual require intentional invocation — they are not wired to hooks to avoid excessive interruption during development.
+
+---
+
+## IDE & Editor Support
+
+### Using Cursor or Copilot?
+
+dream-studio includes platform-specific configuration adapters for Cursor and GitHub Copilot. After setup, generate your editor's config:
+
+```bash
+make adapters
+```
+
+This generates adapter files under `adapters/` for your IDE. See `adapters/README.md` for details on available adapters and manual setup options.
 
 ---
 
