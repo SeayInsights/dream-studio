@@ -15,7 +15,7 @@ tools:
     install_command:
       windows: "choco install gh -y"
       mac: "brew install gh"
-      linux: "sudo apt-get install gh"
+      linux: "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && echo 'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt-get update && sudo apt-get install gh -y"
     what_it_unlocks:
       - dream-studio:core (git workflows, PR creation/review)
       - dream-studio:domains (client-work with GitHub integration)
@@ -106,7 +106,7 @@ tools:
       linux: "sudo apt-get install python3.12 python3.12-venv"
     install_command:
       windows: "choco install python -y"
-      mac: "brew install python@3.12"
+      mac: "brew install python@3.12 && brew link python@3.12"
       linux: "sudo apt-get install python3.12 python3.12-venv"
     what_it_unlocks:
       - dream-studio:core (all Python-based skills)
