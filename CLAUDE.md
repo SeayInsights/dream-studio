@@ -7,52 +7,28 @@ When the user's intent matches a dream-studio skill, invoke it via the Skill too
 ### Exploration & Research
 Not every request needs a full skill. Casual lookups get dispatched as lightweight subagents:
 - **"go check", "look into", "investigate", "what's going on with"** → Spawn an Explore subagent (Haiku model). Quick codebase/file lookup, report back.
-- **"research", "dig into", "explore options"** → If scoped to a codebase question, use Explore. If it needs design thinking or spec work, escalate to `dream-studio:think` with the `research:` trigger.
+- **"research", "dig into", "explore options"** → If scoped to a codebase question, use Explore. If it needs design thinking or spec work, escalate to `dream-studio:core` with arg `think`.
 - **"go find", "where is", "search for"** → Explore subagent or direct Grep/Glob — no skill needed.
 
 <!-- BEGIN AUTO-ROUTING -->
-### Build Pipeline (sequential: think → plan → build → review → verify → ship)
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. | `dream-studio:build` | build:, execute plan: |
-| Trace how X works — from entry point through layers to output, at the depth the Director needs | `dream-studio:explain` | explain:, how does, walk me through, what is this doing, why does |
-| Session continuity — capture structured state (current task, progress, phase, decisions, active files, next action) to both markdown and JSON. A fresh session resumes from the file alone. | `dream-studio:handoff` | handoff: |
-| Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. | `dream-studio:plan` | plan:, /plan |
-| Capture structured build memory — what was built, decisions, risks, stack, remaining work, next step — to `.sessions/YYYY-MM-DD/recap-<topic>.md`. | `dream-studio:recap` | recap:, session recap: |
-| Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. | `dream-studio:review` | review:, review code, review PR: |
-| Pre-deploy gate — audit (a11y, perf, technical), harden (error/empty/loading states), optimize (bundle/render/animation/images), test (Playwright + regression). Any FAIL blocks deploy. | `dream-studio:ship` | ship:, pre-deploy:, deploy: |
-| Clarify an idea, explore 2-3 approaches with trade-offs, write a spec, and get approval before any code. | `dream-studio:think` | think:, spec:, shape ux:, design brief:, research: |
-| Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. | `dream-studio:verify` | verify:, prove it: |
+### Pack-Based Routing
 
-### Quality & Learning
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging. | `dream-studio:debug` | debug:, diagnose: |
-| Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml, UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit, etc.) and fills gaps from templates. | `dream-studio:harden` | /harden, /harden audit, /harden fix tier1, /harden fix #N |
-| Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. | `dream-studio:learn` | meta/draft-lessons/, meta/lessons/, learn:, capture lesson: |
+Each pack is one skill with modes. Invoke via `Skill(skill="dream-studio:<pack>", args="<mode>")`. If the user's message matches a keyword, invoke the pack and let the router infer the mode.
 
-### Visual & Design
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative art (p5.js), theme application to projects, and ad-creative guidance. | `dream-studio:design` | design art:, design poster:, canvas:, generative art:, apply theme:, brand:, ad creative: |
-| UI quality decision tree — critique seven dimensions (layout, typography, color, animation, copy, responsive, edge cases), score 1-5, fix by priority, re-score. | `dream-studio:polish` | polish ui:, critique design:, redesign:, make it premium:, build page:, build component: |
-
-### Domain Builders
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| Tauri + React desktop dashboard patterns — feed contract (hooks write JSON, dashboard reads), multi-panel architecture, additive schema evolution. | `dream-studio:dashboard-dev` | dashboard:, feed contract: |
-| 4-phase MCP server development — research, implement (Zod schemas, structured errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. | `dream-studio:mcp-build` | build mcp:, new mcp:, extend mcp: |
-| React 19 + React Router 7 + Cloudflare Workers + D1/Kysely stack patterns for SaaS builds — API contract-first, loaders/actions, migrations, CI-only deploys. | `dream-studio:saas-build` | build feature:, build api:, build page:, deploy:, build supabase: |
-
-### Session Management
-| Intent | Skill | Triggers |
-|--------|-------|----------|
-| YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. | `dream-studio:workflow` | workflow: |
+| Pack | Skill | Mode keywords |
+|------|-------|---------------|
+| Build lifecycle | `dream-studio:core` | **think:** spec:, research:, shape ux: · **plan:** plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does, walk me through, what is this doing, why does |
+| Code quality | `dream-studio:quality` | **debug:** debug:, diagnose: · **polish:** polish ui:, critique design:, redesign: · **harden:** /harden, harden audit · **secure:** secure:, security review: · **structure-audit:** /structure-audit · **learn:** learn:, capture lesson: · **coach:** /coach, workflow coaching: |
+| Career pipeline | `dream-studio:career` | **ops:** career:, job search · **scan:** scan jobs:, find jobs: · **evaluate:** evaluate offer:, evaluate gig: · **apply:** apply:, cover letter:, tailor resume: · **track:** track:, pipeline: · **pdf:** resume:, generate pdf: |
+| Security analysis | `dream-studio:security` | **scan:** scan:, scan org:, run security scan: · **dast:** dast:, web scan: · **binary-scan:** binary-scan:, analyze exe: · **mitigate:** mitigate:, fix findings: · **comply:** comply:, SOC 2:, NIST: · **netcompat:** netcompat:, Zscaler: · **dashboard:** security dashboard:, export dataset: |
+| Analysis engine | `dream-studio:analyze` | **multi:** analyze:, evaluate idea:, /analyze · **domain-re:** domain-re:, real estate: |
+| Domain builders | `dream-studio:domains` | **game-dev:** game:, game build: · **saas-build:** build feature:, build api:, build page: · **mcp-build:** build mcp:, new mcp:, extend mcp: · **dashboard-dev:** dashboard:, feed contract: · **client-work:** intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: · **design:** design art:, design poster:, canvas:, brand: |
+| Workflow orchestration | `dream-studio:workflow` | workflow: |
 <!-- END AUTO-ROUTING -->
 
 ### Routing Fallback
 
-If the user's intent does not match any trigger keyword in the tables above, route to `dream-studio:coach` with mode `route-classify`. Coach will classify the intent, map it to the nearest skill, and explain confidence + alternatives. This prevents unmatched intents from falling through to raw Claude default behavior.
+If the user's intent does not match any keyword above, route to `dream-studio:quality` with arg `coach`. Coach will classify the intent, map it to the nearest pack and mode, and explain confidence + alternatives.
 
 ## GitHub Workflow
 - **Never push directly to `main`** — always create a feature branch first.

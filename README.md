@@ -1,12 +1,12 @@
 # dream-studio
 
 [![CI](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.11.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](pyproject.toml)
 
-An opinionated Claude Code plugin that adds a **Build Pipeline**, **38 skills**, automated hooks, semantic memory retrieval, CI gate, and a context-aware status bar — portable across every project.
+An opinionated Claude Code plugin that adds a **Build Pipeline**, **7 pack skills (37 modes)**, automated hooks, semantic memory retrieval, CI gate, and a context-aware status bar — portable across every project.
 
 ---
 
@@ -133,18 +133,20 @@ workflow: run studio-onboard
 This audits your setup, customises dream-studio to your project, and walks you through the Director profile (name, domain, primary use). Run it once after install — subsequent sessions skip it automatically once your profile is set.
 
 ```
-/think   Shape a feature idea into a spec
-/plan    Break the approved spec into ordered tasks
-/build   Execute the plan with subagent-per-task
-/review  Two-stage quality check
-/verify  Evidence-based proof it works
-/ship    Pre-deploy gate — blocks on any FAIL
+/dream-studio:core think     Shape a feature idea into a spec
+/dream-studio:core plan      Break the approved spec into ordered tasks
+/dream-studio:core build     Execute the plan with subagent-per-task
+/dream-studio:core review    Two-stage quality check
+/dream-studio:core verify    Evidence-based proof it works
+/dream-studio:core ship      Pre-deploy gate — blocks on any FAIL
 ```
+
+Or just use natural language — the router infers the mode from keywords like `think:`, `plan:`, `debug:`, etc.
 
 **Harden a project** (run once to scaffold missing standards files):
 
 ```
-/harden
+/dream-studio:quality harden
 ```
 
 **Run the test suite:**
@@ -157,75 +159,78 @@ make test
 
 ## Skills
 
-Skills are invoked as `/skill-name` or via natural-language triggers listed below.
+Skills are organized into **7 packs**. Each pack is a single discoverable skill with multiple modes. Invoke via `/dream-studio:<pack> <mode>` or natural language — the router infers the mode from keywords.
 
-### Build Pipeline
+### `dream-studio:core` — Build Lifecycle
 
-| Skill | Trigger | What it does |
+| Mode | Keywords | What it does |
 |---|---|---|
-| `think` | `/think`, `think:`, `spec:` | Clarify + spec an idea; get explicit approval before any code |
-| `plan` | `/plan`, `plan:` | Break an approved spec into atomic, dependency-ordered tasks |
-| `build` | `/build`, `build:`, `execute plan:` | Execute plan with a fresh subagent per task, parallel wave execution |
-| `review` | `/review`, `review:` | Two-stage check: spec compliance first, then code quality |
-| `verify` | `/verify`, `verify:` | Evidence-based verification with screenshots + Playwright results |
-| `ship` | `/ship`, `ship:`, `pre-deploy:` | Pre-deploy gate: a11y, perf, error states, regression — any FAIL blocks |
+| `think` | `think:`, `spec:`, `research:` | Clarify + spec an idea; get explicit approval before any code |
+| `plan` | `plan:` | Break an approved spec into atomic, dependency-ordered tasks |
+| `build` | `build:`, `execute plan:` | Execute plan with a fresh subagent per task, parallel wave execution |
+| `review` | `review:`, `review code:` | Two-stage check: spec compliance first, then code quality |
+| `verify` | `verify:`, `prove it:` | Evidence-based verification with screenshots + Playwright results |
+| `ship` | `ship:`, `pre-deploy:`, `deploy:` | Pre-deploy gate: a11y, perf, error states, regression — any FAIL blocks |
+| `handoff` | `handoff:` | Structured state capture for session continuity |
+| `recap` | `recap:` | Build memory snapshot — decisions, risks, stack, remaining work |
+| `explain` | `explain:`, `how does X work` | Trace entry point through layers to output; depth adapts to the question |
 
-### Code Quality
+### `dream-studio:quality` — Code Quality & Learning
 
-| Skill | Trigger | What it does |
+| Mode | Keywords | What it does |
 |---|---|---|
-| `debug` | `/debug`, `debug:`, `diagnose:` | Reproduce → hypothesize → test one variable at a time → fix |
-| `explain` | `explain:`, `how does X work`, `walk me through` | Trace entry point through layers to output; depth adapts to the question |
-| `polish` | `/polish`, `polish ui:`, `critique design:` | Critique 7 UI dimensions (layout, typography, color…), scored 1–5 |
-| `secure` | `/secure`, `secure:`, `check security` | OWASP Top 10 checklist + STRIDE threat model |
-| `analyze` | `/analyze` | Parallel multi-perspective analyst subagents → synthesized decision memo |
-
-### Security
-
-| Skill | Trigger | What it does |
-|---|---|---|
-| `scan` | `scan org:`, `run security scan` | SAST scanning — Semgrep rule generation, scan execution, SARIF ingestion |
-| `dast` | `dast:`, `web scan`, `zap scan` | DAST scanning — ZAP + Nuclei setup, run, ingest for web app targets |
-| `binary-scan` | `binary-scan:`, `scan binary`, `checksec` | Binary analysis — checksec + YARA + strings against compiled artifacts |
-| `mitigate` | `mitigate:`, `how to fix` | Generate fix snippets + effort estimates for every finding |
-| `comply` | `comply:`, `compliance map` | Map findings → SOC 2, NIST CSF, OWASP ASVS controls; identify gaps |
-| `netcompat` | `netcompat:`, `zscaler check` | Detect cert pinning, custom TLS, non-standard ports that break enterprise proxies |
-| `security-dashboard` | `security dashboard:`, `export dataset` | ETL pipeline → Power BI-ready CSVs (findings, mitigations, compliance, risk scores) |
-
-### Domain
-
-| Skill | Trigger | What it does |
-|---|---|---|
-| `game-dev` | game build/QA/design commands | Godot 4: controllers, scenes, CSG blockouts, Blender→GLB pipeline, QA gates |
-| `saas-build` | `build feature:`, `build api:`, `build page:` | React 19 + React Router 7 + Cloudflare Workers + D1/Kysely |
-| `mcp-build` | `build mcp:`, `new mcp:`, `extend mcp:` | 4-phase MCP server dev: research → implement → test → evaluate |
-| `dashboard-dev` | `dashboard:`, `feed contract:` | Tauri + React desktop dashboards, feed contract pattern |
-| `client-work` | `intake:`, `build report:`, `build app:`, `build flow:` | Power BI, Power Apps, Power Automate — DAX/M-query + delegation rules |
-| `design` | `design art:`, `canvas:`, `apply theme:`, `brand:` | Brand tokens, p5.js generative art, theme application, ad creative |
-
-### Session & Meta
-
-| Skill | Trigger | What it does |
-|---|---|---|
-| `handoff` | `handoff:`, auto at context limit | Structured state capture (task, progress, decisions, next action) for continuity |
-| `recap` | `recap:`, auto after builds | Build memory snapshot — decisions, risks, stack, remaining work |
+| `debug` | `debug:`, `diagnose:` | Reproduce → hypothesize → test one variable at a time → fix |
+| `polish` | `polish ui:`, `critique design:` | Critique 7 UI dimensions (layout, typography, color...), scored 1-5 |
+| `harden` | `harden:` | 20-item project audit + gap-fill from templates |
+| `secure` | `secure:`, `security review:` | OWASP Top 10 checklist + STRIDE threat model |
+| `structure-audit` | `structure-audit:` | Folder structure audit scored against FSC + architecture conventions |
 | `learn` | `learn:`, `capture lesson:` | Draft → Director review → promote to memory / skill / agent updates |
-| `workflow` | `workflow:`, `workflow status`, `workflow resume` | YAML DAG orchestration with gates and parallel node spawning |
-| `harden` | `/harden` | 20-item project audit + gap-fill from `templates/project-standards/` |
-| `structure-audit` | `/structure-audit` | Folder structure audit scored against FSC + architecture conventions |
-| `coach` | `/coach`, `coach:` | Workflow coaching — evaluates workflow-fit, context-health, pr-hygiene, agent-dispatch; `route-classify` mode maps unmatched intents to the nearest skill |
+| `coach` | `coach:` | Workflow coaching; `route-classify` mode maps unmatched intents |
 
-### Career Ops
+### `dream-studio:security` — Enterprise Security Analysis
 
-`/career-ops` routes to sub-skills:
-
-| Sub-skill | Mode | What it does |
+| Mode | Keywords | What it does |
 |---|---|---|
-| `career-scan` | `scan` | Scrape job portals, deduplicate against history, add to pipeline |
-| `career-evaluate` | `evaluate`, `oferta`, `gig` | Score offers, freelance gigs, proposals |
-| `career-apply` | `apply`, `batch` | Form fill + answer generation (single job or parallel batch) |
-| `career-track` | `tracker`, `pipeline`, `patterns`, `followup` | Pipeline management + follow-up cadence |
-| `career-pdf` | `pdf`, `contact` | ATS-optimized CV generation + LinkedIn outreach messages |
+| `scan` | `scan:`, `scan org:` | SAST scanning — Semgrep rule generation, scan execution, SARIF ingestion |
+| `dast` | `dast:`, `web scan:` | DAST scanning — ZAP + Nuclei setup, run, ingest for web app targets |
+| `binary-scan` | `binary-scan:`, `scan binary:` | Binary analysis — checksec + YARA + strings against compiled artifacts |
+| `mitigate` | `mitigate:`, `how to fix:` | Generate fix snippets + effort estimates for every finding |
+| `comply` | `comply:`, `SOC 2:`, `NIST:` | Map findings → SOC 2, NIST CSF, OWASP ASVS controls; identify gaps |
+| `netcompat` | `netcompat:`, `Zscaler check:` | Detect cert pinning, custom TLS, non-standard ports that break proxies |
+| `dashboard` | `security dashboard:` | ETL pipeline → Power BI-ready CSVs (findings, mitigations, compliance) |
+
+### `dream-studio:domains` — Stack-Specific Builders
+
+| Mode | Keywords | What it does |
+|---|---|---|
+| `game-dev` | `game:`, `game build:` | Godot 4: controllers, scenes, CSG blockouts, Blender→GLB pipeline |
+| `saas-build` | `build feature:`, `build api:` | React 19 + React Router 7 + Cloudflare Workers + D1/Kysely |
+| `mcp-build` | `build mcp:`, `new mcp:` | 4-phase MCP server dev: research → implement → test → evaluate |
+| `dashboard-dev` | `dashboard:`, `feed contract:` | Tauri + React desktop dashboards, feed contract pattern |
+| `client-work` | `intake:`, `build powerbi:` | Power BI, Power Apps, Power Automate — DAX/M-query + delegation rules |
+| `design` | `design art:`, `canvas:`, `brand:` | Brand tokens, p5.js generative art, theme application, ad creative |
+
+### `dream-studio:career` — Career Pipeline
+
+| Mode | Keywords | What it does |
+|---|---|---|
+| `ops` | `career:`, `job search:` | Career pipeline management hub |
+| `scan` | `scan jobs:`, `find jobs:` | Scrape job portals, deduplicate against history, add to pipeline |
+| `evaluate` | `evaluate offer:`, `evaluate gig:` | Score offers, freelance gigs, proposals |
+| `apply` | `apply:`, `cover letter:` | Form fill + answer generation (single or parallel batch) |
+| `track` | `track:`, `pipeline:` | Pipeline management + follow-up cadence |
+| `pdf` | `resume:`, `generate pdf:` | ATS-optimized CV generation + LinkedIn outreach messages |
+
+### `dream-studio:analyze` — Analysis Engine
+
+| Mode | Keywords | What it does |
+|---|---|---|
+| `multi` | `analyze:`, `/analyze` | Parallel multi-perspective analyst subagents → synthesized decision memo |
+| `domain-re` | `domain-re:`, `real estate:` | Real estate domain-specific evaluation |
+
+### `dream-studio:workflow` — Workflow Orchestration
+
+Standalone skill (no modes). Invoke with `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 
 ---
 
@@ -351,7 +356,7 @@ When implementing features, fixes, or improvements:
 
 ### Debug Workflow Integration
 
-When `dream-studio:debug` is invoked for a bug:
+When `dream-studio:quality debug` is invoked for a bug:
 
 1. Run systematic debug process (reproduce, hypothesize, test, narrow)
 2. Once root cause is identified, **create GitHub issue** with full debug log
@@ -362,7 +367,7 @@ When `dream-studio:debug` is invoked for a bug:
 
 ### When to use `dream-studio:ship`
 
-Regular PRs do NOT need the full ship gate. Use `/ship` (comprehensive quality gate) only when:
+Regular PRs do NOT need the full ship gate. Use `/dream-studio:core ship` (comprehensive quality gate) only when:
 
 - User explicitly says "ship it" or "ready to ship"
 - Before major version releases (v2.0, big feature launches)
@@ -389,7 +394,7 @@ Prevent accidental use of built-in tools that dream-studio replaces:
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'BLOCKED: Use dream-studio:plan instead of built-in plan mode.' >&2; exit 2"
+            "command": "echo 'BLOCKED: Use dream-studio:core with arg plan instead of built-in plan mode.' >&2; exit 2"
           }
         ]
       },
@@ -531,19 +536,19 @@ Session notes are written to `.sessions/<YYYY-MM-DD>/` inside each project.
 
 ## Project Structure
 
-dream-studio organizes non-skill assets into **packs** — domain-grouped bundles of hooks, agents, rules, and context. Skills stay in `skills/` (Claude Code discovery requirement) but each SKILL.md declares its `pack:` in frontmatter.
+dream-studio organizes skills into **packs** — each pack is a single discoverable skill with a router that dispatches to modes. This keeps the total skill description budget under 900 chars (Claude Code has a character budget for skill descriptions shared across all plugins).
 
 ### Packs
 
-| Pack | Purpose | Skills | Hooks | Other |
+| Pack | Skill | Modes | Hooks | Other |
 |---|---|---|---|---|
-| **core** | Build lifecycle | think, plan, build, review, verify, ship, handoff, recap | milestone-start/end, workflow-progress, changelog-nudge, stop-handoff | Agents: director, engineering, chief-of-staff. Context: session, director prefs |
-| **quality** | Code quality & learning | debug, polish, harden, secure, structure-audit, learn, coach | security-scan, quality-score, structure-check, agent-correction | Rules: FSC, architecture |
-| **career** | Job search pipeline | career-ops, -scan, -evaluate, -apply, -track, -pdf | — | Config: career-ops/config.yml |
-| **analyze** | Multi-perspective analysis | analyze, domain-re | — | 27 analyst personas |
-| **domains** | Stack-specific builders | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design | game-validate | Agents: game, client. Rules: game/*. Templates: project-standards/ |
-| **security** | Enterprise security analysis | scan, dast, binary-scan, mitigate, comply, netcompat, security-dashboard | — | ETL pipeline, Semgrep/ZAP/Nuclei/YARA templates, compliance mappings, Power BI dashboard spec |
-| **meta** | Observability & sessions | workflow | pulse, meta-review, context-threshold, post-compact, token-log, tool-activity, skill-load | Shared hook lib (hooks/lib/) |
+| **core** | `dream-studio:core` | think, plan, build, review, verify, ship, handoff, recap, explain | milestone-start/end, workflow-progress, changelog-nudge, stop-handoff | Agents: director, engineering, chief-of-staff |
+| **quality** | `dream-studio:quality` | debug, polish, harden, secure, structure-audit, learn, coach | security-scan, quality-score, structure-check, agent-correction | Rules: FSC, architecture |
+| **career** | `dream-studio:career` | ops, scan, evaluate, apply, track, pdf | — | — |
+| **analyze** | `dream-studio:analyze` | multi, domain-re | — | 27 analyst personas |
+| **domains** | `dream-studio:domains` | game-dev, saas-build, mcp-build, dashboard-dev, client-work, design | game-validate | Agents: game, client. Rules: game/* |
+| **security** | `dream-studio:security` | scan, dast, binary-scan, mitigate, comply, netcompat, dashboard | — | ETL pipeline, compliance mappings |
+| **meta** | `dream-studio:workflow` | (standalone) | pulse, meta-review, context-threshold, token-log, tool-activity, skill-load | Shared hook lib |
 
 ### Directory Layout
 
@@ -578,7 +583,7 @@ dream-studio/
 │   ├── hooks.json                   # Hook event -> handler registrations
 │   ├── run.sh                       # Unix launcher (searches packs/*/hooks/)
 │   └── run.cmd                      # Windows launcher
-├── skills/                          # 38 skill definitions (each has SKILL.md with pack: field)
+├── skills/                          # 7 pack skills (each with modes/ subdirectory containing full skill definitions)
 ├── workflows/                       # YAML workflow DAG definitions
 ├── packs.yaml                       # Pack manifest — defines all 6 packs and their members
 ├── scripts/
@@ -598,11 +603,11 @@ dream-studio/
 
 ## Skill Architecture
 
-As of **v0.8.0 (2026-04-29)**, all 38 skills follow a structured architecture with evolution tracking, quality metrics, and auto-generated documentation.
+As of **v0.11.0**, skills are organized into 7 pack-level routers. Each pack's `modes/` directory contains the full skill definitions with evolution tracking, quality metrics, and auto-generated documentation.
 
 ### Standardized Skill Structure
 
-Every skill has:
+Every mode has:
 - **metadata.yml** — Evolution tracking, quality metrics (success rate, token usage), dependencies
 - **gotchas.yml** — Structured lessons learned (avoid patterns, best practices, edge cases)
 - **config.yml** — Runtime configuration and performance budgets

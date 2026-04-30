@@ -1,13 +1,20 @@
-# sync-cache.ps1 — copy all skills from builds/skills/ into the plugin cache
+# sync-cache.ps1 — mirror skills from builds/skills/ into the plugin cache
 # Run from the dream-studio root: pwsh -File scripts/sync-cache.ps1
-# Does NOT delete cache-only skills (one-way push, builds → cache)
+# Removes cache-only directories that no longer exist in builds (full mirror).
 
 $buildsSkills = Join-Path $PSScriptRoot "..\skills"
-$cacheSkills  = "$env:USERPROFILE\.claude\plugins\cache\dream-studio\dream-studio\0.2.0\skills"
+
+# Find the cache path dynamically (version may change)
+$cacheBase = "$env:USERPROFILE\.claude\plugins\cache\dream-studio\dream-studio"
+$cacheVersion = Get-ChildItem $cacheBase -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $cacheVersion) {
+    Write-Error "No cached plugin version found under: $cacheBase"
+    exit 1
+}
+$cacheSkills = Join-Path $cacheVersion.FullName "skills"
 
 if (-not (Test-Path $cacheSkills)) {
-    Write-Error "Cache path not found: $cacheSkills"
-    exit 1
+    New-Item -ItemType Directory -Path $cacheSkills -Force | Out-Null
 }
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -40,6 +47,17 @@ foreach ($skillDir in Get-ChildItem $buildsSkills -Directory) {
     $synced++
 }
 
+# Clean stale directories from cache that no longer exist in builds
+$removed = 0
+foreach ($cacheDir in Get-ChildItem $cacheSkills -Directory) {
+    $srcMatch = Join-Path $buildsSkills $cacheDir.Name
+    if (-not (Test-Path $srcMatch)) {
+        Remove-Item $cacheDir.FullName -Recurse -Force
+        Write-Host "  removed stale: $($cacheDir.Name)"
+        $removed++
+    }
+}
+
 Write-Host ""
-Write-Host "Done. $synced skills synced ($created new)."
+Write-Host "Done. $synced skills synced ($created new, $removed stale removed)."
 Write-Host "Cache: $cacheSkills"

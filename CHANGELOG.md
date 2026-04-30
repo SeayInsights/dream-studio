@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-04-30
+
+### Changed
+- **Pack consolidation** — 37 individual skills consolidated into 7 pack-level router skills (core, quality, career, security, analyze, domains, workflow). Each pack uses a `modes/` subdirectory for sub-skill content. Total skill description budget drops from ~10,000 to ~885 chars, ensuring all skills load for every user out of the box.
+- **packs.yaml** — bumped to schema_version 2; `skills` field replaced with `skill` (singular) + `modes` list per pack
+- **CLAUDE.md routing table** — 35-row individual skill routing replaced with 7-row pack-based routing
+- **sync-cache.ps1** — dynamic version detection, stale directory cleanup on sync
+- **README.md** — updated skill documentation to reflect pack-based invocation pattern
+- **plugin.json** — version 0.11.0
+
+### Removed
+- 37 top-level skill directories (moved into pack `modes/` subdirectories — content unchanged)
+
+### Migration
+- Invocations change from `dream-studio:think` to `dream-studio:core` with arg `think`
+- Natural language routing still works — pack routers infer mode from keywords
+- `workflow` remains standalone (unchanged)
+
 ## [0.10.0] — 2026-04-29
 
 ### Added
