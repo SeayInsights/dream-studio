@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[generate | refresh | template] [--client <name>]"
 pack: security
+chain_suggests: []
 ---
 
 # Security Dashboard — ETL Orchestration + Power BI Export

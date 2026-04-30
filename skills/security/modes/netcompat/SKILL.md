@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[analyze | report | rules] [--client <name>]"
 pack: quality
+chain_suggests: []
 ---
 
 # Netcompat — Network/Proxy Compatibility Analyzer

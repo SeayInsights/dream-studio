@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data | evaluate-strategy | evaluate-content | evaluate-repo] [--quick]"
 pack: analyze
+chain_suggests: []
 ---
 
 # Analyze — Multi-Perspective Decision Engine

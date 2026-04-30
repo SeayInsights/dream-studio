@@ -2,6 +2,7 @@
 name: jit
 description: "Just-in-time tool prompt — called by other skills when a missing tool is detected mid-workflow. Checks whether the user has already chosen 'never' for this tool, displays a single targeted install prompt if not, saves the choice to setup-prefs.json, and returns whether the tool is now available"
 pack: setup
+chain_suggests: []
 ---
 
 # JIT Mode (Just-in-Time Prompt)
