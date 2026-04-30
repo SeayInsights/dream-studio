@@ -113,7 +113,49 @@ def _count_section_items(text: str, header_pattern: str, *, exclude: str) -> int
 
 
 # ---------------------------------------------------------------------------
-# T004 — Planning spec harvester
+# Operational harvester (reads from raw_operational_snapshots)
+# ---------------------------------------------------------------------------
+
+
+def harvest_operational(
+    db_path: Path | None = None, project_slug: str | None = None
+) -> list[dict]:
+    """Read operational snapshots from SQLite.
+
+    When project_slug is provided, filters to that project.
+    Returns list of dicts with snapshot_date and metric columns.
+    """
+    db = db_path or paths.state_dir() / "studio.db"
+    if not db.exists():
+        return []
+
+    conn = sqlite3.connect(str(db))
+    try:
+        if project_slug:
+            rows = conn.execute(
+                "SELECT snapshot_date, ci_status, open_prs, stale_branches, "
+                "pending_drafts, open_escalations FROM raw_operational_snapshots "
+                "WHERE project_slug = ? ORDER BY snapshot_date",
+                (project_slug,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT snapshot_date, ci_status, open_prs, stale_branches, "
+                "pending_drafts, open_escalations FROM raw_operational_snapshots "
+                "ORDER BY snapshot_date"
+            ).fetchall()
+    except sqlite3.OperationalError:
+        conn.close()
+        return []
+    conn.close()
+
+    cols = ["snapshot_date", "ci_status", "open_prs", "stale_branches",
+            "pending_drafts", "open_escalations"]
+    return [dict(zip(cols, r)) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Planning spec harvester
 # ---------------------------------------------------------------------------
 
 def _parse_front_matter(text: str) -> dict[str, str]:

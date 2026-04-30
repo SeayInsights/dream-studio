@@ -468,6 +468,21 @@ def main() -> None:
         {"timestamp": utcnow().isoformat(), **stats}
     )
 
+    try:
+        from lib.studio_db import insert_operational_snapshot  # noqa: PLC0415
+        project_slug = Path.cwd().name
+        insert_operational_snapshot(
+            snapshot_date=utcnow().strftime("%Y-%m-%d"),
+            project_slug=project_slug,
+            ci_status=stats.get("ci_status"),
+            open_prs=stats.get("open_prs"),
+            stale_branches=stats.get("stale_branches"),
+            pending_drafts=stats.get("pending_drafts"),
+            open_escalations=stats.get("escalations"),
+        )
+    except Exception:
+        pass
+
     print(
         f"\n[dream-studio] Pulse check complete — {stats['health']}\n"
         f"  -> Report: {report_path}\n"
