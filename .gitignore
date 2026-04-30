@@ -9,6 +9,9 @@ CONTEXT.md
 
 # Planning dirs are session artifacts — local only, never committed
 .planning/
+
+# Generated adapter output — build artifacts, never committed
+dist/
 skills/**/.planning/
 
 # Structure audit reports — generated artifacts
