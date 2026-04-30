@@ -247,12 +247,17 @@ async function detectNpm(): Promise<ToolStatus> {
   return detectBinary("npm", "--version");
 }
 
-/** Detect Python — tries `python3` then `python`. */
+/** Detect Python — tries `py` (Windows launcher) then `python3` then `python`. */
 async function detectPython(): Promise<ToolStatus> {
   const parseVer = (raw: string) => {
     const m = raw.match(/Python (\S+)/i);
     return m ? m[1] : raw.split(/\r?\n/)[0] || null;
   };
+
+  if (process.platform === "win32") {
+    const pyLauncher = await detectBinary("py", "--version", parseVer);
+    if (pyLauncher.installed) return pyLauncher;
+  }
 
   const py3 = await detectBinary("python3", "--version", parseVer);
   if (py3.installed) return py3;
