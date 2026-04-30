@@ -50,6 +50,7 @@ Call `detectTool(toolName)` using the platform-appropriate detect command from `
 **Special cases (same as wizard/status modes):**
 - Python on Windows: `where py`
 - Python on Mac/Linux: `which python3`
+- Firecrawl: check `claude mcp list` output for `firecrawl-mcp` — if present and connected, mark `installed`; if present but error, mark `partial`; if absent, mark `missing`
 - Playwright: if CLI found but `playwright list-browsers` fails or returns empty → status `partial`
 
 If detection result is `installed`:

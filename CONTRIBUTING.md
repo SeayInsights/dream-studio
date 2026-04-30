@@ -4,9 +4,9 @@
 
 | Prefix | When to use |
 |--------|-------------|
-| `feature/` | New capabilities |
+| `feat/` | New capabilities |
 | `fix/` | Bug fixes |
-| `hotfix/` | Urgent production fixes |
+| `chore/` | Maintenance, docs, deps |
 
 ## Commit Message Format
 

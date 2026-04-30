@@ -65,7 +65,6 @@ def main() -> None:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
         try:
-            from pydantic import ValidationError
             validated = StopPayload(**payload)
             session_id = validated.session_id or None
         except Exception:
