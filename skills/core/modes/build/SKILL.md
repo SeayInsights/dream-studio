@@ -109,6 +109,18 @@ After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
 
 Use Haiku for mechanical tasks, Sonnet for integration, Opus for architecture/design/review.
 
+## Compiled Prompt Pattern (preferred when available)
+
+Before spawning implementer agents, use the compiled prompt pipeline if scripts exist:
+
+1. **Generate static context:** `py hooks/lib/context_compiler.py --skill=build --pack=core [--repo-context=<path>]`
+2. **Assemble prompt:** `py hooks/lib/prompt_assembler.py --template=implementer --static-context=<compiled.md> --task-text="<task>"`
+3. Use the assembled output as the agent's prompt
+
+The compiled prompt produces a byte-identical static prefix across all tasks in a wave, enabling Claude prompt cache hits. If either script is unavailable or errors, fall back to the standard template below.
+
+For reviewers: use `--template=reviewer`. For exploration: use `--template=explorer`.
+
 ## Implementer Prompt Template
 
 **See:** core/orchestration.md — Implementer prompt template
