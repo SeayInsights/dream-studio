@@ -35,7 +35,6 @@ from domain_lib.game_validate import (  # noqa: E402
     GAME_FILE_EXTENSIONS,
     MAX_WARNINGS_DISPLAYED,
     ProjectContext,
-    ValidationResult,
     check_version_staleness,
     classify_path,
     detect_project,

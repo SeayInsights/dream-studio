@@ -4,8 +4,8 @@
 # Generated session handoffs — contain conversation history, never commit
 .sessions/
 
-# Ephemeral planning artifacts — not source, not docs
-.planning/
+# Generated context/domain glossary — session artifact, not source
+CONTEXT.md
 
 # Structure audit reports — generated artifacts
 .audit/
