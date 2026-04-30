@@ -37,6 +37,7 @@ Run `detectTool(toolName)` for each of the 6 tools in `tool-registry.yml` (gh, f
 **Special cases (from core/setup.md):**
 - **Python on Windows:** Run `where py` (Windows Python Launcher), not `where python`.
 - **Python on Mac/Linux:** Run `which python3`, not `which python`.
+- **Firecrawl:** Do not use `where`/`which`. Instead, check `claude mcp list` output for `firecrawl-mcp`. If present and shows `connected`, mark as `installed`. If present but shows an error state, mark as `partial`. If absent, mark as `missing`.
 - **Playwright:** If the CLI is found but `playwright list-browsers` fails or returns empty, mark status as `partial` (CLI installed, browsers missing). Run `playwright install` as the repair command in this case.
 - **npm/node:** Detect each separately even though node ships with npm.
 
@@ -48,7 +49,7 @@ After detection, for any tool with status `installed` or `partial`, run the foll
 
 If Firecrawl's status is `installed` or `partial`:
 
-1. Check whether `FIRECRAWL_API_KEY` is set in the current environment (env var) **or** present in `.env` in the project root.
+1. Check whether `FIRECRAWL_API_KEY` is set in the current environment (env var), present in `.env` in the project root, **or** configured in the MCP server entry (passed via `-e` flag in `claude mcp add`).
 2. If the key is found and non-empty: skip — no action needed.
 3. If the key is **not** found or empty, present:
 
@@ -67,7 +68,7 @@ Choice: [key / browser / skip]
 ```
 
 **Response handling:**
-- `key` → Prompt: `Paste your Firecrawl API key:`. Read the input. Write `FIRECRAWL_API_KEY=<value>` to `.env` (append if file exists, create if not). Print `API key saved to .env`. Update Firecrawl's session state status to `installed`.
+- `key` → Prompt: `Paste your Firecrawl API key:`. Read the input. If Firecrawl MCP server is already registered, update it with the key: `claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<value> -- npx -y firecrawl-mcp`. If not registered, run the same command to add it. Print `Firecrawl MCP server configured with API key.` Update Firecrawl's session state status to `installed`.
 - `browser` → Open `https://firecrawl.dev` in the system default browser (use `start https://firecrawl.dev` on Windows, `open https://firecrawl.dev` on Mac, `xdg-open https://firecrawl.dev` on Linux). Print `Browser opened. After you get your key, re-run the wizard or set FIRECRAWL_API_KEY=<key> in your .env.` Mark Firecrawl status as `partial` with note `auth_pending`.
 - `skip` → Mark Firecrawl status as `partial` with note `no_api_key`. Continue.
 - Any other input → Re-prompt once with `Please enter key, browser, or skip:`. If still invalid, treat as `skip`.

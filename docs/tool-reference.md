@@ -9,7 +9,7 @@ Per-tool documentation for the 6 optional tools that extend dream-studio capabil
 | Tool | What it is | Required? | Verification |
 |------|-----------|-----------|--------------|
 | [gh](#gh--github-cli) | GitHub CLI | Recommended | `gh --version` |
-| [firecrawl](#firecrawl) | Web scraping / LLM content extraction | Optional | `firecrawl --version` |
+| [firecrawl](#firecrawl) | Web scraping / LLM extraction (MCP server) | Optional | `claude mcp list` shows `firecrawl-mcp` |
 | [playwright](#playwright) | Browser automation and UI testing | Optional | `playwright --version` |
 | [npm](#npm--node-package-manager) | JavaScript package manager | Optional | `npm --version` |
 | [python](#python) | Python interpreter | Required | `python --version` |
@@ -48,9 +48,9 @@ Per-tool documentation for the 6 optional tools that extend dream-studio capabil
 
 ## firecrawl
 
-**What it is:** Web scraping and LLM-ready data extraction tool with JavaScript rendering support.
+**What it is:** MCP server for web scraping, crawling, search, and LLM-ready data extraction via the Firecrawl API.
 
-**Why you'd want it:** Enables dream-studio to fetch, crawl, and convert web pages into structured content for research, security analysis, and client data gathering. Particularly useful when web.md or live documentation must be ingested as context.
+**Why you'd want it:** Enables dream-studio to fetch, crawl, search, and convert web pages into structured content for research, security analysis, and client data gathering. Runs as an MCP server inside Claude Code — tools appear automatically as `mcp__firecrawl-mcp__*` when connected.
 
 **Which skills benefit:**
 
@@ -58,19 +58,27 @@ Per-tool documentation for the 6 optional tools that extend dream-studio capabil
 |------|------|----------------|
 | `dream-studio:core` | `think` | Web research and content extraction for specs |
 | `dream-studio:domains` | `client-work` | Scraping client data sources and web reports |
-| `dream-studio:security` | `dast` | Extracting DAST findings from web scan results |
+| `dream-studio:security` | `dast` | Site crawling and DAST findings extraction |
+| `dream-studio:career` | `scan` | Job portal scraping via firecrawl_search |
 
 **Install:**
 
-| Platform | Command |
-|----------|---------|
-| Windows | `pip install firecrawl-py` |
-| macOS | `pip install firecrawl-py` |
-| Linux | `pip install firecrawl-py` |
+```bash
+claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<your-key> -- npx -y firecrawl-mcp
+```
 
-**Verify:** `firecrawl --version`
+Or install globally and point Claude Code to it:
 
-**Docs:** https://github.com/mendableai/firecrawl
+```bash
+npm install -g firecrawl-mcp
+claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<your-key> -- node "$(npm root -g)/firecrawl-mcp/dist/index.js"
+```
+
+**API key:** Required. Get one at [firecrawl.dev](https://firecrawl.dev). Pass via `-e FIRECRAWL_API_KEY=<key>` in the `claude mcp add` command.
+
+**Verify:** `claude mcp list` — should show `firecrawl-mcp: connected`
+
+**Docs:** https://github.com/mendableai/firecrawl-mcp-server
 
 ---
 

@@ -32,7 +32,7 @@ Firecrawl → scraper-mcp → WebSearch/WebFetch
 ### Check for Firecrawl
 ```javascript
 // Firecrawl is available if mcp__firecrawl-mcp__* tools are loaded
-const hasFirecrawl = typeof mcp__firecrawl_mcp__scrape_url !== 'undefined'
+const hasFirecrawl = typeof mcp__firecrawl-mcp__firecrawl_scrape !== 'undefined'
 ```
 
 ### Check for scraper-mcp
@@ -142,12 +142,12 @@ function selectWebTool(task) {
 ```javascript
 // Load Firecrawl tools if not already loaded
 ToolSearch({
-  query: "select:mcp__firecrawl-mcp__scrape_url",
+  query: "select:mcp__firecrawl-mcp__firecrawl_scrape",
   max_results: 1
 })
 
 // Scrape with full extraction
-mcp__firecrawl_mcp__scrape_url({
+mcp__firecrawl-mcp__firecrawl_scrape({
   url: "https://example.com",
   formats: ["markdown", "links"]
 })
@@ -185,7 +185,7 @@ WebFetch({
 
 **Tier 1: Firecrawl**
 ```javascript
-mcp__firecrawl_mcp__scrape_url({
+mcp__firecrawl-mcp__firecrawl_scrape({
   url: "https://example.com",
   formats: ["links"]
 })
@@ -207,7 +207,19 @@ const html = await WebFetch({ url: "https://example.com" })
 
 ### Search for content
 
-**Tier 1/2: Not applicable** (search is not scraping-specific)
+**Tier 1: Firecrawl**
+```javascript
+ToolSearch({
+  query: "select:mcp__firecrawl-mcp__firecrawl_search",
+  max_results: 1
+})
+
+mcp__firecrawl-mcp__firecrawl_search({
+  query: "dream-studio MCP server"
+})
+```
+
+**Tier 2: Not applicable**
 
 **Tier 3: WebSearch (built-in)**
 ```javascript
@@ -228,7 +240,7 @@ WebSearch({
 
 **Tier 1: Firecrawl**
 ```javascript
-mcp__firecrawl_mcp__crawl({
+mcp__firecrawl-mcp__firecrawl_crawl({
   url: "https://example.com",
   max_depth: 2,
   limit: 10
@@ -255,7 +267,7 @@ const page1 = await WebFetch({ url: "https://example.com" })
 
 **Tier 1: Firecrawl**
 ```javascript
-mcp__firecrawl_mcp__map({
+mcp__firecrawl-mcp__firecrawl_map({
   url: "https://example.com"
 })
 ```
@@ -301,9 +313,11 @@ This skill uses the web access fallback chain from core/web.md:
 | Link extraction | ✓ Structured | ✓ Structured | Manual parsing |
 | Multi-page crawl | ✓ Depth control | ✓ Page limit | Manual iteration |
 | Sitemap fetch | ✓ Auto-discover | ✓ Direct fetch | ✓ Manual parse |
+| Web search | ✓ Keyword search | — | ✓ Built-in |
+| Structured extraction | ✓ LLM extract | — | — |
+| Site mapping | ✓ Auto-discover | ✓ Sitemap fetch | ✓ Manual parse |
 | API endpoint detection | — | ✓ JS interception | — |
 | Wayback Machine | — | ✓ Archive fetch | — |
-| Web search | — | — | ✓ Built-in |
 
 ## Rules
 
@@ -320,8 +334,8 @@ Before using MCP tools, load them via ToolSearch:
 ```javascript
 // Load Firecrawl tools
 ToolSearch({
-  query: "select:mcp__firecrawl-mcp__scrape_url,mcp__firecrawl-mcp__crawl,mcp__firecrawl-mcp__map",
-  max_results: 3
+  query: "select:mcp__firecrawl-mcp__firecrawl_scrape,mcp__firecrawl-mcp__firecrawl_crawl,mcp__firecrawl-mcp__firecrawl_map,mcp__firecrawl-mcp__firecrawl_search,mcp__firecrawl-mcp__firecrawl_extract",
+  max_results: 5
 })
 
 // Load scraper-mcp tools

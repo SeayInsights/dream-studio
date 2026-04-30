@@ -23,27 +23,28 @@ tools:
     docs_url: "https://cli.github.com/manual"
 
   firecrawl:
-    name: Firecrawl
-    description: "Web scraping and LLM-ready web data extraction with JavaScript support"
+    name: Firecrawl MCP Server
+    description: "MCP server for web scraping, crawling, search, and LLM-ready extraction via Firecrawl API"
     detect_command:
-      windows: "where firecrawl"
-      mac: "which firecrawl"
-      linux: "which firecrawl"
-    version_command: "firecrawl --version"
-    min_version: "0.0.16"
+      windows: "claude mcp list 2>NUL | findstr firecrawl-mcp"
+      mac: "claude mcp list 2>/dev/null | grep firecrawl-mcp"
+      linux: "claude mcp list 2>/dev/null | grep firecrawl-mcp"
+    version_command: "npm list -g firecrawl-mcp --depth=0 2>NUL || echo unknown"
+    min_version: "3.0.0"
     upgrade_command:
-      windows: "pip install --upgrade firecrawl-py"
-      mac: "pip install --upgrade firecrawl-py"
-      linux: "pip install --upgrade firecrawl-py"
+      windows: "npm update -g firecrawl-mcp"
+      mac: "npm update -g firecrawl-mcp"
+      linux: "npm update -g firecrawl-mcp"
     install_command:
-      windows: "pip install firecrawl-py"
-      mac: "pip install firecrawl-py"
-      linux: "pip install firecrawl-py"
+      windows: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
+      mac: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
+      linux: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
     what_it_unlocks:
-      - dream-studio:core (web research, web.md content extraction)
-      - dream-studio:domains (web scraping for client work)
-      - dream-studio:security (DAST findings extraction)
-    docs_url: "https://github.com/mendableai/firecrawl"
+      - dream-studio:core (web research, web.md content extraction, site mapping)
+      - dream-studio:domains (web scraping for client work, competitive research)
+      - dream-studio:security (DAST site crawling and findings extraction)
+      - dream-studio:career (job portal scraping via firecrawl_search)
+    docs_url: "https://github.com/mendableai/firecrawl-mcp-server"
 
   playwright:
     name: Playwright
