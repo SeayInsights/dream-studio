@@ -135,6 +135,26 @@ analysts.forEach(analyst => {
 // Collect and synthesize results
 ```
 
+### Compiled Prompt Pattern (automated)
+
+When `hooks/lib/context_compiler.py` and `hooks/lib/prompt_assembler.py` are available, use them instead of manually assembling prompts:
+
+```bash
+# 1. Compile static context (run ONCE per session)
+py hooks/lib/context_compiler.py --skill=build --pack=core --repo-context=repo-context.json > compiled.md
+
+# 2. Assemble per-task prompt (run per dispatch)
+py hooks/lib/prompt_assembler.py --template=implementer --static-context=compiled.md --task-text="Task 3: Build login form"
+```
+
+**Why:** The compiled context strips boilerplate (~77% reduction) and produces a byte-identical static prefix. Claude automatically caches the longest common prefix across consecutive calls, so tasks in the same wave share cache hits.
+
+**Templates:** `implementer` (build tasks), `reviewer` (code review), `auditor` (security/quality audits), `explorer` (codebase questions).
+
+**Model selection:** Use `py hooks/lib/model_selector.py --skill=<name>` as an alternative to hardcoded model tiers. It queries historical success rates from SQLite and recommends haiku/sonnet/opus.
+
+**Fallback:** If scripts are unavailable or error, use the manual templates below — they work identically, just without automatic caching optimization.
+
 ### Implementer prompt template (build skill)
 
 **Ordering rule:** Static content FIRST, dynamic content LAST. Assemble the static prefix
