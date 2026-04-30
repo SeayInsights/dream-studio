@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment, FileSystemLoader
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_ROOT = _PROJECT_ROOT / "skills"
+_TEMPLATES_DIR = _PROJECT_ROOT / "scripts" / "adapter_templates"
 
 
 def discover_skills() -> list[Path]:
@@ -108,3 +110,31 @@ def load_gotchas(skill_dir: Path) -> list[dict]:
         for entry in avoid
         if isinstance(entry, dict) and entry.get("title")
     ]
+
+
+def render_adapter(
+    platform_cfg: dict,
+    skills: list[dict],
+    domains: list[dict] | None = None,
+) -> Path:
+    """Render a Jinja2 template for a specific platform adapter.
+
+    Args:
+        platform_cfg: Platform config dict with keys: template, output_path.
+        skills: Parsed skill dicts to inject into the template.
+        domains: Optional domain knowledge dicts to inject.
+
+    Returns:
+        Path to the written output file.
+    """
+    env = Environment(
+        loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+        keep_trailing_newline=True,
+    )
+    template = env.get_template(platform_cfg["template"])
+    rendered = template.render(skills=skills, domains=domains or [])
+
+    output_path = _PROJECT_ROOT / platform_cfg["output_path"]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(rendered, encoding="utf-8")
+    return output_path
