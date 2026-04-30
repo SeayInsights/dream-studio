@@ -66,3 +66,81 @@ def compute_pulse_trend(db_path: Path | None = None) -> dict:
         "trend_slope": slope,
         "trend_direction": direction,
     }
+
+
+def compute_skill_velocity(db_path: Path | None = None):
+    """Compute per-skill invocation counts, success rates, and avg token usage.
+
+    Returns a pandas DataFrame sorted by invocation_count descending.
+    """
+    import pandas as pd
+
+    columns = ["skill_name", "invocation_count", "success_rate", "avg_tokens"]
+
+    if db_path is None:
+        db_path = paths.state_dir() / "studio.db"
+
+    if not db_path.exists():
+        return pd.DataFrame(columns=columns)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                skill_name,
+                COUNT(*)            AS invocation_count,
+                AVG(success)        AS success_rate,
+                AVG(input_tokens + output_tokens) AS avg_tokens
+            FROM effective_skill_runs
+            GROUP BY skill_name
+            ORDER BY invocation_count DESC
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        conn.close()
+        return pd.DataFrame(columns=columns)
+    conn.close()
+
+    if not rows:
+        return pd.DataFrame(columns=columns)
+
+    return pd.DataFrame(rows, columns=columns)
+
+
+def compute_conversion_rate(db_path: Path | None = None) -> dict:
+    """Compute spec-to-build conversion rate from planning specs.
+
+    Returns dict with total, orphaned, and rate keys.
+    """
+    if db_path is None:
+        db_path = paths.state_dir() / "studio.db"
+
+    empty = {"total": 0, "orphaned": 0, "rate": 0.0}
+
+    if not db_path.exists():
+        return empty
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*)                         AS total,
+                SUM(CASE WHEN has_build_commit = 0 THEN 1 ELSE 0 END) AS orphaned
+            FROM raw_planning_specs
+            """
+        ).fetchone()
+    except sqlite3.OperationalError:
+        conn.close()
+        return empty
+    conn.close()
+
+    if row is None or row[0] == 0:
+        return empty
+
+    total = row[0]
+    orphaned = row[1]
+    rate = (total - orphaned) / total
+
+    return {"total": total, "orphaned": orphaned, "rate": float(rate)}
