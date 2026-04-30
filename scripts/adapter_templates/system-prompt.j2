@@ -1,0 +1,36 @@
+# dream-studio — AI Workflow System
+
+## Routing Table
+
+| Skill | Triggers |
+|-------|----------|
+{%- for skill in skills %}
+| {{ skill.name }} | {{ skill.triggers | join(', ') }} |
+{%- endfor %}
+
+## Skill Details
+{%- for skill in skills %}
+
+### {{ skill.name }}
+{{ skill.description }}
+{%- if skill.workflow_steps %}
+Steps:
+{%- for step in skill.workflow_steps %}
+{{ loop.index }}. {{ step }}
+{%- endfor %}
+{%- endif %}
+{%- if skill.gotchas %}
+Avoid:
+{%- for g in skill.gotchas %}
+- {{ g.title }}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+{%- if domains %}
+
+## Domain Knowledge
+Available domains:
+{%- for d in domains %}
+- {{ d.name }} ({{ d.path }})
+{%- endfor %}
+{%- endif %}
