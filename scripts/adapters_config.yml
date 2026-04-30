@@ -9,6 +9,11 @@ platforms:
     template: copilot.j2
     output_path: dist/adapters/copilot/.github/copilot-instructions.md
     include_domains: true
+  windsurf:
+    name: Windsurf
+    template: windsurf.j2
+    output_path: dist/adapters/windsurf/.windsurfrules
+    include_domains: true
   system-prompt:
     name: System Prompt (Generic)
     template: system-prompt.j2
