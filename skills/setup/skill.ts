@@ -101,22 +101,39 @@ export async function promptForSetupPath(): Promise<"wizard" | "as-needed" | "re
 
 /**
  * Save setup preferences to .dream-studio/setup-prefs.json
- * To be implemented in T006
+ * Implemented in T006
  */
 export async function savePreference(prefs: SetupPreferences): Promise<void> {
-  // TODO: Write to .dream-studio/setup-prefs.json
+  const dreamStudioDir = path.join(process.cwd(), ".dream-studio");
+  const prefsPath = path.join(dreamStudioDir, "setup-prefs.json");
+
   // Create .dream-studio directory if it doesn't exist
-  throw new Error("Not implemented - see T006");
+  await fs.mkdir(dreamStudioDir, { recursive: true });
+
+  // Write preferences to file
+  const jsonContent = JSON.stringify(prefs, null, 2);
+  await fs.writeFile(prefsPath, jsonContent, "utf-8");
 }
 
 /**
  * Load setup preferences from .dream-studio/setup-prefs.json
- * To be implemented in T006
+ * Implemented in T006
  */
 export async function loadPreference(): Promise<SetupPreferences | null> {
-  // TODO: Read from .dream-studio/setup-prefs.json
-  // Return null if file doesn't exist
-  throw new Error("Not implemented - see T006");
+  const prefsPath = path.join(process.cwd(), ".dream-studio", "setup-prefs.json");
+
+  try {
+    const fileContent = await fs.readFile(prefsPath, "utf-8");
+    const prefs = JSON.parse(fileContent) as SetupPreferences;
+    return prefs;
+  } catch (error) {
+    // Return null if file doesn't exist or can't be read
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    // Re-throw other errors (e.g., invalid JSON)
+    throw error;
+  }
 }
 
 /**
