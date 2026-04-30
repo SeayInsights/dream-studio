@@ -38,7 +38,7 @@ packs:
   meta:
     description: Observability, session management, and shared hook infrastructure
     skill: workflow
-    hooks: [on-pulse, on-meta-review, on-context-threshold, on-post-compact, on-token-log, on-tool-activity, on-skill-load]
+    hooks: [on-pulse, on-meta-review, on-context-threshold, on-post-compact, on-token-log, on-tool-activity, on-skill-load, on-skill-telemetry]
     lib: hooks/lib/
 
   security:
