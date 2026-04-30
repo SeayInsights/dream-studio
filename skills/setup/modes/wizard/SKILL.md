@@ -39,6 +39,60 @@ Run `detectTool(toolName)` for each of the 6 tools in `tool-registry.yml` (gh, f
 - **Playwright:** If the CLI is found but `playwright list-browsers` fails or returns empty, mark status as `partial` (CLI installed, browsers missing). Run `playwright install` as the repair command in this case.
 - **npm/node:** Detect each separately even though node ships with npm.
 
+### Step 2b — Auth checks for installed tools
+
+After detection, for any tool with status `installed` or `partial`, run the following auth checks **before** prompting for missing tools. These checks are separate from install prompts — they target configuration gaps, not missing binaries.
+
+#### Firecrawl API key check
+
+If Firecrawl's status is `installed` or `partial`:
+
+1. Check whether `FIRECRAWL_API_KEY` is set in the current environment (env var) **or** present in `.env` in the project root.
+2. If the key is found and non-empty: skip — no action needed.
+3. If the key is **not** found or empty, present:
+
+```
+─────────────────────────────────────────
+Tool:     Firecrawl
+Issue:    installed but no API key found
+Action:   Firecrawl needs an API key to function.
+
+Enter key, open browser to sign up, or skip?
+  key     → paste your API key now
+  browser → open https://firecrawl.dev in your browser to sign up / get a key
+  skip    → mark as partial and continue
+
+Choice: [key / browser / skip]
+```
+
+**Response handling:**
+- `key` → Prompt: `Paste your Firecrawl API key:`. Read the input. Write `FIRECRAWL_API_KEY=<value>` to `.env` (append if file exists, create if not). Print `API key saved to .env`. Update Firecrawl's session state status to `installed`.
+- `browser` → Open `https://firecrawl.dev` in the system default browser (use `start https://firecrawl.dev` on Windows, `open https://firecrawl.dev` on Mac, `xdg-open https://firecrawl.dev` on Linux). Print `Browser opened. After you get your key, re-run the wizard or set FIRECRAWL_API_KEY=<key> in your .env.` Mark Firecrawl status as `partial` with note `auth_pending`.
+- `skip` → Mark Firecrawl status as `partial` with note `no_api_key`. Continue.
+- Any other input → Re-prompt once with `Please enter key, browser, or skip:`. If still invalid, treat as `skip`.
+
+#### gh CLI auth check
+
+If `gh` status is `installed`:
+
+1. Run `gh auth status` (exit code 0 = authenticated, non-zero = not authenticated).
+2. If authenticated: skip — no action needed.
+3. If **not** authenticated, present:
+
+```
+─────────────────────────────────────────
+Tool:     gh (GitHub CLI)
+Issue:    installed but not authenticated
+Action:   gh needs to be authenticated to manage PRs and issues.
+
+Run gh auth login now? [y / n]
+```
+
+**Response handling:**
+- `y` → Run `gh auth login` and stream output to the user. After completion, re-run `gh auth status` to verify. If now authenticated: print `gh authenticated successfully.` Update `gh` session status to `installed`. If still not authenticated: print `Warning: gh auth login completed but auth status still shows unauthenticated.` Mark `gh` as `verify_failed`.
+- `n` → Mark `gh` as `skipped_auth`. Print `Skipping gh auth — you can run gh auth login later.`
+- Any other input → Re-prompt once. If still invalid, treat as `n`.
+
 ### Step 3 — Identify tools needing action
 
 After detection, partition the tool list into two groups:
@@ -125,6 +179,10 @@ Where `<toolKey>` matches the key in `tool-registry.yml` (e.g., `gh`, `firecrawl
 - Tools where install command itself failed → status `failed`, version `null`.
 - Tools where user responded `n` or `skip` → status `skipped`, version `null`.
 - Tools that were `partial` at detection and not repaired → status `partial`, version from initial detection.
+- Firecrawl with API key saved successfully → status `installed`, include `api_key_source: ".env"`.
+- Firecrawl where user chose `browser` → status `partial`, include `auth_note: "auth_pending"`.
+- Firecrawl where user chose `skip` on auth → status `partial`, include `auth_note: "no_api_key"`.
+- `gh` where user skipped auth → status `skipped_auth`, version from initial detection.
 
 ### Step 7 — Render completion summary
 
