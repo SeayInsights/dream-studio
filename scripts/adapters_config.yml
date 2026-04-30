@@ -1,0 +1,16 @@
+platforms:
+  cursor:
+    name: Cursor
+    template: cursor.j2
+    output_path: dist/adapters/cursor/.cursorrules
+    include_domains: false
+  copilot:
+    name: GitHub Copilot
+    template: copilot.j2
+    output_path: dist/adapters/copilot/.github/copilot-instructions.md
+    include_domains: true
+  system-prompt:
+    name: System Prompt (Generic)
+    template: system-prompt.j2
+    output_path: dist/adapters/system-prompt/system-prompt.md
+    include_domains: true
