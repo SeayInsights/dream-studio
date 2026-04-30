@@ -109,6 +109,41 @@ def _resolve_ref(ref: str, wf: dict) -> str | None:
     return str(node.get(field, ""))
 
 
+def _resolve_session_ref(filename: str, session_dir: str | None) -> str | None:
+    """Resolve a session:<filename> reference. Returns None if no session dir or empty result."""
+    if not session_dir:
+        return None
+    try:
+        from lib.session_cache import read_session_file, read_all_session_files
+        if filename in ("*", "all"):
+            result = read_all_session_files(session_dir)
+        else:
+            result = read_session_file(session_dir, filename)
+        return result if result else None
+    except ImportError:
+        return None
+
+
+def resolve_templates(text: str, wf: dict, session_dir: str | None = None) -> str:
+    """Resolve all {{ref}} templates in text.
+
+    Supported patterns:
+      {{node_id.field}}    — resolved via workflow state
+      {{session:filename}} — resolved via session_cache
+    Unresolved templates are left as-is.
+    """
+    def _replace(m: re.Match) -> str:
+        ref = m.group(1)
+        if ref.startswith("session:"):
+            filename = ref[len("session:"):]
+            val = _resolve_session_ref(filename, session_dir)
+            return val if val is not None else m.group(0)
+        val = _resolve_ref(ref, wf)
+        return val if val is not None else m.group(0)
+
+    return re.sub(r"\{\{(.+?)\}\}", _replace, text)
+
+
 def _coerce(val: str) -> int | float | str:
     """Coerce a string value to int, float, or str. Resolves 'quality-score' alias."""
     if val == "quality-score":
@@ -207,6 +242,27 @@ def _evaluate(expr: str, wf: dict) -> bool:
     if has_unresolved:
         return False
     return bool(resolved.strip())
+
+
+# ── Output compression ────────────────────────────────────────────────
+
+
+def compress_node_output(raw_output: str, compress_type: str) -> str | None:
+    """Compress node output according to the compress_type.
+
+    Currently supported: "findings" (via findings_summarizer).
+    Returns compressed JSON string, or None on failure (caller falls back to raw).
+    """
+    if compress_type != "findings":
+        return None
+    try:
+        from lib.findings_summarizer import summarize_findings
+        result = summarize_findings(raw_output)
+        if result and result.get("total", 0) > 0:
+            return json.dumps(result, indent=2)
+        return None
+    except (ImportError, Exception):
+        return None
 
 
 # ── Context budget guard ───────────────────────────────────────────────

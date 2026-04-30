@@ -2,6 +2,13 @@
 name: build
 description: Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`.
 pack: core
+chain_suggests:
+  - condition: "ui_build"
+    next: "polish"
+    prompt: "UI changes detected — run polish?"
+  - condition: "always"
+    next: "review"
+    prompt: "Build complete — review the code?"
 ---
 
 # Build — Execute With Discipline
@@ -101,6 +108,18 @@ After every 3 tasks or 30 minutes (whichever first), output checkpoint with:
 **See:** core/orchestration.md — Model Selection
 
 Use Haiku for mechanical tasks, Sonnet for integration, Opus for architecture/design/review.
+
+## Compiled Prompt Pattern (preferred when available)
+
+Before spawning implementer agents, use the compiled prompt pipeline if scripts exist:
+
+1. **Generate static context:** `py hooks/lib/context_compiler.py --skill=build --pack=core [--repo-context=<path>]`
+2. **Assemble prompt:** `py hooks/lib/prompt_assembler.py --template=implementer --static-context=<compiled.md> --task-text="<task>"`
+3. Use the assembled output as the agent's prompt
+
+The compiled prompt produces a byte-identical static prefix across all tasks in a wave, enabling Claude prompt cache hits. If either script is unavailable or errors, fall back to the standard template below.
+
+For reviewers: use `--template=reviewer`. For exploration: use `--template=explorer`.
 
 ## Implementer Prompt Template
 

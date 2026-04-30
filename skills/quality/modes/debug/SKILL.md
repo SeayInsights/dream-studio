@@ -5,6 +5,13 @@ pack: core
 triggers:
   - debug:
   - diagnose:
+chain_suggests:
+  - condition: "root_cause_found"
+    next: "plan"
+    prompt: "Root cause identified — plan the fix?"
+  - condition: "debug_iterations_gte_3"
+    next: "learn"
+    prompt: "Complex debug — capture lesson?"
 ---
 
 ## Before you start

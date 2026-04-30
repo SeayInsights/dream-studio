@@ -65,6 +65,11 @@ nodes:
         - Note if an ORM is present (Prisma, Drizzle, SQLAlchemy, TypeORM)
         - Check for any query logging or explain-plan output in the codebase
 
+      STRUCTURED FLAGS (for downstream condition checks):
+      At the end of your output, include these lines:
+        has_infra: true|false  (true if Docker, Cloudflare, or CI config found)
+        has_data_layer: true|false  (true if ORM, SQL files, or DB config found)
+
       Save all baseline metrics to: .sessions/<YYYY-MM-DD>/optimize-baseline.md
       Print a one-line summary of each metric found.
     model: haiku
@@ -74,6 +79,7 @@ nodes:
   # ── Stage 3: Parallel audits ──────────────────────────────────────────────
   - id: audit-deps
     depends_on: [profile]
+    output_compress: findings
     command: |
       DEPENDENCY AUDIT — find bloat and redundancy in project dependencies.
 
@@ -114,6 +120,7 @@ nodes:
 
   - id: audit-code
     depends_on: [profile]
+    output_compress: findings
     command: |
       DEAD CODE AUDIT — find code that is defined but never used.
 
@@ -152,6 +159,8 @@ nodes:
 
   - id: audit-infra
     depends_on: [profile]
+    condition: "{{profile.has_infra}} == true"
+    output_compress: findings
     command: |
       INFRASTRUCTURE AUDIT — find right-sizing and configuration opportunities.
 
@@ -191,6 +200,8 @@ nodes:
 
   - id: audit-queries
     depends_on: [profile]
+    condition: "{{profile.has_data_layer}} == true"
+    output_compress: findings
     command: |
       QUERY / API AUDIT — find inefficient data fetching patterns.
 
