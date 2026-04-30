@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
 from lib import paths
 
@@ -266,3 +268,44 @@ def detect_orphans(db_path: Path | None = None) -> list[str]:
     conn.commit()
     conn.close()
     return orphaned
+
+
+# ---------------------------------------------------------------------------
+# T006 — Skill telemetry harvester
+# ---------------------------------------------------------------------------
+
+_EMPTY_VELOCITY_COLS = ["skill_name", "week", "invocation_count", "success_rate"]
+
+
+def harvest_skill_velocity(db_path: Path | None = None) -> pd.DataFrame:
+    """Query effective_skill_runs and compute weekly skill velocity.
+
+    Returns a DataFrame with columns: ``skill_name``, ``week``,
+    ``invocation_count``, ``success_rate``.  Returns an empty DataFrame
+    with the correct columns if no telemetry data exists.
+    """
+    conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
+
+    # Check if the view has any rows
+    try:
+        row_count = conn.execute("SELECT COUNT(*) FROM effective_skill_runs").fetchone()[0]
+    except sqlite3.OperationalError:
+        conn.close()
+        return pd.DataFrame(columns=_EMPTY_VELOCITY_COLS)
+
+    if row_count == 0:
+        conn.close()
+        return pd.DataFrame(columns=_EMPTY_VELOCITY_COLS)
+
+    query = """
+        SELECT skill_name,
+               strftime('%Y-W%W', invoked_at) AS week,
+               COUNT(*)                        AS invocation_count,
+               AVG(success)                    AS success_rate
+        FROM effective_skill_runs
+        GROUP BY skill_name, week
+        ORDER BY skill_name, week
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df
