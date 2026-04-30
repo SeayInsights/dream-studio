@@ -138,3 +138,48 @@ def render_adapter(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
     return output_path
+
+
+def load_domains() -> list[dict]:
+    """Load domain knowledge files (.md and .yml) from skills/domains/.
+
+    Skips SKILL.md files (pack routers). For .yml files that fail to parse,
+    logs an error to stderr and skips the file.
+
+    Returns:
+        Sorted list of dicts with keys: name, path, content, type.
+    """
+    domains_root = _SKILLS_ROOT / "domains"
+    if not domains_root.is_dir():
+        return []
+
+    results: list[dict] = []
+
+    for pattern in ("**/*.md", "**/*.yml"):
+        for filepath in domains_root.glob(pattern):
+            if not filepath.is_file():
+                continue
+            # Skip SKILL.md files — those are routers, not domain knowledge
+            if filepath.name == "SKILL.md":
+                continue
+
+            content = filepath.read_text(encoding="utf-8-sig")
+
+            # For .yml files, verify valid YAML
+            if filepath.suffix == ".yml":
+                try:
+                    yaml.safe_load(content)
+                except yaml.YAMLError as exc:
+                    print(f"Warning: skipping malformed YAML {filepath}: {exc}", file=sys.stderr)
+                    continue
+
+            rel_path = filepath.relative_to(_SKILLS_ROOT)
+            results.append({
+                "name": filepath.stem,
+                "path": str(rel_path).replace("\\", "/"),
+                "content": content,
+                "type": "yml" if filepath.suffix == ".yml" else "md",
+            })
+
+    results.sort(key=lambda d: d["name"])
+    return results
