@@ -18,26 +18,27 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = REPO_ROOT / "skills"
-ANALYSTS_DIR = SKILLS_DIR / "coach" / "analysts"
+ANALYSTS_DIR = SKILLS_DIR / "quality" / "modes" / "coach" / "analysts"
 
 # Skills excluded from analyst coverage requirements
 EXCLUDED_SKILLS = {"coach"}  # coach doesn't analyse itself
 
 
 def get_all_skills() -> set[str]:
-    """Collect skill names from skills/*/metadata.yml name fields."""
+    """Collect skill names from metadata.yml (flat and pack/mode layouts)."""
     skills = set()
-    for metadata_file in SKILLS_DIR.glob("*/metadata.yml"):
-        try:
-            text = metadata_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        match = re.search(r"^name:\s*['\"]?([^'\"\n]+)['\"]?", text, re.MULTILINE)
-        if match:
-            skills.add(match.group(1).strip())
-        else:
-            # Fall back to directory name
-            skills.add(metadata_file.parent.name)
+    patterns = ["*/metadata.yml", "*/modes/*/metadata.yml"]
+    for pattern in patterns:
+        for metadata_file in SKILLS_DIR.glob(pattern):
+            try:
+                text = metadata_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            match = re.search(r"^name:\s*['\"]?([^'\"\n]+)['\"]?", text, re.MULTILINE)
+            if match:
+                skills.add(match.group(1).strip())
+            else:
+                skills.add(metadata_file.parent.name)
     return skills - EXCLUDED_SKILLS
 
 

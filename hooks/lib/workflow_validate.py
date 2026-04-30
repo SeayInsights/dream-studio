@@ -118,6 +118,26 @@ def _parse_scalar(val: str):
     return val
 
 
+# ── Skill resolution ────────────────────────────────────────────────
+
+
+def _resolve_skill(skill: str, plugin_root: Path) -> Path | None:
+    """Find SKILL.md for a skill name, checking both flat and pack/mode layouts."""
+    flat = plugin_root / "skills" / skill / "SKILL.md"
+    if flat.is_file():
+        return flat
+    skills_dir = plugin_root / "skills"
+    if not skills_dir.is_dir():
+        return None
+    for pack_dir in skills_dir.iterdir():
+        if not pack_dir.is_dir():
+            continue
+        mode_path = pack_dir / "modes" / skill / "SKILL.md"
+        if mode_path.is_file():
+            return mode_path
+    return None
+
+
 # ── Validation ───────────────────────────────────────────────────────
 
 
@@ -159,10 +179,9 @@ def validate(data: dict, plugin_root: Path) -> list[str]:
 
         skill = n.get("skill")
         if skill:
-            skill_path = plugin_root / "skills" / skill / "SKILL.md"
-            if not skill_path.is_file():
+            if not _resolve_skill(skill, plugin_root):
                 errors.append(f"Node \"{nid}\": skill \"{skill}\" — "
-                              f"{skill_path} not found")
+                              f"{skill} not found in skills/ or any pack mode")
 
     # Validate on_failure at workflow level
     on_failure = data.get("on_failure")
