@@ -187,3 +187,82 @@ def harvest_specs(db_path: Path | None = None) -> int:
     conn.commit()
     conn.close()
     return count
+
+
+# ---------------------------------------------------------------------------
+# T005 — Orphan detection
+# ---------------------------------------------------------------------------
+
+def detect_orphans(db_path: Path | None = None) -> list[str]:
+    """Identify specs with no matching ``dream-studio:build`` commit.
+
+    For each spec that has a ``created_date``, searches git history for a
+    build commit within 14 days. Updates ``has_build_commit`` in the DB
+    and returns titles of orphaned specs (those with no build commit).
+    """
+    import subprocess
+    from datetime import timedelta
+
+    conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
+    cur = conn.cursor()
+    cur.execute("SELECT id, title, created_date FROM raw_planning_specs")
+    rows = cur.fetchall()
+
+    orphaned: list[str] = []
+
+    for row_id, title, created_date in rows:
+        if not created_date:
+            # No created_date — can't determine orphan status, mark as orphan
+            conn.execute(
+                "UPDATE raw_planning_specs SET has_build_commit = 0 WHERE id = ?",
+                (row_id,),
+            )
+            if title:
+                orphaned.append(title)
+            continue
+
+        # Calculate the 14-day window
+        try:
+            since_date = created_date  # YYYY-MM-DD
+            until_dt = datetime.strptime(created_date, "%Y-%m-%d") + timedelta(days=14)
+            until_date = until_dt.strftime("%Y-%m-%d")
+        except ValueError:
+            conn.execute(
+                "UPDATE raw_planning_specs SET has_build_commit = 0 WHERE id = ?",
+                (row_id,),
+            )
+            if title:
+                orphaned.append(title)
+            continue
+
+        # Search git history for build commits in the window
+        has_build = 0
+        try:
+            result = subprocess.run(
+                [
+                    "git", "log", "--oneline",
+                    f"--since={since_date}",
+                    f"--until={until_date}",
+                    "--grep=dream-studio:build",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(paths.plugin_root()),
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                has_build = 1
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            # git not available or timed out — default to orphan
+            pass
+
+        conn.execute(
+            "UPDATE raw_planning_specs SET has_build_commit = ? WHERE id = ?",
+            (has_build, row_id),
+        )
+        if has_build == 0 and title:
+            orphaned.append(title)
+
+    conn.commit()
+    conn.close()
+    return orphaned
