@@ -10,9 +10,13 @@ Reads all */metadata.yml files and generates dream-studio-catalog.md with:
 - Performance insights
 """
 
+import sys
 from pathlib import Path
-from datetime import datetime
 from collections import defaultdict
+
+# Add hooks/lib to path for time_utils
+sys.path.insert(0, str(Path(__file__).parent.parent / "hooks" / "lib"))
+from time_utils import utcnow
 
 # Base directory
 SKILLS_DIR = Path(__file__).parent
@@ -277,7 +281,7 @@ def generate_health_dashboard(skills):
 
 def generate_catalog(skills):
     """Generate the full catalog markdown."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = utcnow().strftime("%Y-%m-%d %H:%M")
 
     output = [
         "# Dream-Studio Skill Catalog\n\n",
