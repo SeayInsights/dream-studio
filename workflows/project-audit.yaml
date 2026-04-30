@@ -1,18 +1,15 @@
 name: project-audit
 description: >
   Full project audit — harden (structure + best practices), secure (OWASP + STRIDE),
-  then review (code quality) — run sequentially with director gates between each phase.
+  and review (code quality) — run in parallel with a single director gate before the report.
   Invoke from the project root directory, or say "workflow: project-audit path: <absolute-path>".
 version: 1
 on_failure: abort
 
 gates:
-  after-harden:
+  review-findings:
     type: pause
-    prompt: "Harden complete. Review findings above, then approve to proceed to security audit?"
-  after-secure:
-    type: pause
-    prompt: "Security audit complete. Review findings above, then approve to proceed to code review?"
+    prompt: "All audits complete. Review findings above, then approve to generate the final report?"
 
 nodes:
   - id: harden
@@ -23,16 +20,12 @@ nodes:
 
   - id: secure
     skill: secure
-    depends_on: [harden]
-    gate: after-harden
     model: sonnet
     context: fresh
     timeout_seconds: 600
 
   - id: review
     skill: review
-    depends_on: [secure]
-    gate: after-secure
     model: sonnet
     context: fresh
     timeout_seconds: 600
@@ -40,6 +33,7 @@ nodes:
   - id: report
     depends_on: [harden, secure, review]
     trigger_rule: all_done
+    gate: review-findings
     command: |
       Read all audit findings files in the project root:
         - review-harden-findings.md
