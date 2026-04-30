@@ -17,6 +17,49 @@
 
 import { promises as fs } from "fs";
 import * as path from "path";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
+
+/** Returns the platform-specific command to locate an executable by name. */
+function whichCommand(bin: string): string {
+  return process.platform === "win32" ? `where ${bin}` : `which ${bin}`;
+}
+
+/**
+ * Core helper: locate a binary and verify its version.
+ * @param bin         The executable name (e.g. "gh", "node").
+ * @param versionArg  The flag used to print the version (default: "--version").
+ * @param parseVersion Optional function to extract a clean semver from raw output.
+ */
+async function detectBinary(
+  bin: string,
+  versionArg = "--version",
+  parseVersion?: (raw: string) => string | null,
+): Promise<ToolStatus> {
+  // Step 1 — locate the binary
+  let binPath: string | null = null;
+  try {
+    const { stdout } = await execAsync(whichCommand(bin));
+    // `where` on Windows may return multiple lines; use the first one
+    binPath = stdout.split(/\r?\n/)[0].trim() || null;
+  } catch {
+    return { installed: false, version: null, path: null };
+  }
+
+  // Step 2 — check version
+  let version: string | null = null;
+  try {
+    const { stdout } = await execAsync(`${bin} ${versionArg}`);
+    const raw = stdout.trim();
+    version = parseVersion ? parseVersion(raw) : raw.split(/\r?\n/)[0] || null;
+  } catch {
+    // Binary exists but --version failed — still mark as installed
+  }
+
+  return { installed: true, version, path: binPath };
+}
 
 export interface SetupPreferences {
   onboarding_path: "wizard" | "as-needed" | "read-docs";
@@ -137,43 +180,107 @@ export async function loadPreference(): Promise<SetupPreferences | null> {
 }
 
 /**
- * Detect if gh CLI is installed
- * To be implemented in T013
+ * Detect if gh CLI is installed.
+ * Parses output like "gh version 2.47.0 (2024-03-19)" → "2.47.0"
  */
 export async function detectGh(): Promise<ToolStatus> {
-  // TODO: Cross-platform detection
-  // Windows: where gh
-  // Unix: which gh
-  // Return {installed: bool, version: string|null, path: string|null}
-  throw new Error("Not implemented - see T013");
+  return detectBinary("gh", "--version", (raw) => {
+    const m = raw.match(/gh version (\S+)/i);
+    return m ? m[1] : raw.split(/\r?\n/)[0] || null;
+  });
 }
 
 /**
- * Detect if Firecrawl is installed
- * To be implemented in T013
+ * Detect if Firecrawl CLI is installed.
+ * Tries the `firecrawl` binary; falls back to the `@mendable/firecrawl-js`
+ * package in local node_modules (npm-installed SDK, no standalone CLI binary).
  */
 export async function detectFirecrawl(): Promise<ToolStatus> {
-  // TODO: Check for Firecrawl CLI or API
-  // Verify with --version or API connectivity check
-  throw new Error("Not implemented - see T013");
+  // Try the CLI binary first
+  const cliBinary = await detectBinary("firecrawl", "--version");
+  if (cliBinary.installed) return cliBinary;
+
+  // Fall back: check for the npm package in the closest node_modules
+  try {
+    const pkgPath = require.resolve("@mendable/firecrawl-js/package.json");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkg = require(pkgPath) as { version?: string };
+    return { installed: true, version: pkg.version ?? null, path: pkgPath };
+  } catch {
+    // Not found anywhere
+    return { installed: false, version: null, path: null };
+  }
 }
 
 /**
- * Detect if Playwright is installed
- * To be implemented in T013
+ * Detect if Playwright is installed.
+ * Checks for the `@playwright/test` npm package; also tries the `playwright`
+ * CLI binary (available after `npm install -g playwright`).
  */
 export async function detectPlaywright(): Promise<ToolStatus> {
-  // TODO: Check npm registry for @playwright/test
-  // Or check local node_modules
-  throw new Error("Not implemented - see T013");
+  // Try the `playwright` CLI binary first (global install)
+  const cliBinary = await detectBinary("playwright", "--version", (raw) => {
+    const m = raw.match(/Version (\S+)/i);
+    return m ? m[1] : raw.split(/\r?\n/)[0] || null;
+  });
+  if (cliBinary.installed) return cliBinary;
+
+  // Fall back: local node_modules package
+  try {
+    const pkgPath = require.resolve("@playwright/test/package.json");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkg = require(pkgPath) as { version?: string };
+    return { installed: true, version: pkg.version ?? null, path: pkgPath };
+  } catch {
+    // Not found anywhere
+    return { installed: false, version: null, path: null };
+  }
+}
+
+/** Detect Node.js — parses "v20.11.0" style output. */
+async function detectNode(): Promise<ToolStatus> {
+  return detectBinary("node", "--version", (raw) => raw.replace(/^v/i, "").trim() || null);
+}
+
+/** Detect npm — parses plain semver output ("10.5.0"). */
+async function detectNpm(): Promise<ToolStatus> {
+  return detectBinary("npm", "--version");
+}
+
+/** Detect Python — tries `python3` then `python`. */
+async function detectPython(): Promise<ToolStatus> {
+  const parseVer = (raw: string) => {
+    const m = raw.match(/Python (\S+)/i);
+    return m ? m[1] : raw.split(/\r?\n/)[0] || null;
+  };
+
+  const py3 = await detectBinary("python3", "--version", parseVer);
+  if (py3.installed) return py3;
+
+  return detectBinary("python", "--version", parseVer);
 }
 
 /**
- * Generic tool detection function
- * To be implemented as part of T013
+ * Generic tool detection dispatcher.
+ * Supported tool names: gh, firecrawl, playwright, node, npm, python
  */
 export async function detectTool(toolName: string): Promise<ToolStatus> {
-  // TODO: Delegate to tool-specific detection functions
-  // Support: gh, firecrawl, playwright, npm, python, node
-  throw new Error("Not implemented - see T013");
+  switch (toolName.toLowerCase()) {
+    case "gh":
+      return detectGh();
+    case "firecrawl":
+      return detectFirecrawl();
+    case "playwright":
+      return detectPlaywright();
+    case "node":
+      return detectNode();
+    case "npm":
+      return detectNpm();
+    case "python":
+    case "python3":
+      return detectPython();
+    default:
+      // Generic fallback for unknown tools
+      return detectBinary(toolName, "--version");
+  }
 }
