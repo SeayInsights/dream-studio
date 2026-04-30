@@ -47,6 +47,73 @@ const hasScraperMcp = typeof mcp__scraper_mcp__scrape_url !== 'undefined'
 const hasWebFallback = true
 ```
 
+## JIT Prompt — Firecrawl (as-needed path only)
+
+Before falling back from Tier 1 (Firecrawl) to Tier 2, check the user's onboarding path. If the user chose `as-needed`, offer a just-in-time install prompt via the JIT mode (`skills/setup/modes/jit/SKILL.md`).
+
+**When this fires:**
+- Firecrawl is NOT detected (`hasFirecrawl` is `false`)
+- `setup-prefs.json` exists and `onboarding_path` is `"as-needed"`
+
+**When this does NOT fire:**
+- `onboarding_path` is `"wizard"` — wizard already ran; if Firecrawl wasn't installed then, skip silently
+- `onboarding_path` is `"read-docs"` — user prefers manual setup; never prompt inline
+- `onboarding_path` is absent or file doesn't exist — treat as no preference, skip prompt
+- Firecrawl is already available — no prompt needed
+
+```javascript
+// Pseudo-code — JIT check before Tier 1 → Tier 2 fallback
+async function checkJitFirecrawl(prefs) {
+  if (!prefs || prefs.onboarding_path !== "as-needed") {
+    return false  // Not the as-needed path — skip JIT
+  }
+
+  // Delegate to JIT mode
+  const result = await promptForTool("firecrawl")
+  // result: { available: boolean, status: "installed" | "skipped" | "never" | "failed" | "verify_failed" }
+
+  return result.available
+}
+```
+
+**Integration point in tool selection:**
+
+```javascript
+async function selectWebTool(task) {
+  let hasFirecrawl = checkFirecrawlAvailable()
+
+  if (!hasFirecrawl) {
+    // JIT check: offer install if user is on as-needed path
+    const prefs = loadPreference()  // from core/setup.md
+    const nowAvailable = await checkJitFirecrawl(prefs)
+    if (nowAvailable) {
+      hasFirecrawl = true  // User approved + installed — retry with Firecrawl
+    }
+  }
+
+  // Proceed with updated availability
+  if (hasFirecrawl) {
+    return useFirecrawl(task)
+  } else if (checkScraperMcpAvailable()) {
+    return useScraperMcp(task)
+  } else {
+    return useWebFallback(task)
+  }
+}
+```
+
+**Behavior table:**
+
+| `onboarding_path` | Firecrawl missing | JIT fires? | Outcome |
+|---|---|---|---|
+| `as-needed` | yes | yes | Prompt user; install if approved; retry Tier 1 |
+| `as-needed` | no | no | Use Firecrawl directly |
+| `wizard` | yes | no | Fall through to Tier 2 silently |
+| `read-docs` | yes | no | Fall through to Tier 2 silently |
+| absent / file missing | yes | no | Fall through to Tier 2 silently |
+
+**Reference:** See `skills/setup/modes/jit/SKILL.md` for the full `promptForTool()` contract, preference schema, and error handling rules.
+
 ## Tool Selection Pattern
 
 ```javascript
