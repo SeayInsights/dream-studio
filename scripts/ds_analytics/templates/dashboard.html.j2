@@ -140,6 +140,15 @@
             <h3>Branches</h3>
             <p class="big">{{ git_metrics.branch_count }}</p>
         </div>
+        {% elif all_git_metrics %}
+        <div class="card">
+            <h3>Projects</h3>
+            <p class="big">{{ all_git_metrics | length }}</p>
+        </div>
+        <div class="card">
+            <h3>Total Commits (90d)</h3>
+            <p class="big">{{ all_git_metrics | sum(attribute='total_commits_90d') }}</p>
+        </div>
         {% endif %}
     </div>
 
@@ -159,6 +168,10 @@
         {% if git_metrics %}
         <div class="chart-container">
             <canvas id="commitVelocity"></canvas>
+        </div>
+        {% elif all_git_metrics %}
+        <div class="chart-container">
+            <canvas id="projectCommits"></canvas>
         </div>
         {% endif %}
     </div>
@@ -311,6 +324,35 @@
                 scales: {
                     ...defaultScales,
                     y: { ...defaultScales.y, beginAtZero: true }
+                }
+            }
+        });
+        {% endif %}
+        {% if all_git_metrics %}
+        /* --- Multi-Project Commits (horizontal bar) --- */
+        const projectData = {{ all_git_metrics | tojson }};
+        const palette = [COLORS.purple, COLORS.blue, COLORS.teal, COLORS.orange, COLORS.pink, COLORS.red];
+        new Chart(document.getElementById('projectCommits'), {
+            type: 'bar',
+            data: {
+                labels: projectData.map(p => p.project_name),
+                datasets: [{
+                    label: 'Commits (90d)',
+                    data: projectData.map(p => p.total_commits_90d),
+                    backgroundColor: projectData.map((_, i) => palette[i % palette.length]),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Commits by Project (90 days)', color: '#fff', font: { size: 14 } }
+                },
+                scales: {
+                    x: { ...defaultScales.x, beginAtZero: true },
+                    y: { ...defaultScales.y }
                 }
             }
         });

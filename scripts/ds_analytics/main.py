@@ -16,17 +16,29 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="ds-analytics — harvest, analyze, render")
     ap.add_argument("--db", type=Path, default=None, help="override studio.db path")
     ap.add_argument("--output", type=Path, default=None, help="override dashboard output path")
-    ap.add_argument("--project", type=Path, default=None, help="project root for scoped analytics")
+    ap.add_argument("--project", type=Path, default=None, help="single project root")
+    ap.add_argument("--projects-dir", type=Path, default=None,
+                     help="scan all git repos in this directory (default: ~/builds)")
     args = ap.parse_args()
 
     db_path: Path | None = args.db
-    project_path: Path | None = args.project
 
-    if project_path:
-        project_slug = project_path.name
-        print(f"DSAE: project-scoped mode — {project_slug}")
+    from ds_analytics.git_harvester import discover_projects, harvest_git_metrics
+
+    # Determine project list
+    if args.project:
+        project_roots = [args.project.resolve()]
+        print(f"DSAE: single project — {args.project.name}")
+    elif args.projects_dir:
+        project_roots = discover_projects(args.projects_dir.resolve())
+        print(f"DSAE: scanning {args.projects_dir} — {len(project_roots)} projects")
     else:
-        project_slug = None
+        default_builds = Path.home() / "builds"
+        if default_builds.is_dir():
+            project_roots = discover_projects(default_builds)
+            print(f"DSAE: auto-scanning ~/builds — {len(project_roots)} projects")
+        else:
+            project_roots = []
 
     print("DSAE: harvesting...")
 
@@ -41,26 +53,26 @@ def main() -> None:
     pulse_rows = harvest_pulse(db_path)
     print(f"  pulse snapshots: {len(pulse_rows)}")
 
-    spec_count = harvest_specs(db_path)
+    spec_count = harvest_specs(db_path, extra_roots=project_roots)
     print(f"  planning specs:  {spec_count}")
 
-    orphans = detect_orphans(db_path)
+    orphans = detect_orphans(db_path, git_roots=project_roots or None)
     print(f"  orphaned specs:  {len(orphans)}")
 
     velocity_df = harvest_skill_velocity(db_path)
     print(f"  skill telemetry: {len(velocity_df)} rows")
 
-    op_rows = harvest_operational(db_path, project_slug)
+    op_rows = harvest_operational(db_path)
     print(f"  operational:     {len(op_rows)} snapshots")
 
-    git_metrics = None
-    if project_path:
-        from ds_analytics.git_harvester import harvest_git_metrics
-        git_metrics = harvest_git_metrics(project_path)
-        if git_metrics:
-            print(f"  git metrics:     {git_metrics['total_commits_90d']} commits (90d), {git_metrics['branch_count']} branches")
-        else:
-            print("  git metrics:     not a git repo, skipped")
+    all_git_metrics: list[dict] = []
+    if project_roots:
+        for pr in project_roots:
+            gm = harvest_git_metrics(pr)
+            if gm:
+                all_git_metrics.append(gm)
+        total_commits = sum(g["total_commits_90d"] for g in all_git_metrics)
+        print(f"  git metrics:     {len(all_git_metrics)} repos, {total_commits} commits (90d)")
 
     print("DSAE: analyzing...")
 
@@ -84,15 +96,18 @@ def main() -> None:
     from ds_analytics.renderer import render_dashboard
 
     output = args.output
-    if output is None and project_path:
-        output = project_path / ".dream-studio" / "analytics" / "dashboard.html"
+    if output is None and len(project_roots) == 1:
+        output = project_roots[0] / ".dream-studio" / "analytics" / "dashboard.html"
+
+    project_name = project_roots[0].name if len(project_roots) == 1 else None
 
     data = {
         "pulse_trend": pulse_trend,
         "skill_velocity": skill_velocity,
         "conversion_rate": conversion_rate,
-        "git_metrics": git_metrics,
-        "project_name": project_slug,
+        "git_metrics": all_git_metrics[0] if len(all_git_metrics) == 1 else None,
+        "all_git_metrics": all_git_metrics if len(all_git_metrics) > 1 else None,
+        "project_name": project_name,
     }
 
     output_path = render_dashboard(data, output)

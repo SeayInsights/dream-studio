@@ -186,47 +186,59 @@ def _count_tasks(tasks_path: Path) -> int:
     return len(pattern.findall(content))
 
 
-def harvest_specs(db_path: Path | None = None) -> int:
+def harvest_specs(db_path: Path | None = None, extra_roots: list[Path] | None = None) -> int:
     """Walk .planning/specs/**/spec.md and insert into raw_planning_specs.
 
-    Returns count of specs inserted.
+    Scans dream-studio's own specs plus any extra_roots (project directories
+    that may contain .planning/specs/).
     """
-    specs_root = paths.plugin_root() / ".planning" / "specs"
-    if not specs_root.is_dir():
-        return 0
+    roots: list[tuple[Path, Path]] = []  # (specs_dir, project_root)
+    plugin = paths.plugin_root().resolve()
+    seen: set[str] = set()
+    for project_root in (extra_roots or []):
+        sr = project_root.resolve() / ".planning" / "specs"
+        if sr.is_dir():
+            key = str(sr)
+            if key not in seen:
+                seen.add(key)
+                roots.append((sr, project_root.resolve()))
+    if not extra_roots:
+        ds_specs = plugin / ".planning" / "specs"
+        if ds_specs.is_dir():
+            roots.append((ds_specs, plugin))
 
-    spec_files = sorted(specs_root.glob("**/spec.md"))
-    if not spec_files:
+    if not roots:
         return 0
 
     conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
     now = datetime.now(timezone.utc).isoformat()
     count = 0
 
-    for sf in spec_files:
-        content = sf.read_text(encoding="utf-8")
-        fm = _parse_front_matter(content)
+    for specs_root, project_root in roots:
+        project_name = project_root.name
+        for sf in sorted(specs_root.glob("**/spec.md")):
+            content = sf.read_text(encoding="utf-8")
+            fm = _parse_front_matter(content)
 
-        title = fm.get("title")
-        created_date = fm.get("created")
+            title = fm.get("title")
+            created_date = fm.get("created")
 
-        # Count tasks from sibling tasks.md
-        tasks_path = sf.parent / "tasks.md"
-        task_count = _count_tasks(tasks_path)
+            tasks_path = sf.parent / "tasks.md"
+            task_count = _count_tasks(tasks_path)
 
-        # Use path relative to plugin root for the unique key
-        try:
-            spec_path = str(sf.relative_to(paths.plugin_root()))
-        except ValueError:
-            spec_path = str(sf)
+            try:
+                rel = str(sf.relative_to(project_root))
+            except ValueError:
+                rel = str(sf)
+            spec_path = f"{project_name}/{rel}"
 
-        conn.execute(
-            """INSERT OR REPLACE INTO raw_planning_specs
-               (spec_path, title, created_date, task_count, last_checked)
-               VALUES (?, ?, ?, ?, ?)""",
-            (spec_path, title, created_date, task_count, now),
-        )
-        count += 1
+            conn.execute(
+                """INSERT OR REPLACE INTO raw_planning_specs
+                   (spec_path, title, created_date, task_count, last_checked)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (spec_path, title, created_date, task_count, now),
+            )
+            count += 1
 
     conn.commit()
     conn.close()
@@ -237,15 +249,17 @@ def harvest_specs(db_path: Path | None = None) -> int:
 # T005 — Orphan detection
 # ---------------------------------------------------------------------------
 
-def detect_orphans(db_path: Path | None = None) -> list[str]:
-    """Identify specs with no matching ``dream-studio:build`` commit.
+def detect_orphans(db_path: Path | None = None, git_roots: list[Path] | None = None) -> list[str]:
+    """Identify specs with no matching build commit.
 
-    For each spec that has a ``created_date``, searches git history for a
-    build commit within 14 days. Updates ``has_build_commit`` in the DB
-    and returns titles of orphaned specs (those with no build commit).
+    Searches git history for ``feat`` commits within 14 days of each spec's
+    created_date across all provided git_roots (defaults to plugin_root).
     """
     import subprocess
     from datetime import timedelta
+
+    if git_roots is None:
+        git_roots = [paths.plugin_root()]
 
     conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
     cur = conn.cursor()
@@ -256,7 +270,6 @@ def detect_orphans(db_path: Path | None = None) -> list[str]:
 
     for row_id, title, created_date in rows:
         if not created_date:
-            # No created_date — can't determine orphan status, mark as orphan
             conn.execute(
                 "UPDATE raw_planning_specs SET has_build_commit = 0 WHERE id = ?",
                 (row_id,),
@@ -265,9 +278,8 @@ def detect_orphans(db_path: Path | None = None) -> list[str]:
                 orphaned.append(title)
             continue
 
-        # Calculate the 14-day window
         try:
-            since_date = created_date  # YYYY-MM-DD
+            since_date = created_date
             until_dt = datetime.strptime(created_date, "%Y-%m-%d") + timedelta(days=14)
             until_date = until_dt.strftime("%Y-%m-%d")
         except ValueError:
@@ -279,26 +291,28 @@ def detect_orphans(db_path: Path | None = None) -> list[str]:
                 orphaned.append(title)
             continue
 
-        # Search git history for build commits in the window
         has_build = 0
-        try:
-            result = subprocess.run(
-                [
-                    "git", "log", "--oneline",
-                    f"--since={since_date}",
-                    f"--until={until_date}",
-                    "--grep=dream-studio:build",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=str(paths.plugin_root()),
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                has_build = 1
-        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-            # git not available or timed out — default to orphan
-            pass
+        for root in git_roots:
+            if not (root / ".git").exists():
+                continue
+            try:
+                result = subprocess.run(
+                    [
+                        "git", "log", "--oneline",
+                        f"--since={since_date}",
+                        f"--until={until_date}",
+                        "--grep=feat",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    cwd=str(root),
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    has_build = 1
+                    break
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                continue
 
         conn.execute(
             "UPDATE raw_planning_specs SET has_build_commit = ? WHERE id = ?",
