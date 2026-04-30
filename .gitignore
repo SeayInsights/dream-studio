@@ -7,7 +7,8 @@
 # Generated context/domain glossary — session artifact, not source
 CONTEXT.md
 
-# Nested .planning/ dirs are session artifacts (root .planning/ IS tracked)
+# Planning dirs are session artifacts — local only, never committed
+.planning/
 skills/**/.planning/
 
 # Structure audit reports — generated artifacts
