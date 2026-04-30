@@ -1,7 +1,7 @@
 {
   "name": "dream-studio",
-  "description": "An opinionated Claude Code plugin: two engines (Build Pipeline + Improvement Loop), 38 skills, agent personas, and a status bar.",
-  "version": "0.10.0",
+  "description": "An opinionated Claude Code plugin: 7 pack skills (37 modes), agent personas, hooks, and a status bar.",
+  "version": "0.11.0",
   "author": {
     "name": "SeayInsights",
     "email": "dannis.seay@seayinsights.com"

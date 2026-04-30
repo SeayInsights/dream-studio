@@ -1,30 +1,35 @@
-schema_version: 1
+schema_version: 2
 
 packs:
   core:
     description: Build lifecycle — think through ship, core agents, session context
-    skills: [think, plan, build, review, verify, ship, handoff, recap]
+    skill: core
+    modes: [think, plan, build, review, verify, ship, handoff, recap, explain]
     agents: [director, engineering, chief-of-staff]
     context: [session-context, session-primer, director-preferences, director-corrections, fullstack-standards]
     hooks: [on-milestone-start, on-milestone-end, on-workflow-progress, on-changelog-nudge, on-stop-handoff]
 
   quality:
     description: Code quality, learning, and structural discipline
-    skills: [debug, polish, harden, secure, structure-audit, learn, coach]
+    skill: quality
+    modes: [debug, polish, harden, secure, structure-audit, learn, coach]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
   career:
     description: Job search and career pipeline management
-    skills: [career-ops, career-scan, career-evaluate, career-apply, career-track, career-pdf]
+    skill: career
+    modes: [ops, scan, evaluate, apply, track, pdf]
 
   analyze:
     description: Multi-perspective analysis engine
-    skills: [analyze, domain-re]
+    skill: analyze
+    modes: [multi, domain-re]
 
   domains:
     description: Stack-specific and domain builders
-    skills: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design]
+    skill: domains
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design]
     agents: [game, client]
     hooks: [on-game-validate]
     rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
@@ -32,13 +37,14 @@ packs:
 
   meta:
     description: Observability, session management, and shared hook infrastructure
-    skills: [workflow]
+    skill: workflow
     hooks: [on-pulse, on-meta-review, on-context-threshold, on-post-compact, on-token-log, on-tool-activity, on-skill-load]
     lib: hooks/lib/
 
   security:
     description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.
-    skills: [scan, dast, binary-scan, mitigate, comply, netcompat, security-dashboard]
+    skill: security
+    modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard]
 
 # Cross-pack assets not owned by any single pack.
 # traceability-registry is used by build (core) for build DAGs — lives at root
