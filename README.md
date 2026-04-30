@@ -893,16 +893,20 @@ What fires automatically vs what requires a manual command:
 dream-studio includes a built-in analytics pipeline that harvests operational data, computes trends, and renders a standalone HTML dashboard.
 
 ```bash
-make analytics
+make analytics                              # global analytics (all projects)
+make analytics PROJECT=/path/to/project     # project-scoped with git metrics
 ```
 
-This runs the full pipeline: harvest pulse snapshots, scan planning specs, detect orphaned specs, aggregate skill telemetry, compute trends via linear regression, and render a Chart.js dashboard to `~/.dream-studio/analytics/dashboard.html`.
+Global mode runs the full pipeline and outputs to `~/.dream-studio/analytics/dashboard.html`. Project-scoped mode adds git metrics and outputs to `<project>/.dream-studio/analytics/dashboard.html`.
 
 **What it tracks:**
 - **Pulse health trend** — health score over time with linear regression
 - **Skill velocity** — invocation counts and success rates per skill per week
 - **Spec conversion rate** — how many planning specs result in actual build commits
 - **Orphan detection** — specs with no build commit within 14 days
+- **Commit velocity** (project mode) — commits per week over the last 12 weeks
+- **Branch count** (project mode) — active local branches
+- **Operational snapshots** — CI status, open PRs, stale branches per project (SQLite-backed)
 
 ---
 
