@@ -1,0 +1,89 @@
+version: "1.0"
+topic: repo-knowledge-enhancement
+created: 2026-04-29
+status: complete
+
+requirements:
+  - id: FR-001
+    description: Fix TMDL indentation bug (spaces → tabs)
+    implemented_by: [T001]
+    status: complete
+
+  - id: FR-002
+    description: Add full TMDL syntax rules to pbip-format.md
+    implemented_by: [T001]
+    status: complete
+
+  - id: FR-003
+    description: Create tmdl-authoring.md reference file
+    implemented_by: [T002]
+    status: complete
+
+  - id: FR-004
+    description: Expand dax-patterns.md with annotated patterns and code examples
+    implemented_by: [T003]
+    status: complete
+
+  - id: FR-005
+    description: Add STOP checklist gates and anti-patterns table to client-work/SKILL.md
+    implemented_by: [T004]
+    status: complete
+
+  - id: FR-006
+    description: Add anti-patterns tables to build and debug skills
+    implemented_by: [T005, T006]
+    status: complete
+
+  - id: FR-007
+    description: Create canvas-patterns.md for DreamySuite visual builder patterns
+    implemented_by: [T007]
+    status: complete
+
+tasks:
+  - id: T001
+    description: Rewrite client-work/powerbi/pbip-format.md
+    implements: [FR-001, FR-002]
+    status: pending
+    commits: []
+
+  - id: T002
+    description: Create client-work/powerbi/tmdl-authoring.md
+    implements: [FR-003]
+    status: pending
+    commits: []
+    depends_on: [T001]
+
+  - id: T003
+    description: Expand skills/domains/bi/dax-patterns.md
+    implements: [FR-004]
+    status: pending
+    commits: []
+    depends_on: [T001]
+
+  - id: T004
+    description: Update client-work/SKILL.md with checklist gates and anti-patterns
+    implements: [FR-005]
+    status: pending
+    commits: []
+    depends_on: [T002]
+
+  - id: T005
+    description: Update build/SKILL.md with STOP gate and anti-patterns table
+    implements: [FR-006]
+    status: pending
+    commits: []
+    depends_on: [T001]
+
+  - id: T006
+    description: Update debug/SKILL.md with anti-patterns table
+    implements: [FR-006]
+    status: pending
+    commits: []
+    depends_on: [T001]
+
+  - id: T007
+    description: Create dashboard-dev/canvas-patterns.md
+    implements: [FR-007]
+    status: pending
+    commits: []
+    depends_on: [T001]
