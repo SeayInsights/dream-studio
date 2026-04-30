@@ -1,5 +1,9 @@
 ---
 pack: quality
+chain_suggests:
+  - condition: "findings_found"
+    next: "plan"
+    prompt: "Violations found — plan refactor?"
 ---
 
 # Skill: /structure-audit

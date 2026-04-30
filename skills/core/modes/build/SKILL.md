@@ -2,6 +2,13 @@
 name: build
 description: Execute a plan with subagent-driven development — fresh agent per task, two-stage review, isolated context, parallel wave execution. Trigger on `build:`, `execute plan:`, or after `plan`.
 pack: core
+chain_suggests:
+  - condition: "ui_build"
+    next: "polish"
+    prompt: "UI changes detected — run polish?"
+  - condition: "always"
+    next: "review"
+    prompt: "Build complete — review the code?"
 ---
 
 # Build — Execute With Discipline
