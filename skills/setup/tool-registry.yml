@@ -7,6 +7,11 @@ tools:
       mac: "which gh"
       linux: "which gh"
     version_command: "gh --version"
+    min_version: "2.40.0"
+    upgrade_command:
+      windows: "choco upgrade gh -y"
+      mac: "brew upgrade gh"
+      linux: "sudo apt-get install --only-upgrade gh"
     install_command:
       windows: "choco install gh -y"
       mac: "brew install gh"
@@ -25,6 +30,11 @@ tools:
       mac: "which firecrawl"
       linux: "which firecrawl"
     version_command: "firecrawl --version"
+    min_version: "0.0.16"
+    upgrade_command:
+      windows: "pip install --upgrade firecrawl-py"
+      mac: "pip install --upgrade firecrawl-py"
+      linux: "pip install --upgrade firecrawl-py"
     install_command:
       windows: "pip install firecrawl-py"
       mac: "pip install firecrawl-py"
@@ -43,6 +53,11 @@ tools:
       mac: "which playwright"
       linux: "which playwright"
     version_command: "playwright --version"
+    min_version: "1.40.0"
+    upgrade_command:
+      windows: "pip install --upgrade playwright && playwright install"
+      mac: "pip install --upgrade playwright && playwright install"
+      linux: "pip install --upgrade playwright && playwright install"
     install_command:
       windows: "pip install playwright && playwright install"
       mac: "pip install playwright && playwright install"
@@ -61,6 +76,11 @@ tools:
       mac: "which npm"
       linux: "which npm"
     version_command: "npm --version"
+    min_version: "9.0.0"
+    upgrade_command:
+      windows: "npm install -g npm@latest"
+      mac: "npm install -g npm@latest"
+      linux: "npm install -g npm@latest"
     install_command:
       windows: "choco install nodejs -y"
       mac: "brew install node"
@@ -79,6 +99,11 @@ tools:
       mac: "which python3"
       linux: "which python3"
     version_command: "python --version"
+    min_version: "3.10.0"
+    upgrade_command:
+      windows: "choco upgrade python -y"
+      mac: "brew upgrade python@3.12"
+      linux: "sudo apt-get install python3.12 python3.12-venv"
     install_command:
       windows: "choco install python -y"
       mac: "brew install python@3.12"
@@ -98,6 +123,11 @@ tools:
       mac: "which node"
       linux: "which node"
     version_command: "node --version"
+    min_version: "18.0.0"
+    upgrade_command:
+      windows: "choco upgrade nodejs -y"
+      mac: "brew upgrade node"
+      linux: "sudo apt-get install nodejs"
     install_command:
       windows: "choco install nodejs -y"
       mac: "brew install node"

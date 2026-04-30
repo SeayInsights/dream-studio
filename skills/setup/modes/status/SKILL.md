@@ -49,42 +49,62 @@ Use `getToolStatus(toolName)` semantics (from `core/setup.md`):
 | `missing` | Tool not found on system |
 | `partial` | Tool found but dependencies absent (playwright only) |
 
+### Step 3b — Version check (if tool is installed or partial)
+
+For every tool that is `installed` or `partial`:
+
+1. Extract the numeric version from the version string returned by `version_command`. Strip leading `v`, `Version `, `gh version `, etc. — parse only the `MAJOR.MINOR.PATCH` segment (e.g., `"gh version 2.38.0 (2024-03-13)"` → `2.38.0`).
+2. Read `min_version` from `tool-registry.yml` for that tool. If `min_version` is absent, skip the check.
+3. Compare using semantic versioning (MAJOR, then MINOR, then PATCH — each as an integer).
+4. If detected version < `min_version`: mark the tool as **outdated**. Record the platform-appropriate `upgrade_command` from `tool-registry.yml`.
+5. If detected version >= `min_version`: no action needed.
+
 ### Step 4 — Render the status table
 
 Output a markdown table with these columns:
 
-| Tool | Status | Version | What It Unlocks | Install Command |
+| Tool | Status | Version | What It Unlocks | Install / Upgrade Command |
 |---|---|---|---|---|
 
 **Column rules:**
 - **Tool**: Use the human-readable `name` from `tool-registry.yml` (e.g., "GitHub CLI", not "gh").
-- **Status**: Show `installed`, `missing`, or `partial` — use visual indicators: `installed` → checkmark symbol, `missing` → X symbol, `partial` → warning symbol.
-- **Version**: Show detected version string if installed; show `—` if missing.
+- **Status**: Use visual indicators based on combined state:
+  - `installed` (current) → `✓ installed`
+  - `installed` but outdated → `⚠ outdated`
+  - `missing` → `✗ missing`
+  - `partial` (current) → `⚠ partial`
+  - `partial` but also outdated → `⚠ partial, outdated`
+- **Version**: Show detected version string if installed; show `—` if missing. If outdated, append `(min: X.Y.Z)` after the version — e.g., `2.38.0 (min: 2.40.0)`.
 - **What It Unlocks**: List the `what_it_unlocks` entries from `tool-registry.yml`, joined with ` · ` separator. Abbreviate long lists to the first 2–3 entries if more than 3 exist, then add `+ N more`.
-- **Install Command**: Show the platform-appropriate `install_command` from `tool-registry.yml` if missing or partial; show `—` if already installed.
+- **Install / Upgrade Command**: 
+  - Missing or partial: show the platform-appropriate `install_command`.
+  - Outdated: show the platform-appropriate `upgrade_command` with the label `(outdated, upgrade with: <command>)`.
+  - Installed and current: show `—`.
 
 **Example output (Windows, mixed state):**
 
 ```
-Tool               | Status      | Version     | What It Unlocks                                              | Install Command
-GitHub CLI         | ✓ installed | gh version 2.45.0 | dream-studio:core · dream-studio:domains             | —
-Firecrawl          | ✗ missing   | —           | dream-studio:core · dream-studio:domains · dream-studio:security | pip install firecrawl-py
-Playwright         | ⚠ partial   | 1.42.0      | dream-studio:quality · dream-studio:security                 | playwright install
-Node Package Manager | ✓ installed | 10.2.4    | dream-studio:domains · dream-studio:workflow                 | —
-Python             | ✓ installed | Python 3.12.0 | dream-studio:core · dream-studio:quality + 2 more          | —
-Node.js            | ✓ installed | v20.11.0    | dream-studio:domains · dream-studio:workflow                 | —
+Tool               | Status           | Version                | What It Unlocks                                              | Install / Upgrade Command
+GitHub CLI         | ⚠ outdated       | 2.38.0 (min: 2.40.0)   | dream-studio:core · dream-studio:domains             | (outdated, upgrade with: choco upgrade gh -y)
+Firecrawl          | ✗ missing        | —                      | dream-studio:core · dream-studio:domains · dream-studio:security | pip install firecrawl-py
+Playwright         | ⚠ partial        | 1.42.0                 | dream-studio:quality · dream-studio:security                 | playwright install
+Node Package Manager | ✓ installed    | 10.2.4                 | dream-studio:domains · dream-studio:workflow                 | —
+Python             | ✓ installed      | Python 3.12.0          | dream-studio:core · dream-studio:quality + 2 more          | —
+Node.js            | ✓ installed      | v20.11.0               | dream-studio:domains · dream-studio:workflow                 | —
 ```
 
 ### Step 5 — Append summary and next step
 
 After the table:
 
-1. Count installed, partial, and missing tools.
-2. Print a one-line summary: e.g., `4 installed · 1 partial · 1 missing`
+1. Count installed (current), outdated, partial, and missing tools.
+2. Print a one-line summary: e.g., `3 installed · 1 outdated · 1 partial · 1 missing`
 3. If any tools are `missing` or `partial`, append:
    > Run `dream-studio:setup wizard` to install or repair missing tools.
-4. If all tools are `installed`, append:
-   > All tools are installed. Your dream-studio environment is fully operational.
+4. If any tools are `outdated`, append:
+   > Run the upgrade command(s) above to bring outdated tools up to the required minimum version.
+5. If all tools are `installed` and current, append:
+   > All tools are installed and up to date. Your dream-studio environment is fully operational.
 
 ## Output format
 
