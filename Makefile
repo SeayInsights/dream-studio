@@ -1,4 +1,4 @@
-.PHONY: test lint fmt security install-dev install-statusline install status docs sync-cache validate-analysts setup ci-gate workflows
+.PHONY: test lint fmt security install-dev install-statusline install status docs sync-cache validate-analysts setup ci-gate workflows analytics
 
 ifeq ($(OS),Windows_NT)
 	PYTHON := py -3.12
@@ -50,3 +50,6 @@ install:
 
 workflows:
 	$(PYTHON) hooks/lib/workflow_registry.py
+
+analytics:
+	$(PYTHON) scripts/ds_analytics/main.py
