@@ -15,6 +15,9 @@
  * - T010-T020: Mode implementations
  */
 
+import { promises as fs } from "fs";
+import * as path from "path";
+
 export interface SetupPreferences {
   onboarding_path: "wizard" | "as-needed" | "read-docs";
   first_run_complete: boolean;
@@ -37,12 +40,17 @@ export interface ToolStatus {
 
 /**
  * Check if this is the first run (setup-prefs.json doesn't exist)
- * To be implemented in T004
+ * Implemented in T004
  */
 export async function isFirstRun(): Promise<boolean> {
-  // TODO: Check if .dream-studio/setup-prefs.json exists
-  // Return true if missing, false if exists
-  throw new Error("Not implemented - see T004");
+  const prefsPath = path.join(process.cwd(), ".dream-studio", "setup-prefs.json");
+
+  try {
+    await fs.access(prefsPath);
+    return false; // File exists
+  } catch {
+    return true; // File doesn't exist (or directory doesn't exist)
+  }
 }
 
 /**
