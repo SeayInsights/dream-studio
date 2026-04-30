@@ -93,14 +93,43 @@ Run gh auth login now? [y / n]
 - `n` → Mark `gh` as `skipped_auth`. Print `Skipping gh auth — you can run gh auth login later.`
 - Any other input → Re-prompt once. If still invalid, treat as `n`.
 
+### Step 2c — Check for partial wizard progress (resume logic)
+
+Before Step 3, load `.dream-studio/setup-prefs.json` via `loadPreference()` and check for a `_wizard_progress` key:
+
+```json
+{
+  "_wizard_progress": {
+    "completed_tools": ["gh", "npm"],
+    "wizard_started_at": "<ISO 8601 timestamp>",
+    "wizard_interrupted": true
+  }
+}
+```
+
+- If `_wizard_progress.wizard_interrupted` is `true`, the previous wizard run was cancelled mid-flight.
+- Count the tools listed in `completed_tools` — these have already been processed (installed, skipped, or failed) and must not be re-prompted.
+- Display a resume banner before Step 3:
+
+```
+─────────────────────────────────────────
+Resuming wizard — <N> of 6 tools already configured
+─────────────────────────────────────────
+```
+
+Where `<N>` = the number of entries in `completed_tools`.
+
+- If `_wizard_progress` is absent or `wizard_interrupted` is `false`, this is a fresh run — no banner, no tools to skip.
+
 ### Step 3 — Identify tools needing action
 
-After detection, partition the tool list into two groups:
+After detection (and after applying resume logic from Step 2c), partition the tool list into two groups:
 
 - **Already installed / fully functional:** Status is `installed` — skip these, no prompt needed.
-- **Needs action:** Status is `missing` or `partial` — present each to the user one at a time.
+- **Already completed in a prior interrupted run:** Tool key is listed in `_wizard_progress.completed_tools` — skip these, no prompt needed (their saved state is already in `setup-prefs.json`).
+- **Needs action:** Status is `missing` or `partial` AND not in `completed_tools` — present each to the user one at a time.
 
-If all tools are already `installed`, skip to Step 6 with a fully-installed message.
+If all tools are already `installed` or `completed`, skip to Step 6 with a fully-installed message.
 
 ### Step 4 — Interactive per-tool prompts
 
@@ -155,9 +184,30 @@ After a successful install command (exit code 0), re-run `detectTool(toolName)`:
 - If now `installed`: print `<tool name> installed successfully. Version: <version string>`
 - If still `missing` or `partial` after install: print `Warning: <tool name> install reported success but tool is still not detected. You may need to restart your terminal.` Mark as `verify_failed` in session state.
 
+#### 5c — Save incremental progress after each tool
+
+Immediately after each tool's outcome is determined (installed, skipped, failed, or verify_failed), call `savePreference()` with a partial state object that includes:
+
+1. The current tool's final state entry (same format as Step 6).
+2. An updated `_wizard_progress` block:
+
+```json
+{
+  "_wizard_progress": {
+    "completed_tools": ["<all tool keys processed so far>"],
+    "wizard_started_at": "<ISO 8601 timestamp from when this wizard run began>",
+    "wizard_interrupted": true
+  }
+}
+```
+
+This write happens synchronously before presenting the next tool's prompt. `wizard_interrupted` stays `true` throughout the active run — it is only set to `false` in the final save (Step 6).
+
+**Cancellation handling:** If the user sends Ctrl+C, closes the terminal, or the session is otherwise interrupted after this point, the partial state on disk is valid. The next wizard run will read `_wizard_progress`, show the resume banner, and skip all `completed_tools`.
+
 ### Step 6 — Save state to setup-prefs.json
 
-After all prompts are complete (or if all tools were already installed), call `savePreference()` to write the final state for all 6 tools to `.dream-studio/setup-prefs.json`.
+After all prompts are complete (or if all tools were already installed), call `savePreference()` to write the final state for all 6 tools to `.dream-studio/setup-prefs.json`. This is the completion save — it merges any partial state written during Step 5c with the remaining tools and marks the wizard run as complete.
 
 The saved state object must include, for each tool:
 ```json
@@ -171,6 +221,20 @@ The saved state object must include, for each tool:
 ```
 
 Where `<toolKey>` matches the key in `tool-registry.yml` (e.g., `gh`, `firecrawl`, `playwright`, `npm`, `python`, `node`).
+
+In addition, include a `_wizard_progress` block with `wizard_interrupted: false` to signal that this run completed cleanly:
+
+```json
+{
+  "_wizard_progress": {
+    "completed_tools": ["gh", "firecrawl", "playwright", "npm", "python", "node"],
+    "wizard_started_at": "<ISO 8601 timestamp>",
+    "wizard_interrupted": false
+  }
+}
+```
+
+Setting `wizard_interrupted: false` ensures the next wizard run treats this as a fresh start rather than a resume.
 
 **Status assignment rules for saving:**
 - Tools that were `installed` at detection time → status `installed`, include version.
@@ -233,3 +297,10 @@ All tools installed. Your dream-studio environment is fully operational.
 - If `savePreference()` fails: print a warning `Warning: could not save setup-prefs.json — <error>`. Do not treat as a fatal error; still print the summary.
 - If detection for a single tool throws an unexpected error (not simply "not found"), mark that tool as `missing` and continue — do not abort the full wizard.
 - Never skip the save step even if one or more installs failed — always write whatever state is known.
+
+## Cancellation and resume behaviour
+
+- **Graceful cancel (Ctrl+C or mid-session exit):** Because Step 5c writes progress after every tool, partial work is never lost. The last incremental save captures all tools processed before the interrupt. `wizard_interrupted` remains `true` on disk, signalling that the next run should resume.
+- **Re-run after cancel:** On next invocation, Step 2c reads `_wizard_progress`, identifies already-completed tools, and skips them entirely — including skipping their live-detection prompts. The resume banner tells the user exactly how many tools were already handled.
+- **Full re-run (user wants to start over):** If the user explicitly asks to start the wizard from scratch, delete or ignore `_wizard_progress` by passing a `--reset` intent. When reset is requested, set `completed_tools: []` and `wizard_interrupted: false` before Step 2 and proceed as a fresh run.
+- **Idempotent installs:** If a tool in `completed_tools` was recorded as `skipped` or `failed` and the user wants to retry it, they should run `dream-studio:setup wizard` with `--reset` or use `dream-studio:setup status` to manually re-trigger a single tool. The standard resume flow does not re-prompt completed tools regardless of their prior outcome.
