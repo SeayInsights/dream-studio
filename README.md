@@ -207,29 +207,38 @@ python --version    # or: py --version (Windows)
 Adds Firecrawl and Playwright on top of the Standard profile. Unlocks web scraping, browser automation, DAST scanning, and the full `dream-studio:security` dast mode.
 
 **What this unlocks:**
-- **Firecrawl**: Web scraping in `dream-studio:career scan` (job portal scraping), `dream-studio:security dast` (site crawling), and `dream-studio:domains saas-build` (competitive research)
+- **Firecrawl MCP Server**: Web scraping, search, and extraction in `dream-studio:career scan` (job portal scraping), `dream-studio:security dast` (site crawling), and `dream-studio:domains saas-build` (competitive research)
 - **Playwright**: Browser automation in `dream-studio:core verify` (screenshot evidence), `dream-studio:security dast` (dynamic testing), and `dream-studio:domains game-dev` (automated QA)
 
-#### Install Firecrawl
+#### Install Firecrawl (MCP Server)
 
-Firecrawl requires an API key from [firecrawl.dev](https://firecrawl.dev).
+Firecrawl runs as an MCP server inside Claude Code. It requires an API key from [firecrawl.dev](https://firecrawl.dev).
 
-| Platform | Command |
-|---|---|
-| **Windows / macOS / Linux** | `npm install -g @mendableai/firecrawl-cli` |
+**Quick setup** (uses npx, no global install):
 
-Set your API key:
-
-**Windows (PowerShell)**
-```powershell
-$env:FIRECRAWL_API_KEY = "fc-your-key-here"
-# To persist: add to your PowerShell profile or System Environment Variables
+```bash
+claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY="fc-your-key-here" -- npx -y firecrawl-mcp
 ```
 
-**macOS / Linux**
+**Global install** (if you prefer):
+
 ```bash
-export FIRECRAWL_API_KEY="fc-your-key-here"
-# To persist: add to ~/.bashrc or ~/.zshrc
+npm install -g firecrawl-mcp
+claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY="fc-your-key-here" -- node "$(npm root -g)/firecrawl-mcp/dist/index.js"
+```
+
+**Windows (global install, PowerShell):**
+
+```powershell
+npm install -g firecrawl-mcp
+claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY="fc-your-key-here" -- node "$($env:APPDATA)\npm\node_modules\firecrawl-mcp\dist\index.js"
+```
+
+Verify:
+
+```bash
+claude mcp list
+# Should show: firecrawl-mcp: connected
 ```
 
 #### Install Playwright
@@ -255,9 +264,10 @@ gh --version
 node --version
 python --version    # or: py --version (Windows)
 playwright --version
+claude mcp list     # Should show firecrawl-mcp: connected
 ```
 
-All four commands should return version numbers. Run `dream-studio:setup status` to see dream-studio's view of your installed tools.
+All commands should return version numbers. `claude mcp list` should show `firecrawl-mcp` as connected. Run `dream-studio:setup status` to see dream-studio's view of your installed tools.
 
 ---
 
