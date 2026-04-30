@@ -15,7 +15,8 @@ def render_dashboard(data: dict, output_path: Path | None = None) -> Path:
     """Render the analytics dashboard HTML.
 
     Args:
-        data: merged analysis dict with keys: pulse_trend, skill_velocity, conversion_rate
+        data: merged analysis dict with keys: pulse_trend, skill_velocity,
+              conversion_rate, and optionally git_metrics, project_name
         output_path: where to write the HTML (default: ~/.dream-studio/analytics/dashboard.html)
 
     Returns:
@@ -29,10 +30,12 @@ def render_dashboard(data: dict, output_path: Path | None = None) -> Path:
     env = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
     template = env.get_template("dashboard.html.j2")
 
-    # Convert skill_velocity DataFrame to list of dicts for template
     sv = data.get("skill_velocity")
     if sv is not None and hasattr(sv, "to_dict"):
         data = {**data, "skill_velocity": sv.to_dict("records")}
+
+    data.setdefault("git_metrics", None)
+    data.setdefault("project_name", None)
 
     html = template.render(**data)
     output_path.write_text(html, encoding="utf-8")
