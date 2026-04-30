@@ -238,3 +238,90 @@ def truncate_to_budget(
             skill["workflow_steps"] = skill.get("workflow_steps", [])[:3]
 
     return skills, domains
+
+
+def main() -> None:
+    """CLI entry point — build platform-specific adapters from dream-studio skills."""
+    import argparse
+
+    from jinja2 import TemplateNotFound
+
+    ap = argparse.ArgumentParser(
+        description="Build platform-specific adapters from dream-studio skills",
+    )
+    ap.add_argument(
+        "--platform",
+        type=str,
+        default=None,
+        help="Build only this platform (e.g., cursor, copilot, system-prompt)",
+    )
+    args = ap.parse_args()
+
+    # Load config
+    config_path = _PROJECT_ROOT / "scripts" / "adapters_config.yml"
+    with open(config_path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    platforms = config.get("platforms", {})
+    if args.platform:
+        if args.platform not in platforms:
+            print(
+                f"Error: unknown platform '{args.platform}'. "
+                f"Available: {', '.join(platforms.keys())}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        platforms = {args.platform: platforms[args.platform]}
+
+    # Discover and parse skills
+    skill_paths = discover_skills()
+    skills: list[dict] = []
+    skipped: list[str] = []
+    for sp in skill_paths:
+        parsed = parse_skill(sp)
+        if parsed is None:
+            skipped.append(str(sp))
+            continue
+        parsed["gotchas"] = load_gotchas(sp.parent)
+        skills.append(parsed)
+
+    # Load domains
+    domains = load_domains()
+
+    print(f"Skills processed: {len(skills)}")
+    if skipped:
+        print(f"Skills skipped ({len(skipped)}):")
+        for s in skipped:
+            print(f"  - {s}")
+
+    # Build each platform
+    for platform_key, platform_cfg in platforms.items():
+        platform_skills = skills
+        platform_domains = domains if platform_cfg.get("include_domains") else None
+
+        # Apply token budget for system-prompt
+        if platform_key == "system-prompt":
+            platform_skills, platform_domains_truncated = truncate_to_budget(
+                [s.copy() for s in platform_skills],
+                list(platform_domains) if platform_domains else [],
+            )
+            platform_domains = platform_domains_truncated
+
+        try:
+            output_path = render_adapter(platform_cfg, platform_skills, platform_domains)
+        except TemplateNotFound as exc:
+            print(
+                f"  {platform_cfg['name']}: SKIPPED — template not found: {exc}",
+                file=sys.stderr,
+            )
+            continue
+
+        content = output_path.read_text(encoding="utf-8")
+        tokens = estimate_tokens(content)
+        print(f"  {platform_cfg['name']}: {output_path} ({tokens} tokens)")
+
+    print(f"\nOutput files: {len(platforms)}")
+
+
+if __name__ == "__main__":
+    main()
