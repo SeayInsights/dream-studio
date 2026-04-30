@@ -1,0 +1,122 @@
+version: 1.0
+project: multi-ai-adapters
+plan: .planning/specs/multi-ai-adapters/plan.md
+
+requirements:
+  TR-001:
+    description: Build script runs via `py scripts/build_adapters.py` and `make adapters`
+    spec_id: FR-001
+    priority: must
+    status: planned
+    tasks: [7, 9]
+    commits: []
+    tests: []
+
+  TR-002:
+    description: Script reads all skills/*/modes/*/SKILL.md as SSOT
+    spec_id: FR-002
+    priority: must
+    status: planned
+    tasks: [3]
+    commits: []
+    tests: []
+
+  TR-003:
+    description: Extract name, description, triggers, workflow steps, gotchas per skill
+    spec_id: FR-003
+    priority: must
+    status: planned
+    tasks: [3]
+    commits: []
+    tests: []
+
+  TR-004:
+    description: Generate dist/adapters/cursor/.cursorrules in Cursor XML-rule format
+    spec_id: FR-004
+    priority: must
+    status: planned
+    tasks: [8, 9]
+    commits: []
+    tests: []
+
+  TR-005:
+    description: Generate dist/adapters/copilot/.github/copilot-instructions.md in flat markdown
+    spec_id: FR-005
+    priority: must
+    status: planned
+    tasks: [10, 11]
+    commits: []
+    tests: []
+
+  TR-006:
+    description: Generate dist/adapters/system-prompt/system-prompt.md as generic injectable
+    spec_id: FR-006
+    priority: must
+    status: planned
+    tasks: [12, 13]
+    commits: []
+    tests: []
+
+  TR-007:
+    description: Support --platform <name> flag for partial rebuilds
+    spec_id: FR-007
+    priority: must
+    status: planned
+    tasks: [7]
+    commits: []
+    tests: []
+
+  TR-008:
+    description: Log skills processed, skipped (with reason), output files, token estimate per adapter
+    spec_id: FR-008
+    priority: must
+    status: planned
+    tasks: [7]
+    commits: []
+    tests: []
+
+  TR-009:
+    description: SKILL.md files remain unmodified by build script
+    spec_id: FR-009
+    priority: must
+    status: planned
+    tasks: [3]
+    commits: []
+    tests: []
+
+  TR-010:
+    description: New platform requires only one template file + one config entry, no script edits
+    spec_id: FR-010
+    priority: must
+    status: planned
+    tasks: [1, 2, 7]
+    commits: []
+    tests: []
+
+  TR-011:
+    description: Domain knowledge files included in system-prompt adapter, optionally in platform adapters
+    spec_id: FR-011
+    priority: must
+    status: planned
+    tasks: [5, 12]
+    commits: []
+    tests: []
+
+  TR-012:
+    description: Build script outputs token count estimate per generated adapter
+    spec_id: FR-012
+    priority: must
+    status: planned
+    tasks: [6, 7]
+    commits: []
+    tests: []
+
+summary:
+  total: 12
+  must: 12
+  should: 0
+  could: 0
+  planned: 12
+  in_progress: 0
+  implemented: 0
+  verified: 0

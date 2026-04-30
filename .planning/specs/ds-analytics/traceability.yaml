@@ -1,0 +1,46 @@
+version: 1.0
+project: ds-analytics
+plan: .planning/specs/ds-analytics/plan.md
+
+requirements:
+  TR-001:
+    description: Identify all orphaned specs (plans with no build) across all projects
+    priority: must
+    status: planned
+    tasks: [4, 5, 8, 11]
+    commits: []
+    tests: []
+
+  TR-002:
+    description: Pulse health trend visible over time (not just latest snapshot)
+    priority: must
+    status: planned
+    tasks: [3, 7, 11]
+    commits: []
+    tests: []
+
+  TR-003:
+    description: HTML dashboard is standalone — no Python server required to view
+    priority: must
+    status: planned
+    tasks: [9, 10, 11]
+    commits: []
+    tests: []
+
+  TR-004:
+    description: Skill velocity chart shows which dream-studio skills are over/underused
+    priority: must
+    status: planned
+    tasks: [6, 8, 11]
+    commits: []
+    tests: []
+
+summary:
+  total: 4
+  must: 4
+  should: 0
+  could: 0
+  planned: 4
+  in_progress: 0
+  implemented: 0
+  verified: 0
