@@ -108,3 +108,82 @@ def _count_section_items(text: str, header_pattern: str, *, exclude: str) -> int
         if stripped.startswith("- ") and exclude not in stripped:
             count += 1
     return count
+
+
+# ---------------------------------------------------------------------------
+# T004 — Planning spec harvester
+# ---------------------------------------------------------------------------
+
+def _parse_front_matter(text: str) -> dict[str, str]:
+    """Extract YAML-style front matter (between --- delimiters) using regex.
+
+    Returns a dict of key: value strings. Empty dict if no front matter found.
+    """
+    fm_match = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not fm_match:
+        return {}
+    result: dict[str, str] = {}
+    for line in fm_match.group(1).splitlines():
+        m = re.match(r"^(\w[\w-]*):\s*(.+)$", line)
+        if m:
+            result[m.group(1).strip()] = m.group(2).strip()
+    return result
+
+
+def _count_tasks(tasks_path: Path) -> int:
+    """Count task entries in a tasks.md file.
+
+    Matches both ``### T\\d+`` section headers and ``- [ ] T\\d+`` checklist items.
+    """
+    if not tasks_path.is_file():
+        return 0
+    content = tasks_path.read_text(encoding="utf-8")
+    pattern = re.compile(r"(?:^### T\d+|^- \[[ x]\] T\d+)", re.MULTILINE)
+    return len(pattern.findall(content))
+
+
+def harvest_specs(db_path: Path | None = None) -> int:
+    """Walk .planning/specs/**/spec.md and insert into raw_planning_specs.
+
+    Returns count of specs inserted.
+    """
+    specs_root = paths.plugin_root() / ".planning" / "specs"
+    if not specs_root.is_dir():
+        return 0
+
+    spec_files = sorted(specs_root.glob("**/spec.md"))
+    if not spec_files:
+        return 0
+
+    conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
+    now = datetime.now(timezone.utc).isoformat()
+    count = 0
+
+    for sf in spec_files:
+        content = sf.read_text(encoding="utf-8")
+        fm = _parse_front_matter(content)
+
+        title = fm.get("title")
+        created_date = fm.get("created")
+
+        # Count tasks from sibling tasks.md
+        tasks_path = sf.parent / "tasks.md"
+        task_count = _count_tasks(tasks_path)
+
+        # Use path relative to plugin root for the unique key
+        try:
+            spec_path = str(sf.relative_to(paths.plugin_root()))
+        except ValueError:
+            spec_path = str(sf)
+
+        conn.execute(
+            """INSERT OR REPLACE INTO raw_planning_specs
+               (spec_path, title, created_date, task_count, last_checked)
+               VALUES (?, ?, ?, ?, ?)""",
+            (spec_path, title, created_date, task_count, now),
+        )
+        count += 1
+
+    conn.commit()
+    conn.close()
+    return count
