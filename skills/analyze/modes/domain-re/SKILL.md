@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[lease-analysis | credit-check | renewal-economics | rollover-analysis] [--quick]"
 pack: analyze
+chain_suggests: []
 ---
 
 # Domain-RE — Real Estate Analysis Engine

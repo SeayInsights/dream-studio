@@ -26,7 +26,7 @@ nodes:
     skill: plan
     depends_on: [think]
     gate: director-approval
-    model: opus
+    model: sonnet
     context: fresh
     timeout_seconds: 300
     input: "{{think.output}}"
@@ -49,6 +49,7 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+    output_compress: findings
     agent: engineering
 
   - id: review-security
@@ -57,6 +58,7 @@ nodes:
     model: sonnet
     context: fresh
     timeout_seconds: 300
+    output_compress: findings
     agent: engineering
 
   - id: review-tests
@@ -65,6 +67,7 @@ nodes:
     model: haiku
     context: fresh
     timeout_seconds: 300
+    output_compress: findings
     config:
       focus: test-coverage-only
 
@@ -74,6 +77,7 @@ nodes:
     model: haiku
     context: fresh
     timeout_seconds: 300
+    output_compress: findings
     config:
       focus: performance-only
 
@@ -83,6 +87,7 @@ nodes:
     model: haiku
     context: fresh
     timeout_seconds: 300
+    output_compress: findings
     config:
       focus: docs-impact-only
 

@@ -2,6 +2,10 @@
 name: ship
 description: Pre-deploy gate — audit (a11y, perf, technical), harden (error/empty/loading states), optimize (bundle/render/animation/images), test (Playwright + regression). Any FAIL blocks deploy. Trigger on `ship:`, `pre-deploy:`, `deploy:`, or before any deployment command.
 pack: core
+chain_suggests:
+  - condition: "always"
+    next: "recap"
+    prompt: "Shipped — capture recap?"
 ---
 
 # Ship — Pre-Deploy Gate

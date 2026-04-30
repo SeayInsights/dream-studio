@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[workflow-fit | context-health | pr-hygiene | agent-dispatch] [--quick]"
 pack: quality
+chain_suggests: []
 ---
 
 # Coach — Claude Code Workflow Advisor

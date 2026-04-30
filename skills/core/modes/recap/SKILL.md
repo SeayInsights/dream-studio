@@ -2,6 +2,10 @@
 name: recap
 description: Capture structured build memory — what was built, decisions, risks, stack, remaining work, next step — to `.sessions/YYYY-MM-DD/recap-<topic>.md`. Trigger on `recap:`, `session recap:`, or auto after substantive builds (3+ files, multi-task plans).
 pack: core
+chain_suggests:
+  - condition: "root_cause_found"
+    next: "learn"
+    prompt: "Root cause in recap — capture lesson?"
 ---
 
 # Recap — Build Memory Capture

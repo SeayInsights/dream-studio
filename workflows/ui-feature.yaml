@@ -1,0 +1,83 @@
+name: ui-feature
+description: >
+  UI-aware feature pipeline — think → plan → build → polish (conditional) → review → verify → ship.
+  Polish runs only when build touches UI files (.tsx, .vue, .svelte, .astro, .css).
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Review and approve to continue?"
+  evidence-required:
+    type: pause
+    requires: [screenshots, test-results]
+
+nodes:
+  - id: think
+    skill: think
+    gate: director-approval
+    model: opus
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 12000
+
+  - id: plan
+    skill: plan
+    depends_on: [think]
+    gate: director-approval
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 10000
+    input: "{{think.output}}"
+
+  - id: build
+    skill: build
+    depends_on: [plan]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 25000
+    input: "{{plan.output}}"
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  - id: polish
+    skill: polish
+    depends_on: [build]
+    condition: "{{build.ui_files_changed}} == true"
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 10000
+
+  - id: review
+    skill: review
+    depends_on: [build, polish]
+    trigger_rule: all_done
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 8000
+
+  - id: verify
+    skill: verify
+    depends_on: [review]
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 10000
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  - id: ship
+    skill: ship
+    depends_on: [verify]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 8000

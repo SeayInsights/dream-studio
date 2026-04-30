@@ -2,6 +2,7 @@
 name: client-work
 description: Power Platform client lifecycle — intake, SOW, build (Power BI, Power Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules, and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`, `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`, `document:`, `add measure:`, `create measure:`, `build measure:`, `add column:`, `create report:`, `DAX error:`, `M-query error:`, `refresh fails:`, `TMDL:`, `pbip:`, `semantic model:`, `RLS:`, `star schema:`, `data model:`.
 pack: domains
+chain_suggests: []
 ---
 
 # Client Work — Full Lifecycle

@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[map | gaps | evidence] [--client <name>]"
 pack: quality
+chain_suggests: []
 ---
 
 # Comply — Compliance Framework Mapping

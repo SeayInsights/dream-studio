@@ -5,6 +5,13 @@ user_invocable: true
 args: mode
 argument-hint: "[pr-review | architecture-review | dependency-audit] [--quick]"
 pack: quality
+chain_suggests:
+  - condition: "critical_findings"
+    next: "mitigate"
+    prompt: "Critical findings — run mitigate?"
+  - condition: "clean"
+    next: "verify"
+    prompt: "Security clean — verify?"
 ---
 
 # Secure — Parallel Security Review

@@ -5,6 +5,10 @@ user_invocable: true
 args: mode
 argument-hint: "[setup | ingest | status] [--client <name>] [--repo <repo>] [--file <path>]"
 pack: quality
+chain_suggests:
+  - condition: "findings_found"
+    next: "mitigate"
+    prompt: "Vulnerabilities found — run mitigate?"
 ---
 
 # Scan — Security Scanning Orchestrator

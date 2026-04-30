@@ -5,6 +5,10 @@ user_invocable: true
 args: mode
 argument-hint: "[setup | analyze | ingest | status] [--client <name>] [--target <name>]"
 pack: security
+chain_suggests:
+  - condition: "findings_found"
+    next: "mitigate"
+    prompt: "Binary findings — run mitigate?"
 ---
 
 # Binary Scan — Executable Analysis

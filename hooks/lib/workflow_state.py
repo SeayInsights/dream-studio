@@ -40,6 +40,7 @@ from lib.workflow_engine import (                            # noqa: E402
     _file_lock, _extract_node_ids,
     _evaluate, _resolve_ref, _coerce,
     _compute_ready_nodes, _check_context_budget,
+    resolve_templates, compress_node_output,
 )
 
 SCHEMA_VERSION = 1
@@ -117,6 +118,34 @@ def _try_archive_and_prune(data: dict, key: str, wf: dict) -> None:
         _write_state(data)
 
 
+# ── Repo context helper ──────────────────────────────────────────
+
+
+def _generate_repo_context(data: dict, key: str) -> None:
+    """Call repo_context.py to snapshot the project, store path in workflow state."""
+    try:
+        from lib.repo_context import generate_snapshot
+    except ImportError:
+        return
+
+    session_dir = paths.state_dir() / "workflow-sessions" / key
+    session_dir.mkdir(parents=True, exist_ok=True)
+    output_path = session_dir / "repo-context.json"
+
+    try:
+        snapshot = generate_snapshot(Path.cwd())
+        output_path.write_text(
+            json.dumps(snapshot, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        wf = data.get("active_workflows", {}).get(key, {})
+        wf["repo_context_path"] = str(output_path)
+        wf["session_dir"] = str(session_dir)
+        _write_state(data)
+    except Exception:
+        pass
+
+
 # ── Commands ────────────────────────────────────────────────────
 
 
@@ -173,6 +202,9 @@ def cmd_start(args: argparse.Namespace) -> None:
         }
         _write_state(data)
     _write_checkpoint(key, None, "running")
+
+    # Generate repo context snapshot for session templates
+    _generate_repo_context(data, key)
 
     print(key)
     print(f"[workflow] {args.name} started — {len(node_ids)} nodes initialized")

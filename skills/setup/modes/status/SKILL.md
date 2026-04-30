@@ -2,6 +2,7 @@
 name: status
 description: "Live tool detection across all 6 registered tools — outputs a formatted table with install status, version, what each tool unlocks, and the install command for anything missing"
 pack: setup
+chain_suggests: []
 ---
 
 # Status Mode

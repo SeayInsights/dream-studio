@@ -2,6 +2,7 @@
 name: wizard
 description: "Interactive install wizard — detects all 6 registered tools, shows what each missing tool unlocks, prompts the user per tool (install / skip), runs the platform-appropriate install command, verifies post-install, and saves final states to setup-prefs.json"
 pack: setup
+chain_suggests: []
 ---
 
 # Wizard Mode

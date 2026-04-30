@@ -1,0 +1,93 @@
+name: audit-to-fix
+description: >
+  Generic audit → synthesize → plan → build → verify → report chain.
+  Parameterized by audit type (harden, secure, structure-audit, scan).
+  Usage: workflow: audit-to-fix audit=harden
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Review the plan. Approve to apply fixes automatically?"
+
+nodes:
+  - id: audit
+    skill: "{{params.audit}}"
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 15000
+
+  - id: synthesize
+    depends_on: [audit]
+    output_compress: findings
+    command: |
+      Read all findings files in the current directory matching:
+        review-*-findings.md, audit-*.md
+
+      Extract all findings with severity tags (Critical/High/Medium/Low).
+      De-duplicate and sort by severity.
+
+      Output a structured findings summary.
+      Your final output line MUST be: VERDICT: <PASSED|BLOCKED> — <summary>
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+    estimated_tokens: 5000
+
+  - id: plan
+    skill: plan
+    depends_on: [synthesize]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 10000
+    input: "{{synthesize.output}}"
+
+  - id: approve
+    depends_on: [plan]
+    gate: director-approval
+    command: "echo 'Awaiting director approval'"
+    model: haiku
+    context: fresh
+    timeout_seconds: 30
+    estimated_tokens: 500
+
+  - id: build
+    skill: build
+    depends_on: [approve]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 20000
+    input: "{{plan.output}}"
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  - id: verify
+    skill: verify
+    depends_on: [build]
+    model: haiku
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 8000
+
+  - id: report
+    depends_on: [verify]
+    trigger_rule: all_done
+    command: |
+      Produce a final report summarizing:
+        1. What was audited ({{params.audit}} type)
+        2. Findings found and their severities
+        3. Fixes applied
+        4. Verification result
+
+      Save to: ~/.dream-studio/state/audit-fix-<project-slug>-<YYYY-MM-DD>.md
+
+      Your final output line MUST be: VERDICT: <PASSED|BLOCKED|FAILED> — <summary>
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+    estimated_tokens: 3000

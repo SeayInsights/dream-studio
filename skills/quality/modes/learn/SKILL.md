@@ -2,6 +2,7 @@
 name: learn
 description: Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. Trigger on `learn:`, `capture lesson:`, or `learn: harvest` for cross-project batch extraction.
 pack: quality
+chain_suggests: []
 ---
 
 # Learn — Pattern Capture and Promotion

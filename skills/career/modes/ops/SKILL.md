@@ -5,6 +5,7 @@ user_invocable: true
 args: mode
 argument-hint: "[scan | evaluate | pdf | apply | compare | tracker | pipeline | deep | training | project | gig | proposal | sow | patterns | followup | batch | contact | interview-prep]"
 pack: career
+chain_suggests: []
 ---
 
 # Career-Ops — Router & Command Center
