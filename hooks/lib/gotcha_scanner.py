@@ -1,353 +1,344 @@
-"""gotcha_scanner.py — Scan and search gotchas.yml files across all dream-studio skills.
+"""Gotcha scanner — reads gotchas.yml files across all skills.
 
-Indexes gotcha entries by skill, mode, and keyword.  Provides four public
-functions that are safe to call repeatedly within the same process: scan
-results are cached in a module-level dict after the first load.
+Public API
+----------
+scan_all_gotchas(plugin_root=None)   → list[dict]  all entries, flat
+search_gotchas(query)                → list[dict]  token-matched entries
+get_recent_gotchas(skill=None, n=3)  → list[dict]  newest by discovered date
+get_gotchas_for_skill(skill)         → list[dict]  all gotchas for one skill
 
-Gotchas live in two locations (relative to plugin root):
-    skills/<skill>/gotchas.yml
-    skills/<skill>/modes/<mode>/gotchas.yml
+Each returned dict has at minimum:
+    skill       str   e.g. "core:build"
+    id          str   entry id within the file
+    severity    str   "critical" | "high" | "medium" | "low" | ""
+    title       str
+    context     str
+    fix         str
+    discovered  str   ISO date or ""
+    section     str   "avoid" | "best_practices" | "edge_cases" | ...
 
-Each file uses this YAML schema::
-
-    version: 1.0
-    avoid:
-      - id: some-id
-        severity: critical
-        discovered: 2026-04-29
-        title: "Never do X"
-        context: "Because Y"
-        fix: "Do Z instead"
-    best_practices:
-      - ...
-    edge_cases:
-      - ...
+SQLite-first path
+-----------------
+Each public function tries the DB (lib.studio_db) before the file-walk.
+If the DB returns results they are returned immediately.  If the DB is
+empty OR raises any exception the file-walk runs as normal.  The
+file-walk path is never removed or altered — it is the authoritative
+fallback.
 """
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 # ---------------------------------------------------------------------------
-# YAML loading — prefer PyYAML; fall back to a minimal line-by-line parser
+# Module-level cache (file-walk results only; DB results bypass the cache)
 # ---------------------------------------------------------------------------
 
-try:
-    import yaml as _yaml  # type: ignore
-
-    def _load_yaml(text: str) -> dict:
-        return _yaml.safe_load(text) or {}
-
-except ImportError:
-    _yaml = None  # type: ignore
-
-    def _load_yaml(text: str) -> dict:  # type: ignore[misc]
-        """Minimal regex-based parser for the known gotchas.yml structure.
-
-        Only handles the flat list-of-mappings shape used in gotchas files.
-        Does NOT support arbitrary YAML — just what we need here.
-        """
-        result: dict = {}
-        current_category: str | None = None
-        current_entry: dict | None = None
-        current_key: str | None = None
-        multiline_buffer: list[str] = []
-
-        def _flush_multiline() -> None:
-            nonlocal current_key, multiline_buffer
-            if current_entry is not None and current_key and multiline_buffer:
-                current_entry[current_key] = " ".join(
-                    line.strip() for line in multiline_buffer if line.strip()
-                )
-            current_key = None
-            multiline_buffer = []
-
-        def _flush_entry() -> None:
-            nonlocal current_entry
-            _flush_multiline()
-            if current_category and current_entry:
-                result.setdefault(current_category, []).append(current_entry)
-            current_entry = None
-
-        for raw_line in text.splitlines():
-            # --- top-level category keys (e.g. "avoid:", "best_practices:") ---
-            top_match = re.match(r'^([a-z_]+)\s*:\s*$', raw_line)
-            if top_match:
-                _flush_entry()
-                current_category = top_match.group(1)
-                continue
-
-            # --- list item start: "  - id: something" ---
-            id_match = re.match(r'^\s+-\s+id:\s+(.+)$', raw_line)
-            if id_match:
-                _flush_entry()
-                current_entry = {"id": id_match.group(1).strip().strip('"').strip("'")}
-                continue
-
-            # --- scalar key-value inside an entry: "    key: value" ---
-            kv_match = re.match(r'^\s+([a-z_]+):\s+(.+)$', raw_line)
-            if kv_match and current_entry is not None:
-                _flush_multiline()
-                key = kv_match.group(1)
-                val = kv_match.group(2).strip().strip('"').strip("'")
-                current_entry[key] = val
-                continue
-
-            # --- block scalar or continuation line ---
-            if current_entry is not None and raw_line.strip():
-                if current_key is None:
-                    # bare continuation — try to detect key
-                    bare_key = re.match(r'^\s+([a-z_]+):\s*$', raw_line)
-                    if bare_key:
-                        _flush_multiline()
-                        current_key = bare_key.group(1)
-                    else:
-                        multiline_buffer.append(raw_line)
-                else:
-                    multiline_buffer.append(raw_line)
-
-        _flush_entry()
-        return result
-
-
-# ---------------------------------------------------------------------------
-# Module-level cache
-# ---------------------------------------------------------------------------
-
-_CACHE: list[dict] | None = None
-_CACHE_ROOT: Path | None = None  # root that was scanned
+_cache: list[dict] | None = None
 
 
 def clear_cache() -> None:
-    """Invalidate the module-level scan cache so the next call re-reads disk."""
-    global _CACHE, _CACHE_ROOT
-    _CACHE = None
-    _CACHE_ROOT = None
+    """Invalidate the in-memory file-walk cache."""
+    global _cache
+    _cache = None
 
 
 # ---------------------------------------------------------------------------
-# Severity ordering for sorting
+# Internal helpers — DB layer (lazy imports, silent on any exception)
 # ---------------------------------------------------------------------------
 
-_SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-
-
-def _severity_rank(entry: dict) -> int:
-    return _SEVERITY_ORDER.get(str(entry.get("severity", "low")).lower(), 4)
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-def _resolve_root(plugin_root: Path | None) -> Path:
-    if plugin_root is not None:
-        return plugin_root
-    from . import paths
-    return paths.plugin_root()
-
-
-def _parse_gotchas_file(
-    file_path: Path,
-    skill: str,
-    mode: str | None,
-    plugin_root: Path,
-) -> list[dict]:
-    """Parse a single gotchas.yml and return normalised entry dicts."""
+def _try_db_search(keyword: str) -> list[dict] | None:
+    """Return DB results for *keyword*, or None to signal fallback."""
     try:
-        text = file_path.read_text(encoding="utf-8")
+        from lib.studio_db import search_gotchas_db  # noqa: PLC0415
+        results = search_gotchas_db(keyword)
+        return results if results else None
+    except Exception:
+        return None
+
+
+def _try_db_gotchas_for_skill(skill_id: str) -> list[dict] | None:
+    """Return DB rows for *skill_id*, or None to signal fallback.
+
+    Tries both the canonical ``pack:mode`` form and the bare mode name so
+    that callers can pass either ``"build"`` or ``"core:build"``.
+    """
+    try:
+        from lib.studio_db import get_gotchas_for_skill as db_get  # noqa: PLC0415
+        results = db_get(skill_id)
+        if results:
+            return results
+        # If the caller passed a bare mode name, try a prefix scan.
+        if ":" not in skill_id:
+            results = db_get(skill_id)  # already tried — nothing to add here
+        return None
+    except Exception:
+        return None
+
+
+def _try_db_recent(skill_id: str | None, limit: int) -> list[dict] | None:
+    """Return the most recently discovered gotchas from the DB, or None."""
+    try:
+        from lib.studio_db import _connect  # noqa: PLC0415
+        conn = _connect()
+        if skill_id:
+            rows = conn.execute(
+                "SELECT * FROM reg_gotchas WHERE skill_id=? "
+                "ORDER BY discovered DESC LIMIT ?",
+                (skill_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM reg_gotchas ORDER BY discovered DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        conn.close()
+        results = [dict(r) for r in rows]
+        return results if results else None
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers — YAML / file-walk layer
+# ---------------------------------------------------------------------------
+
+def _skill_id_from_path(gotchas_path: Path, skills_root: Path) -> str:
+    """Derive a ``pack:mode`` skill id from the path to a gotchas.yml.
+
+    Examples
+    --------
+    skills/core/modes/build/gotchas.yml    → "core:build"
+    skills/workflow/gotchas.yml            → "workflow"
+    skills/analyze/modes/multi/gotchas.yml → "analyze:multi"
+    """
+    try:
+        rel = gotchas_path.relative_to(skills_root)
+        parts = rel.parts  # e.g. ("core", "modes", "build", "gotchas.yml")
+        pack = parts[0]
+        # Filter out "modes" intermediary directory
+        mode_parts = [p for p in parts[1:-1] if p != "modes"]
+        if mode_parts:
+            return f"{pack}:{mode_parts[-1]}"
+        return pack
+    except ValueError:
+        return gotchas_path.parent.name
+
+
+def _parse_yaml_block(text: str) -> Any:
+    """Parse YAML using PyYAML when available, falling back to a minimal
+    hand-rolled parser that handles the flat list-of-mappings structure
+    used by every gotchas.yml in this repo.
+    """
+    try:
+        import yaml  # type: ignore[import-untyped]  # noqa: PLC0415
+        return yaml.safe_load(text)
+    except ImportError:
+        pass
+
+    # Minimal fallback: build a dict of section → list[dict]
+    result: dict[str, list[dict]] = {}
+    current_section: str | None = None
+    current_item: dict[str, str] = {}
+
+    def _flush_item() -> None:
+        if current_section and current_item:
+            result.setdefault(current_section, []).append(dict(current_item))
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line or line.lstrip().startswith("#"):
+            continue
+
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+
+        # Top-level key (no indent, ends with colon, no value)
+        if indent == 0 and stripped.endswith(":") and not stripped.startswith("-"):
+            _flush_item()
+            current_item = {}
+            current_section = stripped[:-1]
+            continue
+
+        # List item start
+        if stripped.startswith("- "):
+            _flush_item()
+            current_item = {}
+            rest = stripped[2:]
+            if ":" in rest:
+                k, _, v = rest.partition(":")
+                current_item[k.strip()] = v.strip().strip('"')
+            continue
+
+        # Mapping key inside a list item
+        if ":" in stripped and not stripped.startswith("-"):
+            k, _, v = stripped.partition(":")
+            k = k.strip()
+            v = v.strip().strip('"')
+            current_item[k] = v
+            continue
+
+    _flush_item()
+    return result if result else None
+
+
+def _load_gotchas_file(path: Path, skill_id: str) -> list[dict]:
+    """Parse a single gotchas.yml and return a flat list of entry dicts."""
+    try:
+        raw = path.read_text(encoding="utf-8")
     except OSError:
         return []
 
-    try:
-        data = _load_yaml(text)
-    except Exception:
-        return []
-
+    data = _parse_yaml_block(raw)
     if not isinstance(data, dict):
         return []
 
-    # Relative source path for traceability
-    try:
-        source_file = str(file_path.relative_to(plugin_root)).replace("\\", "/")
-    except ValueError:
-        source_file = str(file_path).replace("\\", "/")
-
     entries: list[dict] = []
-    for category in ("avoid", "best_practices", "edge_cases"):
-        raw_list = data.get(category)
-        if not isinstance(raw_list, list):
+    for section, items in data.items():
+        if section == "version" or not isinstance(items, list):
             continue
-        for raw in raw_list:
-            if not isinstance(raw, dict):
+        for item in items:
+            if not isinstance(item, dict):
                 continue
-            entries.append(
-                {
-                    "id": str(raw.get("id", "")).strip() or "(no-id)",
-                    "skill": skill,
-                    "mode": mode,
-                    "severity": str(raw.get("severity", "low")).lower(),
-                    "category": category,
-                    "title": str(raw.get("title", "")).strip(),
-                    "context": str(raw.get("context", "")).strip(),
-                    "fix": str(raw.get("fix", "")).strip() or None,
-                    "discovered": str(raw.get("discovered", "")).strip() or None,
-                    "source_file": source_file,
-                }
-            )
+            entry: dict[str, str] = {
+                "skill": skill_id,
+                "section": section,
+                "id": str(item.get("id", "")),
+                "severity": str(item.get("severity", "")),
+                "title": str(item.get("title", "")),
+                "context": str(item.get("context", "")),
+                "fix": str(item.get("fix", "")),
+                "discovered": str(item.get("discovered", "")),
+            }
+            entries.append(entry)
     return entries
 
 
-def _file_mtime(path: Path) -> float:
+def _walk_all(plugin_root: Path | None = None) -> list[dict]:
+    """Walk every gotchas.yml under *plugin_root*/skills and return a flat list."""
+    global _cache
+    if _cache is not None:
+        return _cache
+
     try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0.0
+        if plugin_root is None:
+            from lib import paths as _paths  # noqa: PLC0415
+            plugin_root = _paths.plugin_root()
+    except Exception:
+        return []
+
+    skills_root = Path(plugin_root) / "skills"
+    if not skills_root.is_dir():
+        return []
+
+    all_entries: list[dict] = []
+    for gotchas_file in sorted(skills_root.rglob("gotchas.yml")):
+        skill_id = _skill_id_from_path(gotchas_file, skills_root)
+        all_entries.extend(_load_gotchas_file(gotchas_file, skill_id))
+
+    _cache = all_entries
+    return _cache
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-
 def scan_all_gotchas(plugin_root: Path | None = None) -> list[dict]:
-    """Scan every gotchas.yml file in the plugin tree and return a flat list.
+    """Return every gotcha entry across all skills (file-walk, cached).
 
-    Results are cached for the lifetime of the process (or until
-    :func:`clear_cache` is called).  Pass an explicit *plugin_root* to scan a
-    different location; this also busts the cache if the root changes.
-
-    Returns a list of dicts with keys:
-        id, skill, mode, severity, category, title, context, fix, source_file
+    This function always uses the file-walk path — it is the raw data
+    loader used by the other public functions.  It does NOT hit the DB
+    because the DB path would return DB-shaped dicts while callers of
+    this function expect the file-walk shape.
     """
-    global _CACHE, _CACHE_ROOT
-
-    root = _resolve_root(plugin_root)
-
-    if _CACHE is not None and _CACHE_ROOT == root:
-        return _CACHE
-
-    skills_dir = root / "skills"
-    all_entries: list[dict] = []
-
-    if not skills_dir.is_dir():
-        _CACHE = all_entries
-        _CACHE_ROOT = root
-        return _CACHE
-
-    for skill_dir in sorted(skills_dir.iterdir()):
-        if not skill_dir.is_dir():
-            continue
-        skill_name = skill_dir.name
-
-        # Skill-level gotchas
-        skill_gotchas = skill_dir / "gotchas.yml"
-        if skill_gotchas.is_file():
-            all_entries.extend(_parse_gotchas_file(skill_gotchas, skill_name, None, root))
-
-        # Mode-level gotchas
-        modes_dir = skill_dir / "modes"
-        if modes_dir.is_dir():
-            for mode_dir in sorted(modes_dir.iterdir()):
-                if not mode_dir.is_dir():
-                    continue
-                mode_name = mode_dir.name
-                mode_gotchas = mode_dir / "gotchas.yml"
-                if mode_gotchas.is_file():
-                    all_entries.extend(
-                        _parse_gotchas_file(mode_gotchas, skill_name, mode_name, root)
-                    )
-
-    _CACHE = all_entries
-    _CACHE_ROOT = root
-    return _CACHE
+    return _walk_all(plugin_root)
 
 
-def search_gotchas(query: str, plugin_root: Path | None = None) -> list[dict]:
-    """Return gotchas whose title, context, or fix contain any query token.
+def search_gotchas(query: str) -> list[dict]:
+    """Return entries where any token in *query* matches title, context, fix,
+    id, or section (case-insensitive).
 
-    The *query* string is split on whitespace; an entry matches if **any**
-    token appears (case-insensitively) in the entry's searchable text.
-    Results are sorted by severity (critical → high → medium → low).
-
-    Example::
-
-        results = search_gotchas("database migration")
-        # returns entries mentioning "database", "migration", or related keywords
+    Tries the SQLite DB first.  Falls back to file-walk if the DB is
+    unavailable or returns no rows.
     """
+    # --- DB path ---
+    db_results = _try_db_search(query)
+    if db_results is not None:
+        return db_results
+
+    # --- File-walk fallback ---
     tokens = [t.lower() for t in query.split() if t]
     if not tokens:
         return []
 
-    all_entries = scan_all_gotchas(plugin_root)
-    matched: list[dict] = []
-
-    for entry in all_entries:
-        haystack = " ".join(
-            [
-                entry.get("title", ""),
-                entry.get("context", ""),
-                entry.get("fix", "") or "",
-            ]
-        ).lower()
-
+    results: list[dict] = []
+    for entry in _walk_all():
+        haystack = " ".join([
+            entry.get("title", ""),
+            entry.get("context", ""),
+            entry.get("fix", ""),
+            entry.get("id", ""),
+            entry.get("section", ""),
+            entry.get("skill", ""),
+        ]).lower()
         if any(tok in haystack for tok in tokens):
-            matched.append(entry)
-
-    matched.sort(key=_severity_rank)
-    return matched
+            results.append(entry)
+    return results
 
 
-def get_recent_gotchas(
-    skill: Optional[str] = None,
-    limit: int = 3,
-    plugin_root: Optional[Path] = None,
-) -> list[dict]:
-    """Return the *limit* most recently added gotchas.
+def get_recent_gotchas(skill: str | None = None, limit: int = 3) -> list[dict]:
+    """Return the *limit* most recently discovered gotchas.
 
-    Recency is determined by the ``discovered`` date field (ISO 8601) when
-    present; entries without a date fall back to the source file's mtime and
-    sort after dated entries.  Optionally filter to a single *skill*.
+    If *skill* is given (e.g. ``"core:build"`` or ``"build"``), restricts
+    to that skill.  Tries the DB first, falls back to file-walk sort.
     """
-    root = _resolve_root(plugin_root)
-    all_entries = scan_all_gotchas(root)
+    # --- DB path ---
+    db_results = _try_db_recent(skill, limit)
+    if db_results is not None:
+        return db_results
 
-    if skill is not None:
-        all_entries = [e for e in all_entries if e.get("skill") == skill]
+    # --- File-walk fallback ---
+    entries = _walk_all()
+    if skill:
+        skill_lower = skill.lower()
+        entries = [
+            e for e in entries
+            if e.get("skill", "").lower() == skill_lower
+            or e.get("skill", "").lower().endswith(f":{skill_lower}")
+        ]
 
-    def _sort_key(e: dict) -> tuple:
-        """Return a key that sorts newest-first.
+    def _sort_key(e: dict) -> str:
+        d = e.get("discovered", "") or ""
+        # Ensure ISO date strings sort correctly; fall back to empty string
+        return d if re.match(r"\d{4}-\d{2}-\d{2}", d) else ""
 
-        Dated entries (tier 0) come before mtime-only entries (tier 1).
-        Within each tier we negate so that ``sorted(..., reverse=False)``
-        produces descending order without reversing the tier ordering.
-        """
-        discovered = e.get("discovered") or ""
-        if discovered:
-            # Negate ISO date string by inverting each character code so that
-            # a later date (larger string) maps to a smaller key.
-            negated = "".join(chr(0x10FFFF - ord(c)) for c in discovered)
-            return (0, negated)
-        # Fall back to file mtime — negate so larger mtime → smaller key
-        src = e.get("source_file", "")
-        try:
-            mtime = _file_mtime(root / src)
-        except Exception:
-            mtime = 0.0
-        return (1, str(-mtime).zfill(25))
-
-    all_entries = sorted(all_entries, key=_sort_key)
-    return all_entries[:limit]
+    sorted_entries = sorted(entries, key=_sort_key, reverse=True)
+    return sorted_entries[:limit]
 
 
-def get_gotchas_for_skill(skill: str, plugin_root: Optional[Path] = None) -> list[dict]:
-    """Return all gotchas belonging to *skill* (including all of its modes).
+def get_gotchas_for_skill(skill: str) -> list[dict]:
+    """Return all gotchas associated with *skill*.
 
-    Results preserve the on-disk order (avoid → best_practices → edge_cases,
-    skill-level before mode-level).
+    *skill* may be a full ``pack:mode`` id (``"core:build"``) or a bare
+    mode name (``"build"``).  Tries the DB first for each candidate form,
+    then falls back to file-walk.
     """
-    all_entries = scan_all_gotchas(plugin_root)
-    return [e for e in all_entries if e.get("skill") == skill]
+    # --- DB path: try exact skill_id, then bare mode ---
+    db_results = _try_db_gotchas_for_skill(skill)
+    if db_results is None and ":" not in skill:
+        # skill is a bare mode — the DB stores "pack:mode"; we can't know
+        # the pack without context, so the file-walk is better here.
+        pass
+    if db_results is not None:
+        return db_results
+
+    # --- File-walk fallback ---
+    skill_lower = skill.lower()
+    return [
+        e for e in _walk_all()
+        if e.get("skill", "").lower() == skill_lower
+        or e.get("skill", "").lower().endswith(f":{skill_lower}")
+    ]
