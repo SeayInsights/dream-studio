@@ -21,6 +21,24 @@ from lib.model_selector import get_model_for_skill  # noqa: E402
 from lib.studio_db import insert_token_usage  # noqa: E402
 
 
+def _build_display_name(skill_name: str, skill_args: str) -> tuple[str, str | None]:
+    """Return ``(display_name, mode)`` from a raw skill name and args string.
+
+    Strips the ``dream-studio:`` prefix from *skill_name* to obtain the pack
+    component, then takes the first whitespace-delimited word of *skill_args*
+    as the mode.  Examples::
+
+        ("dream-studio:core", "think") -> ("core:think", "think")
+        ("dream-studio:core", "")      -> ("core",       None)
+        ("core",              "think") -> ("core:think", "think")
+        ("unknown",           "")      -> ("unknown",    None)
+    """
+    pack = skill_name.removeprefix("dream-studio:")
+    mode: str | None = skill_args.split()[0] if skill_args.strip() else None
+    display_name = f"{pack}:{mode}" if mode else pack
+    return display_name, mode
+
+
 def main() -> None:
     try:
         raw = sys.stdin.read()
@@ -39,6 +57,8 @@ def main() -> None:
     skill_args = tool_input.get("args", "")
     skill_specifier = f"{skill_name} {skill_args}".strip() if skill_args else skill_name
 
+    display_name, mode = _build_display_name(skill_name, skill_args)
+
     try:
         recommended_model = get_model_for_skill(skill_specifier)
     except Exception:
@@ -49,7 +69,8 @@ def main() -> None:
 
     record = {
         "ts": datetime.now(timezone.utc).isoformat(),
-        "skill": skill_name,
+        "skill": display_name,
+        "mode": mode or "",
         "session": payload.get("session_id", ""),
         "recommended_model": recommended_model,
     }
@@ -62,7 +83,7 @@ def main() -> None:
         insert_token_usage(
             session_id=payload.get("session_id", ""),
             project_id=Path.cwd().name,
-            skill_name=skill_name,
+            skill_name=display_name,
             input_tokens=0,
             output_tokens=0,
             model=recommended_model,
