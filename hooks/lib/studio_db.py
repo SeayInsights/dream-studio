@@ -17,7 +17,9 @@ CREATE VIEW IF NOT EXISTS effective_skill_runs AS SELECT t.id, t.skill_name, t.i
 CREATE TABLE IF NOT EXISTS raw_pulse_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL UNIQUE, health_score INTEGER NOT NULL, health_status TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, raw_content TEXT);
 CREATE TABLE IF NOT EXISTS raw_planning_specs (id INTEGER PRIMARY KEY AUTOINCREMENT, spec_path TEXT NOT NULL UNIQUE, title TEXT, created_date TEXT, task_count INTEGER, has_build_commit INTEGER DEFAULT 0, last_checked TEXT);
 CREATE TABLE IF NOT EXISTS sum_analytics_run (id INTEGER PRIMARY KEY AUTOINCREMENT, run_at TEXT NOT NULL, pulse_rows INTEGER, spec_rows INTEGER, skill_rows INTEGER, output_path TEXT);
-CREATE TABLE IF NOT EXISTS raw_operational_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL, project_slug TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, captured_at TEXT NOT NULL, UNIQUE(snapshot_date, project_slug));"""
+CREATE TABLE IF NOT EXISTS raw_operational_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL, project_slug TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, captured_at TEXT NOT NULL, UNIQUE(snapshot_date, project_slug));
+CREATE TABLE IF NOT EXISTS raw_approaches (id INTEGER PRIMARY KEY AUTOINCREMENT, skill_id TEXT NOT NULL, session_date TEXT NOT NULL, approach TEXT NOT NULL, outcome TEXT NOT NULL, context TEXT, why_worked TEXT, tokens_used INTEGER, duration_s REAL, model TEXT, captured_at TEXT NOT NULL);
+CREATE VIEW IF NOT EXISTS vw_approach_patterns AS SELECT skill_id, approach, COUNT(*) AS times_tried, SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS successes, ROUND(CAST(SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) AS success_pct, CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens, ROUND(AVG(duration_s), 1) AS avg_duration FROM raw_approaches GROUP BY skill_id, approach HAVING COUNT(*) >= 2;"""
 
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -83,7 +85,8 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
             d1 = c.execute("DELETE FROM raw_skill_telemetry WHERE id NOT IN (SELECT id FROM raw_skill_telemetry t2 WHERE t2.skill_name=raw_skill_telemetry.skill_name ORDER BY id DESC LIMIT 100)").rowcount
             d2 = c.execute("DELETE FROM raw_workflow_nodes WHERE run_key IN (SELECT run_key FROM raw_workflow_runs WHERE finished_at<?)", (cutoff,)).rowcount
             d3 = c.execute("DELETE FROM raw_workflow_runs WHERE finished_at<?", (cutoff,)).rowcount
-        return d1 + d2 + d3
+            d4 = c.execute("DELETE FROM raw_approaches WHERE captured_at<?", (cutoff,)).rowcount
+        return d1 + d2 + d3 + d4
     except Exception: return 0
 
 def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
@@ -137,6 +140,60 @@ def insert_operational_snapshot(
         return False
 
 
+def insert_approach(
+    skill_id: str,
+    approach: str,
+    outcome: str,
+    *,
+    context: str = "",
+    why: str = "",
+    tokens_used: int | None = None,
+    duration_s: float | None = None,
+    model: str | None = None,
+    session_date: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_approaches
+                   (skill_id, session_date, approach, outcome, context,
+                    why_worked, tokens_used, duration_s, model, captured_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (skill_id, session_date or _NOW()[:10], approach, outcome,
+                 context or None, why or None, tokens_used, duration_s, model, _NOW()),
+            )
+        return True
+    except Exception:
+        return False
+
+
+def get_approach_patterns(skill_id: str | None = None, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        if skill_id:
+            rows = c.execute("SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC", (skill_id,)).fetchall()
+        else:
+            rows = c.execute("SELECT * FROM vw_approach_patterns ORDER BY success_pct DESC").fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_best_approaches(skill_id: str, limit: int = 3, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC, times_tried DESC LIMIT ?",
+            (skill_id, limit),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="studio_db CLI"); sub = ap.add_subparsers(dest="cmd")
     sc = sub.add_parser("skill-correct"); sc.add_argument("telemetry_id"); sc.add_argument("result", choices=["success","failure"]); sc.add_argument("--reason", default="")
@@ -150,7 +207,7 @@ def main() -> None:
     elif args.cmd == "prune":
         print(f"pruned {rolling_window_prune()} rows")
     elif args.cmd == "status":
-        c = _connect(); tables = ["raw_workflow_runs","raw_workflow_nodes","raw_skill_telemetry","cor_skill_corrections","sum_skill_summary","log_batch_imports","raw_pulse_snapshots","raw_planning_specs","sum_analytics_run","raw_operational_snapshots"]
+        c = _connect(); tables = ["raw_workflow_runs","raw_workflow_nodes","raw_skill_telemetry","cor_skill_corrections","sum_skill_summary","log_batch_imports","raw_pulse_snapshots","raw_planning_specs","sum_analytics_run","raw_operational_snapshots","raw_approaches"]
         print(f"{'Table':<30} {'Rows':>8}\n" + "-"*40)
         for t in tables: print(f"{t:<30} {c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]:>8}")  # noqa: S608
         c.close()
