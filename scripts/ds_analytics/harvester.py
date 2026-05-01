@@ -263,8 +263,13 @@ def detect_orphans(db_path: Path | None = None, git_roots: list[Path] | None = N
 
     conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
     cur = conn.cursor()
-    cur.execute("SELECT id, title, created_date FROM raw_planning_specs")
-    rows = cur.fetchall()
+
+    # Graceful degradation: if table doesn't exist (fresh CI DB), return empty list
+    try:
+        cur.execute("SELECT id, title, created_date FROM raw_planning_specs")
+        rows = cur.fetchall()
+    except sqlite3.OperationalError:
+        return []
 
     orphaned: list[str] = []
 
