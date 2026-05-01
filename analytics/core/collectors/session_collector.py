@@ -13,10 +13,10 @@ class SessionCollector:
         Initialize SessionCollector
 
         Args:
-            db_path: Path to studio.db. If None, uses default ~/.dream-studio/studio.db
+            db_path: Path to studio.db. If None, uses default ~/.dream-studio/state/studio.db
         """
         if db_path is None:
-            self.db_path = str(Path.home() / ".dream-studio" / "studio.db")
+            self.db_path = str(Path.home() / ".dream-studio" / "state" / "studio.db")
         else:
             self.db_path = db_path
 
