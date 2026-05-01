@@ -146,7 +146,11 @@ def test_session_end_graceful_without_session_id(isolated_home, monkeypatch, han
 
 
 def test_skill_metrics_inserts_token_usage(isolated_home, monkeypatch, handler):
-    """on-skill-metrics calls insert_token_usage after writing the JSONL record."""
+    """on-skill-metrics calls insert_token_usage with the granular display name.
+
+    The display name strips the 'dream-studio:' prefix and appends the mode,
+    so 'dream-studio:core' with args='think' becomes 'core:think'.
+    """
     mod = handler("on-skill-metrics")
     tu_calls: list[dict] = []
     monkeypatch.setattr(
@@ -157,7 +161,7 @@ def test_skill_metrics_inserts_token_usage(isolated_home, monkeypatch, handler):
 
     payload = {
         "session_id": "metrics-session",
-        "tool_input": {"skill": "dream-studio:core"},
+        "tool_input": {"skill": "dream-studio:core", "args": "think"},
     }
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
 
@@ -166,6 +170,6 @@ def test_skill_metrics_inserts_token_usage(isolated_home, monkeypatch, handler):
     assert len(tu_calls) == 1
     call = tu_calls[0]
     assert call["session_id"] == "metrics-session"
-    assert call["skill_name"] == "dream-studio:core"
+    assert call["skill_name"] == "core:think"
     assert call["input_tokens"] == 0
     assert call["output_tokens"] == 0
