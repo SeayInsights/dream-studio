@@ -23,6 +23,11 @@ Read `gotchas.yml` in this directory before every invocation.
 ## Purpose
 Diagnose and fix bugs using disciplined hypothesis testing. One variable at a time.
 
+## Pre-flight Intelligence
+Before starting diagnosis, query the registry:
+1. **Gotcha check** — `get_gotchas_for_skill('quality:debug')` from `hooks/lib/studio_db.py` (falls back to file-walk via `gotcha_scanner.py` if registry not populated). Show top 3 recent gotchas — debug sessions are the highest-value place for this.
+2. **Approach history** — `get_best_approaches('quality:debug')` from `hooks/lib/studio_db.py`. Show top 3 approaches that worked for past debug sessions. Prior debug patterns often short-circuit new diagnosis.
+
 ## Steps
 
 **Pre-flight Gotcha Briefing** — Before starting diagnosis, surface recent gotchas for the domain being debugged:

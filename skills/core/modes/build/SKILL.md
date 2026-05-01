@@ -18,6 +18,11 @@ Read `gotchas.yml` in this directory before every invocation.
 If the project has `.planning/GOTCHAS.md` — read it before starting.
 If the project has `.planning/CONSTITUTION.md` — read it before starting.
 
+## Pre-flight Intelligence
+Before dispatching any task, query the registry for relevant context:
+1. **Gotcha check** — `get_gotchas_for_skill('core:build')` from `hooks/lib/studio_db.py` (falls back to file-walk via `gotcha_scanner.py` if registry not populated). Show top 3 most recent gotchas as "Pre-flight: 3 recent gotchas for [skill]" — informational only, doesn't block.
+2. **Approach history** — `get_best_approaches('core:build')` from `hooks/lib/studio_db.py`. Surface proven approaches: "Prior sessions show [approach] worked [N]% of the time." Use this to inform dispatch strategy (parallel vs sequential, model choice).
+
 ## Imports
 - core/git.md — commit formatting, diff reading, branch operations
 - core/traceability.md — TR-ID validation and updates
