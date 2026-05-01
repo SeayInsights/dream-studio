@@ -31,7 +31,8 @@ Record what happened in a build so future sessions and the Improvement Loop (Eng
 3. **Risks** — What risk flags were raised? What was deferred?
 4. **Stack** — What technologies/patterns were used?
 5. **Remaining** — What's left undone? What's the logical next step?
-6. **Write** — Output to `.sessions/YYYY-MM-DD/recap-<topic>.md`
+6. **Write to DB (primary)** — Call `end_session()` from `hooks/lib/studio_db.py` to update the session record with outcome, token counts, and tasks completed. Call `capture_approach()` for each notable approach.
+6a. **Write file** — Output to `.sessions/YYYY-MM-DD/recap-<topic>.md`
 6b. **Micro-capture** — Append a summary line to the daily capture file using `hooks/lib/micro_capture.py`:
    - Call: `append_capture(skill='recap', outcome='<pass|correction>', note='<one-line summary of what was built>')`
    - Use `outcome: correction` if any Director corrections or approach overrides were noted in the Decisions section

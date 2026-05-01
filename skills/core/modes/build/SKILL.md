@@ -104,7 +104,7 @@ Group tasks into waves based on dependencies. Independent tasks within a wave MA
    - If exists: validate → update commits + status → re-validate
    - If doesn't exist or invalid: skip
 
-7. **Mark complete** — Write proof to disk (task status in plan file or state file)
+7. **Mark complete** — Write proof to disk (task status in plan file or state file). Call `update_task_status()` from `hooks/lib/studio_db.py` with the commit SHA to track completion in the DB.
 
 ### Step 3: Checkpoint
 **See:** core/format.md — Checkpoint format
