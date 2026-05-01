@@ -150,6 +150,23 @@
             <p class="big">{{ all_git_metrics | sum(attribute='total_commits_90d') }}</p>
         </div>
         {% endif %}
+        {% if efficiency %}
+        <div class="card">
+            <h3>Total Cost</h3>
+            <p class="big">${{ "%.2f"|format(efficiency.cost_analysis.total_cost_usd) }}</p>
+            <p>{{ efficiency.summary.total_sessions }} sessions</p>
+        </div>
+        <div class="card">
+            <h3>Avg Session Duration</h3>
+            <p class="big">{{ efficiency.time_to_context.avg_duration_min }}m</p>
+            <p>{{ efficiency.time_to_context.sessions_hitting_75pct }} hit 75%</p>
+        </div>
+        <div class="card">
+            <h3>Avg Burn Rate</h3>
+            <p class="big">{{ "{:,}".format(efficiency.token_usage.avg_burn_rate_per_min) }}</p>
+            <p>tokens/min</p>
+        </div>
+        {% endif %}
     </div>
 
     <div class="charts">
@@ -172,6 +189,20 @@
         {% elif all_git_metrics %}
         <div class="chart-container">
             <canvas id="projectCommits"></canvas>
+        </div>
+        {% endif %}
+        {% if efficiency %}
+        <div class="chart-container">
+            <canvas id="dailyCost"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="modelCost"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="sessionDuration"></canvas>
+        </div>
+        <div class="chart-container">
+            <canvas id="contextPressure"></canvas>
         </div>
         {% endif %}
     </div>
@@ -353,6 +384,122 @@
                 scales: {
                     x: { ...defaultScales.x, beginAtZero: true },
                     y: { ...defaultScales.y }
+                }
+            }
+        });
+        {% endif %}
+        {% if efficiency %}
+        /* --- Daily Cost Trend (line) --- */
+        const dailyCostData = {{ efficiency.cost_analysis.daily_trend | tojson }};
+        const dailyCostDates = Object.keys(dailyCostData);
+        const dailyCostValues = dailyCostDates.map(d => dailyCostData[d].cost_usd);
+        new Chart(document.getElementById('dailyCost'), {
+            type: 'line',
+            data: {
+                labels: dailyCostDates,
+                datasets: [{
+                    label: 'Cost (USD)',
+                    data: dailyCostValues,
+                    borderColor: COLORS.orange,
+                    backgroundColor: 'rgba(255, 159, 67, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointBackgroundColor: COLORS.orange
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Daily Cost Trend (USD)', color: '#fff', font: { size: 14 } }
+                },
+                scales: {
+                    ...defaultScales,
+                    y: { ...defaultScales.y, beginAtZero: true }
+                }
+            }
+        });
+
+        /* --- Model Cost Breakdown (doughnut) --- */
+        const modelCostData = {{ efficiency.cost_analysis.per_model | tojson }};
+        const modelCostLabels = Object.keys(modelCostData);
+        const modelCostValues = modelCostLabels.map(m => modelCostData[m].cost_usd);
+        const costPalette = [COLORS.orange, COLORS.blue, COLORS.teal, COLORS.purple, COLORS.pink, COLORS.red];
+        new Chart(document.getElementById('modelCost'), {
+            type: 'doughnut',
+            data: {
+                labels: modelCostLabels,
+                datasets: [{
+                    data: modelCostValues,
+                    backgroundColor: modelCostLabels.map((_, i) => costPalette[i % costPalette.length]),
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Model Cost Breakdown (USD)', color: '#fff', font: { size: 14 } }
+                }
+            }
+        });
+
+        /* --- Session Duration (bar) --- */
+        const sessionDurData = {{ efficiency.daily_trends | tojson }};
+        const sessionDurDates = Object.keys(sessionDurData);
+        const sessionDurValues = sessionDurDates.map(d => sessionDurData[d].total_duration_min);
+        new Chart(document.getElementById('sessionDuration'), {
+            type: 'bar',
+            data: {
+                labels: sessionDurDates,
+                datasets: [{
+                    label: 'Total Duration (min)',
+                    data: sessionDurValues,
+                    backgroundColor: COLORS.blue,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Session Duration by Day (min)', color: '#fff', font: { size: 14 } }
+                },
+                scales: {
+                    ...defaultScales,
+                    y: { ...defaultScales.y, beginAtZero: true }
+                }
+            }
+        });
+
+        /* --- Context Pressure Distribution (bar) --- */
+        const ctxPressure = {{ efficiency.context_pressure | tojson }};
+        new Chart(document.getElementById('contextPressure'), {
+            type: 'bar',
+            data: {
+                labels: ['<50%', '50-75%', '75-90%', '>90%'],
+                datasets: [{
+                    label: 'Sessions',
+                    data: [
+                        {{ efficiency.summary.total_sessions }} - ctxPressure.sessions_over_50pct,
+                        ctxPressure.sessions_over_50pct - ctxPressure.sessions_over_75pct,
+                        ctxPressure.sessions_over_75pct - ctxPressure.sessions_over_90pct,
+                        ctxPressure.sessions_over_90pct
+                    ],
+                    backgroundColor: [COLORS.teal, COLORS.blue, COLORS.orange, COLORS.red],
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Context Pressure Distribution', color: '#fff', font: { size: 14 } }
+                },
+                scales: {
+                    ...defaultScales,
+                    y: { ...defaultScales.y, beginAtZero: true }
                 }
             }
         });
