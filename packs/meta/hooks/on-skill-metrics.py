@@ -17,6 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.studio_db import insert_token_usage  # noqa: E402
+
 
 def main() -> None:
     try:
@@ -46,6 +48,18 @@ def main() -> None:
     log_path = state_dir / "skill-usage.jsonl"
     with log_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+    try:
+        insert_token_usage(
+            session_id=payload.get("session_id", ""),
+            project_id=Path.cwd().name,
+            skill_name=skill_name,
+            input_tokens=0,
+            output_tokens=0,
+            model=None,
+        )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
