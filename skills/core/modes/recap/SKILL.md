@@ -73,6 +73,16 @@ Session: [session context if available]
 [The single most logical next action for the next session]
 ```
 
+## Approach Capture
+After writing the recap (step 6) and before auto-draft (step 7):
+
+1. **Query prior approaches** — Run `get_best_approaches(skill_id)` (from `hooks/lib/studio_db.py`) for each skill used this session. Surface patterns: "Past sessions show [approach] worked [N]% of the time for [skill]."
+2. **Capture this session's approaches** — For each skill invoked this session, call `capture_approach(skill, approach, outcome, context, why)` from `hooks/lib/studio_db.py`. Focus on:
+   - Corrections (Director overrode your approach)
+   - Surprising outcomes (unexpected success or failure)
+   - Notable approaches (parallel dispatch, specific debug strategy, etc.)
+   Skip routine successes unless the approach itself was notable or new.
+
 ## Rules
 - Write to `.sessions/YYYY-MM-DD/` — create directory if needed
 - Be specific: file paths, commit hashes, decision rationale

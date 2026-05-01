@@ -95,7 +95,11 @@ Read [plan path] — resume at Phase [N], Task [N.N]
   "active_files": ["src/api/auth.ts", "src/lib/cache.ts"],
   "next_action": "Fix auth.test.ts failures, then continue task 3.3",
   "lessons_this_session": [{"lesson": "description", "source": "what triggered it"}],
-  "gotchas_hit": ["gotcha-id-1", "gotcha-id-2"]
+  "gotchas_hit": ["gotcha-id-1", "gotcha-id-2"],
+  "approaches_taken": [
+    {"skill": "core:build", "approach": "parallel subagents for wave 1", "outcome": "success", "why": "3 independent tasks, no shared files"},
+    {"skill": "quality:debug", "approach": "trace render pipeline end-to-end", "outcome": "correction", "why": "Director corrected: always check SSOT first"}
+  ]
 }
 ```
 
@@ -109,6 +113,13 @@ The JSON handoff enables programmatic resume:
 6. Scans lessons_this_session for patterns worth promoting to gotchas.yml or memory
 
 No re-reading conversation history. No orientation. Immediate productive work.
+
+## Approach Capture
+Before writing the handoff files (step 6):
+
+1. **Record approaches** — For each skill invoked this session, add an entry to the `approaches_taken` array in the JSON output. Record: skill ID, approach description, outcome (success/failure/partial/correction), and why it worked or didn't.
+2. **Persist to DB** — Call `capture_approach(skill, approach, outcome, context, why)` from `hooks/lib/studio_db.py` for each entry. This persists to SQLite for cross-session pattern detection.
+3. **On resume** — When starting from a handoff, query `get_best_approaches(skill_id)` from `hooks/lib/studio_db.py` for skills about to be used. Surface proven approaches: "Prior sessions show [approach] worked [N]% of the time."
 
 ## Context pressure triggers
 When context is growing large:
