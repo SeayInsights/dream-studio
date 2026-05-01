@@ -29,7 +29,8 @@ Capture the minimum context needed for the next session to continue without re-e
      - This includes: pre-flight gotcha briefings that changed your approach, gotchas from spec_risk_check that informed edge cases, or gotchas you recalled while debugging
      - Only log gotchas that actually influenced behavior — not every gotcha that was displayed
    - This creates a feedback loop: gotchas that frequently fire are proven valuable; gotchas that never appear in handoffs after 90 days get flagged by self-audit for removal
-6. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`. For `project_root` in the JSON, use the absolute path of the current working directory (the project root, not a subdirectory).
+6. **Write to DB (primary)** — Call `insert_handoff()` and `insert_session()` from `hooks/lib/studio_db.py` with the structured handoff data. Register the project via `upsert_project()` if not already present. Mark the previous session's handoff as consumed via `mark_handoff_consumed()`.
+6b. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`. For `project_root` in the JSON, use the absolute path of the current working directory (the project root, not a subdirectory).
 7. **Auto-draft** — After writing both files, scan the "What's broken / blocked" section for items that have an identified root cause — specifically patterns that are non-obvious and would recur in future sessions. If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
    - `Source: auto-harvest (handoff)`
    - `Confidence: medium` (root cause is identified but not yet validated by outcome)

@@ -44,6 +44,7 @@ Use these templates to structure your plan:
 7. **Assess traceability need** — See Traceability section below.
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
 9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
+9b. **Persist to DB** — Call `upsert_spec()` and `upsert_task()` from `hooks/lib/studio_db.py` for each spec and task. This enables cross-project task queries and blocked-task tracking.
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
     - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in tasks.md

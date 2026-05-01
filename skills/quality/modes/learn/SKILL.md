@@ -38,7 +38,7 @@ Status: DRAFT
 ```
 
 ## Promotion flow
-1. **Capture** — Write draft lesson to `meta/draft-lessons/`
+1. **Capture** — Write to DB via `insert_lesson()` from `hooks/lib/studio_db.py` as primary store, then write draft lesson to `meta/draft-lessons/`
 2. **Accumulate** — Drafts sit until Director reviews (via `on-meta-review` or manual check)
 3. **Review** — Director approves, edits, or rejects each draft
 4. **Promote** — Approved lessons become:

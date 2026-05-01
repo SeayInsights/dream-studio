@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -101,7 +103,29 @@ def write_pulse(data: Dict[str, Any]) -> Path:
     """Persist the latest pulse snapshot atomically, stamping schema_version."""
     path = _pulse_path()
     _atomic_write(path, {**data, "schema_version": SCHEMA_VERSION})
+    backup_db()
     return path
+
+
+def backup_db() -> Path | None:
+    """Back up studio.db using the SQLite online backup API. Monthly VACUUM on day 1."""
+    db_path = paths.state_dir() / "studio.db"
+    if not db_path.is_file():
+        return None
+    bak_path = db_path.with_suffix(".db.bak")
+    try:
+        src = sqlite3.connect(str(db_path))
+        dst = sqlite3.connect(str(bak_path))
+        src.backup(dst)
+        dst.close()
+        src.close()
+        if datetime.now(timezone.utc).day == 1:
+            conn = sqlite3.connect(str(db_path))
+            conn.execute("VACUUM")
+            conn.close()
+        return bak_path
+    except Exception:
+        return None
 
 
 def get_quiet_mode() -> int:
