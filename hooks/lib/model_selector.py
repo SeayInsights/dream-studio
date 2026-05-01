@@ -9,6 +9,11 @@ from __future__ import annotations
 import argparse, re, sqlite3, sys
 from pathlib import Path
 
+try:
+    import yaml as _yaml
+except ImportError:  # pragma: no cover
+    _yaml = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -231,8 +236,29 @@ def _plugin_root_cached() -> Path:
     return _plugin_root_cached._val
 
 
+def _read_config_yml_tier(config_yml: Path) -> str | None:
+    """Read model_tier from a config.yml file. Returns None if absent or invalid."""
+    if not config_yml.is_file():
+        return None
+    try:
+        if _yaml is None:
+            return None
+        data = _yaml.safe_load(config_yml.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    tier = str(data.get("model_tier", "")).lower().strip()
+    return tier if tier in TIERS else None
+
+
 def _read_model_tier(skill_md: Path) -> str | None:
-    """Read model_tier from a SKILL.md frontmatter. Returns None if absent."""
+    """Read model_tier from config.yml next to SKILL.md, falling back to SKILL.md frontmatter."""
+    config_yml = skill_md.parent / "config.yml"
+    tier = _read_config_yml_tier(config_yml)
+    if tier:
+        return tier
+    # Fallback to SKILL.md frontmatter for unmigrated files
     try:
         text = skill_md.read_text(encoding="utf-8-sig")
     except Exception:
