@@ -91,6 +91,19 @@ def main() -> None:
     conversion_rate = compute_conversion_rate(db_path)
     print(f"  conversion rate: {conversion_rate['rate']:.0%} ({conversion_rate['total'] - conversion_rate['orphaned']}/{conversion_rate['total']})")
 
+    # Efficiency analytics
+    from efficiency_analytics import parse_token_log, build_sessions, compute_efficiency_report, get_handoff_tasks
+
+    eff_records = parse_token_log()
+    if eff_records:
+        eff_sessions = build_sessions(eff_records)
+        eff_handoffs = get_handoff_tasks(db_path)
+        efficiency_data = compute_efficiency_report(eff_sessions, eff_handoffs)
+        print(f"  efficiency:      {len(eff_sessions)} sessions, ${efficiency_data.get('cost_analysis', {}).get('total_cost_usd', 0):.2f} total cost")
+    else:
+        efficiency_data = None
+        print("  efficiency:      no token-log data")
+
     print("DSAE: rendering...")
 
     from ds_analytics.renderer import render_dashboard
@@ -108,6 +121,7 @@ def main() -> None:
         "git_metrics": all_git_metrics[0] if len(all_git_metrics) == 1 else None,
         "all_git_metrics": all_git_metrics if len(all_git_metrics) > 1 else None,
         "project_name": project_name,
+        "efficiency": efficiency_data,
     }
 
     output_path = render_dashboard(data, output)
