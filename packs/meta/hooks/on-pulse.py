@@ -27,7 +27,7 @@ from lib.time_utils import utcnow  # noqa: E402
 
 GITHUB_TOKEN = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN", "")
 STALE_BRANCH_DAYS = 7
-COOLDOWN_MINUTES = 60
+COOLDOWN_SEC = int(os.environ.get("PULSE_COOLDOWN_SEC", "60"))
 
 
 def _github_repo() -> str:
@@ -434,7 +434,7 @@ def generate_pulse() -> tuple[str, dict]:
 
 
 def _cooldown_active() -> bool:
-    """Return True if the last pulse ran less than COOLDOWN_MINUTES ago."""
+    """Return True if the last pulse ran less than PULSE_COOLDOWN_SEC ago."""
     last = state.read_pulse()
     ts = last.get("timestamp")
     if not ts:
@@ -442,7 +442,7 @@ def _cooldown_active() -> bool:
     try:
         last_run = datetime.fromisoformat(ts)
         elapsed = (utcnow() - last_run).total_seconds()
-        return elapsed < COOLDOWN_MINUTES * 60
+        return elapsed < COOLDOWN_SEC
     except (ValueError, TypeError):
         return False
 
@@ -456,6 +456,24 @@ def main() -> None:
         state.set_quiet_mode(remaining - 1)
         return
     if _cooldown_active():
+        # Return cached pulse data instead of re-running checks
+        cached = state.read_pulse()
+        date_str = cached.get("timestamp", "")[:10] if cached.get("timestamp") else "unknown"
+        report_path = paths.meta_dir() / f"pulse-{date_str}.md"
+
+        print(
+            f"\n[dream-studio] Pulse check complete (cached) — {cached.get('health', 'UNKNOWN')}\n"
+            f"  -> Report: {report_path}\n"
+            f"  -> Stale branches: {cached.get('stale_branches', 0)}\n"
+            f"  -> Overdue milestones: {cached.get('overdue_milestones', 0)}\n"
+            f"  -> Open PRs: {cached.get('open_prs', 0)}\n"
+            f"  -> Pending draft lessons: {cached.get('pending_drafts', 0)}\n"
+            f"  -> Stale domain agents: {cached.get('stale_agents', 0)}\n"
+            + (f"  -> Degraded skills: {cached.get('degraded_skills', 0)}\n" if cached.get('degraded_skills') else ""),
+            flush=True,
+        )
+
+        print(json.dumps({"status": "ok", "hook": "on-pulse", **cached, "cached": True}))
         return
     imported = _import_and_rotate_buffer()
     report, stats = generate_pulse()
