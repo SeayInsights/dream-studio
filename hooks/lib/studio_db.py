@@ -1,40 +1,157 @@
-"""SQLite analytics backend for dream-studio (WAL, prefixed schema, CLI)."""
+"""SQLite analytics backend for dream-studio (WAL, migrations, retry, CLI)."""
 from __future__ import annotations
-import argparse, hashlib, json, sqlite3, sys
+import argparse, functools, hashlib, json, re, sqlite3, sys, time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import paths  # noqa: E402
 
-_DDL = """PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;
-CREATE TABLE IF NOT EXISTS raw_workflow_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, run_key TEXT NOT NULL UNIQUE, workflow TEXT NOT NULL, yaml_path TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, node_count INTEGER, nodes_done INTEGER);
-CREATE TABLE IF NOT EXISTS raw_workflow_nodes (id INTEGER PRIMARY KEY AUTOINCREMENT, run_key TEXT NOT NULL REFERENCES raw_workflow_runs(run_key), node_id TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT, finished_at TEXT, duration_s REAL, output TEXT);
-CREATE TABLE IF NOT EXISTS raw_skill_telemetry (id INTEGER PRIMARY KEY AUTOINCREMENT, skill_name TEXT NOT NULL, invoked_at TEXT NOT NULL, model TEXT, input_tokens INTEGER, output_tokens INTEGER, success INTEGER NOT NULL, execution_time_s REAL);
-CREATE TABLE IF NOT EXISTS cor_skill_corrections (id INTEGER PRIMARY KEY AUTOINCREMENT, telemetry_id INTEGER NOT NULL REFERENCES raw_skill_telemetry(id), corrected_success INTEGER NOT NULL, reason TEXT, corrected_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS sum_skill_summary (skill_name TEXT PRIMARY KEY, times_used INTEGER, success_rate REAL, avg_input_tokens REAL, avg_output_tokens REAL, avg_exec_time_s REAL, last_success TEXT, last_failure TEXT, updated_at TEXT);
-CREATE TABLE IF NOT EXISTS log_batch_imports (batch_id TEXT PRIMARY KEY, imported_at TEXT NOT NULL, row_count INTEGER NOT NULL);
-CREATE VIEW IF NOT EXISTS effective_skill_runs AS SELECT t.id, t.skill_name, t.invoked_at, COALESCE(c.corrected_success, t.success) AS success, CASE WHEN c.id IS NOT NULL THEN 'corrected' ELSE 'heuristic' END AS signal_source, t.input_tokens, t.output_tokens, t.execution_time_s FROM raw_skill_telemetry t LEFT JOIN cor_skill_corrections c ON c.telemetry_id = t.id;
-CREATE TABLE IF NOT EXISTS raw_pulse_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL UNIQUE, health_score INTEGER NOT NULL, health_status TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, raw_content TEXT);
-CREATE TABLE IF NOT EXISTS raw_planning_specs (id INTEGER PRIMARY KEY AUTOINCREMENT, spec_path TEXT NOT NULL UNIQUE, title TEXT, created_date TEXT, task_count INTEGER, has_build_commit INTEGER DEFAULT 0, last_checked TEXT);
-CREATE TABLE IF NOT EXISTS sum_analytics_run (id INTEGER PRIMARY KEY AUTOINCREMENT, run_at TEXT NOT NULL, pulse_rows INTEGER, spec_rows INTEGER, skill_rows INTEGER, output_path TEXT);
-CREATE TABLE IF NOT EXISTS raw_operational_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL, project_slug TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, captured_at TEXT NOT NULL, UNIQUE(snapshot_date, project_slug));
-CREATE TABLE IF NOT EXISTS raw_approaches (id INTEGER PRIMARY KEY AUTOINCREMENT, skill_id TEXT NOT NULL, session_date TEXT NOT NULL, approach TEXT NOT NULL, outcome TEXT NOT NULL, context TEXT, why_worked TEXT, tokens_used INTEGER, duration_s REAL, model TEXT, captured_at TEXT NOT NULL);
-CREATE VIEW IF NOT EXISTS vw_approach_patterns AS SELECT skill_id, approach, COUNT(*) AS times_tried, SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS successes, ROUND(CAST(SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) AS success_pct, CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens, ROUND(AVG(duration_s), 1) AS avg_duration FROM raw_approaches GROUP BY skill_id, approach HAVING COUNT(*) >= 2;
-CREATE TABLE IF NOT EXISTS reg_skills (skill_id TEXT PRIMARY KEY, pack TEXT NOT NULL, mode TEXT NOT NULL, description TEXT, triggers TEXT, skill_path TEXT NOT NULL, gotchas_path TEXT, word_count INTEGER, chains_to TEXT, updated_at TEXT);
-CREATE TABLE IF NOT EXISTS reg_gotchas (gotcha_id TEXT NOT NULL, skill_id TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL, context TEXT, fix TEXT, keywords TEXT, discovered TEXT, times_hit INTEGER DEFAULT 0, last_hit TEXT, PRIMARY KEY (gotcha_id, skill_id));
-CREATE TABLE IF NOT EXISTS reg_workflows (workflow_id TEXT PRIMARY KEY, yaml_path TEXT NOT NULL, description TEXT, node_count INTEGER, skills_used TEXT, category TEXT, est_tokens INTEGER, updated_at TEXT);
-CREATE TABLE IF NOT EXISTS reg_skill_deps (from_skill TEXT NOT NULL, to_skill TEXT NOT NULL, dep_type TEXT NOT NULL, PRIMARY KEY (from_skill, to_skill, dep_type));"""
-
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
 def _db_path() -> Path: return paths.state_dir() / "studio.db"
 
+
+# ── SQL statement splitter ──────────────────────────────────────────────────
+
+def _split_statements(sql_text: str) -> list[str]:
+    """Split SQL into individual statements, respecting trigger BEGIN/END blocks."""
+    statements: list[str] = []
+    current: list[str] = []
+    depth = 0
+
+    for line in sql_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("--"):
+            continue
+
+        current.append(line)
+        upper = stripped.upper()
+
+        if re.search(r"\bBEGIN\b", upper):
+            depth += 1
+
+        if stripped.endswith(";"):
+            end_token = upper.rstrip(";").rstrip()
+            if depth > 0 and end_token.endswith("END"):
+                depth -= 1
+
+            if depth == 0:
+                stmt = "\n".join(current).strip().rstrip(";").strip()
+                if stmt:
+                    statements.append(stmt)
+                current = []
+
+    if current:
+        stmt = "\n".join(current).strip().rstrip(";").strip()
+        if stmt:
+            statements.append(stmt)
+
+    return statements
+
+
+# ── Migration runner ────────────────────────────────────────────────────────
+
+def _migrations_dir() -> Path:
+    return Path(__file__).parent / "migrations"
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply pending schema migrations from hooks/lib/migrations/*.sql."""
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS _schema_version ("
+        "version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    conn.commit()
+
+    current = conn.execute(
+        "SELECT MAX(version) FROM _schema_version"
+    ).fetchone()[0] or 0
+
+    mdir = _migrations_dir()
+    if not mdir.is_dir():
+        return
+
+    files = sorted(mdir.glob("[0-9]*.sql"))
+    if not files:
+        return
+
+    latest_code = max(int(f.stem.split("_")[0]) for f in files)
+
+    if current > latest_code:
+        raise RuntimeError(
+            f"Database schema v{current} is newer than code v{latest_code}. "
+            "Update dream-studio to a compatible version."
+        )
+
+    for f in files:
+        version = int(f.stem.split("_")[0])
+        if version <= current:
+            continue
+
+        sql_text = f.read_text(encoding="utf-8")
+        for stmt in _split_statements(sql_text):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError as e:
+                msg = str(e).lower()
+                if "duplicate column name" in msg:
+                    continue
+                if "no such module" in msg:
+                    continue
+                if "no such table" in msg and "fts_gotchas" in msg:
+                    continue
+                raise
+
+        conn.execute(
+            "INSERT INTO _schema_version(version, applied_at) VALUES(?, ?)",
+            (version, _NOW()),
+        )
+        conn.commit()
+
+
+# ── Connection ──────────────────────────────────────────────────────────────
+
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path or _db_path()), timeout=10.0)
+    conn = sqlite3.connect(str(db_path or _db_path()), timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.executescript(_DDL)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
+    _run_migrations(conn)
     return conn
 
+
+# ── Retry infrastructure ───────────────────────────────────────────────────
+
+def _with_retry(fn=None, *, retries=3, backoffs=(0.1, 0.5, 2.0)):
+    """Decorator: retry on SQLITE_BUSY with exponential backoff."""
+    if fn is None:
+        return lambda f: _with_retry(f, retries=retries, backoffs=backoffs)
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        for attempt in range(retries + 1):
+            try:
+                return fn(*args, **kwargs)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < retries:
+                    time.sleep(backoffs[min(attempt, len(backoffs) - 1)])
+                    continue
+                raise
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def _reraise_if_busy(e: Exception) -> None:
+    """Re-raise SQLITE_BUSY so the retry decorator can handle it."""
+    if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
+        raise
+
+
+# ── Workflow functions ──────────────────────────────────────────────────────
+
+@_with_retry
 def archive_workflow(run_key: str, wf: dict, db_path: Path | None = None) -> bool:
     try:
         nodes = wf.get("nodes", {})
@@ -46,7 +163,10 @@ def archive_workflow(run_key: str, wf: dict, db_path: Path | None = None) -> boo
                 c.execute("INSERT INTO raw_workflow_nodes(run_key,node_id,status,started_at,finished_at,duration_s,output) VALUES(?,?,?,?,?,?,?)",
                           (run_key, nid, nd.get("status",""), nd.get("started"), nd.get("finished"), nd.get("duration_s"), nd.get("output")))
         return True
-    except Exception: return False
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
 
 def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
     try:
@@ -55,11 +175,14 @@ def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
         c.close(); return dict(r) if r else None
     except Exception: return None
 
+
 def run_count(workflow_name: str, db_path: Path | None = None) -> int:
     try:
         c = _connect(db_path); n = c.execute("SELECT COUNT(*) FROM raw_workflow_runs WHERE workflow=?", (workflow_name,)).fetchone()[0]; c.close(); return n
     except Exception: return 0
 
+
+@_with_retry
 def import_buffer(buffer_path: Path, db_path: Path | None = None) -> int:
     try:
         raw = buffer_path.read_bytes()
@@ -73,15 +196,22 @@ def import_buffer(buffer_path: Path, db_path: Path | None = None) -> int:
                           (r["skill_name"], r.get("invoked_at", _NOW()), r.get("model"), r.get("input_tokens"), r.get("output_tokens"), int(r["success"]), r.get("execution_time_s")))
             c.execute("INSERT INTO log_batch_imports(batch_id,imported_at,row_count) VALUES(?,?,?)", (bid, _NOW(), len(rows)))
         return len(rows)
-    except Exception: return 0
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
 
+
+@_with_retry
 def rebuild_summaries(db_path: Path | None = None) -> None:
     try:
         with _connect(db_path) as c:
             c.executescript("""DELETE FROM sum_skill_summary;
 INSERT INTO sum_skill_summary SELECT skill_name,COUNT(*),AVG(success),AVG(input_tokens),AVG(output_tokens),AVG(execution_time_s),MAX(CASE WHEN success=1 THEN invoked_at END),MAX(CASE WHEN success=0 THEN invoked_at END),datetime('now') FROM (SELECT * FROM effective_skill_runs WHERE skill_name IN (SELECT skill_name FROM raw_skill_telemetry GROUP BY skill_name HAVING COUNT(*)>=5) ORDER BY id DESC LIMIT 30) GROUP BY skill_name;""")
-    except Exception: pass
+    except Exception as e:
+        _reraise_if_busy(e)
 
+
+@_with_retry
 def rolling_window_prune(db_path: Path | None = None) -> int:
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
@@ -91,7 +221,10 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
             d3 = c.execute("DELETE FROM raw_workflow_runs WHERE finished_at<?", (cutoff,)).rowcount
             d4 = c.execute("DELETE FROM raw_approaches WHERE captured_at<?", (cutoff,)).rowcount
         return d1 + d2 + d3 + d4
-    except Exception: return 0
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
+
 
 def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
     try:
@@ -111,13 +244,19 @@ def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
     except Exception:
         return []
 
+
+@_with_retry
 def skill_correct(telemetry_id: int, success: int, reason: str = "", db_path: Path | None = None) -> bool:
     try:
         with _connect(db_path) as c:
             c.execute("INSERT INTO cor_skill_corrections(telemetry_id,corrected_success,reason,corrected_at) VALUES(?,?,?,?)", (telemetry_id, success, reason, _NOW()))
         return True
-    except Exception: return False
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
 
+
+@_with_retry
 def insert_operational_snapshot(
     snapshot_date: str,
     project_slug: str,
@@ -140,10 +279,14 @@ def insert_operational_snapshot(
                  stale_branches, pending_drafts, open_escalations, _NOW()),
             )
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
+# ── Approach functions ──────────────────────────────────────────────────────
+
+@_with_retry
 def insert_approach(
     skill_id: str,
     approach: str,
@@ -155,6 +298,8 @@ def insert_approach(
     duration_s: float | None = None,
     model: str | None = None,
     session_date: str | None = None,
+    project_id: str | None = None,
+    session_id: str | None = None,
     db_path: Path | None = None,
 ) -> bool:
     try:
@@ -162,13 +307,16 @@ def insert_approach(
             c.execute(
                 """INSERT INTO raw_approaches
                    (skill_id, session_date, approach, outcome, context,
-                    why_worked, tokens_used, duration_s, model, captured_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    why_worked, tokens_used, duration_s, model, captured_at,
+                    project_id, session_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (skill_id, session_date or _NOW()[:10], approach, outcome,
-                 context or None, why or None, tokens_used, duration_s, model, _NOW()),
+                 context or None, why or None, tokens_used, duration_s, model, _NOW(),
+                 project_id, session_id),
             )
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
@@ -222,6 +370,7 @@ def capture_approach(
 
 # ── Registry query functions ─────────────────────────────────────────────────
 
+@_with_retry
 def upsert_skill(skill_id: str, pack: str, mode: str, skill_path: str, *,
                  description: str = "", triggers: str = "", gotchas_path: str | None = None,
                  word_count: int | None = None, chains_to: str | None = None,
@@ -237,7 +386,8 @@ def upsert_skill(skill_id: str, pack: str, mode: str, skill_path: str, *,
                  gotchas_path, word_count, chains_to, _NOW()),
             )
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
@@ -261,6 +411,7 @@ def find_skills_by_trigger(keyword: str, db_path: Path | None = None) -> list[di
         return []
 
 
+@_with_retry
 def upsert_gotcha(gotcha_id: str, skill_id: str, severity: str, title: str, *,
                   context: str = "", fix: str = "", keywords: str = "",
                   discovered: str | None = None, db_path: Path | None = None) -> bool:
@@ -277,17 +428,27 @@ def upsert_gotcha(gotcha_id: str, skill_id: str, severity: str, title: str, *,
                  keywords, discovered, gotcha_id, skill_id, gotcha_id, skill_id),
             )
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
 def search_gotchas_db(keyword: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? OR context LIKE ? ORDER BY severity",
-            (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
-        ).fetchall()
+        try:
+            rows = c.execute(
+                "SELECT g.* FROM reg_gotchas g "
+                "INNER JOIN fts_gotchas f ON g.rowid = f.rowid "
+                "WHERE fts_gotchas MATCH ? ORDER BY g.severity",
+                (keyword,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = c.execute(
+                "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? "
+                "OR context LIKE ? ORDER BY severity",
+                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
+            ).fetchall()
         c.close()
         return [dict(r) for r in rows]
     except Exception:
@@ -304,6 +465,7 @@ def get_gotchas_for_skill(skill_id: str, db_path: Path | None = None) -> list[di
         return []
 
 
+@_with_retry
 def upsert_workflow(workflow_id: str, yaml_path: str, *, description: str = "",
                     node_count: int | None = None, skills_used: str = "",
                     category: str = "", est_tokens: int | None = None,
@@ -319,7 +481,8 @@ def upsert_workflow(workflow_id: str, yaml_path: str, *, description: str = "",
                  skills_used, category, est_tokens, _NOW()),
             )
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
@@ -333,6 +496,7 @@ def get_workflows_by_category(category: str, db_path: Path | None = None) -> lis
         return []
 
 
+@_with_retry
 def upsert_skill_dep(from_skill: str, to_skill: str, dep_type: str,
                      db_path: Path | None = None) -> bool:
     try:
@@ -340,7 +504,8 @@ def upsert_skill_dep(from_skill: str, to_skill: str, dep_type: str,
             c.execute("INSERT OR REPLACE INTO reg_skill_deps VALUES (?, ?, ?)",
                       (from_skill, to_skill, dep_type))
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
 
@@ -354,15 +519,31 @@ def get_skill_deps(skill_id: str, db_path: Path | None = None) -> list[dict]:
         return []
 
 
+@_with_retry
 def clear_registry(db_path: Path | None = None) -> bool:
     try:
         with _connect(db_path) as c:
             for t in ("reg_skills", "reg_gotchas", "reg_workflows", "reg_skill_deps"):
                 c.execute(f"DELETE FROM {t}")  # noqa: S608
         return True
-    except Exception:
+    except Exception as e:
+        _reraise_if_busy(e)
         return False
 
+
+# ── Schema introspection ───────────────────────────────────────────────────
+
+def schema_version(db_path: Path | None = None) -> int:
+    try:
+        c = _connect(db_path)
+        v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+        c.close()
+        return v
+    except Exception:
+        return 0
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="studio_db CLI"); sub = ap.add_subparsers(dest="cmd")
@@ -377,9 +558,29 @@ def main() -> None:
     elif args.cmd == "prune":
         print(f"pruned {rolling_window_prune()} rows")
     elif args.cmd == "status":
-        c = _connect(); tables = ["raw_workflow_runs","raw_workflow_nodes","raw_skill_telemetry","cor_skill_corrections","sum_skill_summary","log_batch_imports","raw_pulse_snapshots","raw_planning_specs","sum_analytics_run","raw_operational_snapshots","raw_approaches","reg_skills","reg_gotchas","reg_workflows","reg_skill_deps"]
-        print(f"{'Table':<30} {'Rows':>8}\n" + "-"*40)
-        for t in tables: print(f"{t:<30} {c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]:>8}")  # noqa: S608
+        c = _connect()
+        tables = [
+            "raw_workflow_runs", "raw_workflow_nodes", "raw_skill_telemetry",
+            "cor_skill_corrections", "sum_skill_summary", "log_batch_imports",
+            "raw_pulse_snapshots", "raw_planning_specs", "sum_analytics_run",
+            "raw_operational_snapshots", "raw_approaches",
+            "reg_skills", "reg_gotchas", "reg_workflows", "reg_skill_deps",
+            "reg_projects", "raw_sessions", "raw_handoffs",
+            "raw_specs", "raw_tasks", "raw_lessons",
+            "raw_sentinels", "raw_token_usage",
+            "_schema_version",
+        ]
+        v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+        print(f"Schema version: {v}")
+        fk = c.execute("PRAGMA foreign_keys").fetchone()[0]
+        print(f"Foreign keys: {'ON' if fk else 'OFF'}")
+        print(f"\n{'Table':<30} {'Rows':>8}\n" + "-" * 40)
+        for t in tables:
+            try:
+                n = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]  # noqa: S608
+                print(f"{t:<30} {n:>8}")
+            except sqlite3.OperationalError:
+                print(f"{t:<30} {'N/A':>8}")
         c.close()
     else: ap.print_help()
 
