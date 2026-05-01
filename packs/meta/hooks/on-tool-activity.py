@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
 from lib import paths  # noqa: E402
+from lib.studio_db import set_sentinel, has_sentinel  # noqa: E402
 
 MAX_AGENTS = 6
 _NUDGE_TOOLS = {"Edit", "Write"}
@@ -101,14 +102,10 @@ def _maybe_harden_nudge(tool_name: str, tool_input: dict) -> None:
     if (root / "Makefile").exists() or (root / "SECURITY.md").exists():
         return
     slug = str(root).replace("\\", "-").replace("/", "-").replace(":", "-").replace(" ", "-")[:80]
-    sentinel = paths.state_dir() / f"harden-nudge-{slug}.json"
-    if sentinel.exists():
+    key = f"harden-nudge-{slug}"
+    if has_sentinel(key):
         return
-    try:
-        sentinel.parent.mkdir(parents=True, exist_ok=True)
-        sentinel.write_text("{}", encoding="utf-8")
-    except Exception:
-        return
+    set_sentinel(key, "harden-nudge")
     print(
         "\n[dream-studio] This project hasn't been hardened. Run /harden audit to check.\n",
         flush=True,
@@ -135,14 +132,10 @@ def _maybe_security_suggest(tool_name: str, tool_input: dict) -> None:
         return
     root = _project_root(file_path)
     slug = str(root).replace("\\", "-").replace("/", "-").replace(":", "-")[:80]
-    sentinel = paths.state_dir() / f"security-suggest-{slug}.json"
-    if sentinel.exists():
+    key = f"security-suggest-{slug}"
+    if has_sentinel(key):
         return
-    try:
-        sentinel.parent.mkdir(parents=True, exist_ok=True)
-        sentinel.write_text("{}", encoding="utf-8")
-    except Exception:
-        return
+    set_sentinel(key, "security-suggest")
     label = next(iter(matched))
     print(
         f"\n[dream-studio] Security: editing {Path(file_path).name} ({label}) — consider running /secure.\n",

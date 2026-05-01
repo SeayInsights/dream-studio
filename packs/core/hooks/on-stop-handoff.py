@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import paths  # noqa: E402
 from lib.context_handoff import active_files, write_handoff, write_recap  # noqa: E402
 from lib.models import StopPayload  # noqa: E402
+from lib.studio_db import set_sentinel, has_sentinel  # noqa: E402
 
 
 _SESSION_END_KB = 0.0  # sentinel: Stop hook has no context % — use 0 KB
@@ -78,14 +79,14 @@ def main() -> None:
     if not _has_activity(cwd):
         return
 
-    sentinel = paths.state_dir() / f"handoff-done-{session_id or 'unknown'}.json"
-    if sentinel.exists():
+    key = f"handoff-done-{session_id or 'unknown'}"
+    if has_sentinel(key):
         return
 
     handoff_path = write_handoff(cwd, _SESSION_END_KB, session_id, is_pct=False)
     write_recap(cwd, _SESSION_END_KB, session_id, handoff_path)
 
-    sentinel.write_text("{}", encoding="utf-8")
+    set_sentinel(key, "handoff-done")
 
 
 if __name__ == "__main__":
