@@ -22,6 +22,27 @@ avoid:
     context: "Starting implementation before approval wastes work if the approach changes. The approval gate exists to prevent this."
     fix: "End every think with: spec document path + 'Waiting for Director approval before plan.' No code, no plan, no implementation hints."
 
+  - id: spec-without-risk-check
+    severity: high
+    discovered: 2026-05-01
+    title: "Run spec_risk_check.py before writing Edge Cases"
+    context: "Specs written without checking prior session history and gotchas repeat known mistakes. The risk check surfaces relevant prior experience that should inform the spec's edge cases and assumptions."
+    fix: "Before step 4 (Spec), run: py scripts/spec_risk_check.py <topic>. Incorporate relevant gotchas and prior session context into the Edge Cases and Assumptions sections."
+
+  - id: research-without-triangulation
+    severity: high
+    discovered: 2026-05-01
+    title: "Never state a research finding without triangulation"
+    context: "Per domains/research/analysis.yml, findings require 3+ independent sources before they can be stated with confidence. Single-source findings are hypotheses, not conclusions."
+    fix: "Run py scripts/source_ranker.py on collected sources. If triangulation score < 1.0, collect more independent sources. If confidence remains LOW after reasonable effort, explicitly label the finding as 'unverified' in the spec."
+
+  - id: research-without-counter-argument
+    severity: medium
+    discovered: 2026-05-01
+    title: "Always steel-man the opposing view before finalizing a conclusion"
+    context: "Per domains/research/analysis.yml, conclusions without a counter-argument are unreliable. If all sources agree and no dissent is found, the research may be exhibiting confirmation bias."
+    fix: "Before finalizing the recommended approach in step 3 (Recommend), articulate the strongest possible counter-argument. If it cannot be refuted with available evidence, downgrade the conclusion to 'tentative' or 'contested' and note this in the spec."
+
 best_practices:
   - id: p1-p2-p3-by-value
     title: "Prioritize user stories P1/P2/P3 by user value, not implementation complexity"

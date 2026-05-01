@@ -1,0 +1,256 @@
+# Research Cache — Schema, Refresh Policies, and Integration Points
+# Source: synthesized from dream-studio research workflow and triangulation rules
+version: 1
+
+# ── Schema Definition ────────────────────────────────────────────────────────
+# Each entry in the research cache is a JSON object with the following shape.
+# All fields are present at the top level; optional fields may be omitted or empty.
+#
+# {
+#   "topic":            string (required) — kebab-case topic identifier
+#   "sources": [
+#     {
+#       "url":          string — direct URL to the source
+#       "name":         string — human-readable source name
+#       "tier":         integer — 1 (primary) or 2 (secondary)
+#       "date":         string — ISO 8601 date the source was published or accessed
+#       "key_findings": string — one-to-three sentence summary of what this source contributes
+#     }
+#   ],
+#   "confidence":       string — "low" | "medium" | "high"
+#   "triangulated":     boolean — true only when >= 3 independent sources agree
+#   "refresh_due":      string — ISO 8601 date after which this entry should be re-researched
+#   "saved_date":       string — ISO 8601 date the entry was written to cache
+#   "counter_arguments": [ string ],  // optional — steel-manned opposing views
+#   "assumptions":      [ string ]    // optional — unverified assumptions the research rests on
+# }
+#
+# Confidence rules:
+#   high   → triangulated == true AND all sources are Tier 1 OR a mix of Tier 1 + 2 that agree
+#   medium → triangulated == true but sources are Tier 2 only, OR 2 sources with 1 Tier 1
+#   low    → fewer than 3 independent sources, or sources conflict without resolution
+
+# ── Source Tier Definitions ───────────────────────────────────────────────────
+# Tier 1 (primary) — raw data gathered at the origin, unmediated by an intermediary:
+#   - Raw datasets and microdata (census, clinical trial data, telemetry exports)
+#   - Original academic studies with full methodology published
+#   - Direct customer or subject-matter-expert interviews (transcript held)
+#   - Official regulatory or financial filings (SEC 10-K, patent filings, court records)
+#   - First-party surveys administered by the researcher with full methodology
+#
+# Tier 2 (secondary) — data that aggregates, summarizes, or interprets Tier 1:
+#   - Analyst and market research reports (Gartner, IDC, Forrester, CB Insights)
+#   - News and trade press articles
+#   - Blog posts, opinion pieces, and thought leadership content
+#   - Aggregated benchmark databases (e.g., Profitwell benchmarks aggregated across clients)
+#   - Wikipedia and encyclopedic references
+#
+# Conflict resolution rule:
+#   When Tier 1 and Tier 2 sources conflict, Tier 1 wins unless the secondary source
+#   explicitly documents a correction, retraction, or methodological update to the primary.
+#   Document the conflict and resolution in counter_arguments.
+
+patterns:
+  - id: cache-before-research
+    title: Check Cache Before Starting New Research
+    description: >
+      Before spawning a web search or analysis loop, look up the topic key in the
+      research cache. If an unexpired entry exists with confidence >= medium, surface
+      the prior findings and ask whether they are sufficient or a refresh is needed.
+      This prevents redundant work and keeps findings traceable across sessions.
+    example: |
+      # think mode — cache lookup flow
+      1. Normalize topic → kebab-case key: "saas-churn-benchmarks"
+      2. Call research_cache.py get saas-churn-benchmarks
+      3. If entry found AND refresh_due > today:
+           Show: topic, confidence, saved_date, key findings per source, counter_arguments
+           Ask: "Prior research found [X]. Proceed with this, or refresh?"
+      4. If entry missing OR stale: proceed with full research loop, then cache result.
+
+  - id: write-cache-after-triangulation
+    title: Write to Cache Only After Triangulating Three Sources
+    description: >
+      Do not cache a single-source lookup. Run the full triangulation protocol
+      (three independent sources, at least one Tier 1 if available), then write
+      the entry with triangulated: true and the correct confidence level. Partial
+      research should be held in the session context, not committed to cache, to
+      avoid polluting the cache with low-quality entries.
+    example: |
+      # After collecting sources A, B, C that agree on a claim:
+      research_cache.py set \
+        --topic "security-owasp-top10" \
+        --confidence high \
+        --triangulated true \
+        --source-tier 1 "https://owasp.org/..." "OWASP Top 10 Official" "2024-01-01" "Defines A01-A10" \
+        --source-tier 2 "https://portswigger.net/..." "PortSwigger Research" "2024-03-15" "Corroborates injection risk rank" \
+        --source-tier 1 "https://nvd.nist.gov/..." "NVD CVE data" "2024-04-01" "Injection CVEs dominate severity data" \
+        --refresh-days 30
+
+  - id: topic-key-naming
+    title: Consistent Topic Key Naming
+    description: >
+      Topic keys are the primary lookup identifier. Use a consistent naming scheme
+      so that the think mode cache lookup, the daily-standup staleness check, and
+      the source_ranker all resolve the same key for the same topic.
+    example: |
+      # Format: [domain-prefix]-[specific-topic]
+      # Domain prefixes:
+      #   security-   → security-owasp-top10, security-supply-chain-risks
+      #   market-     → market-saas-churn, market-ai-dev-tools-2025
+      #   tech-       → tech-playwright-patterns, tech-edge-runtime-limits
+      #   arch-       → arch-monorepo-patterns, arch-event-sourcing-tradeoffs
+      #   career-     → career-senior-ic-comp-2025, career-bi-developer-demand
+      #
+      # Rules:
+      #   - Lowercase kebab-case only: "playwright-testing-patterns" not "PlaywrightTestingPatterns"
+      #   - Always prefix with domain: "security-owasp-top10" not "owasp-top10"
+      #   - No spaces, underscores, or special characters
+      #   - Include year only when the topic is inherently time-bound: "market-ai-dev-tools-2025"
+
+  - id: refresh-policy-by-domain
+    title: Set refresh_due Based on Domain Volatility
+    description: >
+      Different knowledge domains go stale at different rates. Set refresh_due
+      automatically based on the topic's domain prefix so that the daily-standup
+      workflow and cache management CLI can surface entries needing re-research
+      without manual tracking.
+    example: |
+      # Refresh intervals by domain prefix:
+      #   security-   → 30 days  (CVEs, threat landscape evolve rapidly)
+      #   market-     → 90 days  (market conditions shift quarterly)
+      #   tech-       → 180 days (technology patterns stabilize over 6 months)
+      #   arch-       → 365 days (architecture decisions rarely flip in a year)
+      #   career-     → 90 days  (comp data, job market shift quarterly)
+      #   DEFAULT     → 90 days  (used when domain prefix is unrecognized)
+      #
+      # Example: topic "security-log4j-mitigations" saved 2025-05-01
+      #   refresh_due = 2025-05-31  (30-day security window)
+      #
+      # Example: topic "arch-event-sourcing-tradeoffs" saved 2025-04-01
+      #   refresh_due = 2026-04-01  (365-day architecture window)
+
+anti_patterns:
+  - id: caching-before-triangulation
+    title: Writing Cache Entries Before Triangulation is Complete
+    description: >
+      Caching a finding after one or two sources and marking it as done creates
+      false confidence. The cache will return a "medium" or "high" confidence label
+      for an entry that was never properly triangulated, silently preventing future
+      sessions from re-researching a weakly supported claim.
+      Fix: always complete the triangulation loop (three sources checked, conflicts
+      resolved) before calling research_cache.py set. If time runs short, leave the
+      entry out of the cache and note the gap in the session context instead.
+
+  - id: duplicate-keys-different-scopes
+    title: Using Ambiguous Topic Keys That Collide Across Scopes
+    description: >
+      Storing "churn" instead of "market-saas-churn" means a security-related churn
+      metric for user account terminations could overwrite or conflict with the market
+      benchmarking entry. Ambiguous keys also fail the daily-standup prefix-based
+      domain detection, causing incorrect refresh intervals.
+      Fix: always prefix with the domain and be specific enough that two distinct
+      questions would never share the same key.
+
+  - id: skipping-counter-arguments
+    title: Omitting counter_arguments When Sources Conflict
+    description: >
+      If sources disagree and counter_arguments is left empty, future sessions see
+      only the winning claim with no trace of the tension. The same conflict will be
+      re-litigated every session. Document the steel-manned opposition and the
+      resolution rationale in counter_arguments even when Tier 1 wins cleanly.
+
+  - id: overriding-tier1-with-vendor-report
+    title: Letting Tier 2 Vendor Reports Override Tier 1 Evidence
+    description: >
+      Gartner, IDC, and Forrester reports are Tier 2. A vendor-funded market report
+      claiming a TAM figure cannot override an SEC filing or a first-party survey
+      that shows a different number. The incentive structure of vendor-funded research
+      means Tier 2 numbers can be inflated by 5-10x. Record the conflict in
+      counter_arguments and set confidence to low until a second Tier 1 source is found.
+
+gotchas:
+  - id: stale-cache-high-confidence-label
+    title: Expired Entry Still Shows High Confidence
+    description: >
+      The confidence field reflects source quality at the time of research, not
+      currency. An entry from 18 months ago may still show confidence: high even
+      though it is long past its refresh_due date. Consumers must check refresh_due
+      independently — confidence alone does not indicate freshness.
+    fix: >
+      The think mode cache lookup always compares refresh_due to today before
+      surfacing an entry. Never display confidence without also displaying saved_date
+      and refresh_due. Treat any entry where refresh_due < today as stale regardless
+      of its confidence value.
+
+  - id: llm-output-as-source
+    title: LLM-Generated Content Treated as a Cache Source
+    description: >
+      If the research loop uses an LLM to synthesize findings and that synthesis
+      is logged as a source URL, the cache will contain a circular reference with
+      no ground-truth origin. This is the LLM self-citation loop anti-pattern applied
+      to persistent storage — it compounds across sessions.
+    fix: >
+      Every source entry in the cache must have a verifiable URL or named publication.
+      LLM synthesis is a processing step, not a source. If no verifiable URL exists,
+      the finding cannot be cached — mark it as an unverified assumption instead.
+
+  - id: refresh-due-set-too-aggressively
+    title: Security Topics With 365-Day Refresh Intervals
+    description: >
+      A developer might accidentally use the architecture refresh interval for a
+      security topic, leaving CVE-related findings in cache for a year. Security
+      threat landscapes can shift within weeks of a major disclosure.
+    fix: >
+      The domain prefix determines the refresh interval automatically. Never manually
+      override the security- domain to a longer interval. If a topic genuinely spans
+      domains (e.g., "arch-zero-trust-implementation"), use the shorter of the two
+      applicable intervals (30 days for security topics, not 365).
+
+  - id: topic-key-drift-across-sessions
+    title: Same Topic Cached Under Multiple Keys
+    description: >
+      "market-saas-churn", "market-saas-churn-rates", and "saas-churn-benchmarks"
+      are treated as three separate cache entries even though they cover the same
+      question. The cache grows with duplicate, divergent entries and the think mode
+      lookup may miss an existing valid entry.
+    fix: >
+      Establish the canonical key the first time a topic is researched and record
+      it in the session notes. Before caching, call research_cache.py list and check
+      for near-duplicate keys. If a close match exists, update the existing entry
+      rather than creating a new one.
+
+# ── Integration Points ────────────────────────────────────────────────────────
+# The following components read from or write to the research cache. All access
+# goes through research_cache.py — nothing queries the cache JSON directly.
+#
+# think mode (skills/core/think.md)
+#   Role: primary consumer and writer
+#   On entry: calls `research_cache.py get <topic>` before starting any web research.
+#             If a fresh, triangulated entry exists, surfaces it and asks whether to
+#             proceed with cached findings or force a refresh.
+#   On exit:  after completing triangulation, calls `research_cache.py set` with
+#             all sources, confidence, and the computed refresh_due date.
+#
+# source_ranker.py (skills/domains/research/source_ranker.py)
+#   Role: scores and ranks a list of candidate sources before they are added to cache
+#   Input:  list of {url, name, snippet} objects from a web search result
+#   Output: sorted list with tier classification (1 or 2), deduplication of sources
+#           that cite each other, and a warning flag if no Tier 1 source is present
+#   Called by: think mode immediately after web search, before writing cache entry
+#
+# research_cache.py (skills/domains/research/research_cache.py)
+#   Role: CLI and library for all cache read/write/list operations
+#   Commands:
+#     get <topic>           → returns the cache entry or a "not found / stale" status
+#     set <topic> [flags]   → writes or updates a cache entry with full schema validation
+#     list [--stale]        → lists all entries; --stale filters to entries past refresh_due
+#     delete <topic>        → removes an entry
+#     export                → dumps the full cache as JSON for backup or Power BI import
+#   Schema enforcement: rejects entries missing required fields or with invalid confidence values
+#
+# daily-standup workflow (skills/workflow/daily-standup.yml)
+#   Role: surfaces stale research topics at the start of each session
+#   On trigger: calls `research_cache.py list --stale` and includes the result in the
+#               standup briefing as "Research needing refresh:" with topic, days overdue,
+#               and confidence level
+#   User action: can dismiss, queue for refresh, or escalate to a full think session
