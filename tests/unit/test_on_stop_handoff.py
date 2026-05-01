@@ -95,6 +95,8 @@ def test_main_skips_on_no_activity(tmp_path, monkeypatch):
 def test_main_writes_on_activity(tmp_path, monkeypatch):
     mod = _load_handler()
     monkeypatch.setattr(mod, "_has_activity", lambda cwd: True)
+    monkeypatch.setattr(mod, "has_sentinel", lambda key, **kw: False)
+    monkeypatch.setattr(mod, "set_sentinel", lambda key, typ, **kw: True)
     state_dir = tmp_path / "state"
     state_dir.mkdir()
     monkeypatch.setattr(mod, "paths", mock.Mock(project_root=lambda: tmp_path, state_dir=lambda: state_dir))
