@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Session resume: surface the latest unconsumed handoff for this project.
+"""Session resume: surface the latest unconsumed handoff across all projects.
 
-Runs as a UserPromptSubmit hook. On the first user message of a session,
-queries SQLite for the latest handoff. If found and not yet consumed,
-prints a briefing so Claude can pick up where the last session left off.
+Runs as a UserPromptSubmit hook (global). On the first user message of a
+session, queries SQLite for the latest unconsumed handoff regardless of
+which directory the session started in. Prints a briefing so Claude can
+pick up where the last session left off.
 
 Uses a sentinel to fire only once per session.
 """
@@ -15,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
 from lib.studio_db import (  # noqa: E402
-    get_latest_handoff,
+    get_latest_unconsumed_handoff,
     mark_handoff_consumed,
     has_sentinel,
     set_sentinel,
@@ -23,22 +24,17 @@ from lib.studio_db import (  # noqa: E402
 
 
 def main() -> None:
-    project_id = Path.cwd().name
-
     session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
     sentinel_key = f"resume-shown-{session_id}"
     if has_sentinel(sentinel_key):
         return
 
-    handoff = get_latest_handoff(project_id)
+    handoff = get_latest_unconsumed_handoff()
     if not handoff:
         set_sentinel(sentinel_key, "resume-check")
         return
 
-    if handoff.get("handoff_consumed"):
-        set_sentinel(sentinel_key, "resume-check")
-        return
-
+    project_id = handoff.get("project_id", "unknown")
     topic = handoff.get("topic", "unknown")
     branch = handoff.get("branch", "unknown")
     last_commit = handoff.get("last_commit", "unknown")
@@ -52,6 +48,7 @@ def main() -> None:
 
     print(
         f"\n[dream-studio] Pending handoff from previous session:\n"
+        f"  Project: {project_id}\n"
         f"  Topic:   {topic}\n"
         f"  Branch:  {branch}\n"
         f"  Commit:  {last_commit}\n"
