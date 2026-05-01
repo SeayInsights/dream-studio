@@ -167,6 +167,13 @@
             <p>tokens/min</p>
         </div>
         {% endif %}
+        {% if hook_timing and hook_timing.handlers %}
+        <div class="card">
+            <h3>Hook Overhead</h3>
+            <p class="big">{{ "%.0f"|format(hook_timing.total_overhead_ms) }}ms</p>
+            <p>Slowest: {{ hook_timing.slowest_handler }}</p>
+        </div>
+        {% endif %}
     </div>
 
     <div class="charts">
@@ -203,6 +210,11 @@
         </div>
         <div class="chart-container">
             <canvas id="contextPressure"></canvas>
+        </div>
+        {% endif %}
+        {% if hook_timing and hook_timing.handlers %}
+        <div class="chart-container">
+            <canvas id="hookTiming"></canvas>
         </div>
         {% endif %}
     </div>
@@ -500,6 +512,38 @@
                 scales: {
                     ...defaultScales,
                     y: { ...defaultScales.y, beginAtZero: true }
+                }
+            }
+        });
+        {% endif %}
+
+        {% if hook_timing and hook_timing.handlers %}
+        /* --- Hook Timing (horizontal bar) --- */
+        const hookData = {{ hook_timing.handlers | tojson }};
+        new Chart(document.getElementById('hookTiming'), {
+            type: 'bar',
+            data: {
+                labels: hookData.map(h => h.handler),
+                datasets: [{
+                    label: 'Avg Duration (ms)',
+                    data: hookData.map(h => h.avg_ms),
+                    backgroundColor: hookData.map(h =>
+                        h.avg_ms > 100 ? COLORS.red :
+                        h.avg_ms > 20 ? COLORS.orange : COLORS.teal
+                    ),
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {
+                    ...defaultPlugins,
+                    title: { display: true, text: 'Hook Handler Performance (avg ms)', color: '#fff', font: { size: 14 } }
+                },
+                scales: {
+                    x: { ...defaultScales.x, beginAtZero: true },
+                    y: { ...defaultScales.y }
                 }
             }
         });
