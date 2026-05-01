@@ -194,6 +194,28 @@ def get_best_approaches(skill_id: str, limit: int = 3, db_path: Path | None = No
         return []
 
 
+def capture_approach(
+    skill: str,
+    approach: str,
+    outcome: str,
+    context: str = "",
+    why: str = "",
+) -> bool:
+    """High-level convenience: write approach to DB, fall back to text file."""
+    ok = insert_approach(skill, approach, outcome, context=context, why=why)
+    if not ok:
+        try:
+            fallback = paths.meta_dir() / "approaches.log"
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%H:%M")
+            with open(fallback, "a", encoding="utf-8") as f:
+                f.write(f"{ts} | approach:{skill} | {outcome} | {approach}\n")
+            return True
+        except Exception:
+            return False
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="studio_db CLI"); sub = ap.add_subparsers(dest="cmd")
     sc = sub.add_parser("skill-correct"); sc.add_argument("telemetry_id"); sc.add_argument("result", choices=["success","failure"]); sc.add_argument("--reason", default="")
