@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Smart model routing** — `model_tier` frontmatter on all 48 SKILL.md files + `get_model_for_skill()` API for subagent model selection (opus/sonnet/haiku) with telemetry tracking
 - **Onboarding skill** (`dream-studio:setup`) — wizard, status, and JIT modes for guided tool installation and project setup (#46)
 - **Web access module** (`skills/core/web.md`) — 3-tier fallback chain (Firecrawl → scraper-mcp → WebSearch/WebFetch) with JIT install prompts
 - **Tool registry** (`skills/setup/tool-registry.yml`) — metadata for 6 optional tools with detect/install/upgrade commands
