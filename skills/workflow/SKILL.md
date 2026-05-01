@@ -6,7 +6,7 @@ Read `gotchas.yml` in this directory before every invocation.
 ## Progressive disclosure check
 Before executing any workflow command, check if the workflow skill is available:
 ```python
-py "$PLUGIN/hooks/lib/skill_calibration.py" check-mode workflow workflow "<user-message>"
+py "../../hooks/lib/skill_calibration.py" check-mode workflow workflow "<user-message>"
 ```
 If exit code is non-zero, the mode is locked. Show the unlock message (from stdout) and stop.
 If exit code is zero, continue. If unlock notifications are printed, show them to the user.
@@ -20,12 +20,12 @@ If the user invokes `/workflow` with no workflow name (or types just `workflow` 
 
 1. Run the registry CLI and display its output:
    ```
-   py "$PLUGIN/hooks/lib/workflow_registry.py"
+   py "../../hooks/lib/workflow_registry.py"
    ```
    This prints a live table: Name, Description, Est. Tokens, Last Run, Run count.
 2. Then stop — do not proceed to execution.
 
-The registry auto-discovers all `*.yaml` files in `$PLUGIN/workflows/` including any you just added.
+The registry auto-discovers all `*.yaml` files in `../../workflows/` including any you just added.
 
 ## CLI Tools
 
@@ -35,17 +35,17 @@ All state management and validation runs through scripts at the plugin root. Res
 PLUGIN=<plugin-root>
 
 # Validate YAML before execution
-py "$PLUGIN/hooks/lib/workflow_validate.py" <yaml-path>
+py "../../hooks/lib/workflow_validate.py" <yaml-path>
 
 # State management (each returns structured output)
-py "$PLUGIN/hooks/lib/workflow_state.py" start <name> <yaml-path>
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> <status> [--output TEXT] [--duration SECS]
-py "$PLUGIN/hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
-py "$PLUGIN/hooks/lib/workflow_state.py" resume <key>
-py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
-py "$PLUGIN/hooks/lib/workflow_state.py" status [<key>]
-py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<expression>"
-py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
+py "../../hooks/lib/workflow_state.py" start <name> <yaml-path>
+py "../../hooks/lib/workflow_state.py" update <key> <node-id> <status> [--output TEXT] [--duration SECS]
+py "../../hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
+py "../../hooks/lib/workflow_state.py" resume <key>
+py "../../hooks/lib/workflow_state.py" abort <key>
+py "../../hooks/lib/workflow_state.py" status [<key>]
+py "../../hooks/lib/workflow_state.py" eval <key> "<expression>"
+py "../../hooks/lib/workflow_state.py" next <key>
 ```
 
 ---
@@ -57,12 +57,12 @@ py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
 #### Step 1 — Find and validate
 
 1. Look for `<name>.yaml` in project `.workflows/` first, then plugin `workflows/`
-2. Run the validator: `py "$PLUGIN/hooks/lib/workflow_validate.py" <yaml-path>`
+2. Run the validator: `py "../../hooks/lib/workflow_validate.py" <yaml-path>`
 3. If it exits non-zero → show errors to Director, stop
 
 #### Step 2 — Initialize state
 
-1. Run: `py "$PLUGIN/hooks/lib/workflow_state.py" start <name> <yaml-path>`
+1. Run: `py "../../hooks/lib/workflow_state.py" start <name> <yaml-path>`
 2. Capture the workflow key from the first line of output (e.g., `idea-to-pr-1713456000`)
 3. Save the key — every subsequent command uses it
 
@@ -71,7 +71,7 @@ py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
 **Do not manually plan waves.** Use the `next` command — it reads state + YAML, applies trigger rules, and returns exactly which nodes are ready:
 
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" next <key>
+py "../../hooks/lib/workflow_state.py" next <key>
 ```
 
 Output tells you what to do:
@@ -85,11 +85,11 @@ Output tells you what to do:
 
 **3a. Condition check** — if `next` shows `condition=...` on a node, evaluate it:
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<condition>"
+py "../../hooks/lib/workflow_state.py" eval <key> "<condition>"
 ```
 Exit 1 (false) → skip it:
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> skipped
+py "../../hooks/lib/workflow_state.py" update <key> <node-id> skipped
 ```
 Then call `next` again — skipping a node may unblock others.
 
@@ -99,7 +99,7 @@ If the node has a `gate`, look up the gate definition in the YAML:
 
 - **`pause`** type → pause and ask Director:
   ```
-  py "$PLUGIN/hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
+  py "../../hooks/lib/workflow_state.py" pause <key> <node-id> <gate-name>
   ```
   Print the gate status. Stop. Wait for `workflow resume`.
 
