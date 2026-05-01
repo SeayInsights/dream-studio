@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Local backup and restore CLI for dream-studio's SQLite database.
+"""Local and cloud backup CLI for dream-studio's SQLite database.
 
 Usage:
-    py scripts/studio_backup.py                  # create backup
-    py scripts/studio_backup.py --restore        # restore from default .bak
-    py scripts/studio_backup.py --restore <path> # restore from specific file
-    py scripts/studio_backup.py --export <path>  # copy .bak to target path
+    py scripts/studio_backup.py                    # create backup
+    py scripts/studio_backup.py --restore          # restore from default .bak
+    py scripts/studio_backup.py --restore <path>   # restore from specific file
+    py scripts/studio_backup.py --export <path>    # copy .bak to target path
+    py scripts/studio_backup.py --cloud setup      # configure rclone remote
+    py scripts/studio_backup.py --cloud push       # upload backup to cloud
+    py scripts/studio_backup.py --cloud pull       # download backup from cloud
+    py scripts/studio_backup.py --cloud auto       # toggle daily auto-push
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,13 +160,192 @@ def main(argv: list[str] | None = None) -> None:
         backup()
 
 
+def _backup_config_path() -> Path:
+    return paths.state_dir() / "backup-config.json"
+
+
+def _load_backup_config() -> dict:
+    cfg = _backup_config_path()
+    if cfg.is_file():
+        try:
+            return json.loads(cfg.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_backup_config(data: dict) -> Path:
+    cfg = _backup_config_path()
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return cfg
+
+
+def _has_rclone() -> bool:
+    return shutil.which("rclone") is not None
+
+
+def _rclone_run(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["rclone", *args],
+        capture_output=True, text=True, timeout=120,
+    )
+
+
 def _cloud_dispatch(cloud_args: list[str]) -> None:
-    """Placeholder for T023 cloud subcommands."""
-    if not cloud_args:
+    cmds = {"setup": cloud_setup, "push": cloud_push, "pull": cloud_pull, "auto": cloud_auto}
+    if not cloud_args or cloud_args[0] not in cmds:
         print("Usage: studio_backup.py --cloud <setup|push|pull|auto>")
         sys.exit(1)
-    print(f"Cloud subcommand '{cloud_args[0]}' not yet implemented.")
-    sys.exit(1)
+    cmds[cloud_args[0]]()
+
+
+def cloud_setup() -> None:
+    """Interactive setup: detect rclone, pick provider, test connection, save config."""
+    if not _has_rclone():
+        print("rclone is not installed.", file=sys.stderr)
+        print("")
+        print("Install it:")
+        print("  Windows:  winget install Rclone.Rclone")
+        print("  macOS:    brew install rclone")
+        print("  Linux:    curl https://rclone.org/install.sh | sudo bash")
+        print("")
+        print("Alternatively, use --export <path> to copy backups to a synced folder.")
+        sys.exit(1)
+
+    # List existing remotes
+    result = _rclone_run(["listremotes"])
+    remotes = [r.strip().rstrip(":") for r in result.stdout.strip().splitlines() if r.strip()]
+
+    if remotes:
+        print("Existing rclone remotes:")
+        for i, r in enumerate(remotes, 1):
+            print(f"  {i}. {r}")
+        print(f"  {len(remotes) + 1}. Create new remote")
+        print("")
+        choice = input(f"Select remote [1-{len(remotes) + 1}]: ").strip()
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(remotes):
+                remote_name = remotes[idx - 1]
+            else:
+                print("Run 'rclone config' to create a new remote, then re-run --cloud setup.")
+                sys.exit(0)
+        except ValueError:
+            print("Invalid selection.")
+            sys.exit(1)
+    else:
+        print("No rclone remotes configured.")
+        print("Run 'rclone config' to create one, then re-run --cloud setup.")
+        sys.exit(1)
+
+    remote_path = input(f"Remote path for backups [{remote_name}:dream-studio-backup]: ").strip()
+    if not remote_path:
+        remote_path = f"{remote_name}:dream-studio-backup"
+
+    # Test connection
+    print(f"Testing connection to {remote_path}...")
+    test = _rclone_run(["mkdir", remote_path])
+    if test.returncode != 0:
+        print(f"ERROR: Could not reach {remote_path}", file=sys.stderr)
+        print(test.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    config = _load_backup_config()
+    config["remote"] = remote_path
+    config["remote_name"] = remote_name
+    config["configured_at"] = _timestamp()
+    _save_backup_config(config)
+
+    print(f"Cloud backup configured: {remote_path}")
+    print(f"Config saved: {_backup_config_path()}")
+
+
+def cloud_push() -> None:
+    """Upload latest .bak to configured rclone remote."""
+    if not _has_rclone():
+        print("ERROR: rclone is not installed. Run --cloud setup first.", file=sys.stderr)
+        sys.exit(1)
+
+    config = _load_backup_config()
+    remote = config.get("remote")
+    if not remote:
+        print("ERROR: No cloud remote configured. Run --cloud setup first.", file=sys.stderr)
+        sys.exit(1)
+
+    bak_path = _default_bak_path()
+    if not bak_path.is_file():
+        print("No backup exists. Creating one first...")
+        bak_path = backup()
+
+    dest = f"{remote}/studio-{_timestamp()}.db.bak"
+    print(f"Pushing {bak_path.name} -> {dest}...")
+
+    result = _rclone_run(["copyto", str(bak_path), dest])
+    if result.returncode != 0:
+        print(f"ERROR: Push failed", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    # Also copy as "latest" for easy pull
+    latest_dest = f"{remote}/studio-latest.db.bak"
+    _rclone_run(["copyto", str(bak_path), latest_dest])
+
+    config["last_push"] = _timestamp()
+    _save_backup_config(config)
+    print(f"Push complete: {dest}")
+
+
+def cloud_pull() -> None:
+    """Download latest backup from configured rclone remote."""
+    if not _has_rclone():
+        print("ERROR: rclone is not installed. Run --cloud setup first.", file=sys.stderr)
+        sys.exit(1)
+
+    config = _load_backup_config()
+    remote = config.get("remote")
+    if not remote:
+        print("ERROR: No cloud remote configured. Run --cloud setup first.", file=sys.stderr)
+        sys.exit(1)
+
+    src = f"{remote}/studio-latest.db.bak"
+    pull_path = paths.state_dir() / "studio-cloud-pull.db.bak"
+
+    print(f"Pulling {src}...")
+    result = _rclone_run(["copyto", src, str(pull_path)])
+    if result.returncode != 0:
+        print(f"ERROR: Pull failed", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+
+    size_kb = pull_path.stat().st_size / 1024
+    print(f"Downloaded: {pull_path} ({size_kb:.1f} KB)")
+    print("")
+    answer = input("Restore from this backup? [y/N]: ").strip().lower()
+    if answer == "y":
+        restore(pull_path)
+    else:
+        print(f"Backup saved at {pull_path}. Restore later with: --restore {pull_path}")
+
+    config["last_pull"] = _timestamp()
+    _save_backup_config(config)
+
+
+def cloud_auto() -> None:
+    """Toggle daily auto-push flag in backup config."""
+    config = _load_backup_config()
+    if not config.get("remote"):
+        print("ERROR: No cloud remote configured. Run --cloud setup first.", file=sys.stderr)
+        sys.exit(1)
+
+    current = config.get("auto_push", False)
+    config["auto_push"] = not current
+    _save_backup_config(config)
+
+    state = "ENABLED" if config["auto_push"] else "DISABLED"
+    print(f"Auto-push {state}")
+    if config["auto_push"]:
+        print("Backups will be pushed to cloud automatically after each daily pulse.")
 
 
 if __name__ == "__main__":
