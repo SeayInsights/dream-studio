@@ -531,6 +531,586 @@ def clear_registry(db_path: Path | None = None) -> bool:
         return False
 
 
+# ── Project functions ──────────────────────────────────────────────────────
+
+@_with_retry
+def upsert_project(project_id: str, project_path: str, *,
+                   project_name: str | None = None, project_type: str | None = None,
+                   git_remote: str | None = None, db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO reg_projects
+                   (project_id, project_path, project_name, project_type,
+                    git_remote, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(project_id) DO UPDATE SET
+                    project_path=excluded.project_path,
+                    project_name=COALESCE(excluded.project_name, reg_projects.project_name),
+                    project_type=COALESCE(excluded.project_type, reg_projects.project_type),
+                    git_remote=COALESCE(excluded.git_remote, reg_projects.git_remote)""",
+                (project_id, project_path, project_name, project_type,
+                 git_remote, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM reg_projects WHERE project_id=?", (project_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def list_projects(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_projects ORDER BY last_session_at DESC").fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def update_project_stats(project_id: str, *, sessions_delta: int = 0,
+                         tokens_delta: int = 0, db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """UPDATE reg_projects SET
+                    total_sessions = total_sessions + ?,
+                    total_tokens = total_tokens + ?,
+                    last_session_at = ?
+                   WHERE project_id = ?""",
+                (sessions_delta, tokens_delta, _NOW(), project_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Session functions ──────────────────────────────────────────────────────
+
+@_with_retry
+def insert_session(session_id: str, project_id: str, *,
+                   topic: str | None = None, pipeline_phase: str | None = None,
+                   db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_sessions
+                   (session_id, project_id, topic, started_at, pipeline_phase)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, project_id, topic, _NOW(), pipeline_phase),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_session(session_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM raw_sessions WHERE session_id=?", (session_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def get_latest_session(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT * FROM raw_sessions WHERE project_id=? ORDER BY started_at DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+@_with_retry
+def mark_handoff_consumed(session_id: str, db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute("UPDATE raw_sessions SET handoff_consumed=1 WHERE session_id=?",
+                      (session_id,))
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+@_with_retry
+def end_session(session_id: str, *, outcome: str | None = None,
+                input_tokens: int | None = None, output_tokens: int | None = None,
+                tasks_completed: int | None = None,
+                db_path: Path | None = None) -> bool:
+    try:
+        started = None
+        with _connect(db_path) as c:
+            row = c.execute("SELECT started_at FROM raw_sessions WHERE session_id=?",
+                            (session_id,)).fetchone()
+            if row:
+                try:
+                    started = datetime.fromisoformat(row["started_at"])
+                except (ValueError, TypeError):
+                    pass
+            now = _NOW()
+            duration = (datetime.fromisoformat(now) - started).total_seconds() if started else None
+            c.execute(
+                """UPDATE raw_sessions SET
+                    ended_at=?, duration_s=?, outcome=?,
+                    input_tokens=COALESCE(?, input_tokens),
+                    output_tokens=COALESCE(?, output_tokens),
+                    tasks_completed=COALESCE(?, tasks_completed)
+                   WHERE session_id=?""",
+                (now, duration, outcome, input_tokens, output_tokens,
+                 tasks_completed, session_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Handoff functions ──────────────────────────────────────────────────────
+
+@_with_retry
+def insert_handoff(session_id: str, project_id: str, topic: str, *,
+                   plan_path: str | None = None, pipeline_phase: str | None = None,
+                   current_task_id: str | None = None, current_task_name: str | None = None,
+                   tasks_completed: int | None = None, tasks_total: int | None = None,
+                   branch: str | None = None, last_commit: str | None = None,
+                   working: list | None = None, broken: list | None = None,
+                   pending_decisions: list | None = None, active_files: list | None = None,
+                   next_action: str | None = None, lessons_json: list | None = None,
+                   gotchas_hit: list | None = None, approaches_json: list | None = None,
+                   db_path: Path | None = None) -> int | None:
+    try:
+        with _connect(db_path) as c:
+            cur = c.execute(
+                """INSERT INTO raw_handoffs
+                   (session_id, project_id, topic, plan_path, pipeline_phase,
+                    current_task_id, current_task_name, tasks_completed, tasks_total,
+                    branch, last_commit, working, broken, pending_decisions,
+                    active_files, next_action, lessons_json, gotchas_hit,
+                    approaches_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, project_id, topic, plan_path, pipeline_phase,
+                 current_task_id, current_task_name, tasks_completed, tasks_total,
+                 branch, last_commit,
+                 json.dumps(working) if working is not None else None,
+                 json.dumps(broken) if broken is not None else None,
+                 json.dumps(pending_decisions) if pending_decisions is not None else None,
+                 json.dumps(active_files) if active_files is not None else None,
+                 next_action,
+                 json.dumps(lessons_json) if lessons_json is not None else None,
+                 json.dumps(gotchas_hit) if gotchas_hit is not None else None,
+                 json.dumps(approaches_json) if approaches_json is not None else None,
+                 _NOW()),
+            )
+            return cur.lastrowid
+    except Exception as e:
+        _reraise_if_busy(e)
+        return None
+
+
+def get_latest_handoff(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        c.close()
+        if not r:
+            return None
+        d = dict(r)
+        for col in ("working", "broken", "pending_decisions", "active_files",
+                     "lessons_json", "gotchas_hit", "approaches_json"):
+            if d.get(col):
+                try:
+                    d[col] = json.loads(d[col])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+    except Exception:
+        return None
+
+
+def get_handoffs_for_project(project_id: str, limit: int = 20,
+                             db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
+            (project_id, limit),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── Spec + Task functions ──────────────────────────────────────────────────
+
+@_with_retry
+def upsert_spec(spec_id: str, project_id: str, title: str, *,
+                status: str = "draft", task_count: int | None = None,
+                spec_content: str | None = None, plan_content: str | None = None,
+                pr_numbers: list | None = None,
+                db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_specs
+                   (spec_id, project_id, title, status, task_count,
+                    spec_content, plan_content, created_at, pr_numbers)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(spec_id) DO UPDATE SET
+                    title=excluded.title,
+                    status=excluded.status,
+                    task_count=COALESCE(excluded.task_count, raw_specs.task_count),
+                    spec_content=COALESCE(excluded.spec_content, raw_specs.spec_content),
+                    plan_content=COALESCE(excluded.plan_content, raw_specs.plan_content),
+                    pr_numbers=COALESCE(excluded.pr_numbers, raw_specs.pr_numbers),
+                    completed_at=CASE WHEN excluded.status='completed'
+                                      THEN COALESCE(raw_specs.completed_at, ?)
+                                      ELSE raw_specs.completed_at END""",
+                (spec_id, project_id, title, status, task_count,
+                 spec_content, plan_content, _NOW(),
+                 json.dumps(pr_numbers) if pr_numbers else None,
+                 _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_spec(spec_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM raw_specs WHERE spec_id=?", (spec_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def list_specs(project_id: str | None = None, status: str | None = None,
+               db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        query = "SELECT * FROM raw_specs"
+        params: list = []
+        clauses: list[str] = []
+        if project_id:
+            clauses.append("project_id=?")
+            params.append(project_id)
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC"
+        rows = c.execute(query, params).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def upsert_task(task_id: str, spec_id: str, project_id: str, title: str, *,
+                status: str = "planned", depends_on: list | None = None,
+                estimated_hours: float | None = None,
+                db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_tasks
+                   (task_id, spec_id, project_id, title, status,
+                    depends_on, estimated_hours)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(task_id, spec_id) DO UPDATE SET
+                    title=excluded.title,
+                    status=excluded.status,
+                    depends_on=COALESCE(excluded.depends_on, raw_tasks.depends_on),
+                    estimated_hours=COALESCE(excluded.estimated_hours, raw_tasks.estimated_hours)""",
+                (task_id, spec_id, project_id, title, status,
+                 json.dumps(depends_on) if depends_on else None,
+                 estimated_hours),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_tasks WHERE spec_id=? ORDER BY task_id",
+            (spec_id,),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_blocked_tasks(project_id: str | None = None,
+                      db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        if project_id:
+            rows = c.execute(
+                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                "WHERE t.status='blocked' AND t.project_id=?",
+                (project_id,),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                "WHERE t.status='blocked'",
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def update_task_status(task_id: str, spec_id: str, status: str, *,
+                       commit_sha: str | None = None,
+                       actual_hours: float | None = None,
+                       assigned_session: str | None = None,
+                       db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            completed_at = _NOW() if status == "completed" else None
+            c.execute(
+                """UPDATE raw_tasks SET
+                    status=?,
+                    commit_sha=COALESCE(?, commit_sha),
+                    actual_hours=COALESCE(?, actual_hours),
+                    assigned_session=COALESCE(?, assigned_session),
+                    completed_at=COALESCE(?, completed_at)
+                   WHERE task_id=? AND spec_id=?""",
+                (status, commit_sha, actual_hours, assigned_session,
+                 completed_at, task_id, spec_id),
+            )
+            if status == "completed":
+                c.execute(
+                    "UPDATE raw_specs SET tasks_done = "
+                    "(SELECT COUNT(*) FROM raw_tasks WHERE spec_id=? AND status='completed') "
+                    "WHERE spec_id=?",
+                    (spec_id, spec_id),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Lesson functions ───────────────────────────────────────────────────────
+
+@_with_retry
+def insert_lesson(lesson_id: str, source: str, title: str, *,
+                  what_happened: str | None = None, lesson: str | None = None,
+                  evidence: str | None = None, confidence: str = "medium",
+                  db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT OR IGNORE INTO raw_lessons
+                   (lesson_id, source, title, what_happened, lesson,
+                    evidence, confidence, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (lesson_id, source, title, what_happened, lesson,
+                 evidence, confidence, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_lessons(source: str | None = None, status: str | None = None,
+                db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        query = "SELECT * FROM raw_lessons"
+        params: list = []
+        clauses: list[str] = []
+        if source:
+            clauses.append("source=?")
+            params.append(source)
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC"
+        rows = c.execute(query, params).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def promote_lesson(lesson_id: str, promoted_to: str,
+                   db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """UPDATE raw_lessons SET
+                    status='promoted', promoted_to=?, reviewed_at=?
+                   WHERE lesson_id=?""",
+                (promoted_to, _NOW(), lesson_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_pending_lessons(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_lessons WHERE status='draft' ORDER BY created_at DESC",
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── Sentinel functions ─────────────────────────────────────────────────────
+
+@_with_retry
+def set_sentinel(sentinel_key: str, sentinel_type: str, *,
+                 expires_at: str | None = None,
+                 db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO raw_sentinels
+                   (sentinel_key, sentinel_type, created_at, expires_at)
+                   VALUES (?, ?, ?, ?)""",
+                (sentinel_key, sentinel_type, _NOW(), expires_at),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def has_sentinel(sentinel_key: str, db_path: Path | None = None) -> bool:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT expires_at FROM raw_sentinels WHERE sentinel_key=?",
+                      (sentinel_key,)).fetchone()
+        c.close()
+        if not r:
+            return False
+        if r["expires_at"]:
+            return datetime.fromisoformat(r["expires_at"]) > datetime.now(timezone.utc)
+        return True
+    except Exception:
+        return False
+
+
+@_with_retry
+def clear_expired_sentinels(db_path: Path | None = None) -> int:
+    try:
+        with _connect(db_path) as c:
+            n = c.execute(
+                "DELETE FROM raw_sentinels WHERE expires_at IS NOT NULL AND expires_at < ?",
+                (_NOW(),),
+            ).rowcount
+        return n
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
+
+
+# ── Token usage functions ─────────────────────────────────────────────────
+
+@_with_retry
+def insert_token_usage(*, session_id: str | None = None, project_id: str | None = None,
+                       skill_name: str | None = None, input_tokens: int = 0,
+                       output_tokens: int = 0, model: str | None = None,
+                       db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_token_usage
+                   (session_id, project_id, skill_name, input_tokens,
+                    output_tokens, model, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, project_id, skill_name, input_tokens,
+                 output_tokens, model, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_token_summary(project_id: str | None = None, days: int = 7,
+                      db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        if project_id:
+            rows = c.execute(
+                """SELECT skill_name,
+                          SUM(input_tokens) AS total_input,
+                          SUM(output_tokens) AS total_output,
+                          SUM(input_tokens + output_tokens) AS total_tokens,
+                          COUNT(*) AS call_count
+                   FROM raw_token_usage
+                   WHERE project_id=? AND recorded_at>=?
+                   GROUP BY skill_name ORDER BY total_tokens DESC""",
+                (project_id, cutoff),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                """SELECT project_id,
+                          SUM(input_tokens) AS total_input,
+                          SUM(output_tokens) AS total_output,
+                          SUM(input_tokens + output_tokens) AS total_tokens,
+                          COUNT(*) AS call_count
+                   FROM raw_token_usage
+                   WHERE recorded_at>=?
+                   GROUP BY project_id ORDER BY total_tokens DESC""",
+                (cutoff,),
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
 # ── Schema introspection ───────────────────────────────────────────────────
 
 def schema_version(db_path: Path | None = None) -> int:
