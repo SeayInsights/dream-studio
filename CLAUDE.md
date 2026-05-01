@@ -41,6 +41,20 @@ If the user's intent does not match any keyword above, route to `dream-studio:qu
 - Never push to stale/old branches — check branch freshness first.
 - **Before pushing to a branch with an existing PR**, run `gh pr view <branch> --json state` to check if it's been merged or closed. If merged/closed, pull latest main, create a new branch, cherry-pick or reapply changes, and open a new PR. Never push commits to a branch whose PR is already merged.
 
+## Issue → PR Workflow (default for regular work)
+1. Create GitHub issue via `gh issue create`
+2. Create branch named after issue (e.g., `fix/issue-123-description`)
+3. Implement, build, verify
+4. Commit referencing issue: `fix: description (fixes #123)`
+5. Push branch and create PR with issue reference in body: `Fixes #123`
+6. Verify PR is green, then merge
+
+## Debug Workflow
+When `dream-studio:quality debug` finds a root cause: create GitHub issue with debug log, then follow Issue → PR workflow. Bugs need tracking even if the fix is trivial.
+
+## Ship Gate
+Use `dream-studio:core ship` (full quality gate) when user says "ship it", before major releases, client demos, or after risky refactors. Regular PRs do NOT need the ship gate — CI auto-deploys after merge.
+
 ## Commits
 - Never add Co-Authored-By attribution to git commits.
 - One logical change per commit. Commit messages should explain why, not what.
