@@ -1,5 +1,6 @@
-﻿---
+---
 name: harden
+model_tier: sonnet
 description: Project hardening audit and fix — checks 20 best-practice items (Makefile, pyproject.toml, UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md, test tooling, audit log, pre-commit, etc.) and fills gaps from templates. Trigger on `/harden`, `/harden audit`, `/harden fix tier1`, `/harden fix #N`.
 pack: quality
 chain_suggests:

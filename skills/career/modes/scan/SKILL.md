@@ -1,5 +1,6 @@
-﻿---
+---
 name: career-scan
+model_tier: sonnet
 description: "Scan job portals for new offers, deduplicate against history, add to pipeline. Always runs as subagent (long-running, Playwright-dependent). Trigger via /career-ops scan."
 pack: career
 chain_suggests: []

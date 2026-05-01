@@ -1,5 +1,6 @@
-﻿---
+---
 name: dashboard-dev
+model_tier: sonnet
 description: Tauri + React desktop dashboard patterns — feed contract (hooks write JSON, dashboard reads), multi-panel architecture, additive schema evolution. Trigger on `dashboard:`, `feed contract:`, or related dashboard-dev commands.
 pack: domains
 chain_suggests: []

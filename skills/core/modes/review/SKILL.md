@@ -1,5 +1,6 @@
-﻿---
+---
 name: review
+model_tier: sonnet
 description: Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. Trigger on `review:`, `review code`, or after `build`.
 pack: core
 chain_suggests:

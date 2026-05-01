@@ -1,5 +1,6 @@
 ---
 name: analyze
+model_tier: sonnet
 description: "Multi-perspective analysis engine and domain-specific evaluation."
 argument-hint: "multi | domain-re"
 user_invocable: true

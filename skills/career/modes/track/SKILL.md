@@ -1,5 +1,6 @@
-﻿---
+---
 name: career-track
+model_tier: sonnet
 description: "Pipeline management, application tracking, pattern analysis, and follow-up cadence. Modes: tracker, pipeline, patterns, followup. Trigger via /career-ops tracker|pipeline|patterns|followup."
 pack: career
 chain_suggests: []

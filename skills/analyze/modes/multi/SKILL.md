@@ -1,5 +1,6 @@
-﻿---
+---
 name: analyze
+model_tier: opus
 description: "Multi-perspective analysis engine — parallel analyst subagents evaluate input from different angles, then synthesis resolves conflicts into a decision memo. Trigger on /analyze or analyze:."
 user_invocable: true
 args: mode

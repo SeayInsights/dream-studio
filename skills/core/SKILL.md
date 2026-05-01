@@ -1,5 +1,6 @@
 ---
 name: core
+model_tier: sonnet
 description: "Build lifecycle: think, plan, build, review, verify, ship, handoff, recap, explain."
 argument-hint: "think | plan | build | review | verify | ship | handoff | recap | explain"
 user_invocable: true

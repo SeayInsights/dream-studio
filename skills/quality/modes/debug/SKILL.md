@@ -1,5 +1,6 @@
 ---
 name: debug
+model_tier: sonnet
 description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging.
 pack: core
 triggers:

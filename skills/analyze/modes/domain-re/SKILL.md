@@ -1,5 +1,6 @@
-﻿---
+---
 name: domain-re
+model_tier: sonnet
 description: "Real estate domain expert — parallel analyst lenses (forensic skeptic, diplomatic executor, strategic realist) evaluate leases, credit, renewals, and portfolio risk. Trigger on /domain-re or re:."
 user_invocable: true
 args: mode
