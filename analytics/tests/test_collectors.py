@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from analytics.core.collectors.session_collector import SessionCollector
 from analytics.core.collectors.skill_collector import SkillCollector
+from analytics.core.collectors.token_collector import TokenCollector
 
 
 @pytest.fixture
@@ -287,3 +288,158 @@ def test_skill_timeline(test_skill_db):
     assert "date" in timeline[0]
     assert "count" in timeline[0]
     assert "success_rate" in timeline[0]
+
+
+# TokenCollector tests
+
+@pytest.fixture
+def test_token_db(tmp_path):
+    """Create a temporary test database with token usage data"""
+    db_path = tmp_path / "test_studio_tokens.db"
+
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+
+    # Create raw_token_usage table
+    cursor.execute("""
+        CREATE TABLE raw_token_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            project_id TEXT,
+            skill_name TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            model TEXT,
+            recorded_at TEXT NOT NULL
+        )
+    """)
+
+    # Insert sample data
+    now = datetime.now()
+    test_data = [
+        ("sess-1", "proj-a", "dream-studio:core", 1000, 500, "sonnet", (now - timedelta(days=1)).isoformat()),
+        ("sess-2", "proj-a", "dream-studio:core", 1200, 600, "sonnet", (now - timedelta(days=2)).isoformat()),
+        ("sess-3", "proj-b", "dream-studio:quality", 500, 200, "haiku", (now - timedelta(days=3)).isoformat()),
+        ("sess-4", "proj-a", "dream-studio:core", 2000, 1000, "opus", (now - timedelta(days=4)).isoformat()),
+        ("sess-5", "proj-c", "dream-studio:security", 800, 400, "sonnet", (now - timedelta(days=5)).isoformat()),
+        ("sess-6", "proj-a", "dream-studio:core", 1000, 500, "sonnet", (now - timedelta(days=100)).isoformat()),  # Too old
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_token_usage
+        (session_id, project_id, skill_name, input_tokens, output_tokens, model, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, test_data)
+
+    conn.commit()
+    conn.close()
+
+    return db_path
+
+
+def test_token_collector_initialization():
+    """Test TokenCollector can be initialized"""
+    collector = TokenCollector()
+    assert collector.db_path is not None
+
+
+def test_token_collect_totals(test_token_db):
+    """Test total token counts"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "total_input_tokens" in metrics
+    assert "total_output_tokens" in metrics
+    assert "total_tokens" in metrics
+
+    # 5 records within 90 days: (1000+1200+500+2000+800) input, (500+600+200+1000+400) output
+    assert metrics["total_input_tokens"] == 5500
+    assert metrics["total_output_tokens"] == 2700
+    assert metrics["total_tokens"] == 8200
+
+
+def test_token_cost_calculation(test_token_db):
+    """Test cost calculation"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "total_cost_usd" in metrics
+    assert metrics["total_cost_usd"] > 0  # Should have calculated cost
+
+
+def test_token_by_model(test_token_db):
+    """Test tokens grouped by model"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_model" in metrics
+    assert "sonnet" in metrics["by_model"]
+    assert "haiku" in metrics["by_model"]
+    assert "opus" in metrics["by_model"]
+
+    # Sonnet: 3 records within 90 days
+    sonnet = metrics["by_model"]["sonnet"]
+    assert sonnet["input_tokens"] == (1000 + 1200 + 800)
+    assert sonnet["output_tokens"] == (500 + 600 + 400)
+
+
+def test_token_by_project(test_token_db):
+    """Test tokens grouped by project"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_project" in metrics
+    assert "proj-a" in metrics["by_project"]
+
+    proj_a = metrics["by_project"]["proj-a"]
+    assert proj_a["total_tokens"] > 0
+    assert "cost_usd" in proj_a
+
+
+def test_token_by_skill(test_token_db):
+    """Test tokens grouped by skill"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_skill" in metrics
+    assert "dream-studio:core" in metrics["by_skill"]
+
+    core = metrics["by_skill"]["dream-studio:core"]
+    assert core["total_tokens"] > 0
+    assert "cost_usd" in core
+
+
+def test_token_daily_average(test_token_db):
+    """Test daily average calculation"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    assert "daily_average" in metrics
+    assert metrics["daily_average"] > 0
+
+
+def test_token_timeline(test_token_db):
+    """Test token usage timeline"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    timeline = collector.get_timeline(days=30)
+
+    assert isinstance(timeline, list)
+    assert len(timeline) == 5  # 5 days with token usage
+    assert "date" in timeline[0]
+    assert "tokens" in timeline[0]
+    assert "cost_usd" in timeline[0]
+
+
+def test_token_percentage(test_token_db):
+    """Test model percentage calculation"""
+    collector = TokenCollector(db_path=str(test_token_db))
+    metrics = collector.collect(days=90)
+
+    # All models should have percentage
+    for model_data in metrics["by_model"].values():
+        assert "percentage" in model_data
+        assert 0 <= model_data["percentage"] <= 100
+
+    # Sum of all percentages should be ~100
+    total_percentage = sum(m["percentage"] for m in metrics["by_model"].values())
+    assert 99 <= total_percentage <= 101  # Allow small rounding errors
