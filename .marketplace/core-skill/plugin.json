@@ -1,0 +1,20 @@
+{
+  "name": "dream-studio-core",
+  "version": "1.0.0",
+  "description": "Build lifecycle: think → plan → build → review → verify → ship",
+  "author": {
+    "name": "Twin Roots LLC",
+    "email": "dannis.seay@twinrootsllc.com"
+  },
+  "homepage": "https://github.com/SeayInsights/dream-studio",
+  "repository": "https://github.com/SeayInsights/dream-studio",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "build-lifecycle",
+    "planning",
+    "code-review",
+    "deployment"
+  ],
+  "skills": ["dream-studio:core"]
+}

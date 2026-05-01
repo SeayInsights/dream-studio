@@ -1,0 +1,72 @@
+# dream-studio conventions for Cursor
+
+## Skill-Based Workflow
+
+When building features, follow this lifecycle:
+1. **think** - Design before building. Write specs, explore approaches, get approval.
+2. **plan** - Break work into atomic tasks with file-level precision.
+3. **build** - Execute the plan. One task at a time, commit after each.
+4. **review** - Quality gate before shipping. Check code, security, architecture.
+5. **verify** - Prove it works. Test the happy path and edge cases.
+6. **ship** - Final quality gate. Run all checks, generate changelog, deploy.
+
+## Trigger Keywords
+
+- **think:** spec, research, shape ux, design brief → Design and exploration
+- **plan:** break down, task list → Create atomic build plan
+- **build:** implement, code it, execute plan → Write code
+- **review:** review code, review PR, code quality → Quality check
+- **verify:** prove it works, test it → Validation
+- **ship:** deploy, release, pre-deploy → Deployment gate
+- **debug:** fix, diagnose, why is this broken → Problem investigation
+- **polish:** UI cleanup, redesign, look better → UX refinement
+- **harden:** project setup, best practices → Infrastructure quality
+- **secure:** security review, vulnerabilities → Security audit
+
+## Git Workflow
+
+- Never push directly to `main` - always use feature branches
+- Branch naming: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`
+- Keep PRs under ~120 lines of changes
+- Never add Co-Authored-By attribution to commits
+- Check for open PRs before starting work: `gh pr list`
+- Never force-push without explicit approval
+- Before pushing to a branch with existing PR, check if it's been merged
+
+## Issue → PR Workflow
+
+1. Create GitHub issue: `gh issue create`
+2. Create branch: `git checkout -b fix/issue-123-description`
+3. Implement, build, verify
+4. Commit: `fix: description (fixes #123)`
+5. Push and create PR: `gh pr create` with `Fixes #123` in body
+6. Verify PR is green, then merge
+
+## Model Usage
+
+- Use faster models (Haiku) for searches and exploration
+- Use capable models (Sonnet) for code changes and reasoning
+- Use most capable models (Opus) for complex analysis and architecture
+
+## Commit Conventions
+
+- One logical change per commit
+- Commit messages explain why, not what
+- Never add Co-Authored-By attribution
+
+## Testing & Verification
+
+- Verify in browser/build before pushing UI changes
+- Run build and check for runtime errors before declaring complete
+- For "X isn't showing up" bugs, trace full render pipeline before editing code
+
+## Context Management
+
+- Keep PRs small and focused
+- Complete and commit each task independently
+- Use grep to verify all selector variants before committing broad renames
+
+## Deploy Safety
+
+- Never run deploy commands directly (e.g., `wrangler deploy`)
+- Push to GitHub and let CI handle deploys

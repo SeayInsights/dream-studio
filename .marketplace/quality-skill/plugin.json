@@ -1,0 +1,20 @@
+{
+  "name": "dream-studio-quality",
+  "version": "1.0.0",
+  "description": "Code quality toolkit: debug, polish, harden, secure, learn",
+  "author": {
+    "name": "Twin Roots LLC",
+    "email": "dannis.seay@twinrootsllc.com"
+  },
+  "homepage": "https://github.com/SeayInsights/dream-studio",
+  "repository": "https://github.com/SeayInsights/dream-studio",
+  "license": "MIT",
+  "keywords": [
+    "code-quality",
+    "debugging",
+    "security",
+    "refactoring",
+    "learning"
+  ],
+  "skills": ["dream-studio:quality"]
+}
