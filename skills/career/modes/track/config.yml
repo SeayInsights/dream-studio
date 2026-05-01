@@ -1,20 +1,6 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: career-track
+model_tier: sonnet
+description: 'Pipeline management, application tracking, pattern analysis, and follow-up
+  cadence. Modes: tracker, pipeline, patterns, followup. Trigger via /career-ops tracker|pipeline|patterns|followup.'
+pack: career
+chain_suggests: []

@@ -1,11 +1,3 @@
----
-name: mcp-build
-model_tier: sonnet
-description: 4-phase MCP server development — research, implement (Zod schemas, structured errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. Trigger on `build mcp:`, `new mcp:`, `extend mcp:`.
-pack: domains
-chain_suggests: []
----
-
 # MCP Build — Server Development
 
 ## Before you start

@@ -1,20 +1,11 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: harden
+model_tier: sonnet
+description: Project hardening audit and fix — checks 20 best-practice items (Makefile,
+  pyproject.toml, UTC enforcement, Pydantic validation, SECURITY.md, CONTRIBUTING.md,
+  test tooling, audit log, pre-commit, etc.) and fills gaps from templates. Trigger
+  on `/harden`, `/harden audit`, `/harden fix tier1`, `/harden fix
+pack: quality
+chain_suggests:
+- condition: findings_found
+  next: build
+  prompt: Gaps found — fill them?

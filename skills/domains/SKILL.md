@@ -1,12 +1,3 @@
----
-name: domains
-model_tier: sonnet
-description: "Stack-specific builders: game, SaaS, MCP server, dashboard, client-work, design."
-argument-hint: "game-dev | saas-build | mcp-build | dashboard-dev | client-work | design"
-user_invocable: true
-args: mode
----
-
 # Domains — Stack-Specific Builders
 
 ## Mode dispatch

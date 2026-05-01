@@ -1,17 +1,3 @@
----
-name: dast
-model_tier: sonnet
-description: "Web application dynamic testing — generate ZAP/Nuclei configs, ingest DAST results, score web-specific vulnerabilities. Trigger on dast:, web scan, pen test web, zap scan."
-user_invocable: true
-args: mode
-argument-hint: "[setup | run | ingest | status] [--client <name>] [--target <name>]"
-pack: security
-chain_suggests:
-  - condition: "findings_found"
-    next: "mitigate"
-    prompt: "DAST findings — run mitigate?"
----
-
 # DAST — Web Application Dynamic Testing
 
 ## Before you start

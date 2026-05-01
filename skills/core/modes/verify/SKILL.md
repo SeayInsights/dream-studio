@@ -1,14 +1,3 @@
----
-name: verify
-model_tier: sonnet
-description: Evidence-based verification — run the app, test golden path + edges, capture proof (screenshots, logs, Playwright results), check regressions. Trigger on `verify:`, `prove it:`, or after `review` passes.
-pack: core
-chain_suggests:
-  - condition: "always"
-    next: "ship"
-    prompt: "Verified — ready to ship?"
----
-
 # Verify — Prove It Works
 
 ## Before you start

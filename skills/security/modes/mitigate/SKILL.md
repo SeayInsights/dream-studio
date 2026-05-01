@@ -1,17 +1,3 @@
----
-name: mitigate
-model_tier: sonnet
-description: "Per-finding fix recommendations with code before/after, verification tests, effort estimates. Trigger on mitigate:, how to fix, generate mitigations."
-user_invocable: true
-args: mode
-argument-hint: "[findings | single | export] [--client <name>]"
-pack: quality
-chain_suggests:
-  - condition: "always"
-    next: "build"
-    prompt: "Mitigations ready — apply fixes?"
----
-
 # Mitigate — Per-Finding Fix Recommendations
 
 ## Before you start

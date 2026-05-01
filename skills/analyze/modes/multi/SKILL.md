@@ -1,14 +1,3 @@
----
-name: analyze
-model_tier: opus
-description: "Multi-perspective analysis engine — parallel analyst subagents evaluate input from different angles, then synthesis resolves conflicts into a decision memo. Trigger on /analyze or analyze:."
-user_invocable: true
-args: mode
-argument-hint: "[evaluate-offer | evaluate-gig | evaluate-data | evaluate-strategy | evaluate-content | evaluate-repo] [--quick]"
-pack: analyze
-chain_suggests: []
----
-
 # Analyze — Multi-Perspective Decision Engine
 
 ## Before you start

@@ -1,12 +1,3 @@
----
-name: security
-model_tier: sonnet
-description: "Enterprise security: scan, DAST, binary analysis, mitigate, comply, network compat, dashboard."
-argument-hint: "scan | dast | binary-scan | mitigate | comply | netcompat | dashboard"
-user_invocable: true
-args: mode
----
-
 # Security — Enterprise Security Analysis
 
 ## Mode dispatch

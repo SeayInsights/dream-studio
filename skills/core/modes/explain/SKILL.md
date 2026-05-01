@@ -1,11 +1,3 @@
----
-name: explain
-model_tier: haiku
-description: Trace how X works — from entry point through layers to output, at the depth the Director needs. Trigger on `explain:`, `how does X work`, `walk me through`, `what is this doing`.
-pack: core
-chain_suggests: []
----
-
 # Explain — Trace How It Works
 
 ## Before you start

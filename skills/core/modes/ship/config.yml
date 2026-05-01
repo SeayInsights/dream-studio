@@ -1,20 +1,11 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: ship
+model_tier: sonnet
+description: Pre-deploy gate — audit (a11y, perf, technical), harden (error/empty/loading
+  states), optimize (bundle/render/animation/images), test (Playwright + regression).
+  Any FAIL blocks deploy. Trigger on `ship:`, `pre-deploy:`, `deploy:`, or before
+  any deployment command.
+pack: core
+chain_suggests:
+- condition: always
+  next: recap
+  prompt: Shipped — capture recap?

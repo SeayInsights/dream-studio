@@ -1,20 +1,7 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: mcp-build
+model_tier: sonnet
+description: 4-phase MCP server development — research, implement (Zod schemas, structured
+  errors, stdio/SSE transport), test (valid/invalid/edge), evaluate. Trigger on `build
+  mcp:`, `new mcp:`, `extend mcp:`.
+pack: domains
+chain_suggests: []

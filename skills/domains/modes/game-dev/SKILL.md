@@ -1,11 +1,3 @@
----
-name: game-dev
-model_tier: sonnet
-description: Godot 4 consolidated patterns — 2D/3D player controllers, scene hierarchies, CSG blockouts, Blender→GLB pipeline with QA gates, two-tier automated/manual QA, and game design scaffolding. Trigger on any game build, review, QA, design, or asset-pipeline command.
-pack: domains
-chain_suggests: []
----
-
 # Game Dev — Godot 4 Consolidated Patterns
 
 ## Before you start

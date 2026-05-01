@@ -1,14 +1,3 @@
----
-name: domain-re
-model_tier: sonnet
-description: "Real estate domain expert — parallel analyst lenses (forensic skeptic, diplomatic executor, strategic realist) evaluate leases, credit, renewals, and portfolio risk. Trigger on /domain-re or re:."
-user_invocable: true
-args: mode
-argument-hint: "[lease-analysis | credit-check | renewal-economics | rollover-analysis] [--quick]"
-pack: analyze
-chain_suggests: []
----
-
 # Domain-RE — Real Estate Analysis Engine
 
 ## Before you start

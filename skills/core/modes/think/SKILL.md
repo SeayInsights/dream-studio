@@ -1,14 +1,3 @@
----
-name: think
-model_tier: opus
-description: Clarify an idea, explore 2-3 approaches with trade-offs, write a spec, and get approval before any code. Trigger on `think:`, `spec:`, `shape ux:`, `design brief:`, `research:`.
-pack: core
-chain_suggests:
-  - condition: "always"
-    next: "plan"
-    prompt: "Spec approved — plan the tasks?"
----
-
 # Think — Design Before Building
 
 ## Before you start

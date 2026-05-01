@@ -1,20 +1,11 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: client-work
+model_tier: sonnet
+description: Power Platform client lifecycle — intake, SOW, build (Power BI, Power
+  Apps, Power Automate), review, handoff — with DAX/M-query patterns, delegation rules,
+  and flow error handling. Trigger on `intake:`, `sow:`, `proposal:`, `build report:`,
+  `review powerbi:`, `optimize dax:`, `build flow:`, `build app:`, `client handoff:`,
+  `document:`, `add measure:`, `create measure:`, `build measure:`, `add column:`,
+  `create report:`, `DAX error:`, `M-query error:`, `refresh fails:`, `TMDL:`, `pbip:`,
+  `semantic model:`, `RLS:`, `star schema:`, `data model:`.
+pack: domains
+chain_suggests: []

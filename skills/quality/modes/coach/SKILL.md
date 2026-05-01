@@ -1,14 +1,3 @@
----
-name: coach
-model_tier: haiku
-description: "Claude Code workflow coach — evaluates HOW you're using Claude Code, not WHAT you're building. Surfaces non-obvious best practices for context management, PR hygiene, agent dispatch, and skill routing. Trigger on /coach or coach:."
-user_invocable: true
-args: mode
-argument-hint: "[workflow-fit | context-health | pr-hygiene | agent-dispatch] [--quick]"
-pack: quality
-chain_suggests: []
----
-
 # Coach — Claude Code Workflow Advisor
 
 ## Before you start

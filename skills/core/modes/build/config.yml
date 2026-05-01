@@ -1,20 +1,13 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 1
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: true
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 150000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: build
+model_tier: sonnet
+description: Execute a plan with subagent-driven development — fresh agent per task,
+  two-stage review, isolated context, parallel wave execution. Trigger on `build:`,
+  `execute plan:`, or after `plan`.
+pack: core
+chain_suggests:
+- condition: ui_build
+  next: polish
+  prompt: UI changes detected — run polish?
+- condition: always
+  next: review
+  prompt: Build complete — review the code?
