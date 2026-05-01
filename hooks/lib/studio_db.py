@@ -19,7 +19,11 @@ CREATE TABLE IF NOT EXISTS raw_planning_specs (id INTEGER PRIMARY KEY AUTOINCREM
 CREATE TABLE IF NOT EXISTS sum_analytics_run (id INTEGER PRIMARY KEY AUTOINCREMENT, run_at TEXT NOT NULL, pulse_rows INTEGER, spec_rows INTEGER, skill_rows INTEGER, output_path TEXT);
 CREATE TABLE IF NOT EXISTS raw_operational_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, snapshot_date TEXT NOT NULL, project_slug TEXT NOT NULL, ci_status TEXT, open_prs INTEGER, stale_branches INTEGER, pending_drafts INTEGER, open_escalations INTEGER, captured_at TEXT NOT NULL, UNIQUE(snapshot_date, project_slug));
 CREATE TABLE IF NOT EXISTS raw_approaches (id INTEGER PRIMARY KEY AUTOINCREMENT, skill_id TEXT NOT NULL, session_date TEXT NOT NULL, approach TEXT NOT NULL, outcome TEXT NOT NULL, context TEXT, why_worked TEXT, tokens_used INTEGER, duration_s REAL, model TEXT, captured_at TEXT NOT NULL);
-CREATE VIEW IF NOT EXISTS vw_approach_patterns AS SELECT skill_id, approach, COUNT(*) AS times_tried, SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS successes, ROUND(CAST(SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) AS success_pct, CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens, ROUND(AVG(duration_s), 1) AS avg_duration FROM raw_approaches GROUP BY skill_id, approach HAVING COUNT(*) >= 2;"""
+CREATE VIEW IF NOT EXISTS vw_approach_patterns AS SELECT skill_id, approach, COUNT(*) AS times_tried, SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS successes, ROUND(CAST(SUM(CASE WHEN outcome='success' THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100, 1) AS success_pct, CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens, ROUND(AVG(duration_s), 1) AS avg_duration FROM raw_approaches GROUP BY skill_id, approach HAVING COUNT(*) >= 2;
+CREATE TABLE IF NOT EXISTS reg_skills (skill_id TEXT PRIMARY KEY, pack TEXT NOT NULL, mode TEXT NOT NULL, description TEXT, triggers TEXT, skill_path TEXT NOT NULL, gotchas_path TEXT, word_count INTEGER, chains_to TEXT, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS reg_gotchas (gotcha_id TEXT NOT NULL, skill_id TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL, context TEXT, fix TEXT, keywords TEXT, discovered TEXT, times_hit INTEGER DEFAULT 0, last_hit TEXT, PRIMARY KEY (gotcha_id, skill_id));
+CREATE TABLE IF NOT EXISTS reg_workflows (workflow_id TEXT PRIMARY KEY, yaml_path TEXT NOT NULL, description TEXT, node_count INTEGER, skills_used TEXT, category TEXT, est_tokens INTEGER, updated_at TEXT);
+CREATE TABLE IF NOT EXISTS reg_skill_deps (from_skill TEXT NOT NULL, to_skill TEXT NOT NULL, dep_type TEXT NOT NULL, PRIMARY KEY (from_skill, to_skill, dep_type));"""
 
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -216,6 +220,150 @@ def capture_approach(
     return True
 
 
+# ── Registry query functions ─────────────────────────────────────────────────
+
+def upsert_skill(skill_id: str, pack: str, mode: str, skill_path: str, *,
+                 description: str = "", triggers: str = "", gotchas_path: str | None = None,
+                 word_count: int | None = None, chains_to: str | None = None,
+                 db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_skills
+                   (skill_id, pack, mode, description, triggers, skill_path,
+                    gotchas_path, word_count, chains_to, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (skill_id, pack, mode, description, triggers, skill_path,
+                 gotchas_path, word_count, chains_to, _NOW()),
+            )
+        return True
+    except Exception:
+        return False
+
+
+def get_skill(skill_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM reg_skills WHERE skill_id=?", (skill_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def find_skills_by_trigger(keyword: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_skills WHERE triggers LIKE ?", (f"%{keyword}%",)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def upsert_gotcha(gotcha_id: str, skill_id: str, severity: str, title: str, *,
+                  context: str = "", fix: str = "", keywords: str = "",
+                  discovered: str | None = None, db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_gotchas
+                   (gotcha_id, skill_id, severity, title, context, fix,
+                    keywords, discovered, times_hit, last_hit)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+                           COALESCE((SELECT times_hit FROM reg_gotchas WHERE gotcha_id=? AND skill_id=?), 0),
+                           (SELECT last_hit FROM reg_gotchas WHERE gotcha_id=? AND skill_id=?))""",
+                (gotcha_id, skill_id, severity, title, context, fix,
+                 keywords, discovered, gotcha_id, skill_id, gotcha_id, skill_id),
+            )
+        return True
+    except Exception:
+        return False
+
+
+def search_gotchas_db(keyword: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? OR context LIKE ? ORDER BY severity",
+            (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_gotchas_for_skill(skill_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_gotchas WHERE skill_id=? ORDER BY severity", (skill_id,)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def upsert_workflow(workflow_id: str, yaml_path: str, *, description: str = "",
+                    node_count: int | None = None, skills_used: str = "",
+                    category: str = "", est_tokens: int | None = None,
+                    db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_workflows
+                   (workflow_id, yaml_path, description, node_count,
+                    skills_used, category, est_tokens, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (workflow_id, yaml_path, description, node_count,
+                 skills_used, category, est_tokens, _NOW()),
+            )
+        return True
+    except Exception:
+        return False
+
+
+def get_workflows_by_category(category: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_workflows WHERE category=?", (category,)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def upsert_skill_dep(from_skill: str, to_skill: str, dep_type: str,
+                     db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            c.execute("INSERT OR REPLACE INTO reg_skill_deps VALUES (?, ?, ?)",
+                      (from_skill, to_skill, dep_type))
+        return True
+    except Exception:
+        return False
+
+
+def get_skill_deps(skill_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_skill_deps WHERE from_skill=?", (skill_id,)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def clear_registry(db_path: Path | None = None) -> bool:
+    try:
+        with _connect(db_path) as c:
+            for t in ("reg_skills", "reg_gotchas", "reg_workflows", "reg_skill_deps"):
+                c.execute(f"DELETE FROM {t}")  # noqa: S608
+        return True
+    except Exception:
+        return False
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="studio_db CLI"); sub = ap.add_subparsers(dest="cmd")
     sc = sub.add_parser("skill-correct"); sc.add_argument("telemetry_id"); sc.add_argument("result", choices=["success","failure"]); sc.add_argument("--reason", default="")
@@ -229,7 +377,7 @@ def main() -> None:
     elif args.cmd == "prune":
         print(f"pruned {rolling_window_prune()} rows")
     elif args.cmd == "status":
-        c = _connect(); tables = ["raw_workflow_runs","raw_workflow_nodes","raw_skill_telemetry","cor_skill_corrections","sum_skill_summary","log_batch_imports","raw_pulse_snapshots","raw_planning_specs","sum_analytics_run","raw_operational_snapshots","raw_approaches"]
+        c = _connect(); tables = ["raw_workflow_runs","raw_workflow_nodes","raw_skill_telemetry","cor_skill_corrections","sum_skill_summary","log_batch_imports","raw_pulse_snapshots","raw_planning_specs","sum_analytics_run","raw_operational_snapshots","raw_approaches","reg_skills","reg_gotchas","reg_workflows","reg_skill_deps"]
         print(f"{'Table':<30} {'Rows':>8}\n" + "-"*40)
         for t in tables: print(f"{t:<30} {c.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]:>8}")  # noqa: S608
         c.close()
