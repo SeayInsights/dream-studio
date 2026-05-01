@@ -38,6 +38,7 @@ def render_dashboard(data: dict, output_path: Path | None = None) -> Path:
     data.setdefault("all_git_metrics", None)
     data.setdefault("project_name", None)
     data.setdefault("efficiency", None)
+    data.setdefault("hook_timing", None)
 
     html = template.render(**data)
     output_path.write_text(html, encoding="utf-8")

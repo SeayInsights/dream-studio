@@ -365,3 +365,59 @@ def harvest_skill_velocity(db_path: Path | None = None) -> pd.DataFrame:
     df = pd.read_sql_query(query, conn)
     conn.close()
     return df
+
+
+# ---------------------------------------------------------------------------
+# Hook timing harvester
+# ---------------------------------------------------------------------------
+
+def harvest_hook_timing() -> dict:
+    """Read hook-timing.jsonl and compute per-handler averages.
+
+    Returns dict with keys: handlers (list of {handler, event, avg_ms, count}),
+    total_overhead_ms, slowest_handler.
+    """
+    import json
+
+    timing_file = paths.state_dir() / "hook-timing.jsonl"
+    if not timing_file.exists():
+        return {"handlers": [], "total_overhead_ms": 0, "slowest_handler": None}
+
+    stats: dict[str, dict] = {}
+    try:
+        for line in timing_file.read_text(encoding="utf-8").strip().split("\n"):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            key = record["handler"]
+            if key not in stats:
+                stats[key] = {
+                    "handler": key,
+                    "event": record.get("event", ""),
+                    "total_ms": 0.0,
+                    "count": 0,
+                }
+            stats[key]["total_ms"] += record.get("duration_ms", 0)
+            stats[key]["count"] += 1
+    except Exception:
+        return {"handlers": [], "total_overhead_ms": 0, "slowest_handler": None}
+
+    handlers = []
+    for s in stats.values():
+        avg = s["total_ms"] / s["count"] if s["count"] > 0 else 0
+        handlers.append({
+            "handler": s["handler"],
+            "event": s["event"],
+            "avg_ms": round(avg, 2),
+            "count": s["count"],
+        })
+
+    handlers.sort(key=lambda h: h["avg_ms"], reverse=True)
+    total = sum(h["avg_ms"] for h in handlers)
+    slowest = handlers[0]["handler"] if handlers else None
+
+    return {
+        "handlers": handlers,
+        "total_overhead_ms": round(total, 2),
+        "slowest_handler": slowest,
+    }

@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import paths, state  # noqa: E402
 
 SKILL_PATTERN = re.compile(r"skills[\\/].+\.md$")
+EXAMPLES_PATTERN = re.compile(r"examples\.md$")
 DIRECTOR_PLACEHOLDER = "{{director_name}}"
 
 
@@ -85,6 +86,8 @@ def main() -> None:
 
     file_path = tool_input.get("file_path", "")
     if not file_path or not SKILL_PATTERN.search(file_path.replace("\\", "/")):
+        return
+    if EXAMPLES_PATTERN.search(file_path.replace("\\", "/")):
         return
 
     skill_name = extract_skill_name(file_path)

@@ -48,6 +48,7 @@ def main() -> None:
         detect_orphans,
         harvest_skill_velocity,
         harvest_operational,
+        harvest_hook_timing,
     )
 
     pulse_rows = harvest_pulse(db_path)
@@ -73,6 +74,12 @@ def main() -> None:
                 all_git_metrics.append(gm)
         total_commits = sum(g["total_commits_90d"] for g in all_git_metrics)
         print(f"  git metrics:     {len(all_git_metrics)} repos, {total_commits} commits (90d)")
+
+    hook_timing = harvest_hook_timing()
+    if hook_timing["handlers"]:
+        print(f"  hook timing:     {len(hook_timing['handlers'])} handlers, {hook_timing['total_overhead_ms']:.1f}ms total avg")
+    else:
+        print("  hook timing:     no data")
 
     print("DSAE: analyzing...")
 
@@ -122,6 +129,7 @@ def main() -> None:
         "all_git_metrics": all_git_metrics if len(all_git_metrics) > 1 else None,
         "project_name": project_name,
         "efficiency": efficiency_data,
+        "hook_timing": hook_timing,
     }
 
     output_path = render_dashboard(data, output)
