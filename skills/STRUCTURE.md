@@ -69,21 +69,16 @@ skill-name/
 ## File Purposes
 
 ### SKILL.md
-**Purpose:** Core orchestration logic  
-**Format:** Markdown with frontmatter  
+**Purpose:** Core orchestration logic (pure instructions, no metadata)  
+**Format:** Markdown (no frontmatter — metadata lives in `config.yml`)  
 **Required sections:**
-- Frontmatter (name, description, pack)
 - Imports (if uses core modules)
 - Trigger (when to invoke)
 - Process (step-by-step execution)
 
 **Example:**
 ```markdown
----
-name: build
-description: Execute a plan with subagent-driven development
-pack: core
----
+# Build — Execute With Discipline
 
 ## Imports
 - core/git.md — commit formatting
@@ -97,6 +92,15 @@ Step 1: Load plan
 Step 2: Execute tasks
 ...
 ```
+
+### config.yml
+**Purpose:** Skill metadata and runtime configuration  
+**Format:** YAML  
+**Key fields:**
+- `name`, `description`, `pack` — Identity
+- `model_tier` — Declared model tier (haiku/sonnet/opus)
+- `triggers` — Activation keywords
+- `chain_suggests` — Advisory next-skill suggestions after completion
 
 ### metadata.yml
 **Purpose:** Evolution tracking, quality metrics, dependencies  

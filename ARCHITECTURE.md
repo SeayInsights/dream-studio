@@ -37,7 +37,7 @@ skills/
 ```
 
 **Rules:**
-- `on-skill-load.py` reads SKILL.md when a skill is triggered via the Skill tool
+- `on-skill-load.py` reads SKILL.md content when a skill is triggered; metadata lives in adjacent `config.yml`
 - Adding a new skill requires BOTH a SKILL.md in `skills/<name>/` AND registration in the global routing table (CLAUDE.md)
 - Skill config.yml values are read by Claude at runtime — they do not affect Python hooks
 - `sync-cache.ps1` runs after every skills/ edit to push changes to the plugin cache

@@ -45,7 +45,7 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 
 def _parse_simple_yaml(block: str) -> dict[str, Any]:
     """
-    Parse a restricted subset of YAML sufficient for SKILL.md frontmatter:
+    Parse a restricted subset of YAML sufficient for config.yml metadata:
       - scalar key: value  (strings, unquoted or quoted)
       - block sequences:
             key:

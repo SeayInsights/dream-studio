@@ -20,15 +20,15 @@ When a skill needs multi-agent orchestration, reference this module:
 
 ## Model Selection
 
-**Primary method: read `model_tier` from the target skill's SKILL.md frontmatter.**
+**Primary method: read `model_tier` from the target skill's `config.yml`.**
 
-Every SKILL.md declares `model_tier: haiku | sonnet | opus`. When spawning a subagent for a skill, use that tier:
+Every skill's `config.yml` declares `model_tier: haiku | sonnet | opus`. When spawning a subagent for a skill, use that tier:
 
 ```python
 # Python (hooks): from hooks.lib.model_selector import get_model_for_skill
 tier = get_model_for_skill("dream-studio:core think")  # → "opus"
 
-# CLI: py hooks/lib/model_selector.py --skill="dream-studio:core think" --frontmatter
+# CLI: py hooks/lib/model_selector.py --skill="dream-studio:core think"
 ```
 
 When dispatching an Agent tool call, set the `model` parameter to the skill's declared tier:
@@ -173,7 +173,7 @@ py hooks/lib/prompt_assembler.py --template=implementer --static-context=compile
 
 **Templates:** `implementer` (build tasks), `reviewer` (code review), `auditor` (security/quality audits), `explorer` (codebase questions).
 
-**Model selection:** Use `py hooks/lib/model_selector.py --skill=<name> --frontmatter` to read the declared tier from SKILL.md frontmatter. Without `--frontmatter`, it queries historical success rates from SQLite for a data-driven recommendation.
+**Model selection:** Use `get_model_for_skill(skill_specifier)` which reads from `config.yml` (priority) then SKILL.md frontmatter (fallback). Without the frontmatter flag, the CLI queries historical success rates from SQLite for a data-driven recommendation.
 
 **Fallback:** If scripts are unavailable or error, use the manual templates below — they work identically, just without automatic caching optimization.
 

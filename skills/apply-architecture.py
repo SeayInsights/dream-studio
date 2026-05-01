@@ -2,8 +2,9 @@
 """
 Apply architecture enhancement to all skills.
 
-Creates metadata.yml, gotchas.yml, config.yml for each skill.
-Extracts data from SKILL.md frontmatter and content.
+Creates metadata.yml, gotchas.yml for each skill.
+Extracts data from config.yml and SKILL.md content.
+NOTE: One-time migration script — frontmatter has moved to config.yml.
 """
 
 import re
