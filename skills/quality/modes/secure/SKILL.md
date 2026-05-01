@@ -1,20 +1,3 @@
----
-name: secure
-model_tier: opus
-description: "Security review — parallel OWASP+STRIDE analyst subagents produce severity-tagged findings with specific fixes. Trigger on secure:, /secure, check security, review architecture, or PRs touching auth/payments/user data/APIs."
-user_invocable: true
-args: mode
-argument-hint: "[pr-review | architecture-review | dependency-audit] [--quick]"
-pack: quality
-chain_suggests:
-  - condition: "critical_findings"
-    next: "mitigate"
-    prompt: "Critical findings — run mitigate?"
-  - condition: "clean"
-    next: "verify"
-    prompt: "Security clean — verify?"
----
-
 # Secure — Parallel Security Review
 
 ## Before you start

@@ -1,14 +1,3 @@
----
-name: plan
-model_tier: sonnet
-description: Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. Trigger on `plan:` or after `think` is approved.
-pack: core
-chain_suggests:
-  - condition: "always"
-    next: "build"
-    prompt: "Plan ready — start building?"
----
-
 # Plan — Break Spec Into Steps
 
 ## Before you start

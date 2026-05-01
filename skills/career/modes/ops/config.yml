@@ -1,20 +1,11 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: career-ops
+model_tier: sonnet
+description: AI job search command center — routes to career sub-skills (evaluate,
+  scan, apply, track, pdf). Trigger on /career-ops or career-related commands.
+user_invocable: true
+args: mode
+argument-hint: '[scan | evaluate | pdf | apply | compare | tracker | pipeline | deep
+  | training | project | gig | proposal | sow | patterns | followup | batch | contact
+  | interview-prep]'
+pack: career
+chain_suggests: []

@@ -1,20 +1,10 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: think
+model_tier: opus
+description: Clarify an idea, explore 2-3 approaches with trade-offs, write a spec,
+  and get approval before any code. Trigger on `think:`, `spec:`, `shape ux:`, `design
+  brief:`, `research:`.
+pack: core
+chain_suggests:
+- condition: always
+  next: plan
+  prompt: Spec approved — plan the tasks?

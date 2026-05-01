@@ -1,17 +1,3 @@
----
-name: scan
-model_tier: sonnet
-description: "Security scanning orchestrator — generates GitHub Actions workflows and Semgrep custom rules from client profiles, ingests SARIF/JSON results into structured storage, and reports scan coverage across a client's GitHub org. Trigger on scan:, scan org:, run security scan."
-user_invocable: true
-args: mode
-argument-hint: "[setup | ingest | status] [--client <name>] [--repo <repo>] [--file <path>]"
-pack: quality
-chain_suggests:
-  - condition: "findings_found"
-    next: "mitigate"
-    prompt: "Vulnerabilities found — run mitigate?"
----
-
 # Scan — Security Scanning Orchestrator
 
 ## Before you start

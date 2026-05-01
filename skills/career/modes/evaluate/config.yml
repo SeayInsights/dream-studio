@@ -1,20 +1,7 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: career-evaluate
+model_tier: sonnet
+description: 'Evaluate job offers, freelance gigs, or compare multiple opportunities.
+  Modes: auto-pipeline, oferta, ofertas, gig, proposal, sow. Trigger via /career-ops
+  routing.'
+pack: career
+chain_suggests: []

@@ -1,14 +1,3 @@
----
-name: comply
-model_tier: opus
-description: "Map findings to SOC 2, NIST CSF, OWASP ASVS controls. Identify coverage gaps. Generate audit-ready evidence. Trigger on comply:, compliance map, audit evidence."
-user_invocable: true
-args: mode
-argument-hint: "[map | gaps | evidence] [--client <name>]"
-pack: quality
-chain_suggests: []
----
-
 # Comply — Compliance Framework Mapping
 
 ## Before you start

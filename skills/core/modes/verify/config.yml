@@ -1,20 +1,10 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: verify
+model_tier: sonnet
+description: Evidence-based verification — run the app, test golden path + edges,
+  capture proof (screenshots, logs, Playwright results), check regressions. Trigger
+  on `verify:`, `prove it:`, or after `review` passes.
+pack: core
+chain_suggests:
+- condition: always
+  next: ship
+  prompt: Verified — ready to ship?

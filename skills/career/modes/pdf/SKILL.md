@@ -1,11 +1,3 @@
----
-name: career-pdf
-model_tier: sonnet
-description: "Generate ATS-optimized CV PDFs and LinkedIn outreach messages. Modes: pdf (CV generation), contacto (LinkedIn outreach). Trigger via /career-ops pdf or /career-ops contact."
-pack: career
-chain_suggests: []
----
-
 # Career-PDF — Content Generation
 
 ## Before you start

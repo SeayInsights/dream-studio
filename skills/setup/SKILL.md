@@ -1,12 +1,3 @@
----
-name: setup
-model_tier: sonnet
-description: "First-run setup and tool management: wizard, status, jit (just-in-time prompts)"
-argument-hint: "wizard | status | jit"
-user_invocable: true
-args: mode
----
-
 # Setup — First-Run Experience & Tool Management
 
 ## Mode dispatch

@@ -1,14 +1,3 @@
----
-name: career-ops
-model_tier: sonnet
-description: "AI job search command center — routes to career sub-skills (evaluate, scan, apply, track, pdf). Trigger on /career-ops or career-related commands."
-user_invocable: true
-args: mode
-argument-hint: "[scan | evaluate | pdf | apply | compare | tracker | pipeline | deep | training | project | gig | proposal | sow | patterns | followup | batch | contact | interview-prep]"
-pack: career
-chain_suggests: []
----
-
 # Career-Ops — Router & Command Center
 
 ## Before you start

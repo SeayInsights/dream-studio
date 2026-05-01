@@ -1,14 +1,3 @@
----
-name: netcompat
-model_tier: sonnet
-description: "Zscaler/proxy compatibility analysis — detect cert pinning, custom SSL, non-standard ports, DLP conflicts. Trigger on netcompat:, zscaler check, proxy compat."
-user_invocable: true
-args: mode
-argument-hint: "[analyze | report | rules] [--client <name>]"
-pack: quality
-chain_suggests: []
----
-
 # Netcompat — Network/Proxy Compatibility Analyzer
 
 ## Before you start

@@ -1,20 +1,11 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: recap
+model_tier: haiku
+description: Capture structured build memory — what was built, decisions, risks, stack,
+  remaining work, next step — to `.sessions/YYYY-MM-DD/recap-<topic>.md`. Trigger
+  on `recap:`, `session recap:`, or auto after substantive builds (3+ files, multi-task
+  plans).
+pack: core
+chain_suggests:
+- condition: root_cause_found
+  next: learn
+  prompt: Root cause in recap — capture lesson?

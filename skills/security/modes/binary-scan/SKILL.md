@@ -1,17 +1,3 @@
----
-name: binary-scan
-model_tier: opus
-description: "Binary/executable analysis — checksec hardening, YARA malware signatures, PE/ELF metadata extraction. Trigger on binary-scan:, scan binary, analyze exe, checksec."
-user_invocable: true
-args: mode
-argument-hint: "[setup | analyze | ingest | status] [--client <name>] [--target <name>]"
-pack: security
-chain_suggests:
-  - condition: "findings_found"
-    next: "mitigate"
-    prompt: "Binary findings — run mitigate?"
----
-
 # Binary Scan — Executable Analysis
 
 ## Before you start

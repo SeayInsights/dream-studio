@@ -1,12 +1,3 @@
----
-name: quality
-model_tier: sonnet
-description: "Code quality: debug, polish, harden, secure, structure-audit, learn, coach."
-argument-hint: "debug | polish | harden | secure | structure-audit | learn | coach"
-user_invocable: true
-args: mode
----
-
 # Quality — Code Quality & Learning
 
 ## Mode dispatch

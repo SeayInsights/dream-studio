@@ -1,20 +1,10 @@
-# Thresholds
-thresholds:
-  max_tasks_before_checkpoint: 3
-  checkpoint_interval_minutes: 30
-
-# Model defaults
-models:
-  default: sonnet
-  fast_mode: haiku
-
-# Behavior flags
-behavior:
-  allow_parallel_execution: false
-  strict_mode: false
-
-# Performance budgets
-budgets:
-  max_tokens: 100000
-  max_time_seconds: 600
-  max_context_percent: 80
+name: structure-audit
+model_tier: haiku
+description: Audit a project's folder/file structure against FSC and architecture
+  conventions. Trigger on `/structure-audit`, `structure-audit:`, or `/structure-audit
+  --quick`.
+pack: quality
+chain_suggests:
+- condition: findings_found
+  next: plan
+  prompt: Violations found — plan refactor?

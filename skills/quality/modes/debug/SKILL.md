@@ -1,20 +1,3 @@
----
-name: debug
-model_tier: sonnet
-description: Systematic problem solving — reproduce, hypothesize, test one variable at a time, narrow, fix, document. No shotgun debugging.
-pack: core
-triggers:
-  - debug:
-  - diagnose:
-chain_suggests:
-  - condition: "root_cause_found"
-    next: "plan"
-    prompt: "Root cause identified — plan the fix?"
-  - condition: "debug_iterations_gte_3"
-    next: "learn"
-    prompt: "Complex debug — capture lesson?"
----
-
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 

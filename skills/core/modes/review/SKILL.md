@@ -1,17 +1,3 @@
----
-name: review
-model_tier: sonnet
-description: Two-stage quality check — spec compliance first (did we build what was asked?), then code quality (is it well-built?) — with severity-tagged findings. Trigger on `review:`, `review code`, or after `build`.
-pack: core
-chain_suggests:
-  - condition: "findings_found"
-    next: "build"
-    prompt: "Findings to fix — re-enter build?"
-  - condition: "clean"
-    next: "verify"
-    prompt: "Review clean — verify it works?"
----
-
 # Review — Two-Stage Quality Check
 
 ## Before you start
