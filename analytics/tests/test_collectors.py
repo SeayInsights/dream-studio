@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from analytics.core.collectors.session_collector import SessionCollector
 from analytics.core.collectors.skill_collector import SkillCollector
 from analytics.core.collectors.token_collector import TokenCollector
+from analytics.core.collectors.model_collector import ModelCollector
 
 
 @pytest.fixture
@@ -443,3 +444,180 @@ def test_token_percentage(test_token_db):
     # Sum of all percentages should be ~100
     total_percentage = sum(m["percentage"] for m in metrics["by_model"].values())
     assert 99 <= total_percentage <= 101  # Allow small rounding errors
+
+
+# ModelCollector tests
+
+@pytest.fixture
+def test_model_db(tmp_path):
+    """Create a temporary test database with model performance data"""
+    db_path = tmp_path / "test_studio_models.db"
+
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+
+    # Create tables
+    cursor.execute("""
+        CREATE TABLE raw_skill_telemetry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            skill_name TEXT NOT NULL,
+            invoked_at TEXT NOT NULL,
+            model TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            success INTEGER NOT NULL,
+            execution_time_s REAL,
+            project_id TEXT,
+            session_id TEXT
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE raw_token_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            project_id TEXT,
+            skill_name TEXT,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            model TEXT,
+            recorded_at TEXT NOT NULL
+        )
+    """)
+
+    # Insert sample skill telemetry data
+    now = datetime.now()
+    skill_data = [
+        ("dream-studio:core", (now - timedelta(days=1)).isoformat(), "sonnet", 1000, 500, 1, 10.0, "proj-a", "sess-1"),
+        ("dream-studio:core", (now - timedelta(days=2)).isoformat(), "sonnet", 1200, 600, 1, 12.0, "proj-a", "sess-2"),
+        ("dream-studio:quality", (now - timedelta(days=3)).isoformat(), "haiku", 500, 200, 1, 5.0, "proj-b", "sess-3"),
+        ("dream-studio:core", (now - timedelta(days=4)).isoformat(), "opus", 2000, 1000, 0, 30.0, "proj-a", "sess-4"),
+        ("dream-studio:security", (now - timedelta(days=5)).isoformat(), "sonnet", 800, 400, 1, 11.0, "proj-c", "sess-5"),
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_skill_telemetry
+        (skill_name, invoked_at, model, input_tokens, output_tokens, success, execution_time_s, project_id, session_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, skill_data)
+
+    # Insert token usage data
+    token_data = [
+        ("sess-1", "proj-a", "dream-studio:core", 1000, 500, "sonnet", (now - timedelta(days=1)).isoformat()),
+        ("sess-2", "proj-a", "dream-studio:core", 1200, 600, "sonnet", (now - timedelta(days=2)).isoformat()),
+        ("sess-3", "proj-b", "dream-studio:quality", 500, 200, "haiku", (now - timedelta(days=3)).isoformat()),
+        ("sess-4", "proj-a", "dream-studio:core", 2000, 1000, "opus", (now - timedelta(days=4)).isoformat()),
+        ("sess-5", "proj-c", "dream-studio:security", 800, 400, "sonnet", (now - timedelta(days=5)).isoformat()),
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_token_usage
+        (session_id, project_id, skill_name, input_tokens, output_tokens, model, recorded_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, token_data)
+
+    conn.commit()
+    conn.close()
+
+    return db_path
+
+
+def test_model_collector_initialization():
+    """Test ModelCollector can be initialized"""
+    collector = ModelCollector()
+    assert collector.db_path is not None
+
+
+def test_model_collect_by_model(test_model_db):
+    """Test metrics grouped by model"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_model" in metrics
+    assert "sonnet" in metrics["by_model"]
+    assert "haiku" in metrics["by_model"]
+    assert "opus" in metrics["by_model"]
+
+    # Sonnet: 3 invocations
+    assert metrics["by_model"]["sonnet"]["invocations"] == 3
+
+
+def test_model_success_rates(test_model_db):
+    """Test model success rate calculation"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    # Sonnet: 3/3 success = 100%
+    assert metrics["by_model"]["sonnet"]["success_rate"] == 100.0
+
+    # Opus: 0/1 success = 0%
+    assert metrics["by_model"]["opus"]["success_rate"] == 0.0
+
+
+def test_model_distribution(test_model_db):
+    """Test model usage distribution"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    assert "distribution" in metrics
+    assert "sonnet" in metrics["distribution"]
+
+    # 5 total invocations, sonnet has 3 = 60%
+    assert metrics["distribution"]["sonnet"] == 60.0
+
+    # Sum should be 100%
+    total = sum(metrics["distribution"].values())
+    assert 99 <= total <= 101
+
+
+def test_model_performance_rank(test_model_db):
+    """Test model performance ranking"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    assert "performance_rank" in metrics
+    assert isinstance(metrics["performance_rank"], list)
+    assert len(metrics["performance_rank"]) > 0
+
+    # Each entry should be (model, score) tuple
+    assert isinstance(metrics["performance_rank"][0], tuple)
+    assert len(metrics["performance_rank"][0]) == 2
+
+
+def test_model_token_efficiency(test_model_db):
+    """Test token efficiency calculation"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    assert "token_efficiency" in metrics
+
+    # Models with execution time should have efficiency score
+    if "sonnet" in metrics["token_efficiency"]:
+        assert metrics["token_efficiency"]["sonnet"] > 0
+
+
+def test_model_timeline(test_model_db):
+    """Test model timeline retrieval"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    timeline = collector.get_model_timeline("sonnet", days=30)
+
+    assert isinstance(timeline, list)
+    assert len(timeline) == 3  # 3 days with sonnet usage
+    assert "date" in timeline[0]
+    assert "invocations" in timeline[0]
+    assert "success_rate" in timeline[0]
+    assert "avg_exec_time_s" in timeline[0]
+
+
+def test_model_performance_metrics(test_model_db):
+    """Test performance metrics (execution time, tokens)"""
+    collector = ModelCollector(db_path=str(test_model_db))
+    metrics = collector.collect(days=90)
+
+    sonnet_metrics = metrics["by_model"]["sonnet"]
+    assert "avg_exec_time_s" in sonnet_metrics
+    assert sonnet_metrics["avg_exec_time_s"] > 0
+    assert "avg_tokens_per_run" in sonnet_metrics
+    assert sonnet_metrics["avg_tokens_per_run"] > 0
+    assert "total_tokens" in sonnet_metrics
+    assert sonnet_metrics["total_tokens"] > 0
