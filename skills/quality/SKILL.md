@@ -2,6 +2,13 @@
 
 ## Mode dispatch
 
+0. **Progressive disclosure check:** Before dispatching to a mode, check if it's available by running:
+   ```python
+   py "$PLUGIN/hooks/lib/skill_calibration.py" check-mode quality <mode> "<user-message>"
+   ```
+   If exit code is non-zero, the mode is locked. Show the unlock message (from stdout) and stop.
+   If exit code is zero, continue to step 1. If unlock notifications are printed, show them to the user.
+
 1. Parse the mode from the argument (first word).
 2. If no mode given, infer from the user's message using the keyword table below.
 3. If still ambiguous, list available modes and ask.

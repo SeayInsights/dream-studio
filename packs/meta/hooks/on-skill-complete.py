@@ -21,6 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.skill_calibration import record_outcome
+
 # ---------------------------------------------------------------------------
 # Pack → directory mapping
 # ---------------------------------------------------------------------------
@@ -289,6 +291,22 @@ def main() -> None:
 
     if not skill_name:
         return
+
+    # Log calibration data
+    # Note: PostToolUse hooks don't have access to execution metadata (model, duration, tokens)
+    # For now, we log successful completions with placeholders. Future enhancement:
+    # Add PreToolUse timestamp tracking + outcome detection from tool_result.
+    try:
+        # Use unknown/placeholder values since PostToolUse doesn't provide metrics
+        model_used = "unknown"
+        outcome = "success"  # PostToolUse fires on completion, assume success
+        duration = 0.0  # Not available in payload
+        tokens = 0  # Not available in payload
+
+        record_outcome(skill_name, model_used, outcome, duration, tokens)
+    except Exception:
+        # Calibration logging must never block skill completion
+        pass
 
     skill_dir = _locate_skill_dir(skill_name, skill_args)
     if skill_dir is None:

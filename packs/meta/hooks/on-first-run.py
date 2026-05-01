@@ -90,6 +90,11 @@ def main() -> None:
     _hydrate_registry_once()
 
     if cfg.get("director_name"):
+        # Director profile exists — check if onboarding mode is set
+        if not cfg.get("onboarding_mode"):
+            # Default to full mode for existing users to avoid breaking their workflows
+            cfg["onboarding_mode"] = "full"
+            state.write_config(cfg)
         return
 
     print(
@@ -100,6 +105,9 @@ def main() -> None:
         "  3. Run: workflow: run studio-onboard\n\n"
         "The onboarding workflow will configure your Director profile, projects root,\n"
         "and Claude memory path — then audit your environment for any gaps.\n\n"
+        "During onboarding, you'll be asked to choose an onboarding mode:\n"
+        "  • progressive — Start with 5 core modes, unlock more as you use them (recommended for new users)\n"
+        "  • full        — All 40 modes available immediately (recommended for power users)\n\n"
         "Why a new session? The onboarding workflow needs fresh context to run correctly.\n"
         "This message will not appear again once setup is complete.\n",
         flush=True,

@@ -1,5 +1,8 @@
 # dream-studio runtime state (user data dir, never committed)
-.dream-studio/
+# Exception: allow team collaboration directory
+!.dream-studio/
+.dream-studio/*
+!.dream-studio/team/
 
 # Generated session handoffs — contain conversation history, never commit
 .sessions/
