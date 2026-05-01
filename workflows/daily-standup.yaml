@@ -1,0 +1,121 @@
+name: daily-standup
+description: >
+  Morning routine — check open PRs, pending lessons, latest handoff,
+  stale research, and produce a one-page morning briefing.
+  Invoke: "workflow: daily-standup"
+version: 1
+on_failure: continue
+
+gates:
+  priorities-confirmed:
+    type: pause
+    prompt: "Morning briefing delivered. Confirm today's priorities before starting work?"
+
+nodes:
+  - id: check-prs
+    command: |
+      Check open pull requests across projects.
+
+      Run `gh pr list --state open` in the current repo.
+      If harvest.projects_root is configured in ~/.dream-studio/config.json,
+      also check for repos in that directory that have open PRs.
+
+      Output a summary:
+        Open PRs: N total
+        - [repo]: PR #X "title" (status, age)
+
+      If no GitHub CLI available: note "gh not available — skipping PR check"
+      End with: PASSED: N open PRs found
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: check-lessons
+    command: |
+      Check pending draft lessons.
+
+      Run: py scripts/lesson_queue.py list --pending
+
+      Count the pending lessons. If > 5 pending, flag for attention.
+
+      Output:
+        Pending lessons: N
+        [table output from lesson_queue.py]
+
+      End with: PASSED: N pending lessons
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: check-handoffs
+    depends_on: []
+    command: |
+      Find the most recent handoff and generate a brief resume command.
+
+      Run: py scripts/resume_from_handoff.py --brief
+
+      If a handoff is found, output the resume command.
+      If no handoff found, output: "No recent handoff — starting fresh."
+
+      End with: PASSED: resume point identified (or "no handoff")
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: check-research
+    depends_on: []
+    command: |
+      Check for stale research topics.
+
+      Run: py scripts/research_cache.py stale
+
+      If stale topics exist, list them with their refresh_due dates.
+      If no stale topics: "All research topics current."
+      If no research cache exists: "No research cache — nothing to check."
+
+      End with: PASSED: N stale topics (or "all current")
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: synthesize
+    depends_on: [check-prs, check-lessons, check-handoffs, check-research]
+    trigger_rule: all_done
+    gate: priorities-confirmed
+    command: |
+      Synthesize all morning checks into a one-page briefing.
+
+      Inputs:
+        - PRs: {{check-prs.output}}
+        - Lessons: {{check-lessons.output}}
+        - Handoff: {{check-handoffs.output}}
+        - Research: {{check-research.output}}
+
+      Produce a MORNING BRIEFING:
+
+        # Morning Briefing — YYYY-MM-DD
+
+        ## Open PRs
+        [summary from check-prs]
+
+        ## Pending Lessons (need review)
+        [count and any flagged items from check-lessons]
+
+        ## Resume Point
+        [resume command from check-handoffs, or "Starting fresh"]
+
+        ## Stale Research
+        [stale topics from check-research, or "All current"]
+
+        ## Suggested Priorities
+        Based on the above:
+        1. [most urgent item — e.g., "Review 2 open PRs" or "Resume task X"]
+        2. [second priority]
+        3. [third priority]
+
+      Save to: ~/.dream-studio/meta/daily/YYYY-MM-DD-standup.md
+
+      End with: PASSED: morning briefing delivered
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120

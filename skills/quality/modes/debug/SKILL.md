@@ -24,6 +24,14 @@ Read `gotchas.yml` in this directory before every invocation.
 Diagnose and fix bugs using disciplined hypothesis testing. One variable at a time.
 
 ## Steps
+
+**Pre-flight Gotcha Briefing** — Before starting diagnosis, surface recent gotchas for the domain being debugged:
+1. Run `hooks/lib/gotcha_scanner.py` → `search_gotchas(topic)` where topic is the bug description
+2. Also run `get_recent_gotchas(limit=3)` for the debug skill
+3. Display matches as: `[severity] gotcha-id — title`
+4. If a gotcha directly matches the bug symptoms, highlight it: "⚡ This gotcha may explain the issue"
+5. Debug sessions are the highest-value place for this — most gotchas originated from debug sessions
+
 0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
 1. **Reproduce** — Confirm the bug exists. Get exact steps, error messages, stack traces.
 2. **Hypothesize** — Form 2-3 hypotheses ranked by likelihood based on the error.

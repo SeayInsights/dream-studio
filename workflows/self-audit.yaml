@@ -129,6 +129,26 @@ nodes:
         - "always validate before modifying"
         - "commit per task not per wave"
 
+      Also check GOTCHA EFFECTIVENESS:
+
+      Scan .sessions/**/handoff-*.json files from the last 90 days.
+      For each handoff, read the "gotchas_hit" array (may not exist in older handoffs — skip if absent).
+
+      Build a hit frequency map: gotcha-id → count of handoffs that reference it.
+
+      Cross-reference against all gotchas in skills/*/gotchas.yml:
+      - Gotchas hit 3+ times in 90 days → flag as HIGH_VALUE — consider promoting to core if skill-specific
+      - Gotchas hit 0 times in 90 days → flag as STALE_CANDIDATE — review whether still relevant
+        (Note: absence of hits doesn't prove a gotcha is useless — it may be preventing issues silently.
+         Only flag, don't auto-remove.)
+
+      Add to findings file:
+        ## Gotcha Effectiveness (last 90 days)
+        | Gotcha ID | Skill | Hits | Status |
+        HIGH_VALUE: [list]
+        STALE_CANDIDATE: [list]
+        Note: gotchas_hit tracking was added 2026-05-01. Handoffs before this date won't have the field.
+
       Write findings to: .sessions/<YYYY-MM-DD>/self-audit-gotchas.md
       Format: [PROMOTE_TO_CORE] concept — appears in: skill-a, skill-b, skill-c — suggested core module: quality.md or format.md
     model: haiku

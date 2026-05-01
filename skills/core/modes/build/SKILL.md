@@ -47,6 +47,13 @@ Dispatch fresh subagent per task with isolated context.
 ## The Process
 
 ### Step 0: Load plan and project context
+
+**Pre-flight Gotcha Briefing** — Before loading the plan, surface the 3 most recently added gotchas relevant to this build:
+1. Run `hooks/lib/gotcha_scanner.py` → `get_recent_gotchas(limit=3)` for the skills involved in this plan
+2. Display each gotcha as: `[severity] gotcha-id — title`
+3. This is informational only — does not block the build
+4. Purpose: recently-added gotchas reflect the latest lessons learned; surfacing them here prevents repeating recent mistakes
+
 If `.planning/GOTCHAS.md` exists, read it now. If `.planning/CONSTITUTION.md` exists, read it now. These contain known failure patterns and architectural decisions that must constrain every task in the build.
 Read the plan file ONCE. Extract ALL tasks with full text. Don't re-read the plan per task.
 

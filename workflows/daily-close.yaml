@@ -1,0 +1,108 @@
+name: daily-close
+description: >
+  End-of-day routine — harvest daily learnings, check for WIP,
+  audit memory for corrections, and produce a day summary.
+  Invoke: "workflow: daily-close"
+version: 1
+on_failure: continue
+
+nodes:
+  - id: daily-learn
+    command: |
+      Run the daily learning harvest.
+
+      This invokes the learn: daily mode from dream-studio:quality.
+
+      Steps:
+      1. Read ~/.dream-studio/meta/today.md for micro-captures
+      2. Scan .sessions/ for today's date (handoffs and recaps)
+      3. Check git log --since="today" for today's commits
+      4. Extract candidate patterns:
+         - Any micro-capture with outcome:correction
+         - Any handoff lessons_this_session entry
+         - Any recap Risk flags with root causes
+      5. Dedup against existing draft-lessons and gotchas.yml
+      6. Write <=5 new drafts to meta/draft-lessons/
+
+      Output: "Daily harvest: N candidates found, M drafts written, K skipped"
+      If nothing found: "Clean day — no new patterns."
+
+      End with: PASSED: daily harvest complete
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  - id: check-wip
+    depends_on: []
+    command: |
+      Check for work in progress that needs a handoff.
+
+      1. Run `git status` — check for uncommitted changes
+      2. Run `git stash list` — check for stashed work
+      3. Check if any task file in .planning/ has incomplete tasks (unchecked boxes)
+
+      If uncommitted changes or incomplete tasks exist:
+        Output: "WIP DETECTED — uncommitted changes or incomplete tasks found. Consider running handoff before closing."
+        List the specific items found.
+
+      If clean:
+        Output: "No WIP — workspace is clean."
+
+      End with: PASSED: WIP check complete (clean | WIP detected)
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: memory-check
+    depends_on: []
+    command: |
+      Check if today's session produced corrections that should become memory entries.
+
+      1. Scan .sessions/ for today's handoff files
+      2. Look for lessons_this_session entries
+      3. Check if those lessons already have corresponding memory files
+         in ~/.claude/projects/*/memory/
+      4. For any unmatched correction, draft a memory entry suggestion:
+         - Proposed filename
+         - Proposed type (feedback, project, user)
+         - Proposed content
+
+      Output the suggestions for Director review.
+      If no corrections found: "No new corrections to memorize."
+
+      End with: PASSED: memory check complete (N suggestions | clean)
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
+
+  - id: day-summary
+    depends_on: [daily-learn, check-wip, memory-check]
+    trigger_rule: all_done
+    command: |
+      Produce a 5-line day summary.
+
+      Inputs:
+        - Learn: {{daily-learn.output}}
+        - WIP: {{check-wip.output}}
+        - Memory: {{memory-check.output}}
+
+      Also check:
+        - git log --since="today" --oneline — what was committed today
+        - .sessions/ for today — what sessions happened
+
+      Write to ~/.dream-studio/meta/daily/YYYY-MM-DD-summary.md:
+
+        # Day Summary — YYYY-MM-DD
+
+        **Built**: [one sentence — what was accomplished today]
+        **Learned**: [one sentence — key lesson or "Clean day"]
+        **Committed**: [N commits across M repos]
+        **WIP**: [clean | describe what's pending]
+        **Tomorrow**: [one sentence — what to start with]
+
+      Print the summary to stdout as well.
+
+      End with: PASSED: day summary saved
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
