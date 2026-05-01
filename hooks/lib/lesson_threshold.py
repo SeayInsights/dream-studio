@@ -3,6 +3,15 @@
 Reads the draft-lessons directory and counts how many lessons reference each
 skill. Returns skills that have reached the escalation threshold, signalling
 that the skill's SKILL.md or gotchas.yml should be reviewed and updated.
+
+Promotion logic (future implementation):
+- Load promotion-rules.yml from skills/quality/modes/learn/
+- Score each draft lesson based on evidence count, confidence, recency
+- Auto-reject lessons matching auto_reject criteria
+- Promote lessons reaching auto_promote_threshold if require_director_review=false
+- If require_director_review=true, surface candidates but wait for approval
+- Move promoted lessons to promote_to targets (gotchas.yml, memory/)
+- Archive promoted drafts to meta/lessons/ with Status: PROMOTED
 """
 
 from __future__ import annotations
@@ -83,3 +92,24 @@ def _known_skills() -> set[str]:
     if not skills_dir.is_dir():
         return set()
     return {p.name for p in skills_dir.iterdir() if p.is_dir() and not p.name.startswith(".")}
+
+
+# ============================================================================
+# Promotion logic — to be implemented
+# ============================================================================
+# Future implementation will add:
+# - load_promotion_rules() → reads skills/quality/modes/learn/promotion-rules.yml
+# - score_lesson(lesson_file: Path) → float score based on evidence/confidence/recency
+# - should_auto_reject(lesson_data: dict, rules: dict) → bool
+# - promote_lesson(lesson_file: Path, target: str) → moves to gotchas.yml or memory/
+# - archive_promoted(lesson_file: Path) → moves to meta/lessons/ with Status: PROMOTED
+#
+# Example flow:
+# 1. Scan meta/draft-lessons/ for lessons with Status: DRAFT
+# 2. Score each lesson using promotion-rules.yml weights
+# 3. Auto-reject lessons matching auto_reject criteria
+# 4. If score >= auto_promote_threshold:
+#    - If require_director_review=true: surface for approval
+#    - If require_director_review=false: auto-promote to target
+# 5. Archive promoted lessons with timestamp and promotion target
+# ============================================================================

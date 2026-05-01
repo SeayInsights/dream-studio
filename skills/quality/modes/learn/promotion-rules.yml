@@ -1,0 +1,22 @@
+# Lesson Promotion Heuristics
+# Used by hooks/lib/lesson_threshold.py to auto-promote recurring patterns
+
+auto_promote_threshold: 3  # occurrences before auto-promotion
+require_director_review: true  # all promotions need explicit approval
+
+# Target locations for promoted lessons
+promote_to:
+  - gotchas.yml     # anti-patterns, edge cases, best practices
+  - memory/         # domain knowledge, tool behaviors, long-term learnings
+
+# Promotion scoring weights
+scoring:
+  evidence_count: 1.0      # each distinct source adds 1 point
+  confidence_boost: 0.5    # high-confidence lessons get +0.5
+  recency_decay: 0.9       # older lessons decay by 10% per month
+
+# Auto-rejection criteria (skip Director review)
+auto_reject:
+  - single_source_low_confidence  # only 1 source AND confidence=low
+  - already_in_gotchas            # exact match found in any gotchas.yml
+  - domain_specific_in_core       # lesson tagged for specific domain but targeting core skills
