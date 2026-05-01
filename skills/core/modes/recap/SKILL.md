@@ -32,6 +32,12 @@ Record what happened in a build so future sessions and the Improvement Loop (Eng
 4. **Stack** — What technologies/patterns were used?
 5. **Remaining** — What's left undone? What's the logical next step?
 6. **Write** — Output to `.sessions/YYYY-MM-DD/recap-<topic>.md`
+6b. **Micro-capture** — Append a summary line to the daily capture file using `hooks/lib/micro_capture.py`:
+   - Call: `append_capture(skill='recap', outcome='<pass|correction>', note='<one-line summary of what was built>')`
+   - Use `outcome: correction` if any Director corrections or approach overrides were noted in the Decisions section
+   - Use `outcome: pass` otherwise
+   - The note should be a single sentence capturing the most important thing from this session
+   - This feeds the daily learning pipeline — daily harvest reads these micro-captures
 7. **Auto-draft** — After writing the recap file, scan what was captured for:
    - Any Director correction or approach override during the session
    - Any "Risk flags" entry that has an identified root cause (not just "risk exists" but "why it happened")
