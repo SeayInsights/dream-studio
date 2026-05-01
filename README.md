@@ -762,7 +762,7 @@ As of **v0.11.0**, skills are organized into 7 pack-level routers. Each pack's `
 Every mode has:
 - **metadata.yml** — Evolution tracking, quality metrics (success rate, token usage), dependencies
 - **gotchas.yml** — Structured lessons learned (avoid patterns, best practices, edge cases)
-- **config.yml** — Runtime configuration and performance budgets
+- **config.yml** — Skill metadata (name, model_tier, description, triggers, chain_suggests)
 - **changelog.md** — Version history
 
 Core skills (build, plan, review, verify, ship) additionally have:
@@ -809,10 +809,11 @@ Skills compose from reusable building blocks in `skills/core/`:
 ### Creating New Skills
 
 1. Copy templates from `skills/templates/`
-2. Edit `metadata.yml` with skill info
-3. Create `SKILL.md` with orchestration logic
-4. Add `changelog.md` entry
-5. Regenerate catalog: `py generate-catalog.py`
+2. Create `config.yml` with skill metadata (name, model_tier, description, triggers, chain_suggests)
+3. Create `SKILL.md` with orchestration logic (pure instructions, no frontmatter)
+4. Edit `metadata.yml` with evolution tracking info
+5. Add `changelog.md` entry
+6. Regenerate catalog: `py generate-catalog.py`
 
 See `skills/STRUCTURE.md` for complete guide.
 
@@ -935,7 +936,7 @@ make adapters PLATFORM=cursor    # build one platform only
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming conventions, commit format, and the PR checklist.
 
 ```bash
-make test        # run 355 tests with coverage (threshold: 70%)
+make test        # run tests with coverage (threshold: 70%)
 make lint        # flake8
 make fmt         # black --check
 make security    # pip-audit for known vulnerabilities

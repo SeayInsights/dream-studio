@@ -59,7 +59,7 @@ py scripts/session_analytics.py --project C:\Users\Dannis Seay\builds\dream-stud
 ### memory_audit.py
 
 Scans Claude memory files (`~/.claude/projects/*/memory/`) for staleness, conflicts, and gaps.
-Parses YAML frontmatter from each `.md` file to detect outdated entries.
+Parses YAML frontmatter from each memory `.md` file to detect outdated entries.
 
 **Arguments:**
 
@@ -229,7 +229,7 @@ py scripts/lesson_queue.py stats
 
 ### lint_skills.py
 
-Validates all `SKILL.md` files for structural correctness: required frontmatter fields,
+Validates all skill directories for structural correctness: required `config.yml` fields,
 required sections, and `gotchas.yml` schema if present.
 
 **Arguments:**

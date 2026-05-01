@@ -3,7 +3,7 @@
 
 Trigger: PostToolUse on Skill tool (after on-skill-metrics).
 
-Reads the completed skill's SKILL.md frontmatter for chain_suggests entries,
+Reads the completed skill's config.yml for chain_suggests entries,
 evaluates conditions against session state, and prints a suggestion line.
 Never auto-invokes — advisory only.
 
@@ -38,23 +38,40 @@ _PACK_SKILL_DIRS: dict[str, str] = {
 _UI_EXTENSIONS = {".tsx", ".vue", ".svelte", ".astro", ".css", ".scss", ".jsx"}
 
 # ---------------------------------------------------------------------------
-# YAML frontmatter parsing (stdlib only)
+# config.yml reading
 # ---------------------------------------------------------------------------
 
-def _parse_frontmatter(text: str) -> dict:
-    text = text.lstrip("﻿")
-    m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    if not m:
-        return {}
-    return _parse_yaml_subset(m.group(1))
+try:
+    import yaml as _yaml
+except ImportError:
+    _yaml = None  # type: ignore[assignment]
 
 
-def _parse_yaml_subset(yaml_text: str) -> dict:
+def _read_chain_suggests(config_yml: Path) -> list[dict]:
+    """Read chain_suggests from a config.yml file."""
+    if not config_yml.is_file():
+        return []
+    try:
+        if _yaml is not None:
+            data = _yaml.safe_load(config_yml.read_text(encoding="utf-8-sig"))
+        else:
+            data = _parse_config_yml_fallback(config_yml)
+        if not isinstance(data, dict):
+            return []
+        suggests = data.get("chain_suggests", [])
+        return suggests if isinstance(suggests, list) else []
+    except Exception:
+        return []
+
+
+def _parse_config_yml_fallback(config_yml: Path) -> dict:
+    """Minimal config.yml parser when PyYAML is unavailable."""
+    text = config_yml.read_text(encoding="utf-8-sig")
     result: dict = {}
     current_key = ""
     current_list: list | None = None
 
-    for line in yaml_text.splitlines():
+    for line in text.splitlines():
         if not line.strip() or line.strip().startswith("#"):
             continue
 
@@ -95,32 +112,6 @@ def _parse_yaml_subset(yaml_text: str) -> dict:
         result[current_key] = current_list
 
     return result
-
-
-def _parse_chain_suggests_robust(text: str) -> list[dict]:
-    """Fallback: parse chain_suggests from frontmatter using regex directly."""
-    text = text.lstrip("﻿")
-    m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
-    if not m:
-        return []
-
-    fm = m.group(1)
-    cs_match = re.search(r"chain_suggests:\s*\n((?:[ \t]+[^\n]*\n?)*)", fm)
-    if not cs_match:
-        return []
-
-    entries = []
-    for entry_match in re.finditer(
-        r'-\s+condition:\s*"([^"]*)"\s*\n\s+next:\s*"([^"]*)"\s*\n\s+prompt:\s*"([^"]*)"',
-        cs_match.group(1),
-    ):
-        entries.append({
-            "condition": entry_match.group(1),
-            "next": entry_match.group(2),
-            "prompt": entry_match.group(3),
-        })
-
-    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -250,34 +241,27 @@ def _log_suggestion(skill: str, suggested_next: str, condition: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SKILL.md locator
+# Skill directory locator
 # ---------------------------------------------------------------------------
 
-def _locate_skill_md(skill_full: str, args_text: str) -> Path | None:
+def _locate_skill_dir(skill_full: str, args_text: str) -> Path | None:
+    """Return the mode directory containing config.yml and SKILL.md."""
     plugin_root = Path(__file__).resolve().parents[3]
 
-    pack_prefix = ""
-    mode_name = ""
-
-    if ":" in skill_full:
-        pack_prefix = skill_full
-        mode_name = args_text.split()[0] if args_text else ""
-    else:
-        pack_prefix = skill_full
-        mode_name = args_text.split()[0] if args_text else ""
+    pack_prefix = skill_full
+    mode_name = args_text.split()[0] if args_text else ""
 
     if pack_prefix in _PACK_SKILL_DIRS and mode_name:
-        candidate = plugin_root / _PACK_SKILL_DIRS[pack_prefix] / mode_name / "SKILL.md"
-        if candidate.exists():
+        candidate = plugin_root / _PACK_SKILL_DIRS[pack_prefix] / mode_name
+        if (candidate / "config.yml").exists() or (candidate / "SKILL.md").exists():
             return candidate
 
     if pack_prefix in _PACK_SKILL_DIRS and not mode_name:
         modes_dir = plugin_root / _PACK_SKILL_DIRS[pack_prefix]
         if modes_dir.is_dir():
             for d in sorted(modes_dir.iterdir()):
-                sk = d / "SKILL.md"
-                if sk.exists():
-                    return sk
+                if (d / "config.yml").exists() or (d / "SKILL.md").exists():
+                    return d
 
     return None
 
@@ -306,16 +290,11 @@ def main() -> None:
     if not skill_name:
         return
 
-    skill_md = _locate_skill_md(skill_name, skill_args)
-    if skill_md is None:
+    skill_dir = _locate_skill_dir(skill_name, skill_args)
+    if skill_dir is None:
         return
 
-    text = skill_md.read_text(encoding="utf-8")
-
-    chain_suggests = _parse_chain_suggests_robust(text)
-    if not chain_suggests:
-        fm = _parse_frontmatter(text)
-        chain_suggests = fm.get("chain_suggests", [])
+    chain_suggests = _read_chain_suggests(skill_dir / "config.yml")
 
     if not chain_suggests:
         return

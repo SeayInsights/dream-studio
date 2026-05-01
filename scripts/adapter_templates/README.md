@@ -8,7 +8,7 @@ Every template receives these variables:
 
 | Variable | Type | Description |
 |---|---|---|
-| `skill_name` | string | The skill's name from SKILL.md frontmatter |
+| `skill_name` | string | The skill's name from `config.yml` |
 | `triggers` | list[str] | Trigger keywords that activate the skill |
 | `workflow_steps` | list[str] | Numbered workflow steps from the skill body |
 
@@ -16,7 +16,7 @@ Every template receives these variables:
 
 | Variable | Type | Description |
 |---|---|---|
-| `description` | string | Skill description from frontmatter |
+| `description` | string | Skill description from `config.yml` |
 | `gotchas` | list[dict] | Avoid entries from gotchas.yml (`title`, `context`, `fix`) |
 | `domains` | list[dict] | Domain knowledge files (`name`, `content`) — only if `include_domains: true` in config |
 
