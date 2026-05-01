@@ -8,15 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Smart model routing** — `model_tier` frontmatter on all 48 SKILL.md files + `get_model_for_skill()` API for subagent model selection (opus/sonnet/haiku) with telemetry tracking
-- **Hook consolidation** — 3 dispatchers replace 19 subprocess calls (UserPromptSubmit 6→1, Stop 9→1, Edit|Write 4→1) with per-handler timing telemetry
-- **Context trimming** — extract detailed content from 14 SKILL.md files into examples.md (44% line reduction), hook timing dashboard panel, global CLAUDE.md deduplication
+- **YAML mode config** — migrated skill metadata from SKILL.md frontmatter to dedicated `config.yml` files across all 48 skill directories; SKILL.md is now pure instructions (#83)
+- **Granular skill tracking** — dashboard shows mode-level names ("core:think", "quality:debug") instead of pack-only names ("core", "quality") (#84)
+- **Smart model routing** — `get_model_for_skill()` API reads `model_tier` from config.yml for subagent model selection (opus/sonnet/haiku) with telemetry tracking (#80)
+- **Hook consolidation** — 3 dispatchers replace 19 subprocess calls (UserPromptSubmit 6→1, Stop 9→1, Edit|Write 4→1) with per-handler timing telemetry (#81)
+- **Context trimming** — extract detailed content from 14 SKILL.md files into examples.md (44% line reduction), hook timing dashboard panel, global CLAUDE.md deduplication (#82)
+- **Analytics in CI** — dashboard renders on main branch pushes and uploads as a build artifact (#85)
 - **Onboarding skill** (`dream-studio:setup`) — wizard, status, and JIT modes for guided tool installation and project setup (#46)
 - **Web access module** (`skills/core/web.md`) — 3-tier fallback chain (Firecrawl → scraper-mcp → WebSearch/WebFetch) with JIT install prompts
 - **Tool registry** (`skills/setup/tool-registry.yml`) — metadata for 6 optional tools with detect/install/upgrade commands
 - **Tool reference** (`docs/tool-reference.md`) — per-tool documentation with skill benefit tables and setup profiles
 
+### Fixed
+- **Chain suggestions restored** — `on-skill-complete.py` now reads `chain_suggests` from config.yml instead of stripped SKILL.md frontmatter (#85)
+
 ### Changed
+- **Documentation** — updated 10 files with stale "SKILL.md frontmatter" references to reflect config.yml as the metadata SSOT (#85)
 - **Workflow coverage** — token efficiency improvements and feature activation gates (#48)
 - **Linux gh install** — corrected install command; Mac Python symlink fix (#47)
 
