@@ -21,7 +21,7 @@ test -f .planning/traceability.yaml && echo "ACTIVE" || echo "INACTIVE"
 
 ### Validate traceability file
 ```bash
-py "$PLUGIN/hooks/lib/traceability.py" validate .planning/traceability.yaml
+py "../../hooks/lib/traceability.py" validate .planning/traceability.yaml
 ```
 
 Always validate BEFORE modifying the file. If validation fails, warn and skip updates — don't corrupt a broken file.
@@ -41,14 +41,14 @@ After creating a commit for a task:
 ```bash
 if [ -f .planning/traceability.yaml ]; then
   # Validate first
-  py "$PLUGIN/hooks/lib/traceability.py" validate .planning/traceability.yaml
+  py "../../hooks/lib/traceability.py" validate .planning/traceability.yaml
   
   if [ $? -eq 0 ]; then
     # Edit: append commit SHA to TR-001's commits list
     # Edit: update TR-001 status to in_progress or implemented
     
     # Re-validate
-    py "$PLUGIN/hooks/lib/traceability.py" validate .planning/traceability.yaml
+    py "../../hooks/lib/traceability.py" validate .planning/traceability.yaml
   else
     echo "⚠️ Traceability file invalid, skipping update"
   fi

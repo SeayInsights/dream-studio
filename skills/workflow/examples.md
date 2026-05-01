@@ -3,7 +3,7 @@
 Extracted from SKILL.md to reduce context injection size.
 
   ```
-  py "$PLUGIN/hooks/lib/workflow_state.py" eval <key> "<gate-condition>"
+  py "../../hooks/lib/workflow_state.py" eval <key> "<gate-condition>"
   ```
   If true → continue. If false → fall back to pause behavior.
 
@@ -13,7 +13,7 @@ Extracted from SKILL.md to reduce context injection size.
 
 Mark running:
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> running
+py "../../hooks/lib/workflow_state.py" update <key> <node-id> running
 ```
 
 **Skill node:**
@@ -76,12 +76,12 @@ After the agent returns, verify the file exists. If not, write the agent's respo
 Extract the verdict from the agent's output (last non-empty line). If the verdict doesn't match a known value, treat as `UNKNOWN` and pause for Director review.
 
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<verdict>: <summary>" --duration <seconds>
+py "../../hooks/lib/workflow_state.py" update <key> <node-id> completed --output "<verdict>: <summary>" --duration <seconds>
 ```
 
 Or on failure:
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" update <key> <node-id> failed --output "FAILED: <error>"
+py "../../hooks/lib/workflow_state.py" update <key> <node-id> failed --output "FAILED: <error>"
 ```
 
 On failure: retry up to 3 times (or node's `retry` value). Upgrade model each retry (haiku→sonnet→opus). After exhaustion → pause workflow, escalate to Director.
@@ -124,7 +124,7 @@ When `next` returns `done`, run `workflow_state.py status <key>` to print the fi
 ### `workflow status`
 
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" status [<key>]
+py "../../hooks/lib/workflow_state.py" status [<key>]
 ```
 Print the output. If no key given, shows all workflows.
 
@@ -142,7 +142,7 @@ You do NOT need the original session context. The state file + YAML have everyth
 ### `workflow abort`
 
 ```
-py "$PLUGIN/hooks/lib/workflow_state.py" abort <key>
+py "../../hooks/lib/workflow_state.py" abort <key>
 ```
 
 ---
