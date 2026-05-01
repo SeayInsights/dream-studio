@@ -1,5 +1,6 @@
-﻿---
+---
 name: design
+model_tier: sonnet
 description: Visual design capability — brand tokens, anti-slop rules, visual hierarchy, generative art (p5.js), theme application to projects, and ad-creative guidance. Trigger on `design art:`, `design poster:`, `canvas:`, `generative art:`, `apply theme:`, `brand:`, `ad creative:`, and related commands.
 pack: domains
 chain_suggests: []

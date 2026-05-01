@@ -1,5 +1,6 @@
-﻿---
+---
 name: dast
+model_tier: sonnet
 description: "Web application dynamic testing — generate ZAP/Nuclei configs, ingest DAST results, score web-specific vulnerabilities. Trigger on dast:, web scan, pen test web, zap scan."
 user_invocable: true
 args: mode

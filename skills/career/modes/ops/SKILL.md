@@ -1,5 +1,6 @@
-﻿---
+---
 name: career-ops
+model_tier: sonnet
 description: "AI job search command center — routes to career sub-skills (evaluate, scan, apply, track, pdf). Trigger on /career-ops or career-related commands."
 user_invocable: true
 args: mode

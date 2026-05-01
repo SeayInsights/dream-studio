@@ -1,5 +1,6 @@
-﻿---
+---
 name: security-dashboard
+model_tier: sonnet
 description: "ETL orchestration + Power BI dataset export — runs the full security ETL pipeline (SARIF → scored → compliance-mapped → mitigated → Power BI CSVs), calculates org risk score from client profile weights, and manages the Power BI template lifecycle. Trigger on security dashboard:, refresh dashboard, export dataset."
 user_invocable: true
 args: mode

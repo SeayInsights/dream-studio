@@ -1,5 +1,6 @@
 ---
 name: workflow
+model_tier: sonnet
 description: YAML workflow orchestration — validate, execute DAG nodes through existing skills with gates and parallel spawning, track state via CLI. Trigger on `workflow:`, `workflow status`, `workflow resume`, `workflow abort`.
 pack: meta
 ---

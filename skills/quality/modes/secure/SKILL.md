@@ -1,5 +1,6 @@
-﻿---
+---
 name: secure
+model_tier: opus
 description: "Security review — parallel OWASP+STRIDE analyst subagents produce severity-tagged findings with specific fixes. Trigger on secure:, /secure, check security, review architecture, or PRs touching auth/payments/user data/APIs."
 user_invocable: true
 args: mode

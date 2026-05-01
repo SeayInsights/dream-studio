@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 
+from lib.model_selector import get_model_for_skill  # noqa: E402
 from lib.studio_db import insert_token_usage  # noqa: E402
 
 
@@ -35,6 +36,13 @@ def main() -> None:
             tool_input = {}
 
     skill_name = tool_input.get("skill") or tool_input.get("name") or "unknown"
+    skill_args = tool_input.get("args", "")
+    skill_specifier = f"{skill_name} {skill_args}".strip() if skill_args else skill_name
+
+    try:
+        recommended_model = get_model_for_skill(skill_specifier)
+    except Exception:
+        recommended_model = "sonnet"
 
     state_dir = Path.home() / ".dream-studio" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -43,6 +51,7 @@ def main() -> None:
         "ts": datetime.now(timezone.utc).isoformat(),
         "skill": skill_name,
         "session": payload.get("session_id", ""),
+        "recommended_model": recommended_model,
     }
 
     log_path = state_dir / "skill-usage.jsonl"
@@ -56,7 +65,7 @@ def main() -> None:
             skill_name=skill_name,
             input_tokens=0,
             output_tokens=0,
-            model=None,
+            model=recommended_model,
         )
     except Exception:
         pass

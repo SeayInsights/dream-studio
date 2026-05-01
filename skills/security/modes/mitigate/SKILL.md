@@ -1,5 +1,6 @@
-﻿---
+---
 name: mitigate
+model_tier: sonnet
 description: "Per-finding fix recommendations with code before/after, verification tests, effort estimates. Trigger on mitigate:, how to fix, generate mitigations."
 user_invocable: true
 args: mode

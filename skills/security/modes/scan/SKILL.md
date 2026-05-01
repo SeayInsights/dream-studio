@@ -1,5 +1,6 @@
-﻿---
+---
 name: scan
+model_tier: sonnet
 description: "Security scanning orchestrator — generates GitHub Actions workflows and Semgrep custom rules from client profiles, ingests SARIF/JSON results into structured storage, and reports scan coverage across a client's GitHub org. Trigger on scan:, scan org:, run security scan."
 user_invocable: true
 args: mode

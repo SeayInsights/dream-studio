@@ -1,5 +1,6 @@
-﻿---
+---
 name: binary-scan
+model_tier: opus
 description: "Binary/executable analysis — checksec hardening, YARA malware signatures, PE/ELF metadata extraction. Trigger on binary-scan:, scan binary, analyze exe, checksec."
 user_invocable: true
 args: mode

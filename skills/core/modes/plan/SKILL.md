@@ -1,5 +1,6 @@
-﻿---
+---
 name: plan
+model_tier: sonnet
 description: Break an approved spec into atomic, dependency-ordered tasks with per-task acceptance criteria. Trigger on `plan:` or after `think` is approved.
 pack: core
 chain_suggests:

@@ -1,5 +1,6 @@
-﻿---
+---
 name: career-evaluate
+model_tier: sonnet
 description: "Evaluate job offers, freelance gigs, or compare multiple opportunities. Modes: auto-pipeline, oferta, ofertas, gig, proposal, sow. Trigger via /career-ops routing."
 pack: career
 chain_suggests: []
