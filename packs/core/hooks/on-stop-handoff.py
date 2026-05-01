@@ -23,7 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "hooks"))
 from lib import paths  # noqa: E402
 from lib.context_handoff import active_files, write_handoff, write_recap  # noqa: E402
 from lib.models import StopPayload  # noqa: E402
-from lib.studio_db import set_sentinel, has_sentinel  # noqa: E402
+from lib.studio_db import (  # noqa: E402
+    set_sentinel, has_sentinel,
+    upsert_project, insert_session, insert_handoff,
+)
 
 
 _SESSION_END_KB = 0.0  # sentinel: Stop hook has no context % — use 0 KB
@@ -85,6 +88,29 @@ def main() -> None:
 
     handoff_path = write_handoff(cwd, _SESSION_END_KB, session_id, is_pct=False)
     write_recap(cwd, _SESSION_END_KB, session_id, handoff_path)
+
+    try:
+        project_id = cwd.name
+        sid = session_id or "unknown"
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"], cwd=cwd,
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip() or "unknown"
+        last_commit = subprocess.run(
+            ["git", "log", "--oneline", "-1"], cwd=cwd,
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip() or "unknown"
+        upsert_project(project_id, str(cwd))
+        insert_session(sid, project_id)
+        insert_handoff(
+            sid, project_id, branch,
+            branch=branch,
+            last_commit=last_commit,
+            active_files=[str(handoff_path)] if handoff_path else None,
+            next_action=f"Read {handoff_path} to resume.",
+        )
+    except Exception:
+        pass
 
     set_sentinel(key, "handoff-done")
 
