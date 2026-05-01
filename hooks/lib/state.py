@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -123,9 +125,44 @@ def backup_db() -> Path | None:
             conn = sqlite3.connect(str(db_path))
             conn.execute("VACUUM")
             conn.close()
+        _maybe_cloud_push()
         return bak_path
     except Exception:
         return None
+
+
+def _maybe_cloud_push() -> None:
+    """If auto-push is enabled in backup-config.json, push to cloud (non-blocking)."""
+    try:
+        cfg_path = paths.state_dir() / "backup-config.json"
+        if not cfg_path.is_file():
+            return
+        config = json.loads(cfg_path.read_text(encoding="utf-8"))
+        if not config.get("auto_push") or not config.get("remote"):
+            return
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "studio_backup.py"
+        if not script.is_file():
+            # Fall back to plugin root
+            try:
+                script = paths.plugin_root() / "scripts" / "studio_backup.py"
+            except RuntimeError:
+                return
+            if not script.is_file():
+                return
+
+        subprocess.Popen(
+            [sys.executable, str(script), "--cloud", "push"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # Log push attempt as sentinel
+        from . import studio_db
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        studio_db.set_sentinel(f"cloud-push-{today}", "backup")
+    except Exception:
+        pass
 
 
 def get_quiet_mode() -> int:
