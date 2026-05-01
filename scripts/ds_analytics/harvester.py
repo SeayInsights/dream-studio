@@ -10,7 +10,7 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
-from lib import paths
+from lib import paths, studio_db
 
 # ---------------------------------------------------------------------------
 # Health mapping
@@ -261,7 +261,8 @@ def detect_orphans(db_path: Path | None = None, git_roots: list[Path] | None = N
     if git_roots is None:
         git_roots = [paths.plugin_root()]
 
-    conn = sqlite3.connect(str(db_path or paths.state_dir() / "studio.db"))
+    # Use studio_db._connect() to ensure migrations run and table exists
+    conn = studio_db._connect(db_path)
     cur = conn.cursor()
     cur.execute("SELECT id, title, created_date FROM raw_planning_specs")
     rows = cur.fetchall()
