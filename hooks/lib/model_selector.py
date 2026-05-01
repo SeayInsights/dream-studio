@@ -1,12 +1,12 @@
 """Model tier recommender for dream-studio skills.
 
 CLI:  py hooks/lib/model_selector.py --skill=<name> [--default=sonnet]
-API:  from hooks.lib.model_selector import recommend_model
+API:  from hooks.lib.model_selector import recommend_model, get_model_for_skill
 
 Outputs exactly one of: haiku | sonnet | opus
 """
 from __future__ import annotations
-import argparse, sqlite3, sys
+import argparse, re, sqlite3, sys
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -171,6 +171,96 @@ def _apply_floor(tier: str, floor: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Frontmatter-based model tier lookup
+# ---------------------------------------------------------------------------
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+_MODEL_TIER_RE = re.compile(r"^model_tier:\s*(\S+)", re.MULTILINE)
+
+
+def _resolve_skill_md(skill_specifier: str) -> Path | None:
+    """Resolve a skill specifier to its SKILL.md path.
+
+    Accepts:
+      "dream-studio:quality debug"  → skills/quality/modes/debug/SKILL.md
+      "dream-studio:core think"     → skills/core/modes/think/SKILL.md
+      "quality debug"               → skills/quality/modes/debug/SKILL.md
+      "debug"                       → searches all packs for modes/debug/SKILL.md
+    """
+    try:
+        root = _plugin_root_cached()
+    except Exception:
+        return None
+
+    spec = skill_specifier.strip()
+    if spec.startswith("dream-studio:"):
+        spec = spec[len("dream-studio:"):]
+
+    parts = spec.split(None, 1)
+    if len(parts) == 2:
+        pack, mode = parts[0], parts[1]
+        candidate = root / "skills" / pack / "modes" / mode / "SKILL.md"
+        if candidate.is_file():
+            return candidate
+
+    # Single token — try as mode name across all packs
+    mode_name = parts[-1] if parts else spec
+    skills_dir = root / "skills"
+    if skills_dir.is_dir():
+        for pack_dir in skills_dir.iterdir():
+            if not pack_dir.is_dir():
+                continue
+            candidate = pack_dir / "modes" / mode_name / "SKILL.md"
+            if candidate.is_file():
+                return candidate
+
+    return None
+
+
+def _plugin_root_cached() -> Path:
+    if not hasattr(_plugin_root_cached, "_val"):
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from lib import paths  # type: ignore[import]
+            _plugin_root_cached._val = paths.plugin_root()
+        except Exception:
+            candidate = Path(__file__).resolve().parents[2]
+            if (candidate / "skills").is_dir():
+                _plugin_root_cached._val = candidate
+            else:
+                raise
+    return _plugin_root_cached._val
+
+
+def _read_model_tier(skill_md: Path) -> str | None:
+    """Read model_tier from a SKILL.md frontmatter. Returns None if absent."""
+    try:
+        text = skill_md.read_text(encoding="utf-8-sig")
+    except Exception:
+        return None
+    fm_match = _FRONTMATTER_RE.search(text)
+    if not fm_match:
+        return None
+    tier_match = _MODEL_TIER_RE.search(fm_match.group(1))
+    if not tier_match:
+        return None
+    tier = tier_match.group(1).lower().strip()
+    return tier if tier in TIERS else None
+
+
+def get_model_for_skill(skill_specifier: str, default: str = "sonnet") -> str:
+    """Return the declared model_tier from a skill's SKILL.md frontmatter.
+
+    Falls back to *default* if the skill can't be found or has no model_tier.
+    """
+    default = default.lower().strip() if default.lower().strip() in TIERS else "sonnet"
+    skill_md = _resolve_skill_md(skill_specifier)
+    if skill_md is None:
+        return default
+    tier = _read_model_tier(skill_md)
+    return tier if tier else default
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 def main() -> None:
@@ -180,10 +270,14 @@ def main() -> None:
     ap.add_argument("--skill",    required=True, help="Skill name to look up")
     ap.add_argument("--default",  default="sonnet",
                     choices=TIERS, help="Fallback tier when no history exists")
+    ap.add_argument("--frontmatter", action="store_true",
+                    help="Read model_tier from SKILL.md frontmatter instead of DB stats")
     args = ap.parse_args()
 
-    result = recommend_model(args.skill, args.default)
-    # Output exactly one word, no trailing newline issues
+    if args.frontmatter:
+        result = get_model_for_skill(args.skill, args.default)
+    else:
+        result = recommend_model(args.skill, args.default)
     sys.stdout.write(result + "\n")
     sys.stdout.flush()
 
