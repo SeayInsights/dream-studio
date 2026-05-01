@@ -30,6 +30,17 @@ from lib import paths
 
 CONTEXT_LIMIT_TOKENS = 400_000
 
+# Pricing in USD per 1M tokens: (input_price, output_price)
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "claude-opus-4-6": (15.0, 75.0),
+    "claude-opus-4-7": (15.0, 75.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-sonnet-4-5-20250929": (3.0, 15.0),
+    "claude-haiku-4-5-20251001": (0.80, 4.0),
+}
+
+_SONNET_FALLBACK: tuple[float, float] = (3.0, 15.0)
+
 
 def parse_token_log(log_path: Path | None = None) -> list[dict]:
     """Parse token-log.md into structured records.
@@ -144,6 +155,68 @@ def get_handoff_tasks(db_path: Path | None = None) -> dict:
         return {}
 
 
+def compute_cost_analysis(sessions: list[dict], total_tasks: int = 0) -> dict:
+    """Compute cost breakdown from session data using MODEL_PRICING table.
+
+    Args:
+        sessions: output of build_sessions()
+        total_tasks: total completed tasks from handoffs (for cost-per-task)
+
+    Returns:
+        Nested dict with total_cost_usd, per_model, daily_trend, per_session,
+        and cost_per_task_usd.
+    """
+    per_session_costs: list[dict] = []
+    model_costs: dict[str, float] = defaultdict(float)
+    daily_costs: dict[str, dict] = defaultdict(lambda: {"cost_usd": 0.0, "sessions": 0})
+
+    for s in sessions:
+        model = s["primary_model"]
+        input_price, output_price = MODEL_PRICING.get(model, _SONNET_FALLBACK)
+        prompt_tokens = s.get("prompt_tokens", 0)
+        completion_tokens = s.get("completion_tokens", 0)
+        cost = (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
+        cost = round(cost, 6)
+
+        per_session_costs.append({
+            "session_id": s["session_id"],
+            "cost_usd": cost,
+            "model": model,
+            "date": s["date"],
+        })
+        model_costs[model] += cost
+        daily_costs[s["date"]]["cost_usd"] += cost
+        daily_costs[s["date"]]["sessions"] += 1
+
+    total = sum(c["cost_usd"] for c in per_session_costs)
+
+    per_model = {
+        m: {
+            "cost_usd": round(v, 4),
+            "pct": round(v / total * 100, 1) if total > 0 else 0.0,
+        }
+        for m, v in sorted(model_costs.items(), key=lambda kv: kv[1], reverse=True)
+    }
+
+    daily_trend = {
+        d: {
+            "cost_usd": round(v["cost_usd"], 4),
+            "sessions": v["sessions"],
+        }
+        for d, v in sorted(daily_costs.items())
+    }
+
+    cost_per_task = round(total / total_tasks, 4) if total_tasks > 0 else None
+
+    return {
+        "total_cost_usd": round(total, 4),
+        "per_model": per_model,
+        "daily_trend": daily_trend,
+        "per_session": per_session_costs,
+        "cost_per_task_usd": cost_per_task,
+    }
+
+
 def compute_efficiency_report(sessions: list[dict], handoffs: dict) -> dict:
     """Compute aggregate efficiency metrics."""
     if not sessions:
@@ -178,6 +251,8 @@ def compute_efficiency_report(sessions: list[dict], handoffs: dict) -> dict:
     total_tasks = sum(h.get("tasks_completed", 0) or 0 for h in handoffs.values())
     total_tokens_all = sum(peaks)
     tokens_per_task = round(total_tokens_all / total_tasks) if total_tasks > 0 else None
+
+    cost_analysis = compute_cost_analysis(sessions, total_tasks)
 
     # Daily aggregation for trends
     daily = defaultdict(lambda: {"sessions": 0, "total_tokens": 0, "total_duration_min": 0})
@@ -225,6 +300,7 @@ def compute_efficiency_report(sessions: list[dict], handoffs: dict) -> dict:
             }
             for d, v in sorted(daily.items())
         },
+        "cost_analysis": cost_analysis,
         "sessions": sessions,
     }
 
@@ -295,6 +371,24 @@ def print_report(report: dict) -> None:
             f"{v['avg_tokens_per_session']:>13,} {v['total_duration_min']:>8.1f}m"
         )
     print()
+
+    ca = report.get("cost_analysis", {})
+    if ca:
+        print("--- COST ANALYSIS ---")
+        print(f"  Total cost:              ${ca['total_cost_usd']:.2f}")
+        cpt = ca.get("cost_per_task_usd")
+        if cpt is not None:
+            print(f"  Cost per task:           ${cpt:.2f}")
+        print()
+        print("  By model:")
+        for model, info in ca.get("per_model", {}).items():
+            print(f"    {model:40s}  ${info['cost_usd']:.2f}  ({info['pct']:.1f}%)")
+        print()
+        print("  Daily trend:")
+        for d, v in ca.get("daily_trend", {}).items():
+            print(f"    {d}               ${v['cost_usd']:.2f}  ({v['sessions']} sessions)")
+        print()
+
     print("=" * 70)
 
 
