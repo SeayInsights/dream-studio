@@ -52,7 +52,7 @@ workflows:
 	$(PYTHON) hooks/lib/workflow_registry.py
 
 analytics:
-	$(PYTHON) scripts/ds_analytics/main.py
+	$(PYTHON) scripts/ds_analytics/main.py $(if $(PROJECT),--project $(PROJECT),)
 
 adapters:
 	$(PYTHON) scripts/build_adapters.py $(if $(PLATFORM),--platform $(PLATFORM),)
