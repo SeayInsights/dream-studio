@@ -111,6 +111,38 @@ Confidence: [low|medium|high]  # based on number of distinct sources found
 ### No-harvest conditions
 If harvest finds nothing new: output "No new patterns found. [N] drafts reviewed." Do not create empty draft files. Do not re-draft lessons already in a gotchas.yml.
 
+## Daily Harvest Mode
+
+### Trigger
+`learn: daily` — auto-triggered by daily-close workflow or manual invocation
+
+### Purpose
+Lightweight end-of-day learning capture. Scoped to today only — no cross-project scanning.
+
+### Sources (in order)
+1. **Micro-captures** — read `~/.dream-studio/meta/today.md` (written by `hooks/lib/micro_capture.py` throughout the day)
+2. **Today's sessions** — scan `.sessions/YYYY-MM-DD/` for today's date only (handoffs and recaps)
+3. **Git log** — `git log --since="today" --oneline` for commits made today
+
+### Protocol
+1. Read all three sources above
+2. Extract candidate patterns:
+   - Any micro-capture with `outcome:correction` — something went wrong and was fixed
+   - Any handoff `lessons_this_session` entry
+   - Any recap `Risk flags` with identified root causes
+   - Any commit that was a fix for something that broke during the build
+3. Apply anti-bloat rules from Harvest Mode:
+   - Dedup against existing `meta/draft-lessons/` and `skills/*/gotchas.yml`
+   - Only draft lessons with evidence from the day's work
+   - ≤5 new drafts per daily run — rank by significance
+4. Write drafts to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
+   - `Source: daily-harvest`
+   - `Confidence: medium` (single-day evidence)
+5. Output summary: "Daily harvest: N candidates found, M drafts written, K skipped (already captured)"
+
+### No-harvest conditions
+If no corrections, risk flags, or notable patterns found today: output "Clean day — no new patterns." Do not create empty drafts.
+
 ## When to capture
 - A debugging session reveals a non-obvious root cause
 - A build approach succeeds that contradicts initial expectations

@@ -22,6 +22,13 @@ Capture the minimum context needed for the next session to continue without re-e
 3. **Progress** — What's done, what's in progress, what's not started?
 4. **State** — What's working? What's broken? Any pending Director decisions?
 5. **Files** — Which files are actively being touched?
+5b. **Lessons & Gotcha Tracking** — Review the session for learnings:
+   - **Lessons**: List any Director corrections, approach changes, or surprises as `lessons_this_session` entries
+   - **Gotcha hits**: For each gotcha that was consulted or whose advice was followed during the session:
+     - Add its ID to the `gotchas_hit` array (e.g., "parallel-same-file", "spec-before-constitution")
+     - This includes: pre-flight gotcha briefings that changed your approach, gotchas from spec_risk_check that informed edge cases, or gotchas you recalled while debugging
+     - Only log gotchas that actually influenced behavior — not every gotcha that was displayed
+   - This creates a feedback loop: gotchas that frequently fire are proven valuable; gotchas that never appear in handoffs after 90 days get flagged by self-audit for removal
 6. **Write both files** — markdown + JSON to `.sessions/YYYY-MM-DD/`. For `project_root` in the JSON, use the absolute path of the current working directory (the project root, not a subdirectory).
 7. **Auto-draft** — After writing both files, scan the "What's broken / blocked" section for items that have an identified root cause — specifically patterns that are non-obvious and would recur in future sessions. If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
    - `Source: auto-harvest (handoff)`
@@ -58,6 +65,12 @@ Read [plan path] — resume at Phase [N], Task [N.N]
 ## Active files
 - [file path]: [what's being done to it]
 
+## Lessons this session
+- [correction or surprise]: [what was learned]
+
+## Gotchas hit
+- [gotcha-id]: [how it helped avoid an error]
+
 ## Next action
 [Exact next thing to do — specific enough that a fresh session can start immediately]
 ```
@@ -80,7 +93,9 @@ Read [plan path] — resume at Phase [N], Task [N.N]
   "broken": [{"item": "test suite", "detail": "2 failures in auth.test.ts"}],
   "pending_decisions": [{"decision": "cache strategy", "context": "Redis vs in-memory"}],
   "active_files": ["src/api/auth.ts", "src/lib/cache.ts"],
-  "next_action": "Fix auth.test.ts failures, then continue task 3.3"
+  "next_action": "Fix auth.test.ts failures, then continue task 3.3",
+  "lessons_this_session": [{"lesson": "description", "source": "what triggered it"}],
+  "gotchas_hit": ["gotcha-id-1", "gotcha-id-2"]
 }
 ```
 
@@ -91,6 +106,7 @@ The JSON handoff enables programmatic resume:
 3. Reads plan file at `plan_path`
 4. Skips completed tasks (by `current_task_id`)
 5. Resumes at `next_action`
+6. Scans lessons_this_session for patterns worth promoting to gotchas.yml or memory
 
 No re-reading conversation history. No orientation. Immediate productive work.
 
