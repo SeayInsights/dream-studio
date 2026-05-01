@@ -750,6 +750,32 @@ def get_latest_handoff(project_id: str, db_path: Path | None = None) -> dict | N
         return None
 
 
+def get_latest_unconsumed_handoff(db_path: Path | None = None) -> dict | None:
+    """Return the most recent handoff that has not been consumed, across all projects."""
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            """SELECT h.* FROM raw_handoffs h
+               LEFT JOIN raw_sessions s ON h.session_id = s.session_id
+               WHERE COALESCE(s.handoff_consumed, 0) = 0
+               ORDER BY h.created_at DESC LIMIT 1""",
+        ).fetchone()
+        c.close()
+        if not r:
+            return None
+        d = dict(r)
+        for col in ("working", "broken", "pending_decisions", "active_files",
+                     "lessons_json", "gotchas_hit", "approaches_json"):
+            if d.get(col):
+                try:
+                    d[col] = json.loads(d[col])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+    except Exception:
+        return None
+
+
 def get_handoffs_for_project(project_id: str, limit: int = 20,
                              db_path: Path | None = None) -> list[dict]:
     try:
