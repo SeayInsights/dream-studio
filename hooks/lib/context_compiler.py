@@ -287,11 +287,34 @@ def compile_context(
         )
 
     # ---- 3. Read gotchas.yml (optional) -----------------------------------
+    # Load team gotchas first, then skill-specific gotchas
     gotcha_items: list[dict] = []
+
+    # Team gotchas (if .dream-studio/team/gotchas.yml exists)
+    try:
+        # Import team_context - handle both module and script contexts
+        try:
+            from . import team_context  # noqa: PLC0415
+        except ImportError:
+            # When run as script, add hooks/lib to path and import
+            import sys as _sys  # noqa: PLC0415
+            _lib_path = Path(__file__).parent
+            if str(_lib_path) not in _sys.path:
+                _sys.path.insert(0, str(_lib_path))
+            import team_context  # type: ignore[import-not-found]  # noqa: PLC0415
+
+        team_gotchas = team_context.load_team_gotchas()
+        if team_gotchas:
+            filtered_team = _filter_high_gotchas(team_gotchas)
+            gotcha_items.extend(filtered_team)
+    except Exception:
+        pass  # Team gotchas are optional, fail gracefully
+
+    # Skill-specific gotchas
     if gotchas_path.exists():
         raw_gotchas = gotchas_path.read_text(encoding="utf-8")
         all_entries = _parse_gotchas(raw_gotchas)
-        gotcha_items = _filter_high_gotchas(all_entries)
+        gotcha_items.extend(_filter_high_gotchas(all_entries))
 
     # ---- 4. Read repo-context JSON (optional) -----------------------------
     repo_context_block: str | None = None

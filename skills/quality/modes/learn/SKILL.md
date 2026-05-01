@@ -15,7 +15,7 @@ Write to `meta/draft-lessons/YYYY-MM-DD-<topic>.md`:
 # Draft Lesson: [topic]
 Date: YYYY-MM-DD
 Source: [what build/session this came from]
-Status: DRAFT
+Status: COMPLETE
 
 ## What happened
 [Concrete description — what worked or what broke]

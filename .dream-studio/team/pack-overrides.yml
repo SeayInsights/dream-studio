@@ -1,0 +1,64 @@
+version: 1.0
+
+# Team-wide pack configuration overrides.
+# These settings apply to all team members unless overridden in personal config.
+
+# Active packs (empty = all packs enabled)
+# Example: uncomment to restrict to core workflow only
+# active_packs:
+#   - core
+#   - quality
+
+# Global thresholds
+thresholds:
+  # Minimum complexity score to trigger automatic refactor suggestion
+  complexity_threshold: 15
+
+  # Maximum PR size (lines changed) before auto-split suggestion
+  pr_size_limit: 120
+
+  # Minimum test coverage for new code (%)
+  min_coverage: 80
+
+# Domain-specific overrides
+domains:
+  # Client work settings
+  client-work:
+    # Require intake form for all client projects
+    require_intake: true
+
+    # Auto-generate SOW after intake
+    auto_sow: true
+
+  # Security pack settings
+  security:
+    # Run security scan on every build
+    auto_scan: true
+
+    # Severity threshold for blocking builds
+    block_on_severity: high
+
+# Workflow automation
+automation:
+  # Auto-create GitHub issues for failed CI builds
+  auto_issue_on_failure: true
+
+  # Auto-assign PRs to code owners
+  auto_assign_reviewers: true
+
+  # Auto-label PRs based on files changed
+  auto_label: true
+
+# Team preferences
+preferences:
+  # Default model for exploration
+  explore_model: haiku
+
+  # Default model for code changes
+  build_model: sonnet
+
+  # Default model for architecture/analysis
+  think_model: sonnet
+
+  # Commit attribution
+  co_author_attribution: false

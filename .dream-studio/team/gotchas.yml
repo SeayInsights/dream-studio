@@ -1,0 +1,25 @@
+version: 1.0
+
+# Team-wide gotchas — shared anti-patterns and lessons across the entire team.
+# These gotchas are loaded BEFORE personal gotchas and skill-specific gotchas.
+# Use this for organization-wide policies, common mistakes, and standards.
+
+avoid:
+  - id: no-force-push-main
+    severity: critical
+    discovered: 2026-05-01
+    title: "Never force-push to main/master branches"
+    context: "Force-pushing to protected branches can lose team members' work and break CI/CD pipelines. Git history rewriting should only happen on feature branches."
+    fix: "Before pushing, check branch protection status. If you need to update main, create a revert commit instead of force-pushing. For feature branches, get team approval before force-push."
+
+best_practices:
+  - id: pr-size-limit
+    title: "Keep PRs under 120 lines of changes"
+    context: "Large PRs are harder to review, take longer to merge, and increase the risk of bugs slipping through. Split work into independent, deployable chunks."
+    fix: "Before creating a PR, run `git diff main...HEAD --stat` and check total lines changed. If >120, split into multiple PRs with logical boundaries."
+
+edge_cases: []
+
+limitations: []
+
+deprecated: []

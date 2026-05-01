@@ -1,0 +1,46 @@
+# Progressive disclosure onboarding — 5 starter modes
+# User sees only these modes until they trigger unlock conditions
+
+starter_modes:
+  # Core pack
+  - pack: core
+    mode: think
+    description: "Research, spec design, shape UX before building"
+    why_first: "Start with thinking before jumping to implementation"
+
+  - pack: core
+    mode: plan
+    description: "Break down work into numbered task steps"
+    why_first: "Structure your work before executing"
+
+  - pack: core
+    mode: build
+    description: "Implement features, write code, execute plan"
+    why_first: "The fundamental skill for making things"
+
+  - pack: core
+    mode: review
+    description: "Review code, PRs, changes before shipping"
+    why_first: "Catch issues before they go live"
+
+  - pack: core
+    mode: verify
+    description: "Test, prove it works, validate behavior"
+    why_first: "Ensure quality before considering it done"
+
+# Full mode count for reference
+total_modes: 40
+starter_count: 5
+
+# Onboarding message shown when user first encounters progressive mode
+welcome_message: |
+  You're in progressive disclosure mode — starting with 5 core modes:
+
+  • think  — research and design before building
+  • plan   — break down work into steps
+  • build  — implement features
+  • review — check code quality
+  • verify — test that it works
+
+  More modes unlock as you use dream-studio. Run `dream-studio:setup status`
+  to see what's available and what unlocks next.

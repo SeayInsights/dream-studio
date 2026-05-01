@@ -3,6 +3,14 @@
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Progressive disclosure check
+Before executing any workflow command, check if the workflow skill is available:
+```python
+py "$PLUGIN/hooks/lib/skill_calibration.py" check-mode workflow workflow "<user-message>"
+```
+If exit code is non-zero, the mode is locked. Show the unlock message (from stdout) and stop.
+If exit code is zero, continue. If unlock notifications are printed, show them to the user.
+
 ## Trigger
 `workflow: <name>`, `workflow list`, `workflow status`, `workflow resume`, `workflow abort`
 

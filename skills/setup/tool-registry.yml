@@ -138,3 +138,75 @@ tools:
       - dream-studio:workflow (package scripts, CLI execution)
       - Frontend tooling and build systems
     docs_url: "https://nodejs.org/en/download"
+
+  semgrep:
+    name: Semgrep
+    description: "Static analysis tool for finding bugs, detecting vulnerabilities, and enforcing code standards across 30+ languages"
+    detect_command:
+      windows: "where semgrep"
+      mac: "which semgrep"
+      linux: "which semgrep"
+    version_command: "semgrep --version"
+    min_version: "1.0.0"
+    upgrade_command:
+      windows: "pip install --upgrade semgrep"
+      mac: "pip install --upgrade semgrep"
+      linux: "pip install --upgrade semgrep"
+    install_command:
+      windows: "pip install semgrep"
+      mac: "pip install semgrep"
+      linux: "pip install semgrep"
+    what_it_unlocks:
+      - dream-studio:security (SAST scanning, code vulnerability detection)
+      - dream-studio:quality (code quality checks, custom rule enforcement)
+      - dream-studio:core (pre-commit security validation)
+    docs_url: "https://semgrep.dev/docs"
+
+  zap:
+    name: OWASP ZAP
+    description: "Dynamic application security testing (DAST) tool for finding vulnerabilities in running web applications"
+    detect_command:
+      windows: "where zap.bat"
+      mac: "which zap.sh"
+      linux: "which zap.sh"
+    version_command:
+      windows: "zap.bat -version"
+      mac: "zap.sh -version"
+      linux: "zap.sh -version"
+    min_version: "2.14.0"
+    upgrade_command:
+      windows: "Manual update: download latest from https://www.zaproxy.org/download"
+      mac: "brew upgrade --cask owasp-zap"
+      linux: "Manual update: download latest from https://www.zaproxy.org/download"
+    install_command:
+      windows: "Manual install: download from https://www.zaproxy.org/download"
+      mac: "brew install --cask owasp-zap"
+      linux: "snap install zaproxy --classic"
+    what_it_unlocks:
+      - dream-studio:security (DAST web application scanning)
+      - dream-studio:quality (runtime vulnerability detection)
+      - dream-studio:domains (client security assessments)
+    docs_url: "https://www.zaproxy.org/docs"
+
+  nuclei:
+    name: Nuclei
+    description: "Fast vulnerability scanner based on templates for detecting security issues across web apps, networks, and cloud"
+    detect_command:
+      windows: "where nuclei"
+      mac: "which nuclei"
+      linux: "which nuclei"
+    version_command: "nuclei -version"
+    min_version: "3.0.0"
+    upgrade_command:
+      windows: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      mac: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      linux: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+    install_command:
+      windows: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      mac: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      linux: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+    what_it_unlocks:
+      - dream-studio:security (template-based vulnerability scanning)
+      - dream-studio:quality (infrastructure security checks)
+      - dream-studio:domains (rapid security assessment)
+    docs_url: "https://docs.projectdiscovery.io/nuclei"
