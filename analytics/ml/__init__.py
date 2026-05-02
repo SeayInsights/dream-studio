@@ -11,10 +11,20 @@ from .base import (
     prepare_time_series,
     train_test_split_temporal,
 )
+from .clustering import BehaviorClusterer
+from .patterns import (
+    PatternDetector,
+    detect_skill_patterns,
+    detect_workflow_patterns,
+)
 
 __all__ = [
     "BaseModel",
     "validate_dataframe",
     "prepare_time_series",
     "train_test_split_temporal",
+    "BehaviorClusterer",
+    "PatternDetector",
+    "detect_skill_patterns",
+    "detect_workflow_patterns",
 ]
