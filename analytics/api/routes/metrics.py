@@ -178,9 +178,15 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
         most_used_skill = data.get('top_skills', [{}])[0].get('skill_name', 'N/A') if data.get('top_skills') else 'N/A'
         most_used_count = data.get('top_skills', [{}])[0].get('count', 0) if data.get('top_skills') else 0
 
+        top_skills = [
+            {**s, 'usage_count': s.get('count', 0)}
+            for s in data.get('top_skills', [])
+        ]
+
         return {
             **data,
-            'overall_success_rate': data.get('overall_success_rate', 0) / 100,  # Convert to 0-1 range
+            'top_skills': top_skills,
+            'overall_success_rate': data.get('overall_success_rate', 0) / 100,
             'leaderboard': leaderboard,
             'most_used_skill': most_used_skill,
             'most_used_count': most_used_count,
@@ -199,12 +205,16 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
         db_path = get_db_path()
         collector = TokenCollector(db_path)
         data = collector.collect(days=days)
+        timeline = collector.get_timeline(days=days)
 
-        # Calculate cache hit rate (placeholder for now)
         cache_hit_rate = data.get('cache_hits', 0) / max(data.get('total_tokens', 1), 1)
+
+        cost_timeline = [{"date": t["date"], "cost": t["cost_usd"]} for t in timeline]
 
         return {
             **data,
+            'timeline': timeline,
+            'cost_timeline': cost_timeline,
             'total_cost': data.get('total_cost_usd', 0),
             'cache_hit_rate': cache_hit_rate
         }
@@ -217,20 +227,58 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
     """Get model usage metrics with dashboard-friendly format"""
     try:
         db_path = get_db_path()
-        collector = ModelCollector(db_path)
-        data = collector.collect(days=days)
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
 
-        # Transform distribution for pie chart
+        rows = conn.execute("""
+            SELECT model,
+                   COUNT(*) as record_count,
+                   SUM(input_tokens) as input_tok,
+                   SUM(output_tokens) as output_tok
+            FROM raw_token_usage
+            WHERE recorded_at >= ? AND model IS NOT NULL AND model != '<synthetic>'
+            GROUP BY model ORDER BY (input_tok + output_tok) DESC
+        """, (cutoff,)).fetchall()
+        conn.close()
+
+        total_records = sum(r["record_count"] for r in rows)
+        total_tokens = sum((r["input_tok"] or 0) + (r["output_tok"] or 0) for r in rows)
+
+        by_model = {}
+        model_distribution = []
+        model_performance = []
         distribution = []
-        for model, percentage in data.get('distribution_pct', {}).items():
-            distribution.append({
-                'model': model,
-                'percentage': percentage
+
+        for r in rows:
+            name = r["model"]
+            inp = r["input_tok"] or 0
+            out = r["output_tok"] or 0
+            tok = inp + out
+            pct = round(tok / total_tokens * 100, 1) if total_tokens else 0
+
+            by_model[name] = {
+                "input_tokens": inp, "output_tokens": out,
+                "total_tokens": tok, "record_count": r["record_count"],
+                "percentage": pct
+            }
+            distribution.append({"model": name, "percentage": pct})
+            model_distribution.append({"model_name": name, "usage_count": r["record_count"]})
+
+            speed = round(tok / max(r["record_count"], 1), 1)
+            model_performance.append({
+                "model_name": name,
+                "speed": speed,
+                "success_rate": 100.0,
+                "efficiency": speed
             })
 
         return {
-            **data,
-            'distribution': distribution
+            "total_invocations": total_records,
+            "by_model": by_model,
+            "distribution": distribution,
+            "model_distribution": model_distribution,
+            "model_performance": model_performance
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting model metrics: {str(e)}")
