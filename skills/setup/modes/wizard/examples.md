@@ -10,6 +10,125 @@ Determine OS from environment context:
 
 Refer to each tool's `detect_command` in `tool-registry.yml` for the exact command per platform.
 
+### Step 1b — Create standardized folder structure
+
+**Purpose:** Prevent drive clutter by creating a standard project workspace during first-time setup.
+
+**Folders to create** (all relative to user's home directory):
+
+```
+~/
+├── builds/           # All project repos
+│   └── README.md
+├── claude_mcp/      # All MCP servers
+│   └── README.md
+├── shared/          # Shared utilities
+│   └── README.md
+```
+
+**Implementation:**
+
+1. Detect home directory path from environment (`$HOME` on Unix, `%USERPROFILE%` on Windows)
+2. For each folder (`builds`, `claude_mcp`, `shared`):
+   - Check if folder exists
+   - If missing: create folder + README.md with description
+   - Track what was created vs. already existed
+3. Create `.gitignore` in home directory (if it doesn't exist) with:
+   ```
+   # Dream-studio working files
+   .planning/
+   .sessions/
+   *.log
+   *.tmp
+   ```
+
+**README.md content for each folder:**
+
+`builds/README.md`:
+```markdown
+# builds
+
+All project repositories and codebases go here.
+
+Never create project folders directly in your home directory — always place them in this folder.
+```
+
+`claude_mcp/README.md`:
+```markdown
+# claude_mcp
+
+All MCP server installations go here.
+
+Install MCP servers with:
+```bash
+cd ~/claude_mcp
+git clone <mcp-server-repo>
+```
+
+Then register with Claude Code via `claude mcp add`.
+```
+
+`shared/README.md`:
+```markdown
+# shared
+
+Shared utilities and libraries used across multiple projects.
+
+Examples: brand assets, common scripts, reusable components.
+```
+
+**User-facing output:**
+
+```
+Setting up your workspace structure...
+
+✅ Created: builds/, claude_mcp/, shared/, .gitignore
+ℹ️  Already exist: (none)
+
+Your workspace is now organized:
+  📁 ~/builds/ — all projects go here
+  📁 ~/claude_mcp/ — MCP servers
+  📁 ~/shared/ — shared utilities
+
+Continuing with tool detection...
+─────────────────────────────────────────
+```
+
+If folders already exist:
+```
+Setting up your workspace structure...
+
+ℹ️  Already exist: builds/, claude_mcp/, shared/
+✅ Created: .gitignore
+
+Your workspace structure is ready.
+
+Continuing with tool detection...
+─────────────────────────────────────────
+```
+
+**Idempotent:** Safe to run multiple times. Only creates what's missing.
+
+**Error handling:**
+- If folder creation fails (permissions): print warning `Warning: could not create <folder> — <error>`. Continue to tool detection anyway.
+- If README write fails: skip silently — folder existence is what matters.
+
+**Integration with setup-prefs.json:**
+
+After successful folder creation, save paths to `.dream-studio/setup-prefs.json`:
+```json
+{
+  "_workspace": {
+    "builds_path": "/home/user/builds",
+    "mcp_path": "/home/user/claude_mcp",
+    "shared_path": "/home/user/shared",
+    "created_at": "<ISO 8601 timestamp>"
+  }
+}
+```
+
+This allows other dream-studio skills to reference these paths programmatically.
+
 ### Step 2 — Detect all 6 tools
 
 Run `detectTool(toolName)` for each of the 6 tools in `tool-registry.yml` (gh, firecrawl, playwright, npm, python, node):
