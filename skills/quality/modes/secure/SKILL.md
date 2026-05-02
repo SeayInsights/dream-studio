@@ -31,6 +31,41 @@ One HIGH or CRITICAL finding from any analyst = BLOCKED. The ship gate is binary
   this report with the commit SHA: `[FIXED: abc1234]`. A report with no resolution markers
   misleads every future session that reads it.
 
+## Response Contract {#response-contract}
+
+Every security review MUST include these 5 sections. Use this as a validation checklist:
+
+- [ ] **Threat Model**: What could an attacker exploit?
+  - Attack vectors and entry points
+  - Assumptions about attacker capabilities
+  - Assets at risk and potential impact
+  
+- [ ] **Findings**: Vulnerabilities found (severity, location, proof)
+  - Severity level (CRITICAL/HIGH/MEDIUM/LOW/INFO)
+  - Exact file path and line number
+  - Code snippet demonstrating the vulnerability
+  - Proof of concept or exploitation scenario
+  
+- [ ] **Remediation**: How to fix each finding
+  - Specific code changes required
+  - Implementation guidance with examples
+  - Alternative approaches if applicable
+  - Dependencies or prerequisites for the fix
+  
+- [ ] **Verification**: How to verify fixes work
+  - Manual testing steps
+  - Automated test cases to add
+  - Expected behavior after remediation
+  - Regression testing guidance
+  
+- [ ] **False Positive Check**: Did we rule out false positives?
+  - Context that might make flagged code safe
+  - Compensating controls in place
+  - Framework/library protections active
+  - Explicit confirmation: "Verified this is a true positive" or "Flagged as false positive because..."
+
+**Ship gate verdict**: SHIP or BLOCKED (based on severity threshold)
+
 ## Detailed Reference
 
 See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.
