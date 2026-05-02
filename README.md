@@ -129,6 +129,19 @@ dream-studio works out of the box with zero external tools installed. Optional t
 > **Interactive setup:** Run `dream-studio:setup wizard` to auto-detect installed tools and walk through each install step.  
 > **Check current state:** Run `dream-studio:setup status` to see which tools are installed and what each unlocks.
 
+### Workspace Structure
+
+**First-time setup automatically creates:**
+
+```
+~/
+├── builds/          # All project repos
+├── claude_mcp/      # MCP server installations
+└── shared/          # Shared utilities
+```
+
+Each folder includes a README explaining its purpose. This prevents drive clutter and ensures consistent project organization across all dream-studio users.
+
 ---
 
 ### Minimal Profile — Zero Install
