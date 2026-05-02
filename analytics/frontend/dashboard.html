@@ -2081,22 +2081,18 @@
                 return;
             }
 
-            const modelColors = {
-                'sonnet': { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
-                'haiku': { border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' },
-                'opus': { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' }
-            };
+            const palette = [
+                { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
+                { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' },
+                { border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' },
+                { border: '#ef4444', bg: 'rgba(239, 68, 68, 0.2)' },
+                { border: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.2)' },
+                { border: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)' },
+                { border: '#06b6d4', bg: 'rgba(6, 182, 212, 0.2)' }
+            ];
 
-            const datasets = performanceData.map(model => {
-                const modelKey = model.model_name.toLowerCase();
-                let colors = { border: '#6b7280', bg: 'rgba(107, 114, 128, 0.2)' };
-
-                for (const [key, color] of Object.entries(modelColors)) {
-                    if (modelKey.includes(key)) {
-                        colors = color;
-                        break;
-                    }
-                }
+            const datasets = performanceData.map((model, idx) => {
+                const colors = palette[idx % palette.length];
 
                 return {
                     label: model.model_name,

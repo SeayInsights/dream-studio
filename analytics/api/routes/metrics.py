@@ -1,7 +1,8 @@
 """Metrics API routes"""
+import sqlite3
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 
 from ..models.metrics import (
     MetricsQuery,
@@ -29,6 +30,143 @@ def get_db_path() -> str:
     """Get database path - could be from env or config"""
     import os
     return os.path.expanduser("~/.dream-studio/state/studio.db")
+
+
+def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    m = model.lower()
+    if "opus" in m:
+        return input_tokens * 15.0 / 1e6 + output_tokens * 75.0 / 1e6
+    elif "haiku" in m:
+        return input_tokens * 0.80 / 1e6 + output_tokens * 4.0 / 1e6
+    return input_tokens * 3.0 / 1e6 + output_tokens * 15.0 / 1e6
+
+
+def _build_skill_costs(db_path: str, days: int, total_cost: float) -> Dict[str, Any]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT skill_name, COUNT(*) as cnt
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ? AND skill_name IS NOT NULL
+            GROUP BY skill_name
+        """, (cutoff,)).fetchall()
+        total_inv = sum(r["cnt"] for r in rows) or 1
+        result = {}
+        for r in rows:
+            share = r["cnt"] / total_inv
+            est_cost = round(total_cost * share, 2)
+            result[r["skill_name"]] = {
+                "skill_name": r["skill_name"],
+                "total_tokens": 0, "invocations": r["cnt"],
+                "cost_usd": est_cost, "cost": est_cost
+            }
+        return result
+    finally:
+        conn.close()
+
+
+def _build_exec_time_ranges(db_path: str, days: int) -> Dict[str, Dict[str, float]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT skill_name,
+                   MIN(execution_time_s) as min_s,
+                   MAX(execution_time_s) as max_s
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ? AND execution_time_s IS NOT NULL
+            GROUP BY skill_name
+        """, (cutoff,)).fetchall()
+        return {
+            r["skill_name"]: {
+                "min_m": round((r["min_s"] or 0) / 60, 2),
+                "max_m": round((r["max_s"] or 0) / 60, 2)
+            }
+            for r in rows
+        }
+    finally:
+        conn.close()
+
+
+def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT DATE(recorded_at) as date,
+                   SUM(input_tokens) as input_tokens,
+                   SUM(output_tokens) as output_tokens,
+                   model
+            FROM raw_token_usage
+            WHERE recorded_at >= ?
+            GROUP BY DATE(recorded_at), model
+            ORDER BY date ASC
+        """, (cutoff,)).fetchall()
+        by_date: Dict[str, Dict[str, Any]] = {}
+        for r in rows:
+            d = r["date"]
+            inp = r["input_tokens"] or 0
+            out = r["output_tokens"] or 0
+            cost = _estimate_cost(r["model"] or "sonnet", inp, out)
+            if d not in by_date:
+                by_date[d] = {"date": d, "input_tokens": 0, "output_tokens": 0, "cached_tokens": 0, "tokens": 0, "cost_usd": 0.0}
+            by_date[d]["input_tokens"] += inp
+            by_date[d]["output_tokens"] += out
+            by_date[d]["tokens"] += inp + out
+            by_date[d]["cost_usd"] = round(by_date[d]["cost_usd"] + cost, 2)
+        return sorted(by_date.values(), key=lambda x: x["date"])
+    finally:
+        conn.close()
+
+
+def _build_success_trend(db_path: str, days: int) -> List[Dict[str, Any]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT
+                DATE(invoked_at) as date,
+                COUNT(*) as total,
+                SUM(success) as successes
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ?
+            GROUP BY DATE(invoked_at)
+            ORDER BY date ASC
+        """, (cutoff,)).fetchall()
+        return [
+            {
+                "date": r["date"],
+                "success_rate": round((r["successes"] or 0) / r["total"], 3) if r["total"] else 0
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def _build_skill_heatmap(db_path: str, days: int) -> List[Dict[str, Any]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT
+                skill_name,
+                CAST(strftime('%H', invoked_at) AS INTEGER) as hour,
+                COUNT(*) as invocations
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ?
+            GROUP BY skill_name, hour
+            ORDER BY skill_name, hour
+        """, (cutoff,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 @router.get("/", response_model=AllMetricsResponse)
@@ -104,24 +242,26 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
         collector = SkillCollector(db_path)
         data = collector.collect(days=days)
 
-        # Transform to dashboard format
+        exec_ranges = _build_exec_time_ranges(db_path, days)
+
         leaderboard = []
         for skill_name, skill_data in data.get('by_skill', {}).items():
             avg_exec_s = skill_data.get('avg_exec_time_s', 0)
             avg_duration_minutes = avg_exec_s / 60 if avg_exec_s else 0
+            ranges = exec_ranges.get(skill_name, {})
 
-            # Estimate cost based on tokens (very rough estimate)
             input_tok = skill_data.get('avg_input_tokens', 0)
             output_tok = skill_data.get('avg_output_tokens', 0)
-            # Rough estimate: $0.003/1K input, $0.015/1K output (Sonnet-like pricing)
             avg_cost = (input_tok / 1000 * 0.003) + (output_tok / 1000 * 0.015)
 
             leaderboard.append({
                 'skill_name': skill_name,
                 'invocations': skill_data.get('count', 0),
-                'success_rate': skill_data.get('success_rate', 0) / 100,  # Convert to 0-1 range
+                'success_rate': skill_data.get('success_rate', 0) / 100,
                 'avg_exec_time_s': avg_exec_s,
                 'avg_duration_minutes': avg_duration_minutes,
+                'min_duration_minutes': ranges.get('min_m', 0),
+                'max_duration_minutes': ranges.get('max_m', 0),
                 'avg_cost': avg_cost,
                 'avg_input_tokens': input_tok,
                 'avg_output_tokens': output_tok
@@ -131,15 +271,21 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
         most_used_skill = data.get('top_skills', [{}])[0].get('skill_name', 'N/A') if data.get('top_skills') else 'N/A'
         most_used_count = data.get('top_skills', [{}])[0].get('count', 0) if data.get('top_skills') else 0
 
+        top_skills = [
+            {**s, 'usage_count': s.get('count', 0)}
+            for s in data.get('top_skills', [])
+        ]
+
         return {
             **data,
-            'overall_success_rate': data.get('overall_success_rate', 0) / 100,  # Convert to 0-1 range
+            'top_skills': top_skills,
+            'overall_success_rate': data.get('overall_success_rate', 0) / 100,
             'leaderboard': leaderboard,
             'most_used_skill': most_used_skill,
             'most_used_count': most_used_count,
             'recent_failures': data.get('failures', []),
-            'success_trend': [],  # TODO: Add timeline data
-            'heatmap': []  # TODO: Add heatmap data
+            'success_trend': _build_success_trend(db_path, days),
+            'heatmap': _build_skill_heatmap(db_path, days)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting skill metrics: {str(e)}")
@@ -152,14 +298,35 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
         db_path = get_db_path()
         collector = TokenCollector(db_path)
         data = collector.collect(days=days)
+        timeline = _build_token_timeline(db_path, days)
 
-        # Calculate cache hit rate (placeholder for now)
         cache_hit_rate = data.get('cache_hits', 0) / max(data.get('total_tokens', 1), 1)
+
+        cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd", 0)} for t in timeline]
+
+        by_project = {
+            k: {**v, "project_name": k, "cost": v.get("cost_usd", 0)}
+            for k, v in data.get("by_project", {}).items()
+        }
+        raw_by_skill = data.get("by_skill", {})
+        has_skill_costs = any(v.get("cost_usd", 0) > 0 for v in raw_by_skill.values())
+
+        if has_skill_costs:
+            by_skill = {
+                k: {**v, "skill_name": k, "cost": v.get("cost_usd", 0)}
+                for k, v in raw_by_skill.items()
+            }
+        else:
+            by_skill = _build_skill_costs(db_path, days, data.get("total_cost_usd", 0))
 
         return {
             **data,
+            'timeline': timeline,
+            'cost_timeline': cost_timeline,
             'total_cost': data.get('total_cost_usd', 0),
-            'cache_hit_rate': cache_hit_rate
+            'cache_hit_rate': cache_hit_rate,
+            'by_project': by_project,
+            'by_skill': by_skill
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting token metrics: {str(e)}")
@@ -170,20 +337,86 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
     """Get model usage metrics with dashboard-friendly format"""
     try:
         db_path = get_db_path()
-        collector = ModelCollector(db_path)
-        data = collector.collect(days=days)
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
 
-        # Transform distribution for pie chart
+        rows = conn.execute("""
+            SELECT model,
+                   COUNT(*) as record_count,
+                   SUM(input_tokens) as input_tok,
+                   SUM(output_tokens) as output_tok
+            FROM raw_token_usage
+            WHERE recorded_at >= ? AND model IS NOT NULL AND model != '<synthetic>'
+            GROUP BY model ORDER BY (input_tok + output_tok) DESC
+        """, (cutoff,)).fetchall()
+        conn.close()
+
+        total_records = sum(r["record_count"] for r in rows)
+        total_tokens = sum((r["input_tok"] or 0) + (r["output_tok"] or 0) for r in rows)
+
+        by_model = {}
+        model_distribution = []
+        model_performance = []
+        token_efficiency = []
         distribution = []
-        for model, percentage in data.get('distribution_pct', {}).items():
-            distribution.append({
-                'model': model,
-                'percentage': percentage
+
+        raw_tps = []
+        for r in rows:
+            name = r["model"]
+            inp = r["input_tok"] or 0
+            out = r["output_tok"] or 0
+            tok = inp + out
+            pct = round(tok / total_tokens * 100, 1) if total_tokens else 0
+            cost = _estimate_cost(name, inp, out)
+            tps = round(tok / max(r["record_count"], 1), 1)
+            raw_tps.append(tps)
+
+            by_model[name] = {
+                "input_tokens": inp, "output_tokens": out,
+                "total_tokens": tok, "record_count": r["record_count"],
+                "percentage": pct,
+                "model_name": name,
+                "cost": round(cost, 2), "cost_usd": round(cost, 2)
+            }
+            distribution.append({"model": name, "percentage": pct})
+            model_distribution.append({"model_name": name, "usage_count": r["record_count"]})
+            token_efficiency.append({"model_name": name, "tokens_per_second": tps})
+
+        max_tps = max(raw_tps) if raw_tps else 1
+        max_cost_eff = 0
+        cost_effs = []
+        for i, r in enumerate(rows):
+            name = r["model"]
+            tok = (r["input_tok"] or 0) + (r["output_tok"] or 0)
+            cost = _estimate_cost(name, r["input_tok"] or 0, r["output_tok"] or 0) or 1
+            ce = tok / cost if cost > 0 else 0
+            cost_effs.append(ce)
+            max_cost_eff = max(max_cost_eff, ce)
+
+        top_n = sorted(range(len(rows)), key=lambda i: rows[i]["record_count"], reverse=True)[:4]
+        for i in top_n:
+            name = rows[i]["model"]
+            tps = raw_tps[i]
+            ce = cost_effs[i]
+            model_performance.append({
+                "model_name": name,
+                "speed": round(tps / max_tps, 3),
+                "success_rate": round(by_model[name]["percentage"] / 100, 3),
+                "efficiency": round(ce / max_cost_eff, 3) if max_cost_eff else 0
             })
 
+        best = max(token_efficiency, key=lambda x: x["tokens_per_second"]) if token_efficiency else {}
+
         return {
-            **data,
-            'distribution': distribution
+            "total_invocations": total_records,
+            "by_model": by_model,
+            "distribution": distribution,
+            "model_distribution": model_distribution,
+            "model_performance": model_performance,
+            "token_efficiency": token_efficiency,
+            "most_efficient_model": best.get("model_name", "--"),
+            "most_efficient_rate": best.get("tokens_per_second", 0)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting model metrics: {str(e)}")
