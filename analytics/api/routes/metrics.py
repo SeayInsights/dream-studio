@@ -107,13 +107,24 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
         # Transform to dashboard format
         leaderboard = []
         for skill_name, skill_data in data.get('by_skill', {}).items():
+            avg_exec_s = skill_data.get('avg_exec_time_s', 0)
+            avg_duration_minutes = avg_exec_s / 60 if avg_exec_s else 0
+
+            # Estimate cost based on tokens (very rough estimate)
+            input_tok = skill_data.get('avg_input_tokens', 0)
+            output_tok = skill_data.get('avg_output_tokens', 0)
+            # Rough estimate: $0.003/1K input, $0.015/1K output (Sonnet-like pricing)
+            avg_cost = (input_tok / 1000 * 0.003) + (output_tok / 1000 * 0.015)
+
             leaderboard.append({
                 'skill_name': skill_name,
                 'invocations': skill_data.get('count', 0),
-                'success_rate': skill_data.get('success_rate', 0),
-                'avg_exec_time_s': skill_data.get('avg_exec_time_s', 0),
-                'avg_input_tokens': skill_data.get('avg_input_tokens', 0),
-                'avg_output_tokens': skill_data.get('avg_output_tokens', 0)
+                'success_rate': skill_data.get('success_rate', 0) / 100,  # Convert to 0-1 range
+                'avg_exec_time_s': avg_exec_s,
+                'avg_duration_minutes': avg_duration_minutes,
+                'avg_cost': avg_cost,
+                'avg_input_tokens': input_tok,
+                'avg_output_tokens': output_tok
             })
 
         # Get most used skill
