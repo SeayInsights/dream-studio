@@ -1,0 +1,199 @@
+<!-- Device Frame: iPhone 15 Pro -->
+<div class="device-frame device-frame--ios">
+  <style>
+    .device-frame--ios {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+    }
+
+    .device-frame--ios .device-body {
+      position: relative;
+      width: 393px;
+      height: 852px;
+      background: #000;
+      border-radius: 55px;
+      border: 8px solid #1a1a1a;
+      box-shadow:
+        0 0 0 1px #3a3a3a,
+        0 30px 80px rgba(0, 0, 0, 0.5),
+        0 10px 30px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 1px #0a0a0a;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .device-frame--ios .device-screen {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      border-radius: 48px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .device-frame--ios .device-dynamic-island {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 126px;
+      height: 37px;
+      background: #000;
+      border-radius: 20px;
+      z-index: 10;
+    }
+
+    .device-frame--ios .device-status-bar {
+      position: relative;
+      height: 59px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 28px 8px;
+      z-index: 5;
+    }
+
+    .device-frame--ios .device-status-bar .status-time {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #000;
+      letter-spacing: -0.3px;
+    }
+
+    .device-frame--ios .device-status-bar .status-indicators {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .device-frame--ios .status-signal {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+    }
+
+    .device-frame--ios .status-signal span {
+      display: block;
+      width: 3px;
+      background: #000;
+      border-radius: 1px;
+    }
+
+    .device-frame--ios .status-signal span:nth-child(1) { height: 4px; }
+    .device-frame--ios .status-signal span:nth-child(2) { height: 6px; }
+    .device-frame--ios .status-signal span:nth-child(3) { height: 9px; }
+    .device-frame--ios .status-signal span:nth-child(4) { height: 12px; }
+
+    .device-frame--ios .status-wifi {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      width: 16px;
+      height: 12px;
+      justify-content: flex-end;
+    }
+
+    .device-frame--ios .status-wifi span {
+      display: block;
+      border: 1.5px solid #000;
+      border-bottom: none;
+      border-radius: 50% 50% 0 0;
+      background: transparent;
+    }
+
+    .device-frame--ios .status-wifi span:nth-child(1) { width: 14px; height: 7px; }
+    .device-frame--ios .status-wifi span:nth-child(2) { width: 9px; height: 5px; }
+    .device-frame--ios .status-wifi span:nth-child(3) { width: 4px; height: 4px; border-radius: 50%; border: none; background: #000; }
+
+    .device-frame--ios .status-battery {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .device-frame--ios .status-battery-body {
+      width: 22px;
+      height: 11px;
+      border: 1.5px solid #000;
+      border-radius: 2.5px;
+      padding: 1.5px;
+      display: flex;
+      align-items: center;
+    }
+
+    .device-frame--ios .status-battery-fill {
+      width: 70%;
+      height: 100%;
+      background: #000;
+      border-radius: 1px;
+    }
+
+    .device-frame--ios .status-battery-cap {
+      width: 2px;
+      height: 5px;
+      background: #000;
+      border-radius: 0 1px 1px 0;
+      opacity: 0.4;
+    }
+
+    .device-frame--ios .device-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .device-frame--ios .device-home-indicator {
+      height: 34px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+    }
+
+    .device-frame--ios .home-indicator-bar {
+      width: 134px;
+      height: 5px;
+      background: #000;
+      border-radius: 2.5px;
+      opacity: 0.2;
+    }
+  </style>
+
+  <div class="device-body">
+    <div class="device-screen">
+      <div class="device-dynamic-island"></div>
+      <div class="device-status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-indicators">
+          <div class="status-signal">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="status-wifi">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="status-battery">
+            <div class="status-battery-body">
+              <div class="status-battery-fill"></div>
+            </div>
+            <div class="status-battery-cap"></div>
+          </div>
+        </div>
+      </div>
+      <div class="device-content">
+        <!-- CONTENT -->
+      </div>
+      <div class="device-home-indicator">
+        <div class="home-indicator-bar"></div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -24,6 +24,7 @@
 | dashboard-dev | modes/dashboard-dev/SKILL.md | dashboard:, feed contract:, Tauri: |
 | client-work | modes/client-work/SKILL.md | intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: |
 | design | modes/design/SKILL.md | design art:, design poster:, canvas:, brand:, ad creative: |
+| website | modes/website/SKILL.md | website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: |
 
 ## Shared resources
 
