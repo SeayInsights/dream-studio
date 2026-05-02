@@ -8,7 +8,7 @@ per-file-ignores = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "analytics/tests"]
 
 [tool.coverage.run]
 source = ["hooks/lib", "packs/domains/domain_lib"]

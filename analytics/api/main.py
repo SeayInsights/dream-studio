@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from .routes import metrics, insights, reports, exports
+from .routes import metrics, insights, reports, exports, realtime, alerts, ml
 
 # Create FastAPI app
 app = FastAPI(
@@ -30,6 +30,9 @@ app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["metrics"])
 app.include_router(insights.router, prefix="/api/v1/insights", tags=["insights"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
 app.include_router(exports.router, prefix="/api/v1/export", tags=["export"])
+app.include_router(realtime.router, prefix="/api/v1", tags=["realtime"])
+app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
+app.include_router(ml.router, prefix="/api/v1/ml", tags=["ml"])
 
 
 @app.get("/")
