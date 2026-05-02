@@ -20,6 +20,21 @@ For any Power BI work involving `.pbip` files, TMDL format, semantic model valid
 
 Dispatch triggers: editing `.pbip`/`.tmdl` files, DAX error diagnosis, semantic model failures, M-query refresh errors, Dataverse schema changes, RLS implementation.
 
+## Intake Triage {#intake-triage}
+
+Use this table to quickly classify incoming requests and route to the right approach.
+
+| Request Pattern | Work Type | Est. Hours | Submode/Approach |
+|---|---|---|---|
+| "Build a dashboard showing..." | Power BI dashboard build | 8-20 | Full lifecycle: data model → measures → visuals → storytelling framework. Check `domains/powerbi/storytelling-framework.yml` for structure. |
+| "This DAX measure is slow/wrong..." | DAX formula optimization | 2-6 | Dispatch `bi-developer` subagent. Read `domains/powerbi/dax-patterns.md` for VAR patterns, context transition, time intelligence. Analyze query plan if >3s. |
+| "Build an app for tracking..." | Power Apps canvas app | 12-30 | Canvas app with delegation warnings resolved. Follow naming conventions (scr_, ctn_, lbl_, btn_). Test offline scenarios if mobile. |
+| "Automate [process] when [trigger]..." | Power Automate flow | 4-12 | Flow with error handling (Scope + Configure Run After), approval timeout, environment variables for connections. Set concurrency to 1 if shared state. |
+| "Connect [source A] to [source B]..." | Data model design | 6-16 | Star schema with fact/dimension tables. Check `domains/powerbi/m-query-patterns.md` for query folding. Dispatch `bi-developer` for TMDL authoring. |
+| "Report takes 30s to load..." | Report performance tuning | 4-10 | Check DirectQuery vs Import, measure complexity, visual count. Use Performance Analyzer. Read `domains/powerbi/dax-patterns.md` for SUMMARIZE/TREATAS patterns. Dispatch `bi-developer` if semantic model changes needed. |
+
+**Escalation:** If the request does not match any pattern above, ask one clarifying question: "Is this primarily a data issue, a visualization issue, or a process automation issue?"
+
 ## Power BI Pre-Build Checklist
 
 Before writing or editing any TMDL, DAX, or M-query — complete every item:
@@ -86,6 +101,55 @@ After any build or change, verify in this order:
 - Naming: descriptive action names, not defaults
 - Environment variables for connection references and config values
 - Concurrency control: set to 1 for flows that modify shared state
+
+## Deliverable Response Contract {#deliverable-contract}
+
+Every client deliverable MUST include all five sections below. This contract ensures nothing is missed and the client can maintain/extend the work independently.
+
+### 1. Scope Confirmation
+**What was requested vs. what was delivered**
+
+- [ ] Original request documented (from email, meeting notes, or intake form)
+- [ ] Delivered scope explicitly stated
+- [ ] Any deviations from original request explained with rationale
+- [ ] Out-of-scope items listed (what was NOT included and why)
+- [ ] Sign-off confirmation: "This deliverable fulfills [specific business requirement]"
+
+### 2. Data Lineage
+**Where data comes from, transformations applied**
+
+- [ ] Source systems documented (e.g., SQL Server, SharePoint, Excel, Dataverse)
+- [ ] Connection details provided (server names, database names, authentication method)
+- [ ] Transformation steps outlined (M-query steps, DAX calculations, Power Automate actions)
+- [ ] Refresh schedule documented (frequency, time, dependencies)
+- [ ] Data freshness indicators shown (e.g., "Last Refresh" timestamp on report)
+
+### 3. Validation Evidence
+**Test results, data checks passed**
+
+- [ ] Sample outputs provided (screenshots, PDFs, or test data exports)
+- [ ] Expected vs. actual results documented for key metrics
+- [ ] Edge cases tested (empty data, nulls, filters, RLS, date ranges)
+- [ ] Performance benchmarks documented (refresh time, query response time)
+- [ ] Accessibility compliance verified (see `accessibility-checklist.yml` for Power BI)
+
+### 4. Handoff Checklist
+**Files delivered, access granted, documentation**
+
+- [ ] All files delivered (`.pbix`, `.pbit`, `.msapp`, flow exports, documentation)
+- [ ] Access granted (workspace permissions, data source credentials, app sharing)
+- [ ] User guide provided (how to use the deliverable, with screenshots)
+- [ ] Admin guide provided (how to refresh, update, troubleshoot)
+- [ ] Contact info provided (who to reach for support, escalation path)
+
+### 5. Maintenance Notes
+**How to update, troubleshoot, extend**
+
+- [ ] How to refresh data (manual vs. scheduled, gateway dependencies)
+- [ ] How to add new fields/measures (with examples)
+- [ ] How to troubleshoot common errors (with solutions or workarounds)
+- [ ] Known limitations documented (technical debt, workarounds, future improvements)
+- [ ] Extension guidance (how to add new pages, visuals, or flows without breaking existing work)
 
 ## Handoff documentation
 Every deliverable ships with:
