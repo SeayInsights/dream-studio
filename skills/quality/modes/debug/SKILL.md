@@ -23,6 +23,7 @@ Match symptoms to category, then follow the trace strategy in the reference:
 | TypeError, ValueError, AttributeError | Type/Data Issues | Trace data flow, validate types | [runtime-errors](references/runtime-errors.md) |
 | Build fails, compilation errors, syntax errors | Build System | Check build config, dependencies, syntax | [build-failures](references/build-failures.md) |
 | Wrong output, incorrect calculation, data mismatch | Logic Bug | Trace data flow, validate assumptions | [logic-bugs](references/logic-bugs.md) |
+| Race condition, deadlock, async/await issues | Concurrency | Check timing, locks, async patterns | [logic-bugs](references/logic-bugs.md#concurrency) |
 | Works locally, fails in prod/CI | Environment Drift | Compare envs, check config, secrets | [environment-drift](references/environment-drift.md) |
 | Slow execution, timeout, high memory | Performance | Profile, measure, identify bottleneck | [performance-issues](references/performance-issues.md) |
 | Unsure which tool to use (Grep/Read/LSP/Bash) | Tool Selection | Match scenario to tool capability | [tool-selection](references/tool-selection.md) |
