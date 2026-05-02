@@ -1,0 +1,136 @@
+{
+  "name": "Detailed Analysis Report",
+  "description": "Comprehensive deep-dive analysis with all metrics, trends, and detailed insights",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "metrics": [
+        "total_skill_invocations",
+        "success_rate",
+        "total_sessions",
+        "total_cost"
+      ],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Success Rate by Skill",
+          "data_source": "success_rate"
+        }
+      ]
+    },
+    {
+      "title": "Skill Analysis",
+      "metrics": [
+        "unique_skills",
+        "top_skills",
+        "skill_distribution"
+      ],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Top 10 Skills by Invocation Count",
+          "data_source": "top_skills"
+        },
+        {
+          "type": "pie",
+          "title": "Skill Category Distribution",
+          "data_source": "skill_distribution"
+        }
+      ]
+    },
+    {
+      "title": "Token & Cost Analysis",
+      "metrics": [
+        "total_tokens",
+        "total_cost",
+        "avg_tokens_per_session",
+        "cost_by_model"
+      ],
+      "charts": [
+        {
+          "type": "line",
+          "title": "Token Usage Trends",
+          "data_source": "token_trends"
+        },
+        {
+          "type": "bar",
+          "title": "Cost Breakdown by Model",
+          "data_source": "cost_by_model"
+        }
+      ]
+    },
+    {
+      "title": "Session Insights",
+      "metrics": [
+        "avg_session_duration",
+        "sessions_by_project",
+        "session_activity"
+      ],
+      "charts": [
+        {
+          "type": "line",
+          "title": "Daily Session Activity",
+          "data_source": "session_activity"
+        },
+        {
+          "type": "pie",
+          "title": "Sessions by Project",
+          "data_source": "sessions_by_project"
+        }
+      ]
+    },
+    {
+      "title": "Model Performance",
+      "metrics": [
+        "model_usage",
+        "avg_tokens_by_model"
+      ],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Average Tokens per Model",
+          "data_source": "avg_tokens_by_model"
+        }
+      ]
+    },
+    {
+      "title": "Learning & Knowledge",
+      "metrics": [
+        "total_lessons",
+        "lessons_by_status",
+        "recent_lessons"
+      ],
+      "charts": []
+    },
+    {
+      "title": "Workflow Execution",
+      "metrics": [
+        "total_workflows",
+        "workflows_by_category",
+        "workflow_success_rate"
+      ],
+      "charts": [
+        {
+          "type": "pie",
+          "title": "Workflows by Category",
+          "data_source": "workflows_by_category"
+        }
+      ]
+    },
+    {
+      "title": "Efficiency Metrics",
+      "metrics": [
+        "avg_tokens_per_session",
+        "success_rate",
+        "workflow_success_rate"
+      ],
+      "charts": [
+        {
+          "type": "scatter",
+          "title": "Session Duration vs Token Usage",
+          "data_source": "avg_tokens_per_session"
+        }
+      ]
+    }
+  ]
+}

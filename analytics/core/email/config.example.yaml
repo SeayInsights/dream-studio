@@ -1,0 +1,52 @@
+# Email configuration example
+# Copy this file to analytics.yaml and update with your settings
+
+email:
+  # SMTP server settings
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  use_tls: true
+
+  # Authentication
+  username: your-email@gmail.com
+  password: your-app-password  # Use app-specific password for Gmail
+
+  # Sender information
+  from_address: "Dream Studio Analytics <noreply@example.com>"
+
+  # Optional: Default recipients for different notification types
+  default_recipients:
+    reports:
+      - manager@example.com
+      - team-lead@example.com
+    alerts:
+      - oncall@example.com
+      - devops@example.com
+
+# Common SMTP settings for different providers:
+#
+# Gmail:
+#   smtp_host: smtp.gmail.com
+#   smtp_port: 587
+#   use_tls: true
+#   Note: You must use an "App Password" instead of your regular Gmail password
+#         Generate at: https://myaccount.google.com/apppasswords
+#
+# Outlook/Office 365:
+#   smtp_host: smtp.office365.com
+#   smtp_port: 587
+#   use_tls: true
+#
+# SendGrid:
+#   smtp_host: smtp.sendgrid.net
+#   smtp_port: 587
+#   username: apikey
+#   password: <your-sendgrid-api-key>
+#   use_tls: true
+#
+# Amazon SES:
+#   smtp_host: email-smtp.us-east-1.amazonaws.com
+#   smtp_port: 587
+#   username: <your-smtp-username>
+#   password: <your-smtp-password>
+#   use_tls: true

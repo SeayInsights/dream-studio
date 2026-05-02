@@ -1,0 +1,434 @@
+{
+  "info": {
+    "name": "Dream-Studio Analytics API",
+    "description": "Complete API collection for ER015 (Reports), ER016 (Exports), and ER017 (Schedules)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "report_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "API Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Root Endpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ER015 - Reports",
+      "item": [
+        {
+          "name": "Generate Report (Summary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('report_id', jsonData.report_id);",
+                  "    pm.collectionVariables.set('report_id', jsonData.report_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_type\": \"summary\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "generate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Report (Detailed with Date Range)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_type\": \"detailed\",\n  \"date_range\": [\"2026-04-01\", \"2026-04-30\"],\n  \"template\": \"executive\",\n  \"filters\": {\"severity\": \"high\"},\n  \"sections\": [\"metrics\", \"insights\", \"recommendations\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "generate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports?page=1&page_size=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Report by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Report",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/{{report_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "{{report_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ER016 - Exports",
+      "item": [
+        {
+          "name": "Export as PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/pdf/{{report_id}}?include_charts=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "pdf", "{{report_id}}"],
+              "query": [
+                {
+                  "key": "include_charts",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export as Excel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/excel/{{report_id}}?include_charts=true&include_raw_data=false",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "excel", "{{report_id}}"],
+              "query": [
+                {
+                  "key": "include_charts",
+                  "value": "true"
+                },
+                {
+                  "key": "include_raw_data",
+                  "value": "false"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export as PowerPoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/pptx/{{report_id}}?template=executive",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "pptx", "{{report_id}}"],
+              "query": [
+                {
+                  "key": "template",
+                  "value": "executive"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Current Data as CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/csv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "csv"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export CSV with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/csv?date_range=2026-04-01,2026-04-30&filters={\"severity\":\"high\"}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "csv"],
+              "query": [
+                {
+                  "key": "date_range",
+                  "value": "2026-04-01,2026-04-30"
+                },
+                {
+                  "key": "filters",
+                  "value": "{\"severity\":\"high\"}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Power BI Dataset",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/powerbi?include_relationships=true&include_measures=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "powerbi"],
+              "query": [
+                {
+                  "key": "include_relationships",
+                  "value": "true"
+                },
+                {
+                  "key": "include_measures",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "ER017 - Schedules",
+      "item": [
+        {
+          "name": "Create Schedule (Daily)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('job_id', jsonData.job_id);",
+                  "    pm.collectionVariables.set('job_id', jsonData.job_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Summary Report\",\n  \"report_type\": \"summary\",\n  \"schedule\": \"0 9 * * *\",\n  \"recipients\": [\"team@company.com\"],\n  \"format\": \"pdf\",\n  \"enabled\": true,\n  \"timezone\": \"UTC\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Schedule (Weekly Executive)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Weekly Executive Summary\",\n  \"report_type\": \"executive\",\n  \"schedule\": \"0 9 * * MON\",\n  \"recipients\": [\"exec@company.com\", \"manager@company.com\"],\n  \"format\": \"pdf\",\n  \"enabled\": true,\n  \"timezone\": \"America/New_York\",\n  \"template\": \"executive\",\n  \"config\": {\n    \"sections\": [\"metrics\", \"insights\", \"recommendations\"]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Schedules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Schedule",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Schedule Name\",\n  \"schedule\": \"0 10 * * MON\",\n  \"recipients\": [\"new@company.com\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules", "{{job_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pause Schedule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/{{job_id}}/pause",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules", "{{job_id}}", "pause"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resume Schedule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/{{job_id}}/resume",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules", "{{job_id}}", "resume"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Schedule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/{{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "schedules", "{{job_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
