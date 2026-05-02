@@ -133,6 +133,7 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
 
         return {
             **data,
+            'overall_success_rate': data.get('overall_success_rate', 0) / 100,  # Convert to 0-1 range
             'leaderboard': leaderboard,
             'most_used_skill': most_used_skill,
             'most_used_count': most_used_count,
