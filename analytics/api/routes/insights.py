@@ -34,7 +34,7 @@ router = APIRouter()
 def get_db_path() -> str:
     """Get database path"""
     import os
-    return os.path.expanduser("~/.dream-studio/studio.db")
+    return os.path.expanduser("~/.dream-studio/state/studio.db")
 
 
 def collect_metrics(days: int = 30):
@@ -272,3 +272,78 @@ async def analyze_root_cause(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error analyzing root cause: {str(e)}")
+
+
+@router.get("/rhythm")
+async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
+    """Get work rhythm analysis: heatmap, peak hours/days, productivity patterns"""
+    import sqlite3
+    from collections import defaultdict
+
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        # Heatmap: 7 days x 24 hours
+        cursor.execute("""
+            SELECT
+                CAST(strftime('%w', started_at) AS INTEGER) as dow,
+                CAST(strftime('%H', started_at) AS INTEGER) as hour,
+                COUNT(*) as count
+            FROM raw_sessions
+            WHERE started_at >= ?
+            GROUP BY dow, hour
+        """, (cutoff,))
+
+        heatmap = [[0] * 24 for _ in range(7)]
+        for row in cursor.fetchall():
+            heatmap[row["dow"]][row["hour"]] = row["count"]
+
+        # Peak hour
+        hour_totals = defaultdict(int)
+        for dow in range(7):
+            for hour in range(24):
+                hour_totals[hour] += heatmap[dow][hour]
+        peak_hour = max(hour_totals, key=hour_totals.get) if hour_totals else 0
+
+        # Peak day
+        day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        day_totals = {d: sum(heatmap[d]) for d in range(7)}
+        peak_day_idx = max(day_totals, key=day_totals.get) if day_totals else 0
+        quietest_day_idx = min(day_totals, key=day_totals.get) if day_totals else 0
+
+        # Completion rate by hour
+        cursor.execute("""
+            SELECT
+                CAST(strftime('%H', started_at) AS INTEGER) as hour,
+                COUNT(*) as total,
+                SUM(CASE WHEN outcome = 'completed' THEN 1 ELSE 0 END) as completed
+            FROM raw_sessions
+            WHERE started_at >= ?
+            GROUP BY hour
+        """, (cutoff,))
+        completion_by_hour = {}
+        for row in cursor.fetchall():
+            total = row["total"]
+            completed = row["completed"] or 0
+            completion_by_hour[str(row["hour"])] = round(completed / total, 3) if total > 0 else 0.0
+
+        return {
+            "heatmap": heatmap,
+            "day_labels": day_names,
+            "peak_hour": peak_hour,
+            "peak_day": day_names[peak_day_idx],
+            "busiest_day_count": day_totals.get(peak_day_idx, 0),
+            "quietest_day": day_names[quietest_day_idx],
+            "quietest_day_count": day_totals.get(quietest_day_idx, 0),
+            "completion_by_hour": completion_by_hour,
+            "hour_totals": dict(hour_totals),
+            "generated_at": datetime.now().isoformat()
+        }
+    finally:
+        conn.close()
