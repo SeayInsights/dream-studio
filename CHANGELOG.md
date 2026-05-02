@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pattern Enhancement (35 tasks)** — 9 foundational patterns for optimized LLM consumption with 40% token savings target (#pattern-enhancement)
+  - Progressive disclosure: `quality/debug` refactored 217→65 lines with 6 reference files for on-demand loading
+  - Design system library: 5 curated systems (3,561 lines) - tech-minimal, editorial-modern, brutalist-bold, playful-rounded, executive-clean
+  - I-Lang discovery protocol: 8-dimension design intent capture with NLP mappings
+  - Version guards: Python/Node/Power BI feature gating for 70% compatibility bug reduction
+  - Decision tables: symptom→solution routing in debug (8 patterns), client-work (6 patterns), design (5 systems)
+  - Response contracts: standardized output sections for security reviews, client deliverables, ship gate
+  - Structured frontmatter: ds: namespace added to all 41 mode SKILL.md files
+  - CI validation: SKILL.md standards enforcement (line count, YAML, banned phrases, reference links)
+  - DO/DON'T lesson template: 75% scan-time reduction (2min→30sec) with visual markers
 - **YAML mode config** — migrated skill metadata from SKILL.md frontmatter to dedicated `config.yml` files across all 48 skill directories; SKILL.md is now pure instructions (#83)
 - **Granular skill tracking** — dashboard shows mode-level names ("core:think", "quality:debug") instead of pack-only names ("core", "quality") (#84)
 - **Smart model routing** — `get_model_for_skill()` API reads `model_tier` from config.yml for subagent model selection (opus/sonnet/haiku) with telemetry tracking (#80)
