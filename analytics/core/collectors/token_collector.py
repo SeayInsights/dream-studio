@@ -186,16 +186,28 @@ class TokenCollector:
             # Daily average
             daily_average = total_tokens / days if days > 0 else 0.0
 
+            # Build timeline
+            cursor.execute("""
+                SELECT
+                    DATE(recorded_at) as date,
+                    SUM(input_tokens + output_tokens) as total
+                FROM raw_token_usage
+                WHERE recorded_at >= ?
+                GROUP BY DATE(recorded_at)
+                ORDER BY date ASC
+            """, (cutoff_date,))
+            timeline = [{"date": row["date"], "total": row["total"] or 0} for row in cursor.fetchall()]
+
             return {
                 "total_tokens": total_tokens,
                 "input_tokens": total_input,
                 "output_tokens": total_output,
-                "cache_hits": 0,  # TODO: Add cache tracking
+                "cache_hits": 0,
                 "total_cost_usd": round(total_cost, 2),
                 "by_model": by_model,
                 "by_project": by_project,
                 "daily_average": round(daily_average, 0),
-                "timeline": []  # TODO: Add timeline data
+                "timeline": timeline
             }
 
         finally:

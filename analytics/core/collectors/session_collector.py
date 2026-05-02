@@ -115,13 +115,17 @@ class SessionCollector:
             result = cursor.fetchone()
             avg_duration_minutes = round(result["avg_duration_minutes"], 2) if result["avg_duration_minutes"] else 0.0
 
+            completed = outcomes.get("completed", 0)
+            success_rate = round(completed / total_sessions, 3) if total_sessions > 0 else 0.0
+
             return {
                 "total_sessions": total_sessions,
                 "by_project": by_project,
                 "timeline": timeline,
                 "day_of_week": day_of_week,
                 "outcomes": outcomes,
-                "avg_duration_minutes": avg_duration_minutes
+                "avg_duration_minutes": avg_duration_minutes,
+                "success_rate": success_rate
             }
 
         finally:
