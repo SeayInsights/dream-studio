@@ -6,7 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](pyproject.toml)
 
-An opinionated Claude Code plugin that adds a **Build Pipeline**, **7 pack skills (41 modes)**, automated hooks, semantic memory retrieval, CI gate, and a context-aware status bar — portable across every project. Enhanced with progressive disclosure, design systems, and version guards for 40% token savings and 70% fewer compatibility bugs.
+An opinionated Claude Code plugin that gives you a structured build pipeline, automated quality gates, and a local analytics dashboard — portable across every project.
+
+Ships with **8 skill packs (42 modes)** covering the full lifecycle from thinking through shipping, plus domain-specific skills for game dev, SaaS, Power Platform, security, and career ops. Hooks run automatically on every session to track health, enforce CI gates, and surface lessons learned.
 
 ---
 
@@ -941,7 +943,8 @@ dream-studio includes a built-in analytics pipeline that harvests operational da
 ### Quick start
 
 ```bash
-make dashboard    # bootstrap DB + launch server + open browser (one command)
+./launch-dashboard          # Windows (.cmd) or Unix — bootstrap DB + launch server + open browser
+make dashboard              # alternative if you have make installed
 ```
 
 This is the recommended way to use analytics. On first run it automatically:
