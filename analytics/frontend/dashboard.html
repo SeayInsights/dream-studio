@@ -2009,20 +2009,20 @@
                     return;
                 }
 
-                // Combine data
+                // Combine data (data is at root level, not .summary)
                 const combinedData = {
                     summary: {
-                        total_tokens: tokensData.summary?.total_tokens || 0,
-                        total_cost: tokensData.summary?.total_cost || 0,
-                        cache_hit_rate: modelsData.summary?.cache_hit_rate || 0,
-                        most_efficient_model: modelsData.summary?.most_efficient_model || '--',
-                        most_efficient_rate: modelsData.summary?.most_efficient_rate || 0
+                        total_tokens: tokensData.total_tokens || 0,
+                        total_cost: tokensData.total_cost || 0,
+                        cache_hit_rate: tokensData.cache_hit_rate || 0,
+                        most_efficient_model: modelsData.most_efficient_model || '--',
+                        most_efficient_rate: modelsData.most_efficient_rate || 0
                     },
-                    performance: modelsData.model_performance || [],
-                    tokenTimeline: tokensData.token_timeline || [],
-                    costByModel: modelsData.cost_by_model || [],
-                    costByProject: tokensData.cost_by_project || [],
-                    costBySkill: tokensData.cost_by_skill || [],
+                    performance: modelsData.model_performance || modelsData.by_model || [],
+                    tokenTimeline: tokensData.timeline || [],
+                    costByModel: modelsData.by_model || [],
+                    costByProject: tokensData.by_project || [],
+                    costBySkill: tokensData.by_skill || [],
                     efficiency: modelsData.token_efficiency || [],
                     cacheTimeline: modelsData.cache_timeline || []
                 };
