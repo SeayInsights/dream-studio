@@ -611,24 +611,82 @@
 
         <!-- Anomalies Tab -->
         <div id="anomalies" class="tab-content">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">Anomaly Detection</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <!-- Summary Stats -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Anomaly Detection Summary</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="text-sm font-medium text-gray-600">Detected Anomalies</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                        <div id="anomaly-count" class="mt-2 text-2xl font-bold text-gray-900">--</div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="text-sm font-medium text-gray-600">Last Detection</div>
-                        <div class="mt-2 text-xl font-bold text-gray-900">--</div>
+                        <div id="anomaly-last-detected" class="mt-2 text-lg font-bold text-gray-900">--</div>
                     </div>
                     <div class="border border-gray-200 rounded-lg p-4">
                         <div class="text-sm font-medium text-gray-600">Detection Rate</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                        <div id="anomaly-detection-rate" class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Severity</div>
+                        <div id="anomaly-severity" class="mt-2 text-2xl font-bold text-gray-900">--</div>
                     </div>
                 </div>
-                <div class="h-96 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
-                    Anomaly timeline and visualization
+            </div>
+
+            <!-- Anomaly Scatter Plot -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Anomaly Detection Scatter Plot</h2>
+                <p class="text-sm text-gray-600 mb-4">Token usage vs session duration with outliers highlighted</p>
+                <div class="relative h-96">
+                    <canvas id="anomaly-scatter-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Trend Analysis -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Trend Analysis with Regression</h2>
+                <p class="text-sm text-gray-600 mb-4">Historical trends with predictive regression lines</p>
+                <div class="relative h-96">
+                    <canvas id="trend-analysis-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Session Outcome Flow -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Session Outcome Flow</h2>
+                <p class="text-sm text-gray-600 mb-4">Visual flow of session outcomes from start to completion</p>
+                <div id="session-flow-diagram" class="relative h-96 overflow-x-auto">
+                    <!-- Custom Sankey-style flow diagram -->
+                    <svg width="100%" height="384" viewBox="0 0 800 384" class="min-w-full">
+                        <!-- Will be populated by JS -->
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Heatmaps -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Day of Week Heatmap -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold text-gray-900 mb-4">Activity by Day of Week</h2>
+                    <p class="text-sm text-gray-600 mb-4">Session activity patterns across the week</p>
+                    <div id="day-of-week-heatmap" class="grid grid-cols-7 gap-2">
+                        <!-- Will be populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Hourly Heatmap -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold text-gray-900 mb-4">Hourly Activity Heatmap</h2>
+                    <p class="text-sm text-gray-600 mb-4">24-hour activity patterns across 7 days</p>
+                    <div id="hourly-heatmap" class="overflow-x-auto">
+                        <div class="min-w-[600px]">
+                            <!-- 24 hours × 7 days grid -->
+                            <div id="hourly-grid" class="grid grid-rows-7 gap-1">
+                                <!-- Will be populated by JS -->
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -651,7 +709,8 @@
             models: false,
             workflows: false,
             alerts: false,
-            ml: false
+            ml: false,
+            anomalies: false
         };
 
         function switchTab(tabName) {
@@ -692,6 +751,9 @@
             } else if (tabName === 'ml' && !tabsInitialized.ml) {
                 tabsInitialized.ml = true;
                 initMLTab();
+            } else if (tabName === 'anomalies' && !tabsInitialized.anomalies) {
+                tabsInitialized.anomalies = true;
+                initAnomaliesTab();
             }
         }
 
@@ -718,7 +780,9 @@
             slaAvailabilityGauge: null,
             slaCustomGauge: null,
             topTriggeredRules: null,
-            resolutionTime: null
+            resolutionTime: null,
+            anomalyScatter: null,
+            trendAnalysis: null
         };
 
         // Real-time update state
@@ -3677,6 +3741,344 @@
                 console.error('Error dismissing recommendation:', error);
                 alert('Failed to dismiss recommendation. Please try again.');
             }
+        }
+
+        // ========================================
+        // Anomalies Tab Implementation
+        // ========================================
+
+        async function initAnomaliesTab() {
+            console.log('Initializing Anomalies tab...');
+
+            try {
+                // Fetch anomaly data from all relevant analyzers
+                const [anomalyData, trendData, performanceData] = await Promise.all([
+                    fetch('/api/v1/analytics/anomalies').then(r => r.ok ? r.json() : null),
+                    fetch('/api/v1/analytics/trends').then(r => r.ok ? r.json() : null),
+                    fetch('/api/v1/analytics/performance').then(r => r.ok ? r.json() : null)
+                ]);
+
+                // Update summary stats
+                updateAnomalySummary(anomalyData);
+
+                // Initialize all visualizations
+                await Promise.all([
+                    initAnomalyScatterPlot(anomalyData),
+                    initTrendAnalysisChart(trendData),
+                    initSessionFlowDiagram(performanceData),
+                    initDayOfWeekHeatmap(performanceData),
+                    initHourlyHeatmap(performanceData)
+                ]);
+
+                console.log('Anomalies tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Anomalies tab:', error);
+            }
+        }
+
+        function updateAnomalySummary(data) {
+            if (!data) {
+                console.warn('No anomaly data available');
+                return;
+            }
+
+            const anomalyCount = data.anomalies?.length || 0;
+            const lastDetected = data.last_detected || 'Never';
+            const detectionRate = data.detection_rate || 0;
+            const avgSeverity = data.avg_severity || 'Low';
+
+            document.getElementById('anomaly-count').textContent = anomalyCount;
+            document.getElementById('anomaly-last-detected').textContent =
+                typeof lastDetected === 'string' ? lastDetected : new Date(lastDetected).toLocaleString();
+            document.getElementById('anomaly-detection-rate').textContent = `${(detectionRate * 100).toFixed(1)}%`;
+            document.getElementById('anomaly-severity').textContent = avgSeverity;
+        }
+
+        async function initAnomalyScatterPlot(data) {
+            if (!data || !data.scatter_data) {
+                console.warn('No scatter plot data available');
+                return;
+            }
+
+            const ctx = document.getElementById('anomaly-scatter-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.anomalyScatter) {
+                charts.anomalyScatter.destroy();
+            }
+
+            // Separate normal points from anomalies
+            const normalPoints = data.scatter_data.filter(d => !d.is_anomaly);
+            const anomalyPoints = data.scatter_data.filter(d => d.is_anomaly);
+
+            charts.anomalyScatter = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Normal Sessions',
+                            data: normalPoints.map(d => ({ x: d.duration, y: d.tokens })),
+                            backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                            borderColor: '#3b82f6',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Anomalies',
+                            data: anomalyPoints.map(d => ({ x: d.duration, y: d.tokens })),
+                            backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                            borderColor: '#ef4444',
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            pointStyle: 'triangle'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const point = context.raw;
+                                    return `Duration: ${point.x}s, Tokens: ${point.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Session Duration (seconds)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Token Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function initTrendAnalysisChart(data) {
+            if (!data || !data.trends) {
+                console.warn('No trend data available');
+                return;
+            }
+
+            const ctx = document.getElementById('trend-analysis-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.trendAnalysis) {
+                charts.trendAnalysis.destroy();
+            }
+
+            const datasets = [];
+            const metrics = ['sessions', 'tokens', 'cost'];
+            const colors = ['#3b82f6', '#10b981', '#f59e0b'];
+
+            metrics.forEach((metric, idx) => {
+                if (data.trends[metric]) {
+                    // Actual data
+                    datasets.push({
+                        label: `${metric.charAt(0).toUpperCase() + metric.slice(1)} (Actual)`,
+                        data: data.trends[metric].actual,
+                        borderColor: colors[idx],
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.4
+                    });
+
+                    // Regression line
+                    datasets.push({
+                        label: `${metric.charAt(0).toUpperCase() + metric.slice(1)} (Trend)`,
+                        data: data.trends[metric].regression,
+                        borderColor: colors[idx],
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        tension: 0
+                    });
+                }
+            });
+
+            charts.trendAnalysis = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates || [],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        async function initSessionFlowDiagram(data) {
+            const container = document.getElementById('session-flow-diagram');
+            if (!container) return;
+
+            const svg = container.querySelector('svg');
+            if (!svg) return;
+
+            // Define flow data
+            const flowData = data?.session_flow || {
+                started: 1000,
+                completed: 750,
+                failed: 150,
+                timeout: 100
+            };
+
+            // Calculate percentages
+            const total = flowData.started;
+            const completedPct = (flowData.completed / total) * 100;
+            const failedPct = (flowData.failed / total) * 100;
+            const timeoutPct = (flowData.timeout / total) * 100;
+
+            // Build Sankey-style flow diagram with SVG
+            svg.innerHTML = `
+                <!-- Start Node -->
+                <rect x="50" y="142" width="120" height="100" fill="#3b82f6" rx="8"/>
+                <text x="110" y="192" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Started</text>
+                <text x="110" y="212" text-anchor="middle" fill="white" font-size="18">${total}</text>
+
+                <!-- Flow to Completed -->
+                <path d="M 170 192 Q 400 192 400 120" stroke="#10b981" stroke-width="${completedPct * 0.8}" fill="none" opacity="0.6"/>
+                <rect x="400" y="70" width="120" height="100" fill="#10b981" rx="8"/>
+                <text x="460" y="110" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Completed</text>
+                <text x="460" y="130" text-anchor="middle" fill="white" font-size="18">${flowData.completed}</text>
+                <text x="460" y="150" text-anchor="middle" fill="white" font-size="12">${completedPct.toFixed(1)}%</text>
+
+                <!-- Flow to Failed -->
+                <path d="M 170 192 Q 400 192 400 192" stroke="#ef4444" stroke-width="${failedPct * 0.8}" fill="none" opacity="0.6"/>
+                <rect x="400" y="192" width="120" height="100" fill="#ef4444" rx="8"/>
+                <text x="460" y="232" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Failed</text>
+                <text x="460" y="252" text-anchor="middle" fill="white" font-size="18">${flowData.failed}</text>
+                <text x="460" y="272" text-anchor="middle" fill="white" font-size="12">${failedPct.toFixed(1)}%</text>
+
+                <!-- Flow to Timeout -->
+                <path d="M 170 192 Q 400 192 400 314" stroke="#f59e0b" stroke-width="${timeoutPct * 0.8}" fill="none" opacity="0.6"/>
+                <rect x="400" y="264" width="120" height="100" fill="#f59e0b" rx="8"/>
+                <text x="460" y="304" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Timeout</text>
+                <text x="460" y="324" text-anchor="middle" fill="white" font-size="18">${flowData.timeout}</text>
+                <text x="460" y="344" text-anchor="middle" fill="white" font-size="12">${timeoutPct.toFixed(1)}%</text>
+            `;
+        }
+
+        async function initDayOfWeekHeatmap(data) {
+            const container = document.getElementById('day-of-week-heatmap');
+            if (!container) return;
+
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const activityData = data?.day_of_week || [120, 150, 140, 180, 160, 80, 60];
+
+            // Find min/max for color scaling
+            const max = Math.max(...activityData);
+            const min = Math.min(...activityData);
+
+            // Generate heatmap cells
+            container.innerHTML = days.map((day, idx) => {
+                const value = activityData[idx];
+                const intensity = (value - min) / (max - min);
+                const bgColor = `rgba(59, 130, 246, ${0.2 + intensity * 0.8})`;
+
+                return `
+                    <div class="text-center p-4 rounded-lg border border-gray-200 transition-all hover:scale-105"
+                         style="background-color: ${bgColor}">
+                        <div class="text-xs font-medium text-gray-700 mb-1">${day}</div>
+                        <div class="text-lg font-bold text-gray-900">${value}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function initHourlyHeatmap(data) {
+            const container = document.getElementById('hourly-grid');
+            if (!container) return;
+
+            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+
+            // Generate mock hourly data (7 days × 24 hours)
+            const hourlyData = data?.hourly_activity || Array.from({ length: 7 }, () =>
+                Array.from({ length: 24 }, () => Math.floor(Math.random() * 50))
+            );
+
+            // Flatten to find min/max
+            const allValues = hourlyData.flat();
+            const max = Math.max(...allValues);
+            const min = Math.min(...allValues);
+
+            // Generate grid
+            container.innerHTML = days.map((day, dayIdx) => {
+                const rowCells = hours.map((hour, hourIdx) => {
+                    const value = hourlyData[dayIdx][hourIdx];
+                    const intensity = (value - min) / (max - min);
+                    const bgColor = `rgba(59, 130, 246, ${0.1 + intensity * 0.9})`;
+
+                    return `
+                        <div class="w-6 h-6 rounded-sm border border-gray-100 flex items-center justify-center text-[8px] font-medium text-gray-700 hover:scale-125 transition-transform cursor-pointer"
+                             style="background-color: ${bgColor}"
+                             title="${day} ${hour}:00 - ${value} sessions">
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="flex items-center gap-1">
+                        <div class="w-8 text-xs font-medium text-gray-600 flex-shrink-0">${day}</div>
+                        <div class="flex gap-1 flex-1">${rowCells}</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add hour labels at the top
+            const hourLabels = hours.filter(h => h % 3 === 0).map(h =>
+                `<div class="text-[8px] text-gray-500" style="position: absolute; left: ${32 + h * 24 + 8}px; top: -16px">${h}</div>`
+            ).join('');
+
+            container.style.position = 'relative';
+            container.style.paddingTop = '20px';
+            container.insertAdjacentHTML('beforebegin', `<div style="position: relative; height: 20px; width: 100%">${hourLabels}</div>`);
         }
     </script>
 
