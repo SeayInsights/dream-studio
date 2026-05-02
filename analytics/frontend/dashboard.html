@@ -587,6 +587,58 @@
             costOverTime: null
         };
 
+        // Real-time update state
+        let lastChartUpdate = 0;
+        const CHART_UPDATE_THROTTLE = 1000; // 1 second throttle
+        const MAX_TIMELINE_POINTS = 100; // Sliding window limit
+
+        // Animate number change (count-up effect)
+        function animateNumber(element, targetValue, prefix = '', suffix = '') {
+            const currentText = element.textContent.replace(prefix, '').replace(suffix, '');
+            const currentValue = parseFloat(currentText) || 0;
+            const diff = targetValue - currentValue;
+            const duration = 500; // Animation duration in ms
+            const steps = 20;
+            const stepValue = diff / steps;
+            const stepDuration = duration / steps;
+
+            let currentStep = 0;
+
+            const interval = setInterval(() => {
+                currentStep++;
+                const newValue = currentValue + (stepValue * currentStep);
+
+                if (currentStep >= steps) {
+                    clearInterval(interval);
+                    element.textContent = prefix + targetValue.toLocaleString() + suffix;
+                } else {
+                    element.textContent = prefix + Math.round(newValue).toLocaleString() + suffix;
+                }
+            }, stepDuration);
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${
+                type === 'error' ? 'bg-red-500' :
+                type === 'warning' ? 'bg-yellow-500' :
+                type === 'success' ? 'bg-green-500' :
+                'bg-blue-500'
+            }`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease-out';
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 5000);
+        }
+
         // API Base URL
         const API_BASE = '/api/v1/metrics';
 
@@ -983,9 +1035,141 @@
                 };
 
                 ws.onmessage = function(event) {
-                    // Message handling will be implemented in T008
                     console.log('[WebSocket] Received message:', event.data);
+
+                    try {
+                        const message = JSON.parse(event.data);
+
+                        // Route message by type
+                        if (message.type === 'metric_update') {
+                            handleMetricUpdate(message);
+                        } else {
+                            console.warn('[WebSocket] Unknown message type:', message.type);
+                        }
+                    } catch (error) {
+                        console.error('[WebSocket] Failed to parse message:', error);
+                    }
                 };
+
+                // Handle metric updates from WebSocket
+                function handleMetricUpdate(message) {
+                    const { metric, data } = message;
+
+                    switch (metric) {
+                        case 'sessions':
+                            handleSessionUpdate(data);
+                            break;
+                        case 'tokens':
+                            handleTokenUpdate(data);
+                            break;
+                        case 'alerts':
+                            handleAlertUpdate(data);
+                            break;
+                        case 'sla':
+                            handleSLAUpdate(data);
+                            break;
+                        default:
+                            console.warn('[WebSocket] Unknown metric type:', metric);
+                    }
+                }
+
+                // Handle session metric updates
+                function handleSessionUpdate(data) {
+                    // Update session count ticker
+                    if (data.total_sessions !== undefined) {
+                        const element = document.getElementById('kpi-total-sessions');
+                        if (element) {
+                            animateNumber(element, data.total_sessions);
+                        }
+                    }
+
+                    // Update success rate if provided
+                    if (data.success_rate !== undefined) {
+                        const element = document.getElementById('kpi-success-rate');
+                        if (element) {
+                            const percentage = (data.success_rate * 100).toFixed(1);
+                            element.textContent = percentage + '%';
+                        }
+                    }
+
+                    // Update session timeline chart (throttled)
+                    if (data.timestamp && data.count !== undefined) {
+                        updateSessionTimelineChart(data.timestamp, data.count);
+                    }
+                }
+
+                // Handle token/cost metric updates
+                function handleTokenUpdate(data) {
+                    // Update cost ticker
+                    if (data.total_cost !== undefined) {
+                        const element = document.getElementById('kpi-total-cost');
+                        if (element) {
+                            const cost = parseFloat(data.total_cost);
+                            animateNumber(element, cost, '$', '');
+                        }
+                    }
+                }
+
+                // Handle alert metric updates
+                function handleAlertUpdate(data) {
+                    // Show toast notification
+                    if (data.message) {
+                        const type = data.severity === 'critical' ? 'error' :
+                                    data.severity === 'warning' ? 'warning' :
+                                    'info';
+                        showToast(data.message, type);
+                    }
+
+                    // Update active alerts count
+                    if (data.active_count !== undefined) {
+                        const element = document.getElementById('kpi-active-alerts');
+                        if (element) {
+                            element.textContent = data.active_count;
+                        }
+                    }
+                }
+
+                // Handle SLA metric updates
+                function handleSLAUpdate(data) {
+                    // Future: Update SLA indicators when implemented
+                    console.log('[WebSocket] SLA update:', data);
+                }
+
+                // Update session timeline chart with throttling
+                function updateSessionTimelineChart(timestamp, count) {
+                    const now = Date.now();
+
+                    // Throttle updates to max 1 per second
+                    if (now - lastChartUpdate < CHART_UPDATE_THROTTLE) {
+                        return;
+                    }
+                    lastChartUpdate = now;
+
+                    // Only update if chart exists
+                    if (!charts.sessionTimeline) {
+                        return;
+                    }
+
+                    const chart = charts.sessionTimeline;
+                    const formattedTime = new Date(timestamp).toLocaleTimeString('en-US', {
+                        hour12: false,
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+
+                    // Add new data point
+                    chart.data.labels.push(formattedTime);
+                    chart.data.datasets[0].data.push(count);
+
+                    // Implement sliding window (max 100 points)
+                    if (chart.data.labels.length > MAX_TIMELINE_POINTS) {
+                        chart.data.labels.shift();
+                        chart.data.datasets[0].data.shift();
+                    }
+
+                    // Update chart
+                    chart.update('none'); // 'none' animation mode for better performance
+                }
 
                 ws.onerror = function(error) {
                     console.error('[WebSocket] Error:', error);
