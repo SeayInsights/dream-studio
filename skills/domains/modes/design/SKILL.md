@@ -3,6 +3,84 @@
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
+## Step 1: Discovery (MANDATORY) {#discovery}
+
+**Purpose:** Translate user intent into structured design system parameters before any design work begins.
+
+**This step CANNOT be skipped.** Discovery establishes the design foundation and prevents misalignment. Every design request must begin with discovery.
+
+### Three Input Modes
+
+#### Mode A: I-Lang Format (Structured Input)
+User provides structured YAML/JSON with dimension values from the discovery protocol.
+
+**Example:**
+```yaml
+palette: monochrome
+mood: professional
+density: spacious
+typography: sans-serif
+layout: centered
+responsive: mobile-first
+exclude: [animations, gradients]
+```
+
+**Process:**
+1. Parse input against `discovery-protocol.yml` schema
+2. Validate dimension values (reject invalid options)
+3. Flag missing critical dimensions: `mood`, `density`, `layout`
+4. Proceed to design system selection with validated intent
+
+#### Mode B: Natural Language (Prose Description)
+User describes intent in natural language without structure.
+
+**Example:**
+"I want a clean, professional design with lots of space and no animations. Should work well on mobile."
+
+**Process:**
+1. Extract phrases and map to dimensions using `nlp_mappings` from `discovery-protocol.yml`
+   - "clean, professional" → `mood: professional`, `typography: sans-serif`
+   - "lots of space" → `density: spacious`
+   - "no animations" → `exclude: [animations]`
+   - "work well on mobile" → `responsive: mobile-first`
+2. Document mapped dimensions
+3. If critical dimensions missing (`mood`, `density`, `layout`), switch to Mode C for targeted questions
+4. Proceed to design system selection
+
+#### Mode C: Interactive Prompting (Minimal Input)
+User gives minimal input or Mode B extraction yields insufficient data.
+
+**Process:**
+1. Ask targeted questions for missing critical dimensions
+2. Minimum viable set (in priority order):
+   - **Mood:** "What feeling should this design convey?" (professional / playful / minimal / bold / elegant / modern)
+   - **Density:** "How much information needs to fit?" (spacious / balanced / compact / data-heavy)
+   - **Layout:** "What's the main content structure?" (centered / sidebar / full-width / multi-column / asymmetric)
+3. Optional follow-up for refinement:
+   - **Palette:** "Any color preference?" (monochrome / vibrant / warm / cool / pastel / high-contrast)
+   - **Accent:** "Primary accent color?" (blue / green / purple / red / orange / none)
+4. Document responses as structured intent
+5. Proceed to design system selection
+
+### Discovery Output
+
+At the end of discovery, you must have:
+- **Minimum:** `mood`, `density`, `layout`
+- **Recommended:** All 8 dimensions defined or explicitly defaulted
+- **Format:** Structured dimension map (YAML/JSON or documented prose)
+
+### Reference
+
+All dimension definitions, valid values, and NLP mappings are defined in `discovery-protocol.yml`. Consult this file when:
+- Validating I-Lang input
+- Mapping natural language phrases
+- Designing interactive prompts
+- Adding new dimension values
+
+**Discovery checkpoint:** Once intent is captured, proceed to Design System Selection.
+
+---
+
 ## Trigger
 `design art:`, `design poster:`, `canvas:`, `design gen:`, `generative art:`, `algorithmic art:`, `apply theme:`, `theme:`, `brand:`, `apply brand:`, `ad creative:`, `ad copy:`, `generate ads:`
 
