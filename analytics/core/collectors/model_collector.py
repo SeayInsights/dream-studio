@@ -97,16 +97,21 @@ class ModelCollector:
 
             # Performance ranking (higher is better)
             # Score = success_rate * (1 / avg_exec_time) * distribution_weight
-            performance_rank = []
+            performance_scores = []
             for model, data in by_model.items():
                 if data["avg_exec_time_s"] > 0:
                     # Speed score (inverted time)
                     speed_score = 1 / data["avg_exec_time_s"]
                     # Weighted by success rate and usage
                     score = (data["success_rate"] / 100) * speed_score * (distribution.get(model, 0) / 100)
-                    performance_rank.append((model, round(score, 4)))
+                    performance_scores.append((model, round(score, 4)))
 
-            performance_rank.sort(key=lambda x: x[1], reverse=True)
+            performance_scores.sort(key=lambda x: x[1], reverse=True)
+            # Extract just model names for API
+            performance_rank = [model for model, score in performance_scores]
+
+            # Extract success rates for API
+            success_rates = {model: data["success_rate"] for model, data in by_model.items()}
 
             # Token efficiency (tokens per second)
             token_efficiency = {}
@@ -116,8 +121,10 @@ class ModelCollector:
                     token_efficiency[model] = round(tokens_per_second, 1)
 
             return {
+                "total_invocations": total_invocations,
                 "by_model": by_model,
-                "distribution": distribution,
+                "distribution_pct": distribution,
+                "success_rates": success_rates,
                 "performance_rank": performance_rank,
                 "token_efficiency": token_efficiency
             }

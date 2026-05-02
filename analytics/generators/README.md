@@ -51,7 +51,7 @@ Generates a single, self-contained HTML file with:
 ## Requirements
 
 - Python 3.8+
-- dream-studio analytics data in `~/.dream-studio/studio.db`
+- dream-studio analytics data in `~/.dream-studio/state/studio.db`
 - Internet connection (for Chart.js CDN on first load)
 
 ## Architecture

@@ -28,7 +28,7 @@ router = APIRouter()
 def get_db_path() -> str:
     """Get database path - could be from env or config"""
     import os
-    return os.path.expanduser("~/.dream-studio/studio.db")
+    return os.path.expanduser("~/.dream-studio/state/studio.db")
 
 
 @router.get("/", response_model=AllMetricsResponse)

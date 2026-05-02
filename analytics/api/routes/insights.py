@@ -34,7 +34,7 @@ router = APIRouter()
 def get_db_path() -> str:
     """Get database path"""
     import os
-    return os.path.expanduser("~/.dream-studio/studio.db")
+    return os.path.expanduser("~/.dream-studio/state/studio.db")
 
 
 def collect_metrics(days: int = 30):

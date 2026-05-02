@@ -123,7 +123,7 @@ class TrainResponse(BaseModel):
 
 def get_db_path() -> str:
     """Get database path"""
-    return os.path.expanduser("~/.dream-studio/studio.db")
+    return os.path.expanduser("~/.dream-studio/state/studio.db")
 
 
 def collect_time_series_data(metric: str, days: int = 30):
