@@ -58,6 +58,16 @@ async def get_all_metrics(
         lessons_data = lesson_collector.collect(days=days)
         workflows_data = workflow_collector.collect(days=days)
 
+        # Map workflow collector fields to Pydantic model fields
+        workflows_mapped = {
+            "total_workflows": workflows_data["total_runs"],
+            "by_workflow": workflows_data["by_workflow"],
+            "overall_success_rate": workflows_data["success_rate"],
+            "by_status": workflows_data["by_status"],
+            "avg_completion_time_minutes": workflows_data["avg_completion_time_minutes"],
+            "total_nodes": workflows_data["total_nodes_executed"]
+        }
+
         # Build response
         return AllMetricsResponse(
             sessions=SessionMetrics(**sessions_data),
@@ -65,7 +75,7 @@ async def get_all_metrics(
             tokens=TokenMetrics(**tokens_data),
             models=ModelMetrics(**models_data),
             lessons=LessonMetrics(**lessons_data),
-            workflows=WorkflowMetrics(**workflows_data),
+            workflows=WorkflowMetrics(**workflows_mapped),
             generated_at=datetime.now(),
             query_params=MetricsQuery(days=days, project=project, skill=skill, model=model)
         )
@@ -129,6 +139,7 @@ async def get_lesson_metrics(days: int = Query(default=30, ge=1, le=365)):
         db_path = get_db_path()
         collector = LessonCollector(db_path)
         data = collector.collect(days=days)
+        # Collector returns correct field names - no mapping needed
         return LessonMetrics(**data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting lesson metrics: {str(e)}")
@@ -141,6 +152,17 @@ async def get_workflow_metrics(days: int = Query(default=30, ge=1, le=365)):
         db_path = get_db_path()
         collector = WorkflowCollector(db_path)
         data = collector.collect(days=days)
-        return WorkflowMetrics(**data)
+
+        # Map WorkflowCollector field names to WorkflowMetrics field names
+        mapped_data = {
+            "total_workflows": data["total_runs"],
+            "by_workflow": data["by_workflow"],
+            "overall_success_rate": data["success_rate"],
+            "by_status": data["by_status"],
+            "avg_completion_time_minutes": data["avg_completion_time_minutes"],
+            "total_nodes": data["total_nodes_executed"]
+        }
+
+        return WorkflowMetrics(**mapped_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting workflow metrics: {str(e)}")

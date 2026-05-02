@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Transform Tests</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test-case { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .pass { background-color: #d4edda; }
+        .fail { background-color: #f8d7da; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Frontend Data Transform Tests</h1>
+    <div id="results"></div>
+
+    <script>
+        // Copy the transform functions from dashboard.html
+        function transformWorkflowData(apiData) {
+            if (!apiData) return null;
+
+            const byWorkflow = apiData.by_workflow || {};
+            const byStatus = apiData.by_status || {};
+
+            // Handle both field name variants
+            const totalWorkflowCount = apiData.total_workflows || apiData.total_runs || 0;
+            const overallSuccessRate = apiData.overall_success_rate || apiData.success_rate || 0;
+
+            // Transform by_workflow dict to success_rates array
+            const successRates = Object.entries(byWorkflow).map(([workflowName, stats]) => ({
+                workflow_name: workflowName,
+                success_rate: (stats.success_rate || 0) / 100,
+                total_runs: stats.count || 0
+            }));
+
+            // Create summary object
+            const summary = {
+                total_workflows: Object.keys(byWorkflow).length,
+                active_workflows: byStatus.running || 0,
+                avg_success_rate: overallSuccessRate / 100
+            };
+
+            // Create status_board with counts
+            const statusBoard = {
+                running: [],
+                completed: [],
+                failed: [],
+                _counts: {
+                    running: byStatus.running || 0,
+                    completed: byStatus.completed || 0,
+                    failed: byStatus.failed || 0
+                }
+            };
+
+            return { summary, status_board: statusBoard, success_rates: successRates };
+        }
+
+        function transformLessonData(apiData) {
+            if (!apiData) return null;
+
+            const bySource = apiData.by_source || {};
+            const recentLessons = apiData.recent_lessons || [];
+
+            // Map string confidence to numeric
+            const confidenceMap = { high: 0.9, medium: 0.6, low: 0.3 };
+
+            // Transform recent_lessons
+            const recent = recentLessons.map(lesson => ({
+                lesson: lesson.title || 'Untitled Lesson',
+                lesson_text: lesson.title || 'Untitled Lesson',
+                confidence: confidenceMap[lesson.confidence] || 0.5,
+                source: lesson.source || 'Unknown',
+                timestamp: lesson.created_at,
+                is_promoted: lesson.status === 'promoted',
+                promoted: lesson.status === 'promoted'
+            }));
+
+            // Transform by_source dict to array
+            const bySourceArray = Object.entries(bySource).map(([source, count]) => {
+                const total = Object.values(bySource).reduce((sum, c) => sum + c, 0);
+                return {
+                    source: source,
+                    count: count,
+                    percentage: total > 0 ? (count / total * 100).toFixed(1) : 0
+                };
+            });
+
+            // Create summary
+            const summary = {
+                total_lessons: apiData.total_lessons || 0,
+                promoted_lessons: apiData.promoted_count || 0,
+                promoted: apiData.promoted_count || 0
+            };
+
+            const timeline = [];
+
+            return { summary, recent, by_source: bySourceArray, timeline };
+        }
+
+        // Test cases
+        const tests = [
+            {
+                name: 'Workflow - Collector Output Format',
+                input: {
+                    total_runs: 50,
+                    by_workflow: {
+                        "core:build": { count: 20, success_rate: 85.5, avg_duration_minutes: 12.3 },
+                        "core:plan": { count: 15, success_rate: 92.0, avg_duration_minutes: 5.2 }
+                    },
+                    by_status: { running: 2, completed: 45, failed: 3 },
+                    success_rate: 88.7,
+                    avg_completion_time_minutes: 9.2,
+                    total_nodes_executed: 150
+                },
+                transform: transformWorkflowData,
+                assertions: (result) => {
+                    const checks = [];
+                    checks.push(['summary.total_workflows', result.summary.total_workflows === 2]);
+                    checks.push(['summary.active_workflows', result.summary.active_workflows === 2]);
+                    checks.push(['summary.avg_success_rate', Math.abs(result.summary.avg_success_rate - 0.887) < 0.001]);
+                    checks.push(['success_rates length', result.success_rates.length === 2]);
+                    checks.push(['success_rates[0].success_rate', Math.abs(result.success_rates[0].success_rate - 0.855) < 0.001]);
+                    checks.push(['status_board._counts.running', result.status_board._counts.running === 2]);
+                    checks.push(['status_board._counts.completed', result.status_board._counts.completed === 45]);
+                    checks.push(['status_board._counts.failed', result.status_board._counts.failed === 3]);
+                    return checks;
+                }
+            },
+            {
+                name: 'Lesson - Collector Output Format',
+                input: {
+                    total_lessons: 25,
+                    by_source: { "debug": 10, "build": 8, "review": 7 },
+                    by_status: { "draft": 20, "promoted": 5 },
+                    by_confidence: { "high": 5, "medium": 12, "low": 8 },
+                    capture_rate: 2.5,
+                    promoted_count: 5,
+                    recent_lessons: [
+                        { lesson_id: 1, source: "debug", status: "promoted", confidence: "high", title: "Always check logs", created_at: "2026-05-02T10:00:00Z" },
+                        { lesson_id: 2, source: "build", status: "draft", confidence: "medium", title: "Use caching", created_at: "2026-05-02T09:00:00Z" }
+                    ]
+                },
+                transform: transformLessonData,
+                assertions: (result) => {
+                    const checks = [];
+                    checks.push(['summary.total_lessons', result.summary.total_lessons === 25]);
+                    checks.push(['summary.promoted', result.summary.promoted === 5]);
+                    checks.push(['by_source length', result.by_source.length === 3]);
+                    checks.push(['recent length', result.recent.length === 2]);
+                    checks.push(['recent[0].confidence', result.recent[0].confidence === 0.9]); // high -> 0.9
+                    checks.push(['recent[1].confidence', result.recent[1].confidence === 0.6]); // medium -> 0.6
+                    checks.push(['recent[0].is_promoted', result.recent[0].is_promoted === true]);
+                    checks.push(['recent[1].is_promoted', result.recent[1].is_promoted === false]);
+                    return checks;
+                }
+            },
+            {
+                name: 'Workflow - Empty/Missing Fields',
+                input: {
+                    total_runs: 0,
+                    by_workflow: {},
+                    by_status: {},
+                    success_rate: 0
+                },
+                transform: transformWorkflowData,
+                assertions: (result) => {
+                    const checks = [];
+                    checks.push(['summary.total_workflows', result.summary.total_workflows === 0]);
+                    checks.push(['summary.active_workflows', result.summary.active_workflows === 0]);
+                    checks.push(['summary.avg_success_rate', result.summary.avg_success_rate === 0]);
+                    checks.push(['success_rates length', result.success_rates.length === 0]);
+                    return checks;
+                }
+            },
+            {
+                name: 'Lesson - Empty/Missing Fields',
+                input: {
+                    total_lessons: 0,
+                    by_source: {},
+                    promoted_count: 0,
+                    recent_lessons: []
+                },
+                transform: transformLessonData,
+                assertions: (result) => {
+                    const checks = [];
+                    checks.push(['summary.total_lessons', result.summary.total_lessons === 0]);
+                    checks.push(['summary.promoted', result.summary.promoted === 0]);
+                    checks.push(['by_source length', result.by_source.length === 0]);
+                    checks.push(['recent length', result.recent.length === 0]);
+                    return checks;
+                }
+            }
+        ];
+
+        // Run tests
+        const resultsDiv = document.getElementById('results');
+        let totalTests = 0;
+        let passedTests = 0;
+
+        tests.forEach(test => {
+            const result = test.transform(test.input);
+            const checks = test.assertions(result);
+
+            const allPassed = checks.every(([_, pass]) => pass);
+            totalTests++;
+            if (allPassed) passedTests++;
+
+            const testDiv = document.createElement('div');
+            testDiv.className = `test-case ${allPassed ? 'pass' : 'fail'}`;
+            testDiv.innerHTML = `
+                <h3>${allPassed ? '✓' : '✗'} ${test.name}</h3>
+                <details>
+                    <summary>Details (${checks.filter(([_, p]) => p).length}/${checks.length} assertions passed)</summary>
+                    <pre>Input: ${JSON.stringify(test.input, null, 2)}</pre>
+                    <pre>Output: ${JSON.stringify(result, null, 2)}</pre>
+                    <h4>Assertions:</h4>
+                    <ul>
+                        ${checks.map(([name, pass]) => `<li style="color: ${pass ? 'green' : 'red'}">${pass ? '✓' : '✗'} ${name}</li>`).join('')}
+                    </ul>
+                </details>
+            `;
+            resultsDiv.appendChild(testDiv);
+        });
+
+        // Summary
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = `test-case ${passedTests === totalTests ? 'pass' : 'fail'}`;
+        summaryDiv.innerHTML = `<h2>Summary: ${passedTests}/${totalTests} tests passed</h2>`;
+        resultsDiv.insertBefore(summaryDiv, resultsDiv.firstChild);
+    </script>
+</body>
+</html>
