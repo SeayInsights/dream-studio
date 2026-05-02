@@ -1,7 +1,8 @@
 """Metrics API routes"""
+import sqlite3
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
 
 from ..models.metrics import (
     MetricsQuery,
@@ -29,6 +30,52 @@ def get_db_path() -> str:
     """Get database path - could be from env or config"""
     import os
     return os.path.expanduser("~/.dream-studio/state/studio.db")
+
+
+def _build_success_trend(db_path: str, days: int) -> List[Dict[str, Any]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT
+                DATE(invoked_at) as date,
+                COUNT(*) as total,
+                SUM(success) as successes
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ?
+            GROUP BY DATE(invoked_at)
+            ORDER BY date ASC
+        """, (cutoff,)).fetchall()
+        return [
+            {
+                "date": r["date"],
+                "success_rate": round((r["successes"] or 0) / r["total"], 3) if r["total"] else 0
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def _build_skill_heatmap(db_path: str, days: int) -> List[Dict[str, Any]]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT
+                skill_name,
+                CAST(strftime('%H', invoked_at) AS INTEGER) as hour,
+                COUNT(*) as invocations
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ?
+            GROUP BY skill_name, hour
+            ORDER BY skill_name, hour
+        """, (cutoff,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 @router.get("/", response_model=AllMetricsResponse)
@@ -138,8 +185,8 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
             'most_used_skill': most_used_skill,
             'most_used_count': most_used_count,
             'recent_failures': data.get('failures', []),
-            'success_trend': [],  # TODO: Add timeline data
-            'heatmap': []  # TODO: Add heatmap data
+            'success_trend': _build_success_trend(db_path, days),
+            'heatmap': _build_skill_heatmap(db_path, days)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting skill metrics: {str(e)}")

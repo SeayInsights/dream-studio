@@ -485,33 +485,30 @@ async def get_alert_analytics() -> Dict[str, Any]:
             for row in top_triggered_rows
         ]
 
-        # Get resolution time distribution (placeholder - simplified implementation)
-        # In production, this would query actual resolution timestamps
-        # For now, return sample distribution data
-        resolution_times = [
-            {"range": "< 5 min", "count": 0},
-            {"range": "5-15 min", "count": 0},
-            {"range": "15-30 min", "count": 0},
-            {"range": "30-60 min", "count": 0},
-            {"range": "> 60 min", "count": 0}
-        ]
-
-        # Count total alerts in last 30 days for placeholder data
         cursor.execute("""
-            SELECT COUNT(*) as total
+            SELECT
+                (julianday(resolved_at) - julianday(triggered_at)) * 1440 as resolution_minutes
             FROM alert_history
             WHERE triggered_at >= datetime('now', '-30 days')
+              AND resolved_at IS NOT NULL
         """)
-        total_alerts = cursor.fetchone()["total"]
+        resolved_rows = cursor.fetchall()
 
-        # Distribute counts across resolution time ranges (placeholder logic)
-        if total_alerts > 0:
-            # Simple distribution: most resolved quickly, fewer take longer
-            resolution_times[0]["count"] = int(total_alerts * 0.5)
-            resolution_times[1]["count"] = int(total_alerts * 0.3)
-            resolution_times[2]["count"] = int(total_alerts * 0.15)
-            resolution_times[3]["count"] = int(total_alerts * 0.04)
-            resolution_times[4]["count"] = total_alerts - sum(r["count"] for r in resolution_times[:4])
+        buckets = [
+            {"range": "< 5 min", "count": 0, "max": 5},
+            {"range": "5-15 min", "count": 0, "max": 15},
+            {"range": "15-30 min", "count": 0, "max": 30},
+            {"range": "30-60 min", "count": 0, "max": 60},
+            {"range": "> 60 min", "count": 0, "max": float("inf")}
+        ]
+        for row in resolved_rows:
+            minutes = row["resolution_minutes"] or 0
+            for bucket in buckets:
+                if minutes < bucket["max"]:
+                    bucket["count"] += 1
+                    break
+
+        resolution_times = [{"range": b["range"], "count": b["count"]} for b in buckets]
 
         conn.close()
 
