@@ -81,6 +81,28 @@ Before writing or editing any TMDL, DAX, or M-query — complete every item:
 ### .pbip format
 **See:** `domains/powerbi/pbip-format.md` — full file structure, TMDL syntax, JSON schemas, and editing rules
 
+## Power BI Version Detection {#powerbi-versions}
+
+Before using advanced Power BI features, detect the client's Power BI Desktop version using `shared/version-detection.sh`. Use fallbacks for features unavailable in older versions.
+
+### Feature Gates
+
+| Feature | Min Version | Fallback |
+|---------|-------------|----------|
+| Field Parameters | 2.106 (June 2022) | Manual slicer tables |
+| Calculation Groups | 2.87 (Nov 2020) | Duplicate measures |
+| Small Multiples | 2.85 (Sept 2020) | Multiple visuals |
+| Smart Narrative visual | 2.84 (Aug 2020) | Text boxes |
+| Decomposition Tree | 2.69 (May 2019) | Manual drill-down visuals |
+| Q&A visual | 2.68 (Apr 2019) | Standard visuals |
+| Dataflows | 2.67 (Mar 2019) | Power Query in Desktop |
+
+### Usage
+
+Run `shared/version-detection.sh` to check Power BI version. If the detected version is below the minimum for a feature, use the fallback approach.
+
+**Reference:** See [Power BI release history](https://learn.microsoft.com/en-us/power-bi/fundamentals/desktop-latest-update-archive) for complete feature timeline.
+
 ## Power BI Verify
 
 After any build or change, verify in this order:
