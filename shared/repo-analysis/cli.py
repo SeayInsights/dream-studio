@@ -9,11 +9,11 @@ Usage:
 
 import argparse
 import sys
-import json
 from pathlib import Path
 from typing import List
 
 from .analyzer import RepoAnalyzer
+from .formatters import json_formatter, markdown_formatter
 
 
 def parse_args():
@@ -161,60 +161,6 @@ def filter_patterns(report: dict, pattern_filter: List[str]) -> dict:
     return report
 
 
-def format_markdown_report(report: dict) -> str:
-    """
-    Convert JSON report to Markdown format
-
-    Args:
-        report: Analysis report dictionary
-
-    Returns:
-        Markdown-formatted string
-    """
-    lines = []
-    lines.append("# Repository Analysis Report\n")
-
-    # Summary
-    lines.append("## Summary\n")
-    lines.append(f"- **Total SKILL.md files analyzed**: {report['summary']['total_skills_analyzed']}")
-    lines.append(f"- **Repositories analyzed**: {', '.join(report['summary']['repos_analyzed'])}")
-    lines.append(f"- **Patterns found**: {', '.join(report['summary']['patterns_found'])}\n")
-
-    # Repository Structures
-    lines.append("## Repository Structures\n")
-    for repo_name, repo_data in report['repo_structures'].items():
-        lines.append(f"### {repo_name}\n")
-        lines.append(f"- Total skills: {repo_data['total_skills']}")
-        lines.append(f"- Skills with references: {repo_data['skills_with_references']}")
-        lines.append(f"- Has CLAUDE.md: {repo_data['has_claude_md']}")
-        lines.append(f"- Has AGENTS.md: {repo_data['has_agents_md']}")
-        lines.append(f"- Has skill standards: {repo_data['has_skill_standards']}")
-        lines.append(f"- Has PR template: {repo_data['has_pr_template']}")
-        lines.append(f"- Has validation CI: {repo_data['has_validation_ci']}\n")
-
-    # Pattern Adoption Rates
-    lines.append("## Pattern Adoption Rates\n")
-    if 'pattern_adoption_rate' in report['statistics']:
-        for repo_name, rates in report['statistics']['pattern_adoption_rate'].items():
-            lines.append(f"### {repo_name}\n")
-            for pattern, rate in rates.items():
-                lines.append(f"- {pattern}: {rate}")
-            lines.append("")
-
-    # Patterns Found
-    lines.append("## Patterns Detected\n")
-    for pattern_name, instances in report['patterns'].items():
-        lines.append(f"### {pattern_name.replace('_', ' ').title()}\n")
-        lines.append(f"Found {len(instances)} instances:\n")
-        for instance in instances[:5]:  # Show first 5 instances
-            lines.append(f"- **{instance['repo']}**: {instance['file']}")
-        if len(instances) > 5:
-            lines.append(f"- _(and {len(instances) - 5} more)_")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
 def main():
     """Main CLI entry point"""
     args = parse_args()
@@ -249,12 +195,12 @@ def main():
 
     # Write output
     if args.format == 'json':
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(report, f, indent=2)
+        output_content = json_formatter.format_report(report)
     else:  # markdown
-        markdown_content = format_markdown_report(report)
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(markdown_content)
+        output_content = markdown_formatter.format_report(report)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(output_content)
 
     if args.verbose:
         print(f"\n[CLI] Analysis complete! Report written to: {output_path}")
