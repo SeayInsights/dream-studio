@@ -1638,19 +1638,17 @@
 
         // Update summary cards
         function updateSkillsSummary(data) {
-            if (data.summary) {
-                const mostUsed = data.most_used_skill || '--';
-                const mostUsedCount = data.most_used_count || 0;
-                const avgDuration = data.avg_duration_minutes || 0;
-                const successRate = data.overall_success_rate || 0;
-                const totalInvocations = data.total_invocations || 0;
+            const mostUsed = data.most_used_skill || '--';
+            const mostUsedCount = data.most_used_count || 0;
+            const avgDuration = data.avg_duration_minutes || 0;
+            const successRate = data.overall_success_rate || 0;
+            const totalInvocations = data.total_invocations || 0;
 
-                document.getElementById('skills-most-used').textContent = mostUsed;
-                document.getElementById('skills-most-used-count').textContent = `${mostUsedCount.toLocaleString()} invocations`;
-                document.getElementById('skills-avg-duration').textContent = `${avgDuration.toFixed(1)}m`;
-                document.getElementById('skills-success-rate').textContent = `${(successRate * 100).toFixed(1)}%`;
-                document.getElementById('skills-total-invocations').textContent = `${totalInvocations.toLocaleString()} total invocations`;
-            }
+            document.getElementById('skills-most-used').textContent = mostUsed;
+            document.getElementById('skills-most-used-count').textContent = `${mostUsedCount.toLocaleString()} invocations`;
+            document.getElementById('skills-avg-duration').textContent = `${avgDuration.toFixed(1)}m`;
+            document.getElementById('skills-success-rate').textContent = `${(successRate * 100).toFixed(1)}%`;
+            document.getElementById('skills-total-invocations').textContent = `${totalInvocations.toLocaleString()} total invocations`;
         }
 
         // Populate skills leaderboard table
