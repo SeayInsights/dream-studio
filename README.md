@@ -938,21 +938,68 @@ What fires automatically vs what requires a manual command:
 
 dream-studio includes a built-in analytics pipeline that harvests operational data, computes trends, and renders a standalone HTML dashboard.
 
+### Quick start
+
 ```bash
-make analytics                              # global analytics (all projects)
-make analytics PROJECT=/path/to/project     # project-scoped with git metrics
+make dashboard    # bootstrap DB + launch server + open browser (one command)
 ```
 
-Global mode runs the full pipeline and outputs to `~/.dream-studio/analytics/dashboard.html`. Project-scoped mode adds git metrics and outputs to `<project>/.dream-studio/analytics/dashboard.html`.
+This is the recommended way to use analytics. On first run it automatically:
+1. Creates the SQLite database (`~/.dream-studio/state/studio.db`) and runs all migrations
+2. Harvests existing data from token logs, pulse reports, git repos, and lessons
+3. Starts the FastAPI analytics server at `http://localhost:8000`
+4. Opens the real-time dashboard at `http://localhost:8000/dashboard` in your browser
 
-**What it tracks:**
+On subsequent runs, if the server is already running it just opens the browser. Stop the server with `Ctrl+C`.
+
+### Interactive setup
+
+For a guided walkthrough with health checks and gates at each step:
+
+```
+workflow: studio-analytics          # interactive — pauses at each phase for confirmation
+workflow: studio-analytics auto     # non-interactive — runs everything end-to-end
+```
+
+The workflow shows you what data sources exist, how many rows were harvested, and lets you review before launching.
+
+### What you get
+
+Once the server is running:
+
+| URL | What |
+|-----|------|
+| `http://localhost:8000/dashboard` | Real-time dashboard with WebSocket streaming |
+| `http://localhost:8000/api/docs` | Interactive API documentation (Swagger) |
+| `ws://localhost:8000/api/v1/stream/metrics` | WebSocket real-time metric stream |
+| `http://localhost:8000/api/v1/` | REST API for metrics, reports, exports |
+
+### First-time setup
+
+Analytics is automatically bootstrapped when you run `make setup` — the database is created and any existing data (token logs, pulse reports, lessons) is harvested. You don't need to do anything extra before running `make dashboard`.
+
+### What it tracks
+
 - **Pulse health trend** — health score over time with linear regression
 - **Skill velocity** — invocation counts and success rates per skill per week
 - **Spec conversion rate** — how many planning specs result in actual build commits
 - **Orphan detection** — specs with no build commit within 14 days
-- **Commit velocity** (project mode) — commits per week over the last 12 weeks
-- **Branch count** (project mode) — active local branches
-- **Operational snapshots** — CI status, open PRs, stale branches per project (SQLite-backed)
+- **Commit velocity** — commits per week over the last 12 weeks
+- **Operational snapshots** — CI status, open PRs, stale branches per project
+- **ML insights** — anomaly detection, pattern recognition
+- **Alerts & SLA** — threshold monitoring with real-time notifications
+
+### Data sources
+
+The analytics pipeline harvests from these sources (all optional — works with whatever exists):
+
+| Source | Location | What it provides |
+|--------|----------|-----------------|
+| Token log | `~/.dream-studio/meta/token-log.md` | Session durations, model usage, cost estimates |
+| Pulse reports | `~/.dream-studio/meta/pulse-*.md` | Health scores, CI status, stale branches |
+| Lessons | `~/.dream-studio/meta/lessons/*.md` | Lesson counts and themes |
+| Handoffs | `.sessions/*/handoff-*.json` | Session handoff history |
+| Git repos | `~/builds/*/.git` | Commit velocity, branch counts |
 
 ---
 
@@ -986,8 +1033,9 @@ make lint        # flake8
 make fmt         # black --check
 make security    # pip-audit for known vulnerabilities
 make analytics   # harvest data + render analytics dashboard
+make dashboard   # bootstrap + render + open dashboard in browser
 make adapters    # generate IDE adapter files
-make setup       # first-time project setup
+make setup       # first-time project setup (includes analytics bootstrap)
 ```
 
 Bugs and security issues: see [SECURITY.md](SECURITY.md).

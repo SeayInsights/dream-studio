@@ -216,6 +216,52 @@ def _repo_slug() -> str:
     return slug
 
 
+def step_analytics_bootstrap() -> StepResult:
+    """FR-S05: Initialize analytics database and harvest existing data."""
+    name = "Analytics DB bootstrap"
+    try:
+        import importlib
+        hooks_dir = REPO_ROOT / "hooks"
+        sys.path.insert(0, str(hooks_dir))
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+        lib_paths = importlib.import_module("lib.paths")
+        studio_db = importlib.import_module("lib.studio_db")
+
+        # Create DB + run migrations (idempotent)
+        conn = studio_db._connect()
+        version = conn.execute(
+            "SELECT MAX(version) FROM _schema_version"
+        ).fetchone()[0] or 0
+        conn.close()
+
+        # Harvest existing pulse data
+        harvested = 0
+        try:
+            backfill_pulse = importlib.import_module("ds_analytics.backfill_pulse")
+            harvested += backfill_pulse.backfill()
+        except Exception:
+            pass
+
+        # Harvest token log if present
+        token_log = lib_paths.meta_dir() / "token-log.md"
+        if token_log.is_file():
+            try:
+                bts = importlib.import_module("backfill_token_sessions")
+                result = bts.backfill_token_usage()
+                harvested += result.get("inserted", 0)
+            except Exception:
+                pass
+
+        detail = f"schema v{version}"
+        if harvested:
+            detail += f", {harvested} rows harvested"
+
+        return StepResult(name, True, detail)
+    except Exception as exc:  # noqa: BLE001
+        return StepResult(name, False, str(exc))
+
+
 def step_memory_init() -> StepResult:
     """FR-S04: Create ~/.claude/projects/<slug>/memory/ and seed MEMORY.md."""
     name = "Memory dir init"
@@ -250,6 +296,7 @@ def main() -> int:
         step_venv_and_deps,
         step_settings_merge,
         step_memory_init,
+        step_analytics_bootstrap,
     ]
 
     results: list[StepResult] = []

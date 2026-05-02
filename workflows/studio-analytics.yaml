@@ -1,0 +1,153 @@
+name: studio-analytics
+description: >
+  Interactive analytics dashboard setup and launch.
+  Walks the user through DB initialization, data harvesting, and launches
+  the real-time analytics server at http://localhost:8000/dashboard.
+  Supports two modes:
+    - Guided (default): interactive with gates at each phase
+    - Auto: "workflow: studio-analytics auto" — runs everything without stopping
+  For daily use without the workflow, run: make dashboard
+version: 1
+on_failure: abort
+
+gates:
+  post-healthcheck:
+    type: pause
+    prompt: "Health check complete. Review data sources above — proceed with setup?"
+  post-harvest:
+    type: pause
+    prompt: "Data harvest complete. Review the summary above — launch the dashboard now?"
+
+nodes:
+
+  # ── PHASE 0: MODE DETECTION ───────────────────────────────────────────
+  - id: mode-detect
+    command: |
+      MISSION: Determine whether to run in guided or auto mode.
+
+      Check the workflow invocation arguments:
+      - If the user included "auto" or "just do it" → set mode to AUTO
+      - Otherwise → set mode to GUIDED
+
+      In AUTO mode: skip all gates, run everything end-to-end.
+      In GUIDED mode: pause at each gate for user confirmation.
+
+      Report the detected mode.
+
+      End with: VERDICT: mode detected — <GUIDED|AUTO>
+    model: haiku
+    context: inherit
+    timeout_seconds: 30
+
+  # ── PHASE 1: HEALTH CHECK ────────────────────────────────────────────
+  - id: healthcheck
+    depends_on: [mode-detect]
+    gate: post-healthcheck
+    command: |
+      MISSION: Check the current state of analytics infrastructure and data sources.
+
+      ## Step 1 — Database status
+      Check if ~/.dream-studio/state/studio.db exists.
+      If it exists, report:
+        - File size
+        - Schema version (query: SELECT MAX(version) FROM _schema_version)
+        - Row counts for key tables: raw_sessions, raw_skill_telemetry, raw_token_usage, raw_operational_snapshots
+      If it does not exist: report "No database — will be created"
+
+      ## Step 2 — Available data sources
+      Scan for existing data that can be harvested:
+
+      | Source | Location | Status |
+      |--------|----------|--------|
+      | Token log | ~/.dream-studio/meta/token-log.md | FOUND (N lines) / MISSING |
+      | Pulse reports | ~/.dream-studio/meta/pulse-*.md | FOUND (N files) / MISSING |
+      | Lessons | ~/.dream-studio/meta/lessons/*.md | FOUND (N files) / MISSING |
+      | Handoffs | .sessions/*/handoff-*.json | FOUND (N files) / MISSING |
+      | Git repos | ~/builds/*/.git | FOUND (N repos) / MISSING |
+
+      ## Step 3 — Server status
+      Check if port 8000 is already in use (something may already be running).
+      If so, note that the existing server will be reused.
+
+      End with: VERDICT: healthcheck complete — DB: <EXISTS|MISSING>, sources: <N found>
+
+      NOTE: If mode is AUTO, this gate should be skipped — report results and continue.
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  # ── PHASE 2: BOOTSTRAP ───────────────────────────────────────────────
+  - id: bootstrap
+    depends_on: [healthcheck]
+    command: |
+      MISSION: Create the analytics database and run all migrations.
+
+      Run this Python snippet from the dream-studio repo root:
+
+        py -3.12 -c "import sys; sys.path.insert(0,'hooks'); from lib.studio_db import _connect; conn = _connect(); v = conn.execute('SELECT MAX(version) FROM _schema_version').fetchone()[0]; t = conn.execute(\"SELECT COUNT(*) FROM sqlite_master WHERE type='table'\").fetchone()[0]; conn.close(); print(f'DB ready: schema v{v}, {t} tables')"
+
+      Report the schema version and table count.
+
+      End with: VERDICT: bootstrap complete — schema v<N>, <N> tables
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  # ── PHASE 3: HARVEST ──────────────────────────────────────────────────
+  - id: harvest
+    depends_on: [bootstrap]
+    gate: post-harvest
+    command: |
+      MISSION: Harvest all existing data into the analytics database.
+
+      Run from dream-studio repo root. Execute each backfill in sequence:
+
+      1. Pulse backfill:
+         py -3.12 -c "import sys; sys.path.insert(0,'hooks'); sys.path.insert(0,'scripts'); from ds_analytics.backfill_pulse import backfill; print(f'Pulse: {backfill()} snapshots')"
+
+      2. Token backfill (only if ~/.dream-studio/meta/token-log.md exists):
+         py -3.12 scripts/backfill_token_sessions.py --sessions
+
+      3. Metadata migration (handoffs, lessons, sentinels, specs):
+         py -3.12 scripts/migrate_to_db.py
+
+      After all three, query the database for a summary:
+         py -3.12 -c "import sys, sqlite3; sys.path.insert(0,'hooks'); from lib import paths; conn = sqlite3.connect(str(paths.state_dir() / 'studio.db')); [print(f'  {r[0]}: {r[1]} rows') for r in conn.execute(\"SELECT 'raw_sessions', COUNT(*) FROM raw_sessions UNION ALL SELECT 'raw_skill_telemetry', COUNT(*) FROM raw_skill_telemetry UNION ALL SELECT 'raw_token_usage', COUNT(*) FROM raw_token_usage UNION ALL SELECT 'raw_operational_snapshots', COUNT(*) FROM raw_operational_snapshots\").fetchall()]; conn.close()"
+
+      Report the harvest results as a table.
+
+      NOTE: If mode is AUTO, skip the post-harvest gate.
+
+      End with: VERDICT: harvest complete — <N> total rows across <N> tables
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 4: LAUNCH SERVER + OPEN ────────────────────────────────────
+  - id: launch
+    depends_on: [harvest]
+    command: |
+      MISSION: Launch the real-time analytics dashboard server and open it in the browser.
+
+      Run from dream-studio repo root:
+        make dashboard
+
+      This will:
+        1. Start the FastAPI server at http://localhost:8000
+        2. Open http://localhost:8000/dashboard in the default browser
+        3. The server provides:
+           - Real-time WebSocket streaming at ws://localhost:8000/api/v1/stream/metrics
+           - REST API at http://localhost:8000/api/v1/
+           - Interactive API docs at http://localhost:8000/api/docs
+
+      NOTE: The server runs in the foreground. The user can stop it with Ctrl+C.
+      Tell the user:
+        - Dashboard is live at http://localhost:8000/dashboard
+        - API docs at http://localhost:8000/api/docs
+        - Stop with Ctrl+C
+        - Next time, just run: make dashboard
+
+      End with: VERDICT: dashboard launched at http://localhost:8000/dashboard
+    model: haiku
+    context: fresh
+    timeout_seconds: 30
