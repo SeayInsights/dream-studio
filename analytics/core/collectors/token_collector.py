@@ -186,14 +186,15 @@ class TokenCollector:
             daily_average = total_tokens / days if days > 0 else 0.0
 
             return {
-                "total_input_tokens": total_input,
-                "total_output_tokens": total_output,
                 "total_tokens": total_tokens,
+                "input_tokens": total_input,
+                "output_tokens": total_output,
+                "cache_hits": 0,  # TODO: Add cache tracking
                 "total_cost_usd": round(total_cost, 2),
                 "by_model": by_model,
                 "by_project": by_project,
-                "by_skill": by_skill,
-                "daily_average": round(daily_average, 0)
+                "daily_average": round(daily_average, 0),
+                "timeline": []  # TODO: Add timeline data
             }
 
         finally:

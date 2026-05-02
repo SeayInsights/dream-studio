@@ -106,16 +106,22 @@ class SkillCollector:
             """, (cutoff_date,))
             failures = [dict(row) for row in cursor.fetchall()]
 
-            # Top skills by usage
-            top_skills = [(skill, data["count"]) for skill, data in
-                         sorted(by_skill.items(), key=lambda x: x[1]["count"], reverse=True)[:10]]
+            # Top skills by usage (as list of dicts)
+            top_skills = [
+                {"skill_name": skill, "count": data["count"], "success_rate": data["success_rate"]}
+                for skill, data in sorted(by_skill.items(), key=lambda x: x[1]["count"], reverse=True)[:10]
+            ]
+
+            # Count unique skills
+            unique_skills = len(by_skill)
 
             return {
                 "total_invocations": total_invocations,
+                "unique_skills": unique_skills,
+                "overall_success_rate": round(success_rate_overall, 1),
                 "by_skill": by_skill,
-                "success_rate_overall": round(success_rate_overall, 1),
-                "failures": failures,
-                "top_skills": top_skills
+                "top_skills": top_skills,
+                "failures": failures
             }
 
         finally:

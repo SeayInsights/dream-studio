@@ -108,18 +108,15 @@ class ModelCollector:
 
             performance_rank.sort(key=lambda x: x[1], reverse=True)
 
-            # Token efficiency (tokens per second)
-            token_efficiency = {}
-            for model, data in by_model.items():
-                if data["avg_exec_time_s"] > 0 and data["avg_tokens_per_run"] > 0:
-                    tokens_per_second = data["avg_tokens_per_run"] / data["avg_exec_time_s"]
-                    token_efficiency[model] = round(tokens_per_second, 1)
+            # Extract success rates as separate dict
+            success_rates = {model: data["success_rate"] for model, data in by_model.items()}
 
             return {
+                "total_invocations": total_invocations,
                 "by_model": by_model,
-                "distribution": distribution,
-                "performance_rank": performance_rank,
-                "token_efficiency": token_efficiency
+                "distribution_pct": distribution,
+                "success_rates": success_rates,
+                "performance_rank": [model for model, score in performance_rank]  # Just model names
             }
 
         finally:
