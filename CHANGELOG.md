@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Analytics database path** — corrected database path from `~/.dream-studio/studio.db` to `~/.dream-studio/state/studio.db` in API routes (ml.py, insights.py, metrics.py) and documentation
+- **Collector data formats** — converted skill_collector `top_skills` and model_collector `performance_rank` from tuples to dictionaries/lists matching Pydantic model schemas; added missing fields (`unique_skills`, `success_rates`, `total_invocations`)
+
 ### Added
 - **Pattern Enhancement (35 tasks)** — 9 foundational patterns for optimized LLM consumption with 40% token savings target (#pattern-enhancement)
   - Progressive disclosure: `quality/debug` refactored 217→65 lines with 6 reference files for on-demand loading
