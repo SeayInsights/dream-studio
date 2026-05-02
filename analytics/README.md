@@ -750,12 +750,24 @@ export ANALYTICS_DEBUG="true"
    python -m api.main
    ```
 
-2. **Open API documentation**:
+2. **Open the Real-Time Dashboard**:
+   ```
+   http://localhost:8000/dashboard
+   ```
+   
+   Features:
+   - Live WebSocket streaming with auto-reconnect
+   - 7 interactive tabs: Overview, Skills, Models & Tokens, Workflows & Lessons, Alerts & SLA, ML Insights, Anomalies & Trends
+   - Real-time KPI updates, alerts, and SLA monitoring
+   - ML-powered forecasts, pattern detection, and recommendations
+   - Responsive mobile design with touch-friendly controls
+
+3. **Open API documentation** (advanced):
    ```
    http://localhost:8000/api/docs
    ```
 
-3. **Create your first alert rule**:
+4. **Create your first alert rule** (optional):
    ```bash
    curl -X POST http://localhost:8000/api/v1/alerts/rules \
      -H "Content-Type: application/json" \
@@ -768,7 +780,7 @@ export ANALYTICS_DEBUG="true"
      }'
    ```
 
-4. **Connect to WebSocket stream**:
+5. **Connect to WebSocket stream** (advanced):
    ```bash
    # Using websocat
    websocat ws://localhost:8000/api/v1/stream/metrics
