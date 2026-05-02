@@ -1298,7 +1298,7 @@
         let reconnectTimeout = null;
         const INITIAL_RECONNECT_DELAY = 1000; // 1 second
         const MAX_RECONNECT_DELAY = 30000; // 30 seconds
-        const WS_URL = 'ws://localhost:8000/api/v1/realtime/stream/metrics';
+        const WS_URL = 'ws://localhost:8000/api/v1/stream/metrics';
         const METRICS_TO_SUBSCRIBE = ['sessions', 'tokens', 'alerts', 'sla'];
 
         function connectWebSocket() {
