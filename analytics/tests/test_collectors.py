@@ -22,7 +22,7 @@ def test_db(tmp_path):
     cursor.execute("""
         CREATE TABLE raw_sessions (
             session_id TEXT PRIMARY KEY,
-            project_slug TEXT,
+            project_id TEXT,
             started_at TEXT NOT NULL,
             ended_at TEXT,
             outcome TEXT,
@@ -41,7 +41,7 @@ def test_db(tmp_path):
     ]
 
     cursor.executemany("""
-        INSERT INTO raw_sessions (session_id, project_slug, started_at, ended_at, outcome, exit_reason)
+        INSERT INTO raw_sessions (session_id, project_id, started_at, ended_at, outcome, exit_reason)
         VALUES (?, ?, ?, ?, ?, ?)
     """, test_data)
 
@@ -135,7 +135,7 @@ def test_get_recent_sessions(test_db):
 
     assert len(recent) == 3
     assert "session_id" in recent[0]
-    assert "project_slug" in recent[0]
+    assert "project_id" in recent[0]
     assert "started_at" in recent[0]
 
 

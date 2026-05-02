@@ -32,8 +32,12 @@ class TokenCollector:
         else:
             self.db_path = db_path
 
-    def _calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
+    def _calculate_cost(self, model: str | None, input_tokens: int, output_tokens: int) -> float:
         """Calculate cost in USD for given token usage"""
+        # Handle None model
+        if model is None:
+            return 0.0
+
         # Normalize model name
         model_key = model.lower()
         for key in PRICING:
