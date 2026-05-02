@@ -6,6 +6,8 @@ from analytics.core.collectors.session_collector import SessionCollector
 from analytics.core.collectors.skill_collector import SkillCollector
 from analytics.core.collectors.token_collector import TokenCollector
 from analytics.core.collectors.model_collector import ModelCollector
+from analytics.core.collectors.lesson_collector import LessonCollector
+from analytics.core.collectors.workflow_collector import WorkflowCollector
 
 
 @pytest.fixture
@@ -621,3 +623,308 @@ def test_model_performance_metrics(test_model_db):
     assert sonnet_metrics["avg_tokens_per_run"] > 0
     assert "total_tokens" in sonnet_metrics
     assert sonnet_metrics["total_tokens"] > 0
+
+
+# LessonCollector tests
+
+@pytest.fixture
+def test_lesson_db(tmp_path):
+    """Create a temporary test database with lesson data"""
+    db_path = tmp_path / "test_studio_lessons.db"
+
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE raw_lessons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id TEXT NOT NULL UNIQUE,
+            source TEXT NOT NULL,
+            confidence TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'draft',
+            title TEXT NOT NULL,
+            what_happened TEXT,
+            lesson TEXT,
+            evidence TEXT,
+            promoted_to TEXT,
+            created_at TEXT NOT NULL,
+            reviewed_at TEXT
+        )
+    """)
+
+    now = datetime.now()
+    test_data = [
+        ("lesson-1", "on-skill-complete", "high", "final", "Auth bug fixed", "Bug desc", "Lesson text", "Evidence", "gotchas.yml", (now - timedelta(days=1)).isoformat(), None),
+        ("lesson-2", "on-context-threshold", "medium", "draft", "Context overflow", "Desc", "Lesson", "Evidence", None, (now - timedelta(days=2)).isoformat(), None),
+        ("lesson-3", "on-skill-complete", "high", "final", "Perf improvement", "Desc", "Lesson", "Evidence", "best_practices.md", (now - timedelta(days=3)).isoformat(), (now - timedelta(days=2)).isoformat()),
+        ("lesson-4", "manual", "low", "draft", "Minor issue", "Desc", "Lesson", "Evidence", None, (now - timedelta(days=5)).isoformat(), None),
+        ("lesson-5", "on-skill-complete", "medium", "draft", "Old lesson", "Desc", "Lesson", "Evidence", None, (now - timedelta(days=100)).isoformat(), None),  # Too old
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_lessons
+        (lesson_id, source, confidence, status, title, what_happened, lesson, evidence, promoted_to, created_at, reviewed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, test_data)
+
+    conn.commit()
+    conn.close()
+
+    return db_path
+
+
+def test_lesson_collector_initialization():
+    """Test LessonCollector can be initialized"""
+    collector = LessonCollector()
+    assert collector.db_path is not None
+
+
+def test_lesson_collect_total(test_lesson_db):
+    """Test total lessons count"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "total_lessons" in metrics
+    assert metrics["total_lessons"] == 4  # 5 total, but 1 is > 90 days old
+
+
+def test_lesson_by_source(test_lesson_db):
+    """Test lessons grouped by source"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_source" in metrics
+    assert "on-skill-complete" in metrics["by_source"]
+    assert metrics["by_source"]["on-skill-complete"] == 2
+
+
+def test_lesson_by_status(test_lesson_db):
+    """Test lessons grouped by status"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_status" in metrics
+    assert "draft" in metrics["by_status"]
+    assert "final" in metrics["by_status"]
+
+
+def test_lesson_by_confidence(test_lesson_db):
+    """Test lessons grouped by confidence"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_confidence" in metrics
+    assert "high" in metrics["by_confidence"]
+    assert "medium" in metrics["by_confidence"]
+    assert "low" in metrics["by_confidence"]
+
+
+def test_lesson_capture_rate(test_lesson_db):
+    """Test lesson capture rate calculation"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "capture_rate" in metrics
+    assert metrics["capture_rate"] > 0  # 4 lessons / 90 days
+
+
+def test_lesson_promoted_count(test_lesson_db):
+    """Test promoted lessons count"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "promoted_count" in metrics
+    assert metrics["promoted_count"] == 2  # lesson-1 and lesson-3 are promoted
+
+
+def test_lesson_recent_lessons(test_lesson_db):
+    """Test recent lessons retrieval"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    metrics = collector.collect(days=90)
+
+    assert "recent_lessons" in metrics
+    assert len(metrics["recent_lessons"]) == 4  # 4 within 90 days
+    assert "lesson_id" in metrics["recent_lessons"][0]
+    assert "title" in metrics["recent_lessons"][0]
+
+
+def test_lesson_timeline(test_lesson_db):
+    """Test lesson timeline"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    timeline = collector.get_timeline(days=30)
+
+    assert isinstance(timeline, list)
+    assert len(timeline) > 0
+
+
+def test_lesson_source_quality(test_lesson_db):
+    """Test source quality analysis"""
+    collector = LessonCollector(db_path=str(test_lesson_db))
+    quality = collector.get_source_quality()
+
+    assert isinstance(quality, list)
+    assert len(quality) > 0
+    assert "source" in quality[0]
+    assert "count" in quality[0]
+    assert "promoted_rate" in quality[0]
+    assert "avg_confidence_score" in quality[0]
+
+
+# WorkflowCollector tests
+
+@pytest.fixture
+def test_workflow_db(tmp_path):
+    """Create a temporary test database with workflow data"""
+    db_path = tmp_path / "test_studio_workflows.db"
+
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE raw_workflow_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_key TEXT NOT NULL UNIQUE,
+            workflow TEXT NOT NULL,
+            yaml_path TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            node_count INTEGER,
+            nodes_done INTEGER
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE raw_workflow_nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_key TEXT NOT NULL REFERENCES raw_workflow_runs(run_key),
+            node_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            duration_s REAL,
+            output TEXT
+        )
+    """)
+
+    now = datetime.now()
+    workflow_data = [
+        ("run-1", "build-pipeline", "/workflows/build.yml", "completed", (now - timedelta(days=1)).isoformat(), (now - timedelta(days=1, hours=-1)).isoformat(), 3, 3),
+        ("run-2", "test-suite", "/workflows/test.yml", "completed", (now - timedelta(days=2)).isoformat(), (now - timedelta(days=2, hours=-0.5)).isoformat(), 2, 2),
+        ("run-3", "build-pipeline", "/workflows/build.yml", "failed", (now - timedelta(days=3)).isoformat(), (now - timedelta(days=3, hours=-0.8)).isoformat(), 3, 2),
+        ("run-4", "deploy", "/workflows/deploy.yml", "completed", (now - timedelta(days=5)).isoformat(), (now - timedelta(days=5, hours=-2)).isoformat(), 4, 4),
+        ("run-5", "test-suite", "/workflows/test.yml", "completed", (now - timedelta(days=100)).isoformat(), (now - timedelta(days=100, hours=-0.5)).isoformat(), 2, 2),  # Too old
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_workflow_runs
+        (run_key, workflow, yaml_path, status, started_at, finished_at, node_count, nodes_done)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, workflow_data)
+
+    # Add some nodes
+    node_data = [
+        ("run-1", "compile", "completed", (now - timedelta(days=1)).isoformat(), (now - timedelta(days=1, hours=-0.3)).isoformat(), 18.5, "output1"),
+        ("run-1", "test", "completed", (now - timedelta(days=1)).isoformat(), (now - timedelta(days=1, hours=-0.5)).isoformat(), 30.0, "output2"),
+        ("run-2", "test", "completed", (now - timedelta(days=2)).isoformat(), (now - timedelta(days=2, hours=-0.5)).isoformat(), 28.0, "output3"),
+        ("run-3", "compile", "completed", (now - timedelta(days=3)).isoformat(), (now - timedelta(days=3, hours=-0.3)).isoformat(), 20.0, "output4"),
+        ("run-3", "test", "failed", (now - timedelta(days=3)).isoformat(), (now - timedelta(days=3, hours=-0.5)).isoformat(), 15.0, "output5"),
+    ]
+
+    cursor.executemany("""
+        INSERT INTO raw_workflow_nodes
+        (run_key, node_id, status, started_at, finished_at, duration_s, output)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, node_data)
+
+    conn.commit()
+    conn.close()
+
+    return db_path
+
+
+def test_workflow_collector_initialization():
+    """Test WorkflowCollector can be initialized"""
+    collector = WorkflowCollector()
+    assert collector.db_path is not None
+
+
+def test_workflow_collect_total(test_workflow_db):
+    """Test total workflow runs count"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "total_runs" in metrics
+    assert metrics["total_runs"] == 4  # 5 total, but 1 is > 90 days old
+
+
+def test_workflow_by_workflow(test_workflow_db):
+    """Test workflows grouped by name"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_workflow" in metrics
+    assert "build-pipeline" in metrics["by_workflow"]
+    assert metrics["by_workflow"]["build-pipeline"]["count"] == 2
+
+
+def test_workflow_success_rate(test_workflow_db):
+    """Test workflow success rate"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "success_rate" in metrics
+    # 3 completed out of 4 total = 75%
+    assert metrics["success_rate"] == 75.0
+
+
+def test_workflow_by_status(test_workflow_db):
+    """Test workflows grouped by status"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "by_status" in metrics
+    assert "completed" in metrics["by_status"]
+    assert "failed" in metrics["by_status"]
+
+
+def test_workflow_avg_completion_time(test_workflow_db):
+    """Test average completion time"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "avg_completion_time_minutes" in metrics
+    assert metrics["avg_completion_time_minutes"] > 0
+
+
+def test_workflow_total_nodes(test_workflow_db):
+    """Test total nodes executed"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    metrics = collector.collect(days=90)
+
+    assert "total_nodes_executed" in metrics
+    assert metrics["total_nodes_executed"] == 5  # 5 nodes in recent workflows
+
+
+def test_workflow_timeline(test_workflow_db):
+    """Test workflow timeline"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    timeline = collector.get_timeline(days=30)
+
+    assert isinstance(timeline, list)
+    assert len(timeline) > 0
+    assert "date" in timeline[0]
+    assert "runs" in timeline[0]
+
+
+def test_workflow_node_performance(test_workflow_db):
+    """Test node performance analysis"""
+    collector = WorkflowCollector(db_path=str(test_workflow_db))
+    performance = collector.get_node_performance()
+
+    assert isinstance(performance, list)
+    assert len(performance) > 0
+    assert "node_id" in performance[0]
+    assert "executions" in performance[0]
+    assert "avg_duration_s" in performance[0]
+    assert "failure_rate" in performance[0]
