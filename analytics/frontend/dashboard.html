@@ -111,40 +111,58 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Overview Tab -->
         <div id="overview" class="tab-content active">
+            <!-- KPI Cards -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Total Sessions</div>
-                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
-                    <div class="mt-2 text-xs text-gray-500">Last 24 hours</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900" id="kpi-total-sessions">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Last 30 days</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="text-sm font-medium text-gray-600">Avg Session Duration</div>
-                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
-                    <div class="mt-2 text-xs text-gray-500">Minutes</div>
+                    <div class="text-sm font-medium text-gray-600">Total Cost</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900" id="kpi-total-cost">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Estimated USD</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="text-sm font-medium text-gray-600">Total Tokens</div>
-                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
-                    <div class="mt-2 text-xs text-gray-500">Last 24 hours</div>
+                    <div class="text-sm font-medium text-gray-600">Success Rate</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900" id="kpi-success-rate">--%</div>
+                    <div class="mt-2 text-xs text-gray-500">Sessions completed</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Active Alerts</div>
-                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900" id="kpi-active-alerts">--</div>
                     <div class="mt-2 text-xs text-gray-500">Requiring attention</div>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Charts Row 1: Timeline and Top Skills -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Session Activity</h3>
-                    <div class="h-64 flex items-center justify-center text-gray-400">
-                        Chart placeholder
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Session Timeline</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="sessionTimelineChart"></canvas>
                     </div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Token Usage</h3>
-                    <div class="h-64 flex items-center justify-center text-gray-400">
-                        Chart placeholder
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Top Skills</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="topSkillsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 2: Model Distribution and Cost Over Time -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Model Distribution</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="modelDistributionChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cost Over Time</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="costOverTimeChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -361,6 +379,333 @@
             document.getElementById('lastUpdated').textContent = timeString;
         }
 
+        // Chart instances
+        let charts = {
+            sessionTimeline: null,
+            topSkills: null,
+            modelDistribution: null,
+            costOverTime: null
+        };
+
+        // API Base URL
+        const API_BASE = '/api/v1/metrics';
+
+        // Fetch data from API
+        async function fetchMetrics(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        // Update KPI cards
+        async function updateKPIs() {
+            // Fetch all metrics
+            const [sessions, tokens, skills] = await Promise.all([
+                fetchMetrics('/sessions'),
+                fetchMetrics('/tokens'),
+                fetchMetrics('/skills')
+            ]);
+
+            if (sessions && sessions.summary) {
+                document.getElementById('kpi-total-sessions').textContent =
+                    sessions.summary.total_sessions || 0;
+
+                const successRate = sessions.summary.success_rate || 0;
+                document.getElementById('kpi-success-rate').textContent =
+                    `${(successRate * 100).toFixed(1)}%`;
+            }
+
+            if (tokens && tokens.summary) {
+                const totalCost = tokens.summary.total_cost || 0;
+                document.getElementById('kpi-total-cost').textContent =
+                    `$${totalCost.toFixed(2)}`;
+            }
+
+            // Active alerts - placeholder for now (will be populated by T005)
+            document.getElementById('kpi-active-alerts').textContent = '0';
+        }
+
+        // Initialize Session Timeline Chart
+        async function initSessionTimelineChart() {
+            const data = await fetchMetrics('/sessions');
+            if (!data || !data.timeline) {
+                console.warn('No session timeline data available');
+                return;
+            }
+
+            const ctx = document.getElementById('sessionTimelineChart').getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (charts.sessionTimeline) {
+                charts.sessionTimeline.destroy();
+            }
+
+            charts.sessionTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Sessions',
+                        data: data.timeline.map(d => d.count),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Top Skills Chart
+        async function initTopSkillsChart() {
+            const data = await fetchMetrics('/skills');
+            if (!data || !data.top_skills) {
+                console.warn('No skills data available');
+                return;
+            }
+
+            const ctx = document.getElementById('topSkillsChart').getContext('2d');
+
+            if (charts.topSkills) {
+                charts.topSkills.destroy();
+            }
+
+            // Take top 10 skills
+            const topSkills = data.top_skills.slice(0, 10);
+
+            charts.topSkills = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topSkills.map(s => s.skill_name),
+                    datasets: [{
+                        label: 'Usage Count',
+                        data: topSkills.map(s => s.usage_count),
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#2563eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const skill = topSkills[context.dataIndex];
+                                    return `Avg duration: ${skill.avg_duration_minutes.toFixed(1)}m`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Model Distribution Chart
+        async function initModelDistributionChart() {
+            const data = await fetchMetrics('/models');
+            if (!data || !data.model_distribution) {
+                console.warn('No model distribution data available');
+                return;
+            }
+
+            const ctx = document.getElementById('modelDistributionChart').getContext('2d');
+
+            if (charts.modelDistribution) {
+                charts.modelDistribution.destroy();
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.modelDistribution = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.model_distribution.map(m => m.model_name),
+                    datasets: [{
+                        data: data.model_distribution.map(m => m.usage_count),
+                        backgroundColor: data.model_distribution.map(m => {
+                            const modelKey = m.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost Over Time Chart
+        async function initCostOverTimeChart() {
+            const data = await fetchMetrics('/tokens');
+            if (!data || !data.cost_timeline) {
+                console.warn('No cost timeline data available');
+                return;
+            }
+
+            const ctx = document.getElementById('costOverTimeChart').getContext('2d');
+
+            if (charts.costOverTime) {
+                charts.costOverTime.destroy();
+            }
+
+            // Create gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(34, 197, 94, 0.3)');
+            gradient.addColorStop(1, 'rgba(34, 197, 94, 0.0)');
+
+            charts.costOverTime = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.cost_timeline.map(d => d.date),
+                    datasets: [{
+                        label: 'Cost (USD)',
+                        data: data.cost_timeline.map(d => d.cost),
+                        borderColor: '#22c55e',
+                        backgroundColor: gradient,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `$${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize all Overview tab components
+        async function initOverviewTab() {
+            try {
+                await updateKPIs();
+                await Promise.all([
+                    initSessionTimelineChart(),
+                    initTopSkillsChart(),
+                    initModelDistributionChart(),
+                    initCostOverTimeChart()
+                ]);
+                console.log('Overview tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Overview tab:', error);
+                // Show user-friendly error message
+                alert('Unable to load dashboard data. Please check that the API server is running.');
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Set initial time
@@ -368,6 +713,9 @@
 
             // Update time every second
             setInterval(updateLastUpdatedTime, 1000);
+
+            // Initialize Overview tab
+            initOverviewTab();
 
             console.log('Dream Studio Analytics Dashboard initialized');
         });
