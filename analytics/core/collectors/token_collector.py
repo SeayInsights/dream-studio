@@ -129,14 +129,15 @@ class TokenCollector:
             # By project
             cursor.execute("""
                 SELECT
-                    project_id,
-                    SUM(input_tokens) as input_tokens,
-                    SUM(output_tokens) as output_tokens,
-                    model
-                FROM raw_token_usage
-                WHERE recorded_at >= ?
-                AND project_id IS NOT NULL
-                GROUP BY project_id, model
+                    s.project_id,
+                    SUM(t.input_tokens) as input_tokens,
+                    SUM(t.output_tokens) as output_tokens,
+                    t.model
+                FROM raw_token_usage t
+                JOIN raw_sessions s ON t.session_id = s.session_id
+                WHERE t.recorded_at >= ?
+                AND s.project_id IS NOT NULL
+                GROUP BY s.project_id, t.model
             """, (cutoff_date,))
 
             by_project = {}
