@@ -1,148 +1,1796 @@
-# Design Anti-Patterns — Reference
+---
+source: https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
+extracted: 2026-05-02
+pattern: anti-patterns
+purpose: 99 UX anti-patterns with do/don't examples
+---
 
-Banned patterns. If you catch yourself reaching for any of these, stop and use the alternative.
+# UX Anti-Patterns Reference
+
+A comprehensive collection of 99 UX anti-patterns covering accessibility violations, poor interaction design, performance issues, and more. Each anti-pattern includes do/don't examples and severity ratings.
+
+## Table of Contents
+
+- [Navigation](#navigation) (6 patterns)
+- [Animation](#animation) (8 patterns)
+- [Layout](#layout) (7 patterns)
+- [Touch](#touch) (6 patterns)
+- [Interaction](#interaction) (8 patterns)
+- [Accessibility](#accessibility) (11 patterns)
+- [Performance](#performance) (9 patterns)
+- [Forms](#forms) (10 patterns)
+- [Responsive](#responsive) (8 patterns)
+- [Typography](#typography) (6 patterns)
+- [Feedback](#feedback) (6 patterns)
+- [Content](#content) (4 patterns)
+- [Onboarding](#onboarding) (1 pattern)
+- [Search](#search) (2 patterns)
+- [Data Entry](#data-entry) (1 pattern)
+- [AI Interaction](#ai-interaction) (3 patterns)
+- [Spatial UI](#spatial-ui) (2 patterns)
+- [Sustainability](#sustainability) (2 patterns)
 
 ---
 
-## Typography Anti-Patterns
+## Navigation
 
-### ❌ Inter-only typography
-**What it looks like:** Every heading, body, label, and caption set in Inter with no variation.
-**Why it's harmful:** Inter is a fine utility font but it has no personality. Every AI-generated interface defaults to it, making your design invisible.
-**Instead:** Pair a display or editorial font for headings with a neutral body font. Even one expressive typeface changes everything.
+### 1. Smooth Scroll (High Severity)
+**Platform:** Web
 
-### ❌ Flat type scale
-**What it looks like:** h1 through h4 are all similar sizes, maybe 2–4px apart.
-**Why it's harmful:** No hierarchy means the eye doesn't know where to land. The page reads as a wall of text.
-**Instead:** Use a minimum 1.25 ratio between type scale steps. Heading levels should feel dramatically different from each other.
+**Issue:** Anchor links should scroll smoothly to target section
 
-### ❌ Body lines longer than 75ch
-**What it looks like:** Paragraphs that stretch edge-to-edge on a wide container, making lines 100–120 characters long.
-**Why it's harmful:** Long line lengths force the eye to travel far and lose its place on return. Reading speed drops and fatigue increases.
-**Instead:** Cap body text containers at 65–75ch. Use max-width on prose containers, not full-width.
+**Do:** Use scroll-behavior: smooth on html element
+```css
+html { scroll-behavior: smooth; }
+```
 
-### ❌ Gradient text
-**What it looks like:** `background-clip: text` + a gradient background on headings to make them glow or shift color.
-**Why it's harmful:** Pure decoration with no semantic weight. Screams AI-generated. Fails on some rendering engines and prints badly.
-**Instead:** Use a single solid color. Add emphasis through weight, size, or spacing — not color tricks.
-
-### ❌ Low-contrast gray text
-**What it looks like:** Body copy or labels in `#999`, `#aaa`, or similar light gray on white backgrounds.
-**Why it's harmful:** Fails WCAG AA (4.5:1 minimum for normal text). Unreadable for users with low vision, poor monitors, or bright environments.
-**Instead:** Test every text color with a contrast checker. For body text on white, stay at or below `#767676`. For small text, go darker.
+**Don't:** Jump directly without transition
+```html
+<a href='#section'> without CSS
+```
 
 ---
 
-## Color Anti-Patterns
+### 2. Sticky Navigation (Medium Severity)
+**Platform:** Web
 
-### ❌ Purple gradients
-**What it looks like:** Hero sections, cards, or buttons with purple-to-pink or purple-to-blue gradients.
-**Why it's harmful:** Every AI demo from 2023–2025 uses this combination. It signals "AI made this" instantly.
-**Instead:** Pick a color strategy first (restrained / committed / full palette / drenched) before picking colors. Derive the palette from a physical scene sentence, not a category reflex.
+**Issue:** Fixed nav should not obscure content
 
-### ❌ Pure black and pure white
-**What it looks like:** `#000000` backgrounds and `#ffffff` text, or vice versa — no tint, no warmth.
-**Why it's harmful:** Pure black/white have no personality and produce harsh, sterile contrast with no connection to the brand hue.
-**Instead:** Tint every neutral toward the brand hue. A chroma of 0.005–0.01 in OKLCH is invisible but adds life. Use `oklch()` instead of hex for neutrals.
+**Do:** Add padding-top to body equal to nav height
+```
+pt-20 (if nav is h-20)
+```
 
-### ❌ Category-reflex color
-**What it looks like:** Observability tool → dark blue. Healthcare → white and teal. Finance → navy and gold. Crypto → neon on black.
-**Why it's harmful:** If someone can guess your palette from the category name alone, it's the training-data default — not a design decision.
-**Instead:** Write a one-sentence physical scene (who uses this, where, under what ambient light, in what mood). If the sentence doesn't force a color answer, make it more specific until it does.
-
-### ❌ High chroma at extremes
-**What it looks like:** Saturated colors used at very dark (near black) or very light (near white) lightness values — neon shadows, fluorescent tints.
-**Why it's harmful:** In OKLCH, the gamut at extreme lightness values is narrow. Forcing high chroma there produces out-of-gamut colors that shift unpredictably across displays.
-**Instead:** Reduce chroma as lightness approaches 0 or 100. Vivid colors live in the middle range of lightness.
-
-### ❌ Platform-default blue for CTAs
-**What it looks like:** A "Get Started" or "Submit" button in browser-default `#0066cc` or Bootstrap primary blue.
-**Why it's harmful:** It signals no design investment and breaks brand consistency.
-**Instead:** Derive CTA color from brand token color, not platform defaults. If there's no brand color yet, pick one deliberately.
+**Don't:** Let nav overlap first section content
+```
+No padding compensation
+```
 
 ---
 
-## Layout Anti-Patterns
+### 3. Active State (Medium Severity)
+**Platform:** All
 
-### ❌ Centered-everything layouts
-**What it looks like:** Every section — hero, features, testimonials, footer — is center-aligned with centered headings and centered body copy.
-**Why it's harmful:** Center alignment is appropriate for short, high-impact moments (a single hero stat, a pull quote). Applied everywhere it reads as template-generated and creates awkward ragged edges in paragraphs.
-**Instead:** Use left alignment as the default for body content. Reserve center alignment for isolated moments that deserve emphasis.
+**Issue:** Current page/section should be visually indicated
 
-### ❌ Identical card grids
-**What it looks like:** A grid of 3, 6, or 9 cards, all the same size, each with an icon + heading + 2 lines of body text.
-**Why it's harmful:** The most clichéd SaaS layout pattern. Every AI-generated features section looks like this. It signals zero design thought.
-**Instead:** Vary card sizes, break the grid intentionally, use a different information architecture entirely (timeline, masonry, magazine layout, or feature callouts).
+**Do:** Highlight active nav item with color/underline
+```
+text-primary border-b-2
+```
 
-### ❌ Uniform border-radius on every element
-**What it looks like:** Every button, card, input, image, and container has the same 8px or 12px border-radius applied.
-**Why it's harmful:** Mindless application of a single radius value makes everything look like it came from the same template. Radius should reflect the element's personality and the design system's character.
-**Instead:** Decide on a radius language for your design system. Pills for interactive controls, subtle rounding for cards, sharp corners for editorial elements, or a mix with intention.
-
-### ❌ Nesting cards inside cards
-**What it looks like:** A card component that contains another card inside it — often seen in dashboards and admin UIs.
-**Why it's harmful:** Nested cards create visual clutter, flatten the elevation hierarchy, and signal the layout was not thought through.
-**Instead:** Use a different pattern for inner content: a table, a list with dividers, a section with background tint, or inline groups with spacing.
-
-### ❌ Wrapping everything in a container
-**What it looks like:** Every element on the page, including full-bleed heroes, background sections, and edge-to-edge images, is wrapped in a `max-width` container div.
-**Why it's harmful:** Full-bleed moments add visual impact and breathing room. Constraining everything shrinks the design to feel boxy and safe.
-**Instead:** Let backgrounds, images, and decorative elements bleed to the viewport edge. Only constrain text and interactive content where readability requires it.
-
-### ❌ Generic hero section
-**What it looks like:** Full-width section with a stock photo or gradient background, centered H1, a supporting paragraph in gray, and a "Get Started" CTA button.
-**Why it's harmful:** This pattern is so overused it has become invisible. Users skip past it without reading. It communicates nothing unique about the product.
-**Instead:** Make the hero do one specific job. Use the actual product UI, a concrete proof point, a customer result, or an interactive element. The visual should do work, not fill space.
-
-### ❌ Drop shadows on everything
-**What it looks like:** Every card, button, modal, image, and text block has a box-shadow applied.
-**Why it's harmful:** Drop shadows create elevation cues. When everything is elevated, nothing is. The shadow loses its meaning and the page looks muddy.
-**Instead:** Use shadows sparingly and only where elevation is semantically meaningful — floating modals, popovers, active/hover states. Use flat backgrounds, borders, or spacing to separate elements instead.
+**Don't:** No visual feedback on current location
+```
+All links same style
+```
 
 ---
 
-## Motion Anti-Patterns
+### 4. Back Button (High Severity)
+**Platform:** Mobile
 
-### ❌ Animating CSS layout properties
-**What it looks like:** Transitions or animations on `width`, `height`, `top`, `left`, `margin`, or `padding`.
-**Why it's harmful:** Layout property changes trigger browser reflow, which is expensive and produces jank even on capable hardware.
-**Instead:** Animate `transform` and `opacity` only. Use `transform: translate()` instead of `top`/`left`, `transform: scale()` instead of `width`/`height`.
+**Issue:** Users expect back to work predictably
 
-### ❌ Bounce and elastic easing
-**What it looks like:** UI elements that overshoot their destination and spring back, or that wobble into place.
-**Why it's harmful:** Bounce and elastic motion call attention to themselves. They read as playful at best, juvenile at worst, and always slow down perceived interaction time.
-**Instead:** Use ease-out-quart, ease-out-quint, or ease-out-expo curves. Motion should decelerate into its final state, not oscillate.
+**Do:** Preserve navigation history properly
+```javascript
+history.pushState()
+```
 
-### ❌ Glassmorphism as default
-**What it looks like:** Blurred, translucent card panels applied to most or all UI surfaces — navigation, cards, modals, sidebars.
-**Why it's harmful:** Glassmorphism became a design trend and then immediately a cliché. Used decoratively it adds visual noise and reduces readability.
-**Instead:** Use solid surfaces as the default. Reserve blur and translucency for moments where the layering is semantically meaningful — a true overlay, a tooltip over content, a floating toolbar.
+**Don't:** Break browser/app back button behavior
+```javascript
+location.replace()
+```
 
 ---
 
-## Copy Anti-Patterns
+### 5. Deep Linking (Medium Severity)
+**Platform:** All
 
-### ❌ Em dashes
-**What it looks like:** Sentences that use — em dashes — to insert asides or connect clauses.
-**Why it's harmful:** Em dashes are a strong signal of AI-generated prose. They also create rhythm problems in UI copy and vary in rendering across fonts.
-**Instead:** Rewrite with commas, colons, semicolons, periods, or parentheses. If a clause needs an em dash to hold together, it probably needs to be its own sentence.
+**Issue:** URLs should reflect current state for sharing
 
-### ❌ Restated headings
-**What it looks like:** A section heading that says "Key Features" and the body copy below it begins with "Here are some key features of our product…"
-**Why it's harmful:** The heading already did the work. The intro sentence adds zero information and delays the reader from getting to what matters.
-**Instead:** The first sentence after a heading should add new information, not repeat the heading. Subheadings should expand on the heading, not mirror it.
+**Do:** Update URL on state/view changes
+```
+Use query params or hash
+```
 
-### ❌ The hero-metric template
-**What it looks like:** A big bold number (10,000+), a small label beneath it (Happy Customers), repeated 3–4 times in a row, often with a gradient accent line.
-**Why it's harmful:** The most recognizable SaaS cliché. Every AI-generated landing page uses this exact structure. It signals no design investment.
-**Instead:** If metrics matter, make them specific and contextual. Show the number in relation to something real — a chart, a case study stat, a before/after. Give the number a story.
+**Don't:** Static URLs for dynamic content
+```
+Single URL for all states
+```
 
-### ❌ Modal as first thought
-**What it looks like:** Any user action that needs more information — a form, a confirmation, a settings panel — is immediately put in a modal dialog.
-**Why it's harmful:** Modals block the page, trap focus, and interrupt flow. They are often the lazy default rather than the right pattern.
-**Instead:** Exhaust inline and progressive alternatives first. Inline expansion, side sheets, drawers, step-by-step flows on the same page, or a dedicated route. Use modals only when interruption is truly warranted (destructive confirmations, critical alerts).
+---
 
-### ❌ Side-stripe borders as decoration
-**What it looks like:** Cards, list items, callouts, or alert boxes with a thick colored `border-left` or `border-right` as the primary decorative accent.
-**Why it's harmful:** The left-border accent card is one of the most overused patterns in dashboard and admin UI. It reads as a template element, not a design decision.
-**Instead:** Use full borders, background tints, leading icons, numbers, or colored headings. If you need to group or call out content, choose a pattern that adds information rather than just visual weight.
+### 6. Breadcrumbs (Low Severity)
+**Platform:** Web
+
+**Issue:** Show user location in site hierarchy
+
+**Do:** Use for sites with 3+ levels of depth
+```
+Home > Category > Product
+```
+
+**Don't:** Use for flat single-level sites
+```
+Only on deep nested pages
+```
+
+---
+
+## Animation
+
+### 7. Excessive Motion (High Severity)
+**Platform:** All
+
+**Issue:** Too many animations cause distraction and motion sickness
+
+**Do:** Animate 1-2 key elements per view maximum
+```
+Single hero animation
+```
+
+**Don't:** Animate everything that moves
+```
+animate-bounce on 5+ elements
+```
+
+---
+
+### 8. Duration Timing (Medium Severity)
+**Platform:** All
+
+**Issue:** Animations should feel responsive not sluggish
+
+**Do:** Use 150-300ms for micro-interactions
+```
+transition-all duration-200
+```
+
+**Don't:** Use animations longer than 500ms for UI
+```
+duration-1000
+```
+
+---
+
+### 9. Reduced Motion (High Severity)
+**Platform:** All
+
+**Issue:** Respect user's motion preferences
+
+**Do:** Check prefers-reduced-motion media query
+```css
+@media (prefers-reduced-motion: reduce)
+```
+
+**Don't:** Ignore accessibility motion settings
+```
+No motion query check
+```
+
+---
+
+### 10. Loading States (High Severity)
+**Platform:** All
+
+**Issue:** Show feedback during async operations
+
+**Do:** Use skeleton screens or spinners
+```
+animate-pulse skeleton
+```
+
+**Don't:** Leave UI frozen with no feedback
+```
+Blank screen while loading
+```
+
+---
+
+### 11. Hover vs Tap (High Severity)
+**Platform:** All
+
+**Issue:** Hover effects don't work on touch devices
+
+**Do:** Use click/tap for primary interactions
+```
+onClick handler
+```
+
+**Don't:** Rely only on hover for important actions
+```
+onMouseEnter only
+```
+
+---
+
+### 12. Continuous Animation (Medium Severity)
+**Platform:** All
+
+**Issue:** Infinite animations are distracting
+
+**Do:** Use for loading indicators only
+```
+animate-spin on loader
+```
+
+**Don't:** Use for decorative elements
+```
+animate-bounce on icons
+```
+
+---
+
+### 13. Transform Performance (Medium Severity)
+**Platform:** Web
+
+**Issue:** Some CSS properties trigger expensive repaints
+
+**Do:** Use transform and opacity for animations
+```css
+transform: translateY()
+```
+
+**Don't:** Animate width/height/top/left properties
+```css
+top: 10px animation
+```
+
+---
+
+### 14. Easing Functions (Low Severity)
+**Platform:** All
+
+**Issue:** Linear motion feels robotic
+
+**Do:** Use ease-out for entering ease-in for exiting
+```
+ease-out
+```
+
+**Don't:** Use linear for UI transitions
+```
+linear
+```
+
+---
+
+## Layout
+
+### 15. Z-Index Management (High Severity)
+**Platform:** Web
+
+**Issue:** Stacking context conflicts cause hidden elements
+
+**Do:** Define z-index scale system (10 20 30 50)
+```
+z-10 z-20 z-50
+```
+
+**Don't:** Use arbitrary large z-index values
+```
+z-[9999]
+```
+
+---
+
+### 16. Overflow Hidden (Medium Severity)
+**Platform:** Web
+
+**Issue:** Hidden overflow can clip important content
+
+**Do:** Test all content fits within containers
+```
+overflow-auto with scroll
+```
+
+**Don't:** Blindly apply overflow-hidden
+```
+overflow-hidden truncating content
+```
+
+---
+
+### 17. Fixed Positioning (Medium Severity)
+**Platform:** Web
+
+**Issue:** Fixed elements can overlap or be inaccessible
+
+**Do:** Account for safe areas and other fixed elements
+```
+Fixed nav + fixed bottom with gap
+```
+
+**Don't:** Stack multiple fixed elements carelessly
+```
+Multiple overlapping fixed elements
+```
+
+---
+
+### 18. Stacking Context (Medium Severity)
+**Platform:** Web
+
+**Issue:** New stacking contexts reset z-index
+
+**Do:** Understand what creates new stacking context
+```
+Parent with z-index isolates children
+```
+
+**Don't:** Expect z-index to work across contexts
+```
+z-index: 9999 not working
+```
+
+---
+
+### 19. Content Jumping (High Severity)
+**Platform:** Web
+
+**Issue:** Layout shift when content loads is jarring
+
+**Do:** Reserve space for async content
+```
+aspect-ratio or fixed height
+```
+
+**Don't:** Let images/content push layout around
+```
+No dimensions on images
+```
+
+---
+
+### 20. Viewport Units (Medium Severity)
+**Platform:** Web
+
+**Issue:** 100vh can be problematic on mobile browsers
+
+**Do:** Use dvh or account for mobile browser chrome
+```
+min-h-dvh or min-h-screen
+```
+
+**Don't:** Use 100vh for full-screen mobile layouts
+```
+h-screen on mobile
+```
+
+---
+
+### 21. Container Width (Medium Severity)
+**Platform:** Web
+
+**Issue:** Content too wide is hard to read
+
+**Do:** Limit max-width for text content (65-75ch)
+```
+max-w-prose or max-w-3xl
+```
+
+**Don't:** Let text span full viewport width
+```
+Full width paragraphs
+```
+
+---
+
+## Touch
+
+### 22. Touch Target Size (High Severity)
+**Platform:** Mobile
+
+**Issue:** Small buttons are hard to tap accurately
+
+**Do:** Minimum 44x44px touch targets
+```
+min-h-[44px] min-w-[44px]
+```
+
+**Don't:** Tiny clickable areas
+```
+w-6 h-6 buttons
+```
+
+---
+
+### 23. Touch Spacing (Medium Severity)
+**Platform:** Mobile
+
+**Issue:** Adjacent touch targets need adequate spacing
+
+**Do:** Minimum 8px gap between touch targets
+```
+gap-2 between buttons
+```
+
+**Don't:** Tightly packed clickable elements
+```
+gap-0 or gap-1
+```
+
+---
+
+### 24. Gesture Conflicts (Medium Severity)
+**Platform:** Mobile
+
+**Issue:** Custom gestures can conflict with system
+
+**Do:** Avoid horizontal swipe on main content
+```
+Vertical scroll primary
+```
+
+**Don't:** Override system gestures
+```
+Horizontal swipe carousel only
+```
+
+---
+
+### 25. Tap Delay (Medium Severity)
+**Platform:** Mobile
+
+**Issue:** 300ms tap delay feels laggy
+
+**Do:** Use touch-action CSS or fastclick
+```css
+touch-action: manipulation
+```
+
+**Don't:** Default mobile tap handling
+```
+No touch optimization
+```
+
+---
+
+### 26. Pull to Refresh (Low Severity)
+**Platform:** Mobile
+
+**Issue:** Accidental refresh is frustrating
+
+**Do:** Disable where not needed
+```css
+overscroll-behavior: contain
+```
+
+**Don't:** Enable by default everywhere
+```
+Default overscroll
+```
+
+---
+
+### 27. Haptic Feedback (Low Severity)
+**Platform:** Mobile
+
+**Issue:** Tactile feedback improves interaction feel
+
+**Do:** Use for confirmations and important actions
+```javascript
+navigator.vibrate(10)
+```
+
+**Don't:** Overuse vibration feedback
+```
+Vibrate on every tap
+```
+
+---
+
+## Interaction
+
+### 28. Focus States (High Severity)
+**Platform:** All
+
+**Issue:** Keyboard users need visible focus indicators
+
+**Do:** Use visible focus rings on interactive elements
+```
+focus:ring-2 focus:ring-blue-500
+```
+
+**Don't:** Remove focus outline without replacement
+```
+outline-none without alternative
+```
+
+---
+
+### 29. Hover States (Medium Severity)
+**Platform:** Web
+
+**Issue:** Visual feedback on interactive elements
+
+**Do:** Change cursor and add subtle visual change
+```
+hover:bg-gray-100 cursor-pointer
+```
+
+**Don't:** No hover feedback on clickable elements
+```
+No hover style
+```
+
+---
+
+### 30. Active States (Medium Severity)
+**Platform:** All
+
+**Issue:** Show immediate feedback on press/click
+
+**Do:** Add pressed/active state visual change
+```
+active:scale-95
+```
+
+**Don't:** No feedback during interaction
+```
+No active state
+```
+
+---
+
+### 31. Disabled States (Medium Severity)
+**Platform:** All
+
+**Issue:** Clearly indicate non-interactive elements
+
+**Do:** Reduce opacity and change cursor
+```
+opacity-50 cursor-not-allowed
+```
+
+**Don't:** Confuse disabled with normal state
+```
+Same style as enabled
+```
+
+---
+
+### 32. Loading Buttons (High Severity)
+**Platform:** All
+
+**Issue:** Prevent double submission during async actions
+
+**Do:** Disable button and show loading state
+```
+disabled={loading} spinner
+```
+
+**Don't:** Allow multiple clicks during processing
+```
+Button clickable while loading
+```
+
+---
+
+### 33. Error Feedback (High Severity)
+**Platform:** All
+
+**Issue:** Users need to know when something fails
+
+**Do:** Show clear error messages near problem
+```
+Red border + error message
+```
+
+**Don't:** Silent failures with no feedback
+```
+No indication of error
+```
+
+---
+
+### 34. Success Feedback (Medium Severity)
+**Platform:** All
+
+**Issue:** Confirm successful actions to users
+
+**Do:** Show success message or visual change
+```
+Toast notification or checkmark
+```
+
+**Don't:** No confirmation of completed action
+```
+Action completes silently
+```
+
+---
+
+### 35. Confirmation Dialogs (High Severity)
+**Platform:** All
+
+**Issue:** Prevent accidental destructive actions
+
+**Do:** Confirm before delete/irreversible actions
+```
+Are you sure modal
+```
+
+**Don't:** Delete without confirmation
+```
+Direct delete on click
+```
+
+---
+
+## Accessibility
+
+### 36. Color Contrast (High Severity)
+**Platform:** All
+
+**Issue:** Text must be readable against background
+
+**Do:** Minimum 4.5:1 ratio for normal text
+```
+#333 on white (7:1)
+```
+
+**Don't:** Low contrast text
+```
+#999 on white (2.8:1)
+```
+
+---
+
+### 37. Color Only (High Severity)
+**Platform:** All
+
+**Issue:** Don't convey information by color alone
+
+**Do:** Use icons/text in addition to color
+```
+Red text + error icon
+```
+
+**Don't:** Red/green only for error/success
+```
+Red border only for error
+```
+
+---
+
+### 38. Alt Text (High Severity)
+**Platform:** All
+
+**Issue:** Images need text alternatives
+
+**Do:** Descriptive alt text for meaningful images
+```html
+alt='Dog playing in park'
+```
+
+**Don't:** Empty or missing alt attributes
+```html
+alt='' for content images
+```
+
+---
+
+### 39. Heading Hierarchy (Medium Severity)
+**Platform:** Web
+
+**Issue:** Screen readers use headings for navigation
+
+**Do:** Use sequential heading levels h1-h6
+```
+h1 then h2 then h3
+```
+
+**Don't:** Skip heading levels or misuse for styling
+```
+h1 then h4
+```
+
+---
+
+### 40. ARIA Labels (High Severity)
+**Platform:** All
+
+**Issue:** Interactive elements need accessible names
+
+**Do:** Add aria-label for icon-only buttons
+```html
+aria-label='Close menu'
+```
+
+**Don't:** Icon buttons without labels
+```html
+<button><Icon/></button>
+```
+
+---
+
+### 41. Keyboard Navigation (High Severity)
+**Platform:** Web
+
+**Issue:** All functionality accessible via keyboard
+
+**Do:** Tab order matches visual order
+```
+tabIndex for custom order
+```
+
+**Don't:** Keyboard traps or illogical tab order
+```
+Unreachable elements
+```
+
+---
+
+### 42. Screen Reader (Medium Severity)
+**Platform:** All
+
+**Issue:** Content should make sense when read aloud
+
+**Do:** Use semantic HTML and ARIA properly
+```html
+<nav> <main> <article>
+```
+
+**Don't:** Div soup with no semantics
+```html
+<div> for everything
+```
+
+---
+
+### 43. Form Labels (High Severity)
+**Platform:** All
+
+**Issue:** Inputs must have associated labels
+
+**Do:** Use label with for attribute or wrap input
+```html
+<label for='email'>
+```
+
+**Don't:** Placeholder-only inputs
+```html
+placeholder='Email' only
+```
+
+---
+
+### 44. Error Messages (High Severity)
+**Platform:** All
+
+**Issue:** Error messages must be announced
+
+**Do:** Use aria-live or role=alert for errors
+```html
+role='alert'
+```
+
+**Don't:** Visual-only error indication
+```
+Red border only
+```
+
+---
+
+### 45. Skip Links (Medium Severity)
+**Platform:** Web
+
+**Issue:** Allow keyboard users to skip navigation
+
+**Do:** Provide skip to main content link
+```
+Skip to main content link
+```
+
+**Don't:** No skip link on nav-heavy pages
+```
+100 tabs to reach content
+```
+
+---
+
+### 46. Motion Sensitivity (High Severity)
+**Platform:** All
+
+**Issue:** Parallax/Scroll-jacking causes nausea
+
+**Do:** Respect prefers-reduced-motion
+```css
+@media (prefers-reduced-motion)
+```
+
+**Don't:** Force scroll effects
+```javascript
+ScrollTrigger.create()
+```
+
+---
+
+## Performance
+
+### 47. Image Optimization (High Severity)
+**Platform:** All
+
+**Issue:** Large images slow page load
+
+**Do:** Use appropriate size and format (WebP)
+```
+srcset with multiple sizes
+```
+
+**Don't:** Unoptimized full-size images
+```
+4000px image for 400px display
+```
+
+---
+
+### 48. Lazy Loading (Medium Severity)
+**Platform:** All
+
+**Issue:** Load content as needed
+
+**Do:** Lazy load below-fold images and content
+```html
+loading='lazy'
+```
+
+**Don't:** Load everything upfront
+```
+All images eager load
+```
+
+---
+
+### 49. Code Splitting (Medium Severity)
+**Platform:** Web
+
+**Issue:** Large bundles slow initial load
+
+**Do:** Split code by route/feature
+```javascript
+dynamic import()
+```
+
+**Don't:** Single large bundle
+```
+All code in main bundle
+```
+
+---
+
+### 50. Caching (Medium Severity)
+**Platform:** Web
+
+**Issue:** Repeat visits should be fast
+
+**Do:** Set appropriate cache headers
+```
+Cache-Control headers
+```
+
+**Don't:** No caching strategy
+```
+Every request hits server
+```
+
+---
+
+### 51. Font Loading (Medium Severity)
+**Platform:** Web
+
+**Issue:** Web fonts can block rendering
+
+**Do:** Use font-display swap or optional
+```css
+font-display: swap
+```
+
+**Don't:** Invisible text during font load
+```
+FOIT (Flash of Invisible Text)
+```
+
+---
+
+### 52. Third Party Scripts (Medium Severity)
+**Platform:** Web
+
+**Issue:** External scripts can block rendering
+
+**Do:** Load non-critical scripts async/defer
+```html
+async or defer attribute
+```
+
+**Don't:** Synchronous third-party scripts
+```html
+<script src='...'> in head
+```
+
+---
+
+### 53. Bundle Size (Medium Severity)
+**Platform:** Web
+
+**Issue:** Large JavaScript slows interaction
+
+**Do:** Monitor and minimize bundle size
+```
+Bundle analyzer
+```
+
+**Don't:** Ignore bundle size growth
+```
+No size monitoring
+```
+
+---
+
+### 54. Render Blocking (Medium Severity)
+**Platform:** Web
+
+**Issue:** CSS/JS can block first paint
+
+**Do:** Inline critical CSS defer non-critical
+```
+Critical CSS inline
+```
+
+**Don't:** Large blocking CSS files
+```
+All CSS in head
+```
+
+---
+
+## Forms
+
+### 55. Input Labels (High Severity)
+**Platform:** All
+
+**Issue:** Every input needs a visible label
+
+**Do:** Always show label above or beside input
+```html
+<label>Email</label><input>
+```
+
+**Don't:** Placeholder as only label
+```html
+placeholder='Email' only
+```
+
+---
+
+### 56. Error Placement (Medium Severity)
+**Platform:** All
+
+**Issue:** Errors should appear near the problem
+
+**Do:** Show error below related input
+```
+Error under each field
+```
+
+**Don't:** Single error message at top of form
+```
+All errors at form top
+```
+
+---
+
+### 57. Inline Validation (Medium Severity)
+**Platform:** All
+
+**Issue:** Validate as user types or on blur
+
+**Do:** Validate on blur for most fields
+```
+onBlur validation
+```
+
+**Don't:** Validate only on submit
+```
+Submit-only validation
+```
+
+---
+
+### 58. Input Types (Medium Severity)
+**Platform:** All
+
+**Issue:** Use appropriate input types
+
+**Do:** Use email tel number url etc
+```html
+type='email'
+```
+
+**Don't:** Text input for everything
+```html
+type='text' for email
+```
+
+---
+
+### 59. Autofill Support (Medium Severity)
+**Platform:** Web
+
+**Issue:** Help browsers autofill correctly
+
+**Do:** Use autocomplete attribute properly
+```html
+autocomplete='email'
+```
+
+**Don't:** Block or ignore autofill
+```html
+autocomplete='off' everywhere
+```
+
+---
+
+### 60. Required Indicators (Medium Severity)
+**Platform:** All
+
+**Issue:** Mark required fields clearly
+
+**Do:** Use asterisk or (required) text
+```
+* required indicator
+```
+
+**Don't:** No indication of required fields
+```
+Guess which are required
+```
+
+---
+
+### 61. Password Visibility (Medium Severity)
+**Platform:** All
+
+**Issue:** Let users see password while typing
+
+**Do:** Toggle to show/hide password
+```
+Show/hide password button
+```
+
+**Don't:** No visibility toggle
+```
+Password always hidden
+```
+
+---
+
+### 62. Submit Feedback (High Severity)
+**Platform:** All
+
+**Issue:** Confirm form submission status
+
+**Do:** Show loading then success/error state
+```
+Loading -> Success message
+```
+
+**Don't:** No feedback after submit
+```
+Button click with no response
+```
+
+---
+
+### 63. Input Affordance (Medium Severity)
+**Platform:** All
+
+**Issue:** Inputs should look interactive
+
+**Do:** Use distinct input styling
+```
+Border/background on inputs
+```
+
+**Don't:** Inputs that look like plain text
+```
+Borderless inputs
+```
+
+---
+
+### 64. Mobile Keyboards (Medium Severity)
+**Platform:** Mobile
+
+**Issue:** Show appropriate keyboard for input type
+
+**Do:** Use inputmode attribute
+```html
+inputmode='numeric'
+```
+
+**Don't:** Default keyboard for all inputs
+```
+Text keyboard for numbers
+```
+
+---
+
+## Responsive
+
+### 65. Mobile First (Medium Severity)
+**Platform:** Web
+
+**Issue:** Design for mobile then enhance for larger
+
+**Do:** Start with mobile styles then add breakpoints
+```
+Default mobile + md: lg: xl:
+```
+
+**Don't:** Desktop-first causing mobile issues
+```
+Desktop default + max-width queries
+```
+
+---
+
+### 66. Breakpoint Testing (Medium Severity)
+**Platform:** Web
+
+**Issue:** Test at all common screen sizes
+
+**Do:** Test at 320 375 414 768 1024 1440
+```
+Multiple device testing
+```
+
+**Don't:** Only test on your device
+```
+Single device development
+```
+
+---
+
+### 67. Touch Friendly (High Severity)
+**Platform:** Web
+
+**Issue:** Mobile layouts need touch-sized targets
+
+**Do:** Increase touch targets on mobile
+```
+Larger buttons on mobile
+```
+
+**Don't:** Same tiny buttons on mobile
+```
+Desktop-sized targets on mobile
+```
+
+---
+
+### 68. Readable Font Size (High Severity)
+**Platform:** All
+
+**Issue:** Text must be readable on all devices
+
+**Do:** Minimum 16px body text on mobile
+```
+text-base or larger
+```
+
+**Don't:** Tiny text on mobile
+```
+text-xs for body text
+```
+
+---
+
+### 69. Viewport Meta (High Severity)
+**Platform:** Web
+
+**Issue:** Set viewport for mobile devices
+
+**Do:** Use width=device-width initial-scale=1
+```html
+<meta name='viewport'...>
+```
+
+**Don't:** Missing or incorrect viewport
+```
+No viewport meta tag
+```
+
+---
+
+### 70. Horizontal Scroll (High Severity)
+**Platform:** Web
+
+**Issue:** Avoid horizontal scrolling
+
+**Do:** Ensure content fits viewport width
+```
+max-w-full overflow-x-hidden
+```
+
+**Don't:** Content wider than viewport
+```
+Horizontal scrollbar on mobile
+```
+
+---
+
+### 71. Image Scaling (Medium Severity)
+**Platform:** Web
+
+**Issue:** Images should scale with container
+
+**Do:** Use max-width: 100% on images
+```
+max-w-full h-auto
+```
+
+**Don't:** Fixed width images overflow
+```html
+width='800' fixed
+```
+
+---
+
+### 72. Table Handling (Medium Severity)
+**Platform:** Web
+
+**Issue:** Tables can overflow on mobile
+
+**Do:** Use horizontal scroll or card layout
+```
+overflow-x-auto wrapper
+```
+
+**Don't:** Wide tables breaking layout
+```
+Table overflows viewport
+```
+
+---
+
+## Typography
+
+### 73. Line Height (Medium Severity)
+**Platform:** All
+
+**Issue:** Adequate line height improves readability
+
+**Do:** Use 1.5-1.75 for body text
+```
+leading-relaxed (1.625)
+```
+
+**Don't:** Cramped or excessive line height
+```
+leading-none (1)
+```
+
+---
+
+### 74. Line Length (Medium Severity)
+**Platform:** Web
+
+**Issue:** Long lines are hard to read
+
+**Do:** Limit to 65-75 characters per line
+```
+max-w-prose
+```
+
+**Don't:** Full-width text on large screens
+```
+Full viewport width text
+```
+
+---
+
+### 75. Font Size Scale (Medium Severity)
+**Platform:** All
+
+**Issue:** Consistent type hierarchy aids scanning
+
+**Do:** Use consistent modular scale
+```
+Type scale (12 14 16 18 24 32)
+```
+
+**Don't:** Random font sizes
+```
+Arbitrary sizes
+```
+
+---
+
+### 76. Font Loading (Medium Severity)
+**Platform:** Web
+
+**Issue:** Fonts should load without layout shift
+
+**Do:** Reserve space with fallback font
+```
+font-display: swap + similar fallback
+```
+
+**Don't:** Layout shift when fonts load
+```
+No fallback font
+```
+
+---
+
+### 77. Contrast Readability (High Severity)
+**Platform:** All
+
+**Issue:** Body text needs good contrast
+
+**Do:** Use darker text on light backgrounds
+```
+text-gray-900 on white
+```
+
+**Don't:** Gray text on gray background
+```
+text-gray-400 on gray-100
+```
+
+---
+
+### 78. Heading Clarity (Medium Severity)
+**Platform:** All
+
+**Issue:** Headings should stand out from body
+
+**Do:** Clear size/weight difference
+```
+Bold + larger size
+```
+
+**Don't:** Headings similar to body text
+```
+Same size as body
+```
+
+---
+
+## Feedback
+
+### 79. Loading Indicators (High Severity)
+**Platform:** All
+
+**Issue:** Show system status during waits
+
+**Do:** Show spinner/skeleton for operations > 300ms
+```
+Skeleton or spinner
+```
+
+**Don't:** No feedback during loading
+```
+Frozen UI
+```
+
+---
+
+### 80. Empty States (Medium Severity)
+**Platform:** All
+
+**Issue:** Guide users when no content exists
+
+**Do:** Show helpful message and action
+```
+No items yet. Create one!
+```
+
+**Don't:** Blank empty screens
+```
+Empty white space
+```
+
+---
+
+### 81. Error Recovery (Medium Severity)
+**Platform:** All
+
+**Issue:** Help users recover from errors
+
+**Do:** Provide clear next steps
+```
+Try again button + help link
+```
+
+**Don't:** Error without recovery path
+```
+Error message only
+```
+
+---
+
+### 82. Progress Indicators (Medium Severity)
+**Platform:** All
+
+**Issue:** Show progress for multi-step processes
+
+**Do:** Step indicators or progress bar
+```
+Step 2 of 4 indicator
+```
+
+**Don't:** No indication of progress
+```
+No step information
+```
+
+---
+
+### 83. Toast Notifications (Medium Severity)
+**Platform:** All
+
+**Issue:** Transient messages for non-critical info
+
+**Do:** Auto-dismiss after 3-5 seconds
+```
+Auto-dismiss toast
+```
+
+**Don't:** Toasts that never disappear
+```
+Persistent toast
+```
+
+---
+
+### 84. Confirmation Messages (Medium Severity)
+**Platform:** All
+
+**Issue:** Confirm successful actions
+
+**Do:** Brief success message
+```
+Saved successfully toast
+```
+
+**Don't:** Silent success
+```
+No confirmation
+```
+
+---
+
+## Content
+
+### 85. Truncation (Medium Severity)
+**Platform:** All
+
+**Issue:** Handle long content gracefully
+
+**Do:** Truncate with ellipsis and expand option
+```
+line-clamp-2 with expand
+```
+
+**Don't:** Overflow or broken layout
+```
+Overflow or cut off
+```
+
+---
+
+### 86. Date Formatting (Low Severity)
+**Platform:** All
+
+**Issue:** Use locale-appropriate date formats
+
+**Do:** Use relative or locale-aware dates
+```
+2 hours ago or locale format
+```
+
+**Don't:** Ambiguous date formats
+```
+01/02/03
+```
+
+---
+
+### 87. Number Formatting (Low Severity)
+**Platform:** All
+
+**Issue:** Format large numbers for readability
+
+**Do:** Use thousand separators or abbreviations
+```
+1.2K or 1,234
+```
+
+**Don't:** Long unformatted numbers
+```
+1234567
+```
+
+---
+
+### 88. Placeholder Content (Low Severity)
+**Platform:** All
+
+**Issue:** Show realistic placeholders during dev
+
+**Do:** Use realistic sample data
+```
+Real sample content
+```
+
+**Don't:** Lorem ipsum everywhere
+```
+Lorem ipsum
+```
+
+---
+
+## Onboarding
+
+### 89. User Freedom (Medium Severity)
+**Platform:** All
+
+**Issue:** Users should be able to skip tutorials
+
+**Do:** Provide Skip and Back buttons
+```
+Skip Tutorial button
+```
+
+**Don't:** Force linear unskippable tour
+```
+Locked overlay until finished
+```
+
+---
+
+## Search
+
+### 90. Autocomplete (Medium Severity)
+**Platform:** Web
+
+**Issue:** Help users find results faster
+
+**Do:** Show predictions as user types
+```
+Debounced fetch + dropdown
+```
+
+**Don't:** Require full type and enter
+```
+No suggestions
+```
+
+---
+
+### 91. No Results (Medium Severity)
+**Platform:** Web
+
+**Issue:** Dead ends frustrate users
+
+**Do:** Show 'No results' with suggestions
+```
+Try searching for X instead
+```
+
+**Don't:** Blank screen or '0 results'
+```
+No results found.
+```
+
+---
+
+## Data Entry
+
+### 92. Bulk Actions (Low Severity)
+**Platform:** Web
+
+**Issue:** Editing one by one is tedious
+
+**Do:** Allow multi-select and bulk edit
+```
+Checkbox column + Action bar
+```
+
+**Don't:** Single row actions only
+```
+Repeated actions per row
+```
+
+---
+
+## AI Interaction
+
+### 93. Disclaimer (High Severity)
+**Platform:** All
+
+**Issue:** Users need to know they talk to AI
+
+**Do:** Clearly label AI generated content
+```
+AI Assistant label
+```
+
+**Don't:** Present AI as human
+```
+Fake human name without label
+```
+
+---
+
+### 94. Streaming (Medium Severity)
+**Platform:** All
+
+**Issue:** Waiting for full text is slow
+
+**Do:** Stream text response token by token
+```
+Typewriter effect
+```
+
+**Don't:** Show loading spinner for 10s+
+```
+Spinner until 100% complete
+```
+
+---
+
+### 95. Feedback Loop (Low Severity)
+**Platform:** All
+
+**Issue:** AI needs user feedback to improve
+
+**Do:** Thumps up/down or 'Regenerate'
+```
+Feedback component
+```
+
+**Don't:** Static output only
+```
+Read-only text
+```
+
+---
+
+## Spatial UI
+
+### 96. Gaze Hover (High Severity)
+**Platform:** VisionOS
+
+**Issue:** Elements should respond to eye tracking before pinch
+
+**Do:** Scale/highlight element on look
+```
+hoverEffect()
+```
+
+**Don't:** Static element until pinch
+```
+onTap only
+```
+
+---
+
+### 97. Depth Layering (Medium Severity)
+**Platform:** VisionOS
+
+**Issue:** UI needs Z-depth to separate content from environment
+
+**Do:** Use glass material and z-offset
+```
+.glassBackgroundEffect()
+```
+
+**Don't:** Flat opaque panels blocking view
+```
+bg-white
+```
+
+---
+
+## Sustainability
+
+### 98. Auto-Play Video (Medium Severity)
+**Platform:** Web
+
+**Issue:** Video consumes massive data and energy
+
+**Do:** Click-to-play or pause when off-screen
+```html
+playsInline muted preload='none'
+```
+
+**Don't:** Auto-play high-res video loops
+```html
+autoplay loop
+```
+
+---
+
+### 99. Asset Weight (Medium Severity)
+**Platform:** Web
+
+**Issue:** Heavy 3D/Image assets increase carbon footprint
+
+**Do:** Compress and lazy load 3D models
+```
+Draco compression
+```
+
+**Don't:** Load 50MB textures
+```
+Raw .obj files
+```
+
+---
+
+## Summary by Severity
+
+### High Severity (31 patterns)
+Navigation: Smooth Scroll, Back Button
+Animation: Excessive Motion, Reduced Motion, Loading States, Hover vs Tap
+Layout: Z-Index Management, Content Jumping
+Touch: Touch Target Size
+Interaction: Focus States, Loading Buttons, Error Feedback, Confirmation Dialogs
+Accessibility: Color Contrast, Color Only, Alt Text, ARIA Labels, Keyboard Navigation, Form Labels, Error Messages, Motion Sensitivity
+Performance: Image Optimization
+Forms: Input Labels, Submit Feedback
+Responsive: Touch Friendly, Readable Font Size, Viewport Meta, Horizontal Scroll
+Typography: Contrast Readability
+Feedback: Loading Indicators
+AI Interaction: Disclaimer
+Spatial UI: Gaze Hover
+
+### Medium Severity (57 patterns)
+Navigation: Sticky Navigation, Active State, Deep Linking
+Animation: Duration Timing, Continuous Animation, Transform Performance
+Layout: Overflow Hidden, Fixed Positioning, Stacking Context, Viewport Units, Container Width
+Touch: Touch Spacing, Gesture Conflicts, Tap Delay
+Interaction: Hover States, Active States, Disabled States, Success Feedback
+Accessibility: Heading Hierarchy, Screen Reader, Skip Links
+Performance: Lazy Loading, Code Splitting, Caching, Font Loading, Third Party Scripts, Bundle Size, Render Blocking
+Forms: Error Placement, Inline Validation, Input Types, Autofill Support, Required Indicators, Password Visibility, Input Affordance, Mobile Keyboards
+Responsive: Mobile First, Breakpoint Testing, Image Scaling, Table Handling
+Typography: Line Height, Line Length, Font Size Scale, Font Loading, Heading Clarity
+Feedback: Empty States, Error Recovery, Progress Indicators, Toast Notifications, Confirmation Messages
+Content: Truncation
+Onboarding: User Freedom
+Search: Autocomplete, No Results
+AI Interaction: Streaming
+Spatial UI: Depth Layering
+Sustainability: Auto-Play Video, Asset Weight
+
+### Low Severity (11 patterns)
+Navigation: Breadcrumbs
+Animation: Easing Functions
+Touch: Pull to Refresh, Haptic Feedback
+Content: Date Formatting, Number Formatting, Placeholder Content
+Data Entry: Bulk Actions
+AI Interaction: Feedback Loop
