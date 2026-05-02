@@ -19,6 +19,7 @@
 | Mode | File | Keywords |
 |---|---|---|
 | scan | modes/scan/SKILL.md | scan:, scan org:, run security scan: |
+| review | modes/review/SKILL.md | review:, security review:, review PR:, code review:, pre-commit security: |
 | dast | modes/dast/SKILL.md | dast:, web scan:, pen test web: |
 | binary-scan | modes/binary-scan/SKILL.md | binary-scan:, scan binary:, analyze exe: |
 | mitigate | modes/mitigate/SKILL.md | mitigate:, how to fix findings:, generate mitigations: |
