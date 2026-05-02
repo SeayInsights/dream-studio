@@ -54,13 +54,13 @@ class SessionCollector:
 
             # By project
             cursor.execute("""
-                SELECT project_slug, COUNT(*) as count
+                SELECT project_id, COUNT(*) as count
                 FROM raw_sessions
                 WHERE started_at >= ?
-                GROUP BY project_slug
+                GROUP BY project_id
                 ORDER BY count DESC
             """, (cutoff_date,))
-            by_project = {row["project_slug"]: row["count"] for row in cursor.fetchall()}
+            by_project = {row["project_id"]: row["count"] for row in cursor.fetchall()}
 
             # Timeline (daily)
             cursor.execute("""
@@ -145,7 +145,7 @@ class SessionCollector:
             cursor.execute("""
                 SELECT
                     session_id,
-                    project_slug,
+                    project_id,
                     started_at,
                     ended_at,
                     outcome

@@ -35,10 +35,10 @@ class ProductionDashboard:
         Initialize dashboard generator
 
         Args:
-            db_path: Path to studio.db (defaults to ~/.dream-studio/studio.db)
+            db_path: Path to studio.db (defaults to ~/.dream-studio/state/studio.db)
         """
         import os
-        self.db_path = db_path or os.path.expanduser("~/.dream-studio/studio.db")
+        self.db_path = db_path or os.path.expanduser("~/.dream-studio/state/studio.db")
 
     def generate(self, days: int = 30, output_path: str = "analytics_dashboard.html") -> str:
         """
