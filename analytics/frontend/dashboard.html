@@ -2016,7 +2016,7 @@
                         most_efficient_model: modelsData.most_efficient_model || '--',
                         most_efficient_rate: modelsData.most_efficient_rate || 0
                     },
-                    performance: modelsData.model_performance || modelsData.by_model || [],
+                    performance: modelsData.model_performance || Object.values(modelsData.by_model || {}),
                     tokenTimeline: tokensData.timeline || [],
                     costByModel: modelsData.by_model || [],
                     costByProject: tokensData.by_project || [],
