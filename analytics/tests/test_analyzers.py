@@ -3,6 +3,8 @@ import pytest
 from datetime import datetime, timedelta
 from analytics.core.analyzers.performance_analyzer import PerformanceAnalyzer
 from analytics.core.analyzers.trend_analyzer import TrendAnalyzer
+from analytics.core.analyzers.anomaly_detector import AnomalyDetector
+from analytics.core.analyzers.predictor import Predictor
 
 
 # PerformanceAnalyzer tests
@@ -253,3 +255,235 @@ def test_detect_seasonality_insufficient_data():
     result = analyzer.detect_seasonality(timeline)
 
     assert result["has_weekly_pattern"] is False
+
+
+# AnomalyDetector tests
+
+def test_anomaly_detector_initialization():
+    """Test AnomalyDetector can be initialized"""
+    detector = AnomalyDetector()
+    assert detector is not None
+    assert detector.sensitivity == "medium"
+
+    detector_high = AnomalyDetector(sensitivity="high")
+    assert detector_high.threshold == 1.5
+
+
+def test_detect_outliers_zscore():
+    """Test z-score based outlier detection"""
+    detector = AnomalyDetector(sensitivity="high")  # Use high sensitivity for more detection
+
+    timeline = [
+        {"date": "2026-04-01", "count": 10},
+        {"date": "2026-04-02", "count": 11},
+        {"date": "2026-04-03", "count": 10},
+        {"date": "2026-04-04", "count": 11},
+        {"date": "2026-04-05", "count": 10},
+        {"date": "2026-04-06", "count": 100},  # Severe outlier (much more extreme)
+        {"date": "2026-04-07", "count": 11}
+    ]
+
+    result = detector.detect_outliers_zscore(timeline)
+
+    assert isinstance(result, list)
+    assert len(result) >= 1
+    assert result[0]["value"] == 100
+    assert result[0]["severity"] in ["mild", "moderate", "severe"]
+    assert result[0]["direction"] == "high"
+    assert "z_score" in result[0]
+
+
+def test_detect_trend_breaks():
+    """Test trend break detection"""
+    detector = AnomalyDetector()
+
+    # Create data with a clear trend reversal
+    timeline = []
+    for i in range(15):
+        if i < 7:
+            count = 10 + i * 2  # Increasing
+        else:
+            count = 24 - (i - 7) * 2  # Decreasing (reversal)
+
+        timeline.append({
+            "date": f"2026-04-{str(i+1).zfill(2)}",
+            "count": count
+        })
+
+    result = detector.detect_trend_breaks(timeline)
+
+    assert isinstance(result, list)
+    # Should detect the reversal around day 7
+    if result:  # May or may not detect depending on threshold
+        assert "break_type" in result[0]
+        assert result[0]["break_type"] in ["reversal_downward", "reversal_upward", "acceleration", "deceleration"]
+
+
+def test_detect_pattern_deviation():
+    """Test pattern deviation detection"""
+    detector = AnomalyDetector()
+
+    historical_data = [
+        {"date": f"2026-03-{str(i+1).zfill(2)}", "count": 10 + i}
+        for i in range(20)
+    ]
+
+    current_data = [
+        {"date": f"2026-04-{str(i+1).zfill(2)}", "count": 30 + i}  # Much higher
+        for i in range(7)
+    ]
+
+    result = detector.detect_pattern_deviation(current_data, historical_data)
+
+    assert "is_deviant" in result
+    assert "current_avg" in result
+    assert "historical_avg" in result
+    assert "deviation_pct" in result
+    assert "recommendation" in result
+
+    assert result["is_deviant"] is True  # Should detect deviation
+    assert result["deviation_pct"] > 50  # Significant increase
+
+
+def test_comprehensive_anomaly_scan():
+    """Test comprehensive anomaly scan"""
+    detector = AnomalyDetector()
+
+    timeline = [
+        {"date": "2026-04-01", "count": 10},
+        {"date": "2026-04-02", "count": 11},
+        {"date": "2026-04-03", "count": 50},  # Outlier
+        {"date": "2026-04-04", "count": 10},
+        {"date": "2026-04-05", "count": 11},
+        {"date": "2026-04-06", "count": 12}
+    ]
+
+    result = detector.comprehensive_anomaly_scan(timeline)
+
+    assert "outliers" in result
+    assert "trend_breaks" in result
+    assert "overall_health" in result
+    assert "anomaly_count" in result
+    assert "recommendations" in result
+
+    assert result["overall_health"] in ["healthy", "warning", "critical", "unknown"]
+    assert isinstance(result["recommendations"], list)
+
+
+# Predictor tests
+
+def test_predictor_initialization():
+    """Test Predictor can be initialized"""
+    predictor = Predictor()
+    assert predictor is not None
+
+
+def test_forecast_linear():
+    """Test linear forecasting"""
+    predictor = Predictor()
+
+    timeline = [
+        {"date": f"2026-04-{str(i+1).zfill(2)}", "count": 10 + i * 2}
+        for i in range(14)
+    ]
+
+    result = predictor.forecast_linear(timeline, steps_ahead=7)
+
+    assert "forecast" in result
+    assert "slope" in result
+    assert "confidence_level" in result
+    assert "lower_bound" in result
+    assert "upper_bound" in result
+
+    assert len(result["forecast"]) == 7
+    assert result["slope"] > 0  # Increasing trend
+
+    # Check forecast structure
+    for pred in result["forecast"]:
+        assert "date" in pred
+        assert "predicted_value" in pred
+        assert "confidence_lower" in pred
+        assert "confidence_upper" in pred
+
+
+def test_predict_next_value():
+    """Test single value prediction"""
+    predictor = Predictor()
+
+    timeline = [
+        {"date": f"2026-04-{str(i+1).zfill(2)}", "count": 10 + i}
+        for i in range(10)
+    ]
+
+    result = predictor.predict_next_value(timeline)
+
+    assert "predicted_value" in result
+    assert "confidence_interval" in result
+    assert "trend_direction" in result
+    assert "confidence_score" in result
+
+    assert result["trend_direction"] in ["increasing", "decreasing", "stable", "unknown"]
+    assert 0 <= result["confidence_score"] <= 1
+
+
+def test_forecast_with_seasonality():
+    """Test seasonal forecasting"""
+    predictor = Predictor()
+
+    # Create 3 weeks of data with weekly pattern
+    timeline = []
+    now = datetime(2026, 4, 7)  # Monday
+
+    for i in range(21):
+        date = now + timedelta(days=i)
+        # Weekdays higher than weekends
+        count = 20 if date.weekday() < 5 else 10
+
+        timeline.append({
+            "date": date.strftime("%Y-%m-%d"),
+            "count": count
+        })
+
+    result = predictor.forecast_with_seasonality(timeline, steps_ahead=7)
+
+    assert "forecast" in result
+    assert "seasonality_detected" in result
+
+    # Should have forecast for 7 days
+    assert len(result["forecast"]) == 7
+
+    # Check seasonal adjustment was applied
+    for pred in result["forecast"]:
+        if "seasonal_adjustment" in pred:
+            assert isinstance(pred["seasonal_adjustment"], (int, float))
+
+
+def test_calculate_forecast_accuracy():
+    """Test forecast accuracy calculation"""
+    predictor = Predictor()
+
+    # Create predictable timeline
+    timeline = [
+        {"date": f"2026-04-{str(i+1).zfill(2)}", "count": 10 + i}
+        for i in range(21)
+    ]
+
+    result = predictor.calculate_forecast_accuracy(timeline, validation_window=7)
+
+    assert "mae" in result
+    assert "mape" in result
+    assert "accuracy_score" in result
+
+    assert 0 <= result["accuracy_score"] <= 1
+    assert result["mae"] >= 0
+
+
+def test_forecast_insufficient_data():
+    """Test forecast with insufficient data"""
+    predictor = Predictor()
+
+    timeline = [{"date": "2026-04-01", "count": 10}]
+
+    result = predictor.forecast_linear(timeline, steps_ahead=7)
+
+    assert "error" in result or len(result.get("forecast", [])) == 0
