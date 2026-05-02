@@ -791,6 +791,254 @@ For production use:
 
 ---
 
+## Export & Reporting
+
+The analytics platform supports exporting reports in multiple formats: PDF, Excel, PowerPoint, CSV, and Power BI datasets.
+
+### Quick Export
+
+```python
+from analytics.core.reports import ReportGenerator
+from analytics.exporters import PDFExporter, ExcelExporter
+
+# Generate report
+generator = ReportGenerator()
+report = generator.generate_report("summary", 
+    config={"date_range": ("2026-04-01", "2026-04-30")})
+
+# Export to PDF
+pdf_exporter = PDFExporter()
+pdf_exporter.export_to_pdf(report, "report.pdf")
+
+# Export to Excel
+excel_exporter = ExcelExporter()
+excel_exporter.export_to_excel(report, "report.xlsx")
+```
+
+### Report Types
+
+- **Summary**: Executive overview (3-5 sections, KPIs, charts)
+- **Detailed**: Deep analysis (8-10 sections, all metrics, trends)
+- **Executive**: C-level briefing (business metrics, ROI)
+- **Custom**: User-defined template
+
+### Export Formats
+
+#### PDF Reports
+Professional multi-page layout with embedded charts and tables, branded headers/footers.
+
+```python
+from analytics.exporters import PDFExporter
+
+exporter = PDFExporter()
+success, path = exporter.export_to_pdf(report_data, "output.pdf")
+```
+
+#### Excel Workbooks
+Multi-sheet workbooks with charts, conditional formatting, and professional styling.
+
+```python
+from analytics.exporters import ExcelExporter, ExcelTemplateBuilder
+
+exporter = ExcelExporter()
+builder = ExcelTemplateBuilder()
+
+wb = exporter.create_workbook()
+builder.build_summary_dashboard(report, wb)
+exporter.save_workbook(wb, "dashboard.xlsx")
+```
+
+#### PowerPoint Presentations
+Branded slide templates with chart slides and data tables.
+
+```python
+from analytics.exporters import PPTXExporter
+
+exporter = PPTXExporter()
+exporter.export_to_pptx(report, "presentation.pptx")
+```
+
+#### CSV Data
+Single file or multi-file export with ZIP archive support.
+
+```python
+from analytics.exporters import CSVExporter
+
+exporter = CSVExporter()
+
+# Single file
+exporter.export_to_csv(report, "data.csv")
+
+# ZIP archive
+exporter.export_as_zip(report, "data.zip")
+```
+
+#### Power BI Datasets
+Ready-to-import datasets for Power BI Desktop with connection files.
+
+```python
+from analytics.exporters import PowerBIExporter
+
+exporter = PowerBIExporter()
+exporter.export_dataset(report, "powerbi_export/")
+# Open dataset.pbids in Power BI Desktop
+```
+
+### Email Delivery
+
+Send reports via email with attachments.
+
+```python
+from analytics.core.email import EmailSender
+
+sender = EmailSender(
+    smtp_host="smtp.gmail.com",
+    smtp_port=587,
+    username="user@gmail.com",
+    password="app-password",
+    from_address="Analytics <noreply@example.com>"
+)
+
+sender.send_email(
+    to_addresses=["manager@example.com"],
+    subject="Weekly Analytics Report",
+    body="Please find attached the weekly analytics report.",
+    attachments=["report.pdf"]
+)
+```
+
+### Scheduled Reports
+
+Schedule automatic report generation and delivery.
+
+```python
+from analytics.core.scheduler import ReportScheduler, ScheduleStorage
+
+storage = ScheduleStorage()
+scheduler = ReportScheduler(storage)
+
+job_id = scheduler.schedule_report({
+    "name": "Weekly Executive Summary",
+    "report_type": "summary",
+    "schedule": "0 9 * * MON",  # Every Monday 9am
+    "recipients": ["exec@company.com"],
+    "format": "pdf"
+})
+
+scheduler.start()
+```
+
+**Cron Schedule Examples**:
+- `0 9 * * *` - Daily at 9:00 AM
+- `0 9 * * MON` - Every Monday at 9:00 AM
+- `0 */6 * * *` - Every 6 hours
+- `0 0 1 * *` - First day of each month
+- `0 9 * * 1-5` - Weekdays at 9:00 AM
+
+### REST API
+
+Access export and reporting via HTTP endpoints.
+
+```bash
+# Generate report
+curl -X POST http://localhost:8000/api/v1/reports/generate \
+  -H "Content-Type: application/json" \
+  -d '{"report_type": "summary"}'
+
+# Export PDF
+curl http://localhost:8000/api/v1/export/pdf/{report_id} \
+  -o report.pdf
+
+# List schedules
+curl http://localhost:8000/api/v1/schedules
+
+# Create schedule
+curl -X POST http://localhost:8000/api/v1/schedules \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Daily Report",
+    "report_type": "summary",
+    "schedule": "0 9 * * *",
+    "recipients": ["team@example.com"],
+    "format": "pdf"
+  }'
+```
+
+### Configuration
+
+Configure export and email settings in `analytics/config/analytics.yaml`:
+
+```yaml
+export:
+  output_dir: "exports/"
+  max_file_size: 104857600  # 100MB
+  retention_days: 30
+
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+  # Set credentials via environment variables:
+  # EMAIL_USERNAME, EMAIL_PASSWORD
+
+scheduler:
+  enabled: true
+  timezone: "UTC"
+  max_concurrent_jobs: 5
+```
+
+### Troubleshooting
+
+#### Missing export libraries
+
+Install optional dependencies:
+```bash
+pip install reportlab openpyxl python-pptx matplotlib apscheduler
+```
+
+#### Email sending fails
+
+**Gmail users**: Use an app password instead of your regular password:
+1. Enable 2-factor authentication
+2. Generate app password at https://myaccount.google.com/apppasswords
+3. Use app password in EmailSender configuration
+
+**Firewall issues**: Verify SMTP port (587 for TLS, 465 for SSL) is not blocked.
+
+#### Charts not rendering
+
+Install matplotlib:
+```bash
+pip install matplotlib
+```
+
+For high-DPI displays, configure matplotlib backend:
+```python
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend
+```
+
+#### Scheduler not running
+
+Verify scheduler is started:
+```python
+scheduler.start()
+# Keep main thread alive
+import time
+while True:
+    time.sleep(60)
+```
+
+For production, run as a background service or use process manager (systemd, supervisor).
+
+#### Power BI connection issues
+
+1. Verify CSV files are UTF-8 encoded
+2. Check that .pbids file has correct file path
+3. Open Power BI Desktop → Get Data → Text/CSV → Select CSV from export directory
+
+---
+
 ## Support
 
 For issues, questions, or contributions:

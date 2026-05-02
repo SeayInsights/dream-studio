@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alert Notification</title>
+    <style>
+        /* Inline CSS for email client compatibility */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header.critical {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        }
+        .header.warning {
+            background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+        }
+        .header.info {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        }
+        .alert-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header p {
+            color: rgba(255, 255, 255, 0.95);
+            margin: 10px 0 0 0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #1a1a1a;
+            font-size: 22px;
+            margin: 0 0 20px 0;
+            font-weight: 600;
+        }
+        .content p {
+            color: #4a4a4a;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 0 0 20px 0;
+        }
+        .alert-details {
+            background-color: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        .alert-details.critical {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+        }
+        .alert-details.info {
+            background-color: #d1ecf1;
+            border-color: #17a2b8;
+        }
+        .alert-metric {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .alert-metric-label {
+            color: #6c757d;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .alert-metric-value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #dc3545;
+            margin: 10px 0;
+        }
+        .alert-threshold {
+            color: #6c757d;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .alert-threshold strong {
+            color: #1a1a1a;
+        }
+        .action-button {
+            display: inline-block;
+            background-color: #667eea;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .action-button:hover {
+            background-color: #5568d3;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 0;
+            font-size: 14px;
+            color: #4a4a4a;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e5e5;
+        }
+        .footer p {
+            color: #6c757d;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 8px 0;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Mobile responsive */
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                width: 100% !important;
+            }
+            .content {
+                padding: 30px 20px !important;
+            }
+            .header h1 {
+                font-size: 24px !important;
+            }
+            .alert-metric-value {
+                font-size: 28px !important;
+            }
+            .action-button {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header (class dynamically set based on severity) -->
+        <div class="header {{alert_severity}}">
+            <div class="alert-icon">⚠️</div>
+            <h1>Alert Triggered</h1>
+            <p>{{alert_severity}} severity</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <h2>{{alert_title}}</h2>
+
+            <p>An alert has been triggered in your analytics system. Please review the details below and take appropriate action.</p>
+
+            <div class="alert-details {{alert_severity}}">
+                <div class="alert-metric">
+                    <div class="alert-metric-label">{{metric_name}}</div>
+                    <div class="alert-metric-value">{{metric_value}}</div>
+                    <div class="alert-threshold">
+                        Threshold: <strong>{{threshold}}</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <p><strong>What this means:</strong> The metric "{{metric_name}}" has exceeded the configured threshold. This alert was automatically triggered based on your alert rules.</p>
+            </div>
+
+            <p style="text-align: center;">
+                <a href="{{dashboard_url}}" class="action-button">🔍 View in Dashboard</a>
+            </p>
+
+            <p style="font-size: 14px; color: #6c757d; margin-top: 30px;">
+                <strong>Next Steps:</strong><br>
+                1. Review the metric in the analytics dashboard<br>
+                2. Investigate the root cause of the threshold breach<br>
+                3. Take corrective action if necessary<br>
+                4. Adjust alert thresholds if this is a false positive
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Dream Studio Analytics</strong></p>
+            <p>Automated alert monitoring system</p>
+            <p style="margin-top: 20px;">
+                <a href="#">Manage Alert Rules</a> |
+                <a href="#">Snooze Alerts</a> |
+                <a href="#">Unsubscribe</a>
+            </p>
+            <p style="margin-top: 15px; font-size: 11px; color: #999;">
+                You received this alert because you are subscribed to notifications for this metric.<br>
+                To modify alert settings or unsubscribe, click the links above.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

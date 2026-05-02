@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scheduled Analytics Report</title>
+    <style>
+        /* Inline CSS for email client compatibility */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #28a745 0%, #218838 100%);
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            color: #ffffff;
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .header p {
+            color: rgba(255, 255, 255, 0.9);
+            margin: 10px 0 0 0;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 10px;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #1a1a1a;
+            font-size: 22px;
+            margin: 0 0 20px 0;
+            font-weight: 600;
+        }
+        .content p {
+            color: #4a4a4a;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 0 0 20px 0;
+        }
+        .report-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            padding: 25px;
+            margin: 25px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .report-card-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 12px 0;
+            padding: 12px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .report-card-row:last-child {
+            border-bottom: none;
+        }
+        .report-card-label {
+            color: #6c757d;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .report-card-value {
+            color: #1a1a1a;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        .attachment-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 15px 20px;
+            margin: 25px 0;
+            display: flex;
+            align-items: center;
+        }
+        .attachment-notice-icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        .attachment-notice-text {
+            flex: 1;
+        }
+        .attachment-notice-text p {
+            margin: 0;
+            font-size: 14px;
+            color: #856404;
+        }
+        .attachment-notice-text strong {
+            color: #1a1a1a;
+        }
+        .schedule-info {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .schedule-info p {
+            margin: 0;
+            font-size: 14px;
+            color: #0c5460;
+        }
+        .schedule-info strong {
+            color: #1a1a1a;
+        }
+        .action-button {
+            display: inline-block;
+            background-color: #28a745;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 14px 32px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 10px 5px;
+            text-align: center;
+        }
+        .action-button:hover {
+            background-color: #218838;
+        }
+        .action-button.secondary {
+            background-color: #6c757d;
+        }
+        .action-button.secondary:hover {
+            background-color: #5a6268;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e5e5;
+        }
+        .footer p {
+            color: #6c757d;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 8px 0;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Mobile responsive */
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                width: 100% !important;
+            }
+            .content {
+                padding: 30px 20px !important;
+            }
+            .header h1 {
+                font-size: 24px !important;
+            }
+            .report-card {
+                padding: 20px 15px !important;
+            }
+            .report-card-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .report-card-value {
+                margin-top: 5px;
+            }
+            .action-button {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📅 Scheduled Report Delivery</h1>
+            <p>Your automated analytics report</p>
+            <div class="badge">Scheduled Report</div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <h2>Your Report is Ready</h2>
+
+            <p>Your scheduled analytics report has been automatically generated and is attached to this email.</p>
+
+            <div class="report-card">
+                <div class="report-card-row">
+                    <span class="report-card-label">📊 Report Period</span>
+                    <span class="report-card-value">{{report_period}}</span>
+                </div>
+                <div class="report-card-row">
+                    <span class="report-card-label">📎 Attachment</span>
+                    <span class="report-card-value">{{report_filename}}</span>
+                </div>
+                <div class="report-card-row">
+                    <span class="report-card-label">📆 Next Scheduled</span>
+                    <span class="report-card-value">{{next_scheduled}}</span>
+                </div>
+            </div>
+
+            <div class="attachment-notice">
+                <div class="attachment-notice-icon">📥</div>
+                <div class="attachment-notice-text">
+                    <p><strong>Report attached:</strong> The full report is attached to this email. Download it to view detailed analytics and insights.</p>
+                </div>
+            </div>
+
+            <div class="schedule-info">
+                <p>
+                    ℹ️ This is an automated report delivery. Your next report will be sent on <strong>{{next_scheduled}}</strong>.
+                </p>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="{{manage_subscription_url}}" class="action-button">⚙️ Manage Subscription</a>
+                <a href="{{manage_subscription_url}}" class="action-button secondary">📧 Change Schedule</a>
+            </div>
+
+            <p style="font-size: 14px; color: #6c757d; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e5e5;">
+                <strong>Report Details:</strong><br>
+                This report includes comprehensive analytics data for the specified period. All metrics, trends, and insights are included in the attached file.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>Dream Studio Analytics</strong></p>
+            <p>Automated scheduled reporting system</p>
+            <p style="margin-top: 20px;">
+                <a href="{{manage_subscription_url}}">Manage Schedule</a> |
+                <a href="#">Pause Reports</a> |
+                <a href="#">Unsubscribe</a>
+            </p>
+            <p style="margin-top: 15px; font-size: 11px; color: #999;">
+                You are receiving this scheduled report based on your subscription settings.<br>
+                To modify delivery schedule, format, or recipients, click "Manage Subscription" above.<br>
+                To stop receiving these reports, click the unsubscribe link.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

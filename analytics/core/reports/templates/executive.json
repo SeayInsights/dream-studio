@@ -1,0 +1,61 @@
+{
+  "name": "Executive Briefing",
+  "description": "C-level briefing focused on business metrics, ROI, and strategic insights",
+  "sections": [
+    {
+      "title": "Business Impact",
+      "metrics": [
+        "total_cost",
+        "total_sessions",
+        "success_rate",
+        "workflow_success_rate"
+      ],
+      "charts": [
+        {
+          "type": "line",
+          "title": "Monthly Cost Trends",
+          "data_source": "cost_by_model"
+        }
+      ]
+    },
+    {
+      "title": "Platform Utilization",
+      "metrics": [
+        "total_skill_invocations",
+        "unique_skills",
+        "avg_session_duration"
+      ],
+      "charts": [
+        {
+          "type": "pie",
+          "title": "Resource Allocation by Model",
+          "data_source": "model_usage"
+        }
+      ]
+    },
+    {
+      "title": "Productivity Insights",
+      "metrics": [
+        "session_activity",
+        "sessions_by_project",
+        "top_skills"
+      ],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Top 5 Value-Driving Skills",
+          "data_source": "top_skills"
+        }
+      ]
+    },
+    {
+      "title": "Strategic Recommendations",
+      "metrics": [
+        "lessons_by_status",
+        "workflow_success_rate",
+        "total_lessons"
+      ],
+      "charts": []
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+﻿Metric,Value
+total_tokens,5678901
+by_model.claude-sonnet-4-5,3456789
+by_model.claude-haiku-4-0,2222112
+daily_average,189296.70

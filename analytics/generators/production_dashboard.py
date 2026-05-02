@@ -51,35 +51,35 @@ class ProductionDashboard:
         Returns:
             Path to generated dashboard
         """
-        print(f"📊 Generating analytics dashboard for last {days} days...")
+        print(f"[Dashboard] Generating analytics dashboard for last {days} days...")
 
         # Collect all data
-        print("  → Collecting metrics...")
+        print("  -> Collecting metrics...")
         metrics = self._collect_metrics(days)
 
-        print("  → Running analysis...")
+        print("  -> Running analysis...")
         analysis = self._analyze_metrics(metrics)
 
-        print("  → Generating insights...")
+        print("  -> Generating insights...")
         insights = self._generate_insights(metrics, analysis)
 
-        print("  → Running ML analysis...")
+        print("  -> Running ML analysis...")
         ml_insights = self._generate_ml_insights(metrics, days)
 
-        print("  → Creating visualizations...")
+        print("  -> Creating visualizations...")
         charts = self._generate_charts(metrics, analysis)
 
-        print("  → Creating ML visualizations...")
+        print("  -> Creating ML visualizations...")
         ml_charts = self._generate_ml_charts(ml_insights)
 
-        print("  → Building dashboard...")
+        print("  -> Building dashboard...")
         html = self._build_html(metrics, analysis, insights, charts, ml_insights, ml_charts)
 
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(html)
 
-        print(f"✅ Dashboard generated: {output_path}")
+        print(f"[SUCCESS] Dashboard generated: {output_path}")
         return output_path
 
     def _collect_metrics(self, days: int) -> Dict[str, Any]:
@@ -167,7 +167,7 @@ class ProductionDashboard:
         try:
             import pandas as pd
         except ImportError:
-            print("  ⚠️ pandas not available, skipping ML insights")
+            print("  [WARNING] pandas not available, skipping ML insights")
             return ml_insights
 
         # Generate forecasts
@@ -183,7 +183,7 @@ class ProductionDashboard:
                 forecast_result = forecaster.forecast(steps=7)
                 ml_insights["forecasts"] = forecast_result
         except Exception as e:
-            print(f"  ⚠️ Forecast generation failed: {e}")
+            print(f"  [WARNING] Forecast generation failed: {e}")
 
         # Detect patterns
         try:
@@ -196,7 +196,7 @@ class ProductionDashboard:
                     patterns = detector.get_patterns()
                     ml_insights["patterns"] = patterns[:10]  # Top 10 patterns
         except Exception as e:
-            print(f"  ⚠️ Pattern detection failed: {e}")
+            print(f"  [WARNING] Pattern detection failed: {e}")
 
         # Generate ML recommendations
         try:
@@ -224,7 +224,7 @@ class ProductionDashboard:
                 recs = engine.get_recommendations(min_impact=30)
                 ml_insights["recommendations"] = recs[:5]  # Top 5 by impact
         except Exception as e:
-            print(f"  ⚠️ ML recommendations failed: {e}")
+            print(f"  [WARNING] ML recommendations failed: {e}")
 
         # Generate benchmarks
         try:
@@ -261,7 +261,7 @@ class ProductionDashboard:
 
                 ml_insights["benchmarks"] = benchmarks
         except Exception as e:
-            print(f"  ⚠️ Benchmark generation failed: {e}")
+            print(f"  [WARNING] Benchmark generation failed: {e}")
 
         return ml_insights
 
@@ -758,6 +758,174 @@ class ProductionDashboard:
             font-style: italic;
         }}
 
+        .export-buttons {{
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }}
+
+        .export-buttons button {{
+            padding: 10px 20px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }}
+
+        .export-buttons button:hover {{
+            background: #2980b9;
+        }}
+
+        .report-form {{
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+
+        .report-form h3 {{
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #1a202c;
+        }}
+
+        .report-form label {{
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4a5568;
+        }}
+
+        .report-form input, .report-form select {{
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: inherit;
+        }}
+
+        .report-form button {{
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }}
+
+        .report-form button:hover {{
+            background: #059669;
+        }}
+
+        .schedule-section {{
+            background: #f0f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }}
+
+        .schedule-section h3 {{
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #1a202c;
+        }}
+
+        .schedule-section table {{
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 4px;
+            overflow: hidden;
+        }}
+
+        .schedule-section th {{
+            background: #3b82f6;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }}
+
+        .schedule-section td {{
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+        }}
+
+        .schedule-section tr:last-child td {{
+            border-bottom: none;
+        }}
+
+        .schedule-section button {{
+            padding: 6px 12px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }}
+
+        .schedule-section button:first-of-type {{
+            background: #f59e0b;
+            color: white;
+        }}
+
+        .schedule-section button:last-of-type {{
+            background: #ef4444;
+            color: white;
+        }}
+
+        .reports-list {{
+            background: #fefce8;
+            padding: 20px;
+            border-radius: 8px;
+        }}
+
+        .reports-list h3 {{
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #1a202c;
+        }}
+
+        .report-item {{
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+
+        .report-item-info {{
+            flex: 1;
+        }}
+
+        .report-item-info strong {{
+            display: block;
+            color: #1a202c;
+            margin-bottom: 5px;
+        }}
+
+        .report-item-info small {{
+            color: #64748b;
+        }}
+
+        .report-item button {{
+            padding: 6px 12px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }}
+
         footer {{
             text-align: center;
             color: white;
@@ -827,7 +995,7 @@ class ProductionDashboard:
 
         # Add issues
         if issues:
-            html += "<h3 style='color: #ef4444; margin: 1.5rem 0 1rem;'>⚠️ Issues</h3>"
+            html += "<h3 style='color: #ef4444; margin: 1.5rem 0 1rem;'>[WARNING] Issues</h3>"
             for issue in issues[:3]:
                 html += f"""
             <div class="insight-item issue">
@@ -859,6 +1027,85 @@ class ProductionDashboard:
 
         html += f"""
             </ul>
+        </div>
+
+        <!-- Export & Reports Section -->
+        <div class="insights-section">
+            <h2 class="section-title">📊 Export & Reports</h2>
+
+            <!-- Quick Export Buttons -->
+            <div class="export-buttons">
+                <button onclick="exportReport('pdf')">📄 Export PDF</button>
+                <button onclick="exportReport('excel')">📊 Export Excel</button>
+                <button onclick="exportReport('pptx')">📽️ Export PowerPoint</button>
+                <button onclick="exportReport('csv')">📑 Export CSV</button>
+                <button onclick="exportReport('powerbi')">📈 Power BI Dataset</button>
+            </div>
+
+            <!-- Report Generation Form -->
+            <div class="report-form">
+                <h3>Generate Custom Report</h3>
+                <label>Report Type:</label>
+                <select id="reportType">
+                    <option value="summary">Summary</option>
+                    <option value="detailed">Detailed</option>
+                    <option value="executive">Executive</option>
+                </select>
+
+                <label>Date Range:</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <input type="date" id="startDate" placeholder="Start Date">
+                    <input type="date" id="endDate" placeholder="End Date">
+                </div>
+
+                <label>Template:</label>
+                <select id="template">
+                    <option value="default">Default</option>
+                    <option value="executive">Executive</option>
+                    <option value="technical">Technical</option>
+                </select>
+
+                <label>Format:</label>
+                <select id="exportFormat">
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel</option>
+                    <option value="pptx">PowerPoint</option>
+                </select>
+
+                <button onclick="generateCustomReport()">Generate Report</button>
+            </div>
+
+            <!-- Schedule Management -->
+            <div class="schedule-section">
+                <h3>Scheduled Reports</h3>
+                <table id="schedulesTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Schedule</th>
+                            <th>Next Run</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #64748b; padding: 20px;">
+                                No scheduled reports. Create one to get started!
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button onclick="showScheduleForm()" style="margin-top: 10px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;">+ New Schedule</button>
+            </div>
+
+            <!-- Generated Reports List -->
+            <div class="reports-list">
+                <h3>Recent Reports</h3>
+                <div id="reportsList">
+                    <p style="text-align: center; color: #64748b;">No reports generated yet. Use the buttons above to create one!</p>
+                </div>
+            </div>
         </div>
 """
 
@@ -963,7 +1210,7 @@ class ProductionDashboard:
                     status = benchmark.get("status", "at_baseline")
 
                     # Status emoji
-                    status_emoji = "✅" if status == "above_baseline" else "⚠️" if status == "below_baseline" else "➡️"
+                    status_emoji = "✅" if status == "above_baseline" else "[WARNING]" if status == "below_baseline" else "➡️"
 
                     html += f"""
             <div class="benchmark-item">
@@ -1029,6 +1276,178 @@ class ProductionDashboard:
                     }}
                 }});
             }}
+        }});
+
+        // Export functionality
+        async function exportReport(format) {{
+            try {{
+                const response = await fetch(`/api/v1/exports`, {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        report_id: 'dashboard-{datetime.now().strftime("%Y%m%d")}',
+                        format: format,
+                        include_charts: true,
+                        include_raw_data: true
+                    }})
+                }});
+
+                if (!response.ok) {{
+                    throw new Error(`Export failed: ${{response.statusText}}`);
+                }}
+
+                const result = await response.json();
+                const exportId = result.export_id;
+
+                // Poll for completion
+                await pollExportStatus(exportId, format);
+            }} catch (error) {{
+                console.error('Export error:', error);
+                alert(`Export failed: ${{error.message}}`);
+            }}
+        }}
+
+        async function pollExportStatus(exportId, format) {{
+            const maxAttempts = 30;
+            let attempts = 0;
+
+            while (attempts < maxAttempts) {{
+                const response = await fetch(`/api/v1/exports/${{exportId}}`);
+                const status = await response.json();
+
+                if (status.status === 'complete') {{
+                    // Download the file
+                    window.location.href = status.download_url;
+                    addReportToList(exportId, format);
+                    return;
+                }} else if (status.status === 'failed') {{
+                    throw new Error('Export generation failed');
+                }}
+
+                // Wait 2 seconds before next poll
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                attempts++;
+            }}
+
+            throw new Error('Export timeout - please try again');
+        }}
+
+        async function generateCustomReport() {{
+            const reportType = document.getElementById('reportType').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const template = document.getElementById('template').value;
+            const format = document.getElementById('exportFormat').value;
+
+            if (!startDate || !endDate) {{
+                alert('Please select both start and end dates');
+                return;
+            }}
+
+            try {{
+                // Create report configuration
+                const reportResponse = await fetch('/api/v1/reports', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        name: `${{reportType}} Report`,
+                        type: reportType,
+                        description: `Custom report from ${{startDate}} to ${{endDate}}`,
+                        days: 30,
+                        filters: {{
+                            start_date: startDate,
+                            end_date: endDate,
+                            template: template
+                        }},
+                        sections: ['metrics', 'insights', 'recommendations']
+                    }})
+                }});
+
+                const report = await reportResponse.json();
+
+                // Export the report
+                const exportResponse = await fetch('/api/v1/exports', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{
+                        report_id: report.id,
+                        format: format,
+                        include_charts: true,
+                        include_raw_data: true
+                    }})
+                }});
+
+                const exportResult = await exportResponse.json();
+                await pollExportStatus(exportResult.export_id, format);
+            }} catch (error) {{
+                console.error('Report generation error:', error);
+                alert(`Report generation failed: ${{error.message}}`);
+            }}
+        }}
+
+        function addReportToList(exportId, format) {{
+            const reportsList = document.getElementById('reportsList');
+
+            // Remove "no reports" message if present
+            if (reportsList.querySelector('p')) {{
+                reportsList.innerHTML = '';
+            }}
+
+            const reportItem = document.createElement('div');
+            reportItem.className = 'report-item';
+            reportItem.innerHTML = `
+                <div class="report-item-info">
+                    <strong>${{format.toUpperCase()}} Report</strong>
+                    <small>Generated at ${{new Date().toLocaleString()}} · Export ID: ${{exportId}}</small>
+                </div>
+                <button onclick="window.location.href='/api/v1/exports/${{exportId}}/download'">Download</button>
+            `;
+
+            reportsList.insertBefore(reportItem, reportsList.firstChild);
+        }}
+
+        async function loadSchedules() {{
+            try {{
+                const response = await fetch('/api/v1/schedules');
+                const data = await response.json();
+                const tbody = document.getElementById('schedulesTable').querySelector('tbody');
+
+                if (data.schedules && data.schedules.length > 0) {{
+                    tbody.innerHTML = data.schedules.map(s => `
+                        <tr>
+                            <td>${{s.name}}</td>
+                            <td>${{s.schedule}}</td>
+                            <td>${{s.next_run || 'N/A'}}</td>
+                            <td>${{s.enabled ? '✅ Active' : '⏸️ Paused'}}</td>
+                            <td>
+                                <button onclick="pauseSchedule('${{s.job_id}}')">Pause</button>
+                                <button onclick="deleteSchedule('${{s.job_id}}')">Delete</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }}
+            }} catch (error) {{
+                console.log('Schedules not available:', error);
+            }}
+        }}
+
+        function showScheduleForm() {{
+            alert('Schedule form feature coming soon! This will allow you to set up automated report generation.');
+        }}
+
+        async function pauseSchedule(jobId) {{
+            alert(`Pause schedule ${{jobId}} - Feature coming soon!`);
+        }}
+
+        async function deleteSchedule(jobId) {{
+            if (confirm('Are you sure you want to delete this schedule?')) {{
+                alert(`Delete schedule ${{jobId}} - Feature coming soon!`);
+            }}
+        }}
+
+        // Load schedules on page load
+        document.addEventListener('DOMContentLoaded', () => {{
+            loadSchedules();
         }});
     </script>
 </body>

@@ -1,0 +1,51 @@
+{
+  "name": "Summary Report",
+  "description": "Executive overview with key performance indicators and high-level metrics",
+  "sections": [
+    {
+      "title": "Key Performance Indicators",
+      "metrics": [
+        "total_skill_invocations",
+        "success_rate",
+        "total_sessions",
+        "total_cost"
+      ],
+      "charts": [
+        {
+          "type": "bar",
+          "title": "Top 5 Skills by Usage",
+          "data_source": "top_skills"
+        }
+      ]
+    },
+    {
+      "title": "Usage Overview",
+      "metrics": [
+        "unique_skills",
+        "total_tokens",
+        "avg_session_duration"
+      ],
+      "charts": [
+        {
+          "type": "pie",
+          "title": "Model Distribution",
+          "data_source": "model_usage"
+        }
+      ]
+    },
+    {
+      "title": "Activity Trends",
+      "metrics": [
+        "session_activity",
+        "token_trends"
+      ],
+      "charts": [
+        {
+          "type": "line",
+          "title": "Session Activity Over Time",
+          "data_source": "session_activity"
+        }
+      ]
+    }
+  ]
+}

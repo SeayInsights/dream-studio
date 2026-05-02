@@ -1,0 +1,39 @@
+﻿Section,Metric,Value
+Overview,total_sessions,156
+Overview,total_skill_invocations,1234
+Overview,total_tokens,5678901
+Overview,total_cost_usd,123.45
+Overview,date_range_days,30
+Top Skills,top_skills[0].skill,core:build
+Top Skills,top_skills[0].count,567
+Top Skills,top_skills[0].success_rate,92.50
+Top Skills,top_skills[1].skill,quality:debug
+Top Skills,top_skills[1].count,234
+Top Skills,top_skills[1].success_rate,88.30
+Top Skills,top_skills[2].skill,domains:saas-build
+Top Skills,top_skills[2].count,123
+Top Skills,top_skills[2].success_rate,95.10
+Top Skills,top_skills[3].skill,core:think
+Top Skills,top_skills[3].count,89
+Top Skills,top_skills[3].success_rate,100
+Top Skills,top_skills[4].skill,quality:polish
+Top Skills,top_skills[4].count,67
+Top Skills,top_skills[4].success_rate,91
+Top Skills,success_rate_overall,91.80
+Token Usage,by_model.claude-sonnet-4-5,3456789
+Token Usage,by_model.claude-haiku-4-0,2222112
+Token Usage,daily_average,189296.70
+Session Analytics,by_project.dream-studio,89
+Session Analytics,by_project.dreamysuite,45
+Session Analytics,by_project.career-studio,22
+Session Analytics,day_of_week.Monday,25
+Session Analytics,day_of_week.Tuesday,30
+Session Analytics,day_of_week.Wednesday,28
+Session Analytics,day_of_week.Thursday,22
+Session Analytics,day_of_week.Friday,20
+Session Analytics,day_of_week.Saturday,18
+Session Analytics,day_of_week.Sunday,13
+Session Analytics,outcomes.success,140
+Session Analytics,outcomes.partial,12
+Session Analytics,outcomes.failed,4
+Session Analytics,avg_duration_minutes,42.50

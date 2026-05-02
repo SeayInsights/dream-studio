@@ -17,6 +17,10 @@ class ReportFormat(str, Enum):
     """Export formats"""
     PDF = "pdf"
     EXCEL = "excel"
+    PPTX = "pptx"
+    CSV = "csv"
+    CSV_ZIP = "csv_zip"
+    POWERBI = "powerbi"
     JSON = "json"
     HTML = "html"
 
