@@ -921,7 +921,7 @@
             console.log('Dream Studio Analytics Dashboard initialized');
         });
 
-        // Connection status helper functions (will be used by WebSocket logic in T007)
+        // Connection status helper functions
         function setConnectionStatus(status) {
             const statusEl = document.getElementById('connectionStatus');
             const textEl = document.getElementById('connectionText');
@@ -943,6 +943,108 @@
                     break;
             }
         }
+
+        // ==================== WEBSOCKET CONNECTION ====================
+
+        let ws = null;
+        let reconnectAttempt = 0;
+        let reconnectTimeout = null;
+        const INITIAL_RECONNECT_DELAY = 1000; // 1 second
+        const MAX_RECONNECT_DELAY = 30000; // 30 seconds
+        const WS_URL = 'ws://localhost:8000/api/v1/realtime/stream/metrics';
+        const METRICS_TO_SUBSCRIBE = ['sessions', 'tokens', 'alerts', 'sla'];
+
+        function connectWebSocket() {
+            // Clear any pending reconnect timeout
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+
+            // Set connecting status
+            setConnectionStatus('connecting');
+            console.log('[WebSocket] Connecting to', WS_URL);
+
+            try {
+                ws = new WebSocket(WS_URL);
+
+                ws.onopen = function() {
+                    console.log('[WebSocket] Connected successfully');
+                    setConnectionStatus('connected');
+                    reconnectAttempt = 0; // Reset reconnect counter on successful connection
+
+                    // Send subscription message
+                    const subscriptionMsg = {
+                        type: 'subscribe',
+                        metrics: METRICS_TO_SUBSCRIBE
+                    };
+                    ws.send(JSON.stringify(subscriptionMsg));
+                    console.log('[WebSocket] Subscribed to metrics:', METRICS_TO_SUBSCRIBE);
+                };
+
+                ws.onmessage = function(event) {
+                    // Message handling will be implemented in T008
+                    console.log('[WebSocket] Received message:', event.data);
+                };
+
+                ws.onerror = function(error) {
+                    console.error('[WebSocket] Error:', error);
+                };
+
+                ws.onclose = function(event) {
+                    console.log('[WebSocket] Connection closed. Code:', event.code, 'Reason:', event.reason);
+                    setConnectionStatus('disconnected');
+                    ws = null;
+
+                    // Attempt to reconnect with exponential backoff
+                    scheduleReconnect();
+                };
+
+            } catch (error) {
+                console.error('[WebSocket] Failed to create WebSocket:', error);
+                setConnectionStatus('disconnected');
+                scheduleReconnect();
+            }
+        }
+
+        function scheduleReconnect() {
+            if (reconnectTimeout) {
+                return; // Already scheduled
+            }
+
+            reconnectAttempt++;
+
+            // Calculate delay with exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
+            const delay = Math.min(
+                INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempt - 1),
+                MAX_RECONNECT_DELAY
+            );
+
+            console.log(`[WebSocket] Scheduling reconnect attempt ${reconnectAttempt} in ${delay}ms`);
+
+            reconnectTimeout = setTimeout(() => {
+                reconnectTimeout = null;
+                console.log(`[WebSocket] Reconnect attempt ${reconnectAttempt}...`);
+                connectWebSocket();
+            }, delay);
+        }
+
+        function disconnectWebSocket() {
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        // Connect WebSocket when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            connectWebSocket();
+        });
 
         // ==================== SKILLS TAB ====================
 
