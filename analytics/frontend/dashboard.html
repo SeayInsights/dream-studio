@@ -197,7 +197,7 @@
                 <button onclick="switchTab('ml')"
                         class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
                         data-tab="ml">
-                    ML Insights
+                    Strengths &amp; Growth
                 </button>
                 <button onclick="switchTab('anomalies')"
                         class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
@@ -621,86 +621,62 @@
             </div>
         </div>
 
-        <!-- ML Insights Tab -->
+        <!-- Strengths & Growth Tab -->
         <div id="ml" class="tab-content">
-            <!-- Load Forecasts Button -->
+            <!-- Load Button -->
             <div id="ml-load-section" class="bg-white rounded-lg shadow p-6 mb-6 text-center">
-                <h2 class="text-xl font-bold text-gray-900 mb-2">Machine Learning Insights</h2>
-                <p class="text-sm text-gray-600 mb-4">Load ML forecasts and pattern analysis (may take 10-15 seconds)</p>
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Strengths & Growth</h2>
+                <p class="text-sm text-gray-600 mb-4">Analyze your skill mastery, work rhythm, and growth opportunities</p>
                 <button id="load-forecasts-btn"
-                        onclick="loadMLInsights()"
+                        onclick="loadInsights()"
                         class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
                     <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                     </svg>
-                    Load Forecasts
+                    Load Insights
                 </button>
             </div>
 
-            <!-- ML Content (hidden until loaded) -->
+            <!-- Content (hidden until loaded) -->
             <div id="ml-content" class="hidden">
-                <!-- Forecasts Section -->
+
+                <!-- Strengths & Issues -->
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4">Usage Forecasts (7-Day Prediction)</h3>
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                        <!-- Sessions Forecast Chart -->
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-700 mb-3">Sessions Forecast</h4>
-                            <div class="h-64 relative">
-                                <canvas id="sessions-forecast-chart"></canvas>
-                            </div>
-                        </div>
-                        <!-- Tokens Forecast Chart -->
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-700 mb-3">Tokens Forecast</h4>
-                            <div class="h-64 relative">
-                                <canvas id="tokens-forecast-chart"></canvas>
-                            </div>
-                        </div>
-                        <!-- Skills Forecast Chart -->
-                        <div>
-                            <h4 class="text-sm font-medium text-gray-700 mb-3">Skills Forecast</h4>
-                            <div class="h-64 relative">
-                                <canvas id="skills-forecast-chart"></canvas>
-                            </div>
-                        </div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">What You Do Well</h3>
+                    <div id="strengths-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 mt-6">Areas to Watch</h3>
+                    <div id="issues-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     </div>
                 </div>
 
-                <!-- Pattern Detection Section -->
+                <!-- Work Rhythm -->
                 <div class="bg-white rounded-lg shadow p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4">Pattern Detection</h3>
-                    <div id="patterns-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <!-- Populated by JS -->
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Work Rhythm</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Peak Hour</div>
+                            <div id="rhythm-peak-hour" class="mt-1 text-2xl font-bold text-blue-600">--</div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Most Active Day</div>
+                            <div id="rhythm-peak-day" class="mt-1 text-2xl font-bold text-green-600">--</div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Quietest Day</div>
+                            <div id="rhythm-quiet-day" class="mt-1 text-2xl font-bold text-gray-500">--</div>
+                        </div>
+                    </div>
+                    <div id="rhythm-callout" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-sm text-blue-800 hidden"></div>
+                    <div class="h-64 relative">
+                        <canvas id="rhythm-heatmap-chart"></canvas>
                     </div>
                 </div>
 
-                <!-- Recommendations Section -->
-                <div class="bg-white rounded-lg shadow p-6 mb-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4">AI Recommendations</h3>
-                    <div id="recommendations-feed" class="space-y-4">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-
-                <!-- Benchmarks Section -->
+                <!-- Growth Opportunities -->
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4">Performance Benchmarks</h3>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">7-Day Avg</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">30-Day Avg</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trend</th>
-                                </tr>
-                            </thead>
-                            <tbody id="benchmarks-table" class="bg-white divide-y divide-gray-200">
-                                <!-- Populated by JS -->
-                            </tbody>
-                        </table>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Growth Opportunities</h3>
+                    <div id="opportunities-feed" class="space-y-4">
                     </div>
                 </div>
             </div>
@@ -3557,75 +3533,47 @@
             }
         });
 
-        // ==================== ML INSIGHTS TAB ====================
+        // ==================== STRENGTHS & GROWTH TAB ====================
 
-        // Initialize ML tab (just show the load button)
         function initMLTab() {
-            // Tab is lazy - ML content loads only when user clicks "Load Forecasts"
-            console.log('ML Insights tab initialized (load button ready)');
+            // Tab is lazy - content loads only when user clicks "Load Insights"
+            console.log('Strengths & Growth tab initialized');
         }
 
-        // Load ML insights data (expensive queries)
-        async function loadMLInsights() {
+        async function loadInsights() {
             const loadBtn = document.getElementById('load-forecasts-btn');
             const loadSection = document.getElementById('ml-load-section');
             const mlContent = document.getElementById('ml-content');
 
             try {
-                // Disable button and show loading state
                 loadBtn.disabled = true;
                 loadBtn.innerHTML = `
                     <svg class="animate-spin mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Loading ML Insights...
+                    Loading Insights...
                 `;
 
-                // Fetch all ML data in parallel (forecasts need per-metric calls)
-                const [sessionsForecast, tokensForecast, skillsForecast, patternsData, recommendationsData, benchmarksData] = await Promise.all([
-                    fetchML('/forecasts?metric=sessions'),
-                    fetchML('/forecasts?metric=tokens'),
-                    fetchML('/forecasts?metric=skills'),
-                    fetchML('/patterns'),
-                    fetchML('/recommendations'),
-                    fetchML('/benchmarks')
+                const [insightsData, rhythmData] = await Promise.all([
+                    fetchInsights('/'),
+                    fetchInsights('/rhythm')
                 ]);
 
-                // Transform forecast API response to chart format
-                function toChartData(resp) {
-                    if (!resp || !resp.forecast || resp.forecast.length === 0) return null;
-                    return {
-                        dates: resp.forecast.map(p => p.date),
-                        predicted: resp.forecast.map(p => p.value),
-                        confidence_lower: resp.forecast.map(p => p.lower_bound),
-                        confidence_upper: resp.forecast.map(p => p.upper_bound)
-                    };
+                if (insightsData) {
+                    renderStrengths(insightsData.strengths || []);
+                    renderIssues([...(insightsData.issues || []), ...(insightsData.risks || [])]);
+                    renderOpportunities(insightsData.opportunities || []);
                 }
 
-                // Initialize forecast charts
-                await Promise.all([
-                    initForecastChart('sessions-forecast-chart', toChartData(sessionsForecast), 'Sessions'),
-                    initForecastChart('tokens-forecast-chart', toChartData(tokensForecast), 'Tokens'),
-                    initForecastChart('skills-forecast-chart', toChartData(skillsForecast), 'Skills')
-                ]);
+                if (rhythmData) {
+                    renderRhythm(rhythmData);
+                }
 
-                // Populate pattern detection cards
-                populatePatternsGrid(patternsData?.patterns || []);
-
-                // Populate recommendations feed
-                populateRecommendationsFeed(recommendationsData?.recommendations || []);
-
-                // Populate benchmarks table
-                populateBenchmarksTable(benchmarksData?.benchmarks || []);
-
-                // Hide load button, show content
                 loadSection.classList.add('hidden');
                 mlContent.classList.remove('hidden');
-
-                console.log('ML Insights loaded successfully');
             } catch (error) {
-                console.error('Error loading ML insights:', error);
+                console.error('Error loading insights:', error);
                 loadBtn.disabled = false;
                 loadBtn.innerHTML = `
                     <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3633,25 +3581,149 @@
                     </svg>
                     Error - Click to Retry
                 `;
-                alert('Failed to load ML insights. Please try again.');
             }
         }
 
-        // Fetch ML data
-        async function fetchML(endpoint) {
+        async function fetchInsights(endpoint) {
             try {
-                const response = await fetch(`/api/v1/ml${endpoint}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
+                const response = await fetch(`/api/v1/insights${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return await response.json();
             } catch (error) {
-                console.error(`Error fetching ML data ${endpoint}:`, error);
+                console.error(`Error fetching insights ${endpoint}:`, error);
                 return null;
             }
         }
 
-        // Initialize forecast chart with confidence intervals
+        function renderStrengths(strengths) {
+            const grid = document.getElementById('strengths-grid');
+            if (!strengths || strengths.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">No strengths detected yet</div>';
+                return;
+            }
+            grid.innerHTML = strengths.map(s => `
+                <div class="border border-green-200 bg-green-50 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <svg class="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-semibold text-green-900">${s.title || s.type || 'Strength'}</h4>
+                            <p class="text-sm text-green-800 mt-1">${s.description || ''}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderIssues(items) {
+            const grid = document.getElementById('issues-grid');
+            if (!items || items.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">No issues detected</div>';
+                return;
+            }
+            grid.innerHTML = items.map(item => {
+                const isRisk = item.severity === 'warning' || item.type?.includes('risk');
+                const color = isRisk ? 'yellow' : 'red';
+                const icon = isRisk
+                    ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>'
+                    : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>';
+                return `
+                    <div class="border border-${color}-200 bg-${color}-50 rounded-lg p-4">
+                        <div class="flex items-start gap-3">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <svg class="h-5 w-5 text-${color}-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>
+                            </div>
+                            <div>
+                                <h4 class="text-sm font-semibold text-${color}-900">${item.title || item.type || 'Issue'}</h4>
+                                <p class="text-sm text-${color}-800 mt-1">${item.description || ''}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRhythm(data) {
+            document.getElementById('rhythm-peak-hour').textContent = `${data.peak_hour}:00`;
+            document.getElementById('rhythm-peak-day').textContent = `${data.peak_day} (${data.busiest_day_count})`;
+            document.getElementById('rhythm-quiet-day').textContent = `${data.quietest_day} (${data.quietest_day_count})`;
+
+            // Callout insight
+            const ratio = data.busiest_day_count / Math.max(data.quietest_day_count, 1);
+            if (ratio >= 2) {
+                const callout = document.getElementById('rhythm-callout');
+                callout.textContent = `You're ${ratio.toFixed(0)}x more active on ${data.peak_day}s than ${data.quietest_day}s. Your peak hour is ${data.peak_hour}:00.`;
+                callout.classList.remove('hidden');
+            }
+
+            // Heatmap as stacked bar chart (hours on x-axis, stacked by day)
+            const ctx = document.getElementById('rhythm-heatmap-chart').getContext('2d');
+            const dayColors = [
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(249, 115, 22, 0.7)',
+                'rgba(234, 179, 8, 0.7)',
+                'rgba(34, 197, 94, 0.7)',
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(139, 92, 246, 0.7)',
+                'rgba(236, 72, 153, 0.7)'
+            ];
+
+            const datasets = data.day_labels.map((day, di) => ({
+                label: day,
+                data: data.heatmap[di],
+                backgroundColor: dayColors[di],
+                borderWidth: 0
+            }));
+
+            if (charts['rhythm-heatmap-chart']) charts['rhythm-heatmap-chart'].destroy();
+            charts['rhythm-heatmap-chart'] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                        title: { display: true, text: 'Sessions by Hour & Day of Week', font: { size: 13 } }
+                    },
+                    scales: {
+                        x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 0 } },
+                        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Sessions' } }
+                    }
+                }
+            });
+        }
+
+        function renderOpportunities(opportunities) {
+            const feed = document.getElementById('opportunities-feed');
+            if (!opportunities || opportunities.length === 0) {
+                feed.innerHTML = '<div class="text-center text-gray-500 py-8">No growth opportunities detected yet. Keep using skills and building data!</div>';
+                return;
+            }
+            feed.innerHTML = opportunities.map(opp => `
+                <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-shrink-0 mt-0.5">
+                            <svg class="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-semibold text-blue-900">${opp.title || opp.type || 'Opportunity'}</h4>
+                            <p class="text-sm text-blue-800 mt-1">${opp.description || ''}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Legacy ML function kept for backward compatibility
         async function initForecastChart(canvasId, data, label) {
             if (!data || !data.dates || !data.predicted || !data.confidence_lower || !data.confidence_upper) {
                 console.warn(`No forecast data for ${label}`);
