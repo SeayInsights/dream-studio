@@ -960,17 +960,17 @@
                 fetchMetrics('/skills')
             ]);
 
-            if (sessions && sessions.summary) {
+            if (sessions) {
                 document.getElementById('kpi-total-sessions').textContent =
-                    sessions.summary.total_sessions || 0;
+                    sessions.total_sessions || 0;
 
-                const successRate = sessions.summary.success_rate || 0;
+                const successRate = sessions.success_rate || 0;
                 document.getElementById('kpi-success-rate').textContent =
                     `${(successRate * 100).toFixed(1)}%`;
             }
 
-            if (tokens && tokens.summary) {
-                const totalCost = tokens.summary.total_cost || 0;
+            if (tokens) {
+                const totalCost = tokens.total_cost || 0;
                 document.getElementById('kpi-total-cost').textContent =
                     `$${totalCost.toFixed(2)}`;
             }
@@ -1639,11 +1639,11 @@
         // Update summary cards
         function updateSkillsSummary(data) {
             if (data.summary) {
-                const mostUsed = data.summary.most_used_skill || '--';
-                const mostUsedCount = data.summary.most_used_count || 0;
-                const avgDuration = data.summary.avg_duration_minutes || 0;
-                const successRate = data.summary.success_rate || 0;
-                const totalInvocations = data.summary.total_invocations || 0;
+                const mostUsed = data.most_used_skill || '--';
+                const mostUsedCount = data.most_used_count || 0;
+                const avgDuration = data.avg_duration_minutes || 0;
+                const successRate = data.overall_success_rate || 0;
+                const totalInvocations = data.total_invocations || 0;
 
                 document.getElementById('skills-most-used').textContent = mostUsed;
                 document.getElementById('skills-most-used-count').textContent = `${mostUsedCount.toLocaleString()} invocations`;
@@ -2038,7 +2038,7 @@
                     initCostByProjectChart(combinedData.costByProject),
                     initCostBySkillChart(combinedData.costBySkill),
                     initTokenEfficiencyChart(combinedData.efficiency),
-                    initCacheHitRateGaugeChart(combinedData.summary.cache_hit_rate),
+                    initCacheHitRateGaugeChart(combinedData.cache_hit_rate),
                     initCacheHitRateTimelineChart(combinedData.cacheTimeline)
                 ]);
 
