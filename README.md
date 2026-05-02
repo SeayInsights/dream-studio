@@ -943,7 +943,8 @@ dream-studio includes a built-in analytics pipeline that harvests operational da
 ### Quick start
 
 ```bash
-make dashboard    # bootstrap DB + launch server + open browser (one command)
+./launch-dashboard          # Windows (.cmd) or Unix — bootstrap DB + launch server + open browser
+make dashboard              # alternative if you have make installed
 ```
 
 This is the recommended way to use analytics. On first run it automatically:
