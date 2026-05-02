@@ -32,6 +32,41 @@ def get_db_path() -> str:
     return os.path.expanduser("~/.dream-studio/state/studio.db")
 
 
+def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    m = model.lower()
+    if "opus" in m:
+        return input_tokens * 15.0 / 1e6 + output_tokens * 75.0 / 1e6
+    elif "haiku" in m:
+        return input_tokens * 0.80 / 1e6 + output_tokens * 4.0 / 1e6
+    return input_tokens * 3.0 / 1e6 + output_tokens * 15.0 / 1e6
+
+
+def _build_skill_costs(db_path: str, days: int, total_cost: float) -> Dict[str, Any]:
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute("""
+            SELECT skill_name, COUNT(*) as cnt
+            FROM raw_skill_telemetry
+            WHERE invoked_at >= ? AND skill_name IS NOT NULL
+            GROUP BY skill_name
+        """, (cutoff,)).fetchall()
+        total_inv = sum(r["cnt"] for r in rows) or 1
+        result = {}
+        for r in rows:
+            share = r["cnt"] / total_inv
+            est_cost = round(total_cost * share, 2)
+            result[r["skill_name"]] = {
+                "skill_name": r["skill_name"],
+                "total_tokens": 0, "invocations": r["cnt"],
+                "cost_usd": est_cost, "cost": est_cost
+            }
+        return result
+    finally:
+        conn.close()
+
+
 def _build_success_trend(db_path: str, days: int) -> List[Dict[str, Any]]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = sqlite3.connect(db_path)
@@ -211,12 +246,29 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
 
         cost_timeline = [{"date": t["date"], "cost": t["cost_usd"]} for t in timeline]
 
+        by_project = {
+            k: {**v, "project_name": k, "cost": v.get("cost_usd", 0)}
+            for k, v in data.get("by_project", {}).items()
+        }
+        raw_by_skill = data.get("by_skill", {})
+        has_skill_costs = any(v.get("cost_usd", 0) > 0 for v in raw_by_skill.values())
+
+        if has_skill_costs:
+            by_skill = {
+                k: {**v, "skill_name": k, "cost": v.get("cost_usd", 0)}
+                for k, v in raw_by_skill.items()
+            }
+        else:
+            by_skill = _build_skill_costs(db_path, days, data.get("total_cost_usd", 0))
+
         return {
             **data,
             'timeline': timeline,
             'cost_timeline': cost_timeline,
             'total_cost': data.get('total_cost_usd', 0),
-            'cache_hit_rate': cache_hit_rate
+            'cache_hit_rate': cache_hit_rate,
+            'by_project': by_project,
+            'by_skill': by_skill
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting token metrics: {str(e)}")
@@ -248,6 +300,7 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
         by_model = {}
         model_distribution = []
         model_performance = []
+        token_efficiency = []
         distribution = []
 
         for r in rows:
@@ -256,21 +309,24 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
             out = r["output_tok"] or 0
             tok = inp + out
             pct = round(tok / total_tokens * 100, 1) if total_tokens else 0
+            cost = _estimate_cost(name, inp, out)
+            tps = round(tok / max(r["record_count"], 1), 1)
 
             by_model[name] = {
                 "input_tokens": inp, "output_tokens": out,
                 "total_tokens": tok, "record_count": r["record_count"],
-                "percentage": pct
+                "percentage": pct,
+                "model_name": name,
+                "cost": round(cost, 2), "cost_usd": round(cost, 2)
             }
             distribution.append({"model": name, "percentage": pct})
             model_distribution.append({"model_name": name, "usage_count": r["record_count"]})
-
-            speed = round(tok / max(r["record_count"], 1), 1)
             model_performance.append({
-                "model_name": name,
-                "speed": speed,
-                "success_rate": 100.0,
-                "efficiency": speed
+                "model_name": name, "speed": tps,
+                "success_rate": 100.0, "efficiency": tps
+            })
+            token_efficiency.append({
+                "model_name": name, "tokens_per_second": tps
             })
 
         return {
@@ -278,7 +334,8 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
             "by_model": by_model,
             "distribution": distribution,
             "model_distribution": model_distribution,
-            "model_performance": model_performance
+            "model_performance": model_performance,
+            "token_efficiency": token_efficiency
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting model metrics: {str(e)}")
