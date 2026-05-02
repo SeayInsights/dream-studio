@@ -2018,9 +2018,9 @@
                     },
                     performance: modelsData.model_performance || Object.values(modelsData.by_model || {}),
                     tokenTimeline: tokensData.timeline || [],
-                    costByModel: modelsData.by_model || [],
-                    costByProject: tokensData.by_project || [],
-                    costBySkill: tokensData.by_skill || [],
+                    costByModel: Object.entries(modelsData.by_model || {}).map(([k,v]) => ({...v, name: k})),
+                    costByProject: Object.entries(tokensData.by_project || {}).map(([k,v]) => ({...v, name: k})),
+                    costBySkill: Object.entries(tokensData.by_skill || {}).map(([k,v]) => ({...v, name: k})),
                     efficiency: modelsData.token_efficiency || [],
                     cacheTimeline: modelsData.cache_timeline || []
                 };
