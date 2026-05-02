@@ -96,38 +96,83 @@ async def get_session_metrics(days: int = Query(default=30, ge=1, le=365)):
         raise HTTPException(status_code=500, detail=f"Error collecting session metrics: {str(e)}")
 
 
-@router.get("/skills", response_model=SkillMetrics)
+@router.get("/skills")
 async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
-    """Get skill metrics"""
+    """Get skill metrics with dashboard-friendly format"""
     try:
         db_path = get_db_path()
         collector = SkillCollector(db_path)
         data = collector.collect(days=days)
-        return SkillMetrics(**data)
+
+        # Transform to dashboard format
+        leaderboard = []
+        for skill_name, skill_data in data.get('by_skill', {}).items():
+            leaderboard.append({
+                'skill_name': skill_name,
+                'invocations': skill_data.get('count', 0),
+                'success_rate': skill_data.get('success_rate', 0),
+                'avg_exec_time_s': skill_data.get('avg_exec_time_s', 0),
+                'avg_input_tokens': skill_data.get('avg_input_tokens', 0),
+                'avg_output_tokens': skill_data.get('avg_output_tokens', 0)
+            })
+
+        # Get most used skill
+        most_used_skill = data.get('top_skills', [{}])[0].get('skill_name', 'N/A') if data.get('top_skills') else 'N/A'
+        most_used_count = data.get('top_skills', [{}])[0].get('count', 0) if data.get('top_skills') else 0
+
+        return {
+            **data,
+            'leaderboard': leaderboard,
+            'most_used_skill': most_used_skill,
+            'most_used_count': most_used_count,
+            'recent_failures': data.get('failures', []),
+            'success_trend': [],  # TODO: Add timeline data
+            'heatmap': []  # TODO: Add heatmap data
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting skill metrics: {str(e)}")
 
 
-@router.get("/tokens", response_model=TokenMetrics)
+@router.get("/tokens")
 async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
-    """Get token usage metrics"""
+    """Get token usage metrics with dashboard-friendly format"""
     try:
         db_path = get_db_path()
         collector = TokenCollector(db_path)
         data = collector.collect(days=days)
-        return TokenMetrics(**data)
+
+        # Calculate cache hit rate (placeholder for now)
+        cache_hit_rate = data.get('cache_hits', 0) / max(data.get('total_tokens', 1), 1)
+
+        return {
+            **data,
+            'total_cost': data.get('total_cost_usd', 0),
+            'cache_hit_rate': cache_hit_rate
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting token metrics: {str(e)}")
 
 
-@router.get("/models", response_model=ModelMetrics)
+@router.get("/models")
 async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
-    """Get model usage metrics"""
+    """Get model usage metrics with dashboard-friendly format"""
     try:
         db_path = get_db_path()
         collector = ModelCollector(db_path)
         data = collector.collect(days=days)
-        return ModelMetrics(**data)
+
+        # Transform distribution for pie chart
+        distribution = []
+        for model, percentage in data.get('distribution_pct', {}).items():
+            distribution.append({
+                'model': model,
+                'percentage': percentage
+            })
+
+        return {
+            **data,
+            'distribution': distribution
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting model metrics: {str(e)}")
 
