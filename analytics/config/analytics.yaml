@@ -1,0 +1,21 @@
+# Dream Studio Analytics Platform - Configuration
+# Real-time monitoring and alerting settings
+
+realtime:
+  # Enable/disable real-time monitoring features
+  enabled: true
+
+  # Polling interval for metric collection (seconds)
+  poll_interval: 60
+
+  # Interval for checking alert conditions (seconds)
+  alert_check_interval: 60
+
+  # Enabled notification channels
+  notification_channels:
+    - console
+    - file
+    - webhook
+
+  # SLA compliance window (hours)
+  sla_window: 24
