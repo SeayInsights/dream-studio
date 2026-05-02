@@ -20,6 +20,7 @@ class SessionMetrics(BaseModel):
     by_project: Dict[str, int]
     timeline: List[Dict[str, Any]]
     day_of_week: Dict[str, int]
+    success_rate: float = 0.0
 
 
 class SkillMetrics(BaseModel):

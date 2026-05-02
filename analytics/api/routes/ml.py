@@ -229,24 +229,31 @@ async def get_forecasts(
         forecaster.fit(data)
 
         # Generate forecast
-        forecast_result = forecaster.forecast(steps=days)
+        forecast_result = forecaster.forecast(periods=days)
 
         # Format response
+        predictions = forecast_result["predictions"]
+        dates = forecast_result["dates"]
+        lower_bounds = forecast_result.get("lower_95", [None] * len(predictions))
+        upper_bounds = forecast_result.get("upper_95", [None] * len(predictions))
+
         forecast_points = []
-        for item in forecast_result["forecast"]:
+        for i, date in enumerate(dates):
             forecast_points.append(ForecastPoint(
-                date=item["date"],
-                value=item["value"],
-                lower_bound=item.get("lower_bound"),
-                upper_bound=item.get("upper_bound")
+                date=date,
+                value=predictions[i],
+                lower_bound=lower_bounds[i] if i < len(lower_bounds) else None,
+                upper_bound=upper_bounds[i] if i < len(upper_bounds) else None
             ))
+
+        forecast_mean = sum(predictions) / len(predictions) if predictions else 0.0
 
         return ForecastResponse(
             metric=metric,
-            method=forecast_result["method"],
+            method=forecaster.method,
             forecast=forecast_points,
             historical_mean=float(data["value"].mean()),
-            forecast_mean=forecast_result["mean"],
+            forecast_mean=forecast_mean,
             days=days,
             generated_at=datetime.now().isoformat()
         )

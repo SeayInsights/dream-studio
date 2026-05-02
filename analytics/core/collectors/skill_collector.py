@@ -115,13 +115,36 @@ class SkillCollector:
             # Count unique skills
             unique_skills = len(by_skill)
 
+            # Timeline: daily skill invocation counts
+            cursor.execute("""
+                SELECT
+                    DATE(invoked_at) as date,
+                    COUNT(*) as count
+                FROM raw_skill_telemetry
+                WHERE invoked_at >= ?
+                GROUP BY DATE(invoked_at)
+                ORDER BY date ASC
+            """, (cutoff_date,))
+            timeline = [{"date": row["date"], "count": row["count"]} for row in cursor.fetchall()]
+
+            # Raw invocations for pattern detection
+            cursor.execute("""
+                SELECT session_id, skill_name, invoked_at
+                FROM raw_skill_telemetry
+                WHERE invoked_at >= ?
+                ORDER BY invoked_at ASC
+            """, (cutoff_date,))
+            invocations = [dict(row) for row in cursor.fetchall()]
+
             return {
                 "total_invocations": total_invocations,
                 "unique_skills": unique_skills,
                 "overall_success_rate": round(success_rate_overall, 1),
                 "by_skill": by_skill,
                 "top_skills": top_skills,
-                "failures": failures
+                "failures": failures,
+                "timeline": timeline,
+                "invocations": invocations
             }
 
         finally:

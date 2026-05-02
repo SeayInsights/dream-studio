@@ -3582,29 +3582,42 @@
                     Loading ML Insights...
                 `;
 
-                // Fetch all ML data in parallel
-                const [forecastsData, patternsData, recommendationsData, benchmarksData] = await Promise.all([
-                    fetchML('/forecasts'),
+                // Fetch all ML data in parallel (forecasts need per-metric calls)
+                const [sessionsForecast, tokensForecast, skillsForecast, patternsData, recommendationsData, benchmarksData] = await Promise.all([
+                    fetchML('/forecasts?metric=sessions'),
+                    fetchML('/forecasts?metric=tokens'),
+                    fetchML('/forecasts?metric=skills'),
                     fetchML('/patterns'),
                     fetchML('/recommendations'),
                     fetchML('/benchmarks')
                 ]);
 
+                // Transform forecast API response to chart format
+                function toChartData(resp) {
+                    if (!resp || !resp.forecast || resp.forecast.length === 0) return null;
+                    return {
+                        dates: resp.forecast.map(p => p.date),
+                        predicted: resp.forecast.map(p => p.value),
+                        confidence_lower: resp.forecast.map(p => p.lower_bound),
+                        confidence_upper: resp.forecast.map(p => p.upper_bound)
+                    };
+                }
+
                 // Initialize forecast charts
                 await Promise.all([
-                    initForecastChart('sessions-forecast-chart', forecastsData?.sessions || null, 'Sessions'),
-                    initForecastChart('tokens-forecast-chart', forecastsData?.tokens || null, 'Tokens'),
-                    initForecastChart('skills-forecast-chart', forecastsData?.skills || null, 'Skills')
+                    initForecastChart('sessions-forecast-chart', toChartData(sessionsForecast), 'Sessions'),
+                    initForecastChart('tokens-forecast-chart', toChartData(tokensForecast), 'Tokens'),
+                    initForecastChart('skills-forecast-chart', toChartData(skillsForecast), 'Skills')
                 ]);
 
                 // Populate pattern detection cards
-                populatePatternsGrid(patternsData || []);
+                populatePatternsGrid(patternsData?.patterns || []);
 
                 // Populate recommendations feed
-                populateRecommendationsFeed(recommendationsData || []);
+                populateRecommendationsFeed(recommendationsData?.recommendations || []);
 
                 // Populate benchmarks table
-                populateBenchmarksTable(benchmarksData || []);
+                populateBenchmarksTable(benchmarksData?.benchmarks || []);
 
                 // Hide load button, show content
                 loadSection.classList.add('hidden');
@@ -3753,10 +3766,11 @@
             grid.innerHTML = patterns.map(pattern => {
                 const typeColors = {
                     sequence: 'blue',
-                    temporal: 'green',
-                    workflow: 'purple'
+                    temporal_hour: 'green',
+                    temporal_day: 'purple'
                 };
                 const color = typeColors[pattern.pattern_type] || 'gray';
+                const confidence = pattern.confidence != null ? `${(pattern.confidence * 100).toFixed(1)}%` : 'N/A';
 
                 return `
                     <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -3764,12 +3778,11 @@
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800">
                                 ${pattern.pattern_type}
                             </span>
-                            <span class="text-xs text-gray-500">${pattern.frequency}x</span>
+                            <span class="text-xs text-gray-500">${pattern.support}x</span>
                         </div>
-                        <h4 class="text-sm font-medium text-gray-900 mb-1">${pattern.name}</h4>
-                        <p class="text-xs text-gray-600">${pattern.description}</p>
+                        <h4 class="text-sm font-medium text-gray-900 mb-1">${pattern.pattern}</h4>
                         <div class="mt-3 text-xs text-gray-500">
-                            Confidence: <span class="font-medium text-gray-900">${(pattern.confidence * 100).toFixed(1)}%</span>
+                            Confidence: <span class="font-medium text-gray-900">${confidence}</span>
                         </div>
                     </div>
                 `;
@@ -3789,12 +3802,13 @@
             const sorted = [...recommendations].sort((a, b) => b.impact_score - a.impact_score);
 
             feed.innerHTML = sorted.map(rec => {
-                const priorityColors = {
-                    high: 'red',
-                    medium: 'yellow',
-                    low: 'green'
+                const categoryColors = {
+                    skill_optimization: 'blue',
+                    workflow_improvement: 'purple',
+                    inefficiency_detection: 'red',
+                    performance_booster: 'green'
                 };
-                const color = priorityColors[rec.priority] || 'gray';
+                const color = categoryColors[rec.category] || 'gray';
 
                 return `
                     <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -3802,24 +3816,17 @@
                             <div class="flex-1">
                                 <div class="flex items-center gap-2 mb-1">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800">
-                                        ${rec.priority} priority
+                                        ${rec.category.replace(/_/g, ' ')}
                                     </span>
-                                    <span class="text-xs text-gray-500">Impact: ${rec.impact_score}/10</span>
+                                    <span class="text-xs text-gray-500">Impact: ${rec.impact_score}/100</span>
                                     <span class="text-xs text-gray-500">Confidence: ${(rec.confidence * 100).toFixed(0)}%</span>
                                 </div>
                                 <h4 class="text-sm font-bold text-gray-900 mb-1">${rec.title}</h4>
                                 <p class="text-sm text-gray-700">${rec.description}</p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 mt-3">
-                            <button onclick="applyRecommendation('${rec.id}')"
-                                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none transition-colors">
-                                Apply
-                            </button>
-                            <button onclick="dismissRecommendation('${rec.id}')"
-                                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-colors">
-                                Dismiss
-                            </button>
+                        <div class="mt-2 text-xs text-gray-600">
+                            <strong>Action:</strong> ${rec.suggested_action}
                         </div>
                     </div>
                 `;
@@ -3836,22 +3843,25 @@
             }
 
             tbody.innerHTML = benchmarks.map(bm => {
-                const trendIcon = bm.trend > 0
-                    ? '<svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"></path></svg>'
-                    : bm.trend < 0
-                    ? '<svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd"></path></svg>'
-                    : '<svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>';
+                const trendColors = { improving: 'green', stable: 'gray', declining: 'red' };
+                const trendColor = trendColors[bm.trend] || 'gray';
+                const trendIcons = {
+                    improving: '<svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"></path></svg>',
+                    declining: '<svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd"></path></svg>',
+                    stable: '<svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>'
+                };
+                const statusColors = { above_baseline: 'text-green-600', at_baseline: 'text-gray-600', below_baseline: 'text-red-600' };
 
                 return `
                     <tr class="hover:bg-gray-50">
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${bm.metric}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bm.current}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.avg_7d}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.avg_30d}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bm.current_value.toFixed(1)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.baseline.toFixed(1)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.percentile.toFixed(0)}th</td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm">
                             <div class="flex items-center gap-1">
-                                ${trendIcon}
-                                <span class="${bm.trend > 0 ? 'text-green-600' : bm.trend < 0 ? 'text-red-600' : 'text-gray-500'}">${Math.abs(bm.trend).toFixed(1)}%</span>
+                                ${trendIcons[bm.trend] || trendIcons.stable}
+                                <span class="${statusColors[bm.status] || 'text-gray-500'}">${bm.trend}</span>
                             </div>
                         </td>
                     </tr>
@@ -3869,7 +3879,7 @@
                     alert('Recommendation applied successfully!');
                     // Reload recommendations
                     const data = await fetchML('/recommendations');
-                    populateRecommendationsFeed(data || []);
+                    populateRecommendationsFeed(data?.recommendations || []);
                 } else {
                     throw new Error('Failed to apply recommendation');
                 }
@@ -3888,7 +3898,7 @@
                 if (response.ok) {
                     // Reload recommendations
                     const data = await fetchML('/recommendations');
-                    populateRecommendationsFeed(data || []);
+                    populateRecommendationsFeed(data?.recommendations || []);
                 } else {
                     throw new Error('Failed to dismiss recommendation');
                 }
