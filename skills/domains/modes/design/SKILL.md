@@ -138,6 +138,97 @@ All dimension definitions, valid values, and NLP mappings are defined in `discov
 **Integration with Phase 3:**
 This table will power automated design system selection when curated presets are integrated in Phase 3. Each system name maps to a preset bundle (tokens, components, templates).
 
+## External References
+
+The following extracted pattern files are available in `skills/domains/modes/design/references/`:
+
+1. **[priority-matrix.md](references/priority-matrix.md)** - 10-level priority system for design decisions (P0 Critical → P9 Future Vision)
+2. **[font-pairings.md](references/font-pairings.md)** - 75 curated font pairings with search utility (`search-font-pairings.py`)
+3. **[token-architecture.md](references/token-architecture.md)** - 3-layer design token system (base → semantic → component)
+4. **[anti-patterns.md](references/anti-patterns.md)** - 99 design anti-patterns with search utility (`search-anti-patterns.py`)
+5. **[component-composition.md](references/component-composition.md)** - 14 React component composition patterns
+6. **[semantic-colors.md](references/semantic-colors.md)** - 30+ semantic color tokens with usage guidance
+
+### Search Utilities
+
+Two Python utilities provide quick pattern lookups:
+
+**Font Pairing Search:**
+```bash
+py skills/domains/modes/design/references/search-font-pairings.py "modern professional"
+# Returns matching font pairings from 75 curated pairs
+```
+
+**Anti-Pattern Search:**
+```bash
+py skills/domains/modes/design/references/search-anti-patterns.py "color accessibility"
+# Returns relevant anti-patterns with severity levels
+```
+
+## Mode Routing
+
+### Core Modes
+
+The design skill supports multiple specialized modes. Invoke via `Skill(skill="dream-studio:domains", args="design:<mode>")`.
+
+| Mode | Trigger Keywords | Purpose | Output |
+|------|------------------|---------|--------|
+| **default** | `design:`, `brand:`, `theme:` | Full design system generation with discovery | Complete design system, components, brand package |
+| **design-system** | `design-system:`, `tokens:`, `build design system:` | Generate design systems using token architecture | 3-layer token system, component library, usage guide |
+| **banner** | `banner:`, `hero:`, `header design:` | Create banner/hero designs with font pairings | Banner variants with curated font pairings |
+| **validate-composition** | `validate:`, `review composition:`, `check patterns:` | Validate React components against composition patterns | Validation report with anti-pattern detection |
+
+### Mode Examples
+
+**Design System Mode:**
+```yaml
+# User request: "design-system: Build a design system for a fintech dashboard"
+# Output: 3-layer token architecture + semantic color palette + component library
+```
+
+**Banner Mode:**
+```yaml
+# User request: "banner: Create a hero section for a SaaS landing page, modern and trustworthy"
+# Output: 3 banner variants with font pairings from references/font-pairings.md
+```
+
+**Validate Composition Mode:**
+```yaml
+# User request: "validate-composition: Check my React components for anti-patterns"
+# Output: Anti-pattern scan + composition pattern recommendations
+```
+
+## Integration Points
+
+### Discovery → Font Pairings
+When `discovery-protocol.yml` extraction yields:
+- `typography: serif` → Filter font pairings for serif headings
+- `mood: professional` → Prioritize "Formal" or "Clean" font pairs
+- `mood: playful` → Prioritize "Friendly" or "Warm" font pairs
+
+**Example workflow:**
+1. Discovery extracts `mood: professional`, `typography: sans-serif`
+2. Run `py references/search-font-pairings.py "professional sans"`
+3. Select top 3 pairings for design system
+
+### Token Architecture → Design System
+All design system outputs should follow the 3-layer token structure from `token-architecture.md`:
+1. **Base tokens** - Raw values (colors, sizes, spacing)
+2. **Semantic tokens** - Purpose-based mappings (primary, success, danger)
+3. **Component tokens** - Component-specific overrides
+
+### Anti-Pattern Validation
+Before finalizing any design output:
+1. Run anti-pattern search for relevant categories (e.g., "accessibility", "layout")
+2. Cross-check design decisions against flagged anti-patterns
+3. Document any intentional exceptions with reasoning
+
+### Priority Matrix Integration
+Use the 10-level priority matrix to sequence design work:
+- **P0-P2:** Must-have for MVP (core layout, primary actions, critical accessibility)
+- **P3-P5:** Important but can be staged (polish, secondary features, edge cases)
+- **P6-P9:** Enhancements and future vision (animations, advanced interactions)
+
 ## Detailed Reference
 
 See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.
