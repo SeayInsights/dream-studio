@@ -1,0 +1,9 @@
+Report Metadata
+========================================
+
+generated_at: 2026-05-01T23:15:00
+report_type: detailed
+date_range:
+  start: 2026-04-01
+  end: 2026-04-30
+  days: 30

@@ -1,0 +1,22 @@
+# Test Dependencies for Analytics Test Suite
+# Install: pip install -r requirements-test.txt
+
+# Core testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+
+# Optional: Better test output and parallel execution
+pytest-html>=3.1.0
+pytest-xdist>=3.0.0
+
+# Mocking and test utilities
+responses>=0.23.0
+freezegun>=1.2.0
+
+# For integration tests with real dependencies
+reportlab>=4.0.0
+openpyxl>=3.1.0
+python-pptx>=0.6.21
+matplotlib>=3.7.0
+apscheduler>=3.10.0

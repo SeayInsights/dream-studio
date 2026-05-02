@@ -19,3 +19,47 @@ realtime:
 
   # SLA compliance window (hours)
   sla_window: 24
+
+# Export & Reporting Configuration
+export:
+  output_dir: "exports/"
+  max_file_size: 104857600  # 100MB
+  retention_days: 30
+  formats:
+    - pdf
+    - excel
+    - pptx
+    - csv
+    - powerbi
+
+  pdf:
+    page_size: "letter"  # letter, a4
+    orientation: "portrait"  # portrait, landscape
+
+  excel:
+    max_rows_per_sheet: 1000000
+    include_charts: true
+
+  pptx:
+    slide_size: "16:9"  # 16:9, 4:3
+    template: "default"  # default, executive, technical
+
+# Email Configuration
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  username: ""  # Set via environment variable ANALYTICS_SMTP_USER
+  password: ""  # Set via environment variable ANALYTICS_SMTP_PASS
+  from_address: "Dream Studio Analytics <noreply@example.com>"
+  use_tls: true
+  timeout: 30
+
+# Scheduler Configuration
+scheduler:
+  enabled: true
+  timezone: "UTC"
+  max_concurrent_jobs: 5
+  job_defaults:
+    misfire_grace_time: 900  # 15 minutes
+    coalesce: true
+    max_instances: 1

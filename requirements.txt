@@ -6,3 +6,5 @@ Jinja2>=3.1
 PyYAML>=6.0
 # Optional: tiktoken (for precise token counting in adapter builds)
 # tiktoken>=0.5
+# Optional: APScheduler (for report scheduler - recommended)
+# apscheduler>=3.10
