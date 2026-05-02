@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: review
+  mode_type: review
+  inputs: [pr_diff, commit_history, test_results, spec_reference]
+  outputs: [review_comments, approval_status, change_requests, quality_score]
+  capabilities_required: [Read, Grep, Bash, Agent]
+  model_preference: sonnet
+  estimated_duration: 15-45min
+---
+
 # Review — Two-Stage Quality Check
 
 ## Before you start

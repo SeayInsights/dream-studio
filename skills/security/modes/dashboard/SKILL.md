@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: dashboard
+  mode_type: report
+  inputs: [scan_results, compliance_mappings, mitigations, network_compat]
+  outputs: [etl_pipeline, powerbi_datasets, risk_score, executive_report]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 20-45min
+---
+
 # Security Dashboard — ETL Orchestration + Power BI Export
 
 ## Before you start

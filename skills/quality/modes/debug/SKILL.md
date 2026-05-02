@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: debug
+  mode_type: diagnostic
+  inputs: [bug_description, error_message, stack_trace, reproduction_steps]
+  outputs: [root_cause, fix, verification_evidence, debug_log]
+  capabilities_required: [Read, Grep, Bash, LSP, Agent]
+  model_preference: sonnet
+  estimated_duration: 15-45min
+---
+
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 

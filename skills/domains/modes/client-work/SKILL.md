@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: client-work
+  mode_type: build
+  inputs: [client_request, business_requirements, data_sources, sow]
+  outputs: [deliverable, documentation, handoff_package, validation_evidence]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, Agent]
+  model_preference: sonnet
+  estimated_duration: 8-30hrs
+---
+
 # Client Work — Full Lifecycle
 
 ## Before you start

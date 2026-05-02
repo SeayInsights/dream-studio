@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: verify
+  mode_type: verification
+  inputs: [implementation, acceptance_criteria, test_plan]
+  outputs: [test_results, verification_evidence, regression_check, pass_fail_verdict]
+  capabilities_required: [Read, Bash, Grep, LSP]
+  model_preference: sonnet
+  estimated_duration: 10-30min
+---
+
 # Verify — Prove It Works
 
 ## Before you start

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: setup
+  mode: status
+  mode_type: report
+  inputs: [platform, tool_registry, setup_preferences]
+  outputs: [status_report, installed_tools, missing_tools]
+  capabilities_required: [Read, Bash]
+  model_preference: haiku
+  estimated_duration: 3-5min
+---
+
 # Status Mode
 
 ## Imports

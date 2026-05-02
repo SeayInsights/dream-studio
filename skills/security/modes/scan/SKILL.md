@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: scan
+  mode_type: orchestration
+  inputs: [client_profile, repo_list, scan_config]
+  outputs: [github_workflows, semgrep_rules, scan_results, status_report]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 20-60min
+---
+
 # Scan — Security Scanning Orchestrator
 
 ## Before you start

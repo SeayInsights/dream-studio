@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: polish
+  mode_type: review
+  inputs: [ui_implementation, design_intent, user_feedback]
+  outputs: [critique, fixes, improved_implementation, quality_score]
+  capabilities_required: [Read, Write, Edit, Grep, Bash]
+  model_preference: sonnet
+  estimated_duration: 20-60min
+---
+
 # Polish — UI Quality Decision Tree
 
 ## Before you start

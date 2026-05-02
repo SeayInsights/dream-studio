@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: netcompat
+  mode_type: analysis
+  inputs: [codebase, network_profile, proxy_config, outbound_connections]
+  outputs: [compatibility_score, issues, fix_recommendations]
+  capabilities_required: [Read, Write, Grep, Bash]
+  model_preference: haiku
+  estimated_duration: 15-30min
+---
+
 # Netcompat — Network/Proxy Compatibility Analyzer
 
 ## Before you start

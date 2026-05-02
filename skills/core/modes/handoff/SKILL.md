@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: handoff
+  mode_type: report
+  inputs: [session_context, current_task, blockers, decisions]
+  outputs: [handoff_document, context_summary, next_steps]
+  capabilities_required: [Read, Write]
+  model_preference: haiku
+  estimated_duration: 5-15min
+---
+
 # Handoff — Session Continuity
 
 ## Before you start

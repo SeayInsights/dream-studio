@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: build
+  mode_type: build
+  inputs: [task_list, plan_document, current_task_id]
+  outputs: [implementation, tests, commit, progress_update]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP, Agent]
+  model_preference: sonnet
+  estimated_duration: 30min-4hrs
+---
+
 # Build — Execute With Discipline
 
 ## Before you start

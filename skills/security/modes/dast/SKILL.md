@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: dast
+  mode_type: scan
+  inputs: [target_url, client_profile, scan_config]
+  outputs: [scan_results, findings, ingested_data]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 30-90min
+---
+
 # DAST — Web Application Dynamic Testing
 
 ## Before you start

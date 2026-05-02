@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: mitigate
+  mode_type: remediation
+  inputs: [findings, codebase_context, rule_id, cwe]
+  outputs: [mitigation_plan, code_diff, verification_test, effort_estimate]
+  capabilities_required: [Read, Write, Edit, Grep, Agent]
+  model_preference: sonnet
+  estimated_duration: 30-120min
+---
+
 # Mitigate — Per-Finding Fix Recommendations
 
 ## Before you start

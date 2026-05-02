@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: dashboard-dev
+  mode_type: build
+  inputs: [dashboard_spec, feed_contract, data_sources, ui_requirements]
+  outputs: [dashboard_implementation, feed_handler, components, tests]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
+  model_preference: sonnet
+  estimated_duration: 2-6hrs
+---
+
 # Dashboard Dev — Patterns for Hook-Driven Desktop Dashboards
 
 ## Before you start

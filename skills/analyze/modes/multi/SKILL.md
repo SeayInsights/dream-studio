@@ -1,3 +1,15 @@
+---
+ds:
+  pack: analyze
+  mode: multi
+  mode_type: analysis
+  inputs: [decision_input, mode, context, evaluation_criteria]
+  outputs: [analyst_signals, decision_memo, scores, disagreements]
+  capabilities_required: [Read, Agent]
+  model_preference: sonnet
+  estimated_duration: 20-45min
+---
+
 # Analyze — Multi-Perspective Decision Engine
 
 ## Before you start

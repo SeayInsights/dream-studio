@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: pdf
+  mode_type: build
+  inputs: [resume_data, template, job_target, formatting_preferences]
+  outputs: [formatted_pdf, html_source, preview]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 10-20min
+---
+
 # Career-PDF — Content Generation
 
 ## Before you start

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: coach
+  mode_type: analysis
+  inputs: [workflow_patterns, session_history, user_intent]
+  outputs: [workflow_grade, improvement_recommendations, best_practices]
+  capabilities_required: [Read, Agent]
+  model_preference: sonnet
+  estimated_duration: 15-30min
+---
+
 # Coach — Claude Code Workflow Advisor
 
 ## Before you start

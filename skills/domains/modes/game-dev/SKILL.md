@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: game-dev
+  mode_type: build
+  inputs: [game_spec, scene_design, asset_requirements, mechanics]
+  outputs: [implementation, scenes, scripts, tests]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
+  model_preference: sonnet
+  estimated_duration: 1-4hrs
+---
+
 # Game Dev — Godot 4 Consolidated Patterns
 
 ## Before you start

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: evaluate
+  mode_type: analysis
+  inputs: [offer_details, current_position, market_data, personal_goals]
+  outputs: [analyst_signals, decision_memo, recommendation, comparison_matrix]
+  capabilities_required: [Read, Write, Agent, Skill]
+  model_preference: sonnet
+  estimated_duration: 20-40min
+---
+
 # Career-Evaluate — Offer Assessment Engine
 
 ## Before you start

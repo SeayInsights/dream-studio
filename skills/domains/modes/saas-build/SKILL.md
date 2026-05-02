@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: saas-build
+  mode_type: build
+  inputs: [feature_spec, api_contract, schema_definition, component_requirements]
+  outputs: [implementation, tests, migration, deploy_artifact]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
+  model_preference: sonnet
+  estimated_duration: 2-8hrs
+---
+
 # SaaS Build — React + Cloudflare Stack
 
 ## Before you start

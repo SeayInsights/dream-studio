@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: structure-audit
+  mode_type: audit
+  inputs: [project_path, folder_structure, file_conventions]
+  outputs: [audit_score, violations, fix_recommendations]
+  capabilities_required: [Read, Glob, Grep]
+  model_preference: haiku
+  estimated_duration: 10-20min
+---
+
 # Skill: /structure-audit
 
 **Trigger**: `/structure-audit [path]`

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: binary-scan
+  mode_type: scan
+  inputs: [binary_path, client_profile, analysis_config]
+  outputs: [analysis_results, findings, ingested_data]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 20-60min
+---
+
 # Binary Scan — Executable Analysis
 
 ## Before you start

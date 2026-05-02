@@ -1,3 +1,15 @@
+---
+ds:
+  pack: setup
+  mode: wizard
+  mode_type: setup
+  inputs: [platform, user_preferences, tool_registry]
+  outputs: [installed_tools, setup_config, preferences_file]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 10-30min
+---
+
 # Wizard Mode
 
 ## Imports

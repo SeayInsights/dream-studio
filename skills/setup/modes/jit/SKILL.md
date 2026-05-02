@@ -1,3 +1,15 @@
+---
+ds:
+  pack: setup
+  mode: jit
+  mode_type: setup
+  inputs: [missing_tool, current_task, tool_registry]
+  outputs: [install_prompt, tool_installed, workflow_continuation]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: haiku
+  estimated_duration: 3-10min
+---
+
 # JIT Mode (Just-in-Time Prompt)
 
 ## Imports

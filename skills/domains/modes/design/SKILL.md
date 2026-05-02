@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: design
+  mode_type: build
+  inputs: [design_intent, brand_guidelines, content, target_audience]
+  outputs: [design_system, components, assets, brand_package]
+  capabilities_required: [Read, Write, WebSearch, Skill]
+  model_preference: sonnet
+  estimated_duration: 30-90min
+---
+
 # Design — Visual Design Capability
 
 ## Before you start

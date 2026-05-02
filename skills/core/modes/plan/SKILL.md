@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: plan
+  mode_type: planning
+  inputs: [approved_spec, user_stories, requirements]
+  outputs: [plan_document, task_list, traceability_registry, github_issues]
+  capabilities_required: [Read, Write, Bash]
+  model_preference: sonnet
+  estimated_duration: 15-45min
+---
+
 # Plan — Break Spec Into Steps
 
 ## Before you start

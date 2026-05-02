@@ -1,3 +1,15 @@
+---
+ds:
+  pack: security
+  mode: comply
+  mode_type: report
+  inputs: [findings, framework, controls, scan_coverage]
+  outputs: [compliance_mapping, evidence_documents, coverage_gaps]
+  capabilities_required: [Read, Write, Grep]
+  model_preference: haiku
+  estimated_duration: 20-45min
+---
+
 # Comply — Compliance Framework Mapping
 
 ## Before you start

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: ops
+  mode_type: orchestration
+  inputs: [user_intent, career_context, mode_request]
+  outputs: [routed_mode, status_update, next_actions]
+  capabilities_required: [Read, Skill]
+  model_preference: haiku
+  estimated_duration: 5-10min
+---
+
 # Career-Ops — Router & Command Center
 
 ## Before you start

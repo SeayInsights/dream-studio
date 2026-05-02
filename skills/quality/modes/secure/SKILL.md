@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: secure
+  mode_type: review
+  inputs: [code_diff, file_contents, architecture_description, dependency_manifest]
+  outputs: [threat_model, findings, remediation_steps, ship_verdict]
+  capabilities_required: [Read, Grep, Agent]
+  model_preference: sonnet
+  estimated_duration: 20-60min
+---
+
 # Secure — Parallel Security Review
 
 ## Before you start

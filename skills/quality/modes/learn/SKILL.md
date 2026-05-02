@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: learn
+  mode_type: analysis
+  inputs: [debug_log, build_context, patterns, gotchas]
+  outputs: [lesson_document, promoted_knowledge, gotcha_entries]
+  capabilities_required: [Read, Write, Grep]
+  model_preference: haiku
+  estimated_duration: 10-20min
+---
+
 # Learn — Pattern Capture and Promotion
 
 ## Before you start

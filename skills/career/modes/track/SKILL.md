@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: track
+  mode_type: report
+  inputs: [application_data, interview_history, status_updates]
+  outputs: [pipeline_report, next_actions, follow_up_tasks]
+  capabilities_required: [Read, Write]
+  model_preference: haiku
+  estimated_duration: 10-20min
+---
+
 # Career-Track — Pipeline Intelligence
 
 ## Before you start

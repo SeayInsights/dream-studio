@@ -1,3 +1,15 @@
+---
+ds:
+  pack: quality
+  mode: harden
+  mode_type: audit
+  inputs: [project_structure, codebase, config_files]
+  outputs: [audit_report, fixes, constitution, gotchas, standards_compliance]
+  capabilities_required: [Read, Write, Edit, Grep, Bash]
+  model_preference: sonnet
+  estimated_duration: 30-90min
+---
+
 # Harden — Project Standards Audit & Fix
 
 ## Before you start

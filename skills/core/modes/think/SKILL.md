@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: think
+  mode_type: analysis
+  inputs: [problem_statement, constraints, context, user_goals]
+  outputs: [spec_document, user_stories, requirements, decision_rationale]
+  capabilities_required: [Read, Write, Grep, WebSearch]
+  model_preference: sonnet
+  estimated_duration: 30-90min
+---
+
 # Think — Design Before Building
 
 ## Before you start

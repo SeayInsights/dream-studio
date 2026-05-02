@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: ship
+  mode_type: review
+  inputs: [current_branch, uncommitted_changes, test_results, build_status]
+  outputs: [quality_checks, ship_verdict, rollback_plan, monitoring_plan]
+  capabilities_required: [Read, Bash, Grep]
+  model_preference: sonnet
+  estimated_duration: 10-30min
+---
+
 # Ship — Pre-Deploy Gate
 
 ## Before you start

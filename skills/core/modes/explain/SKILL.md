@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: explain
+  mode_type: analysis
+  inputs: [code_snippet, system_component, question]
+  outputs: [explanation, examples, mental_model, key_concepts]
+  capabilities_required: [Read, Grep, LSP]
+  model_preference: sonnet
+  estimated_duration: 10-30min
+---
+
 # Explain — Trace How It Works
 
 ## Before you start

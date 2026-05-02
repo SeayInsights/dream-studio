@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: scan
+  mode_type: search
+  inputs: [search_criteria, resume, preferences, portal_config]
+  outputs: [job_listings, matched_roles, saved_opportunities]
+  capabilities_required: [Read, Write, WebSearch]
+  model_preference: haiku
+  estimated_duration: 15-30min
+---
+
 # Career-Scan — Portal Discovery
 
 ## Before you start

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: core
+  mode: recap
+  mode_type: report
+  inputs: [session_history, commits, decisions, key_findings]
+  outputs: [session_summary, accomplishments, next_actions]
+  capabilities_required: [Read, Bash]
+  model_preference: haiku
+  estimated_duration: 5-10min
+---
+
 # Recap — Build Memory Capture
 
 ## Before you start

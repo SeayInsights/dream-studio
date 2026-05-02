@@ -1,3 +1,15 @@
+---
+ds:
+  pack: analyze
+  mode: domain-re
+  mode_type: analysis
+  inputs: [deal_terms, property_data, tenant_credit, market_context]
+  outputs: [analyst_signals, risk_score, recommendation, decision_memo]
+  capabilities_required: [Read, Agent]
+  model_preference: sonnet
+  estimated_duration: 20-40min
+---
+
 # Domain-RE — Real Estate Analysis Engine
 
 ## Before you start

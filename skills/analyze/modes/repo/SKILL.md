@@ -1,4 +1,13 @@
 ---
+ds:
+  pack: analyze
+  mode: repo
+  mode_type: analysis
+  inputs: [repository_data, pr_history, issue_patterns, codebase_structure]
+  outputs: [pattern_analysis, comparison_report, recommendations]
+  capabilities_required: [Read, Grep, Bash, Agent]
+  model_preference: sonnet
+  estimated_duration: 30-60min
 name: repo
 description: Repository pattern analysis and cross-repo comparison
 triggers: ["analyze repo:", "repo patterns:", "compare repos:", "repo analysis:"]

@@ -1,3 +1,15 @@
+---
+ds:
+  pack: domains
+  mode: mcp-build
+  mode_type: build
+  inputs: [mcp_spec, tool_definitions, resource_schemas, server_requirements]
+  outputs: [mcp_server, tools, resources, tests, documentation]
+  capabilities_required: [Read, Write, Edit, Grep, Bash, LSP]
+  model_preference: sonnet
+  estimated_duration: 1-3hrs
+---
+
 # MCP Build — Server Development
 
 ## Before you start

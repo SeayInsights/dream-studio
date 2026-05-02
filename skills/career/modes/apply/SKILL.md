@@ -1,3 +1,15 @@
+---
+ds:
+  pack: career
+  mode: apply
+  mode_type: build
+  inputs: [job_posting, resume, experience_data, company_research]
+  outputs: [tailored_resume, cover_letter, application_package]
+  capabilities_required: [Read, Write, WebSearch]
+  model_preference: sonnet
+  estimated_duration: 20-40min
+---
+
 # Career-Apply — Application Engine
 
 ## Before you start
