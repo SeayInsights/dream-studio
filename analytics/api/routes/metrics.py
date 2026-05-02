@@ -401,9 +401,9 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
             ce = cost_effs[i]
             model_performance.append({
                 "model_name": name,
-                "speed": round(tps / max_tps * 100, 1),
-                "success_rate": round(by_model[name]["percentage"], 1),
-                "efficiency": round(ce / max_cost_eff * 100, 1) if max_cost_eff else 0
+                "speed": round(tps / max_tps, 3),
+                "success_rate": round(by_model[name]["percentage"] / 100, 3),
+                "efficiency": round(ce / max_cost_eff, 3) if max_cost_eff else 0
             })
 
         best = max(token_efficiency, key=lambda x: x["tokens_per_second"]) if token_efficiency else {}
