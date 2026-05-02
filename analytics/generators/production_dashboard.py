@@ -1,5 +1,5 @@
 """Production Dashboard Generator - Creates beautiful, interactive analytics dashboards"""
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
 
@@ -21,6 +21,10 @@ from analytics.core.insights import (
     InsightEngine,
     RecommendationEngine
 )
+from analytics.ml.forecasting import TimeSeriesForecaster
+from analytics.ml.patterns import PatternDetector
+from analytics.ml.recommendations import RecommendationEngine as MLRecommendationEngine
+from analytics.ml.benchmarks import BenchmarkEngine
 
 
 class ProductionDashboard:
@@ -59,11 +63,17 @@ class ProductionDashboard:
         print("  → Generating insights...")
         insights = self._generate_insights(metrics, analysis)
 
+        print("  → Running ML analysis...")
+        ml_insights = self._generate_ml_insights(metrics, days)
+
         print("  → Creating visualizations...")
         charts = self._generate_charts(metrics, analysis)
 
+        print("  → Creating ML visualizations...")
+        ml_charts = self._generate_ml_charts(ml_insights)
+
         print("  → Building dashboard...")
-        html = self._build_html(metrics, analysis, insights, charts)
+        html = self._build_html(metrics, analysis, insights, charts, ml_insights, ml_charts)
 
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -135,6 +145,125 @@ class ProductionDashboard:
             "insights": insights,
             "recommendations": recommendations
         }
+
+    def _generate_ml_insights(self, metrics: Dict[str, Any], days: int) -> Dict[str, Any]:
+        """
+        Generate ML-powered insights
+
+        Args:
+            metrics: Collected metrics
+            days: Number of days analyzed
+
+        Returns:
+            Dict containing ML insights (forecasts, patterns, recommendations, benchmarks)
+        """
+        ml_insights: Dict[str, Any] = {
+            "forecasts": None,
+            "patterns": None,
+            "recommendations": None,
+            "benchmarks": None
+        }
+
+        try:
+            import pandas as pd
+        except ImportError:
+            print("  ⚠️ pandas not available, skipping ML insights")
+            return ml_insights
+
+        # Generate forecasts
+        try:
+            timeline = metrics.get("sessions", {}).get("timeline", [])
+            if timeline and len(timeline) >= 14:
+                df = pd.DataFrame(timeline)
+                df["date"] = pd.to_datetime(df["date"])
+                df = df.set_index("date")[["count"]].rename(columns={"count": "value"})
+
+                forecaster = TimeSeriesForecaster(method='auto')
+                forecaster.fit(df)
+                forecast_result = forecaster.forecast(steps=7)
+                ml_insights["forecasts"] = forecast_result
+        except Exception as e:
+            print(f"  ⚠️ Forecast generation failed: {e}")
+
+        # Detect patterns
+        try:
+            skill_data = metrics.get("skills", {})
+            if "invocations" in skill_data and len(skill_data["invocations"]) >= 3:
+                telemetry = pd.DataFrame(skill_data["invocations"])
+                if all(col in telemetry.columns for col in ["session_id", "skill_name", "invoked_at"]):
+                    detector = PatternDetector(min_support=3)
+                    detector.fit(telemetry[["session_id", "skill_name", "invoked_at"]])
+                    patterns = detector.get_patterns()
+                    ml_insights["patterns"] = patterns[:10]  # Top 10 patterns
+        except Exception as e:
+            print(f"  ⚠️ Pattern detection failed: {e}")
+
+        # Generate ML recommendations
+        try:
+            skill_data = metrics.get("skills", {})
+            session_data = metrics.get("sessions", {})
+
+            if ("invocations" in skill_data and len(skill_data["invocations"]) >= 20 and
+                "sessions" in session_data and len(session_data["sessions"]) >= 20):
+
+                telemetry = pd.DataFrame(skill_data["invocations"])
+                sessions = pd.DataFrame(session_data["sessions"])
+
+                # Ensure required columns
+                if "session_id" not in sessions.columns:
+                    sessions["session_id"] = range(len(sessions))
+                if "duration" not in sessions.columns:
+                    sessions["duration"] = 0
+                if "tokens" not in sessions.columns:
+                    sessions["tokens"] = 0
+                if "outcome" not in sessions.columns:
+                    sessions["outcome"] = "success"
+
+                engine = MLRecommendationEngine(min_support=3)
+                engine.fit(telemetry, sessions)
+                recs = engine.get_recommendations(min_impact=30)
+                ml_insights["recommendations"] = recs[:5]  # Top 5 by impact
+        except Exception as e:
+            print(f"  ⚠️ ML recommendations failed: {e}")
+
+        # Generate benchmarks
+        try:
+            timeline = metrics.get("sessions", {}).get("timeline", [])
+            if timeline and len(timeline) >= 14:
+                df = pd.DataFrame(timeline)
+                df["date"] = pd.to_datetime(df["date"])
+                df = df.set_index("date")[["count"]].rename(columns={"count": "sessions"})
+
+                # Add other metrics if available
+                token_timeline = metrics.get("tokens", {}).get("timeline", [])
+                if token_timeline and len(token_timeline) >= 14:
+                    token_df = pd.DataFrame(token_timeline)
+                    token_df["date"] = pd.to_datetime(token_df["date"])
+                    token_df = token_df.set_index("date")[["total"]].rename(columns={"total": "tokens"})
+                    df = df.join(token_df, how="outer")
+
+                engine = BenchmarkEngine()
+                engine.fit(df)
+
+                # Get current values (last 7 days average)
+                current_sessions = df["sessions"].tail(7).mean() if "sessions" in df else 0
+                benchmarks = []
+
+                if current_sessions > 0:
+                    benchmark = engine.benchmark_metric("sessions", current_sessions)
+                    benchmarks.append(benchmark)
+
+                if "tokens" in df:
+                    current_tokens = df["tokens"].tail(7).mean()
+                    if current_tokens > 0:
+                        benchmark = engine.benchmark_metric("tokens", current_tokens)
+                        benchmarks.append(benchmark)
+
+                ml_insights["benchmarks"] = benchmarks
+        except Exception as e:
+            print(f"  ⚠️ Benchmark generation failed: {e}")
+
+        return ml_insights
 
     def _generate_charts(self, metrics: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Generate chart data for JavaScript rendering"""
@@ -213,14 +342,138 @@ class ProductionDashboard:
 
         return charts
 
+    def _generate_ml_charts(self, ml_insights: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate ML-powered chart data for JavaScript rendering
+
+        Args:
+            ml_insights: ML insights from _generate_ml_insights()
+
+        Returns:
+            Dict of chart configurations for Chart.js
+        """
+        charts = {}
+
+        # Forecast chart (predicted vs actual)
+        if ml_insights.get("forecasts"):
+            forecast_data = ml_insights["forecasts"]
+            forecast_points = forecast_data.get("forecast", [])
+
+            if forecast_points:
+                charts["ml_forecast"] = {
+                    "type": "line",
+                    "title": "7-Day Forecast (ML Prediction)",
+                    "data": {
+                        "labels": [p["date"] for p in forecast_points],
+                        "datasets": [
+                            {
+                                "label": "Predicted Sessions",
+                                "data": [p["value"] for p in forecast_points],
+                                "borderColor": "rgb(139, 92, 246)",
+                                "backgroundColor": "rgba(139, 92, 246, 0.1)",
+                                "tension": 0.4,
+                                "fill": True
+                            }
+                        ]
+                    },
+                    "confidence": forecast_data.get("method", "unknown")
+                }
+
+                # Add confidence bands if available
+                if all("lower_bound" in p and "upper_bound" in p for p in forecast_points):
+                    charts["ml_forecast"]["data"]["datasets"].extend([
+                        {
+                            "label": "Upper Bound",
+                            "data": [p.get("upper_bound") for p in forecast_points],
+                            "borderColor": "rgba(139, 92, 246, 0.3)",
+                            "borderDash": [5, 5],
+                            "tension": 0.4,
+                            "fill": False,
+                            "pointRadius": 0
+                        },
+                        {
+                            "label": "Lower Bound",
+                            "data": [p.get("lower_bound") for p in forecast_points],
+                            "borderColor": "rgba(139, 92, 246, 0.3)",
+                            "borderDash": [5, 5],
+                            "tension": 0.4,
+                            "fill": False,
+                            "pointRadius": 0
+                        }
+                    ])
+
+        # Pattern visualization (top 10 patterns)
+        if ml_insights.get("patterns"):
+            patterns = ml_insights["patterns"][:10]
+            if patterns:
+                charts["ml_patterns"] = {
+                    "type": "bar",
+                    "title": "Top 10 Detected Patterns",
+                    "data": {
+                        "labels": [p.get("pattern", "Unknown")[:30] for p in patterns],
+                        "datasets": [{
+                            "label": "Support Count",
+                            "data": [p.get("support", 0) for p in patterns],
+                            "backgroundColor": "rgba(16, 185, 129, 0.6)",
+                            "borderColor": "rgb(16, 185, 129)",
+                            "borderWidth": 1
+                        }]
+                    }
+                }
+
+        # Benchmark comparisons (current vs historical)
+        if ml_insights.get("benchmarks"):
+            benchmarks = ml_insights["benchmarks"]
+            if benchmarks:
+                charts["ml_benchmarks"] = {
+                    "type": "bar",
+                    "title": "Performance vs Baseline",
+                    "data": {
+                        "labels": [b.get("metric", "Unknown").title() for b in benchmarks],
+                        "datasets": [
+                            {
+                                "label": "Current Value",
+                                "data": [b.get("current_value", 0) for b in benchmarks],
+                                "backgroundColor": "rgba(59, 130, 246, 0.6)",
+                                "borderColor": "rgb(59, 130, 246)",
+                                "borderWidth": 1
+                            },
+                            {
+                                "label": "Historical Baseline",
+                                "data": [b.get("baseline", 0) for b in benchmarks],
+                                "backgroundColor": "rgba(156, 163, 175, 0.6)",
+                                "borderColor": "rgb(156, 163, 175)",
+                                "borderWidth": 1
+                            }
+                        ]
+                    }
+                }
+
+        return charts
+
     def _build_html(
         self,
         metrics: Dict[str, Any],
         analysis: Dict[str, Any],
         insights: Dict[str, Any],
-        charts: Dict[str, Any]
+        charts: Dict[str, Any],
+        ml_insights: Dict[str, Any],
+        ml_charts: Dict[str, Any]
     ) -> str:
-        """Build complete HTML dashboard"""
+        """
+        Build complete HTML dashboard
+
+        Args:
+            metrics: Collected metrics
+            analysis: Analysis results
+            insights: Generated insights
+            charts: Chart configurations
+            ml_insights: ML-powered insights
+            ml_charts: ML chart configurations
+
+        Returns:
+            Complete HTML dashboard as string
+        """
 
         # Extract key metrics
         total_sessions = metrics.get("sessions", {}).get("total_sessions", 0)
@@ -233,6 +486,12 @@ class ProductionDashboard:
         strengths = all_insights.get("strengths", [])
         issues = all_insights.get("issues", [])
         recommendations = insights.get("recommendations", [])
+
+        # Get ML insights
+        ml_recommendations = ml_insights.get("recommendations", [])
+        ml_patterns = ml_insights.get("patterns", [])
+        ml_benchmarks = ml_insights.get("benchmarks", [])
+        has_ml_data = any([ml_insights.get("forecasts"), ml_patterns, ml_recommendations, ml_benchmarks])
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -412,6 +671,93 @@ class ProductionDashboard:
             color: #1e40af;
         }}
 
+        .confidence-indicator {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+        }}
+
+        .confidence-bar {{
+            height: 6px;
+            width: 100px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            overflow: hidden;
+        }}
+
+        .confidence-fill {{
+            height: 100%;
+            background: linear-gradient(90deg, #f59e0b 0%, #10b981 100%);
+            transition: width 0.3s ease;
+        }}
+
+        .ml-recommendation {{
+            padding: 1rem;
+            background: #f0f9ff;
+            border-radius: 0.5rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #8b5cf6;
+        }}
+
+        .impact-badge {{
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #dbeafe;
+            color: #1e40af;
+        }}
+
+        .pattern-item {{
+            padding: 0.75rem;
+            background: #f0fdf4;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #10b981;
+        }}
+
+        .benchmark-item {{
+            padding: 1rem;
+            background: #fefce8;
+            border-radius: 0.5rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+
+        .trend-badge {{
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }}
+
+        .trend-improving {{
+            background: #d1fae5;
+            color: #065f46;
+        }}
+
+        .trend-stable {{
+            background: #e0e7ff;
+            color: #3730a3;
+        }}
+
+        .trend-declining {{
+            background: #fee2e2;
+            color: #991b1b;
+        }}
+
+        .no-ml-data {{
+            padding: 2rem;
+            text-align: center;
+            color: #64748b;
+            font-style: italic;
+        }}
+
         footer {{
             text-align: center;
             color: white;
@@ -514,7 +860,140 @@ class ProductionDashboard:
         html += f"""
             </ul>
         </div>
+"""
 
+        # Add ML Insights Section
+        if has_ml_data:
+            html += """
+        <!-- ML Insights Section -->
+        <div class="insights-section">
+            <h2 class="section-title">🤖 ML-Powered Insights</h2>
+"""
+
+            # ML Charts
+            if ml_charts:
+                html += """
+            <div class="charts-grid">
+"""
+                for chart_id, chart in ml_charts.items():
+                    confidence_method = chart.get("confidence", "")
+                    html += f"""
+                <div class="chart-card">
+                    <div class="chart-title">{chart['title']}</div>
+                    <canvas id="{chart_id}"></canvas>
+"""
+                    if confidence_method:
+                        html += f"""
+                    <div class="confidence-indicator">
+                        <span>Method: {confidence_method}</span>
+                    </div>
+"""
+                    html += """
+                </div>
+"""
+                html += """
+            </div>
+"""
+
+            # ML Recommendations
+            if ml_recommendations:
+                html += """
+            <h3 style='color: #8b5cf6; margin: 1.5rem 0 1rem;'>🎯 ML Recommendations (Top 5 by Impact)</h3>
+"""
+                for rec in ml_recommendations[:5]:
+                    impact = rec.get("impact_score", 0)
+                    confidence = rec.get("confidence", 0)
+                    confidence_pct = int(confidence * 100)
+
+                    html += f"""
+            <div class="ml-recommendation">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                    <strong>{rec.get('title', 'ML Recommendation')}</strong>
+                    <span class="impact-badge">Impact: {impact}/100</span>
+                </div>
+                <div style="color: #64748b; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                    {rec.get('description', '')}
+                </div>
+                <div style="color: #3730a3; font-size: 0.875rem; font-weight: 500;">
+                    → {rec.get('suggested_action', '')}
+                </div>
+                <div class="confidence-indicator">
+                    <span>Confidence:</span>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: {confidence_pct}%"></div>
+                    </div>
+                    <span>{confidence_pct}%</span>
+                </div>
+            </div>
+"""
+
+            # Pattern Insights
+            if ml_patterns:
+                html += """
+            <h3 style='color: #10b981; margin: 1.5rem 0 1rem;'>🔍 Detected Patterns (Top 10)</h3>
+"""
+                for pattern in ml_patterns[:10]:
+                    pattern_str = pattern.get("pattern", "Unknown")
+                    support = pattern.get("support", 0)
+                    pattern_type = pattern.get("pattern_type", "sequence")
+
+                    html += f"""
+            <div class="pattern-item">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">{pattern_str}</span>
+                    <span style="font-size: 0.875rem; color: #059669;">Support: {support}</span>
+                </div>
+                <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.25rem;">
+                    Type: {pattern_type}
+                </div>
+            </div>
+"""
+
+            # Benchmark Comparisons
+            if ml_benchmarks:
+                html += """
+            <h3 style='color: #f59e0b; margin: 1.5rem 0 1rem;'>📊 Performance Benchmarks</h3>
+"""
+                for benchmark in ml_benchmarks:
+                    metric = benchmark.get("metric", "Unknown").title()
+                    current = benchmark.get("current_value", 0)
+                    baseline = benchmark.get("baseline", 0)
+                    percentile = benchmark.get("percentile", 50)
+                    trend = benchmark.get("trend", "stable")
+                    status = benchmark.get("status", "at_baseline")
+
+                    # Status emoji
+                    status_emoji = "✅" if status == "above_baseline" else "⚠️" if status == "below_baseline" else "➡️"
+
+                    html += f"""
+            <div class="benchmark-item">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">{status_emoji} {metric}</div>
+                    <div style="font-size: 0.875rem; color: #64748b;">
+                        Current: {current:.1f} | Baseline: {baseline:.1f} | {percentile:.0f}th percentile
+                    </div>
+                </div>
+                <span class="trend-badge trend-{trend}">{trend.replace('_', ' ').title()}</span>
+            </div>
+"""
+
+            html += """
+        </div>
+"""
+        else:
+            # No ML data available
+            html += """
+        <!-- ML Insights Section -->
+        <div class="insights-section">
+            <h2 class="section-title">🤖 ML-Powered Insights</h2>
+            <div class="no-ml-data">
+                <p>ML insights require at least 14 days of historical data and pandas library.</p>
+                <p style="margin-top: 0.5rem;">Continue using dream-studio to unlock advanced analytics!</p>
+            </div>
+        </div>
+"""
+
+        html += f"""
         <footer>
             <p>Dream-Studio Analytics Platform · Built with ❤️ by Twin Roots LLC</p>
         </footer>
@@ -522,32 +1001,34 @@ class ProductionDashboard:
 
     <script>
         // Chart.js configuration
-        const chartData = {json.dumps(charts, indent=8)};
+        const allCharts = {{...{json.dumps(charts, indent=8)}, ...{json.dumps(ml_charts, indent=8)}}};
 
-        // Render all charts
-        Object.keys(chartData).forEach(chartId => {{
-            const config = chartData[chartId];
+        // Render all charts (standard + ML)
+        Object.keys(allCharts).forEach(chartId => {{
+            const config = allCharts[chartId];
             const ctx = document.getElementById(chartId);
 
-            new Chart(ctx, {{
-                type: config.type,
-                data: config.data,
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {{
-                        legend: {{
-                            display: true,
-                            position: 'bottom'
-                        }}
-                    }},
-                    scales: config.type !== 'doughnut' ? {{
-                        y: {{
-                            beginAtZero: true
-                        }}
-                    }} : {{}}
-                }}
-            }});
+            if (ctx) {{
+                new Chart(ctx, {{
+                    type: config.type,
+                    data: config.data,
+                    options: {{
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {{
+                            legend: {{
+                                display: true,
+                                position: 'bottom'
+                            }}
+                        }},
+                        scales: config.type !== 'doughnut' ? {{
+                            y: {{
+                                beginAtZero: true
+                            }}
+                        }} : {{}}
+                    }}
+                }});
+            }}
         }});
     </script>
 </body>
