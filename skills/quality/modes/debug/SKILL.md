@@ -9,52 +9,46 @@ Diagnose and fix bugs using disciplined hypothesis testing. One variable at a ti
 
 ## Pre-flight Intelligence
 Before starting diagnosis, query the registry:
-1. **Gotcha check** — `get_gotchas_for_skill('quality:debug')` from `hooks/lib/studio_db.py` (falls back to file-walk via `gotcha_scanner.py` if registry not populated). Show top 3 recent gotchas — debug sessions are the highest-value place for this.
-2. **Approach history** — `get_best_approaches('quality:debug')` from `hooks/lib/studio_db.py`. Show top 3 approaches that worked for past debug sessions. Prior debug patterns often short-circuit new diagnosis.
+1. **Gotcha check** — `get_gotchas_for_skill('quality:debug')` from `hooks/lib/studio_db.py`. Show top 3 recent gotchas.
+2. **Approach history** — `get_best_approaches('quality:debug')` from `hooks/lib/studio_db.py`. Prior debug patterns often short-circuit new diagnosis.
+3. **Project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis.
 
-## Steps
+## Diagnose Before You Debug {#diagnose}
 
-**Pre-flight Gotcha Briefing** — Before starting diagnosis, surface recent gotchas for the domain being debugged:
-1. Run `hooks/lib/gotcha_scanner.py` → `search_gotchas(topic)` where topic is the bug description
-2. Also run `get_recent_gotchas(limit=3)` for the debug skill
-3. Display matches as: `[severity] gotcha-id — title`
-4. If a gotcha directly matches the bug symptoms, highlight it: "⚡ This gotcha may explain the issue"
-5. Debug sessions are the highest-value place for this — most gotchas originated from debug sessions
+Match symptoms to category, then follow the trace strategy in the reference:
 
-0. **Load project context** — If `.planning/GOTCHAS.md` exists, read it before forming any hypothesis. Known failure patterns there may short-circuit the entire debug loop.
-1. **Reproduce** — Confirm the bug exists. Get exact steps, error messages, stack traces.
-2. **Hypothesize** — Form 2-3 hypotheses ranked by likelihood based on the error.
-3. **Test** — Test the most likely hypothesis first. One variable at a time.
-4. **Narrow** — Eliminate hypotheses based on results. Add new ones if needed.
-5. **Fix** — Apply the fix. Verify it resolves the issue without introducing new ones.
-6. **Document** — Record what was tried and ruled out so the next session doesn't repeat.
-7. **Capture** — After any debug session that required ≥3 hypothesis iterations OR revealed a reusable pattern, invoke `learn:` before closing. This is not optional — draft lessons are the input to dream-studio's self-improvement loop. After the fix is committed and the GitHub issue is created, invoke `learn:` with the debug log summary as input.
+| Symptom Pattern | Bug Category | Trace Strategy | Reference |
+|-----------------|--------------|----------------|-----------|
+| ImportError, ModuleNotFoundError, missing attribute | Dependencies | Check venv, requirements, import paths | [runtime-errors](references/runtime-errors.md#dependencies) |
+| TypeError, ValueError, AttributeError | Type/Data Issues | Trace data flow, validate types | [runtime-errors](references/runtime-errors.md) |
+| Build fails, compilation errors, syntax errors | Build System | Check build config, dependencies, syntax | [build-failures](references/build-failures.md) |
+| Wrong output, incorrect calculation, data mismatch | Logic Bug | Trace data flow, validate assumptions | [logic-bugs](references/logic-bugs.md) |
+| Works locally, fails in prod/CI | Environment Drift | Compare envs, check config, secrets | [environment-drift](references/environment-drift.md) |
+| Slow execution, timeout, high memory | Performance | Profile, measure, identify bottleneck | [performance-issues](references/performance-issues.md) |
+| Unsure which tool to use (Grep/Read/LSP/Bash) | Tool Selection | Match scenario to tool capability | [tool-selection](references/tool-selection.md) |
 
-## Debug log format
-Track in conversation to prevent retrying failed approaches:
+## Workflow
+
+0. **Reproduce** — Get exact steps, error messages, stack traces.
+1. **Hypothesize** — Form 2-3 hypotheses ranked by likelihood. Check diagnose table first.
+2. **Test** — Test most likely hypothesis. One variable at a time.
+3. **Narrow** — Eliminate hypotheses. Add new ones if needed.
+4. **Fix** — Apply fix. Verify no regressions.
+5. **Document** — Record what was tried and ruled out.
+6. **Capture** — After ≥3 iterations OR reusable pattern found, invoke `learn:` with debug log.
+
+## Debug Log Template
 ```
 ## Debug: [symptom]
-
-### Reproduce
-[exact steps to reproduce]
-
-### Hypothesis 1: [description] — LIKELY / RULED OUT
-- Test: [what you did]
-- Result: [what happened]
-- Conclusion: [ruled out / confirmed / need more data]
-
-### Hypothesis 2: [description]
-...
-
-### Fix
-[what was changed and why]
-
-### Verified
-[evidence the fix works + no regressions]
+### Reproduce: [exact steps, error messages]
+### Hypothesis 1: [description] — LIKELY/RULED OUT
+- Test: [action] → Result: [outcome] → Conclusion: [status]
+### Fix: [change + why]
+### Verified: [evidence + no regressions]
 ```
 
 ## Next in pipeline
-→ back to `build` or `verify` (wherever the failure originated)
+→ `build` or `verify`
 
 ## Anti-patterns
 
