@@ -62,6 +62,69 @@ All three must exit 0. If any fail, fix locally — do not push a broken state.
   CI pipeline, run the command locally. If it exits non-zero or finds no files, do not add
   it — create the prerequisite first or omit the step.
 
+## Ship Gate Response Contract {#ship-contract}
+
+Every ship decision MUST include all five sections below. This contract ensures all deployment risks are assessed before the final go/no-go decision.
+
+### Format
+
+```markdown
+## Ship Gate Response Contract
+
+### Quality Checks
+- [ ] All tests passed (unit, integration, E2E)
+- [ ] Lint clean (no errors, warnings documented)
+- [ ] TypeScript clean (npx tsc --noEmit exits 0)
+- [ ] Build successful (npm run build exits 0)
+- [ ] Security scan results: [PASS/FAIL + link to report]
+- [ ] Frontend: Core Web Vitals (LCP < 2.5s, INP < 200ms, CLS < 0.1)
+
+### Known Limitations
+- **What doesn't work yet:** [List incomplete features, edge cases, deferred work]
+- **Acceptable risks:** [List known issues deemed acceptable for this release]
+- **Future work:** [List follow-up tasks tracked in issues]
+
+### Rollback Plan
+- **Rollback trigger:** [What conditions require rollback?]
+- **Rollback steps:** [Numbered list of exact commands to revert]
+- **Data impact:** [Any data migrations? How to reverse?]
+- **Estimated rollback time:** [X minutes]
+
+### Monitoring Plan
+- **Metrics to watch:** [List critical metrics: error rate, latency, user impact]
+- **Monitoring tools:** [Where to check: Sentry, CloudWatch, Analytics, etc.]
+- **Alert thresholds:** [What values trigger an alert?]
+- **Watch duration:** [How long to monitor post-deploy: 1hr, 24hr, 1 week]
+
+### Sign-off
+**Decision:** [CLEAR TO SHIP / BLOCKED]
+
+**Rationale:** [1-2 sentence explanation of decision]
+
+**Blocker resolution required:** [If blocked, list what must be fixed before re-evaluation]
+```
+
+### Usage Notes
+
+- **Never skip sections.** If a section doesn't apply (e.g., no database changes for rollback), write "N/A - no database changes" — don't omit it.
+- **Quality Checks** must be objective pass/fail. "Looks good" is not acceptable — link to CI run, test output, scan report.
+- **Known Limitations** separate acceptable risks from blockers. If a limitation is NOT acceptable, it becomes a blocker and decision is BLOCKED.
+- **Rollback Plan** is mandatory even for low-risk deploys. "Revert the last commit" is acceptable for simple cases.
+- **Monitoring Plan** ensures post-deploy validation. If deployment succeeds but breaks in production, monitoring catches it.
+- **Sign-off** must be explicit. "CLEAR TO SHIP" or "BLOCKED" — no ambiguity.
+
+### Director Override
+
+If a FAIL in Quality Checks or an acceptable risk in Known Limitations would normally block ship, the Director (user) can override with explicit approval. Log the override in the Sign-off section:
+
+```markdown
+**Decision:** CLEAR TO SHIP (Director override)
+
+**Override reason:** [User's stated reason for accepting the risk]
+
+**Original blocker:** [What failed that was overridden]
+```
+
 ## Post-ship archive
 
 After a successful deploy, archive the spec to prevent .planning/specs/ from accumulating indefinitely:
