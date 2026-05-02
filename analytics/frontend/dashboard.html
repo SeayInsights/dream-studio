@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dream Studio Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .connection-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-connected {
+            background-color: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+        .status-disconnected {
+            background-color: #ef4444;
+        }
+        .status-connecting {
+            background-color: #f59e0b;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Dream Studio Analytics</h1>
+                    <p class="text-sm text-gray-600 mt-1">Real-time performance monitoring</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center text-sm">
+                        <span class="connection-status status-disconnected" id="connectionStatus"></span>
+                        <span id="connectionText" class="text-gray-700">Disconnected</span>
+                    </div>
+                    <div class="text-right hidden sm:block">
+                        <div class="text-xs text-gray-500">Last updated</div>
+                        <div class="text-sm font-medium text-gray-900" id="lastUpdated">--:--:--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <div class="bg-white border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav class="flex space-x-8 overflow-x-auto" aria-label="Tabs">
+                <button onclick="switchTab('overview')"
+                        class="tab-button tab-active whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors"
+                        data-tab="overview">
+                    Overview
+                </button>
+                <button onclick="switchTab('skills')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="skills">
+                    Skills
+                </button>
+                <button onclick="switchTab('models')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="models">
+                    Models & Tokens
+                </button>
+                <button onclick="switchTab('workflows')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="workflows">
+                    Workflows & Lessons
+                </button>
+                <button onclick="switchTab('alerts')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="alerts">
+                    Alerts & SLA
+                </button>
+                <button onclick="switchTab('ml')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="ml">
+                    ML Insights
+                </button>
+                <button onclick="switchTab('anomalies')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="anomalies">
+                    Anomalies
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-content active">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Total Sessions</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Last 24 hours</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Avg Session Duration</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Minutes</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Total Tokens</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Last 24 hours</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Active Alerts</div>
+                    <div class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                    <div class="mt-2 text-xs text-gray-500">Requiring attention</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Session Activity</h3>
+                    <div class="h-64 flex items-center justify-center text-gray-400">
+                        Chart placeholder
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Token Usage</h3>
+                    <div class="h-64 flex items-center justify-center text-gray-400">
+                        Chart placeholder
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Skills Tab -->
+        <div id="skills" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Skill Performance</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Most Used</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Avg Duration</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Success Rate</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                </div>
+                <div class="h-96 flex items-center justify-center text-gray-400">
+                    Skills chart placeholder
+                </div>
+            </div>
+        </div>
+
+        <!-- Models & Tokens Tab -->
+        <div id="models" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Model Usage & Token Analytics</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Sonnet Usage</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Haiku Usage</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Opus Usage</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Avg Tokens/Session</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                        Model distribution chart
+                    </div>
+                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                        Token timeline chart
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflows & Lessons Tab -->
+        <div id="workflows" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Workflows & Learning Patterns</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Total Workflows</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Lessons Captured</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Pattern Reuse Rate</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                </div>
+                <div class="h-96 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                    Workflow patterns visualization
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts & SLA Tab -->
+        <div id="alerts" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Alerts & SLA Monitoring</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                    <div class="border border-red-200 bg-red-50 rounded-lg p-4">
+                        <div class="text-sm font-medium text-red-600">Critical</div>
+                        <div class="mt-2 text-2xl font-bold text-red-900">--</div>
+                    </div>
+                    <div class="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
+                        <div class="text-sm font-medium text-yellow-600">Warning</div>
+                        <div class="mt-2 text-2xl font-bold text-yellow-900">--</div>
+                    </div>
+                    <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                        <div class="text-sm font-medium text-blue-600">Info</div>
+                        <div class="mt-2 text-2xl font-bold text-blue-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">SLA Compliance</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="border border-gray-200 rounded-lg p-4 text-gray-400 text-center">
+                        Active alerts will appear here
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ML Insights Tab -->
+        <div id="ml" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Machine Learning Insights</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Predicted Peak Time</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--:--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Confidence Score</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Model Accuracy</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                        Prediction chart
+                    </div>
+                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                        Pattern recognition chart
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anomalies Tab -->
+        <div id="anomalies" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Anomaly Detection</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Detected Anomalies</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Last Detection</div>
+                        <div class="mt-2 text-xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Detection Rate</div>
+                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+                    </div>
+                </div>
+                <div class="h-96 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
+                    Anomaly timeline and visualization
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p class="text-center text-sm text-gray-500">
+                Dream Studio Analytics Dashboard &copy; 2026
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Tab switching functionality
+        function switchTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active state from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('tab-active');
+                button.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                button.classList.remove('text-blue-500');
+            });
+
+            // Show selected tab content
+            document.getElementById(tabName).classList.add('active');
+
+            // Add active state to selected tab button
+            const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+            activeButton.classList.add('tab-active');
+            activeButton.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+            activeButton.classList.add('text-blue-500');
+        }
+
+        // Update last updated time
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('lastUpdated').textContent = timeString;
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set initial time
+            updateLastUpdatedTime();
+
+            // Update time every second
+            setInterval(updateLastUpdatedTime, 1000);
+
+            console.log('Dream Studio Analytics Dashboard initialized');
+        });
+
+        // Connection status helper functions (will be used by WebSocket logic in T007)
+        function setConnectionStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            const textEl = document.getElementById('connectionText');
+
+            statusEl.classList.remove('status-connected', 'status-disconnected', 'status-connecting');
+
+            switch(status) {
+                case 'connected':
+                    statusEl.classList.add('status-connected');
+                    textEl.textContent = 'Connected';
+                    break;
+                case 'connecting':
+                    statusEl.classList.add('status-connecting');
+                    textEl.textContent = 'Connecting...';
+                    break;
+                case 'disconnected':
+                    statusEl.classList.add('status-disconnected');
+                    textEl.textContent = 'Disconnected';
+                    break;
+            }
+        }
+    </script>
+</body>
+</html>
