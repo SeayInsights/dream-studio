@@ -2952,8 +2952,8 @@
 
                 return `
                     <tr class="hover:bg-gray-50">
-                        <td class="px-4 py-3 text-sm font-medium text-gray-900">${rule.name}</td>
-                        <td class="px-4 py-3 text-sm text-gray-600">${rule.metric}</td>
+                        <td class="px-4 py-3 text-sm font-medium text-gray-900">${rule.rule_name}</td>
+                        <td class="px-4 py-3 text-sm text-gray-600">${rule.metric_path}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${rule.condition}</td>
                         <td class="px-4 py-3 text-sm text-gray-600">${rule.threshold}</td>
                         <td class="px-4 py-3">
@@ -2965,7 +2965,7 @@
                             <label class="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" ${rule.enabled ? 'checked' : ''}
                                        class="sr-only peer"
-                                       onchange="toggleAlertRule('${rule.id}', this.checked)">
+                                       onchange="toggleAlertRule('${rule.rule_id}', this.checked)">
                                 <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                             </label>
                         </td>
@@ -3174,6 +3174,96 @@
             const modal = document.getElementById('createRuleModal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            // Reset form
+            document.getElementById('createRuleForm').reset();
+            // Clear error message
+            const errorDiv = document.getElementById('createRuleError');
+            if (errorDiv) {
+                errorDiv.classList.add('hidden');
+            }
+        }
+
+        async function submitCreateRule(event) {
+            event.preventDefault();
+
+            const form = event.target;
+            const errorDiv = document.getElementById('createRuleError');
+            const submitBtn = document.getElementById('submitRuleBtn');
+
+            // Get form values
+            const ruleName = form.ruleName.value.trim();
+            const metricPath = form.metricPath.value;
+            const condition = form.condition.value;
+            const threshold = parseFloat(form.threshold.value);
+            const severity = form.severity.value;
+
+            // Client-side validation
+            if (!ruleName) {
+                errorDiv.textContent = 'Rule name is required';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (!metricPath) {
+                errorDiv.textContent = 'Metric path is required';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if (isNaN(threshold)) {
+                errorDiv.textContent = 'Threshold must be a valid number';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Hide error, disable submit button
+            errorDiv.classList.add('hidden');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating...';
+
+            try {
+                const response = await fetch('/api/v1/alerts/rules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        rule_name: ruleName,
+                        metric_path: metricPath,
+                        condition: condition,
+                        threshold: threshold,
+                        severity: severity,
+                        enabled: true
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: 'Failed to create alert rule' }));
+                    throw new Error(errorData.detail || `Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // Success: close modal, refresh table, show toast
+                closeCreateRuleModal();
+                showToast('Alert rule created successfully', 'success');
+
+                // Refresh the alert rules table
+                const rulesResponse = await fetchAlerts('/rules');
+                if (rulesResponse && rulesResponse.rules) {
+                    populateAlertRulesTable(rulesResponse.rules);
+                }
+
+            } catch (error) {
+                // Show error in modal
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+                console.error('Error creating alert rule:', error);
+            } finally {
+                // Re-enable submit button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Rule';
+            }
         }
 
         // Close modal when clicking outside
@@ -3199,18 +3289,140 @@
                 </button>
             </div>
 
-            <div class="text-center py-12">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
-                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                </div>
-                <h4 class="text-lg font-semibold text-gray-700 mb-2">Alert Rule Creation</h4>
-                <p class="text-gray-500 mb-6">Full alert rule creation form will be implemented in T010</p>
-                <button onclick="closeCreateRuleModal()" class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors">
-                    Close
-                </button>
+            <!-- Error message -->
+            <div id="createRuleError" class="hidden mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p class="text-sm text-red-700"></p>
             </div>
+
+            <!-- Form -->
+            <form id="createRuleForm" onsubmit="submitCreateRule(event)" class="space-y-6">
+                <!-- Rule Name -->
+                <div>
+                    <label for="ruleName" class="block text-sm font-medium text-gray-700 mb-2">
+                        Rule Name <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="ruleName"
+                        name="ruleName"
+                        required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., High Token Usage Alert"
+                    >
+                </div>
+
+                <!-- Metric Path -->
+                <div>
+                    <label for="metricPath" class="block text-sm font-medium text-gray-700 mb-2">
+                        Metric <span class="text-red-500">*</span>
+                    </label>
+                    <select
+                        id="metricPath"
+                        name="metricPath"
+                        required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="">-- Select a metric --</option>
+                        <optgroup label="Skills">
+                            <option value="skills.total_invocations">Total Skill Invocations</option>
+                            <option value="skills.total_duration">Total Skill Duration (seconds)</option>
+                            <option value="skills.avg_duration">Average Skill Duration (seconds)</option>
+                            <option value="skills.success_rate">Skill Success Rate (%)</option>
+                            <option value="skills.failure_count">Skill Failure Count</option>
+                        </optgroup>
+                        <optgroup label="Sessions">
+                            <option value="sessions.total_count">Total Sessions</option>
+                            <option value="sessions.avg_duration">Average Session Duration (seconds)</option>
+                            <option value="sessions.active_count">Active Sessions</option>
+                        </optgroup>
+                        <optgroup label="Tokens">
+                            <option value="tokens.total_input">Total Input Tokens</option>
+                            <option value="tokens.total_output">Total Output Tokens</option>
+                            <option value="tokens.total_combined">Total Combined Tokens</option>
+                            <option value="tokens.avg_per_session">Average Tokens per Session</option>
+                        </optgroup>
+                        <optgroup label="Packs">
+                            <option value="packs.core.invocations">Core Pack Invocations</option>
+                            <option value="packs.quality.invocations">Quality Pack Invocations</option>
+                            <option value="packs.domains.invocations">Domains Pack Invocations</option>
+                            <option value="packs.security.invocations">Security Pack Invocations</option>
+                            <option value="packs.analyze.invocations">Analyze Pack Invocations</option>
+                            <option value="packs.career.invocations">Career Pack Invocations</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <!-- Condition & Threshold -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="condition" class="block text-sm font-medium text-gray-700 mb-2">
+                            Condition <span class="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="condition"
+                            name="condition"
+                            required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                            <option value="gt">Greater Than (&gt;)</option>
+                            <option value="gte">Greater Than or Equal (&gt;=)</option>
+                            <option value="lt">Less Than (&lt;)</option>
+                            <option value="lte">Less Than or Equal (&lt;=)</option>
+                            <option value="eq">Equal (=)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="threshold" class="block text-sm font-medium text-gray-700 mb-2">
+                            Threshold <span class="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="number"
+                            id="threshold"
+                            name="threshold"
+                            required
+                            step="any"
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., 1000000"
+                        >
+                    </div>
+                </div>
+
+                <!-- Severity -->
+                <div>
+                    <label for="severity" class="block text-sm font-medium text-gray-700 mb-2">
+                        Severity <span class="text-red-500">*</span>
+                    </label>
+                    <select
+                        id="severity"
+                        name="severity"
+                        required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                    <button
+                        type="button"
+                        onclick="closeCreateRuleModal()"
+                        class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="submit"
+                        id="submitRuleBtn"
+                        class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    >
+                        Create Rule
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
