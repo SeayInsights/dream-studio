@@ -118,57 +118,17 @@ When user responds with A, B, or C:
 
 ## 5 Pre-Locked Palette Families (fallback)
 
-Use when OKLch generation is uncertain. Customize lightness/chroma to fit the brief, but treat hue anchors as fixed.
+Use when OKLch generation is uncertain. Customize lightness/chroma, but keep hue anchors fixed.
 
-### 1. Maritime Authority
-Professional, trustworthy. Deep navy + warm gold.
-| Role | OKLch | Hex |
-|------|-------|-----|
-| Primary | oklch(0.35 0.13 255) | #1e3a5f |
-| Secondary | oklch(0.55 0.08 255) | #5b7fa6 |
-| Accent | oklch(0.72 0.14 75) | #c49a28 |
-| Surface | oklch(0.97 0.005 255) | #f7f9fc |
-| Text | oklch(0.22 0.02 255) | #1a2535 |
+| Family | Mood | Primary | Accent | Surface | Hue Anchor |
+|--------|------|---------|--------|---------|------------|
+| Maritime Authority | Professional, trustworthy | oklch(0.35 0.13 255) #1e3a5f | oklch(0.72 0.14 75) #c49a28 | oklch(0.97 0.005 255) #f7f9fc | Navy + Gold |
+| Forest Craft | Organic, premium | oklch(0.38 0.12 155) #1a5c3a | oklch(0.78 0.10 95) #c8b560 | oklch(0.96 0.01 100) #f5f2ea | Green + Cream |
+| Ember Precision | Bold, editorial | oklch(0.28 0.02 30) #2e2420 | oklch(0.60 0.18 35) #b8472a | oklch(0.97 0.005 30) #faf8f7 | Charcoal + Rust |
+| Arctic Focus | Clean, technical | oklch(0.40 0.10 240) #2d5080 | oklch(0.82 0.07 210) #9ac8e0 | oklch(0.98 0.004 240) #f6f8fb | Slate + Ice |
+| Terra Heritage | Grounded, authentic | oklch(0.38 0.08 50) #5c3d1e | oklch(0.65 0.09 145) #5a8c6a | oklch(0.96 0.01 60) #f5f0e8 | Brown + Sage |
 
-### 2. Forest Craft
-Organic, premium. Deep green + cream surface.
-| Role | OKLch | Hex |
-|------|-------|-----|
-| Primary | oklch(0.38 0.12 155) | #1a5c3a |
-| Secondary | oklch(0.60 0.08 155) | #5c9474 |
-| Accent | oklch(0.78 0.10 95) | #c8b560 |
-| Surface | oklch(0.96 0.01 100) | #f5f2ea |
-| Text | oklch(0.22 0.02 155) | #1a2e22 |
-
-### 3. Ember Precision
-Bold, editorial. Warm charcoal + rust accent.
-| Role | OKLch | Hex |
-|------|-------|-----|
-| Primary | oklch(0.28 0.02 30) | #2e2420 |
-| Secondary | oklch(0.50 0.04 30) | #6b5a52 |
-| Accent | oklch(0.60 0.18 35) | #b8472a |
-| Surface | oklch(0.97 0.005 30) | #faf8f7 |
-| Text | oklch(0.20 0.02 30) | #1c1512 |
-
-### 4. Arctic Focus
-Clean, technical. Cool slate + ice blue accent.
-| Role | OKLch | Hex |
-|------|-------|-----|
-| Primary | oklch(0.40 0.10 240) | #2d5080 |
-| Secondary | oklch(0.65 0.06 240) | #7098be |
-| Accent | oklch(0.82 0.07 210) | #9ac8e0 |
-| Surface | oklch(0.98 0.004 240) | #f6f8fb |
-| Text | oklch(0.23 0.02 240) | #1c2a38 |
-
-### 5. Terra Heritage
-Grounded, authentic. Warm brown + sage accent.
-| Role | OKLch | Hex |
-|------|-------|-----|
-| Primary | oklch(0.38 0.08 50) | #5c3d1e |
-| Secondary | oklch(0.58 0.06 50) | #8c6a45 |
-| Accent | oklch(0.65 0.09 145) | #5a8c6a |
-| Surface | oklch(0.96 0.01 60) | #f5f0e8 |
-| Text | oklch(0.22 0.03 50) | #2a1c0e |
+Derive Secondary (primary hue, higher lightness) and Text (primary hue, L ≈ 0.22) from Primary.
 
 ---
 

@@ -127,6 +127,14 @@ known_skills:
     triggers: ["binary-scan:", "scan binary", "analyze exe", "checksec", "static binary"]
     description: Binary and executable security analysis
 
+  - skill: website
+    triggers: ["website:", "build website:", "landing page:", "build page:", "prototype app:", "pitch deck:", "animate:", "build site:"]
+    description: End-to-end website design pipeline — discovery, direction, brand, prototype, page, deck, animate, critique
+
+  - skill: fullstack
+    triggers: ["fullstack:", "build fullstack:", "fullstack frontend:", "fullstack backend:", "full-stack:", "full stack:"]
+    description: Full-stack orchestrator — coordinates frontend (website pipeline) and backend (stack-agnostic) with shared API contracts
+
 analyst_instructions: |
   You are the route-classifier analyst. The user's message did not match any known trigger keyword.
 

@@ -12,7 +12,7 @@ ds:
 
 # Prototype — Interactive Device Prototypes
 
-Builds single-file HTML interactive prototypes in device frames, driven by a JS state machine.
+Builds single-file HTML interactive prototypes in device frames driven by a JS state machine.
 
 ## Step 1: Device Selection
 
@@ -137,8 +137,6 @@ Fix all violations before delivering.
 - Status bar content must be real: use an accurate time (e.g., 9:41), full signal, full battery
 - Safe area insets required for notch / Dynamic Island
 - Bottom nav bar for 3–5 primary actions
-- No hover-dependent interactions — mobile has no hover
-
 ## Anti-patterns
 
 - Prototype without device frame (loses platform context)
