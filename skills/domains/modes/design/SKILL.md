@@ -17,79 +17,19 @@ Read `gotchas.yml` in this directory before every invocation.
 
 ## Step 1: Discovery (MANDATORY) {#discovery}
 
-**Purpose:** Translate user intent into structured design system parameters before any design work begins.
+**Purpose:** Translate user intent into structured design system parameters.
 
-**This step CANNOT be skipped.** Discovery establishes the design foundation and prevents misalignment. Every design request must begin with discovery.
+**Three Input Modes:**
 
-### Three Input Modes
+**Mode A: I-Lang (Structured)** — User provides YAML/JSON with dimensions from `discovery-protocol.yml`
+**Mode B: Natural Language** — Extract dimensions from prose using `nlp_mappings`
+**Mode C: Interactive** — Ask targeted questions for missing critical dimensions (mood, density, layout)
 
-#### Mode A: I-Lang Format (Structured Input)
-User provides structured YAML/JSON with dimension values from the discovery protocol.
+**Output:** Minimum `mood`, `density`, `layout` dimensions. Proceed to Design System Selection.
 
-**Example:**
-```yaml
-palette: monochrome
-mood: professional
-density: spacious
-typography: sans-serif
-layout: centered
-responsive: mobile-first
-exclude: [animations, gradients]
-```
+**Reference:** `discovery-protocol.yml` — all dimension definitions, valid values, NLP mappings
 
-**Process:**
-1. Parse input against `discovery-protocol.yml` schema
-2. Validate dimension values (reject invalid options)
-3. Flag missing critical dimensions: `mood`, `density`, `layout`
-4. Proceed to design system selection with validated intent
-
-#### Mode B: Natural Language (Prose Description)
-User describes intent in natural language without structure.
-
-**Example:**
-"I want a clean, professional design with lots of space and no animations. Should work well on mobile."
-
-**Process:**
-1. Extract phrases and map to dimensions using `nlp_mappings` from `discovery-protocol.yml`
-   - "clean, professional" → `mood: professional`, `typography: sans-serif`
-   - "lots of space" → `density: spacious`
-   - "no animations" → `exclude: [animations]`
-   - "work well on mobile" → `responsive: mobile-first`
-2. Document mapped dimensions
-3. If critical dimensions missing (`mood`, `density`, `layout`), switch to Mode C for targeted questions
-4. Proceed to design system selection
-
-#### Mode C: Interactive Prompting (Minimal Input)
-User gives minimal input or Mode B extraction yields insufficient data.
-
-**Process:**
-1. Ask targeted questions for missing critical dimensions
-2. Minimum viable set (in priority order):
-   - **Mood:** "What feeling should this design convey?" (professional / playful / minimal / bold / elegant / modern)
-   - **Density:** "How much information needs to fit?" (spacious / balanced / compact / data-heavy)
-   - **Layout:** "What's the main content structure?" (centered / sidebar / full-width / multi-column / asymmetric)
-3. Optional follow-up for refinement:
-   - **Palette:** "Any color preference?" (monochrome / vibrant / warm / cool / pastel / high-contrast)
-   - **Accent:** "Primary accent color?" (blue / green / purple / red / orange / none)
-4. Document responses as structured intent
-5. Proceed to design system selection
-
-### Discovery Output
-
-At the end of discovery, you must have:
-- **Minimum:** `mood`, `density`, `layout`
-- **Recommended:** All 8 dimensions defined or explicitly defaulted
-- **Format:** Structured dimension map (YAML/JSON or documented prose)
-
-### Reference
-
-All dimension definitions, valid values, and NLP mappings are defined in `discovery-protocol.yml`. Consult this file when:
-- Validating I-Lang input
-- Mapping natural language phrases
-- Designing interactive prompts
-- Adding new dimension values
-
-**Discovery checkpoint:** Once intent is captured, proceed to Design System Selection.
+See `examples.md` for detailed Mode A/B/C workflows and extraction examples.
 
 ---
 
@@ -137,6 +77,53 @@ All dimension definitions, valid values, and NLP mappings are defined in `discov
 
 **Integration with Phase 3:**
 This table will power automated design system selection when curated presets are integrated in Phase 3. Each system name maps to a preset bundle (tokens, components, templates).
+
+## External References
+
+The following extracted pattern files are available in `skills/domains/modes/design/references/`:
+
+1. **[priority-matrix.md](references/priority-matrix.md)** - 10-level priority system for design decisions (P0 Critical → P9 Future Vision)
+2. **[font-pairings.md](references/font-pairings.md)** - 75 curated font pairings with search utility (`search-font-pairings.py`)
+3. **[token-architecture.md](references/token-architecture.md)** - 3-layer design token system (base → semantic → component)
+4. **[anti-patterns.md](references/anti-patterns.md)** - 99 design anti-patterns with search utility (`search-anti-patterns.py`)
+5. **[component-composition.md](references/component-composition.md)** - 14 React component composition patterns
+6. **[semantic-colors.md](references/semantic-colors.md)** - 30+ semantic color tokens with usage guidance
+
+### Search Utilities
+
+Two Python utilities provide quick pattern lookups:
+
+**Font Pairing Search:**
+```bash
+py skills/domains/modes/design/references/search-font-pairings.py "modern professional"
+# Returns matching font pairings from 75 curated pairs
+```
+
+**Anti-Pattern Search:**
+```bash
+py skills/domains/modes/design/references/search-anti-patterns.py "color accessibility"
+# Returns relevant anti-patterns with severity levels
+```
+
+## Mode Routing
+
+| Mode | Trigger | Output |
+|------|---------|--------|
+| **default** | `design:`, `brand:`, `theme:` | Complete design system, components, brand package |
+| **design-system** | `design-system:`, `tokens:` | 3-layer token system, component library |
+| **banner** | `banner:`, `hero:` | Banner variants with curated font pairings |
+| **validate-composition** | `validate:`, `review composition:` | Validation report with anti-pattern detection |
+
+See `examples.md` for mode examples and detailed workflows.
+
+## Integration Points
+
+- **Discovery → Font Pairings:** Use `search-font-pairings.py` to match mood/typography dimensions
+- **Token Architecture:** 3-layer structure (base → semantic → component) from `token-architecture.md`
+- **Anti-Pattern Validation:** Run anti-pattern search before finalizing output
+- **Priority Matrix:** P0-P2 (MVP) → P3-P5 (staged) → P6-P9 (enhancements)
+
+See `examples.md` for detailed integration workflows.
 
 ## Detailed Reference
 
