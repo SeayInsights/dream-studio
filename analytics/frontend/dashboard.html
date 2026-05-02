@@ -261,32 +261,83 @@
 
         <!-- Models & Tokens Tab -->
         <div id="models" class="tab-content">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">Model Usage & Token Analytics</h2>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Sonnet Usage</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Haiku Usage</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Opus Usage</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Avg Tokens/Session</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Total Tokens</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="models-total-tokens">--</div>
+                    <div class="mt-1 text-xs text-gray-500">Last 30 days</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Total Cost</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="models-total-cost">--</div>
+                    <div class="mt-1 text-xs text-gray-500">Estimated USD</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Cache Hit Rate</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="models-cache-hit-rate">--%</div>
+                    <div class="mt-1 text-xs text-gray-500">Avg across all models</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Most Efficient Model</div>
+                    <div class="mt-2 text-xl font-bold text-gray-900" id="models-most-efficient">--</div>
+                    <div class="mt-1 text-xs text-gray-500" id="models-most-efficient-rate">-- tokens/sec</div>
+                </div>
+            </div>
+
+            <!-- Charts Row 1: Model Performance Comparison & Token Usage Timeline -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Model Performance Comparison</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="modelPerformanceRadarChart"></canvas>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
-                        Model distribution chart
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Token Usage Timeline</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="tokenTimelineChart"></canvas>
                     </div>
-                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
-                        Token timeline chart
+                </div>
+            </div>
+
+            <!-- Charts Row 2: Cost Breakdowns -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cost by Model</h3>
+                    <div class="relative" style="height: 280px;">
+                        <canvas id="costByModelChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cost by Project</h3>
+                    <div class="relative" style="height: 280px;">
+                        <canvas id="costByProjectChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cost by Skill</h3>
+                    <div class="relative" style="height: 280px;">
+                        <canvas id="costBySkillChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 3: Token Efficiency & Cache Hit Rate -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Token Efficiency (Tokens/Sec per Model)</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="tokenEfficiencyChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cache Hit Rate & Timeline</h3>
+                    <div class="relative" style="height: 150px; margin-bottom: 20px;">
+                        <canvas id="cacheHitRateGaugeChart"></canvas>
+                    </div>
+                    <div class="relative" style="height: 130px;">
+                        <canvas id="cacheHitRateTimelineChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -413,7 +464,8 @@
         // Tab switching functionality
         const tabsInitialized = {
             overview: false,
-            skills: false
+            skills: false,
+            models: false
         };
 
         function switchTab(tabName) {
@@ -442,6 +494,9 @@
             if (tabName === 'skills' && !tabsInitialized.skills) {
                 tabsInitialized.skills = true;
                 initSkillsTab();
+            } else if (tabName === 'models' && !tabsInitialized.models) {
+                tabsInitialized.models = true;
+                initModelsTab();
             }
         }
 
@@ -1215,6 +1270,658 @@
         // Add chart instances for Skills tab
         charts.skillSuccessRate = null;
         charts.skillExecutionTime = null;
+
+        // ==================== MODELS & TOKENS TAB ====================
+
+        let modelsData = {
+            summary: {},
+            performance: [],
+            tokenTimeline: [],
+            costByModel: [],
+            costByProject: [],
+            costBySkill: [],
+            efficiency: [],
+            cacheTimeline: []
+        };
+
+        // Fetch and populate Models & Tokens tab
+        async function initModelsTab() {
+            try {
+                const [tokensData, modelsData] = await Promise.all([
+                    fetchMetrics('/tokens'),
+                    fetchMetrics('/models')
+                ]);
+
+                if (!tokensData || !modelsData) {
+                    console.warn('No models/tokens data available');
+                    return;
+                }
+
+                // Combine data
+                const combinedData = {
+                    summary: {
+                        total_tokens: tokensData.summary?.total_tokens || 0,
+                        total_cost: tokensData.summary?.total_cost || 0,
+                        cache_hit_rate: modelsData.summary?.cache_hit_rate || 0,
+                        most_efficient_model: modelsData.summary?.most_efficient_model || '--',
+                        most_efficient_rate: modelsData.summary?.most_efficient_rate || 0
+                    },
+                    performance: modelsData.model_performance || [],
+                    tokenTimeline: tokensData.token_timeline || [],
+                    costByModel: modelsData.cost_by_model || [],
+                    costByProject: tokensData.cost_by_project || [],
+                    costBySkill: tokensData.cost_by_skill || [],
+                    efficiency: modelsData.token_efficiency || [],
+                    cacheTimeline: modelsData.cache_timeline || []
+                };
+
+                // Update summary cards
+                updateModelsSummary(combinedData.summary);
+
+                // Initialize all charts
+                await Promise.all([
+                    initModelPerformanceRadarChart(combinedData.performance),
+                    initTokenTimelineChart(combinedData.tokenTimeline),
+                    initCostByModelChart(combinedData.costByModel),
+                    initCostByProjectChart(combinedData.costByProject),
+                    initCostBySkillChart(combinedData.costBySkill),
+                    initTokenEfficiencyChart(combinedData.efficiency),
+                    initCacheHitRateGaugeChart(combinedData.summary.cache_hit_rate),
+                    initCacheHitRateTimelineChart(combinedData.cacheTimeline)
+                ]);
+
+                console.log('Models & Tokens tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Models & Tokens tab:', error);
+            }
+        }
+
+        // Update summary cards
+        function updateModelsSummary(summary) {
+            const totalTokens = summary.total_tokens || 0;
+            const totalCost = summary.total_cost || 0;
+            const cacheHitRate = summary.cache_hit_rate || 0;
+            const mostEfficient = summary.most_efficient_model || '--';
+            const mostEfficientRate = summary.most_efficient_rate || 0;
+
+            // Format large numbers with K/M suffix
+            const formatLargeNumber = (num) => {
+                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                return num.toLocaleString();
+            };
+
+            document.getElementById('models-total-tokens').textContent = formatLargeNumber(totalTokens);
+            document.getElementById('models-total-cost').textContent = `$${totalCost.toFixed(2)}`;
+            document.getElementById('models-cache-hit-rate').textContent = `${(cacheHitRate * 100).toFixed(1)}%`;
+            document.getElementById('models-most-efficient').textContent = mostEfficient;
+            document.getElementById('models-most-efficient-rate').textContent = `${mostEfficientRate.toFixed(0)} tokens/sec`;
+        }
+
+        // Initialize Model Performance Comparison (Radar Chart)
+        async function initModelPerformanceRadarChart(performanceData) {
+            const ctx = document.getElementById('modelPerformanceRadarChart').getContext('2d');
+
+            if (charts.modelPerformanceRadar) {
+                charts.modelPerformanceRadar.destroy();
+            }
+
+            if (!performanceData || performanceData.length === 0) {
+                console.warn('No model performance data available');
+                return;
+            }
+
+            const modelColors = {
+                'sonnet': { border: '#3b82f6', bg: 'rgba(59, 130, 246, 0.2)' },
+                'haiku': { border: '#10b981', bg: 'rgba(16, 185, 129, 0.2)' },
+                'opus': { border: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)' }
+            };
+
+            const datasets = performanceData.map(model => {
+                const modelKey = model.model_name.toLowerCase();
+                let colors = { border: '#6b7280', bg: 'rgba(107, 114, 128, 0.2)' };
+
+                for (const [key, color] of Object.entries(modelColors)) {
+                    if (modelKey.includes(key)) {
+                        colors = color;
+                        break;
+                    }
+                }
+
+                return {
+                    label: model.model_name,
+                    data: [
+                        model.speed || 0,
+                        model.success_rate || 0,
+                        model.efficiency || 0
+                    ],
+                    borderColor: colors.border,
+                    backgroundColor: colors.bg,
+                    borderWidth: 2,
+                    pointBackgroundColor: colors.border,
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: colors.border
+                };
+            });
+
+            charts.modelPerformanceRadar = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Speed', 'Success Rate', 'Efficiency'],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.parsed.r || 0;
+                                    return `${label}: ${value.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                stepSize: 0.2,
+                                callback: function(value) {
+                                    return (value * 100).toFixed(0) + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Token Usage Timeline (Stacked Area Chart)
+        async function initTokenTimelineChart(timelineData) {
+            const ctx = document.getElementById('tokenTimelineChart').getContext('2d');
+
+            if (charts.tokenTimeline) {
+                charts.tokenTimeline.destroy();
+            }
+
+            if (!timelineData || timelineData.length === 0) {
+                console.warn('No token timeline data available');
+                return;
+            }
+
+            charts.tokenTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timelineData.map(d => d.date),
+                    datasets: [
+                        {
+                            label: 'Input Tokens',
+                            data: timelineData.map(d => d.input_tokens || 0),
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Output Tokens',
+                            data: timelineData.map(d => d.output_tokens || 0),
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Cached Tokens',
+                            data: timelineData.map(d => d.cached_tokens || 0),
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 15,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.parsed.y || 0;
+                                    return `${label}: ${value.toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Model Pie Chart
+        async function initCostByModelChart(costData) {
+            const ctx = document.getElementById('costByModelChart').getContext('2d');
+
+            if (charts.costByModel) {
+                charts.costByModel.destroy();
+            }
+
+            if (!costData || costData.length === 0) {
+                console.warn('No cost by model data available');
+                return;
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.costByModel = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: costData.map(d => d.model_name),
+                    datasets: [{
+                        data: costData.map(d => d.cost),
+                        backgroundColor: costData.map(d => {
+                            const modelKey = d.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Project Pie Chart
+        async function initCostByProjectChart(costData) {
+            const ctx = document.getElementById('costByProjectChart').getContext('2d');
+
+            if (charts.costByProject) {
+                charts.costByProject.destroy();
+            }
+
+            if (!costData || costData.length === 0) {
+                console.warn('No cost by project data available');
+                return;
+            }
+
+            // Use a diverse color palette for projects
+            const colors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+            ];
+
+            charts.costByProject = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: costData.map(d => d.project_name || 'Unknown'),
+                    datasets: [{
+                        data: costData.map(d => d.cost),
+                        backgroundColor: costData.map((_, i) => colors[i % colors.length]),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cost by Skill Pie Chart
+        async function initCostBySkillChart(costData) {
+            const ctx = document.getElementById('costBySkillChart').getContext('2d');
+
+            if (charts.costBySkill) {
+                charts.costBySkill.destroy();
+            }
+
+            if (!costData || costData.length === 0) {
+                console.warn('No cost by skill data available');
+                return;
+            }
+
+            // Use a diverse color palette for skills
+            const colors = [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+            ];
+
+            charts.costBySkill = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: costData.map(d => d.skill_name || 'Unknown'),
+                    datasets: [{
+                        data: costData.map(d => d.cost),
+                        backgroundColor: costData.map((_, i) => colors[i % colors.length]),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 10,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Token Efficiency Bar Chart
+        async function initTokenEfficiencyChart(efficiencyData) {
+            const ctx = document.getElementById('tokenEfficiencyChart').getContext('2d');
+
+            if (charts.tokenEfficiency) {
+                charts.tokenEfficiency.destroy();
+            }
+
+            if (!efficiencyData || efficiencyData.length === 0) {
+                console.warn('No token efficiency data available');
+                return;
+            }
+
+            const modelColors = {
+                'sonnet': '#3b82f6',
+                'haiku': '#10b981',
+                'opus': '#f59e0b',
+                'other': '#6b7280'
+            };
+
+            charts.tokenEfficiency = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: efficiencyData.map(d => d.model_name),
+                    datasets: [{
+                        label: 'Tokens per Second',
+                        data: efficiencyData.map(d => d.tokens_per_second || 0),
+                        backgroundColor: efficiencyData.map(d => {
+                            const modelKey = d.model_name.toLowerCase();
+                            for (const [key, color] of Object.entries(modelColors)) {
+                                if (modelKey.includes(key)) return color;
+                            }
+                            return modelColors.other;
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(0)} tokens/sec`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Cache Hit Rate Gauge (Doughnut Chart as Gauge)
+        async function initCacheHitRateGaugeChart(cacheHitRate) {
+            const ctx = document.getElementById('cacheHitRateGaugeChart').getContext('2d');
+
+            if (charts.cacheHitRateGauge) {
+                charts.cacheHitRateGauge.destroy();
+            }
+
+            const rate = (cacheHitRate || 0) * 100;
+
+            // Color based on rate
+            let color = '#ef4444'; // red
+            if (rate >= 70) color = '#10b981'; // green
+            else if (rate >= 40) color = '#f59e0b'; // yellow
+
+            charts.cacheHitRateGauge = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Hit Rate', 'Miss Rate'],
+                    datasets: [{
+                        data: [rate, 100 - rate],
+                        backgroundColor: [color, '#e5e7eb'],
+                        borderWidth: 0,
+                        circumference: 180,
+                        rotation: 270
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            enabled: false
+                        }
+                    },
+                    cutout: '75%'
+                },
+                plugins: [{
+                    id: 'gaugeText',
+                    afterDraw: (chart) => {
+                        const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                        const centerX = (left + right) / 2;
+                        const centerY = (top + bottom) / 2 + 20;
+
+                        ctx.save();
+                        ctx.font = 'bold 32px sans-serif';
+                        ctx.fillStyle = '#111827';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(`${rate.toFixed(1)}%`, centerX, centerY);
+
+                        ctx.font = '12px sans-serif';
+                        ctx.fillStyle = '#6b7280';
+                        ctx.fillText('Cache Hit Rate', centerX, centerY + 25);
+                        ctx.restore();
+                    }
+                }]
+            });
+        }
+
+        // Initialize Cache Hit Rate Timeline (Line Chart)
+        async function initCacheHitRateTimelineChart(timelineData) {
+            const ctx = document.getElementById('cacheHitRateTimelineChart').getContext('2d');
+
+            if (charts.cacheHitRateTimeline) {
+                charts.cacheHitRateTimeline.destroy();
+            }
+
+            if (!timelineData || timelineData.length === 0) {
+                console.warn('No cache hit rate timeline data available');
+                return;
+            }
+
+            charts.cacheHitRateTimeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timelineData.map(d => d.date),
+                    datasets: [{
+                        label: 'Cache Hit Rate',
+                        data: timelineData.map(d => (d.cache_hit_rate || 0) * 100),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 2,
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add chart instances for Models tab
+        charts.modelPerformanceRadar = null;
+        charts.tokenTimeline = null;
+        charts.costByModel = null;
+        charts.costByProject = null;
+        charts.costBySkill = null;
+        charts.tokenEfficiency = null;
+        charts.cacheHitRateGauge = null;
+        charts.cacheHitRateTimeline = null;
     </script>
 </body>
 </html>
