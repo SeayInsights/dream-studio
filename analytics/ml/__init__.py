@@ -11,6 +11,10 @@ from .base import (
     prepare_time_series,
     train_test_split_temporal,
 )
+from .benchmarks import (
+    BenchmarkEngine,
+    run_benchmark_suite,
+)
 from .clustering import BehaviorClusterer
 from .patterns import (
     PatternDetector,
@@ -23,6 +27,8 @@ __all__ = [
     "validate_dataframe",
     "prepare_time_series",
     "train_test_split_temporal",
+    "BenchmarkEngine",
+    "run_benchmark_suite",
     "BehaviorClusterer",
     "PatternDetector",
     "detect_skill_patterns",
