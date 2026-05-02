@@ -39,6 +39,10 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        .sort-indicator {
+            font-size: 10px;
+            color: #3b82f6;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -170,24 +174,87 @@
 
         <!-- Skills Tab -->
         <div id="skills" class="tab-content">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">Skill Performance</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Most Used</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Avg Duration</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Success Rate</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Most Used Skill</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="skills-most-used">--</div>
+                    <div class="mt-1 text-xs text-gray-500" id="skills-most-used-count">-- invocations</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Avg Duration</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="skills-avg-duration">--</div>
+                    <div class="mt-1 text-xs text-gray-500">Across all skills</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Overall Success Rate</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="skills-success-rate">--%</div>
+                    <div class="mt-1 text-xs text-gray-500" id="skills-total-invocations">-- total invocations</div>
+                </div>
+            </div>
+
+            <!-- Skill Leaderboard -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Skill Leaderboard</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onclick="sortSkillsTable('name')">
+                                    Skill Name <span class="sort-indicator" data-col="name"></span>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onclick="sortSkillsTable('invocations')">
+                                    Invocations <span class="sort-indicator" data-col="invocations"></span>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onclick="sortSkillsTable('success_rate')">
+                                    Success Rate <span class="sort-indicator" data-col="success_rate"></span>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onclick="sortSkillsTable('avg_time')">
+                                    Avg Time <span class="sort-indicator" data-col="avg_time"></span>
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onclick="sortSkillsTable('cost')">
+                                    Avg Cost <span class="sort-indicator" data-col="cost"></span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="skills-table-body" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">Loading skills data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Charts Row 1: Success Rate Trend & Execution Time Distribution -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Success Rate Trend</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="skillSuccessRateChart"></canvas>
                     </div>
                 </div>
-                <div class="h-96 flex items-center justify-center text-gray-400">
-                    Skills chart placeholder
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Execution Time Distribution</h3>
+                    <div class="relative" style="height: 300px;">
+                        <canvas id="skillExecutionTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 2: Performance Heatmap -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Performance Heatmap (Skill × Time of Day)</h3>
+                <div class="relative" style="height: 400px; overflow-x: auto;">
+                    <div id="skillHeatmap" class="grid gap-1" style="grid-template-columns: 80px repeat(24, minmax(30px, 1fr));"></div>
+                </div>
+            </div>
+
+            <!-- Recent Failures -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Failures (Last 20)</h3>
+                <div id="skills-recent-failures" class="space-y-2">
+                    <div class="text-sm text-gray-500 text-center py-4">Loading failure data...</div>
                 </div>
             </div>
         </div>
@@ -344,6 +411,11 @@
 
     <script>
         // Tab switching functionality
+        const tabsInitialized = {
+            overview: false,
+            skills: false
+        };
+
         function switchTab(tabName) {
             // Hide all tab contents
             document.querySelectorAll('.tab-content').forEach(content => {
@@ -365,6 +437,12 @@
             activeButton.classList.add('tab-active');
             activeButton.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
             activeButton.classList.add('text-blue-500');
+
+            // Initialize tab if not already initialized
+            if (tabName === 'skills' && !tabsInitialized.skills) {
+                tabsInitialized.skills = true;
+                initSkillsTab();
+            }
         }
 
         // Update last updated time
@@ -714,7 +792,8 @@
             // Update time every second
             setInterval(updateLastUpdatedTime, 1000);
 
-            // Initialize Overview tab
+            // Initialize Overview tab (default)
+            tabsInitialized.overview = true;
             initOverviewTab();
 
             console.log('Dream Studio Analytics Dashboard initialized');
@@ -742,6 +821,400 @@
                     break;
             }
         }
+
+        // ==================== SKILLS TAB ====================
+
+        let skillsData = {
+            leaderboard: [],
+            successTrend: [],
+            heatmap: [],
+            recentFailures: []
+        };
+
+        let skillsSortState = {
+            column: 'invocations',
+            ascending: false
+        };
+
+        // Fetch and populate Skills tab
+        async function initSkillsTab() {
+            try {
+                const data = await fetchMetrics('/skills');
+                if (!data) {
+                    console.warn('No skills data available');
+                    return;
+                }
+
+                skillsData = data;
+
+                // Update summary cards
+                updateSkillsSummary(data);
+
+                // Populate leaderboard
+                populateSkillsLeaderboard(data.leaderboard || []);
+
+                // Initialize charts
+                await Promise.all([
+                    initSkillSuccessRateChart(data.success_trend || []),
+                    initSkillExecutionTimeChart(data.leaderboard || []),
+                    initSkillHeatmap(data.heatmap || [])
+                ]);
+
+                // Populate recent failures
+                populateRecentFailures(data.recent_failures || []);
+
+                console.log('Skills tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Skills tab:', error);
+            }
+        }
+
+        // Update summary cards
+        function updateSkillsSummary(data) {
+            if (data.summary) {
+                const mostUsed = data.summary.most_used_skill || '--';
+                const mostUsedCount = data.summary.most_used_count || 0;
+                const avgDuration = data.summary.avg_duration_minutes || 0;
+                const successRate = data.summary.success_rate || 0;
+                const totalInvocations = data.summary.total_invocations || 0;
+
+                document.getElementById('skills-most-used').textContent = mostUsed;
+                document.getElementById('skills-most-used-count').textContent = `${mostUsedCount.toLocaleString()} invocations`;
+                document.getElementById('skills-avg-duration').textContent = `${avgDuration.toFixed(1)}m`;
+                document.getElementById('skills-success-rate').textContent = `${(successRate * 100).toFixed(1)}%`;
+                document.getElementById('skills-total-invocations').textContent = `${totalInvocations.toLocaleString()} total invocations`;
+            }
+        }
+
+        // Populate skills leaderboard table
+        function populateSkillsLeaderboard(leaderboard) {
+            const tbody = document.getElementById('skills-table-body');
+
+            if (!leaderboard || leaderboard.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-sm text-gray-500">No skills data available</td></tr>';
+                return;
+            }
+
+            // Sort leaderboard
+            const sorted = [...leaderboard].sort((a, b) => {
+                const col = skillsSortState.column;
+                let aVal, bVal;
+
+                switch(col) {
+                    case 'name':
+                        aVal = a.skill_name || '';
+                        bVal = b.skill_name || '';
+                        break;
+                    case 'invocations':
+                        aVal = a.invocations || 0;
+                        bVal = b.invocations || 0;
+                        break;
+                    case 'success_rate':
+                        aVal = a.success_rate || 0;
+                        bVal = b.success_rate || 0;
+                        break;
+                    case 'avg_time':
+                        aVal = a.avg_duration_minutes || 0;
+                        bVal = b.avg_duration_minutes || 0;
+                        break;
+                    case 'cost':
+                        aVal = a.avg_cost || 0;
+                        bVal = b.avg_cost || 0;
+                        break;
+                }
+
+                if (skillsSortState.ascending) {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            tbody.innerHTML = sorted.map(skill => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${skill.skill_name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.invocations.toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        <span class="${skill.success_rate >= 0.9 ? 'text-green-600 font-semibold' : skill.success_rate >= 0.7 ? 'text-yellow-600' : 'text-red-600'}">
+                            ${(skill.success_rate * 100).toFixed(1)}%
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.avg_duration_minutes.toFixed(1)}m</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">$${skill.avg_cost.toFixed(3)}</td>
+                </tr>
+            `).join('');
+
+            // Update sort indicators
+            document.querySelectorAll('.sort-indicator').forEach(el => {
+                const col = el.getAttribute('data-col');
+                if (col === skillsSortState.column) {
+                    el.textContent = skillsSortState.ascending ? ' ▲' : ' ▼';
+                } else {
+                    el.textContent = '';
+                }
+            });
+        }
+
+        // Sort skills table
+        function sortSkillsTable(column) {
+            if (skillsSortState.column === column) {
+                skillsSortState.ascending = !skillsSortState.ascending;
+            } else {
+                skillsSortState.column = column;
+                skillsSortState.ascending = column === 'name'; // Ascending for name, descending for numbers
+            }
+
+            populateSkillsLeaderboard(skillsData.leaderboard || []);
+        }
+
+        // Initialize Success Rate Trend Chart
+        async function initSkillSuccessRateChart(trendData) {
+            const ctx = document.getElementById('skillSuccessRateChart').getContext('2d');
+
+            if (charts.skillSuccessRate) {
+                charts.skillSuccessRate.destroy();
+            }
+
+            if (!trendData || trendData.length === 0) {
+                console.warn('No success rate trend data available');
+                return;
+            }
+
+            charts.skillSuccessRate = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: trendData.map(d => d.date),
+                    datasets: [{
+                        label: 'Success Rate',
+                        data: trendData.map(d => d.success_rate * 100),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Execution Time Distribution Chart (horizontal bar with min/avg/max)
+        async function initSkillExecutionTimeChart(leaderboard) {
+            const ctx = document.getElementById('skillExecutionTimeChart').getContext('2d');
+
+            if (charts.skillExecutionTime) {
+                charts.skillExecutionTime.destroy();
+            }
+
+            if (!leaderboard || leaderboard.length === 0) {
+                console.warn('No execution time data available');
+                return;
+            }
+
+            // Take top 10 skills by invocations
+            const topSkills = [...leaderboard].sort((a, b) => b.invocations - a.invocations).slice(0, 10);
+
+            charts.skillExecutionTime = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topSkills.map(s => s.skill_name),
+                    datasets: [
+                        {
+                            label: 'Min',
+                            data: topSkills.map(s => s.min_duration_minutes || 0),
+                            backgroundColor: '#93c5fd',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Avg',
+                            data: topSkills.map(s => s.avg_duration_minutes || 0),
+                            backgroundColor: '#3b82f6',
+                            borderColor: '#2563eb',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Max',
+                            data: topSkills.map(s => s.max_duration_minutes || 0),
+                            backgroundColor: '#1e40af',
+                            borderColor: '#1e3a8a',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.x.toFixed(1)}m`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + 'm';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Skill Heatmap (CSS grid-based)
+        async function initSkillHeatmap(heatmapData) {
+            const container = document.getElementById('skillHeatmap');
+
+            if (!heatmapData || heatmapData.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No heatmap data available</div>';
+                return;
+            }
+
+            // Extract unique skills and hours
+            const skills = [...new Set(heatmapData.map(d => d.skill_name))];
+            const hours = Array.from({length: 24}, (_, i) => i);
+
+            // Create lookup map
+            const dataMap = new Map();
+            heatmapData.forEach(d => {
+                const key = `${d.skill_name}-${d.hour}`;
+                dataMap.set(key, d.invocations || 0);
+            });
+
+            // Find max value for color scaling
+            const maxInvocations = Math.max(...heatmapData.map(d => d.invocations || 0));
+
+            // Build heatmap HTML
+            let html = '<div class="text-xs font-medium text-gray-700"></div>';
+
+            // Header row (hours)
+            hours.forEach(hour => {
+                html += `<div class="text-xs font-medium text-gray-700 text-center">${hour.toString().padStart(2, '0')}</div>`;
+            });
+
+            // Data rows
+            skills.forEach(skill => {
+                html += `<div class="text-xs font-medium text-gray-700 truncate" title="${skill}">${skill}</div>`;
+
+                hours.forEach(hour => {
+                    const key = `${skill}-${hour}`;
+                    const invocations = dataMap.get(key) || 0;
+                    const intensity = maxInvocations > 0 ? invocations / maxInvocations : 0;
+
+                    // Color scale: white -> blue
+                    const bgColor = intensity > 0
+                        ? `rgba(59, 130, 246, ${0.1 + intensity * 0.9})`
+                        : '#f9fafb';
+
+                    html += `<div class="text-xs text-center border border-gray-200 rounded p-1"
+                                  style="background-color: ${bgColor};"
+                                  title="${skill} at ${hour}:00 - ${invocations} invocations">
+                                  ${invocations > 0 ? invocations : ''}
+                             </div>`;
+                });
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Populate recent failures accordion
+        function populateRecentFailures(failures) {
+            const container = document.getElementById('skills-recent-failures');
+
+            if (!failures || failures.length === 0) {
+                container.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">No recent failures</div>';
+                return;
+            }
+
+            container.innerHTML = failures.map((failure, index) => `
+                <div class="border border-red-200 rounded-lg">
+                    <button class="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-red-50 transition-colors"
+                            onclick="toggleFailureDetail(${index})">
+                        <div class="flex-1">
+                            <div class="font-medium text-gray-900">${failure.skill_name}</div>
+                            <div class="text-xs text-gray-500 mt-1">${new Date(failure.timestamp).toLocaleString()}</div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-500 transition-transform" id="failure-icon-${index}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </button>
+                    <div class="hidden px-4 py-3 border-t border-red-200 bg-red-50" id="failure-detail-${index}">
+                        <div class="text-sm">
+                            <div class="mb-2"><span class="font-medium">Error:</span> ${failure.error_message || 'Unknown error'}</div>
+                            <div class="mb-2"><span class="font-medium">Duration:</span> ${(failure.duration_minutes || 0).toFixed(1)}m</div>
+                            <div class="mb-2"><span class="font-medium">Session ID:</span> <code class="text-xs bg-white px-2 py-1 rounded">${failure.session_id || 'N/A'}</code></div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Toggle failure detail accordion
+        function toggleFailureDetail(index) {
+            const detail = document.getElementById(`failure-detail-${index}`);
+            const icon = document.getElementById(`failure-icon-${index}`);
+
+            if (detail.classList.contains('hidden')) {
+                detail.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                detail.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Add chart instances for Skills tab
+        charts.skillSuccessRate = null;
+        charts.skillExecutionTime = null;
     </script>
 </body>
 </html>
