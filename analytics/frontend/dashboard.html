@@ -526,28 +526,84 @@
 
         <!-- ML Insights Tab -->
         <div id="ml" class="tab-content">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold text-gray-900 mb-4">Machine Learning Insights</h2>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Predicted Peak Time</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--:--</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Confidence Score</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
-                    </div>
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="text-sm font-medium text-gray-600">Model Accuracy</div>
-                        <div class="mt-2 text-2xl font-bold text-gray-900">--%</div>
+            <!-- Load Forecasts Button -->
+            <div id="ml-load-section" class="bg-white rounded-lg shadow p-6 mb-6 text-center">
+                <h2 class="text-xl font-bold text-gray-900 mb-2">Machine Learning Insights</h2>
+                <p class="text-sm text-gray-600 mb-4">Load ML forecasts and pattern analysis (may take 10-15 seconds)</p>
+                <button id="load-forecasts-btn"
+                        onclick="loadMLInsights()"
+                        class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                    <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    Load Forecasts
+                </button>
+            </div>
+
+            <!-- ML Content (hidden until loaded) -->
+            <div id="ml-content" class="hidden">
+                <!-- Forecasts Section -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Usage Forecasts (7-Day Prediction)</h3>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                        <!-- Sessions Forecast Chart -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-700 mb-3">Sessions Forecast</h4>
+                            <div class="h-64 relative">
+                                <canvas id="sessions-forecast-chart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Tokens Forecast Chart -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-700 mb-3">Tokens Forecast</h4>
+                            <div class="h-64 relative">
+                                <canvas id="tokens-forecast-chart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Skills Forecast Chart -->
+                        <div>
+                            <h4 class="text-sm font-medium text-gray-700 mb-3">Skills Forecast</h4>
+                            <div class="h-64 relative">
+                                <canvas id="skills-forecast-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
-                        Prediction chart
+
+                <!-- Pattern Detection Section -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Pattern Detection</h3>
+                    <div id="patterns-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Populated by JS -->
                     </div>
-                    <div class="h-64 flex items-center justify-center text-gray-400 border border-gray-200 rounded-lg">
-                        Pattern recognition chart
+                </div>
+
+                <!-- Recommendations Section -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">AI Recommendations</h3>
+                    <div id="recommendations-feed" class="space-y-4">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Benchmarks Section -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Performance Benchmarks</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">7-Day Avg</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">30-Day Avg</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody id="benchmarks-table" class="bg-white divide-y divide-gray-200">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -594,7 +650,8 @@
             skills: false,
             models: false,
             workflows: false,
-            alerts: false
+            alerts: false,
+            ml: false
         };
 
         function switchTab(tabName) {
@@ -632,6 +689,9 @@
             } else if (tabName === 'alerts' && !tabsInitialized.alerts) {
                 tabsInitialized.alerts = true;
                 initAlertsTab();
+            } else if (tabName === 'ml' && !tabsInitialized.ml) {
+                tabsInitialized.ml = true;
+                initMLTab();
             }
         }
 
@@ -3277,6 +3337,347 @@
                 });
             }
         });
+
+        // ==================== ML INSIGHTS TAB ====================
+
+        // Initialize ML tab (just show the load button)
+        function initMLTab() {
+            // Tab is lazy - ML content loads only when user clicks "Load Forecasts"
+            console.log('ML Insights tab initialized (load button ready)');
+        }
+
+        // Load ML insights data (expensive queries)
+        async function loadMLInsights() {
+            const loadBtn = document.getElementById('load-forecasts-btn');
+            const loadSection = document.getElementById('ml-load-section');
+            const mlContent = document.getElementById('ml-content');
+
+            try {
+                // Disable button and show loading state
+                loadBtn.disabled = true;
+                loadBtn.innerHTML = `
+                    <svg class="animate-spin mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Loading ML Insights...
+                `;
+
+                // Fetch all ML data in parallel
+                const [forecastsData, patternsData, recommendationsData, benchmarksData] = await Promise.all([
+                    fetchML('/forecasts'),
+                    fetchML('/patterns'),
+                    fetchML('/recommendations'),
+                    fetchML('/benchmarks')
+                ]);
+
+                // Initialize forecast charts
+                await Promise.all([
+                    initForecastChart('sessions-forecast-chart', forecastsData?.sessions || null, 'Sessions'),
+                    initForecastChart('tokens-forecast-chart', forecastsData?.tokens || null, 'Tokens'),
+                    initForecastChart('skills-forecast-chart', forecastsData?.skills || null, 'Skills')
+                ]);
+
+                // Populate pattern detection cards
+                populatePatternsGrid(patternsData || []);
+
+                // Populate recommendations feed
+                populateRecommendationsFeed(recommendationsData || []);
+
+                // Populate benchmarks table
+                populateBenchmarksTable(benchmarksData || []);
+
+                // Hide load button, show content
+                loadSection.classList.add('hidden');
+                mlContent.classList.remove('hidden');
+
+                console.log('ML Insights loaded successfully');
+            } catch (error) {
+                console.error('Error loading ML insights:', error);
+                loadBtn.disabled = false;
+                loadBtn.innerHTML = `
+                    <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    Error - Click to Retry
+                `;
+                alert('Failed to load ML insights. Please try again.');
+            }
+        }
+
+        // Fetch ML data
+        async function fetchML(endpoint) {
+            try {
+                const response = await fetch(`/api/v1/ml${endpoint}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error(`Error fetching ML data ${endpoint}:`, error);
+                return null;
+            }
+        }
+
+        // Initialize forecast chart with confidence intervals
+        async function initForecastChart(canvasId, data, label) {
+            if (!data || !data.dates || !data.predicted || !data.confidence_lower || !data.confidence_upper) {
+                console.warn(`No forecast data for ${label}`);
+                return;
+            }
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Destroy existing chart if it exists
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+
+            charts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates,
+                    datasets: [
+                        {
+                            label: `${label} Forecast`,
+                            data: data.predicted,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Confidence Interval',
+                            data: data.confidence_upper,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: '+1',
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            borderDash: [5, 5]
+                        },
+                        {
+                            label: 'Lower Bound',
+                            data: data.confidence_lower,
+                            borderColor: 'rgba(59, 130, 246, 0.3)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: false,
+                            pointRadius: 0,
+                            borderWidth: 1,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                filter: (item) => item.text !== 'Lower Bound',
+                                boxWidth: 12,
+                                padding: 8,
+                                font: { size: 10 }
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += context.parsed.y.toFixed(0);
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                font: { size: 10 }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                font: { size: 9 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Populate pattern detection cards
+        function populatePatternsGrid(patterns) {
+            const grid = document.getElementById('patterns-grid');
+
+            if (!patterns || patterns.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No patterns detected</div>';
+                return;
+            }
+
+            grid.innerHTML = patterns.map(pattern => {
+                const typeColors = {
+                    sequence: 'blue',
+                    temporal: 'green',
+                    workflow: 'purple'
+                };
+                const color = typeColors[pattern.pattern_type] || 'gray';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800">
+                                ${pattern.pattern_type}
+                            </span>
+                            <span class="text-xs text-gray-500">${pattern.frequency}x</span>
+                        </div>
+                        <h4 class="text-sm font-medium text-gray-900 mb-1">${pattern.name}</h4>
+                        <p class="text-xs text-gray-600">${pattern.description}</p>
+                        <div class="mt-3 text-xs text-gray-500">
+                            Confidence: <span class="font-medium text-gray-900">${(pattern.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Populate recommendations feed
+        function populateRecommendationsFeed(recommendations) {
+            const feed = document.getElementById('recommendations-feed');
+
+            if (!recommendations || recommendations.length === 0) {
+                feed.innerHTML = '<div class="text-center text-gray-500 py-8">No recommendations available</div>';
+                return;
+            }
+
+            // Sort by impact score (descending)
+            const sorted = [...recommendations].sort((a, b) => b.impact_score - a.impact_score);
+
+            feed.innerHTML = sorted.map(rec => {
+                const priorityColors = {
+                    high: 'red',
+                    medium: 'yellow',
+                    low: 'green'
+                };
+                const color = priorityColors[rec.priority] || 'gray';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${color}-100 text-${color}-800">
+                                        ${rec.priority} priority
+                                    </span>
+                                    <span class="text-xs text-gray-500">Impact: ${rec.impact_score}/10</span>
+                                    <span class="text-xs text-gray-500">Confidence: ${(rec.confidence * 100).toFixed(0)}%</span>
+                                </div>
+                                <h4 class="text-sm font-bold text-gray-900 mb-1">${rec.title}</h4>
+                                <p class="text-sm text-gray-700">${rec.description}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mt-3">
+                            <button onclick="applyRecommendation('${rec.id}')"
+                                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none transition-colors">
+                                Apply
+                            </button>
+                            <button onclick="dismissRecommendation('${rec.id}')"
+                                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-colors">
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Populate benchmarks table
+        function populateBenchmarksTable(benchmarks) {
+            const tbody = document.getElementById('benchmarks-table');
+
+            if (!benchmarks || benchmarks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-500">No benchmark data available</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = benchmarks.map(bm => {
+                const trendIcon = bm.trend > 0
+                    ? '<svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"></path></svg>'
+                    : bm.trend < 0
+                    ? '<svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z" clip-rule="evenodd"></path></svg>'
+                    : '<svg class="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"></path></svg>';
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${bm.metric}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${bm.current}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.avg_7d}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${bm.avg_30d}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <div class="flex items-center gap-1">
+                                ${trendIcon}
+                                <span class="${bm.trend > 0 ? 'text-green-600' : bm.trend < 0 ? 'text-red-600' : 'text-gray-500'}">${Math.abs(bm.trend).toFixed(1)}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Apply recommendation (placeholder)
+        async function applyRecommendation(id) {
+            try {
+                const response = await fetch(`/api/v1/ml/recommendations/${id}/apply`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    alert('Recommendation applied successfully!');
+                    // Reload recommendations
+                    const data = await fetchML('/recommendations');
+                    populateRecommendationsFeed(data || []);
+                } else {
+                    throw new Error('Failed to apply recommendation');
+                }
+            } catch (error) {
+                console.error('Error applying recommendation:', error);
+                alert('Failed to apply recommendation. Please try again.');
+            }
+        }
+
+        // Dismiss recommendation (placeholder)
+        async function dismissRecommendation(id) {
+            try {
+                const response = await fetch(`/api/v1/ml/recommendations/${id}/dismiss`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    // Reload recommendations
+                    const data = await fetchML('/recommendations');
+                    populateRecommendationsFeed(data || []);
+                } else {
+                    throw new Error('Failed to dismiss recommendation');
+                }
+            } catch (error) {
+                console.error('Error dismissing recommendation:', error);
+                alert('Failed to dismiss recommendation. Please try again.');
+            }
+        }
     </script>
 
     <!-- Create Rule Modal -->
