@@ -87,6 +87,69 @@ BEFORE claiming any status:
 6. **Regression** — Does existing functionality still work?
 7. **Update traceability** — See: core/traceability.md — Update TR-ID with test
 
+## Browser Testing Workflow
+
+**When to use agent-browser-mcp:**
+- UI changes that need visual verification (layout, styling, responsiveness)
+- Interactive workflows (forms, navigation, user flows)
+- Visual regression testing (before/after screenshots)
+- Screenshot evidence for stakeholder approval
+
+**Quick Start:**
+```javascript
+// 1. Create browser session
+const session = await mcp__firecrawl_mcp__firecrawl_browser_create({ ttl: 300 });
+const sessionId = session.sessionId;
+
+// 2. Navigate to app
+await mcp__firecrawl_mcp__firecrawl_browser_execute({
+  sessionId: sessionId,
+  code: "agent-browser open http://localhost:3000",
+  language: "bash"
+});
+
+// 3. Take screenshot for evidence
+await mcp__firecrawl_mcp__firecrawl_browser_execute({
+  sessionId: sessionId,
+  code: "agent-browser screenshot C:/Users/Dannis Seay/Downloads/verify-golden-path.png",
+  language: "bash"
+});
+
+// 4. Test interactions (snapshot → click → verify)
+const snapshot = await mcp__firecrawl_mcp__firecrawl_browser_execute({
+  sessionId: sessionId,
+  code: "agent-browser snapshot -i -c",
+  language: "bash"
+});
+// Output: @e1 button "Submit", @e2 input "Email"
+
+await mcp__firecrawl_mcp__firecrawl_browser_execute({
+  sessionId: sessionId,
+  code: "agent-browser click @e1",
+  language: "bash"
+});
+
+// 5. Cleanup (ALWAYS do this)
+await mcp__firecrawl_mcp__firecrawl_browser_delete({ sessionId: sessionId });
+```
+
+**Integration with verify workflow:**
+1. Run build + start local dev server
+2. Create browser session
+3. Test golden path (navigate → interact → screenshot)
+4. Test edge cases (error states, invalid input)
+5. Capture screenshots as evidence
+6. Delete browser session
+7. Report verification results with screenshot paths
+
+**Full documentation:** [shared/mcp-integrations/agent-browser.md](../../../../shared/mcp-integrations/agent-browser.md)
+
+See examples for:
+- Visual regression testing (baseline vs current)
+- Interactive form testing
+- Multi-page user flows
+- Troubleshooting and best practices
+
 ## Evidence patterns
 
 **See:** core/quality.md — Evidence patterns
@@ -109,10 +172,41 @@ Must follow format: `[Action] → [Observation] → [Conclusion]`
      - `next-browser profile` — check Core Web Vitals: LCP < 2.5s, CLS < 0.1, INP < 200ms
      - `next-browser click <selector>` / `next-browser fill <selector> <value>` — exercise key user paths interactively
      Start the daemon first if not running: `next-browser start`
+   - **Browser automation (agent-browser-mcp)** — Use for UI testing, visual regression, and interactive workflow verification. See [agent-browser.md](../../../../shared/mcp-integrations/agent-browser.md) for full documentation.
+     - When to use: UI changes, visual testing, cross-page flows, screenshot evidence
+     - Workflow: create session → navigate → snapshot/screenshot → interact → verify → cleanup
+     - Example: Login flow verification (navigate → fill email → fill password → click submit → verify dashboard)
 - **API** — Hit endpoints, verify response shape and status codes.
 - **Game** — Run scene via godot-mcp, check QA stdout events.
 - **Power Platform** — Test in preview mode, verify data connections.
 - **MCP server** — Call each tool, verify response format and error handling.
+
+## Example: UI Feature Verification with Browser Testing
+
+```
+User: "verify the new dashboard filters work"
+
+Verify mode workflow:
+1. Run build: npm run build → exit 0
+2. Start dev server: npm run dev → listening on localhost:3000
+3. Create browser session
+4. Navigate to http://localhost:3000/dashboard
+5. Screenshot initial state → Downloads/dashboard-initial.png
+6. Snapshot to find filter elements → @e1 select "Date Range", @e2 button "Apply"
+7. Click date filter → verify options appear
+8. Screenshot filter open → Downloads/dashboard-filter-open.png
+9. Select "Last 7 days" → verify data refreshes
+10. Screenshot filtered state → Downloads/dashboard-filtered.png
+11. Test edge case: clear filters → verify returns to initial state
+12. Delete browser session
+13. Report: VERIFIED — Screenshots show filter interaction works, data updates correctly
+
+Evidence:
+- Build: exit 0
+- Golden path: Screenshots in Downloads/ show filter workflow
+- Edge case: Clear filters returns to unfiltered state
+- Regression: Existing dashboard tabs still navigate correctly
+```
 
 ## Output
 ```
