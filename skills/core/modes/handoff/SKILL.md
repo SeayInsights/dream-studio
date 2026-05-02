@@ -41,7 +41,21 @@ Capture the minimum context needed for the next session to continue without re-e
    - `Confidence: medium` (root cause is identified but not yet validated by outcome)
    - Fill "What happened" from the blocked item, "Lesson" from the root cause, "Evidence" from the handoff context
    If "What's broken / blocked" is empty or all items lack root causes: skip silently.
-8. **Print** — Print the handoff file path so Director can pass it to the next session
+8. **Print** — Print the FULL ABSOLUTE PATH to both handoff files so Director can copy/paste to next session. Use `Path.resolve()` or `os.path.abspath()` to ensure full paths.
+   
+   **Required output format**:
+   ```
+   ✅ Handoff complete
+   
+   📄 Files created:
+      - Markdown: C:\Users\<user>\<project>\.sessions\YYYY-MM-DD\handoff-<topic>.md
+      - JSON: C:\Users\<user>\<project>\.sessions\YYYY-MM-DD\handoff-<topic>.json
+   
+   📋 Next session resume:
+      cat "C:\Users\<user>\<project>\.sessions\YYYY-MM-DD\handoff-<topic>.md"
+   ```
+   
+   **Never print relative paths** — always full absolute paths that work from any working directory
 
 ## Markdown output: `.sessions/YYYY-MM-DD/handoff-<topic>.md`
 ```markdown

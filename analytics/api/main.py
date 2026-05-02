@@ -1,11 +1,10 @@
 """FastAPI application for dream-studio analytics"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from pathlib import Path
+from fastapi.responses import JSONResponse
 import uvicorn
 
-from .routes import metrics, insights, reports, exports, realtime, alerts, ml, schedules
+from .routes import metrics, insights, reports, exports, realtime, alerts, ml, schedules, frontend, analytics
 
 # Create FastAPI app
 app = FastAPI(
@@ -35,6 +34,8 @@ app.include_router(schedules.router, prefix="/api/v1/schedules", tags=["schedule
 app.include_router(realtime.router, prefix="/api/v1", tags=["realtime"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
 app.include_router(ml.router, prefix="/api/v1/ml", tags=["ml"])
+app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
+app.include_router(frontend.router, tags=["frontend"])
 
 
 @app.get("/")
@@ -54,51 +55,8 @@ async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
 
 
-@app.get("/dashboard")
-async def dashboard():
-    """Serve interactive analytics dashboard"""
-    try:
-        from analytics.generators.production_dashboard import ProductionDashboard
-        import tempfile
-        from fastapi.responses import HTMLResponse
-
-        # Generate dashboard in memory
-        dashboard_gen = ProductionDashboard()
-
-        # Create temp file for HTML
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp:
-            temp_path = tmp.name
-
-        # Generate dashboard HTML
-        html_path = dashboard_gen.generate(days=30, output_path=temp_path)
-
-        # Read HTML content
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-
-        # Clean up temp file
-        import os
-        os.unlink(html_path)
-
-        return HTMLResponse(content=html_content)
-
-    except Exception as e:
-        return HTMLResponse(
-            content=f"""
-            <html>
-                <body>
-                    <h1>Dashboard Error</h1>
-                    <p>Failed to generate dashboard: {str(e)}</p>
-                    <p>Check server logs for details.</p>
-                </body>
-            </html>
-            """,
-            status_code=500
-        )
-
-
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(_request, exc):
     """Global exception handler"""
     return JSONResponse(
         status_code=500,

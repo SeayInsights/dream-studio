@@ -1,5 +1,19 @@
 # 📊 Analytics Dashboard Generator
 
+> **⚠️ DEPRECATION NOTICE**  
+> This static dashboard generator is deprecated and will be removed in 30 days.  
+> Please use the new **real-time dashboard** instead:
+> 
+> ```bash
+> cd analytics
+> python -m api.main
+> # Navigate to http://localhost:8000/dashboard
+> ```
+> 
+> The new dashboard includes WebSocket streaming, real-time alerts, ML insights, and responsive mobile design.
+
+---
+
 Production-ready dashboard generator for dream-studio analytics platform.
 
 ## Features

@@ -75,21 +75,37 @@ Validate that each path exists and is a directory.
 - Extract enhancement opportunities
 - Output: Comparison table + recommendations
 
-### 3. Invoke repo-analyzer.py
+### 3. Invoke repo analysis
 
-Use the integration wrapper at `skills/analyze/repo-analyzer.py`:
+**Recommended: Use the automated wrapper** (handles GitHub URLs and local paths):
 
-**For single repo:**
-```python
-py skills/analyze/repo-analyzer.py <repo-path> --format markdown --verbose
+```bash
+# Single repo (GitHub URL or local path)
+py modes/repo/analyze-repos.py <repo-url-or-path> --format markdown --verbose
+
+# Compare multiple repos (mix of URLs and local paths)
+py modes/repo/analyze-repos.py <repo1> <repo2> <repo3> --compare --verbose
+
+# Examples
+py modes/repo/analyze-repos.py https://github.com/user/repo --verbose
+py modes/repo/analyze-repos.py /path/to/repo1 /path/to/repo2 --compare
+py modes/repo/analyze-repos.py https://github.com/user/repo1 /local/repo2 --compare --verbose
 ```
 
-**For comparison:**
+The wrapper automatically:
+- Detects GitHub URLs and clones them to temp directory
+- Validates local paths
+- Invokes the repo-analyzer
+- Cleans up temp files on completion
+
+**Alternative: Direct analyzer usage** (for local paths only):
+
 ```python
-py skills/analyze/repo-analyzer.py <repo1> <repo2> --compare --verbose
+py ../../repo-analyzer.py <repo-path> --format markdown --verbose
+py ../../repo-analyzer.py <repo1> <repo2> --compare --verbose
 ```
 
-**For enhancement extraction:**
+**Programmatic usage:**
 ```python
 from skills.analyze.repo_analyzer import extract_patterns_for_enhancement
 

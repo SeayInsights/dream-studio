@@ -1,7 +1,13 @@
 version: 1.0
 
 # Things to AVOID
-avoid: []
+avoid:
+  - id: relative-path-in-output
+    severity: medium
+    discovered: 2026-05-02
+    title: "Never print relative paths in handoff output"
+    context: "User couldn't find handoff file because relative path '.sessions/2026-05-02/handoff-topic.md' was shown instead of full absolute path. Relative paths break when user changes directory or starts new session from different location."
+    fix: "Use Path.resolve() or os.path.abspath() to get full path, then print: 'Handoff: C:\\Users\\<user>\\<project>\\.sessions\\YYYY-MM-DD\\handoff-topic.md'"
 
 # Best PRACTICES
 best_practices: []

@@ -51,6 +51,17 @@ class ProductionDashboard:
         Returns:
             Path to generated dashboard
         """
+        # Deprecation warning
+        print("\n" + "="*80)
+        print("⚠️  DEPRECATED: This static dashboard generator is deprecated.")
+        print("   Use the real-time dashboard instead:")
+        print("   ")
+        print("   1. Start the API server: cd analytics && python -m api.main")
+        print("   2. Navigate to: http://localhost:8000/dashboard")
+        print("   ")
+        print("   The static generator will be removed in 30 days.")
+        print("="*80 + "\n")
+
         print(f"[Dashboard] Generating analytics dashboard for last {days} days...")
 
         # Collect all data
