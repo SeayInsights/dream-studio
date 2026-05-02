@@ -21,6 +21,15 @@ from .patterns import (
     detect_skill_patterns,
     detect_workflow_patterns,
 )
+from .storage import (
+    save_model,
+    load_model,
+    list_saved_models,
+    delete_model,
+    is_model_stale,
+    get_model_metadata,
+    cleanup_old_models,
+)
 
 __all__ = [
     "BaseModel",
@@ -33,4 +42,11 @@ __all__ = [
     "PatternDetector",
     "detect_skill_patterns",
     "detect_workflow_patterns",
+    "save_model",
+    "load_model",
+    "list_saved_models",
+    "delete_model",
+    "is_model_stale",
+    "get_model_metadata",
+    "cleanup_old_models",
 ]
