@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><!-- SLOT:title --></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <!-- SLOT:fonts -->
+  <style>
+    /* ===== FRAMEWORK STYLES — DO NOT MODIFY ===== */
+
+    /* Reset */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #111;
+    }
+
+    /* Progress bar */
+    .deck-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 3px;
+      width: 0%;
+      background: #4f8ef7;
+      z-index: 1000;
+      transition: width 0.2s ease;
+    }
+
+    /* Outer container centers the scaled slide in the viewport */
+    .deck-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Each slide — base is 1280×720 (16:9); JS applies transform: scale() */
+    .slide {
+      position: absolute;
+      width: 1280px;
+      height: 720px;
+      background: #fff;
+      overflow: hidden;
+      display: none;           /* hidden by default */
+      transform-origin: center center;
+    }
+
+    /* Only the active slide is visible */
+    .slide.active {
+      display: block;
+    }
+
+    /* Inner content wrapper — agents put their markup here */
+    .slide-content {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Slide counter */
+    .deck-counter {
+      position: fixed;
+      bottom: 12px;
+      right: 16px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.7);
+      z-index: 1000;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Speaker notes panel */
+    .deck-notes {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      background: rgba(20, 20, 20, 0.95);
+      border-top: 2px solid #4f8ef7;
+      z-index: 1000;
+      overflow-y: auto;
+      transition: transform 0.25s ease;
+    }
+
+    .deck-notes[hidden] {
+      display: none;
+    }
+
+    .deck-notes-content {
+      padding: 14px 20px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #e8e8e8;
+    }
+
+    .deck-notes-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #4f8ef7;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    /* Touch — no text selection during swipe */
+    .deck-container.swiping {
+      user-select: none;
+    }
+
+    /* ===== PRINT / PDF STYLES ===== */
+    @media print {
+      html, body {
+        width: auto;
+        height: auto;
+        overflow: visible;
+        background: #fff;
+      }
+
+      .deck-progress,
+      .deck-counter,
+      .deck-notes {
+        display: none !important;
+      }
+
+      .deck-container {
+        position: static;
+        display: block;
+        width: auto;
+        height: auto;
+      }
+
+      .slide {
+        position: relative;
+        display: block !important;
+        transform: none !important;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+        page-break-after: always;
+        break-after: page;
+        margin: 0;
+        padding: 0;
+      }
+
+      /* Don't break after the last slide */
+      .slide:last-child {
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+
+      /* Slides with no content (empty slots) should not print */
+      .slide:empty {
+        display: none !important;
+      }
+    }
+
+    /* ===== END FRAMEWORK STYLES ===== */
+
+    /* ===== CONTENT STYLES — Agent may add styles below ===== */
+    <!-- SLOT:styles -->
+  </style>
+</head>
+<body>
+
+  <div class="deck-progress" role="progressbar" aria-valuenow="1" aria-valuemin="1"></div>
+
+  <div class="deck-container">
+    <!-- SLOT:slide-1 -->
+    <!-- SLOT:slide-2 -->
+    <!-- SLOT:slide-3 -->
+    <!-- SLOT:slide-4 -->
+    <!-- SLOT:slide-5 -->
+    <!-- SLOT:slide-6 -->
+    <!-- SLOT:slide-7 -->
+    <!-- SLOT:slide-8 -->
+    <!-- SLOT:slide-9 -->
+    <!-- SLOT:slide-10 -->
+    <!-- SLOT:slide-11 -->
+    <!-- SLOT:slide-12 -->
+    <!-- SLOT:slide-13 -->
+    <!-- SLOT:slide-14 -->
+    <!-- SLOT:slide-15 -->
+    <!-- SLOT:slide-16 -->
+    <!-- SLOT:slide-17 -->
+    <!-- SLOT:slide-18 -->
+    <!-- SLOT:slide-19 -->
+    <!-- SLOT:slide-20 -->
+  </div>
+
+  <div class="deck-counter" aria-live="polite"></div>
+
+  <div class="deck-notes" hidden>
+    <div class="deck-notes-content">
+      <div class="deck-notes-label">Speaker Notes</div>
+      <div class="deck-notes-text"></div>
+    </div>
+  </div>
+
+  <script>
+    /* ===== FRAMEWORK SCRIPT — DO NOT MODIFY ===== */
+
+    (function () {
+      'use strict';
+
+      // ---- State ----
+      var current = 0; // 0-based index
+      var slides = [];
+      var notesVisible = false;
+
+      // ---- DOM refs ----
+      var container   = document.querySelector('.deck-container');
+      var counterEl   = document.querySelector('.deck-counter');
+      var progressEl  = document.querySelector('.deck-progress');
+      var notesPanel  = document.querySelector('.deck-notes');
+      var notesText   = document.querySelector('.deck-notes-text');
+
+      // ---- Collect slides (only .slide elements that have content) ----
+      function collectSlides() {
+        var all = container.querySelectorAll('.slide');
+        slides = [];
+        for (var i = 0; i < all.length; i++) {
+          // Skip completely empty placeholder slides (whitespace only, no elements)
+          if (all[i].innerHTML.trim() !== '') {
+            slides.push(all[i]);
+          }
+        }
+      }
+
+      // ---- Scale-to-fit ----
+      // Slides are natively 1280×720. Scale so they fill the viewport while
+      // preserving aspect ratio (contain, not cover).
+      function applyScale() {
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        var scaleX = vw / 1280;
+        var scaleY = vh / 720;
+        var scale = Math.min(scaleX, scaleY);
+        for (var i = 0; i < slides.length; i++) {
+          slides[i].style.transform = 'scale(' + scale + ')';
+        }
+      }
+
+      // ---- Show slide at index ----
+      function goTo(index) {
+        if (slides.length === 0) return;
+        // Clamp
+        if (index < 0) index = 0;
+        if (index >= slides.length) index = slides.length - 1;
+
+        // Hide previous
+        if (slides[current]) {
+          slides[current].classList.remove('active');
+        }
+
+        current = index;
+        slides[current].classList.add('active');
+
+        updateCounter();
+        updateProgress();
+        updateNotes();
+      }
+
+      function next() { goTo(current + 1); }
+      function prev() { goTo(current - 1); }
+      function first() { goTo(0); }
+      function last() { goTo(slides.length - 1); }
+
+      // ---- Counter ----
+      function updateCounter() {
+        if (slides.length === 0) {
+          counterEl.textContent = '';
+          return;
+        }
+        counterEl.textContent = (current + 1) + ' / ' + slides.length;
+      }
+
+      // ---- Progress bar ----
+      function updateProgress() {
+        if (slides.length === 0) {
+          progressEl.style.width = '0%';
+          return;
+        }
+        var pct = ((current + 1) / slides.length) * 100;
+        progressEl.style.width = pct + '%';
+        progressEl.setAttribute('aria-valuenow', current + 1);
+        progressEl.setAttribute('aria-valuemax', slides.length);
+      }
+
+      // ---- Speaker notes ----
+      function updateNotes() {
+        var slide = slides[current];
+        if (!slide) return;
+        var notes = slide.getAttribute('data-notes') || '';
+        notesText.textContent = notes;
+        // If notes panel is visible but there are no notes, still show panel
+        // (just empty) so user knows this slide has none
+      }
+
+      function toggleNotes() {
+        notesVisible = !notesVisible;
+        if (notesVisible) {
+          notesPanel.removeAttribute('hidden');
+        } else {
+          notesPanel.setAttribute('hidden', '');
+        }
+        updateNotes();
+      }
+
+      // ---- Keyboard navigation ----
+      document.addEventListener('keydown', function (e) {
+        // Don't hijack keys when user is in an input/textarea
+        var tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        if (e.target && e.target.isContentEditable) return;
+
+        switch (e.key) {
+          case 'ArrowRight':
+          case 'ArrowDown':
+          case ' ':
+          case 'Enter':
+            e.preventDefault();
+            next();
+            break;
+
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            e.preventDefault();
+            prev();
+            break;
+
+          case 'Home':
+            e.preventDefault();
+            first();
+            break;
+
+          case 'End':
+            e.preventDefault();
+            last();
+            break;
+
+          case 's':
+          case 'S':
+            e.preventDefault();
+            toggleNotes();
+            break;
+        }
+      });
+
+      // ---- Touch / swipe support ----
+      var touchStartX = 0;
+      var touchStartY = 0;
+      var touchMoved = false;
+
+      container.addEventListener('touchstart', function (e) {
+        touchStartX = e.changedTouches[0].clientX;
+        touchStartY = e.changedTouches[0].clientY;
+        touchMoved = false;
+      }, { passive: true });
+
+      container.addEventListener('touchmove', function (e) {
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        var dy = e.changedTouches[0].clientY - touchStartY;
+        // If horizontal movement dominates, prevent scroll
+        if (Math.abs(dx) > Math.abs(dy)) {
+          e.preventDefault();
+          container.classList.add('swiping');
+        }
+        touchMoved = true;
+      }, { passive: false });
+
+      container.addEventListener('touchend', function (e) {
+        container.classList.remove('swiping');
+        if (!touchMoved) return;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        var dy = e.changedTouches[0].clientY - touchStartY;
+        // Only act on predominantly horizontal swipes with enough distance
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+          if (dx < 0) {
+            next(); // swipe left → advance
+          } else {
+            prev(); // swipe right → go back
+          }
+        }
+        touchMoved = false;
+      }, { passive: true });
+
+      // ---- Responsive rescale ----
+      window.addEventListener('resize', applyScale);
+
+      // ---- Init ----
+      function init() {
+        collectSlides();
+        applyScale();
+        if (slides.length > 0) {
+          slides[0].classList.add('active');
+        }
+        updateCounter();
+        updateProgress();
+        updateNotes();
+      }
+
+      // Run after DOM is fully parsed (script is at end of body, but be safe)
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+
+    })();
+
+    /* ===== END FRAMEWORK SCRIPT ===== */
+  </script>
+
+</body>
+</html>
