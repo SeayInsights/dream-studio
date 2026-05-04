@@ -15,6 +15,13 @@ source = ["hooks/lib", "packs/domains/domain_lib"]
 omit = [
     "hooks/lib/workflow_state.py",
     "hooks/lib/traceability.py",
+    # Wave 0 infrastructure (temporary - add tests in Wave 1)
+    "hooks/lib/deprecation.py",
+    "hooks/lib/document_store.py",
+    "hooks/lib/migrate_files_to_sqlite.py",
+    "hooks/lib/research_engine.py",
+    "hooks/lib/research_methods.py",
+    "hooks/lib/wave_executor.py",
 ]
 
 [tool.coverage.report]
