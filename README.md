@@ -16,6 +16,7 @@ Ships with **8 skill packs (42 modes)** covering the full lifecycle from thinkin
 
 - [What it does](#what-it-does)
 - [Token Overhead](#token-overhead)
+- [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Setup](#setup)
@@ -85,6 +86,20 @@ To measure overhead for your sessions:
 ```bash
 py scripts/benchmark_tokens.py --run-label <your-session-label> --publish
 ```
+
+---
+
+## Architecture
+
+dream-studio follows a two-layer architecture: a Python hook runtime that responds to Claude Code lifecycle events, and a markdown-based skill system that guides Claude's behavior. All state is persisted to a local SQLite database in WAL mode, serving as the single source of truth for telemetry, sessions, workflows, and project intelligence.
+
+The system is designed for local-first operation with no external dependencies (GitHub API is optional for health checks). Hooks batch into dispatchers to minimize overhead, all database writes use retry logic for graceful concurrent access, and skills are stateless markdown files that can be version-controlled with your project.
+
+### Documentation
+
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System overview, component diagram, and architectural decisions (why SQLite, why batched hooks, why markdown skills, etc.)
+- **[DATABASE.md](docs/DATABASE.md)** — Complete SQLite schema with ERD, table definitions, indexes, migrations, and query patterns
+- **[WORKFLOWS.md](docs/WORKFLOWS.md)** — Sequence diagrams and state machines for the five major workflows (session lifecycle, skill invocation, YAML workflows, analytics, health monitoring)
 
 ---
 
