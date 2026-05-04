@@ -4,6 +4,14 @@ pandas>=2.0
 scikit-learn>=1.3
 Jinja2>=3.1
 PyYAML>=6.0
+
+# Security scanning libraries (Wave 4)
+# NOTE: These libraries require Python <3.12, incompatible with current Python 3.14
+# Using stub implementations until Python 3.12 environment available
+# giskard>=2.0
+# rebuff>=0.1
+# llm-guard>=0.3
+
 # Optional: tiktoken (for precise token counting in adapter builds)
 # tiktoken>=0.5
 # Optional: APScheduler (for report scheduler - recommended)
