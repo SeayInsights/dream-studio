@@ -27,6 +27,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 
 HANDLERS: list[tuple[str, Path]] = [
+    ("on-prompt-validate", PLUGIN_ROOT / "packs" / "meta" / "hooks" / "on-prompt-validate.py"),  # Wave 4: Security validation
     ("on-session-start", PLUGIN_ROOT / "packs" / "meta" / "hooks" / "on-session-start.py"),
     ("on-first-run", PLUGIN_ROOT / "packs" / "meta" / "hooks" / "on-first-run.py"),
     ("on-memory-retrieve", PLUGIN_ROOT / "packs" / "meta" / "hooks" / "on-memory-retrieve.py"),

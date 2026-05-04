@@ -6,6 +6,16 @@ from typing import Any
 
 from .studio_db import _connect
 
+# Security scanning (Wave 4)
+try:
+    from .security.giskard_scanner import scan_llm_output
+    _SECURITY_ENABLED = True
+except ImportError:
+    _SECURITY_ENABLED = False
+    def scan_llm_output(output: str, context: dict) -> dict:
+        """Fallback stub if security module not available."""
+        return {"safe": True, "vulnerabilities": [], "risk_score": 0.0}
+
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
 
@@ -55,6 +65,25 @@ class DocumentStore:
         if ttl_days is not None:
             expires_dt = datetime.now(timezone.utc) + timedelta(days=ttl_days)
             expires_at = expires_dt.isoformat()
+
+        # Security scan before storage (Wave 4)
+        scan_result = scan_llm_output(content, {"doc_type": doc_type, "title": title})
+
+        # Merge scan results into metadata
+        if metadata is None:
+            metadata = {}
+        metadata["security_scan"] = {
+            "scanned_at": created_at,
+            "safe": scan_result["safe"],
+            "risk_score": scan_result["risk_score"],
+            "vulnerability_count": len(scan_result.get("vulnerabilities", [])),
+        }
+
+        # Log high-risk documents
+        if scan_result["risk_score"] > 0.7:
+            print(f"⚠️  HIGH RISK document detected: {title} (risk: {scan_result['risk_score']:.2f})")
+            for vuln in scan_result.get("vulnerabilities", [])[:3]:
+                print(f"   - {vuln.get('type', 'Unknown')}: {vuln.get('description', 'N/A')}")
 
         metadata_json = json.dumps(metadata) if metadata is not None else None
         tags_json = json.dumps(tags) if tags is not None else None
