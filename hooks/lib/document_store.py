@@ -285,3 +285,122 @@ class DocumentStore:
                 results.append(doc)
 
             return results
+
+    @staticmethod
+    def get_skill(pack: str, mode: str) -> dict | None:
+        """
+        Get a skill document by pack and mode.
+
+        Args:
+            pack: Pack name (e.g., 'core', 'quality')
+            mode: Mode name (e.g., 'build', 'debug')
+
+        Returns:
+            Skill document dict or None if not found
+        """
+        skill_id = f"{pack}:{mode}"
+        with _connect() as c:
+            row = c.execute(
+                """SELECT * FROM ds_documents
+                   WHERE doc_type = 'skill' AND skill_id = ? AND status = 'active'
+                   LIMIT 1""",
+                (skill_id,),
+            ).fetchone()
+
+            if not row:
+                return None
+
+            doc = dict(row)
+
+            # Deserialize JSON fields
+            if doc.get("metadata"):
+                try:
+                    doc["metadata"] = json.loads(doc["metadata"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            if doc.get("tags"):
+                try:
+                    doc["tags"] = json.loads(doc["tags"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            return doc
+
+    @staticmethod
+    def get_skill_gotchas(pack: str, mode: str) -> list[dict]:
+        """
+        Get gotcha documents for a specific skill mode.
+
+        Args:
+            pack: Pack name (e.g., 'core', 'quality')
+            mode: Mode name (e.g., 'build', 'debug')
+
+        Returns:
+            List of gotcha document dicts
+        """
+        skill_id = f"{pack}:{mode}"
+        with _connect() as c:
+            rows = c.execute(
+                """SELECT * FROM ds_documents
+                   WHERE doc_type = 'gotcha' AND skill_id = ? AND status = 'active'
+                   ORDER BY created_at DESC""",
+                (skill_id,),
+            ).fetchall()
+
+            results = []
+            for row in rows:
+                doc = dict(row)
+
+                # Deserialize JSON fields
+                if doc.get("metadata"):
+                    try:
+                        doc["metadata"] = json.loads(doc["metadata"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                if doc.get("tags"):
+                    try:
+                        doc["tags"] = json.loads(doc["tags"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                results.append(doc)
+
+            return results
+
+    @staticmethod
+    def get_team_gotchas() -> list[dict]:
+        """
+        Get team-wide gotcha documents (not associated with a specific skill).
+
+        Returns:
+            List of gotcha document dicts
+        """
+        with _connect() as c:
+            rows = c.execute(
+                """SELECT * FROM ds_documents
+                   WHERE doc_type = 'gotcha' AND skill_id IS NULL AND status = 'active'
+                   ORDER BY created_at DESC""",
+            ).fetchall()
+
+            results = []
+            for row in rows:
+                doc = dict(row)
+
+                # Deserialize JSON fields
+                if doc.get("metadata"):
+                    try:
+                        doc["metadata"] = json.loads(doc["metadata"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                if doc.get("tags"):
+                    try:
+                        doc["tags"] = json.loads(doc["tags"])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                results.append(doc)
+
+            return results

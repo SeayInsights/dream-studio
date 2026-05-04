@@ -20,6 +20,32 @@ import re
 import sys
 from pathlib import Path
 
+# Import DocumentStore and deprecation warning - deferred to avoid import errors at module level
+_DocumentStore = None
+_deprecation = None
+
+def _ensure_imports():
+    """Lazy import DocumentStore and deprecation to handle both module and script contexts."""
+    global _DocumentStore, _deprecation
+    if _DocumentStore is not None:
+        return
+
+    try:
+        from . import deprecation as _dep  # noqa: PLC0415
+        from .document_store import DocumentStore as _DS  # noqa: PLC0415
+        _DocumentStore = _DS
+        _deprecation = _dep
+    except ImportError:
+        # When run as script, add hooks dir (parent of lib) to path
+        import sys as _sys  # noqa: PLC0415
+        _hooks_path = Path(__file__).parent.parent  # hooks dir
+        if str(_hooks_path) not in _sys.path:
+            _sys.path.insert(0, str(_hooks_path))
+        from lib import deprecation as _dep  # type: ignore[import-not-found]  # noqa: PLC0415
+        from lib.document_store import DocumentStore as _DS  # type: ignore[import-not-found]  # noqa: PLC0415
+        _DocumentStore = _DS
+        _deprecation = _dep
+
 # ---------------------------------------------------------------------------
 # Section classification
 # ---------------------------------------------------------------------------
@@ -273,10 +299,28 @@ def compile_context(
     orch_path = root / "skills" / "core" / "orchestration.md"
 
     # ---- 1. Read SKILL.md -------------------------------------------------
-    if not skill_md_path.exists():
-        raise FileNotFoundError(f"SKILL.md not found: {skill_md_path}")
+    # Try SQLite first, fall back to file system with deprecation warning
+    _ensure_imports()
+    skill_text = None
+    try:
+        if _DocumentStore:
+            skill_doc = _DocumentStore.get_skill(pack, skill)
+            if skill_doc:
+                skill_text = skill_doc["content"]
+    except Exception:
+        pass  # Fall back to file system
 
-    skill_text = skill_md_path.read_text(encoding="utf-8")
+    if skill_text is None:
+        # Fallback to file system (deprecated)
+        if not skill_md_path.exists():
+            raise FileNotFoundError(f"SKILL.md not found: {skill_md_path}")
+        if _deprecation:
+            _deprecation.warn_file_read(
+                skill_md_path,
+                f"DocumentStore.get_skill('{pack}', '{skill}')"
+            )
+        skill_text = skill_md_path.read_text(encoding="utf-8")
+
     skill_sections = _extract_skill_sections(skill_text)
 
     # ---- 2. Read orchestration.md (optional) ------------------------------
@@ -290,28 +334,67 @@ def compile_context(
     # Load team gotchas first, then skill-specific gotchas
     gotcha_items: list[dict] = []
 
-    # Team gotchas (if .dream-studio/team/gotchas.yml exists)
+    # Team gotchas - read from SQLite first
     try:
-        # Import team_context - handle both module and script contexts
-        try:
-            from . import team_context  # noqa: PLC0415
-        except ImportError:
-            # When run as script, add hooks/lib to path and import
-            import sys as _sys  # noqa: PLC0415
-            _lib_path = Path(__file__).parent
-            if str(_lib_path) not in _sys.path:
-                _sys.path.insert(0, str(_lib_path))
-            import team_context  # type: ignore[import-not-found]  # noqa: PLC0415
-
-        team_gotchas = team_context.load_team_gotchas()
-        if team_gotchas:
-            filtered_team = _filter_high_gotchas(team_gotchas)
-            gotcha_items.extend(filtered_team)
+        if _DocumentStore:
+            team_gotcha_docs = _DocumentStore.get_team_gotchas()
+            for doc in team_gotcha_docs:
+                # Extract parsed gotchas from metadata
+                metadata = doc.get("metadata", {})
+                parsed = metadata.get("parsed", {})
+                avoid_entries = parsed.get("avoid", [])
+                if avoid_entries:
+                    filtered_team = _filter_high_gotchas(avoid_entries)
+                    gotcha_items.extend(filtered_team)
     except Exception:
-        pass  # Team gotchas are optional, fail gracefully
+        # Fallback to legacy team_context module
+        try:
+            # Import team_context - handle both module and script contexts
+            try:
+                from . import team_context  # noqa: PLC0415
+            except ImportError:
+                # When run as script, add hooks/lib to path and import
+                import sys as _sys  # noqa: PLC0415
+                _lib_path = Path(__file__).parent
+                if str(_lib_path) not in _sys.path:
+                    _sys.path.insert(0, str(_lib_path))
+                import team_context  # type: ignore[import-not-found]  # noqa: PLC0415
 
-    # Skill-specific gotchas
-    if gotchas_path.exists():
+            team_gotchas = team_context.load_team_gotchas()
+            if team_gotchas:
+                if _deprecation:
+                    _deprecation.warn_file_read(
+                        ".dream-studio/team/gotchas.yml",
+                        "DocumentStore.get_team_gotchas()"
+                    )
+                filtered_team = _filter_high_gotchas(team_gotchas)
+                gotcha_items.extend(filtered_team)
+        except Exception:
+            pass  # Team gotchas are optional, fail gracefully
+
+    # Skill-specific gotchas - read from SQLite first
+    skill_gotchas_loaded = False
+    try:
+        if _DocumentStore:
+            skill_gotcha_docs = _DocumentStore.get_skill_gotchas(pack, skill)
+            for doc in skill_gotcha_docs:
+                # Extract parsed gotchas from metadata
+                metadata = doc.get("metadata", {})
+                parsed = metadata.get("parsed", {})
+                avoid_entries = parsed.get("avoid", [])
+                if avoid_entries:
+                    gotcha_items.extend(_filter_high_gotchas(avoid_entries))
+                    skill_gotchas_loaded = True
+    except Exception:
+        pass  # Try file fallback
+
+    # Fallback to file system for skill gotchas ONLY if not found in SQLite
+    if not skill_gotchas_loaded and gotchas_path.exists():
+        if _deprecation:
+            _deprecation.warn_file_read(
+                gotchas_path,
+                f"DocumentStore.get_skill_gotchas('{pack}', '{skill}')"
+            )
         raw_gotchas = gotchas_path.read_text(encoding="utf-8")
         all_entries = _parse_gotchas(raw_gotchas)
         gotcha_items.extend(_filter_high_gotchas(all_entries))
