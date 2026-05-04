@@ -43,6 +43,7 @@ class TestMigrationRunner:
         assert v == 9
         rows = conn2.execute("SELECT COUNT(*) FROM _schema_version").fetchone()[0]
         assert rows == 8, f"Expected 8 migration records, got {rows}"
+        assert rows == 9, f"Expected 9 migration records, got {rows}"
         conn2.close()
 
     def test_existing_db_gets_upgraded(self, tmp_path):
