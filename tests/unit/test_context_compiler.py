@@ -120,8 +120,12 @@ def test_filter_high_gotchas_sorts_critical_first():
 
 
 @pytest.fixture()
-def skill_tree(tmp_path):
+def skill_tree(tmp_path, monkeypatch):
     """Create a minimal dream-studio project structure for compilation."""
+    # Disable DocumentStore for file-based tests
+    import lib.context_compiler as cc
+    monkeypatch.setattr(cc, "_DocumentStore", None)
+
     modes = tmp_path / "skills" / "core" / "modes" / "build"
     modes.mkdir(parents=True)
 
@@ -164,7 +168,21 @@ def test_compile_excludes_trigger_and_examples(skill_tree):
     assert "just an example" not in result
 
 
-def test_compile_includes_kept_sections(skill_tree):
+def test_compile_includes_kept_sections(skill_tree, monkeypatch):
+    # Force DocumentStore to return None so it falls back to file system
+    import lib.context_compiler as cc
+    class MockDS:
+        @staticmethod
+        def get_skill(*args, **kwargs):
+            return None
+        @staticmethod
+        def get_team_gotchas(*args, **kwargs):
+            return []
+        @staticmethod
+        def get_skill_gotchas(*args, **kwargs):
+            return []
+    cc._DocumentStore = MockDS
+
     result = compile_context("build", "core", project_root=str(skill_tree))
     assert "Read plan" in result
     assert "Commit after each task" in result
@@ -177,7 +195,21 @@ def test_compile_includes_orchestration(skill_tree):
     assert "Other stuff" not in result
 
 
-def test_compile_includes_high_gotchas_only(skill_tree):
+def test_compile_includes_high_gotchas_only(skill_tree, monkeypatch):
+    # Force DocumentStore to return None so it falls back to file system
+    import lib.context_compiler as cc
+    class MockDS:
+        @staticmethod
+        def get_skill(*args, **kwargs):
+            return None
+        @staticmethod
+        def get_team_gotchas(*args, **kwargs):
+            return []
+        @staticmethod
+        def get_skill_gotchas(*args, **kwargs):
+            return []
+    cc._DocumentStore = MockDS
+
     result = compile_context("build", "core", project_root=str(skill_tree))
     assert "SQL injection" in result
     assert "Don't debug inline" in result
