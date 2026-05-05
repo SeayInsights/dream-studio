@@ -31,7 +31,7 @@ def get_db_connection():
 
 # ── HTTP Endpoints ───────────────────────────────────────────────────────────
 
-@router.get("/projects")
+@router.get("")
 async def list_projects(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0)
@@ -45,16 +45,26 @@ async def list_projects(
     try:
         cursor = conn.cursor()
 
-        # Get total count
-        count_query = "SELECT COUNT(*) as total FROM reg_projects WHERE last_analyzed IS NOT NULL"
+        # Get total count of distinct projects
+        count_query = "SELECT COUNT(DISTINCT project_path) as total FROM reg_projects WHERE project_name IS NOT NULL"
         total = cursor.execute(count_query).fetchone()["total"]
 
-        # Get projects with pagination
+        # Get projects with pagination (deduplicated by path, prioritizing entries with most sessions)
         query = """
+        WITH ranked_projects AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY project_path
+                    ORDER BY total_sessions DESC, last_analyzed DESC
+                ) as rn
+            FROM reg_projects
+            WHERE project_name IS NOT NULL
+        )
         SELECT
             project_id,
             project_name,
-            project_root,
+            project_path,
             stack_detected,
             health_score,
             security_score,
@@ -62,10 +72,11 @@ async def list_projects(
             total_files,
             lines_of_code,
             first_analyzed,
-            last_analyzed
-        FROM reg_projects
-        WHERE last_analyzed IS NOT NULL
-        ORDER BY last_analyzed DESC
+            last_analyzed,
+            total_sessions
+        FROM ranked_projects
+        WHERE rn = 1
+        ORDER BY total_sessions DESC, last_analyzed DESC
         LIMIT ? OFFSET ?
         """
 
@@ -107,7 +118,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         SELECT
             project_id,
             project_name,
-            project_root,
+            project_path,
             stack_detected,
             stack_json,
             health_score,
