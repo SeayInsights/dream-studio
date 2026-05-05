@@ -139,7 +139,7 @@ erDiagram
     
     reg_gotchas {
         TEXT gotcha_id PK
-        TEXT skill_id PK FK
+        TEXT skill_id PK
         TEXT severity
         TEXT title
         TEXT context
