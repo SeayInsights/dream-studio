@@ -75,6 +75,10 @@ known_skills:
     triggers: ["/analyze", "analyze:", "multi-perspective", "help me decide"]
     description: Multi-perspective decision analysis
 
+  - skill: intelligence
+    triggers: ["analyze project:", "project intelligence:", "scan codebase:"]
+    description: Comprehensive project intelligence analysis
+
   - skill: handoff
     triggers: ["handoff:", "pass context", "session state", "hand off to next session"]
     description: Session continuity capture
