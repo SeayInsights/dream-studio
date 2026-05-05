@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Chain suggestions restored** — `on-skill-complete.py` now reads `chain_suggests` from config.yml instead of stripped SKILL.md frontmatter (#85)
 
 ### Changed
+- **Visual architecture documentation** — created simplified root `ARCHITECTURE.md` with Mermaid diagrams (system overview, database ERD, session lifecycle) as visual front-door for GitHub browsers; updated `/refresh-architecture` command to maintain consistency between root and detailed docs
 - **Documentation** — updated 10 files with stale "SKILL.md frontmatter" references to reflect config.yml as the metadata SSOT (#85)
 - **Workflow coverage** — token efficiency improvements and feature activation gates (#48)
 - **Linux gh install** — corrected install command; Mac Python symlink fix (#47)

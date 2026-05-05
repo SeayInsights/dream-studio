@@ -192,21 +192,53 @@ Write workflow documentation with sequence diagrams and state machines:
 
 ---
 
-### Step 7: Update README.md
+### Step 7: Generate Root ARCHITECTURE.md
+
+Create a simplified visual summary at the repository root as the front-door view for GitHub browsers:
+
+**Structure:**
+1. **One opening sentence** describing what the project is
+2. **System Overview** — Mermaid flowchart LR showing major components from `docs/ARCHITECTURE.md`
+   - Use `classDef` to color by type (clients, services, storage)
+   - Maximum 3-4 color classes
+   - NO file-path subtitles (keep it clean)
+   - End with: `**Details:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)`
+3. **Database** — Mermaid erDiagram showing every table from `docs/DATABASE.md` with FK relationships
+   - Omit column lists entirely (just table names and crow's-foot connectors)
+   - End with: `**Details:** [docs/DATABASE.md](docs/DATABASE.md)`
+4. **Session Lifecycle** (or most representative workflow) — Mermaid sequenceDiagram
+   - Show primary workflow end-to-end from `docs/WORKFLOWS.md`
+   - End with: `**Details:** [docs/WORKFLOWS.md](docs/WORKFLOWS.md)`
+
+**Verify Consistency:**
+- Every component in root appears in `docs/ARCHITECTURE.md`
+- Every table in root ERD appears in `docs/DATABASE.md` ERD
+- Root sequence diagram matches a workflow in `docs/WORKFLOWS.md`
+- Component names, table names, workflow shape match exactly
+
+**Constraints:**
+- Diagrams only, no column lists or implementation tables
+- All diagrams in triple-backtick Mermaid code fences
+- Fit in roughly one screen of scrolling on github.com
+
+---
+
+### Step 8: Update README.md
 
 Add or update the Architecture section in README.md:
 
 1. **Location:** After "Token Overhead" section, before "Requirements"
 2. **Content:**
    - 2-3 paragraph summary of architecture (two-layer, local-first, SQLite-backed)
-   - Link list to the three docs with brief descriptions
+   - Prominent link to root `ARCHITECTURE.md` for visual overview
+   - Link list to the three detailed docs with brief descriptions
 3. **Table of Contents:** Add `- [Architecture](#architecture)` entry
 
 **Important:** Don't duplicate content from the docs in README - it's a pointer only.
 
 ---
 
-### Step 8: Verify and Commit
+### Step 9: Verify and Commit
 
 1. **Verify changes:**
    - Check that all Mermaid diagrams render correctly (use GitHub preview or Markdown preview)
@@ -215,10 +247,11 @@ Add or update the Architecture section in README.md:
 
 2. **Commit:**
    ```bash
-   git add docs/ARCHITECTURE.md docs/DATABASE.md docs/WORKFLOWS.md README.md
+   git add ARCHITECTURE.md docs/ARCHITECTURE.md docs/DATABASE.md docs/WORKFLOWS.md README.md
    git commit -m "docs: refresh architecture documentation
 
    Regenerated from current codebase state. Updated:
+   - Root ARCHITECTURE.md (visual summary with Mermaid diagrams)
    - Component diagram with current directory structure
    - Database schema (N migrations)
    - Workflow sequences with latest hook execution order
@@ -230,10 +263,11 @@ Add or update the Architecture section in README.md:
 ## Output
 
 When complete, you should have:
+- `ARCHITECTURE.md` - Simplified visual summary (diagrams only, links to detailed docs)
 - `docs/ARCHITECTURE.md` - Updated system overview with current components
 - `docs/DATABASE.md` - Current schema with all tables from latest migrations
 - `docs/WORKFLOWS.md` - Current workflow sequences
-- `README.md` - Updated Architecture section
+- `README.md` - Updated Architecture section with link to root ARCHITECTURE.md
 
 **Note:** This command does NOT push to GitHub - just commits locally. Push manually when ready.
 
