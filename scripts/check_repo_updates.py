@@ -7,7 +7,6 @@ database if changed.
 """
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +17,7 @@ import requests
 # Add hooks to path for database access
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 from lib.studio_db import _connect  # noqa: E402
+from lib.repo_analyzer import analyze_repo  # noqa: E402
 
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -247,9 +247,14 @@ def main() -> int:
             print(f"    {update['old_sha'][:8]} -> {update['new_sha'][:8]}")
 
             # Check if high-trust and should be queued for re-analysis
-            if args.reanalyze_high_trust and update['trust_score'] >= 0.9:
+            if args.reanalyze_high_trust and update['trust_score'] is not None and update['trust_score'] >= 0.9:
                 print(f"    (High-trust repo, queued for re-analysis)")
-                # TODO: In Wave 1, actually queue the re-analysis task
+                try:
+                    # Re-analyze the repo to extract updated patterns/blocks
+                    result = analyze_repo(update['repo_name'], shallow=True)
+                    print(f"    Re-analysis complete: {result['patterns_count']} patterns, {result['building_blocks_count']} blocks")
+                except Exception as e:
+                    print(f"    [!] Re-analysis failed: {e}")
 
         if errors:
             print(f"\nErrors checking {len(errors)} repos:")
