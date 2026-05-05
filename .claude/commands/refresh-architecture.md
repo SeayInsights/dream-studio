@@ -210,12 +210,6 @@ Create a simplified visual summary at the repository root as the front-door view
    - Show primary workflow end-to-end from `docs/WORKFLOWS.md`
    - End with: `**Details:** [docs/WORKFLOWS.md](docs/WORKFLOWS.md)`
 
-**Verify Consistency:**
-- Every component in root appears in `docs/ARCHITECTURE.md`
-- Every table in root ERD appears in `docs/DATABASE.md` ERD
-- Root sequence diagram matches a workflow in `docs/WORKFLOWS.md`
-- Component names, table names, workflow shape match exactly
-
 **Constraints:**
 - Diagrams only, no column lists or implementation tables
 - All diagrams in triple-backtick Mermaid code fences
@@ -223,22 +217,94 @@ Create a simplified visual summary at the repository root as the front-door view
 
 ---
 
-### Step 8: Update README.md
+### Step 8: Generate Root DATABASE.md
 
-Add or update the Architecture section in README.md:
+Create a simplified database schema view at the repository root:
 
-1. **Location:** After "Token Overhead" section, before "Requirements"
-2. **Content:**
+**Structure:**
+1. **One opening sentence** describing what the database is (SQLite in WAL mode, SSOT for telemetry/sessions/workflows/intelligence)
+2. **Schema Overview** — Mermaid erDiagram showing every table from `docs/DATABASE.md` with FK relationships
+   - Omit column lists entirely (just table names and crow's-foot connectors)
+   - Include table count summary (e.g., "**31 tables** tracking projects, sessions, skills...")
+   - Include location, mode, and key settings (WAL, synchronous, foreign_keys, busy_timeout)
+   - End with: `**Details:** [docs/DATABASE.md](docs/DATABASE.md)`
+
+**Constraints:**
+- Single ERD diagram with no column details
+- Clean, scannable view for GitHub browsers
+- All metadata in prose, not tables
+
+---
+
+### Step 9: Generate Root WORKFLOWS.md
+
+Create a progressive disclosure workflow view at the repository root:
+
+**Structure:**
+1. **One opening sentence** describing what the harness does
+2. **Overview diagram** — Mermaid sequenceDiagram titled "Session lifecycle" (as ## heading)
+   - Maximum 4 participants (collapse all hooks into single "Hooks" actor)
+   - Happy path only — no alt/opt/loop blocks in overview
+   - Maximum ~12 messages
+   - Messages describe outcomes, not implementation
+   - Actors are roles, never filenames
+3. **Bridging paragraph** identifying subsystems (e.g., "session bootstrapping, health monitoring, context budget enforcement, shutdown persistence")
+4. **Detail subsections** under ### headings (one per subsystem)
+   - Focused Mermaid sequenceDiagram with 3 participants max
+   - 1-2 sentences of prose per subsection
+   - alt/else blocks allowed in detail diagrams
+   - For threshold logic (e.g., context budget), use markdown table not diagram
+5. End with: `**Details:** [docs/WORKFLOWS.md](docs/WORKFLOWS.md)`
+
+**Constraints:**
+- Overview gives right mental model; details provide full picture
+- No single diagram should be overwhelming
+- All content grounded in `docs/WORKFLOWS.md` — no invention
+
+---
+
+### Step 10: Update README.md
+
+Update the README with navigation badges and architecture section:
+
+1. **Navigation badges** — Add second row of shields.io badges after status badges:
+   - Architecture badge (purple 7B61FF) → `ARCHITECTURE.md`
+   - Database badge (teal 1D9E75) → `DATABASE.md`
+   - Workflows badge (pink D4537E) → `WORKFLOWS.md`
+   - Full Docs badge (blue 185FA5) → `docs/`
+   - Separated from status badges by blank line
+2. **Architecture section** — After "Token Overhead" section, before "Requirements":
    - 2-3 paragraph summary of architecture (two-layer, local-first, SQLite-backed)
    - Prominent link to root `ARCHITECTURE.md` for visual overview
    - Link list to the three detailed docs with brief descriptions
-3. **Table of Contents:** Add `- [Architecture](#architecture)` entry
+3. **Table of Contents:** Add `- [Architecture](#architecture)` entry if missing
 
 **Important:** Don't duplicate content from the docs in README - it's a pointer only.
 
 ---
 
-### Step 9: Verify and Commit
+### Step 11: Verify Consistency
+
+Before committing, verify:
+
+1. **Root files match docs:**
+   - Every component in `ARCHITECTURE.md` appears in `docs/ARCHITECTURE.md`
+   - Every table in `DATABASE.md` ERD appears in `docs/DATABASE.md` ERD
+   - Every subsystem in `WORKFLOWS.md` appears in `docs/WORKFLOWS.md`
+   - Component names, table names, workflow shape match exactly
+
+2. **All files exist:**
+   - `ARCHITECTURE.md`, `DATABASE.md`, `WORKFLOWS.md` at repo root
+   - `docs/ARCHITECTURE.md`, `docs/DATABASE.md`, `docs/WORKFLOWS.md`
+   - Navigation badges link to correct files
+
+3. **Diagrams render:**
+   - All Mermaid code fences use ```mermaid syntax
+   - No syntax errors in diagrams
+
+---
+
+### Step 12: Commit
 
 1. **Verify changes:**
    - Check that all Mermaid diagrams render correctly (use GitHub preview or Markdown preview)
@@ -247,14 +313,15 @@ Add or update the Architecture section in README.md:
 
 2. **Commit:**
    ```bash
-   git add ARCHITECTURE.md docs/ARCHITECTURE.md docs/DATABASE.md docs/WORKFLOWS.md README.md
+   git add ARCHITECTURE.md DATABASE.md WORKFLOWS.md docs/ARCHITECTURE.md docs/DATABASE.md docs/WORKFLOWS.md README.md
    git commit -m "docs: refresh architecture documentation
 
    Regenerated from current codebase state. Updated:
-   - Root ARCHITECTURE.md (visual summary with Mermaid diagrams)
-   - Component diagram with current directory structure
-   - Database schema (N migrations)
-   - Workflow sequences with latest hook execution order
+   - Root ARCHITECTURE.md (system overview, database ERD, session lifecycle)
+   - Root DATABASE.md (schema overview with 31 tables)
+   - Root WORKFLOWS.md (progressive disclosure: overview + 4 subsystems)
+   - Detailed docs (component diagram, database schema, workflow sequences)
+   - README.md (navigation badges + architecture section)
    "
    ```
 
@@ -263,11 +330,13 @@ Add or update the Architecture section in README.md:
 ## Output
 
 When complete, you should have:
-- `ARCHITECTURE.md` - Simplified visual summary (diagrams only, links to detailed docs)
-- `docs/ARCHITECTURE.md` - Updated system overview with current components
-- `docs/DATABASE.md` - Current schema with all tables from latest migrations
-- `docs/WORKFLOWS.md` - Current workflow sequences
-- `README.md` - Updated Architecture section with link to root ARCHITECTURE.md
+- `ARCHITECTURE.md` - Visual summary with system overview, database ERD, session lifecycle
+- `DATABASE.md` - Schema overview with ERD (no column lists)
+- `WORKFLOWS.md` - Progressive disclosure with overview + focused subsections
+- `docs/ARCHITECTURE.md` - Full system overview with current components
+- `docs/DATABASE.md` - Complete schema with all tables from latest migrations
+- `docs/WORKFLOWS.md` - Full workflow sequences with implementation details
+- `README.md` - Navigation badges + architecture section
 
 **Note:** This command does NOT push to GitHub - just commits locally. Push manually when ready.
 
