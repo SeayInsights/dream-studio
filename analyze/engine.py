@@ -51,7 +51,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     """
     path = Path(path).resolve()
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    project_id = f"proj_{path.name}_{uuid.uuid4().hex[:8]}"
     started_at = datetime.now(timezone.utc).isoformat()
     start_time = time.time()
 
@@ -61,6 +60,28 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     registry.register(AstroAdapter())
     registry.register(PythonGenericAdapter())
 
+    conn = _connect()
+    cursor = conn.cursor()
+
+    # Check if project already exists by path
+    cursor.execute("""
+        SELECT project_id FROM reg_projects WHERE project_path = ?
+    """, (str(path),))
+    existing_project = cursor.fetchone()
+
+    if existing_project:
+        project_id = existing_project[0]
+    else:
+        # Generate new project_id only if not found
+        project_id = f"proj_{path.name}_{uuid.uuid4().hex[:8]}"
+        project_name = path.name
+        cursor.execute("""
+            INSERT INTO reg_projects (
+                project_id, project_path, project_name, created_at
+            ) VALUES (?, ?, ?, ?)
+        """, (project_id, str(path), project_name, started_at))
+        conn.commit()
+
     result = {
         "run_id": run_id,
         "project_id": project_id,
@@ -69,19 +90,7 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         "duration_seconds": 0.0,
     }
 
-    conn = _connect()
-    cursor = conn.cursor()
-
     try:
-        # Create project record first (required for foreign key constraint)
-        project_name = path.name
-        cursor.execute("""
-            INSERT OR IGNORE INTO reg_projects (
-                project_id, project_path, project_name, created_at
-            ) VALUES (?, ?, ?, ?)
-        """, (project_id, str(path), project_name, started_at))
-        conn.commit()
-
         # Create analysis run record
         cursor.execute("""
             INSERT INTO pi_analysis_runs (
