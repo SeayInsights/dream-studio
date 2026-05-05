@@ -19,6 +19,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+# Add project root to Python path for analyze module imports
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -71,50 +75,44 @@ Examples:
     # Validate path
     project_path = Path(args.path).resolve()
     if not project_path.exists():
-        print(f"❌ Error: Path does not exist: {project_path}", file=sys.stderr)
+        print(f"[ERROR] Path does not exist: {project_path}", file=sys.stderr)
         sys.exit(1)
 
     if not project_path.is_dir():
-        print(f"❌ Error: Path is not a directory: {project_path}", file=sys.stderr)
+        print(f"[ERROR] Path is not a directory: {project_path}", file=sys.stderr)
         sys.exit(1)
 
     # Check for analyze.engine
     try:
         from analyze.engine import analyze_project
     except ImportError as e:
-        print(f"❌ Error: Project intelligence engine not installed", file=sys.stderr)
+        print(f"[ERROR] Project intelligence engine not installed", file=sys.stderr)
         print(f"The intelligence mode requires Waves 0-4 of project-intelligence to be complete.", file=sys.stderr)
         print(f"Missing module: analyze.engine", file=sys.stderr)
         print(f"\nImport error: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Determine analysis mode
-    run_type = "full"
-    skip_phases = []
-
-    if args.quick:
-        run_type = "quick"
-        skip_phases = ["research"]
-
     if args.incremental:
         run_type = "incremental"
+    elif args.quick:
+        run_type = "targeted"  # Quick mode = targeted analysis (skips research)
+    else:
+        run_type = "full"
 
     # Run analysis
     if args.verbose:
-        print(f"🔍 Analyzing project: {project_path}")
+        print(f"Analyzing project: {project_path}")
         print(f"   Mode: {run_type}")
-        if skip_phases:
-            print(f"   Skipping phases: {', '.join(skip_phases)}")
         print()
 
     try:
         result = analyze_project(
             path=project_path,
-            run_type=run_type,
-            skip_phases=skip_phases
+            run_type=run_type
         )
     except Exception as e:
-        print(f"❌ Analysis failed: {e}", file=sys.stderr)
+        print(f"[ERROR] Analysis failed: {e}", file=sys.stderr)
         print(f"\nPartial results may be available in the database.", file=sys.stderr)
         print(f"Check logs for details: cat ~/.dream-studio/logs/analysis-errors.log", file=sys.stderr)
         sys.exit(1)
@@ -133,50 +131,50 @@ def display_results(result: dict, project_path: Path, verbose: bool = False):
         print(f"❌ Analysis failed: {error_msg}", file=sys.stderr)
         return
 
-    print("✅ Project Intelligence Analysis Complete\n")
+    print("[SUCCESS] Project Intelligence Analysis Complete\n")
 
     # Health score
     health_score = result.get("health_score", 0)
     health_interpretation = get_health_interpretation(health_score)
-    print(f"📊 Health Score: {health_score}/10")
+    print(f"Health Score: {health_score}/10")
     print(f"   {health_interpretation}\n")
 
     # Stack detection
     stack_name = result.get("stack", {}).get("name", "Unknown")
     stack_confidence = result.get("stack", {}).get("confidence", 0) * 100
-    print(f"🔍 Stack Detected: {stack_name} (confidence: {stack_confidence:.0f}%)\n")
+    print(f"Stack Detected: {stack_name} (confidence: {stack_confidence:.0f}%)\n")
 
     # Findings
     violations = result.get("violations_found", 0)
     bugs = result.get("bugs_found", 0)
     improvements = result.get("improvements_suggested", 0)
 
-    print(f"📈 Findings:")
-    print(f"   • {violations} architecture violations")
-    print(f"   • {bugs} bugs detected")
-    print(f"   • {improvements} improvement opportunities\n")
+    print(f"Findings:")
+    print(f"   - {violations} architecture violations")
+    print(f"   - {bugs} bugs detected")
+    print(f"   - {improvements} improvement opportunities\n")
 
     # PRD
     prd_path = result.get("prd_path")
     if prd_path:
-        print(f"📄 PRD Generated: {prd_path}\n")
+        print(f"PRD Generated: {prd_path}\n")
 
     # Dashboard link
-    print(f"🔗 View in Dashboard:")
+    print(f"View in Dashboard:")
     print(f"   Launch dashboard: py scripts/ds_dashboard.py")
-    print(f"   Navigate to Projects tab → {project_path.name}\n")
+    print(f"   Navigate to Projects tab -> {project_path.name}\n")
 
     # Next steps (top recommendations from improvements)
     recommendations = result.get("top_recommendations", [])
     if recommendations:
-        print(f"📋 Next Steps:")
+        print(f"Next Steps:")
         for i, rec in enumerate(recommendations[:3], 1):
             print(f"   {i}. {rec}")
         print()
 
     # Verbose output
     if verbose:
-        print("🔧 Detailed Results:")
+        print("Detailed Results:")
         print(f"   Run ID: {result.get('run_id', 'N/A')}")
         print(f"   Project ID: {result.get('project_id', 'N/A')}")
 
@@ -185,7 +183,7 @@ def display_results(result: dict, project_path: Path, verbose: bool = False):
 
         phases = result.get("phases_completed", [])
         if phases:
-            print(f"   Phases: {' → '.join(phases)}")
+            print(f"   Phases: {' -> '.join(phases)}")
 
 
 def get_health_interpretation(score: float) -> str:
