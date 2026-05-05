@@ -24,8 +24,10 @@ def research_stack(stack: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[
             "research_notes": str
         }
     """
-    stack_name = stack.get("framework", "unknown").lower()
-    detected_stack = project_data.get("detected_stack", "").lower()
+    framework = stack.get("framework", "unknown")
+    stack_name = (framework or "unknown").lower()
+    detected = project_data.get("detected_stack", "")
+    detected_stack = (detected or "").lower()
 
     # Static knowledge base (placeholder for web search)
     knowledge = _get_stack_knowledge(detected_stack or stack_name)
