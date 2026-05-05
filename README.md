@@ -91,6 +91,8 @@ py scripts/benchmark_tokens.py --run-label <your-session-label> --publish
 
 ## Architecture
 
+**See [ARCHITECTURE.md](ARCHITECTURE.md) for a visual overview of the system.**
+
 dream-studio follows a two-layer architecture: a Python hook runtime that responds to Claude Code lifecycle events, and a markdown-based skill system that guides Claude's behavior. All state is persisted to a local SQLite database in WAL mode, serving as the single source of truth for telemetry, sessions, workflows, and project intelligence.
 
 The system is designed for local-first operation with no external dependencies (GitHub API is optional for health checks). Hooks batch into dispatchers to minimize overhead, all database writes use retry logic for graceful concurrent access, and skills are stateless markdown files that can be version-controlled with your project.
