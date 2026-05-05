@@ -21,6 +21,7 @@
 | multi | modes/multi/SKILL.md | analyze:, evaluate idea:, /analyze |
 | domain-re | modes/domain-re/SKILL.md | domain-re:, real estate:, /domain-re |
 | repo | modes/repo/SKILL.md | analyze repo:, repo patterns:, compare repos:, repo analysis: |
+| intelligence | modes/intelligence/SKILL.md | analyze project:, project intelligence:, scan codebase: |
 
 ## Shared resources
 

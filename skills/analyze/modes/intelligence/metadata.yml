@@ -1,0 +1,51 @@
+# Required fields
+name: intelligence
+version: 1.0.0
+pack: analyze
+created_at: 2026-05-05
+updated_at: 2026-05-05
+
+# Evolution tracking
+origin: project-intelligence-wave-5
+parent_skills: []
+generation: 0
+created_by: wave-executor
+
+# Quality & Health
+status: tested
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+# Performance metrics
+quality_metrics:
+  times_used: 0
+  success_rate: 0.0
+  avg_token_usage: 0
+  avg_execution_time_seconds: 0
+  last_success: null
+  last_failure: null
+
+# Failure patterns
+common_failures: []
+
+# Dependencies
+dependencies:
+  core_modules: [analyze.engine, analyze.discovery, analyze.audit, analyze.bugs, analyze.synthesis]
+  tools_required: [python, git]
+  env_vars_required: []
+  files_required: [~/.dream-studio/state/studio.db]
+  calls_skills: []
+
+# Compatibility
+compatibility:
+  min_context_window: 100000
+  works_best_with: sonnet
+  works_with: [haiku, sonnet, opus]
+  platforms: [windows, macos, linux]
+
+# Discovery
+tags: [analysis, intelligence, health, prd, stack-detection]
+category: analysis
+triggers: ["analyze project:", "project intelligence:", "scan codebase:"]
+description: "Comprehensive project intelligence analysis with stack detection, PRD generation, health scoring, violation detection, and bug analysis."

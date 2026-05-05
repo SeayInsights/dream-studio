@@ -204,6 +204,11 @@
                         data-tab="anomalies">
                     Anomalies
                 </button>
+                <button onclick="switchTab('projects')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="projects">
+                    Projects
+                </button>
             </nav>
         </div>
     </div>
@@ -763,6 +768,113 @@
                 </div>
             </div>
         </div>
+
+        <!-- Projects Tab -->
+        <div id="projects" class="tab-content">
+            <!-- Summary Stats -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Project Intelligence Summary</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Total Projects</div>
+                        <div id="projects-total" class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Average Health Score</div>
+                        <div id="projects-avg-health" class="mt-2 text-2xl font-bold text-gray-900">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Critical Bugs</div>
+                        <div id="projects-critical-bugs" class="mt-2 text-2xl font-bold text-red-600">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Open Violations</div>
+                        <div id="projects-open-violations" class="mt-2 text-2xl font-bold text-yellow-600">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects List -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Analyzed Projects</h2>
+                <div id="projects-list" class="grid grid-cols-1 gap-4">
+                    <!-- Project cards will be populated here -->
+                    <div class="text-center text-gray-500 py-8">Loading projects...</div>
+                </div>
+            </div>
+
+            <!-- Project Detail Modal (hidden by default) -->
+            <div id="project-detail-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+                <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-2/3 shadow-lg rounded-md bg-white">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 id="modal-project-name" class="text-2xl font-bold text-gray-900"></h3>
+                            <p id="modal-project-path" class="text-sm text-gray-600 mt-1"></p>
+                        </div>
+                        <button onclick="closeProjectModal()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Health Scores -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Overall Health</div>
+                            <div id="modal-health-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                            <div id="modal-health-interpretation" class="mt-1 text-xs text-gray-500">--</div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Security Score</div>
+                            <div id="modal-security-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4 text-center">
+                            <div class="text-sm font-medium text-gray-600">Maintainability</div>
+                            <div id="modal-maintainability-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Findings -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                            <div class="text-sm font-medium text-red-800">Bugs</div>
+                            <div id="modal-bugs" class="mt-2 text-2xl font-bold text-red-900">--</div>
+                            <div id="modal-bugs-breakdown" class="mt-2 text-xs text-red-700">--</div>
+                        </div>
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <div class="text-sm font-medium text-yellow-800">Violations</div>
+                            <div id="modal-violations" class="mt-2 text-2xl font-bold text-yellow-900">--</div>
+                            <div id="modal-violations-breakdown" class="mt-2 text-xs text-yellow-700">--</div>
+                        </div>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="text-sm font-medium text-blue-800">Improvements</div>
+                            <div id="modal-improvements" class="mt-2 text-2xl font-bold text-blue-900">--</div>
+                            <div id="modal-improvements-breakdown" class="mt-2 text-xs text-blue-700">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Analysis History Chart -->
+                    <div class="mb-6">
+                        <h4 class="text-lg font-semibold text-gray-900 mb-3">Health Trend</h4>
+                        <div class="relative h-64">
+                            <canvas id="modal-health-trend-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Latest Analysis Info -->
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <h4 class="text-sm font-semibold text-gray-900 mb-2">Latest Analysis</h4>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div><span class="text-gray-600">Run ID:</span> <span id="modal-run-id" class="font-mono text-gray-900">--</span></div>
+                            <div><span class="text-gray-600">Status:</span> <span id="modal-run-status" class="font-semibold">--</span></div>
+                            <div><span class="text-gray-600">Started:</span> <span id="modal-run-started" class="text-gray-900">--</span></div>
+                            <div><span class="text-gray-600">Duration:</span> <span id="modal-run-duration" class="text-gray-900">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->
@@ -783,7 +895,8 @@
             workflows: false,
             alerts: false,
             ml: false,
-            anomalies: false
+            anomalies: false,
+            projects: false
         };
 
         function switchTab(tabName) {
@@ -827,6 +940,9 @@
             } else if (tabName === 'anomalies' && !tabsInitialized.anomalies) {
                 tabsInitialized.anomalies = true;
                 initAnomaliesTab();
+            } else if (tabName === 'projects' && !tabsInitialized.projects) {
+                tabsInitialized.projects = true;
+                initProjectsTab();
             }
         }
 
@@ -4363,6 +4479,270 @@
             // Chart.js handles resize automatically with responsive: true
             // This is just a placeholder for any custom resize logic
         });
+
+        // ========================================
+        // Projects Tab Implementation
+        // ========================================
+
+        async function initProjectsTab() {
+            console.log('Initializing Projects tab...');
+
+            try {
+                // Fetch projects data
+                const projectsData = await fetch('/api/v1/projects?limit=50').then(r => r.ok ? r.json() : null);
+
+                if (!projectsData) {
+                    console.warn('No projects data available');
+                    document.getElementById('projects-list').innerHTML =
+                        '<div class="text-center text-gray-500 py-8">No projects analyzed yet.</div>';
+                    return;
+                }
+
+                // Update summary stats
+                updateProjectsSummary(projectsData);
+
+                // Render projects list
+                renderProjectsList(projectsData.projects || []);
+
+                console.log('Projects tab initialized successfully');
+            } catch (error) {
+                console.error('Error initializing Projects tab:', error);
+                document.getElementById('projects-list').innerHTML =
+                    '<div class="text-center text-red-500 py-8">Error loading projects.</div>';
+            }
+        }
+
+        function updateProjectsSummary(data) {
+            const projects = data.projects || [];
+            const totalProjects = data.total || projects.length;
+
+            // Calculate average health score
+            const healthScores = projects.filter(p => p.health_score != null).map(p => p.health_score);
+            const avgHealth = healthScores.length > 0
+                ? (healthScores.reduce((a, b) => a + b, 0) / healthScores.length).toFixed(1)
+                : 'N/A';
+
+            // This would need additional API calls to get bug/violation counts across all projects
+            // For now, we'll show placeholders
+            const criticalBugs = '--';
+            const openViolations = '--';
+
+            document.getElementById('projects-total').textContent = totalProjects;
+            document.getElementById('projects-avg-health').textContent = avgHealth !== 'N/A' ? `${avgHealth}/10` : avgHealth;
+            document.getElementById('projects-critical-bugs').textContent = criticalBugs;
+            document.getElementById('projects-open-violations').textContent = openViolations;
+        }
+
+        function renderProjectsList(projects) {
+            const container = document.getElementById('projects-list');
+
+            if (projects.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-8">No projects analyzed yet.</div>';
+                return;
+            }
+
+            container.innerHTML = projects.map(project => {
+                const healthScore = project.health_score != null ? project.health_score.toFixed(1) : 'N/A';
+                const healthColor = getHealthColor(project.health_score);
+                const healthInterpretation = getHealthInterpretation(project.health_score);
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow cursor-pointer"
+                         onclick="showProjectDetail('${project.project_id}')">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-gray-900">${project.project_name}</h3>
+                                <p class="text-sm text-gray-600 mt-1">${project.project_root}</p>
+                            </div>
+                            <div class="ml-4">
+                                <div class="relative w-24 h-24">
+                                    <svg class="transform -rotate-90" width="96" height="96" viewBox="0 0 96 96">
+                                        <circle cx="48" cy="48" r="40" fill="none" stroke="#e5e7eb" stroke-width="8"></circle>
+                                        <circle cx="48" cy="48" r="40" fill="none" stroke="${healthColor}" stroke-width="8"
+                                                stroke-dasharray="${(project.health_score / 10 * 251).toFixed(2)} 251"
+                                                stroke-linecap="round"></circle>
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span class="text-2xl font-bold ${healthColor === '#10b981' ? 'text-green-600' : healthColor === '#f59e0b' ? 'text-yellow-600' : 'text-red-600'}">
+                                            ${healthScore}
+                                        </span>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-center text-gray-600 mt-1">${healthInterpretation}</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-600">Stack:</span>
+                                <span class="font-medium text-gray-900">${project.stack_detected || 'Unknown'}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600">Files:</span>
+                                <span class="font-medium text-gray-900">${project.total_files || 'N/A'}</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-600">Last Analyzed:</span>
+                                <span class="font-medium text-gray-900">
+                                    ${project.last_analyzed ? new Date(project.last_analyzed).toLocaleDateString() : 'Never'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function showProjectDetail(projectId) {
+            try {
+                // Fetch project health details
+                const healthData = await fetch(`/api/v1/projects/${projectId}/health`).then(r => r.ok ? r.json() : null);
+
+                if (!healthData) {
+                    console.error('Failed to fetch project details');
+                    return;
+                }
+
+                // Populate modal with data
+                const project = healthData.project;
+                const health = healthData.health;
+                const violations = healthData.violations || {};
+                const bugs = healthData.bugs || {};
+                const improvements = healthData.improvements || {};
+                const latestRun = healthData.latest_run;
+
+                document.getElementById('modal-project-name').textContent = project.project_name;
+                document.getElementById('modal-project-path').textContent = project.project_root;
+
+                document.getElementById('modal-health-score').textContent = health.overall_score != null ? `${health.overall_score.toFixed(1)}/10` : 'N/A';
+                document.getElementById('modal-health-interpretation').textContent = getHealthInterpretation(health.overall_score);
+                document.getElementById('modal-security-score').textContent = health.security_score != null ? `${health.security_score.toFixed(1)}/10` : 'N/A';
+                document.getElementById('modal-maintainability-score').textContent = health.maintainability_score != null ? `${health.maintainability_score.toFixed(1)}/10` : 'N/A';
+
+                // Bugs
+                const totalBugs = Object.values(bugs).reduce((a, b) => a + b, 0);
+                document.getElementById('modal-bugs').textContent = totalBugs;
+                document.getElementById('modal-bugs-breakdown').textContent =
+                    `Critical: ${bugs.critical || 0}, High: ${bugs.high || 0}, Medium: ${bugs.medium || 0}`;
+
+                // Violations
+                const totalViolations = Object.values(violations).reduce((a, b) => a + b, 0);
+                document.getElementById('modal-violations').textContent = totalViolations;
+                document.getElementById('modal-violations-breakdown').textContent =
+                    `Critical: ${violations.critical || 0}, High: ${violations.high || 0}, Medium: ${violations.medium || 0}`;
+
+                // Improvements
+                const totalImprovements = Object.values(improvements).reduce((a, b) => a + b, 0);
+                document.getElementById('modal-improvements').textContent = totalImprovements;
+                document.getElementById('modal-improvements-breakdown').textContent =
+                    `High: ${improvements.high || 0}, Medium: ${improvements.medium || 0}, Low: ${improvements.low || 0}`;
+
+                // Latest run info
+                if (latestRun) {
+                    document.getElementById('modal-run-id').textContent = latestRun.run_id || 'N/A';
+                    document.getElementById('modal-run-status').textContent = latestRun.status || 'N/A';
+                    document.getElementById('modal-run-started').textContent = latestRun.started_at
+                        ? new Date(latestRun.started_at).toLocaleString()
+                        : 'N/A';
+                    document.getElementById('modal-run-duration').textContent = latestRun.duration_seconds
+                        ? `${latestRun.duration_seconds.toFixed(1)}s`
+                        : 'N/A';
+                }
+
+                // Fetch and render health trend chart
+                const historyData = await fetch(`/api/v1/projects/${projectId}/history?limit=10`).then(r => r.ok ? r.json() : null);
+                if (historyData && historyData.runs) {
+                    renderHealthTrendChart(historyData.runs);
+                }
+
+                // Show modal
+                document.getElementById('project-detail-modal').classList.remove('hidden');
+                document.getElementById('project-detail-modal').classList.add('flex');
+            } catch (error) {
+                console.error('Error showing project details:', error);
+            }
+        }
+
+        function closeProjectModal() {
+            document.getElementById('project-detail-modal').classList.add('hidden');
+            document.getElementById('project-detail-modal').classList.remove('flex');
+        }
+
+        function renderHealthTrendChart(runs) {
+            const ctx = document.getElementById('modal-health-trend-chart');
+            if (!ctx) return;
+
+            // Destroy existing chart
+            if (charts.projectHealthTrend) {
+                charts.projectHealthTrend.destroy();
+            }
+
+            // Prepare data (reverse to show oldest first)
+            const reversedRuns = [...runs].reverse();
+            const labels = reversedRuns.map(r => new Date(r.started_at).toLocaleDateString());
+
+            // Note: we don't have health_score in runs, so we'll use violations/bugs as proxy
+            const violationsData = reversedRuns.map(r => r.violations_found || 0);
+            const bugsData = reversedRuns.map(r => r.bugs_found || 0);
+
+            charts.projectHealthTrend = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Violations',
+                            data: violationsData,
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Bugs',
+                            data: bugsData,
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function getHealthColor(score) {
+            if (score == null) return '#9ca3af';
+            if (score >= 7) return '#10b981';
+            if (score >= 5) return '#f59e0b';
+            return '#ef4444';
+        }
+
+        function getHealthInterpretation(score) {
+            if (score == null) return 'Not scored';
+            if (score >= 9) return 'Excellent';
+            if (score >= 7) return 'Good';
+            if (score >= 5) return 'Fair';
+            if (score >= 3) return 'Poor';
+            return 'Critical';
+        }
     </script>
 
     <!-- Create Rule Modal -->
