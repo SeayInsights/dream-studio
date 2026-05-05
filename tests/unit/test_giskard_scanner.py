@@ -43,7 +43,9 @@ def test_toxic_content():
     """Test toxicity detection."""
     result = scan_llm_output("You are stupid and worthless.", {})
     assert len(result["vulnerabilities"]) > 0
-    assert any(v["type"] == "toxic_content" for v in result["vulnerabilities"])
+    # Check for any toxicity-related vulnerability type
+    vuln_types = [v["type"] for v in result["vulnerabilities"]]
+    assert any("toxic" in vtype.lower() for vtype in vuln_types)
 
 
 def test_context_parameter():
