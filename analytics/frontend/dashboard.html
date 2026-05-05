@@ -140,6 +140,64 @@
         .swipe-area {
             touch-action: pan-x;
         }
+
+        /* Info tooltip styles */
+        .info-icon {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            margin-left: 8px;
+            background: #6b7280;
+            border-radius: 50%;
+            color: white;
+            text-align: center;
+            line-height: 18px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: help;
+            position: relative;
+        }
+
+        .info-icon:hover {
+            background: #4b5563;
+        }
+
+        .info-tooltip {
+            visibility: hidden;
+            width: 300px;
+            background-color: #1f2937;
+            color: #e5e7eb;
+            text-align: left;
+            border-radius: 8px;
+            padding: 12px 16px;
+            position: absolute;
+            z-index: 1000;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -150px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 13px;
+            font-weight: normal;
+            line-height: 1.6;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .info-tooltip::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: #1f2937 transparent transparent transparent;
+        }
+
+        .info-icon:hover .info-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -249,13 +307,23 @@
             <!-- Charts Row 1: Timeline and Top Skills -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Session Timeline</h3>
+                    <div class="flex items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Session Timeline</h3>
+                        <span class="info-icon">i
+                            <span class="info-tooltip">Shows the number of Claude Code sessions over time. Each point represents total sessions for that day. Use this to identify usage patterns and peak activity periods.</span>
+                        </span>
+                    </div>
                     <div class="relative" style="height: 300px;">
                         <canvas id="sessionTimelineChart"></canvas>
                     </div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Top Skills</h3>
+                    <div class="flex items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Top Skills</h3>
+                        <span class="info-icon">i
+                            <span class="info-tooltip">Most frequently used dream-studio skills by invocation count. Helps identify which workflows you rely on most and where to focus optimization efforts.</span>
+                        </span>
+                    </div>
                     <div class="relative" style="height: 300px;">
                         <canvas id="topSkillsChart"></canvas>
                     </div>
@@ -265,13 +333,23 @@
             <!-- Charts Row 2: Model Distribution and Cost Over Time -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Model Distribution</h3>
+                    <div class="flex items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Model Distribution</h3>
+                        <span class="info-icon">i
+                            <span class="info-tooltip">Breakdown of Claude model usage (Opus, Sonnet, Haiku). Shows which models you use most frequently. Opus = complex tasks, Sonnet = code changes, Haiku = search/exploration.</span>
+                        </span>
+                    </div>
                     <div class="relative" style="height: 300px;">
                         <canvas id="modelDistributionChart"></canvas>
                     </div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cost Over Time</h3>
+                    <div class="flex items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">Cost Over Time</h3>
+                        <span class="info-icon">i
+                            <span class="info-tooltip">Estimated token costs in USD over time. Based on Claude API pricing for input/output tokens. Use to track spending trends and identify cost spikes from high-usage days.</span>
+                        </span>
+                    </div>
                     <div class="relative" style="height: 300px;">
                         <canvas id="costOverTimeChart"></canvas>
                     </div>
@@ -1450,6 +1528,58 @@
 
             console.log('Dream Studio Analytics Dashboard initialized');
         });
+
+        // ==================== DATE FORMATTING HELPERS ====================
+
+        function formatDateTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+            });
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            return date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        function formatRelativeTime(isoString) {
+            if (!isoString) return 'N/A';
+            const date = new Date(isoString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffSecs = Math.floor(diffMs / 1000);
+            const diffMins = Math.floor(diffSecs / 60);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffSecs < 60) return 'just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+            return formatDate(isoString);
+        }
 
         // Connection status helper functions
         function setConnectionStatus(status) {
@@ -4643,7 +4773,7 @@
                         <div class="flex justify-between items-start mb-4">
                             <div class="flex-1">
                                 <h3 class="text-lg font-semibold text-gray-900">${project.project_name}</h3>
-                                <p class="text-sm text-gray-600 mt-1">${project.project_root}</p>
+                                <p class="text-sm text-gray-600 mt-1">${project.project_path}</p>
                             </div>
                             <div class="ml-4">
                                 <div class="relative w-24 h-24">
@@ -4703,7 +4833,7 @@
                 const latestRun = healthData.latest_run;
 
                 document.getElementById('modal-project-name').textContent = project.project_name;
-                document.getElementById('modal-project-path').textContent = project.project_root;
+                document.getElementById('modal-project-path').textContent = project.project_path;
 
                 document.getElementById('modal-health-score').textContent = health.overall_score != null ? `${health.overall_score.toFixed(1)}/10` : 'N/A';
                 document.getElementById('modal-health-interpretation').textContent = getHealthInterpretation(health.overall_score);
@@ -4732,7 +4862,7 @@
                 if (latestRun) {
                     document.getElementById('modal-run-id').textContent = latestRun.run_id || 'N/A';
                     document.getElementById('modal-run-status').textContent = latestRun.status || 'N/A';
-                    document.getElementById('modal-run-started').textContent = latestRun.started_at
+                    document.getElementById('modal-run-started').textContent = formatDateTime(latestRun.started_at)
                         ? new Date(latestRun.started_at).toLocaleString()
                         : 'N/A';
                     document.getElementById('modal-run-duration').textContent = latestRun.duration_seconds
