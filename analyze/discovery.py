@@ -9,20 +9,34 @@ Analyzes a project directory to gather:
 - Entry points and configuration files
 - Project type classification (greenfield vs brownfield)
 - Stack detection
+
+Wave 4 Integration: Context7 for large projects (10k+ files)
 """
 
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import subprocess
+import sys
 from datetime import datetime, timezone
 
+# Context7 integration for large codebases (Wave 4)
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks" / "lib"))
+    from context.context7_manager import Context7Manager
+    _CONTEXT7_AVAILABLE = True
+except ImportError:
+    _CONTEXT7_AVAILABLE = False
+    Context7Manager = None
 
-def discover_project(path: Path) -> Dict[str, Any]:
+
+def discover_project(path: Path, use_context7: bool = False, query: str = "") -> Dict[str, Any]:
     """
     Discover project structure and metadata.
 
     Args:
         path: Project root directory
+        use_context7: If True and project has 10k+ files, use Context7 progressive loading
+        query: Optional query for Context7 relevance ranking (e.g., "authentication security")
 
     Returns:
         Complete project discovery dict with:
@@ -36,13 +50,18 @@ def discover_project(path: Path) -> Dict[str, Any]:
         - project_type: greenfield or brownfield
         - config_files: found configuration files
         - detected_stack: stack adapter name if detected
+        - context7_metadata: (if enabled) progressive loading stats
     """
     path = Path(path).resolve()
 
-    return {
+    # Quick file count to determine if Context7 is needed
+    inventory = _inventory_files(path)
+    total_files = inventory["total_files"]
+
+    result = {
         "project_name": _get_project_name(path),
         "project_path": str(path),
-        "file_inventory": _inventory_files(path),
+        "file_inventory": inventory,
         "lines_of_code": _count_lines(path),
         "languages": _detect_languages(path),
         "git_metadata": _get_git_metadata(path),
@@ -51,6 +70,30 @@ def discover_project(path: Path) -> Dict[str, Any]:
         "config_files": _find_config_files(path),
         "detected_stack": _detect_stack_wrapper(path)
     }
+
+    # Context7 integration for large projects (Wave 4)
+    if use_context7 and _CONTEXT7_AVAILABLE and total_files >= 10000:
+        print(f"📊 Large project detected ({total_files:,} files) - using Context7 progressive loading")
+        manager = Context7Manager(max_tokens=150000)
+        context_result = manager.load_codebase(path, query or "project structure analysis")
+
+        result["context7_metadata"] = {
+            "enabled": True,
+            "total_files": total_files,
+            "files_loaded": len(context_result.get("details", [])),
+            "tokens_used": context_result.get("tokens_used", 0),
+            "coverage": context_result.get("coverage", 0.0),
+            "query": query or "project structure analysis"
+        }
+        print(f"   ✅ Loaded {len(context_result.get('details', []))} most relevant files ({context_result.get('coverage', 0)*100:.1f}% coverage)")
+    elif use_context7 and total_files >= 10000:
+        result["context7_metadata"] = {
+            "enabled": False,
+            "reason": "Context7Manager not available",
+            "total_files": total_files
+        }
+
+    return result
 
 
 def _get_project_name(path: Path) -> str:
