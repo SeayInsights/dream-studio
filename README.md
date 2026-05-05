@@ -6,6 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen.svg)](pyproject.toml)
 
+[![Architecture](https://img.shields.io/badge/📐-Architecture-7B61FF)](ARCHITECTURE.md)
+[![Database](https://img.shields.io/badge/🗄️-Database-1D9E75)](DATABASE.md)
+[![Workflows](https://img.shields.io/badge/🔄-Workflows-D4537E)](WORKFLOWS.md)
+[![Docs](https://img.shields.io/badge/📚-Full_Docs-185FA5)](docs/)
+
 An opinionated Claude Code plugin that gives you a structured build pipeline, automated quality gates, and a local analytics dashboard — portable across every project.
 
 Ships with **8 skill packs (42 modes)** covering the full lifecycle from thinking through shipping, plus domain-specific skills for game dev, SaaS, Power Platform, security, and career ops. Hooks run automatically on every session to track health, enforce CI gates, and surface lessons learned.
