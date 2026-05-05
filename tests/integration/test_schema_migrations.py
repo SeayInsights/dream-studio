@@ -26,13 +26,13 @@ class TestMigrationRunner:
         db = tmp_path / "test.db"
         conn = _connect(db)
         v = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
-        assert v == 9, f"Expected schema version 9, got {v}"
+        assert v == 10, f"Expected schema version 10, got {v}"
         conn.close()
 
     def test_schema_version_function(self, tmp_path):
         db = tmp_path / "test.db"
         _connect(db).close()
-        assert schema_version(db) == 9
+        assert schema_version(db) == 10
 
     def test_migration_is_idempotent(self, tmp_path):
         db = tmp_path / "test.db"
@@ -40,23 +40,23 @@ class TestMigrationRunner:
         conn1.close()
         conn2 = _connect(db)
         v = conn2.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
-        assert v == 9
+        assert v == 10
         rows = conn2.execute("SELECT COUNT(*) FROM _schema_version").fetchone()[0]
-        assert rows == 8, f"Expected 8 migration records, got {rows}"
+        assert rows == 9, f"Expected 9 migration records, got {rows}"
         conn2.close()
 
     def test_existing_db_gets_upgraded(self, tmp_path):
-        """Simulates an existing DB at version 8 that needs migration 9."""
+        """Simulates an existing DB at version 9 that needs migration 10."""
         db = tmp_path / "test.db"
         conn = _connect(db)
         conn.close()
         conn = sqlite3.connect(str(db))
-        conn.execute("DELETE FROM _schema_version WHERE version = 9")
+        conn.execute("DELETE FROM _schema_version WHERE version = 10")
         conn.commit()
         conn.close()
         conn2 = _connect(db)
         v = conn2.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
-        assert v == 9
+        assert v == 10
         conn2.close()
 
     def test_version_check_blocks_old_code(self, tmp_path):

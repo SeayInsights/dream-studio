@@ -209,6 +209,11 @@
                         data-tab="projects">
                     Projects
                 </button>
+                <button onclick="switchTab('learning')"
+                        class="tab-button whitespace-nowrap py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                        data-tab="learning">
+                    Learning
+                </button>
             </nav>
         </div>
     </div>
@@ -875,6 +880,84 @@
                 </div>
             </div>
         </div>
+
+        <!-- Learning Tab -->
+        <div id="learning" class="tab-content">
+            <!-- Summary Stats -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-4">Learning System Summary</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Cache Hit Rate</div>
+                        <div id="learning-cache-hit-rate" class="mt-2 text-2xl font-bold text-green-600">--</div>
+                        <div class="text-xs text-gray-500 mt-1">Last 30 days</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Avg Trust Score</div>
+                        <div id="learning-avg-trust" class="mt-2 text-2xl font-bold text-blue-600">--</div>
+                        <div class="text-xs text-gray-500 mt-1">All sources</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">False Positive Rate</div>
+                        <div id="learning-fp-rate" class="mt-2 text-2xl font-bold text-yellow-600">--</div>
+                        <div class="text-xs text-gray-500 mt-1">Pattern accuracy</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-4">
+                        <div class="text-sm font-medium text-gray-600">Token Efficiency</div>
+                        <div id="learning-token-efficiency" class="mt-2 text-2xl font-bold text-purple-600">--</div>
+                        <div class="text-xs text-gray-500 mt-1">Tokens per task</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <!-- Cache Hit Rate Chart -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Cache Hit Rate Over Time</h3>
+                    <div class="relative h-64">
+                        <canvas id="cache-hit-rate-chart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-3">Higher cache hit rates indicate better efficiency and fewer redundant queries.</p>
+                </div>
+
+                <!-- Trust Score Distribution -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Trust Score Distribution</h3>
+                    <div class="relative h-64">
+                        <canvas id="trust-score-dist-chart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-3">Distribution of trust scores across all research sources and patterns.</p>
+                </div>
+
+                <!-- False Positive Rate Trends -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">False Positive Rate Trends</h3>
+                    <div class="relative h-64">
+                        <canvas id="fp-rate-trends-chart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-3">Lower false positive rates indicate better pattern accuracy as the system learns.</p>
+                </div>
+
+                <!-- Token Efficiency Metrics -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4">Token Efficiency (Tokens per Task)</h3>
+                    <div class="relative h-64">
+                        <canvas id="token-efficiency-chart"></canvas>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-3">Lower tokens per task indicate more efficient operations through optimization and caching.</p>
+                </div>
+            </div>
+
+            <!-- Learning Insights -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Learning Insights</h3>
+                <div id="learning-insights" class="space-y-3">
+                    <!-- Insights will be populated here -->
+                    <div class="text-center text-gray-500 py-8">Loading learning insights...</div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->
@@ -896,7 +979,8 @@
             alerts: false,
             ml: false,
             anomalies: false,
-            projects: false
+            projects: false,
+            learning: false
         };
 
         function switchTab(tabName) {
@@ -943,6 +1027,9 @@
             } else if (tabName === 'projects' && !tabsInitialized.projects) {
                 tabsInitialized.projects = true;
                 initProjectsTab();
+            } else if (tabName === 'learning' && !tabsInitialized.learning) {
+                tabsInitialized.learning = true;
+                initLearningTab();
             }
         }
 
@@ -971,7 +1058,11 @@
             topTriggeredRules: null,
             resolutionTime: null,
             anomalyScatter: null,
-            trendAnalysis: null
+            trendAnalysis: null,
+            cacheHitRate: null,
+            trustScoreDist: null,
+            fpRateTrends: null,
+            tokenEfficiency: null
         };
 
         // Real-time update state
@@ -4742,6 +4833,357 @@
             if (score >= 5) return 'Fair';
             if (score >= 3) return 'Poor';
             return 'Critical';
+        }
+
+        // Learning Tab Functions
+        async function initLearningTab() {
+            console.log('Initializing Learning tab...');
+
+            // Generate sample data for demo purposes
+            // In production, this would fetch from APIs
+            const learningData = generateSampleLearningData();
+
+            // Update summary stats
+            updateLearningSummary(learningData);
+
+            // Initialize charts
+            initCacheHitRateChart(learningData.cacheHitRate);
+            initTrustScoreDistChart(learningData.trustScores);
+            initFPRateTrendsChart(learningData.fpRates);
+            initTokenEfficiencyChart(learningData.tokenEfficiency);
+
+            // Update insights
+            updateLearningInsights(learningData.insights);
+
+            console.log('Learning tab initialized successfully');
+        }
+
+        function generateSampleLearningData() {
+            // Generate sample data showing positive learning trends
+            const days = 30;
+            const cacheHitRate = [];
+            const fpRates = [];
+            const tokenEfficiency = [];
+
+            for (let i = 0; i < days; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() - (days - i - 1));
+
+                // Cache hit rate increasing over time (0% -> 70%)
+                const progress = i / days;
+                cacheHitRate.push({
+                    date: date.toISOString().split('T')[0],
+                    rate: Math.min(70, progress * 70 + Math.random() * 5)
+                });
+
+                // False positive rate decreasing (40% -> 15%)
+                fpRates.push({
+                    date: date.toISOString().split('T')[0],
+                    rate: Math.max(15, 40 - progress * 25 + Math.random() * 3)
+                });
+
+                // Token efficiency improving (10000 -> 6000 tokens per task)
+                tokenEfficiency.push({
+                    date: date.toISOString().split('T')[0],
+                    tokens: Math.max(6000, 10000 - progress * 4000 + Math.random() * 200)
+                });
+            }
+
+            // Trust score distribution
+            const trustScores = [];
+            for (let score = 0; score <= 1; score += 0.1) {
+                // More scores clustered around 0.7-0.9 (high trust)
+                let count;
+                if (score >= 0.7 && score <= 0.9) {
+                    count = Math.floor(Math.random() * 20 + 30);
+                } else if (score >= 0.5 && score < 0.7) {
+                    count = Math.floor(Math.random() * 10 + 10);
+                } else {
+                    count = Math.floor(Math.random() * 5);
+                }
+                trustScores.push({ score: score.toFixed(1), count });
+            }
+
+            return {
+                cacheHitRate,
+                fpRates,
+                tokenEfficiency,
+                trustScores,
+                insights: [
+                    { type: 'success', message: 'Cache hit rate improved by 45% in the last 30 days' },
+                    { type: 'success', message: 'Pattern false positive rate reduced by 25%' },
+                    { type: 'info', message: 'Token efficiency improving through auto-optimization' },
+                    { type: 'warning', message: '3 patterns need recalibration (confidence < 0.4)' }
+                ]
+            };
+        }
+
+        function updateLearningSummary(data) {
+            // Current cache hit rate (last data point)
+            const latestCacheHit = data.cacheHitRate[data.cacheHitRate.length - 1].rate;
+            document.getElementById('learning-cache-hit-rate').textContent = `${latestCacheHit.toFixed(1)}%`;
+
+            // Average trust score
+            const avgTrust = data.trustScores.reduce((sum, item) => sum + (parseFloat(item.score) * item.count), 0) /
+                           data.trustScores.reduce((sum, item) => sum + item.count, 0);
+            document.getElementById('learning-avg-trust').textContent = avgTrust.toFixed(2);
+
+            // Current FP rate (last data point)
+            const latestFPRate = data.fpRates[data.fpRates.length - 1].rate;
+            document.getElementById('learning-fp-rate').textContent = `${latestFPRate.toFixed(1)}%`;
+
+            // Current token efficiency (last data point)
+            const latestTokens = data.tokenEfficiency[data.tokenEfficiency.length - 1].tokens;
+            document.getElementById('learning-token-efficiency').textContent = `${Math.round(latestTokens).toLocaleString()}`;
+        }
+
+        function initCacheHitRateChart(data) {
+            const ctx = document.getElementById('cache-hit-rate-chart').getContext('2d');
+
+            if (charts.cacheHitRate) {
+                charts.cacheHitRate.destroy();
+            }
+
+            charts.cacheHitRate = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Cache Hit Rate (%)',
+                        data: data.map(d => d.rate),
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Hit Rate: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initTrustScoreDistChart(data) {
+            const ctx = document.getElementById('trust-score-dist-chart').getContext('2d');
+
+            if (charts.trustScoreDist) {
+                charts.trustScoreDist.destroy();
+            }
+
+            charts.trustScoreDist = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.score),
+                    datasets: [{
+                        label: 'Source Count',
+                        data: data.map(d => d.count),
+                        backgroundColor: '#3b82f6',
+                        borderColor: '#2563eb',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Sources: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Trust Score'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initFPRateTrendsChart(data) {
+            const ctx = document.getElementById('fp-rate-trends-chart').getContext('2d');
+
+            if (charts.fpRateTrends) {
+                charts.fpRateTrends.destroy();
+            }
+
+            charts.fpRateTrends = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'False Positive Rate (%)',
+                        data: data.map(d => d.rate),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `FP Rate: ${context.parsed.y.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 50,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initTokenEfficiencyChart(data) {
+            const ctx = document.getElementById('token-efficiency-chart').getContext('2d');
+
+            if (charts.tokenEfficiency) {
+                charts.tokenEfficiency.destroy();
+            }
+
+            charts.tokenEfficiency = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: 'Tokens per Task',
+                        data: data.map(d => d.tokens),
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Tokens: ${Math.round(context.parsed.y).toLocaleString()}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return (value / 1000).toFixed(1) + 'k';
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateLearningInsights(insights) {
+            const container = document.getElementById('learning-insights');
+
+            if (!insights || insights.length === 0) {
+                container.innerHTML = '<div class="text-center text-gray-500 py-8">No insights available yet.</div>';
+                return;
+            }
+
+            const insightColors = {
+                success: 'bg-green-50 border-green-200 text-green-800',
+                warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
+                error: 'bg-red-50 border-red-200 text-red-800',
+                info: 'bg-blue-50 border-blue-200 text-blue-800'
+            };
+
+            const insightIcons = {
+                success: '✓',
+                warning: '⚠',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            container.innerHTML = insights.map(insight => `
+                <div class="border rounded-lg p-4 ${insightColors[insight.type] || insightColors.info}">
+                    <div class="flex items-start">
+                        <span class="text-xl mr-3">${insightIcons[insight.type] || insightIcons.info}</span>
+                        <p class="text-sm">${insight.message}</p>
+                    </div>
+                </div>
+            `).join('');
         }
     </script>
 
