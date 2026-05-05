@@ -17,10 +17,8 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 from .document_store import DocumentStore
 from .studio_db import _connect
@@ -528,6 +526,7 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
         building_blocks = extract_building_blocks(clone_path, stack)
 
         # 5. Store in database
+        repo_id: int | None = None
         with _connect() as c:
             # Check if repo already exists
             existing = c.execute(
@@ -558,6 +557,10 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
                     (repo_url, repo_name, _NOW(), _NOW(), stack, len(patterns), len(building_blocks)),
                 )
                 repo_id = cursor.lastrowid
+
+        # Ensure repo_id was assigned
+        if repo_id is None:
+            raise RuntimeError("Failed to get repo_id from database")
 
         # Store extractions
         if patterns:
