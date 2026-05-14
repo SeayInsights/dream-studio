@@ -1,0 +1,3523 @@
+# Security Review Scan Catalog
+# Generated as documentation/data only. Not execution authority.
+catalog_id: "security_review_scan_catalog"
+version: "0.1.0"
+draft_status: "structured_draft"
+source_standard_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+schema_ref: "docs/contracts/security-review-scan-definition-schema.md"
+crosswalk_ref: "docs/contracts/security-review-47-scan-crosswalk.md"
+markdown_catalog_ref: "docs/contracts/security-review-scan-catalog.md"
+non_execution_notice: "This structured catalog is documentation/data only; it must not execute scans, touch target repos, install tools, mutate files, or bypass Work Order approval."
+execution_status: "non_executing_definition"
+scans:
+  - scan_id: "sec.dependency.vulnerability_inventory"
+    title: "Dependency.vulnerability Inventory"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 15
+        item_name: "Known Vulnerability Detection (CVE Scanning)"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct vulnerability inventory evidence coverage."
+    category_id: "dependency_supply_chain"
+    scan_kind: "artifact_review"
+    intent: "Inventory known dependency vulnerability evidence from approved reports."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "dependency manifests"
+      - "lockfiles"
+      - "external report refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.lockfile_integrity"
+    title: "Dependency.lockfile Integrity"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 20
+        item_name: "Dependency Pinning & Integrity Verification"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers lockfile integrity and provenance."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 47
+        item_name: "Dependency & Build Reproducibility"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers lockfile integrity, branch evidence, and release gates."
+    category_id: "dependency_supply_chain"
+    scan_kind: "artifact_review"
+    intent: "Review lockfile presence, drift, and reproducibility evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "lockfile refs"
+      - "branch state"
+      - "diff proof"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.secrets.high_entropy_patterns"
+    title: "Secrets.high Entropy Patterns"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 6
+        item_name: "Hardcoded Credentials & Secrets in Code"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog includes high-entropy credential pattern planning and secret storage policy review."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 21
+        item_name: "Git History Secret Scanning"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct git-history secret review planning, deferred because history scans need redaction and artifact controls."
+    category_id: "secrets_exposure"
+    scan_kind: "static_command"
+    intent: "Plan high-entropy and credential-pattern review with redacted evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "redacted match refs"
+      - "file scope"
+      - "false-positive notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "recovery_decision"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.secrets.env_template_drift"
+    title: "Secrets.env Template Drift"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 22
+        item_name: "Environment Variable & Config File Audit"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct environment/config secret posture coverage."
+    category_id: "secrets_exposure"
+    scan_kind: "config_review"
+    intent: "Compare expected environment placeholders against committed configuration guidance."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "env example refs"
+      - "config refs"
+      - "secret storage notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.injection_patterns"
+    title: "Static.injection Patterns"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 1
+        item_name: "SQL Injection Detection"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog injection and input-validation scans explicitly include query and request-boundary injection risk."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 2
+        item_name: "Cross-Site Scripting (XSS)"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct XSS/output-encoding scan alongside the broader injection scan."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 3
+        item_name: "Command Injection"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog injection scan names shell and interpreter injection risk."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 36
+        item_name: "Injection Testing (Runtime)"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime injection testing planning, deferred until target and validation profiles are approved."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Identify source patterns that may allow injection into queries, shells, templates, or interpreters."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "matched source refs"
+      - "sanitizer refs"
+      - "limitation notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.unsafe_eval_exec"
+    title: "Static.unsafe Eval Exec"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 14
+        item_name: "Unsafe Reflection / Dynamic Code Loading"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has a direct unsafe dynamic execution and interpretation scan."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Identify unsafe dynamic execution and interpretation surfaces."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "matched source refs"
+      - "call-path notes"
+      - "exception notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.auth.access_boundary_review"
+    title: "Auth.access Boundary Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 9
+        item_name: "Broken Authentication Logic"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct broken-authentication logic review plus supporting access/session/recovery scans."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 10
+        item_name: "Broken Access Control / Authorization Flaws"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct access-boundary, role/permission, and sensitive-route review coverage."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review whether protected actions have explicit authorization boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "route refs"
+      - "policy refs"
+      - "role matrix refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.auth.session_cookie_policy"
+    title: "Auth.session Cookie Policy"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 9
+        item_name: "Broken Authentication Logic"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct broken-authentication logic review plus supporting access/session/recovery scans."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 37
+        item_name: "Authentication & Session Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct DAST auth/session testing planning, deferred until credentials and target scope are approved."
+    category_id: "auth_session_access"
+    scan_kind: "config_review"
+    intent: "Review session cookie, token lifetime, and same-site posture evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "auth config refs"
+      - "session policy notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.api.cors_policy_review"
+    title: "Api.cors Policy Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting API surface review for API Security Testing."
+    category_id: "api_surface"
+    scan_kind: "config_review"
+    intent: "Review cross-origin policy, allowed origins, and credential-sharing posture."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "API config refs"
+      - "route refs"
+      - "environment assumptions"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.api.input_validation_surface"
+    title: "Api.input Validation Surface"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 1
+        item_name: "SQL Injection Detection"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog injection and input-validation scans explicitly include query and request-boundary injection risk."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 12
+        item_name: "Server-Side Request Forgery (SSRF)"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct SSRF/request-boundary review scan."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 36
+        item_name: "Injection Testing (Runtime)"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime injection testing planning, deferred until target and validation profiles are approved."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime API security testing planning, deferred until endpoint scope is approved."
+    category_id: "api_surface"
+    scan_kind: "manual_review"
+    intent: "Review request boundaries for validation, normalization, and schema coverage."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "route refs"
+      - "schema refs"
+      - "payload assumptions"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.release.branch_state_evidence"
+    title: "Release.branch State Evidence"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 47
+        item_name: "Dependency & Build Reproducibility"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers lockfile integrity, branch evidence, and release gates."
+    category_id: "build_release_integrity"
+    scan_kind: "artifact_review"
+    intent: "Verify release gate evidence can cite branch, HEAD, index, and ahead-behind state."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "branch refs"
+      - "HEAD proof"
+      - "index proof"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.release.forbidden_artifact_write_check"
+    title: "Release.forbidden Artifact Write Check"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 47
+        item_name: "Dependency & Build Reproducibility"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting build reproducibility by checking generated-artifact write risk."
+    category_id: "build_release_integrity"
+    scan_kind: "artifact_review"
+    intent: "Confirm validation planning accounts for cache, coverage, snapshot, and generated-output writes."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "validation profile refs"
+      - "generated artifact policy"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.license_policy_review"
+    title: "Dependency.license Policy Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 16
+        item_name: "License Compliance Scanning"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct license policy review coverage."
+    category_id: "dependency_supply_chain"
+    scan_kind: "external_report_review"
+    intent: "Review dependency license policy evidence and unresolved approval needs."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "license report refs"
+      - "policy refs"
+      - "exception notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.provenance_review"
+    title: "Dependency.provenance Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 18
+        item_name: "Typosquatting & Malicious Package Detection"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct typosquatting and malicious package review scan."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 20
+        item_name: "Dependency Pinning & Integrity Verification"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers lockfile integrity and provenance."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 28
+        item_name: "Container Registry Security"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct container registry review, deferred until registry/infrastructure scope is approved."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 44
+        item_name: "SBOM & Software Supply Chain Attestation"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct SBOM and supply-chain attestation review coverage."
+    category_id: "dependency_supply_chain"
+    scan_kind: "external_report_review"
+    intent: "Review package provenance, registry trust, and source verification evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "provenance report refs"
+      - "registry policy notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.config.security_headers_review"
+    title: "Config.security Headers Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 39
+        item_name: "Security Header Validation"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime header validation planning, deferred until deployed URL or response-artifact scope is approved."
+    category_id: "configuration_posture"
+    scan_kind: "config_review"
+    intent: "Review security header expectations for deployed HTTP surfaces."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "config refs"
+      - "deployment assumptions"
+      - "header policy"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.config.debug_flag_review"
+    title: "Config.debug Flag Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 30
+        item_name: "Cloud Misconfiguration Detection"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting cloud/configuration misconfiguration review through unsafe debug-flag posture."
+    category_id: "configuration_posture"
+    scan_kind: "config_review"
+    intent: "Review debug, trace, verbose logging, and unsafe default flags."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "config refs"
+      - "environment refs"
+      - "release posture notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.config.secret_storage_policy"
+    title: "Config.secret Storage Policy"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 6
+        item_name: "Hardcoded Credentials & Secrets in Code"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog includes high-entropy credential pattern planning and secret storage policy review."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 22
+        item_name: "Environment Variable & Config File Audit"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct environment/config secret posture coverage."
+    category_id: "configuration_posture"
+    scan_kind: "manual_review"
+    intent: "Review whether secrets are stored outside source and generated artifacts."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "secret storage policy"
+      - "env refs"
+      - "operator notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.path_traversal_patterns"
+    title: "Static.path Traversal Patterns"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 4
+        item_name: "Path Traversal / Directory Traversal"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has a direct path traversal scan."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Identify file path handling patterns that may allow traversal or unsafe file access."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "matched source refs"
+      - "normalization refs"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.crypto_misuse_patterns"
+    title: "Static.crypto Misuse Patterns"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 11
+        item_name: "Cryptographic Failures"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers crypto misuse and encryption posture."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Identify weak cryptography, unsafe randomness, and key-handling patterns."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "matched source refs"
+      - "crypto policy refs"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.deserialization_patterns"
+    title: "Static.deserialization Patterns"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 5
+        item_name: "Insecure Deserialization"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has a direct unsafe parsing/deserialization scan."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 13
+        item_name: "XML External Entity (XXE) Injection"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct XXE/parser configuration scan."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Identify unsafe parsing, deserialization, and object construction surfaces."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "matched source refs"
+      - "parser boundary notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.auth.role_permission_matrix"
+    title: "Auth.role Permission Matrix"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 10
+        item_name: "Broken Access Control / Authorization Flaws"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct access-boundary, role/permission, and sensitive-route review coverage."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 31
+        item_name: "IAM & Least Privilege Analysis"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct IAM and least-privilege review, deferred until identity/infrastructure scope is approved."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review role, permission, and capability mapping for protected workflows."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "role matrix refs"
+      - "workflow refs"
+      - "gaps"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.auth.password_reset_flow_review"
+    title: "Auth.password Reset Flow Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 9
+        item_name: "Broken Authentication Logic"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct broken-authentication logic review plus supporting access/session/recovery scans."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 37
+        item_name: "Authentication & Session Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct DAST auth/session testing planning, deferred until credentials and target scope are approved."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review account recovery controls, token expiry, and abuse limits."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "flow refs"
+      - "token policy refs"
+      - "rate-limit notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.api.rate_limit_review"
+    title: "Api.rate Limit Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime API security testing planning, deferred until endpoint scope is approved."
+    category_id: "api_surface"
+    scan_kind: "manual_review"
+    intent: "Review rate-limit and abuse-control coverage for exposed routes."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "route refs"
+      - "throttle policy refs"
+      - "gap notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.api.webhook_signature_review"
+    title: "Api.webhook Signature Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime API security testing planning, deferred until endpoint scope is approved."
+    category_id: "api_surface"
+    scan_kind: "manual_review"
+    intent: "Review inbound integration signature validation and replay protection."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "webhook refs"
+      - "secret policy refs"
+      - "timestamp checks"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.data.pii_inventory_review"
+    title: "Data.pii Inventory Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 43
+        item_name: "Data Privacy & PII Detection"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers PII inventory and export classification."
+    category_id: "data_handling_privacy"
+    scan_kind: "manual_review"
+    intent: "Inventory personal or sensitive data flows and classification gaps."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "data flow refs"
+      - "schema refs"
+      - "privacy notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.data.export_classification_review"
+    title: "Data.export Classification Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 43
+        item_name: "Data Privacy & PII Detection"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers PII inventory and export classification."
+    category_id: "data_handling_privacy"
+    scan_kind: "manual_review"
+    intent: "Review export outputs for privacy classification and sharing constraints."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "export refs"
+      - "classification notes"
+      - "operator constraints"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.data.retention_policy_review"
+    title: "Data.retention Policy Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 35
+        item_name: "Backup & Disaster Recovery Configuration"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers backup/restore and retention evidence."
+    category_id: "data_handling_privacy"
+    scan_kind: "manual_review"
+    intent: "Review retention, deletion, backup, and lifecycle policy evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "retention refs"
+      - "backup refs"
+      - "deletion notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.data.encryption_at_rest_review"
+    title: "Data.encryption At Rest Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 11
+        item_name: "Cryptographic Failures"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers crypto misuse and encryption posture."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 33
+        item_name: "Encryption Configuration"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers encryption at rest and in transit."
+    category_id: "data_handling_privacy"
+    scan_kind: "external_report_review"
+    intent: "Review storage encryption evidence and gaps."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "provider report refs"
+      - "config refs"
+      - "limitation notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.data.encryption_in_transit_review"
+    title: "Data.encryption In Transit Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 11
+        item_name: "Cryptographic Failures"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers crypto misuse and encryption posture."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 23
+        item_name: "Certificate & Key Management Review"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct certificate and key management coverage."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 33
+        item_name: "Encryption Configuration"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers encryption at rest and in transit."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 40
+        item_name: "TLS/SSL Configuration"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct TLS/SSL configuration review coverage."
+    category_id: "data_handling_privacy"
+    scan_kind: "external_report_review"
+    intent: "Review transport encryption posture and certificate evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "transport policy refs"
+      - "certificate refs"
+      - "deployment notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.container_config_review"
+    title: "Infra.container Config Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 25
+        item_name: "Container Image Vulnerability Scanning"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct image vulnerability review planning, deferred because tool/report execution requires approval."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 26
+        item_name: "Dockerfile Security Best Practices"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct Dockerfile best-practice review coverage."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 27
+        item_name: "Container Runtime Security Configuration"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers container/runtime configuration and runtime environment policy."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 29
+        item_name: "Kubernetes Security Posture (Pod Security)"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct Kubernetes pod security review, deferred until cluster/IaC scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "config_review"
+    intent: "Review container or runtime image configuration when infrastructure is in scope."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "container config refs"
+      - "runtime assumptions"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.runtime_env_policy"
+    title: "Infra.runtime Env Policy"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 27
+        item_name: "Container Runtime Security Configuration"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers container/runtime configuration and runtime environment policy."
+    category_id: "infrastructure_runtime"
+    scan_kind: "config_review"
+    intent: "Review runtime environment variable, permission, and filesystem posture."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "runtime config refs"
+      - "env policy refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.cloud_permission_review"
+    title: "Infra.cloud Permission Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 29
+        item_name: "Kubernetes Security Posture (Pod Security)"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct Kubernetes pod security review, deferred until cluster/IaC scope is approved."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 30
+        item_name: "Cloud Misconfiguration Detection"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct cloud misconfiguration review, deferred until cloud/IaC scope is approved."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 31
+        item_name: "IAM & Least Privilege Analysis"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct IAM and least-privilege review, deferred until identity/infrastructure scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "external_report_review"
+    intent: "Review cloud or platform permission evidence only when explicitly in scope."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "permission report refs"
+      - "scope notes"
+      - "operator approval refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.release.ci_security_gate_review"
+    title: "Release.ci Security Gate Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 24
+        item_name: "CI/CD Pipeline Secret Exposure"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct CI/CD secret exposure review coverage."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 47
+        item_name: "Dependency & Build Reproducibility"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers lockfile integrity, branch evidence, and release gates."
+    category_id: "build_release_integrity"
+    scan_kind: "artifact_review"
+    intent: "Review whether CI/release gates cite required security evidence before release."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "CI config refs"
+      - "gate policy refs"
+      - "missing evidence"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.release.artifact_provenance_review"
+    title: "Release.artifact Provenance Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 19
+        item_name: "Software Bill of Materials (SBOM) Generation"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now has direct SBOM generation planning, but generation remains deferred because it may write artifacts."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 28
+        item_name: "Container Registry Security"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct container registry review, deferred until registry/infrastructure scope is approved."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 44
+        item_name: "SBOM & Software Supply Chain Attestation"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct SBOM and supply-chain attestation review coverage."
+    category_id: "build_release_integrity"
+    scan_kind: "external_report_review"
+    intent: "Review build artifact provenance and source-to-release traceability."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "artifact refs"
+      - "build report refs"
+      - "release notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.obs.security_logging_review"
+    title: "Obs.security Logging Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 34
+        item_name: "Logging, Monitoring & Audit Trail"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers logging and audit trail readiness."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 45
+        item_name: "Security Logging & Alerting Completeness"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers security logging and incident readiness."
+    category_id: "observability_incident"
+    scan_kind: "manual_review"
+    intent: "Review security-relevant logging coverage without exposing sensitive data."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "log policy refs"
+      - "event refs"
+      - "redaction notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.obs.audit_trail_review"
+    title: "Obs.audit Trail Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 34
+        item_name: "Logging, Monitoring & Audit Trail"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog directly covers logging and audit trail readiness."
+    category_id: "observability_incident"
+    scan_kind: "manual_review"
+    intent: "Review auditability for sensitive actions and administrative changes."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "audit event refs"
+      - "actor tracking notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.obs.incident_handoff_review"
+    title: "Obs.incident Handoff Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 45
+        item_name: "Security Logging & Alerting Completeness"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers security logging and incident readiness."
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 46
+        item_name: "Incident Response & Error Handling"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct incident response and error-handling review coverage."
+    category_id: "observability_incident"
+    scan_kind: "manual_review"
+    intent: "Review whether incident response handoff evidence is complete and bounded."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "incident template refs"
+      - "contact refs"
+      - "escalation notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.threat_model_review"
+    title: "Manual.threat Model Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 41
+        item_name: "Business Logic Vulnerability Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting business logic vulnerability review through threat model context."
+    category_id: "static_code_security"
+    scan_kind: "manual_review"
+    intent: "Review assets, trust boundaries, threats, and controls for the scoped release."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "threat model refs"
+      - "architecture refs"
+      - "assumptions"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.abuse_case_review"
+    title: "Manual.abuse Case Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 41
+        item_name: "Business Logic Vulnerability Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct business-logic test planning, deferred until workflow and account scope are approved."
+    category_id: "api_surface"
+    scan_kind: "manual_review"
+    intent: "Review misuse and abuse cases across public and integration surfaces."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "route refs"
+      - "user-flow refs"
+      - "abuse notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.admin_workflow_review"
+    title: "Manual.admin Workflow Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 41
+        item_name: "Business Logic Vulnerability Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct business-logic test planning, deferred until workflow and account scope are approved."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review privileged workflows, approval boundaries, and audit expectations."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "admin flow refs"
+      - "permission refs"
+      - "audit refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.third_party_integration_review"
+    title: "Manual.third Party Integration Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting API Security Testing through third-party integration trust review."
+    category_id: "api_surface"
+    scan_kind: "manual_review"
+    intent: "Review third-party integration trust, data sharing, and failure posture."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "integration refs"
+      - "vendor report refs"
+      - "data flow notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.sensitive_route_review"
+    title: "Manual.sensitive Route Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 10
+        item_name: "Broken Access Control / Authorization Flaws"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog has direct access-boundary, role/permission, and sensitive-route review coverage."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review high-risk routes for access control, validation, and logging expectations."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "route refs"
+      - "auth refs"
+      - "logging refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.backup_restore_security_review"
+    title: "Manual.backup Restore Security Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 35
+        item_name: "Backup & Disaster Recovery Configuration"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog covers backup/restore and retention evidence."
+    category_id: "data_handling_privacy"
+    scan_kind: "manual_review"
+    intent: "Review backup and restore controls for sensitive data and operational continuity."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "backup policy refs"
+      - "restore evidence refs"
+      - "gap notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.dependency_update_risk_review"
+    title: "Manual.dependency Update Risk Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 17
+        item_name: "Dependency Freshness & End-of-Life"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct dependency freshness and end-of-life review scan."
+    category_id: "dependency_supply_chain"
+    scan_kind: "manual_review"
+    intent: "Review dependency update risk, exceptions, and follow-up sequencing."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "dependency report refs"
+      - "exception refs"
+      - "upgrade notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.vulnerability_exception_review"
+    title: "Manual.vulnerability Exception Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 15
+        item_name: "Known Vulnerability Detection (CVE Scanning)"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting vulnerability detection through exception and risk acceptance review."
+    category_id: "build_release_integrity"
+    scan_kind: "manual_review"
+    intent: "Review unresolved vulnerability exceptions and required operator decisions."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "finding refs"
+      - "operator decision refs"
+      - "expiry notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "recovery_decision"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.release_risk_acceptance_review"
+    title: "Manual.release Risk Acceptance Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 42
+        item_name: "Regulatory Compliance Mapping (GDPR/HIPAA/PCI/SOC2)"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "grouped"
+        coverage_rationale: "Supporting governance/compliance mapping through release risk acceptance review."
+    category_id: "build_release_integrity"
+    scan_kind: "manual_review"
+    intent: "Review release risk acceptance constraints, expiry, and evidence completeness."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "release gate refs"
+      - "accepted-risk refs"
+      - "constraints"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.manual.security_retrospective_review"
+    title: "Manual.security Retrospective Review"
+    tier: "T3"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 46
+        item_name: "Incident Response & Error Handling"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct incident response and error-handling review coverage."
+    category_id: "observability_incident"
+    scan_kind: "manual_review"
+    intent: "Review lessons, unresolved risks, and next Work Order recommendations after security work."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "retrospective refs"
+      - "finding refs"
+      - "next prompt refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.xss_output_encoding"
+    title: "Static.xss Output Encoding"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 2
+        item_name: "Cross-Site Scripting (XSS)"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct XSS/output-encoding scan alongside the broader injection scan."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Review cross-site scripting risk through output encoding, template sinks, and client-rendered input boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "source refs"
+      - "template refs"
+      - "sanitizer notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.memory_safety_boundary_review"
+    title: "Static.memory Safety Boundary Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 7
+        item_name: "Buffer Overflow / Memory Safety"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct memory-safety and unsafe-boundary review scan."
+    category_id: "static_code_security"
+    scan_kind: "manual_review"
+    intent: "Review native, unsafe, binary, or buffer-handling boundaries for memory-safety risk."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "unsafe-code refs"
+      - "native boundary refs"
+      - "dependency notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.concurrency_race_review"
+    title: "Static.concurrency Race Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 8
+        item_name: "Race Conditions & Concurrency Bugs"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct security-sensitive concurrency and race-condition review scan."
+    category_id: "static_code_security"
+    scan_kind: "manual_review"
+    intent: "Review security-sensitive state transitions for race conditions, time-of-check/time-of-use issues, and concurrency bugs."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "state-transition refs"
+      - "lock/transaction refs"
+      - "limitation notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.ssrf_request_boundary_review"
+    title: "Static.ssrf Request Boundary Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 12
+        item_name: "Server-Side Request Forgery (SSRF)"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct SSRF/request-boundary review scan."
+    category_id: "api_surface"
+    scan_kind: "static_command"
+    intent: "Review server-side request construction, URL allowlists, metadata endpoint exposure, and outbound fetch boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "request-call refs"
+      - "validation refs"
+      - "allowlist notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.static.xxe_parser_review"
+    title: "Static.xxe Parser Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 13
+        item_name: "XML External Entity (XXE) Injection"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct XXE/parser configuration scan."
+    category_id: "static_code_security"
+    scan_kind: "static_command"
+    intent: "Review XML parser configuration, entity expansion settings, and file/network entity resolution boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "parser refs"
+      - "config refs"
+      - "entity-resolution notes"
+    timeout_policy: "short_static_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.auth.broken_auth_logic_review"
+    title: "Auth.broken Auth Logic Review"
+    tier: "T0"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 9
+        item_name: "Broken Authentication Logic"
+        domain: "DOMAIN 1 — SOURCE CODE ANALYSIS (SAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct broken-authentication logic review plus supporting access/session/recovery scans."
+    category_id: "auth_session_access"
+    scan_kind: "manual_review"
+    intent: "Review authentication state machines, recovery flows, token transitions, and bypass-prone logic."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "auth flow refs"
+      - "session refs"
+      - "recovery refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.freshness_eol_review"
+    title: "Dependency.freshness Eol Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 17
+        item_name: "Dependency Freshness & End-of-Life"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct dependency freshness and end-of-life review scan."
+    category_id: "dependency_supply_chain"
+    scan_kind: "external_report_review"
+    intent: "Review dependency freshness, end-of-life packages, and upgrade risk evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "dependency report refs"
+      - "lifecycle refs"
+      - "upgrade notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.typosquatting_malicious_package_review"
+    title: "Dependency.typosquatting Malicious Package Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 18
+        item_name: "Typosquatting & Malicious Package Detection"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes a direct typosquatting and malicious package review scan."
+    category_id: "dependency_supply_chain"
+    scan_kind: "external_report_review"
+    intent: "Review package name risk, malicious package indicators, registry trust, and provenance anomalies."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "package inventory refs"
+      - "provenance refs"
+      - "exception notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dependency.sbom_generation_planning"
+    title: "Dependency.sbom Generation Planning"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 19
+        item_name: "Software Bill of Materials (SBOM) Generation"
+        domain: "DOMAIN 2 — DEPENDENCY & SUPPLY CHAIN (SCA)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now has direct SBOM generation planning, but generation remains deferred because it may write artifacts."
+    category_id: "dependency_supply_chain"
+    scan_kind: "deferred"
+    intent: "Plan software bill of materials generation as a future approved artifact-producing validation step."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "writes_artifacts"
+    network_risk: "external_metadata"
+    artifact_write_risk: "writes_artifacts"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "SBOM policy refs"
+      - "output location policy"
+      - "approval refs"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.secrets.git_history_secret_review"
+    title: "Secrets.git History Secret Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 21
+        item_name: "Git History Secret Scanning"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct git-history secret review planning, deferred because history scans need redaction and artifact controls."
+    category_id: "secrets_exposure"
+    scan_kind: "deferred"
+    intent: "Plan git-history secret review with redaction and artifact containment before any history scan is executed."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "local_only"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "git-history scope"
+      - "redaction policy"
+      - "approval refs"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "recovery_decision"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.secrets.certificate_key_management_review"
+    title: "Secrets.certificate Key Management Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 23
+        item_name: "Certificate & Key Management Review"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct certificate and key management coverage."
+    category_id: "secrets_exposure"
+    scan_kind: "manual_review"
+    intent: "Review certificate, private-key, rotation, expiry, and storage management evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "certificate refs"
+      - "key storage refs"
+      - "rotation notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.secrets.cicd_secret_exposure_review"
+    title: "Secrets.cicd Secret Exposure Review"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 24
+        item_name: "CI/CD Pipeline Secret Exposure"
+        domain: "DOMAIN 3 — SECRETS & CREDENTIAL SCANNING"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct CI/CD secret exposure review coverage."
+    category_id: "secrets_exposure"
+    scan_kind: "manual_review"
+    intent: "Review CI/CD variables, pipeline logs, workflow configs, and secret propagation boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "CI config refs"
+      - "secret policy refs"
+      - "log exposure notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.container_image_vulnerability_review"
+    title: "Infra.container Image Vulnerability Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 25
+        item_name: "Container Image Vulnerability Scanning"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct image vulnerability review planning, deferred because tool/report execution requires approval."
+    category_id: "infrastructure_runtime"
+    scan_kind: "deferred"
+    intent: "Plan container image vulnerability review as future approved tool/report evidence."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_metadata"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "image refs"
+      - "scanner report refs"
+      - "registry scope"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.dockerfile_security_best_practices"
+    title: "Infra.dockerfile Security Best Practices"
+    tier: "T1"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 26
+        item_name: "Dockerfile Security Best Practices"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct Dockerfile best-practice review coverage."
+    category_id: "infrastructure_runtime"
+    scan_kind: "config_review"
+    intent: "Review Dockerfile hardening posture, base-image policy, user mode, and build-stage exposure."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "Dockerfile refs"
+      - "base-image notes"
+      - "hardening checklist"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "approved_mutation_execution"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.container_registry_security_review"
+    title: "Infra.container Registry Security Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 28
+        item_name: "Container Registry Security"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct container registry review, deferred until registry/infrastructure scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "external_report_review"
+    intent: "Review container registry access, provenance, retention, signing, and vulnerability-report posture when registry scope is approved."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "registry report refs"
+      - "access policy refs"
+      - "provenance refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.kubernetes_pod_security_review"
+    title: "Infra.kubernetes Pod Security Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 29
+        item_name: "Kubernetes Security Posture (Pod Security)"
+        domain: "DOMAIN 4 — CONTAINER & IMAGE SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct Kubernetes pod security review, deferred until cluster/IaC scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "config_review"
+    intent: "Review Kubernetes pod security posture, workload privileges, namespaces, and policy evidence when cluster scope is approved."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "manifest refs"
+      - "policy refs"
+      - "cluster-scope assumptions"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.cloud_misconfiguration_review"
+    title: "Infra.cloud Misconfiguration Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 30
+        item_name: "Cloud Misconfiguration Detection"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct cloud misconfiguration review, deferred until cloud/IaC scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "external_report_review"
+    intent: "Review cloud misconfiguration evidence only when cloud target scope and source reports are approved."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "cloud report refs"
+      - "IaC refs"
+      - "scope notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.iam_least_privilege_review"
+    title: "Infra.iam Least Privilege Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 31
+        item_name: "IAM & Least Privilege Analysis"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct IAM and least-privilege review, deferred until identity/infrastructure scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "external_report_review"
+    intent: "Review IAM and least-privilege evidence for roles, service accounts, tokens, and permission boundaries."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "IAM report refs"
+      - "role refs"
+      - "exception notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.infra.network_segmentation_review"
+    title: "Infra.network Segmentation Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 32
+        item_name: "Network Security & Segmentation"
+        domain: "DOMAIN 5 — INFRASTRUCTURE-AS-CODE (IaC) SECURITY"
+        coverage_status: "deferred_infrastructure"
+        coverage_rationale: "Catalog now includes direct network segmentation review, deferred until network/infrastructure scope is approved."
+    category_id: "infrastructure_runtime"
+    scan_kind: "external_report_review"
+    intent: "Review network segmentation, exposure boundaries, firewall/security-group posture, and private/public route assumptions."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "network report refs"
+      - "topology refs"
+      - "exposure notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.runtime_injection_testing"
+    title: "Dast.runtime Injection Testing"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 36
+        item_name: "Injection Testing (Runtime)"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime injection testing planning, deferred until target and validation profiles are approved."
+    category_id: "api_surface"
+    scan_kind: "deferred"
+    intent: "Plan runtime injection testing as a future approved DAST validation step with target and artifact containment."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_service"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "target URL approval"
+      - "test scope"
+      - "output policy"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.auth_session_testing"
+    title: "Dast.auth Session Testing"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 37
+        item_name: "Authentication & Session Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct DAST auth/session testing planning, deferred until credentials and target scope are approved."
+    category_id: "auth_session_access"
+    scan_kind: "deferred"
+    intent: "Plan runtime authentication and session testing after target scope, credentials, and approval are file-backed."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_service"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "test account policy"
+      - "session scope"
+      - "evidence policy"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.api_security_testing"
+    title: "Dast.api Security Testing"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 38
+        item_name: "API Security Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime API security testing planning, deferred until endpoint scope is approved."
+    category_id: "api_surface"
+    scan_kind: "deferred"
+    intent: "Plan runtime API security testing for approved endpoints, payloads, rate limits, and artifact containment."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_service"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "endpoint scope"
+      - "payload scope"
+      - "output policy"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.security_header_validation"
+    title: "Dast.security Header Validation"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 39
+        item_name: "Security Header Validation"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct runtime header validation planning, deferred until deployed URL or response-artifact scope is approved."
+    category_id: "configuration_posture"
+    scan_kind: "deferred"
+    intent: "Plan runtime security header validation for approved deployed URLs or captured response artifacts."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_service"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "URL scope"
+      - "response refs"
+      - "header policy"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.tls_ssl_configuration_review"
+    title: "Dast.tls Ssl Configuration Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 40
+        item_name: "TLS/SSL Configuration"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct TLS/SSL configuration review coverage."
+    category_id: "configuration_posture"
+    scan_kind: "external_report_review"
+    intent: "Review TLS/SSL configuration evidence from approved reports or scoped runtime validation."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "certificate refs"
+      - "protocol report refs"
+      - "deployment scope"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.dast.business_logic_testing"
+    title: "Dast.business Logic Testing"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 41
+        item_name: "Business Logic Vulnerability Testing"
+        domain: "DOMAIN 6 — DYNAMIC & RUNTIME TESTING (DAST)"
+        coverage_status: "deferred_runtime"
+        coverage_rationale: "Catalog now includes direct business-logic test planning, deferred until workflow and account scope are approved."
+    category_id: "api_surface"
+    scan_kind: "deferred"
+    intent: "Plan business-logic vulnerability testing only after workflows, accounts, and action limits are approved."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "approval_required"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "command_mutation_risk"
+      - "cache_or_artifact_write_risk"
+      - "timeout_policy"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "unknown"
+    network_risk: "external_service"
+    artifact_write_risk: "unknown"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "workflow scope"
+      - "abuse case refs"
+      - "account policy"
+    timeout_policy: "approval_scoped_runtime"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "normal_next_work_order"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.compliance.regulatory_mapping_review"
+    title: "Compliance.regulatory Mapping Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 42
+        item_name: "Regulatory Compliance Mapping (GDPR/HIPAA/PCI/SOC2)"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct compliance mapping coverage without claiming certification."
+    category_id: "data_handling_privacy"
+    scan_kind: "manual_review"
+    intent: "Map scoped evidence to regulatory frameworks such as GDPR, HIPAA, PCI, and SOC 2 without claiming certification."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "compliance scope"
+      - "evidence refs"
+      - "gap notes"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.compliance.sbom_attestation_review"
+    title: "Compliance.sbom Attestation Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 44
+        item_name: "SBOM & Software Supply Chain Attestation"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct SBOM and supply-chain attestation review coverage."
+    category_id: "build_release_integrity"
+    scan_kind: "external_report_review"
+    intent: "Review SBOM and software supply-chain attestation evidence for release-gate readiness."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "external_metadata"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "SBOM refs"
+      - "attestation refs"
+      - "provenance refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null
+  - scan_id: "sec.obs.incident_response_error_handling_review"
+    title: "Obs.incident Response Error Handling Review"
+    tier: "T2"
+    source_item_refs:
+      - source_list_ref: "docs/contracts/security-review-source-47-enterprise-scans.md"
+        item_number: 46
+        item_name: "Incident Response & Error Handling"
+        domain: "DOMAIN 7 — COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY"
+        coverage_status: "explicit"
+        coverage_rationale: "Catalog now includes direct incident response and error-handling review coverage."
+    category_id: "observability_incident"
+    scan_kind: "manual_review"
+    intent: "Review incident-response readiness and security-sensitive error handling without exposing sensitive details."
+    phase_allowed:
+      - "security_review_planning"
+    approval_mode_required: "observe_only"
+    target_profile_inputs:
+      - "target_id"
+      - "repo_path"
+      - "target_output_restrictions"
+    validation_profile_inputs:
+      - "no_validation_phases"
+    evidence_profile_inputs:
+      - "source_list_ref"
+      - "crosswalk_ref"
+      - "finding_refs"
+      - "evidence_limitations"
+      - "no_forbidden_action_proof"
+    mutation_risk: "none"
+    network_risk: "local_only"
+    artifact_write_risk: "none"
+    prerequisites:
+      - "file-backed Work Order scope"
+      - "source list and crosswalk references"
+    expected_outputs:
+      - "incident plan refs"
+      - "error handling refs"
+      - "logging refs"
+    timeout_policy: "manual_review"
+    safe_failure_mode: "HOLD if scope, approval, evidence, or artifact containment is unclear."
+    false_positive_notes: "Requires human security review before release-gate decisions or remediation planning."
+    remediation_handoff_hint: "hold_review"
+    execution_status: "non_executing_definition"
+    command_template: null

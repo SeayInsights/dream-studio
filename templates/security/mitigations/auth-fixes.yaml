@@ -1,0 +1,136 @@
+# Authentication & Authorization Fix Templates
+# Maps rule IDs, CWE codes, and OWASP categories to auth/authz mitigation patterns.
+# rule_pattern is pipe-delimited: any token match triggers this template.
+# Covers KRG-auth-001 through KRG-auth-005 and related multi-tenant access control findings.
+
+- rule_pattern: "KRG-auth-001|CWE-639|missing-tenant-scope|tenant-isolation|idor-tenant"
+  title: "Missing Tenant Scope — Add Vendor/Tenant Filter to All Queries"
+  cwe: "CWE-639"
+  owasp_category: "A01:2021"
+  immediate_fix:
+    description: "Add WHERE vendor_id = ? clause to every query that touches multi-tenant data; bind value from authenticated session, never from request parameters"
+    code_before: |
+      def get_products(category):
+          cursor.execute(
+              "SELECT * FROM products WHERE category = %s",
+              (category,)
+          )
+          return cursor.fetchall()
+    code_after: |
+      def get_products(category, current_user):
+          cursor.execute(
+              "SELECT * FROM products WHERE category = %s AND vendor_id = %s",
+              (category, current_user.vendor_id)
+          )
+          return cursor.fetchall()
+  long_term_fix: "Implement a query middleware layer that automatically appends the tenant scope to every SELECT/UPDATE/DELETE; enforce via integration test that asserts cross-tenant data is never returned in any endpoint"
+  verification_test: "pytest tests/integration/test_tenant_isolation.py — all assertions must pass; manually request resource owned by vendor_A while authenticated as vendor_B — expect 403 or empty result"
+  effort_estimate: "2h per instance"
+  requires_context: true
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
+    - "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+
+- rule_pattern: "KRG-auth-002|CWE-284|idor|insecure-direct-object-reference|missing-ownership-check"
+  title: "IDOR — Verify Ownership Before Accessing Resource"
+  cwe: "CWE-284"
+  owasp_category: "A01:2021"
+  immediate_fix:
+    description: "Before serving or modifying any resource by ID, verify the authenticated user owns or is authorized to access it"
+    code_before: |
+      def get_order(order_id):
+          order = Order.query.get(order_id)
+          return order.to_dict()
+    code_after: |
+      def get_order(order_id, current_user):
+          order = Order.query.filter_by(
+              id=order_id,
+              vendor_id=current_user.vendor_id
+          ).first_or_404()
+          return order.to_dict()
+  long_term_fix: "Centralize ownership verification in a reusable decorator or service method; add Semgrep rule KRG-auth-002 to flag any query.get(id) call not followed by an ownership assertion"
+  verification_test: "curl -H 'Authorization: Bearer {vendor_B_token}' /api/orders/{vendor_A_order_id} — expect HTTP 404 (not 200 or 403 that leaks existence)"
+  effort_estimate: "1h per instance"
+  requires_context: true
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
+
+- rule_pattern: "KRG-auth-003|CWE-306|missing-auth-middleware|unauthenticated-endpoint|no-login-required"
+  title: "Missing Authentication Middleware — Add Auth Decorator to All Protected Routes"
+  cwe: "CWE-306"
+  owasp_category: "A07:2021"
+  immediate_fix:
+    description: "Add the framework's authentication decorator (@login_required, @require_auth, or equivalent) to every route that accesses non-public data"
+    code_before: |
+      @app.route("/api/v1/vendor/products")
+      def list_products():
+          return jsonify(Product.query.all())
+    code_after: |
+      from auth import login_required
+
+      @app.route("/api/v1/vendor/products")
+      @login_required
+      def list_products():
+          return jsonify(
+              Product.query.filter_by(vendor_id=current_user.vendor_id).all()
+          )
+  long_term_fix: "Adopt a default-deny posture: register a before_request hook that rejects all requests to /api/* unless they carry a valid token; explicitly allowlist public endpoints (/health, /login) rather than protecting individual routes"
+  verification_test: "curl /api/v1/vendor/products (no Authorization header) — expect HTTP 401; run pytest tests/integration/test_auth_required.py"
+  effort_estimate: "30m per instance"
+  requires_context: false
+  references:
+    - "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    - "https://flask-login.readthedocs.io/en/latest/#flask_login.login_required"
+
+- rule_pattern: "KRG-auth-004|CWE-200|unscoped-bulk-export|data-exposure-export|bulk-export"
+  title: "Unscoped Bulk Export — Add Tenant Filter to Export Queries"
+  cwe: "CWE-200"
+  owasp_category: "A01:2021"
+  immediate_fix:
+    description: "Restrict bulk export queries to the authenticated tenant; never export rows across tenant boundaries in a single call"
+    code_before: |
+      def export_all_transactions():
+          rows = db.execute("SELECT * FROM transactions").fetchall()
+          return generate_csv(rows)
+    code_after: |
+      def export_all_transactions(current_user):
+          rows = db.execute(
+              "SELECT * FROM transactions WHERE vendor_id = %s",
+              (current_user.vendor_id,)
+          ).fetchall()
+          return generate_csv(rows)
+  long_term_fix: "Add a row-level security policy at the database layer (PostgreSQL RLS) so the DB engine enforces tenant scope regardless of application-layer query; add an integration test that asserts export response never contains rows belonging to another tenant"
+  verification_test: "Download export as vendor_B; grep for vendor_A's known transaction IDs — expect 0 matches; check row count matches vendor_B's transaction count in the DB"
+  effort_estimate: "2h per instance"
+  requires_context: true
+  references:
+    - "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
+    - "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+
+- rule_pattern: "KRG-auth-005|CWE-269|privilege-escalation|role-bypass|missing-role-check"
+  title: "Privilege Escalation — Enforce Role-Based Access Check Before Sensitive Operations"
+  cwe: "CWE-269"
+  owasp_category: "A01:2021"
+  immediate_fix:
+    description: "Add an explicit role check before any admin or privileged operation; reject with 403 if the user's role does not permit the action"
+    code_before: |
+      def update_pricing(product_id, new_price):
+          product = Product.query.get(product_id)
+          product.price = new_price
+          db.session.commit()
+    code_after: |
+      def update_pricing(product_id, new_price, current_user):
+          if current_user.role not in ("admin", "pricing_manager"):
+              abort(403, "Insufficient privileges to modify pricing")
+          product = Product.query.filter_by(
+              id=product_id, vendor_id=current_user.vendor_id
+          ).first_or_404()
+          product.price = new_price
+          db.session.commit()
+  long_term_fix: "Implement RBAC with a centralized permission registry; use a decorator @requires_role('admin') rather than inline role checks; write a role matrix test that exhaustively asserts each role's allowed and denied operations"
+  verification_test: "curl -X PATCH /api/products/{id}/price -H 'Authorization: Bearer {viewer_token}' — expect HTTP 403; pytest tests/integration/test_rbac.py::test_viewer_cannot_update_pricing"
+  effort_estimate: "3h per instance"
+  requires_context: true
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+    - "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"

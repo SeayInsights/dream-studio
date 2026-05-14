@@ -1,0 +1,212 @@
+tools:
+  gh:
+    name: GitHub CLI
+    description: "Official GitHub command-line interface for managing repositories, issues, PRs, and workflows"
+    detect_command:
+      windows: "where gh"
+      mac: "which gh"
+      linux: "which gh"
+    version_command: "gh --version"
+    min_version: "2.40.0"
+    upgrade_command:
+      windows: "choco upgrade gh -y"
+      mac: "brew upgrade gh"
+      linux: "sudo apt-get install --only-upgrade gh"
+    install_command:
+      windows: "choco install gh -y"
+      mac: "brew install gh"
+      linux: "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && echo 'deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt-get update && sudo apt-get install gh -y"
+    what_it_unlocks:
+      - ds-core (git workflows, PR creation/review)
+      - ds-domains (client-work with GitHub integration)
+      - GitHub API access (fallback when API key needed)
+    docs_url: "https://cli.github.com/manual"
+
+  firecrawl:
+    name: Firecrawl MCP Server
+    description: "MCP server for web scraping, crawling, search, and LLM-ready extraction via Firecrawl API"
+    detect_command:
+      windows: "claude mcp list 2>NUL | findstr firecrawl-mcp"
+      mac: "claude mcp list 2>/dev/null | grep firecrawl-mcp"
+      linux: "claude mcp list 2>/dev/null | grep firecrawl-mcp"
+    version_command: "npm list -g firecrawl-mcp --depth=0 2>NUL || echo unknown"
+    min_version: "3.0.0"
+    upgrade_command:
+      windows: "npm update -g firecrawl-mcp"
+      mac: "npm update -g firecrawl-mcp"
+      linux: "npm update -g firecrawl-mcp"
+    install_command:
+      windows: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
+      mac: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
+      linux: "claude mcp add --scope user firecrawl-mcp -e FIRECRAWL_API_KEY=<key> -- npx -y firecrawl-mcp"
+    what_it_unlocks:
+      - ds-core (web research, web.md content extraction, site mapping)
+      - ds-domains (web scraping for client work, competitive research)
+      - ds-security (DAST site crawling and findings extraction)
+      - ds-career (job portal scraping via firecrawl_search)
+    docs_url: "https://github.com/mendableai/firecrawl-mcp-server"
+
+  playwright:
+    name: Playwright
+    description: "Browser automation framework for headless testing, screenshot capture, and dynamic content interaction"
+    detect_command:
+      windows: "where playwright"
+      mac: "which playwright"
+      linux: "which playwright"
+    version_command: "playwright --version"
+    min_version: "1.40.0"
+    upgrade_command:
+      windows: "pip install --upgrade playwright && playwright install"
+      mac: "pip install --upgrade playwright && playwright install"
+      linux: "pip install --upgrade playwright && playwright install"
+    install_command:
+      windows: "pip install playwright && playwright install"
+      mac: "pip install playwright && playwright install"
+      linux: "pip install playwright && playwright install"
+    what_it_unlocks:
+      - ds-quality (UI testing, screenshot verification)
+      - ds-security (DAST browser-based testing)
+      - ds-domains (UI automation testing)
+    docs_url: "https://playwright.dev"
+
+  npm:
+    name: Node Package Manager
+    description: "JavaScript/TypeScript package manager for installing, managing, and running Node.js dependencies"
+    detect_command:
+      windows: "where npm"
+      mac: "which npm"
+      linux: "which npm"
+    version_command: "npm --version"
+    min_version: "9.0.0"
+    upgrade_command:
+      windows: "npm install -g npm@latest"
+      mac: "npm install -g npm@latest"
+      linux: "npm install -g npm@latest"
+    install_command:
+      windows: "choco install nodejs -y"
+      mac: "brew install node"
+      linux: "sudo apt-get install nodejs npm"
+    what_it_unlocks:
+      - ds-domains (SaaS builds, frontend frameworks)
+      - ds-workflow (package scripts execution)
+      - All Node.js based skills and scripts
+    docs_url: "https://docs.npmjs.com"
+
+  python:
+    name: Python
+    description: "Python interpreter and runtime for executing Python scripts and packages across dream-studio"
+    detect_command:
+      windows: "where py"
+      mac: "which python3"
+      linux: "which python3"
+    version_command: "python --version"
+    min_version: "3.10.0"
+    upgrade_command:
+      windows: "choco upgrade python -y"
+      mac: "brew upgrade python@3.12"
+      linux: "sudo apt-get install python3.12 python3.12-venv"
+    install_command:
+      windows: "choco install python -y"
+      mac: "brew install python@3.12 && brew link python@3.12"
+      linux: "sudo apt-get install python3.12 python3.12-venv"
+    what_it_unlocks:
+      - ds-core (all Python-based skills)
+      - ds-quality (linting, formatting, testing)
+      - ds-security (vulnerability scanning, binary analysis)
+      - All dream-studio skills (core runtime dependency)
+    docs_url: "https://www.python.org/downloads"
+
+  node:
+    name: Node.js
+    description: "JavaScript runtime for executing Node.js scripts, CLI tools, and server applications"
+    detect_command:
+      windows: "where node"
+      mac: "which node"
+      linux: "which node"
+    version_command: "node --version"
+    min_version: "18.0.0"
+    upgrade_command:
+      windows: "choco upgrade nodejs -y"
+      mac: "brew upgrade node"
+      linux: "sudo apt-get install nodejs"
+    install_command:
+      windows: "choco install nodejs -y"
+      mac: "brew install node"
+      linux: "sudo apt-get install nodejs"
+    what_it_unlocks:
+      - ds-domains (SaaS builds, web development)
+      - ds-workflow (package scripts, CLI execution)
+      - Frontend tooling and build systems
+    docs_url: "https://nodejs.org/en/download"
+
+  semgrep:
+    name: Semgrep
+    description: "Static analysis tool for finding bugs, detecting vulnerabilities, and enforcing code standards across 30+ languages"
+    detect_command:
+      windows: "where semgrep"
+      mac: "which semgrep"
+      linux: "which semgrep"
+    version_command: "semgrep --version"
+    min_version: "1.0.0"
+    upgrade_command:
+      windows: "pip install --upgrade semgrep"
+      mac: "pip install --upgrade semgrep"
+      linux: "pip install --upgrade semgrep"
+    install_command:
+      windows: "pip install semgrep"
+      mac: "pip install semgrep"
+      linux: "pip install semgrep"
+    what_it_unlocks:
+      - ds-security (SAST scanning, code vulnerability detection)
+      - ds-quality (code quality checks, custom rule enforcement)
+      - ds-core (pre-commit security validation)
+    docs_url: "https://semgrep.dev/docs"
+
+  zap:
+    name: OWASP ZAP
+    description: "Dynamic application security testing (DAST) tool for finding vulnerabilities in running web applications"
+    detect_command:
+      windows: "where zap.bat"
+      mac: "which zap.sh"
+      linux: "which zap.sh"
+    version_command:
+      windows: "zap.bat -version"
+      mac: "zap.sh -version"
+      linux: "zap.sh -version"
+    min_version: "2.14.0"
+    upgrade_command:
+      windows: "Manual update: download latest from https://www.zaproxy.org/download"
+      mac: "brew upgrade --cask owasp-zap"
+      linux: "Manual update: download latest from https://www.zaproxy.org/download"
+    install_command:
+      windows: "Manual install: download from https://www.zaproxy.org/download"
+      mac: "brew install --cask owasp-zap"
+      linux: "snap install zaproxy --classic"
+    what_it_unlocks:
+      - ds-security (DAST web application scanning)
+      - ds-quality (runtime vulnerability detection)
+      - ds-domains (client security assessments)
+    docs_url: "https://www.zaproxy.org/docs"
+
+  nuclei:
+    name: Nuclei
+    description: "Fast vulnerability scanner based on templates for detecting security issues across web apps, networks, and cloud"
+    detect_command:
+      windows: "where nuclei"
+      mac: "which nuclei"
+      linux: "which nuclei"
+    version_command: "nuclei -version"
+    min_version: "3.0.0"
+    upgrade_command:
+      windows: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      mac: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      linux: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+    install_command:
+      windows: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      mac: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+      linux: "go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+    what_it_unlocks:
+      - ds-security (template-based vulnerability scanning)
+      - ds-quality (infrastructure security checks)
+      - ds-domains (rapid security assessment)
+    docs_url: "https://docs.projectdiscovery.io/nuclei"

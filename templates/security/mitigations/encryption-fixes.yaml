@@ -1,0 +1,177 @@
+# Encryption & Transport Security Fix Templates
+# Maps rule IDs, CWE codes, and OWASP categories to encryption/TLS mitigation patterns.
+# rule_pattern is pipe-delimited: any token match triggers this template.
+# Covers KRG-enc-001 through KRG-enc-005.
+
+- rule_pattern: "KRG-enc-001|CWE-319|http-not-https|plaintext-http|insecure-http|no-tls"
+  title: "HTTP Not HTTPS — Enforce HTTPS Redirect and HSTS"
+  cwe: "CWE-319"
+  owasp_category: "A02:2021"
+  immediate_fix:
+    description: "Redirect all HTTP traffic to HTTPS at the web server or load balancer level; add HSTS header to prevent downgrade attacks"
+    code_before: |
+      # Flask — no HTTPS enforcement
+      app.run(host="0.0.0.0", port=80)
+
+      # Nginx config
+      server {
+          listen 80;
+          server_name vendor-portal.example.com;
+          # no redirect
+      }
+    code_after: |
+      # Flask — enforce HTTPS via Talisman
+      from flask_talisman import Talisman
+      Talisman(app, force_https=True, strict_transport_security=True,
+               strict_transport_security_max_age=31536000)
+
+      # Nginx config
+      server {
+          listen 80;
+          server_name vendor-portal.example.com;
+          return 301 https://$host$request_uri;
+      }
+      server {
+          listen 443 ssl;
+          add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      }
+  long_term_fix: "Configure HSTS preloading (max-age >= 1 year + includeSubDomains); submit the domain to the HSTS preload list; ensure all internal service-to-service calls also use HTTPS; audit any hardcoded http:// URLs in the codebase"
+  verification_test: "curl -v http://vendor-portal.example.com — expect HTTP 301 redirect to https://; curl -I https://vendor-portal.example.com — expect Strict-Transport-Security header in response"
+  effort_estimate: "2h"
+  requires_context: false
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html"
+    - "https://hstspreload.org/"
+
+- rule_pattern: "KRG-enc-002|CWE-295|missing-tls-verification|ssl-verify-false|verify=False|tls-skip-verify"
+  title: "Missing TLS Verification — Restore verify=True"
+  cwe: "CWE-295"
+  owasp_category: "A02:2021"
+  immediate_fix:
+    description: "Remove verify=False from all requests calls; if a certificate error is the root cause, fix the certificate — never disable verification"
+    code_before: |
+      import requests
+
+      response = requests.get(
+          "https://api.vendor-portal.internal/data",
+          verify=False  # DANGEROUS: disables TLS certificate verification
+      )
+    code_after: |
+      import requests
+
+      response = requests.get(
+          "https://api.vendor-portal.internal/data"
+          # verify=True is the default — do not override it
+      )
+      # If a custom CA is needed (e.g., internal CA):
+      # response = requests.get(url, verify="/path/to/ca-bundle.crt")
+  long_term_fix: "For internal services behind Zscaler or a corporate proxy: install the proxy's CA certificate into the system trust store and set REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE to its path; never ship verify=False in production code; add Semgrep rule KRG-enc-002 to block verify=False commits"
+  verification_test: "grep -rn 'verify=False\\|verify = False' {file} returns 0 matches; python -c \"import requests; requests.get('https://api.vendor-portal.internal/data')\" exits with code 0"
+  effort_estimate: "1h per instance (includes CA bundle setup if needed)"
+  requires_context: false
+  references:
+    - "https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification"
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html"
+
+- rule_pattern: "KRG-enc-003|CWE-311|unencrypted-db-connection|db-no-ssl|sslmode-disable|db-plaintext"
+  title: "Unencrypted Database Connection — Add sslmode=require"
+  cwe: "CWE-311"
+  owasp_category: "A02:2021"
+  immediate_fix:
+    description: "Add sslmode=require to the database connection string to enforce TLS between the application and the database server"
+    code_before: |
+      conn = psycopg2.connect(
+          host=os.environ["DB_HOST"],
+          database=os.environ["DB_NAME"],
+          user=os.environ["DB_USER"],
+          password=os.environ["DB_PASSWORD"]
+          # no sslmode — connection is unencrypted
+      )
+    code_after: |
+      conn = psycopg2.connect(
+          host=os.environ["DB_HOST"],
+          database=os.environ["DB_NAME"],
+          user=os.environ["DB_USER"],
+          password=os.environ["DB_PASSWORD"],
+          sslmode="require"   # enforces TLS; use "verify-full" for certificate validation
+      )
+  long_term_fix: "Upgrade to sslmode=verify-full with sslrootcert pointing to the DB server's CA certificate for full certificate validation; configure the database server to reject non-SSL connections (postgresql.conf: ssl = on, hostssl entries only in pg_hba.conf)"
+  verification_test: "python -c \"import psycopg2, os; conn = psycopg2.connect(**{...sslmode: 'require'}); cur = conn.cursor(); cur.execute('SELECT pg_ssl_is_used()'); print(cur.fetchone())\" — expect (True,)"
+  effort_estimate: "1h"
+  requires_context: false
+  references:
+    - "https://www.postgresql.org/docs/current/libpq-ssl.html"
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Database_Security_Cheat_Sheet.html"
+
+- rule_pattern: "KRG-enc-004|CWE-614|insecure-cookie|cookie-no-secure|cookie-no-httponly|missing-cookie-flags"
+  title: "Insecure Cookie — Add Secure, HttpOnly, and SameSite Flags"
+  cwe: "CWE-614"
+  owasp_category: "A02:2021"
+  immediate_fix:
+    description: "Set secure=True, httponly=True, and samesite='Strict' (or 'Lax') on all session and authentication cookies"
+    code_before: |
+      # Flask — insecure session cookie config
+      app.config.update(
+          SESSION_COOKIE_SECURE=False,
+          SESSION_COOKIE_HTTPONLY=False
+      )
+
+      # Manual cookie set
+      response.set_cookie("session_id", value=session_token)
+    code_after: |
+      # Flask — secure session cookie config
+      app.config.update(
+          SESSION_COOKIE_SECURE=True,      # only sent over HTTPS
+          SESSION_COOKIE_HTTPONLY=True,    # inaccessible to JavaScript
+          SESSION_COOKIE_SAMESITE="Strict" # blocks CSRF via cross-site requests
+      )
+
+      # Manual cookie set
+      response.set_cookie(
+          "session_id",
+          value=session_token,
+          secure=True,
+          httponly=True,
+          samesite="Strict"
+      )
+  long_term_fix: "Implement Content Security Policy (CSP) alongside HttpOnly to prevent XSS-based cookie theft; use short session token TTLs (15–30 min with sliding expiry); add integration test asserting Set-Cookie header always includes Secure and HttpOnly flags in production responses"
+  verification_test: "curl -I https://vendor-portal.example.com/login — inspect Set-Cookie header, expect 'Secure; HttpOnly; SameSite=Strict'; python -m pytest tests/integration/test_cookies.py::test_session_cookie_flags"
+  effort_estimate: "1h"
+  requires_context: false
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+    - "https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#Security"
+
+- rule_pattern: "KRG-enc-005|CWE-311|unencrypted-data-at-rest|plaintext-pii|no-field-encryption|sensitive-field-unencrypted"
+  title: "Unencrypted Sensitive Data at Rest — Add Encryption Wrapper"
+  cwe: "CWE-311"
+  owasp_category: "A02:2021"
+  immediate_fix:
+    description: "Encrypt sensitive fields (PII, pricing, credentials) before writing to the database; decrypt only when the value is needed at the application layer"
+    code_before: |
+      class VendorProfile(Base):
+          __tablename__ = "vendor_profiles"
+          id = Column(Integer, primary_key=True)
+          vendor_id = Column(String)
+          contact_email = Column(String)     # stored plaintext — PII
+          margin_percent = Column(Float)     # stored plaintext — sensitive
+    code_after: |
+      from sqlalchemy_utils import EncryptedType
+      from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
+      import os
+
+      ENCRYPTION_KEY = os.environ["FIELD_ENCRYPTION_KEY"]
+
+      class VendorProfile(Base):
+          __tablename__ = "vendor_profiles"
+          id = Column(Integer, primary_key=True)
+          vendor_id = Column(String)
+          contact_email = Column(EncryptedType(String, ENCRYPTION_KEY, AesEngine, "pkcs5"))
+          margin_percent = Column(EncryptedType(Float, ENCRYPTION_KEY, AesEngine, "pkcs5"))
+  long_term_fix: "Use database-native column encryption (PostgreSQL pgcrypto, AWS RDS transparent encryption) or a dedicated field encryption service; implement key rotation without downtime using envelope encryption (encrypt data with a data key, wrap data key with a KMS-managed key)"
+  verification_test: "SELECT contact_email FROM vendor_profiles LIMIT 1 — value should be unreadable ciphertext at the database layer; python -c \"from models import VendorProfile; vp = session.get(VendorProfile, 1); assert '@' in vp.contact_email\" — decryption succeeds at application layer"
+  effort_estimate: "4h (includes migration for existing rows)"
+  requires_context: true
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+    - "https://github.com/kvesteri/sqlalchemy-utils"

@@ -1,0 +1,65 @@
+name: Validate SKILL.md Files
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**/*.md'
+    branches: [main]
+
+jobs:
+  validate-skills:
+    name: Validate SKILL.md Standards
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to get changed files
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PyYAML
+        run: pip install PyYAML
+
+      - name: Get changed SKILL.md files
+        id: changed-files
+        run: |
+          # Get list of changed files in this PR
+          git fetch origin ${{ github.base_ref }}
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep 'skills/.*SKILL\.md$' || true)
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No SKILL.md files changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed SKILL.md files:"
+            echo "$CHANGED_FILES"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            # Save to file for next step
+            echo "$CHANGED_FILES" > changed_files.txt
+          fi
+
+      - name: Run validation checks
+        if: steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          echo "Running validation on changed SKILL.md files..."
+          python .github/scripts/validate-skills.py $(cat changed_files.txt)
+
+      - name: Post validation summary
+        if: always() && steps.changed-files.outputs.has_changes == 'true'
+        run: |
+          echo "## SKILL.md Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Validated $(wc -l < changed_files.txt) SKILL.md file(s)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Standards Checked" >> $GITHUB_STEP_SUMMARY
+          echo "- Line count limits (main <300, modes <150)" >> $GITHUB_STEP_SUMMARY
+          echo "- YAML frontmatter syntax" >> $GITHUB_STEP_SUMMARY
+          echo "- Banned scaffolding phrases (warnings only)" >> $GITHUB_STEP_SUMMARY
+          echo "- Reference link integrity (warnings only)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See [SKILL_STANDARDS.md](../.github/SKILL_STANDARDS.md) for details." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,134 @@
+{
+  "approval_required_before_execution": true,
+  "current_branch_mapping": {
+    "branch": "integration/shared-intelligence-remaining-milestones",
+    "old_head": "fa51e3bd046a9f6d3f568fcd26dc125e864aa8b6",
+    "rewritten_head": "8ad0e0fe2ed1941f3263c8fe16fb8576f21bc9a3"
+  },
+  "current_real_repo_branch": "integration/shared-intelligence-remaining-milestones",
+  "current_real_repo_head": "fa51e3bd046a9f6d3f568fcd26dc125e864aa8b6",
+  "filter_command": "git filter-repo --force --path .dream-studio --path backups --path test_output --invert-paths",
+  "final_rewrite_performed": false,
+  "force_push_required": true,
+  "generated_at": "2026-05-14T22:46:00.642479+00:00",
+  "publication_safety_after_rewrite": "safe_for_public_release_after final rewrite is executed against remote refs and the same validation passes",
+  "real_repo_mutated": false,
+  "rehearsal_locations": {
+    "mirror": "<system-temp>/dream-studio-history-rewrite-rehearsal-20260514-183932/dream-studio.git",
+    "root": "<system-temp>/dream-studio-history-rewrite-rehearsal-20260514-183932",
+    "worktree": "<system-temp>/dream-studio-history-rewrite-rehearsal-20260514-183932/worktree"
+  },
+  "remote_mutated": false,
+  "remote_ref_snapshot": {
+    "head_count": 34,
+    "heads": [
+      "refs/heads/chore/refresh-stale-commit-status",
+      "refs/heads/feat/analytics-realtime",
+      "refs/heads/feat/ds-analytics-p2-project",
+      "refs/heads/feat/efficiency-analytics",
+      "refs/heads/feat/fullstack-skill",
+      "refs/heads/feat/gap-fixes-remaining",
+      "refs/heads/feat/github-release-check",
+      "refs/heads/feat/granular-skill-tracking",
+      "refs/heads/feat/pattern-enhancement",
+      "refs/heads/feat/project-intelligence-wave-2",
+      "refs/heads/feat/project-intelligence-wave-3",
+      "refs/heads/feat/schema-audit-phase-2",
+      "refs/heads/feat/schema-audit-phase-3",
+      "refs/heads/feat/skill-calibration",
+      "refs/heads/feat/sqlite-full-migration-pr4",
+      "refs/heads/feat/unified-discovery-phase-6",
+      "refs/heads/feat/unified-discovery-phase-7",
+      "refs/heads/feat/unified-discovery-phase-8",
+      "refs/heads/feat/unified-discovery-phases-1-5",
+      "refs/heads/feat/workflow-registry",
+      "refs/heads/fix/analytics-dashboard-charts",
+      "refs/heads/fix/analytics-db-path-and-format",
+      "refs/heads/fix/analytics-empty-charts",
+      "refs/heads/integration/main-ci-analytics-dashboard-path",
+      "refs/heads/integration/main-ci-dashboard-check-timeout",
+      "refs/heads/integration/main-ci-graph-cache-isolation",
+      "refs/heads/integration/phase3-plus-phase1-phase2",
+      "refs/heads/integration/shared-intelligence-remaining-milestones",
+      "refs/heads/integration/shared-intelligence-sqlite-foundation",
+      "refs/heads/main",
+      "refs/heads/refactor/phase1-runtime-consolidation",
+      "refs/heads/refactor/phase2a-event-authority",
+      "refs/heads/refactor/phase3-semantic-memory",
+      "refs/heads/refactor/track-a-data-plane"
+    ],
+    "remote": "https://github.com/SeayInsights/dream-studio.git",
+    "tag_count": 0,
+    "tags": []
+  },
+  "removed_history_paths": [
+    ".dream-studio/team/conventions.md",
+    ".dream-studio/team/gotchas.yml",
+    ".dream-studio/team/pack-overrides.yml",
+    "backups/analytics.db.2026-05-06-135343.bak",
+    "backups/checksums.txt",
+    "backups/studio-state.db.2026-05-06-135343.bak",
+    "backups/studio.db.2026-05-06-135343.bak",
+    "test_output/excel_compat.csv",
+    "test_output/integration/integration_archive.zip",
+    "test_output/integration/integration_single.csv",
+    "test_output/integration/multiple/metadata.txt",
+    "test_output/integration/multiple/overview.csv",
+    "test_output/integration/multiple/session_analytics.csv",
+    "test_output/integration/multiple/token_usage.csv",
+    "test_output/integration/multiple/top_skills.csv",
+    "test_output/multiple/metadata.txt",
+    "test_output/multiple/sessions.csv",
+    "test_output/multiple/skills.csv",
+    "test_output/multiple/tokens.csv",
+    "test_output/report_archive.zip",
+    "test_output/report_single.csv"
+  ],
+  "removed_path_classes": [
+    "local Dream Studio runtime state: .dream-studio/**",
+    "backup and backup DB artifacts: backups/**",
+    "generated test/report outputs: test_output/**"
+  ],
+  "schema": "dream_studio.repo_publication.history_rewrite_rehearsal.v1",
+  "source_repo": "<local dream-studio checkout>",
+  "tool": {
+    "availability": "available",
+    "help_note": "git filter-repo --help could not open local HTML docs, but the command and Python module were available.",
+    "name": "git-filter-repo",
+    "version_output": "a40bce548d2c"
+  },
+  "validation": {
+    "clean_home_validation": {
+      "clean_home_dream_studio_created": false,
+      "result": "pass",
+      "tests": "26 passed"
+    },
+    "contract_docs_drift_gate": {
+      "result": "pass"
+    },
+    "git_diff_check": {
+      "result": "pass"
+    },
+    "private_artifact_history_scan": {
+      "private_history_hit_count": 0,
+      "result": "pass"
+    },
+    "release_gate": {
+      "format": "pass",
+      "lint_baseline": "pass",
+      "result": "pass",
+      "security": "pass",
+      "tests": "2285 passed, 9 skipped, 1 xfailed"
+    },
+    "required_source_docs_tests_present": {
+      "result": "pass",
+      "sample_required_files_found": 6
+    },
+    "secret_pattern_scan": {
+      "commits_scanned": 872,
+      "finding_count": 0,
+      "result": "pass",
+      "value_redacted": true
+    }
+  }
+}

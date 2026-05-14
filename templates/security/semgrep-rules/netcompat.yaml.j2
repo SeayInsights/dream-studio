@@ -1,0 +1,235 @@
+rules:
+
+  # Rule 1: Certificate pinning — custom cert verification that breaks proxy SSL inspection
+  - id: {{ client.name | lower }}-{% if client.network.proxy.type == 'zscaler' %}zsc{% else %}net{% endif %}-001
+    pattern-either:
+      - pattern: |
+          ssl.match_hostname($CERT, $HOST)
+      - pattern: |
+          $CTX.load_verify_locations($...ARGS)
+      - pattern: |
+          $CTX.load_cert_chain($...ARGS)
+      - pattern: |
+          ssl.get_server_certificate($...ARGS)
+      - pattern: |
+          hashlib.$ALGO($CERT_DATA).digest()
+      - pattern: |
+          $SOCK.getpeercert(binary_form=True)
+    message: >
+      Certificate pinning or custom cert validation detected. This pattern will
+      break when traffic passes through {% if client.network.proxy.type == 'zscaler' %}Zscaler{% else %}the corporate proxy{% endif %}
+      because the proxy re-signs TLS connections with its own CA certificate.
+      Remove cert pinning or add the proxy CA to your trust bundle instead.
+      See network.proxy.custom_ca in the {{ client.name }} client profile.
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-297: Improper Validation of Certificate with Host Mismatch"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      proxy-type: {{ client.network.proxy.type }}
+      rule-group: netcompat
+
+  # Rule 2: Custom SSL context with non-default CA loading
+  - id: {{ client.name | lower }}-{% if client.network.proxy.type == 'zscaler' %}zsc{% else %}net{% endif %}-002
+    patterns:
+      - pattern: |
+          $CTX = ssl.create_default_context(...)
+      - pattern: |
+          $CTX.load_verify_locations($CAFILE)
+    message: >
+      Custom SSL context with explicit CA bundle loading. When
+      {% if client.network.proxy.type == 'zscaler' %}Zscaler{% else %}the corporate proxy{% endif %}
+      performs SSL inspection, it presents its own certificate. If this custom
+      context does not include the proxy CA, connections will fail. Ensure
+      the CA bundle includes the {{ client.name }} approved proxy CA certificate.
+      Use REQUESTS_CA_BUNDLE or SSL_CERT_FILE environment variables where possible.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      proxy-type: {{ client.network.proxy.type }}
+      rule-group: netcompat
+
+  # Rule 3: Hardcoded CA bundle paths
+  - id: {{ client.name | lower }}-{% if client.network.proxy.type == 'zscaler' %}zsc{% else %}net{% endif %}-003
+    pattern-either:
+      - pattern: |
+          certifi.where()
+      - pattern: |
+          ca_certs="..."
+      - pattern: |
+          ca_certs='...'
+      - pattern: |
+          cafile="..."
+      - pattern: |
+          cafile='...'
+      - pattern: |
+          verify="..."
+      - pattern: |
+          verify='...'
+    message: >
+      Hardcoded CA bundle path or use of certifi default CA store. The certifi
+      bundle does not include corporate proxy CA certificates. For {{ client.name }}
+      environments using {% if client.network.proxy.type == 'zscaler' %}Zscaler SSL inspection{% else %}corporate proxy SSL inspection{% endif %},
+      set REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE to a bundle that includes the
+      approved proxy CA, or use the system CA store (ssl.create_default_context()
+      without explicit CA loading on a properly configured host).
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: LOW
+      client: {{ client.name }}
+      proxy-type: {{ client.network.proxy.type }}
+      rule-group: netcompat
+
+  # Rule 4: Non-standard port outbound connections
+  - id: {{ client.name | lower }}-{% if client.network.proxy.type == 'zscaler' %}zsc{% else %}net{% endif %}-004
+    pattern-either:
+      - pattern: |
+          socket.connect(($HOST, $PORT))
+      - pattern: |
+          $SOCK.connect(($HOST, $PORT))
+      - pattern: |
+          requests.$METHOD("...:$PORT/...")
+      - pattern: |
+          urllib.request.urlopen("...:$PORT/...")
+    pattern-not: |
+      socket.connect(($HOST, 80))
+    pattern-not: |
+      socket.connect(($HOST, 443))
+    pattern-not: |
+      socket.connect(($HOST, 22))
+    pattern-not: |
+      $SOCK.connect(("localhost", $PORT))
+    pattern-not: |
+      $SOCK.connect(("127.0.0.1", $PORT))
+    message: >
+      Outbound connection to a non-standard port detected. The {{ client.name }}
+      network policy blocks non-standard ports
+      {% if client.network.proxy.type == 'zscaler' %}via Zscaler (blocked_ports: {{ client.network.proxy.blocked_ports | join(', ') }}){% endif %}.
+      Only ports 80 (HTTP) and 443 (HTTPS) are guaranteed to be allowed.
+      Connections on other ports will be silently dropped or blocked. Use
+      HTTPS (port 443) or coordinate with network/security for exceptions.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-668: Exposure of Resource to Wrong Sphere"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      proxy-type: {{ client.network.proxy.type }}
+      rule-group: netcompat
+
+  # Rule 5: WebSocket connections without TLS — won't tunnel through proxy
+  - id: {{ client.name | lower }}-{% if client.network.proxy.type == 'zscaler' %}zsc{% else %}net{% endif %}-005
+    pattern-either:
+      - pattern: |
+          websocket.create_connection("ws://...")
+      - pattern: |
+          websockets.connect("ws://...")
+      - pattern-regex: 'ws://(?!localhost|127\.0\.0\.1)'
+    message: >
+      Unencrypted WebSocket (ws://) will not work through
+      {% if client.network.proxy.type == 'zscaler' %}Zscaler{% else %}the corporate proxy{% endif %}.
+      Corporate proxies only tunnel WebSocket connections that upgrade from
+      HTTPS (wss://). Replace ws:// with wss:// and ensure the server supports
+      WSS. This applies to all {{ client.name }} WebSocket connections.
+    severity: ERROR
+    languages:
+      - python
+      - javascript
+      - typescript
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-319: Cleartext Transmission of Sensitive Information"
+      category: security
+      confidence: HIGH
+      client: {{ client.name }}
+      proxy-type: {{ client.network.proxy.type }}
+      rule-group: netcompat
+
+{% if client.network.proxy.type == 'zscaler' %}
+  # Rule 6 (Zscaler-only): Custom DNS resolution that bypasses proxy DNS
+  - id: {{ client.name | lower }}-zsc-006
+    pattern-either:
+      - pattern: |
+          socket.getaddrinfo($HOST, $PORT, $...ARGS)
+      - pattern: |
+          dns.resolver.resolve($...ARGS)
+      - pattern: |
+          dns.resolver.query($...ARGS)
+      - pattern: |
+          $RESOLVER = dns.resolver.Resolver()
+      - pattern: |
+          socket.gethostbyname($HOST)
+      - pattern: |
+          socket.gethostbyname_ex($HOST)
+    message: >
+      Custom DNS resolution detected. Zscaler routes DNS through its own
+      resolver to enforce DLP and URL filtering policies. Custom DNS resolvers
+      or direct socket.getaddrinfo() calls may bypass Zscaler's DNS inspection
+      and DLP controls (enabled for {{ client.name }}: dlp_patterns include
+      {{ client.network.proxy.dlp_patterns | join(', ') }}). Use system DNS
+      (Python's default name resolution) and let Zscaler handle DNS routing.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-441: Unintended Proxy or Intermediary"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      proxy-type: zscaler
+      zscaler-control: dns-inspection
+      rule-group: netcompat
+
+  # Rule 7 (Zscaler-only): mTLS configurations that conflict with SSL inspection
+  - id: {{ client.name | lower }}-zsc-007
+    pattern-either:
+      - pattern: |
+          $CTX.load_cert_chain(certfile=$CERT, keyfile=$KEY)
+      - pattern: |
+          $CTX.load_cert_chain($CERT, $KEY)
+      - pattern: |
+          ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+      - pattern: |
+          requests.Session()
+    patterns:
+      - pattern: |
+          $CTX.load_cert_chain($...ARGS)
+    message: >
+      Mutual TLS (mTLS) client certificate configuration detected. Zscaler SSL
+      inspection terminates and re-establishes TLS connections, which breaks mTLS
+      because the client certificate is presented to Zscaler, not the backend
+      server. If mTLS is required for this {{ client.name }} integration, work
+      with the security team to add a Zscaler SSL bypass rule for the specific
+      destination, rather than disabling SSL inspection globally.
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      owasp: "A05:2021 - Security Misconfiguration"
+      cwe: "CWE-295: Improper Certificate Validation"
+      category: security
+      confidence: MEDIUM
+      client: {{ client.name }}
+      proxy-type: zscaler
+      zscaler-control: ssl-inspection
+      rule-group: netcompat
+{% endif %}

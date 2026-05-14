@@ -1,0 +1,735 @@
+{
+  "schema": "dream_studio.repo_publication.final_history_rewrite_branch_classification.v1",
+  "generated_at": "2026-05-14T23:09:35.290965+00:00",
+  "repo": {
+    "defaultBranchRef": {
+      "name": "main"
+    },
+    "isPrivate": true,
+    "nameWithOwner": "SeayInsights/dream-studio",
+    "url": "https://github.com/SeayInsights/dream-studio"
+  },
+  "current_branch": "integration/shared-intelligence-remaining-milestones",
+  "current_local_head": "8eaef80b5f6b6da42e93f52950c6bb2fe80dabd0",
+  "remote_head_count": 34,
+  "remote_tag_count": 0,
+  "unknown_manual_review_count": 0,
+  "retained_rewritten_branches": [
+    "integration/shared-intelligence-remaining-milestones",
+    "main"
+  ],
+  "delete_retire_branches": [
+    "chore/refresh-stale-commit-status",
+    "feat/analytics-realtime",
+    "feat/ds-analytics-p2-project",
+    "feat/efficiency-analytics",
+    "feat/fullstack-skill",
+    "feat/gap-fixes-remaining",
+    "feat/github-release-check",
+    "feat/granular-skill-tracking",
+    "feat/pattern-enhancement",
+    "feat/project-intelligence-wave-2",
+    "feat/project-intelligence-wave-3",
+    "feat/schema-audit-phase-2",
+    "feat/schema-audit-phase-3",
+    "feat/skill-calibration",
+    "feat/sqlite-full-migration-pr4",
+    "feat/unified-discovery-phase-6",
+    "feat/unified-discovery-phase-7",
+    "feat/unified-discovery-phase-8",
+    "feat/unified-discovery-phases-1-5",
+    "feat/workflow-registry",
+    "fix/analytics-dashboard-charts",
+    "fix/analytics-db-path-and-format",
+    "fix/analytics-empty-charts",
+    "integration/main-ci-analytics-dashboard-path",
+    "integration/main-ci-dashboard-check-timeout",
+    "integration/main-ci-graph-cache-isolation",
+    "integration/phase3-plus-phase1-phase2",
+    "integration/shared-intelligence-sqlite-foundation",
+    "refactor/phase1-runtime-consolidation",
+    "refactor/phase2a-event-authority",
+    "refactor/phase3-semantic-memory",
+    "refactor/track-a-data-plane"
+  ],
+  "rewrite_rules": [
+    ".dream-studio/**",
+    "backups/**",
+    "test_output/**",
+    "committed SQLite DBs or backup DBs if reachable under those path classes",
+    "committed local runtime/private operational artifacts if reachable under those path classes"
+  ],
+  "execution_decision": "classification_clear_proceed_with_final_rewrite",
+  "branches": [
+    {
+      "branch": "chore/refresh-stale-commit-status",
+      "sha": "613d7bc3e7ea4e9e033b9e06064e9efd548b71c5",
+      "commit_date": "2026-04-29T15:22:56-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 31,
+          "state": "MERGED",
+          "title": "chore: fix stale red-X status on meta/ and grey-dot folders",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/31",
+          "merged_at": "2026-04-29T19:37:08Z",
+          "closed_at": "2026-04-29T19:37:08Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/analytics-realtime",
+      "sha": "33fc48e5e27349f9303a9a533b78b64dc917a0a9",
+      "commit_date": "2026-05-01T22:36:34-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 90,
+          "state": "MERGED",
+          "title": "Analytics Platform Phase 2: Real-Time Monitoring & Advanced Analytics",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/90",
+          "merged_at": "2026-05-02T02:39:19Z",
+          "closed_at": "2026-05-02T02:39:19Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/ds-analytics-p2-project",
+      "sha": "6b553b33f7d69131e96dbec13469631f18be6363",
+      "commit_date": "2026-05-01T11:15:52-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 58,
+          "state": "CLOSED",
+          "title": "feat: ds-analytics Phase 2 \u00e2\u20ac\u201d project-scoped analytics + git metrics",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/58",
+          "merged_at": null,
+          "closed_at": "2026-04-30T20:15:41Z"
+        }
+      ],
+      "reason": "No open PR remains; retained source of truth is main/current integration history."
+    },
+    {
+      "branch": "feat/efficiency-analytics",
+      "sha": "93e7c896b149164e406d88579e9c4d0e5ce094cd",
+      "commit_date": "2026-05-01T12:56:27-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 72,
+          "state": "MERGED",
+          "title": "feat: efficiency analytics \u00e2\u20ac\u201d time-to-context + token metrics",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/72",
+          "merged_at": "2026-05-01T16:56:49Z",
+          "closed_at": "2026-05-01T16:56:49Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/fullstack-skill",
+      "sha": "bae60ddea5ff3d60cf0ec2d8d966038348d360ce",
+      "commit_date": "2026-05-02T19:39:18-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 105,
+          "state": "MERGED",
+          "title": "feat: add fullstack domain skill",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/105",
+          "merged_at": "2026-05-02T23:41:39Z",
+          "closed_at": "2026-05-02T23:41:39Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/gap-fixes-remaining",
+      "sha": "26403e0e8ab78e8cd9303231920c56bea9cabc09",
+      "commit_date": "2026-04-29T19:06:52-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 41,
+          "state": "MERGED",
+          "title": "fix(debug): mandatory learn invocation after \u00e2\u2030\u00a53 hypothesis iterations",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/41",
+          "merged_at": "2026-04-29T23:08:09Z",
+          "closed_at": "2026-04-29T23:08:09Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/github-release-check",
+      "sha": "e8e340db1c48a93e17cbda7c8eeadf9ea5d88577",
+      "commit_date": "2026-04-29T15:17:00-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 30,
+          "state": "MERGED",
+          "title": "feat: once-per-day GitHub release update check",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/30",
+          "merged_at": "2026-04-29T19:21:00Z",
+          "closed_at": "2026-04-29T19:21:00Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/granular-skill-tracking",
+      "sha": "a95107424cf720f088eda72e2c3c845d6b01df10",
+      "commit_date": "2026-05-01T14:24:30-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 84,
+          "state": "MERGED",
+          "title": "feat: granular skill mode tracking in dashboard",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/84",
+          "merged_at": "2026-05-01T18:28:04Z",
+          "closed_at": "2026-05-01T18:28:04Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/pattern-enhancement",
+      "sha": "d4a0189a8b60c585396ffe936574fea1ba2e6ec4",
+      "commit_date": "2026-05-01T20:52:21-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [],
+      "reason": "Branch tip is already an ancestor of origin/main."
+    },
+    {
+      "branch": "feat/project-intelligence-wave-2",
+      "sha": "df17b8b8749c55c939f5b12526a47e7d2bc11ea9",
+      "commit_date": "2026-05-04T18:36:34-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 107,
+          "state": "MERGED",
+          "title": "feat: Wave 2 - Core Analysis (Stack Detection + PRD Generation)",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/107",
+          "merged_at": "2026-05-04T22:56:17Z",
+          "closed_at": "2026-05-04T22:56:17Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/project-intelligence-wave-3",
+      "sha": "6344bf7657892ff21a997ffb1c74a51be9f52dd6",
+      "commit_date": "2026-05-04T18:57:17-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 108,
+          "state": "MERGED",
+          "title": "feat: Wave 3A+B - Deep Analysis (Dependency Graph + Violations + Bugs)",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/108",
+          "merged_at": "2026-05-04T22:58:33Z",
+          "closed_at": "2026-05-04T22:58:33Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/schema-audit-phase-2",
+      "sha": "63600392e6bf43c8660c216397c01b3cba40dc06",
+      "commit_date": "2026-05-06T12:11:38-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 123,
+          "state": "MERGED",
+          "title": "feat: Phase 2 - Security Findings Dashboard",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/123",
+          "merged_at": "2026-05-06T16:31:24Z",
+          "closed_at": "2026-05-06T16:31:24Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/schema-audit-phase-3",
+      "sha": "04ee99e885bc5ab45827ad43486889b3a3617282",
+      "commit_date": "2026-05-06T13:37:42-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 124,
+          "state": "MERGED",
+          "title": "feat: Phase 3 - Cross-Domain Traceability",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/124",
+          "merged_at": "2026-05-06T17:47:16Z",
+          "closed_at": "2026-05-06T17:47:16Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/skill-calibration",
+      "sha": "104c404c8f355bf810cd9feb7127c2d16d14e8dc",
+      "commit_date": "2026-04-29T18:48:21-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 40,
+          "state": "MERGED",
+          "title": "feat(Item6): self-calibrating skill telemetry loop \u00e2\u20ac\u201d Stop hook, pulse rollup, health report",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/40",
+          "merged_at": "2026-04-29T23:02:03Z",
+          "closed_at": "2026-04-29T23:02:03Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/sqlite-full-migration-pr4",
+      "sha": "4d7d0910b13a75e6789d13b63c15f00d49399e5f",
+      "commit_date": "2026-05-01T12:49:16-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 71,
+          "state": "MERGED",
+          "title": "feat: cloud backup CLI + auto-push integration (PR 4/4)",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/71",
+          "merged_at": "2026-05-01T16:52:18Z",
+          "closed_at": "2026-05-01T16:52:18Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/unified-discovery-phase-6",
+      "sha": "d1eff1667506188dba8b1b96c7274fa9f8cdb954",
+      "commit_date": "2026-05-06T06:59:30-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 119,
+          "state": "MERGED",
+          "title": "feat: Unified Discovery Phase 6 - Polish & Testing",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/119",
+          "merged_at": "2026-05-06T11:14:03Z",
+          "closed_at": "2026-05-06T11:14:03Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/unified-discovery-phase-7",
+      "sha": "feee67e6a84030dfa249981eda8e5bbe1702b99d",
+      "commit_date": "2026-05-06T07:14:41-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 120,
+          "state": "MERGED",
+          "title": "feat: Unified Discovery Phase 7 - Research Integration",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/120",
+          "merged_at": "2026-05-06T11:20:16Z",
+          "closed_at": "2026-05-06T11:20:16Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/unified-discovery-phase-8",
+      "sha": "402d82d3cf5c3f2080c9b8d7ae60eebfd0611bca",
+      "commit_date": "2026-05-06T07:20:44-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 121,
+          "state": "MERGED",
+          "title": "feat: Unified Discovery Phase 8 - Advanced Features",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/121",
+          "merged_at": "2026-05-06T11:22:52Z",
+          "closed_at": "2026-05-06T11:22:52Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/unified-discovery-phases-1-5",
+      "sha": "a553ff71524006919ee5114443601ddafccd4c9b",
+      "commit_date": "2026-05-06T00:15:29-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 118,
+          "state": "MERGED",
+          "title": "feat: Unified Discovery Phases 1-5 Complete",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/118",
+          "merged_at": "2026-05-06T04:23:25Z",
+          "closed_at": "2026-05-06T04:23:25Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "feat/workflow-registry",
+      "sha": "08448e5e48fcd7d8afad8bd066559454dcae9cfe",
+      "commit_date": "2026-04-29T18:34:43-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 39,
+          "state": "MERGED",
+          "title": "feat(Item5): workflow_registry.py \u00e2\u20ac\u201d live discovery table + make workflows",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/39",
+          "merged_at": "2026-04-29T22:35:06Z",
+          "closed_at": "2026-04-29T22:35:07Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "fix/analytics-dashboard-charts",
+      "sha": "1bba8e8ff14c1046ee7936e3158b340ab1cc67f7",
+      "commit_date": "2026-05-02T11:01:13-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 97,
+          "state": "MERGED",
+          "title": "feat: external repo integration + analytics fixes",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/97",
+          "merged_at": "2026-05-02T15:03:30Z",
+          "closed_at": "2026-05-02T15:03:30Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "fix/analytics-db-path-and-format",
+      "sha": "1570da23aa0ddd690c049089d6cbbcfc87bc3139",
+      "commit_date": "2026-05-02T07:39:10-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 95,
+          "state": "CLOSED",
+          "title": "fix(analytics): correct database paths and collector data formats",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/95",
+          "merged_at": null,
+          "closed_at": "2026-05-02T15:12:10Z"
+        }
+      ],
+      "reason": "No open PR remains; retained source of truth is main/current integration history."
+    },
+    {
+      "branch": "fix/analytics-empty-charts",
+      "sha": "06d2bbd638924e0fc2ce5b593bca545c130ba989",
+      "commit_date": "2026-05-02T15:51:22-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 98,
+          "state": "MERGED",
+          "title": "fix(analytics): populate empty dashboard charts with real data",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/98",
+          "merged_at": "2026-05-02T19:52:49Z",
+          "closed_at": "2026-05-02T19:52:50Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "integration/main-ci-analytics-dashboard-path",
+      "sha": "40a669b3ba10f444a6eda029f6994c1ae108f71c",
+      "commit_date": "2026-05-13T23:04:52-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 134,
+          "state": "MERGED",
+          "title": "fix(ci): repair analytics dashboard CLI path",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/134",
+          "merged_at": "2026-05-14T03:19:23Z",
+          "closed_at": "2026-05-14T03:19:23Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "integration/main-ci-dashboard-check-timeout",
+      "sha": "03c9914283728338e10812e99d0471cc27bba170",
+      "commit_date": "2026-05-13T23:36:55-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 135,
+          "state": "MERGED",
+          "title": "test(dashboard): relax check preflight timeout",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/135",
+          "merged_at": "2026-05-14T03:48:55Z",
+          "closed_at": "2026-05-14T03:48:55Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "integration/main-ci-graph-cache-isolation",
+      "sha": "b726185f4dba4646e01cebbe0aa33015cee1aa5a",
+      "commit_date": "2026-05-13T22:33:55-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 133,
+          "state": "MERGED",
+          "title": "fix(graph): isolate cached graphs by database path",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/133",
+          "merged_at": "2026-05-14T02:44:01Z",
+          "closed_at": "2026-05-14T02:44:01Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "integration/phase3-plus-phase1-phase2",
+      "sha": "1b44deff3c930b7aa24771d6fd9fe93e8fcc3cce",
+      "commit_date": "2026-05-13T22:06:59-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 132,
+          "state": "MERGED",
+          "title": "Integrate Phase 3 plus Phase 1/2 stabilization",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/132",
+          "merged_at": "2026-05-14T02:25:35Z",
+          "closed_at": "2026-05-14T02:25:35Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "integration/shared-intelligence-remaining-milestones",
+      "sha": "f27e71c6413d55742f742dbc4a60de8a5e00f980",
+      "commit_date": "2026-05-14T07:40:31-04:00",
+      "classification": "current integration branch",
+      "action": "keep_and_rewrite",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 138,
+          "state": "MERGED",
+          "title": "feat(intelligence): complete shared intelligence adapter milestones",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/138",
+          "merged_at": "2026-05-14T11:43:45Z",
+          "closed_at": "2026-05-14T11:43:45Z"
+        }
+      ],
+      "reason": "Current branch. Local HEAD 8eaef80b5f6b6da42e93f52950c6bb2fe80dabd0 supersedes remote head f27e71c6413d55742f742dbc4a60de8a5e00f980."
+    },
+    {
+      "branch": "integration/shared-intelligence-sqlite-foundation",
+      "sha": "ea11bbc42a769c218135607cb6eb4f4d4eb4e8eb",
+      "commit_date": "2026-05-14T07:20:41-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 137,
+          "state": "MERGED",
+          "title": "feat(intelligence): add skill version evaluation policy",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/137",
+          "merged_at": "2026-05-14T11:29:18Z",
+          "closed_at": "2026-05-14T11:29:18Z"
+        },
+        {
+          "number": 136,
+          "state": "MERGED",
+          "title": "feat(intelligence): add shared intelligence sqlite foundation",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/136",
+          "merged_at": "2026-05-14T11:09:28Z",
+          "closed_at": "2026-05-14T11:09:28Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    },
+    {
+      "branch": "main",
+      "sha": "5eb814606b9f6a339fe0cc56e6c6fc4108fed8c4",
+      "commit_date": "2026-05-14T07:43:45-04:00",
+      "classification": "protected/default branch",
+      "action": "keep_and_rewrite",
+      "merged_to_main": true,
+      "main_merged_to_branch": true,
+      "prs": [],
+      "reason": "Default branch reported by GitHub."
+    },
+    {
+      "branch": "refactor/phase1-runtime-consolidation",
+      "sha": "03ab177022f43d4bb95da51b9763770c11991c46",
+      "commit_date": "2026-05-09T00:33:10-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 129,
+          "state": "CLOSED",
+          "title": "refactor: Phase 1 runtime consolidation",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/129",
+          "merged_at": null,
+          "closed_at": "2026-05-14T01:12:21Z"
+        }
+      ],
+      "reason": "Closed unmerged refactor branch superseded by merged integration/phase3-plus-phase1-phase2 line."
+    },
+    {
+      "branch": "refactor/phase2a-event-authority",
+      "sha": "0e7e45705e76bee9c1f0955fa8e9b92fe685ee2d",
+      "commit_date": "2026-05-09T09:49:21-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 130,
+          "state": "CLOSED",
+          "title": "Phase 2A: Event authority consolidation \u00e2\u20ac\u201d single canonical emitter",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/130",
+          "merged_at": null,
+          "closed_at": "2026-05-14T01:12:15Z"
+        }
+      ],
+      "reason": "Closed unmerged refactor branch superseded by merged integration/phase3-plus-phase1-phase2 line."
+    },
+    {
+      "branch": "refactor/phase3-semantic-memory",
+      "sha": "504f3f60a0c2a07ebb24327e1af0bac8726e5c39",
+      "commit_date": "2026-05-09T10:35:25-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": true,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 131,
+          "state": "CLOSED",
+          "title": "feat: Phase 3 semantic memory convergence",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/131",
+          "merged_at": null,
+          "closed_at": "2026-05-14T01:12:09Z"
+        }
+      ],
+      "reason": "Closed unmerged refactor branch superseded by merged integration/phase3-plus-phase1-phase2 line."
+    },
+    {
+      "branch": "refactor/track-a-data-plane",
+      "sha": "f74aea337c2fafc4621691d5e7af5460e1e896d1",
+      "commit_date": "2026-05-06T17:03:26-04:00",
+      "classification": "stale delete/retire",
+      "action": "delete_remote_head_after_retained_refs_rewritten",
+      "merged_to_main": false,
+      "main_merged_to_branch": false,
+      "prs": [
+        {
+          "number": 126,
+          "state": "MERGED",
+          "title": "refactor: Track A - Data Plane Event-Driven Architecture",
+          "url": "https://github.com/SeayInsights/dream-studio/pull/126",
+          "merged_at": "2026-05-06T21:10:21Z",
+          "closed_at": "2026-05-06T21:10:21Z"
+        }
+      ],
+      "reason": "Merged PR branch; no longer required as a remote head."
+    }
+  ]
+}

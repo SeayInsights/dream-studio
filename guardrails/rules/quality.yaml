@@ -1,0 +1,73 @@
+# Quality Guardrail Rules
+# These rules enforce code quality best practices
+
+- rule_id: GR-010
+  name: warn_large_commit
+  description: "Warn when commit changes more than 25 files (scope too wide)"
+  trigger:
+    custom_query: |
+      SELECT 1 FROM activity_log
+      WHERE event_type = 'commit.prepared'
+      AND json_extract(metadata, '$.files_changed') > 25
+      LIMIT 1
+  action: "advisory"
+  message: "Large commit detected (>25 files). Consider splitting into smaller, focused commits."
+  severity: "medium"
+  enabled: true
+
+- rule_id: GR-011
+  name: warn_missing_tests
+  description: "Warn when source files added but no test files"
+  trigger:
+    custom_query: |
+      SELECT 1 FROM activity_log
+      WHERE event_type = 'quality_score.calculated'
+      AND json_extract(metadata, '$.tests_score') < 4
+      LIMIT 1
+  action: "advisory"
+  message: "Source files added without corresponding tests. Consider adding test coverage."
+  severity: "low"
+  enabled: true
+
+- rule_id: GR-012
+  name: warn_debug_leftovers
+  description: "Warn when debug statements detected in commit"
+  trigger:
+    event_type: "quality_score.calculated"
+    custom_query: |
+      SELECT 1 FROM activity_log
+      WHERE event_type = 'quality_score.calculated'
+      AND json_extract(metadata, '$.debug_score') < 7
+      LIMIT 1
+  action: "advisory"
+  message: "Debug statements detected (console.log, print debug, etc.). Remove before shipping."
+  severity: "low"
+  enabled: true
+
+- rule_id: GR-013
+  name: warn_large_files
+  description: "Warn when files exceed 200 lines"
+  trigger:
+    custom_query: |
+      SELECT 1 FROM activity_log
+      WHERE event_type = 'quality_score.calculated'
+      AND json_extract(metadata, '$.large_files_score') < 8
+      LIMIT 1
+  action: "advisory"
+  message: "Large files detected (>200 lines). Consider splitting for maintainability."
+  severity: "low"
+  enabled: true
+
+- rule_id: GR-014
+  name: require_approval_low_quality_score
+  description: "Require approval when overall quality score < 6/10"
+  trigger:
+    custom_query: |
+      SELECT 1 FROM activity_log
+      WHERE event_type = 'quality_score.calculated'
+      AND json_extract(metadata, '$.overall_score') < 6.0
+      LIMIT 1
+  action: "advisory"
+  message: "Quality score below threshold (<6/10). Review recommended before shipping."
+  severity: "medium"
+  enabled: false  # Disabled for now - too aggressive

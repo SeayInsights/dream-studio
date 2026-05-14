@@ -1,0 +1,143 @@
+name: client-deliverable
+description: >
+  PLMarketing client delivery pipeline — intake → plan → build → validate → screenshot → summary → deliver.
+  Supports Power BI, Power Automate, Power Apps deliverables.
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Review the delivery summary. Approve to commit and create PR?"
+
+nodes:
+  - id: intake
+    command: |
+      Extract delivery requirements from the user's request into structured format:
+
+      1. DELIVERABLE TYPE: Power BI report / Power Automate flow / Power Apps app / Other
+      2. CLIENT: Organization name
+      3. REQUIREMENTS: Bulleted list of specific requirements
+      4. DATA SOURCES: What data is needed and where it comes from
+      5. ACCEPTANCE CRITERIA: How the client will evaluate success
+      6. DEADLINE: If mentioned
+
+      Save to: .sessions/<YYYY-MM-DD>/intake-requirements.md
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+    estimated_tokens: 3000
+
+  - id: plan
+    skill: plan
+    depends_on: [intake]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 10000
+    input: "{{intake.output}}"
+
+  - id: build
+    skill: build
+    depends_on: [plan]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    estimated_tokens: 25000
+    input: "{{plan.output}}"
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  - id: validate
+    depends_on: [build]
+    command: |
+      Run data validation checks appropriate to the deliverable type:
+
+      POWER BI:
+        - Verify DAX measures calculate correctly
+        - Check for missing relationships
+        - Validate filter context behavior
+        - Confirm all visuals render (no blank tiles)
+
+      POWER AUTOMATE:
+        - Verify trigger conditions
+        - Check connection references
+        - Validate error handling paths
+
+      POWER APPS:
+        - Check delegation warnings
+        - Verify form submission logic
+        - Validate data source connections
+
+      Report validation results.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+    estimated_tokens: 5000
+
+  - id: screenshot
+    depends_on: [validate]
+    command: |
+      Capture key visuals of the deliverable:
+
+      If Playwright is available:
+        - Take screenshots of key views/pages
+        - Save to .sessions/<YYYY-MM-DD>/screenshots/
+
+      If Playwright is not available:
+        - Provide instructions for manual screenshot capture
+        - List which views/pages to capture
+
+      Report what was captured.
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+    estimated_tokens: 2000
+
+  - id: summary
+    depends_on: [screenshot]
+    command: |
+      Generate a delivery summary document:
+
+      # Client Delivery Summary — <client> — <YYYY-MM-DD>
+
+      ## Deliverable
+      <type and brief description>
+
+      ## Requirements Met
+      <checklist from intake requirements, each marked done/pending>
+
+      ## Data Sources
+      <what data was used>
+
+      ## Validation Results
+      <summary from validate node>
+
+      ## Screenshots
+      <list captured screenshots or manual capture instructions>
+
+      ## Known Limitations
+      <any caveats or known issues>
+
+      Save to: .sessions/<YYYY-MM-DD>/delivery-summary.md
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+    estimated_tokens: 3000
+
+  - id: deliver
+    depends_on: [summary]
+    gate: director-approval
+    command: |
+      Commit all deliverable files and create a PR:
+
+      1. Stage all relevant files (exclude .sessions/ and temp files)
+      2. Commit with message: "feat(client): <deliverable type> for <client>"
+      3. Push branch and create PR with delivery summary as body
+
+      Print the PR URL.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+    estimated_tokens: 2000

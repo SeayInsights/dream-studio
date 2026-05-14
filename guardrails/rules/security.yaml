@@ -1,0 +1,65 @@
+# Security Guardrail Rules
+# These rules enforce security best practices and block risky commits
+
+- rule_id: GR-001
+  name: block_commit_with_secrets
+  description: "Block commits containing hardcoded credentials or API keys"
+  trigger:
+    event_type: "hook_finding.created"
+    finding_type: "hardcoded credential"
+  action: "advisory"  # Start with advisory for 1-week pilot
+  message: "Hardcoded credentials detected. Remove before committing."
+  severity: "critical"
+  enabled: true
+  metadata:
+    pilot_mode: true
+    convert_to_block: "2026-05-13"  # After 1-week validation
+
+- rule_id: GR-002
+  name: require_approval_critical_vulns
+  description: "Require Director approval for commits with critical vulnerabilities"
+  trigger:
+    event_type: "hook_finding.created"
+    severity: "critical"
+  action: "advisory"  # Start with advisory for pilot
+  message: "Critical vulnerability detected. Director approval required before merge."
+  severity: "critical"
+  enabled: true
+  metadata:
+    pilot_mode: true
+    convert_to_require_approval: "2026-05-13"
+
+- rule_id: GR-003
+  name: block_eval_usage
+  description: "Block commits containing eval() or similar dangerous functions"
+  trigger:
+    event_type: "hook_finding.created"
+    finding_type: "eval()"
+  action: "advisory"
+  message: "eval() usage detected. Use safe alternatives."
+  severity: "high"
+  enabled: true
+  metadata:
+    pilot_mode: true
+
+- rule_id: GR-004
+  name: block_shell_injection_risk
+  description: "Block commits with shell=True or os.system() usage"
+  trigger:
+    event_type: "hook_finding.created"
+    finding_type: "shell=True in subprocess"
+  action: "advisory"
+  message: "Shell injection risk detected (shell=True or os.system). Use subprocess with args list instead."
+  severity: "high"
+  enabled: true
+
+- rule_id: GR-005
+  name: warn_private_key_in_source
+  description: "Warn if private keys detected in source code"
+  trigger:
+    event_type: "hook_finding.created"
+    finding_type: "private key in source"
+  action: "advisory"
+  message: "Private key detected in source code. Move to secure key management system."
+  severity: "critical"
+  enabled: true

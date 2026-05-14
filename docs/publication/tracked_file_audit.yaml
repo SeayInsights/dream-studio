@@ -1,0 +1,64 @@
+{
+  "branch": "integration/shared-intelligence-remaining-milestones",
+  "category_counts": {
+    "examples": 1,
+    "other_product_candidate": 142,
+    "product_source_or_runtime_config": 500,
+    "product_templates_adapter_or_ci_surface": 560,
+    "public_docs": 98,
+    "root_public_metadata": 4,
+    "tests": 240
+  },
+  "classified_public_safe_name_collisions": [
+    {
+      "classification": "active_repo_adapter_surface_public_safe",
+      "path": ".claude/commands/refresh-architecture.md",
+      "rules": [
+        "adapter_local_surface"
+      ]
+    },
+    {
+      "classification": "active_repo_adapter_surface_public_safe",
+      "path": ".claude/hooks/pre-push",
+      "rules": [
+        "adapter_local_surface"
+      ]
+    },
+    {
+      "classification": "active_repo_adapter_surface_public_safe",
+      "path": ".claude/settings.json",
+      "rules": [
+        "adapter_local_surface"
+      ]
+    },
+    {
+      "classification": "source_doc_test_name_collision_public_safe",
+      "path": "skills/quality/modes/secure/analysts/auth.yml",
+      "rules": [
+        "secret_or_auth_path"
+      ]
+    },
+    {
+      "classification": "source_doc_test_name_collision_public_safe",
+      "path": "templates/security/semgrep-rules/secrets.yaml.j2",
+      "rules": [
+        "secret_or_auth_path"
+      ]
+    }
+  ],
+  "current_tree_publication_safe": true,
+  "generated_at": "2026-05-14T22:18:08.566955+00:00",
+  "head": "ce06e56076427576690ea7e4da3a9e5d6f0cb0f3",
+  "operator_absolute_path_scan": {
+    "finding_count": 0,
+    "patterns": [
+      "operator-specific Windows home path",
+      "operator-specific POSIX home path"
+    ],
+    "status": "pass"
+  },
+  "private_or_local_artifacts_tracked": false,
+  "review_required": [],
+  "schema": "dream_studio.repo_publication.tracked_file_audit.v1",
+  "tracked_file_count": 1545
+}

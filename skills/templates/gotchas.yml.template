@@ -1,0 +1,50 @@
+version: 1.0
+
+# Things to AVOID
+avoid: []
+  # - id: example-avoid
+  #   severity: critical  # critical | high | medium | low
+  #   discovered: 2026-04-28
+  #   title: "Never do X"
+  #   context: |
+  #     Detailed explanation of what went wrong
+  #   symptom: "Error message or behavior"
+  #   root_cause: "Why it happened"
+  #   fix: "How to prevent it"
+  #   code_reference: "file.md:line"
+  #   verified_fix: true
+
+# Best PRACTICES
+best_practices: []
+  # - id: example-practice
+  #   impact: high  # high | medium | low
+  #   discovered: 2026-04-28
+  #   title: "Always do Y"
+  #   pattern: |
+  #     Recommended approach
+  #   why: "Reason this works better"
+  #   result:
+  #     metric: "token_usage"
+  #     improvement: "30% reduction"
+  #     sample_size: 10
+
+# Edge CASES handled
+edge_cases: []
+  # - id: example-edge-case
+  #   scenario: "When X happens"
+  #   handling: |
+  #     How the skill handles this case
+
+# Known LIMITATIONS
+limitations: []
+  # - id: example-limitation
+  #   description: "Cannot do X"
+  #   reason: "Technical constraint"
+  #   workaround: "Use Y instead"
+
+# DEPRECATIONS
+deprecated: []
+  # - id: example-deprecated
+  #   deprecated_since: 2026-04-28
+  #   replaced_by: "new-skill"
+  #   migration: "How to migrate"

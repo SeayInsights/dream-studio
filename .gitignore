@@ -1,0 +1,130 @@
+# Dream Studio local/private runtime state (never committed)
+.dream-studio/
+.dream-studio/*
+**/.dream-studio/
+
+# Generated session handoffs — contain conversation history, never commit
+.sessions/
+
+# Generated context/domain glossary — session artifact, not source
+CONTEXT.md
+
+# Planning dirs are session artifacts — local only, never committed
+.planning/
+
+# Generated adapter output — build artifacts, never committed
+dist/
+skills/**/.planning/
+
+# Structure audit reports — generated artifacts
+.audit/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Node
+node_modules/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.swp
+
+.venv/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.bak
+*.backup
+*.dump
+
+# Enterprise features (in separate private repo)
+../dream-studio-enterprise/
+projections/ml/
+!projections/ml.py
+core/org_intelligence_graph/
+!core/org_intelligence.py
+scripts/generate_org_intelligence.py
+projections/tests/test_ml.py
+
+# Enterprise environment
+DREAMSTUDIO_ENTERPRISE_KEY
+.enterprise/
+
+# Generated/archive artifacts — internal audit, analysis, deprecated code
+.census/
+.archive/
+_archived/
+.marketplace/
+scripts/_archived/
+
+# Dashboard backups and experimental prototypes
+projections/frontend/*_backup*.html
+projections/frontend/dashboard_new.html
+projections/frontend/hooks_improved.html
+projections/frontend/dashboard_temp_*.html
+
+# Runtime logs
+dashboard*.log
+*.log
+logs/
+
+# Local runtime/evidence exports
+/backups/
+/reports/
+/raw-telemetry/
+/raw_telemetry/
+/meta/
+.tmp/
+/test_output/
+*.handoff.md
+handoff-*.json
+
+# Phase completion reports and session artifacts
+PHASE*_*.md
+SESSION_SUMMARY.md
+PROJECT_COMPLETE.md
+CODEx_*.md
+DEPLOYMENT_GUIDE.md
+MIGRATION_STATUS.md
+MIGRATION_GUIDE.md
+FILESYSTEM_HYDRATION_V2.md
+IMPLEMENTATION_STATUS.md
+session3-*.txt
+RUNTIME_MANIFEST.md
+apply_migration.py
+check_events.py
+check_tables.py
+fix_extra_parens.py
+test_context_compiler.py
+test_wave_integration.py
+verify_phase1.py
+
+# Superseded README variants
+README_FINAL.md
+README_EXECUTION_OS.md
+
+# Root legacy migrations (superseded by core/event_store/migrations/)
+/migrations/
+
+# Historical/internal docs (archived, not actively referenced)
+docs/forensics/
+docs/convergence/
+docs/phase8/
+docs/intelligence/
+docs/repo_actions/

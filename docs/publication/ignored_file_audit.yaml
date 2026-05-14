@@ -1,0 +1,24 @@
+{
+  "branch": "integration/shared-intelligence-remaining-milestones",
+  "generated_at": "2026-05-14T22:18:08.566955+00:00",
+  "head": "ce06e56076427576690ea7e4da3a9e5d6f0cb0f3",
+  "ignore_rule_checks": {
+    ".dream-studio/state/studio.db": "ignored",
+    ".tmp/pubcheck/example.db": "ignored",
+    ".venv/Lib/example.py": "ignored",
+    "backups/live.db": "ignored",
+    "meta/work-orders/example.yaml": "ignored",
+    "raw-telemetry/events.json": "ignored",
+    "test_output/multiple/tokens.csv": "ignored"
+  },
+  "ignored_category_counts": {
+    "other_ignored": 456,
+    "pytest_cache": 5,
+    "python_cache": 1380,
+    "virtualenv": 1939
+  },
+  "ignored_file_count": 3780,
+  "schema": "dream_studio.repo_publication.ignored_file_audit.v1",
+  "untracked_not_ignored_count": 0,
+  "untracked_publication_risk": false
+}

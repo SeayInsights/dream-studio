@@ -1,0 +1,106 @@
+# Injection Fix Templates
+# Maps rule IDs, CWE codes, and OWASP categories to injection mitigation patterns.
+# rule_pattern is pipe-delimited: any token match triggers this template.
+# Covers KRG-inj-001 through KRG-inj-005 and ZSC equivalents.
+
+- rule_pattern: "KRG-inj-001|CWE-89|sql-injection|sqli"
+  title: "SQL Injection — Use Parameterized Queries"
+  cwe: "CWE-89"
+  owasp_category: "A03:2021"
+  immediate_fix:
+    description: "Replace string concatenation or f-string interpolation with parameterized queries"
+    code_before: |
+      cursor.execute(f"SELECT * FROM users WHERE id = '{user_id}'")
+    code_after: |
+      cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+  long_term_fix: "Adopt SQLAlchemy ORM or a query builder that enforces parameterization by default; ban raw string interpolation in DB calls via Semgrep rule KRG-inj-001"
+  verification_test: "semgrep --config .github/semgrep/injection.yaml {file} — should return 0 findings for KRG-inj-001"
+  effort_estimate: "1h per instance"
+  requires_context: false
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+    - "https://docs.sqlalchemy.org/en/14/core/tutorial.html#using-textual-sql"
+
+- rule_pattern: "KRG-inj-002|CWE-78|command-injection|shell-injection|shell=True"
+  title: "Command Injection — Avoid shell=True in subprocess"
+  cwe: "CWE-78"
+  owasp_category: "A03:2021"
+  immediate_fix:
+    description: "Replace shell=True subprocess calls with a list of arguments and shell=False"
+    code_before: |
+      import subprocess
+      result = subprocess.run(f"ls {user_path}", shell=True, capture_output=True)
+    code_after: |
+      import subprocess
+      result = subprocess.run(["ls", user_path], shell=False, capture_output=True)
+  long_term_fix: "Use shlex.split() for dynamic argument lists; add a pre-commit hook that rejects subprocess calls with shell=True on user-controlled data"
+  verification_test: "grep -rn 'shell=True' {file} | grep -v '# nosec' should return 0 results"
+  effort_estimate: "30m per instance"
+  requires_context: false
+  references:
+    - "https://docs.python.org/3/library/subprocess.html#security-considerations"
+    - "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+
+- rule_pattern: "KRG-inj-003|CWE-79|xss|cross-site-scripting|innerHTML"
+  title: "Cross-Site Scripting (XSS) — Sanitize Output Before Rendering"
+  cwe: "CWE-79"
+  owasp_category: "A03:2021"
+  immediate_fix:
+    description: "Sanitize user-controlled strings with DOMPurify before inserting into the DOM, or use a framework's built-in escaping"
+    code_before: |
+      element.innerHTML = userComment;
+    code_after: |
+      import DOMPurify from 'dompurify';
+      element.innerHTML = DOMPurify.sanitize(userComment);
+  long_term_fix: "Enforce Content Security Policy headers (CSP) to block inline script execution; use a framework (React, Vue) that escapes output by default and forbid direct innerHTML assignment via ESLint rule no-inner-html"
+  verification_test: "npx eslint --rule '{\"no-inner-html\": \"error\"}' {file} should return 0 violations; run OWASP ZAP XSS scan against the rendered page"
+  effort_estimate: "1h per instance"
+  requires_context: false
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+    - "https://github.com/cure53/DOMPurify"
+
+- rule_pattern: "KRG-inj-004|CWE-1336|template-injection|ssti|jinja2-injection"
+  title: "Server-Side Template Injection — Use Safe Template Rendering"
+  cwe: "CWE-1336"
+  owasp_category: "A03:2021"
+  immediate_fix:
+    description: "Never pass user input as the template string itself; use template variables instead"
+    code_before: |
+      from jinja2 import Template
+      tmpl = Template(user_input)          # user_input IS the template
+      output = tmpl.render(name=name)
+    code_after: |
+      from jinja2 import Environment, select_autoescape
+      env = Environment(autoescape=select_autoescape())
+      tmpl = env.get_template("safe_template.html")  # fixed template file
+      output = tmpl.render(user_input=user_input, name=name)
+  long_term_fix: "Enable Jinja2 autoescape for all templates; use a sandboxed environment (jinja2.sandbox.SandboxedEnvironment) if user-defined templates are a product requirement; add Semgrep rule KRG-inj-004 to catch Template(user_*) patterns"
+  verification_test: "python -c \"from jinja2 import Environment, select_autoescape; env = Environment(autoescape=select_autoescape()); print('autoescape OK')\" && semgrep --config .github/semgrep/injection.yaml {file}"
+  effort_estimate: "2h per instance"
+  requires_context: true
+  references:
+    - "https://jinja.palletsprojects.com/en/3.1.x/sandbox/"
+    - "https://portswigger.net/research/server-side-template-injection"
+
+- rule_pattern: "KRG-inj-005|CWE-90|ldap-injection|ldap"
+  title: "LDAP Injection — Sanitize Input Before LDAP Queries"
+  cwe: "CWE-90"
+  owasp_category: "A03:2021"
+  immediate_fix:
+    description: "Escape special LDAP characters in user input before constructing filter strings"
+    code_before: |
+      ldap_filter = f"(uid={username})"
+      conn.search(base_dn, ldap_filter)
+    code_after: |
+      from ldap3.utils.conv import escape_filter_chars
+      safe_username = escape_filter_chars(username)
+      ldap_filter = f"(uid={safe_username})"
+      conn.search(base_dn, ldap_filter)
+  long_term_fix: "Use an LDAP library that enforces parameterized filter construction; validate username against an allowlist pattern (alphanumeric + defined special chars) before any LDAP call"
+  verification_test: "python -c \"from ldap3.utils.conv import escape_filter_chars; print(escape_filter_chars('test)(uid=*'))\" should output escaped string; semgrep rule KRG-inj-005 on {file} returns 0 findings"
+  effort_estimate: "1h per instance"
+  requires_context: false
+  references:
+    - "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+    - "https://ldap3.readthedocs.io/en/latest/searches.html"

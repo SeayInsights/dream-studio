@@ -1,0 +1,155 @@
+erDiagram
+    projects ||--o{ project_authority : owns
+    projects ||--o{ stage_gates : follows
+    stage_gates ||--o{ milestones : sequences
+    milestones ||--o{ work_orders : contains
+    work_orders ||--o{ internal_steps : contains
+    work_orders ||--o{ approvals : requires
+    work_orders ||--o{ operator_decisions : may_request
+    work_orders ||--o{ validations : validates
+    work_orders ||--o{ artifacts : produces
+    work_orders ||--o{ handoffs : renders
+    work_orders ||--o{ commits : may_commit
+    work_orders ||--o{ events : emits
+    artifacts ||--o{ artifact_lifecycle : tracks
+    artifacts ||--o{ source_refs : cites
+    validations ||--o{ source_refs : cites
+    research_evidence ||--o{ source_refs : cites
+    milestones ||--o{ research_evidence : may_require
+    milestones ||--o{ release_gates : gates
+    projects ||--o{ paused_work : records
+    projects ||--o{ open_questions : tracks
+    projects ||--o{ projections : derives
+    projects ||--o{ security_findings : records
+
+    projects {
+        string project_id PK
+        string name
+        string status
+        string authority_status
+    }
+    project_authority {
+        string authority_id PK
+        string project_id FK
+        string lifecycle_status
+        string knowledge_state
+    }
+    stage_gates {
+        string stage_gate_id PK
+        string project_id FK
+        string required_before
+        string routing_constraints
+    }
+    milestones {
+        string milestone_id PK
+        string stage_gate_id FK
+        string status
+        string handoff_policy
+    }
+    work_orders {
+        string work_order_id PK
+        string milestone_id FK
+        string approval_mode
+        string risk_level
+    }
+    internal_steps {
+        string internal_step_id PK
+        string work_order_id FK
+        string step_type
+        string status
+    }
+    approvals {
+        string approval_id PK
+        string work_order_id FK
+        string approved_files
+        string approval_scope
+    }
+    operator_decisions {
+        string decision_id PK
+        string work_order_id FK
+        string decision
+        string rationale
+    }
+    events {
+        string event_id PK
+        string work_order_id FK
+        string event_type
+        string emitted_at
+    }
+    artifacts {
+        string artifact_id PK
+        string work_order_id FK
+        string role
+        string path
+    }
+    artifact_lifecycle {
+        string lifecycle_id PK
+        string artifact_id FK
+        string status
+        string authority_level
+    }
+    handoffs {
+        string handoff_id PK
+        string work_order_id FK
+        string handoff_reason
+        string self_validation_status
+    }
+    validations {
+        string validation_id PK
+        string work_order_id FK
+        string result
+        string evidence_ref
+    }
+    commits {
+        string commit_id PK
+        string work_order_id FK
+        string commit_hash
+        string staged_files
+    }
+    security_findings {
+        string finding_id PK
+        string project_id FK
+        string severity
+        string release_gate
+    }
+    release_gates {
+        string release_gate_id PK
+        string milestone_id FK
+        string decision
+        string criteria
+    }
+    paused_work {
+        string paused_work_id PK
+        string project_id FK
+        string resume_policy
+        string status
+    }
+    projections {
+        string projection_id PK
+        string project_id FK
+        string derived_from
+        string projection_type
+    }
+    open_questions {
+        string question_id PK
+        string project_id FK
+        string knowledge_state
+        string blocking_scope
+    }
+    research_evidence {
+        string research_id PK
+        string milestone_id FK
+        string decision_class
+        string confidence
+    }
+    source_refs {
+        string source_ref_id PK
+        string artifact_id FK
+        string source_type
+        string confidence
+    }
+
+%% Canonical authority tables: projects, project_authority, stage_gates, milestones, work_orders, internal_steps, approvals, operator_decisions, events.
+%% Projection/derived tables: projections.
+%% Evidence/source-ref tables: artifacts, handoffs, validations, commits, security_findings, release_gates, paused_work, open_questions, artifact_lifecycle, research_evidence, source_refs.
+%% Deferred/excluded domains: cloud/org/global enterprise sync, external target repo implementation tables, secret harvesting tables.

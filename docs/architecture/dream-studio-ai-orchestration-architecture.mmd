@@ -1,0 +1,36 @@
+flowchart TD
+    Operator["Operator"]
+    PRD["PRD / stage-gate authority"]
+    Controller["Milestone execution controller"]
+    Classifier["Next-action classifier"]
+    Policy["Policy / stop-gate engine"]
+    Agents["Agents / tools / adapters"]
+    Hooks["Hooks / skills / workflows"]
+    Research["Research / source verification"]
+    DB["SQLite / structured authority"]
+    Files["File-backed evidence"]
+    Index["Artifact index / lifecycle"]
+    Dashboard["Projection / dashboard"]
+    Renderer["Handoff / report renderer"]
+    Paused["Paused validation targets: Bill Stack, DreamySuite, TORII"]
+    Future["Deferred future adapters / cloud / org surfaces"]
+
+    Operator --> PRD
+    PRD --> Controller
+    Controller --> Classifier
+    Classifier --> Policy
+    Policy -->|continue_internal| Agents
+    Policy -->|route work| Hooks
+    Policy -->|research_required| Research
+    Policy -->|record authority| DB
+    Policy -->|record evidence| Files
+    Files --> Index
+    DB --> Index
+    Index --> Dashboard
+    Index --> Renderer
+    Renderer -->|approval / pause / blocker / completion only| Operator
+    Agents --> Files
+    Hooks --> Files
+    Research --> Files
+    Paused -. evidence refs only .-> Files
+    Future -. deferred .-> Policy

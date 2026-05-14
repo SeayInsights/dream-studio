@@ -1,0 +1,352 @@
+# NIST Cybersecurity Framework v1.1 — Compliance Mapping
+# Maps Semgrep rule IDs, CWE codes, and OWASP categories to NIST CSF controls.
+# Used by: dream-studio:comply (map, gaps, evidence modes)
+# Schema version: 1
+
+schema_version: 1
+framework: nist-csf
+framework_name: "NIST Cybersecurity Framework"
+version: "1.1"
+description: >
+  The NIST Cybersecurity Framework organizes cybersecurity activities into five concurrent
+  and continuous functions: Identify, Protect, Detect, Respond, and Recover.
+
+controls:
+
+  # ─── IDENTIFY ───────────────────────────────────────────────────────────────
+
+  - control_id: ID.AM-1
+    framework: nist-csf
+    function: Identify
+    category: "ID.AM — Asset Management"
+    subcategory: "Physical devices and systems within the organization are inventoried."
+    mapped_cwes: []
+    mapped_owasp: []
+    mapped_rule_patterns: []
+    scan_coverage: "Manual — asset inventory is not automatable via static analysis."
+
+  - control_id: ID.AM-2
+    framework: nist-csf
+    function: Identify
+    category: "ID.AM — Asset Management"
+    subcategory: "Software platforms and applications within the organization are inventoried."
+    mapped_cwes:
+      - CWE-1104  # Use of Unmaintained Third-Party Components
+    mapped_owasp:
+      - "A06:2021"
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "KRG-dep-*"
+    scan_coverage: "Dependency audit mode — Trivy and pip-audit results inventory software components."
+
+  - control_id: ID.RA-1
+    framework: nist-csf
+    function: Identify
+    category: "ID.RA — Risk Assessment"
+    subcategory: "Asset vulnerabilities are identified and documented."
+    mapped_cwes:
+      - CWE-937   # Using Components with Known Vulnerabilities
+      - CWE-1035  # 2017 Top Ten: Using Components with Known Vulnerabilities
+    mapped_owasp:
+      - "A06:2021"  # Vulnerable and Outdated Components
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "*-vuln-*"
+      - "KRG-dep-*"
+    scan_coverage: "Semgrep + Trivy rules flag known-vulnerable APIs and outdated dependencies."
+
+  - control_id: ID.RA-5
+    framework: nist-csf
+    function: Identify
+    category: "ID.RA — Risk Assessment"
+    subcategory: "Threats, vulnerabilities, likelihoods, and impacts are used to determine risk."
+    mapped_cwes:
+      - CWE-284
+      - CWE-89
+      - CWE-79
+    mapped_owasp:
+      - "A01:2021"
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-inj-*"
+      - "*-ac-*"
+    scan_coverage: "Semgrep severity scoring provides likelihood and impact signals per finding."
+
+  # ─── PROTECT ────────────────────────────────────────────────────────────────
+
+  - control_id: PR.AC-1
+    framework: nist-csf
+    function: Protect
+    category: "PR.AC — Access Control"
+    subcategory: "Identities and credentials are issued, managed, verified, revoked, and audited for authorized devices, users, and processes."
+    mapped_cwes:
+      - CWE-287  # Improper Authentication
+      - CWE-306  # Missing Authentication for Critical Function
+      - CWE-798  # Use of Hard-coded Credentials
+      - CWE-522  # Insufficiently Protected Credentials
+    mapped_owasp:
+      - "A07:2021"  # Identification and Authentication Failures
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-sec-*"
+      - "KRG-auth-*"
+      - "KRG-sec-*"
+    scan_coverage: "Rules detect hard-coded credentials, missing auth guards, and weak session token patterns."
+
+  - control_id: PR.AC-3
+    framework: nist-csf
+    function: Protect
+    category: "PR.AC — Access Control"
+    subcategory: "Remote access is managed."
+    mapped_cwes:
+      - CWE-284
+      - CWE-285
+      - CWE-918  # Server-Side Request Forgery (SSRF)
+    mapped_owasp:
+      - "A01:2021"
+      - "A10:2021"  # Server-Side Request Forgery
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-ssrf-*"
+      - "KRG-ac-*"
+    scan_coverage: "Access control and SSRF rules cover unauthorized remote endpoint access patterns."
+
+  - control_id: PR.AC-4
+    framework: nist-csf
+    function: Protect
+    category: "PR.AC — Access Control"
+    subcategory: "Access permissions and authorizations are managed, incorporating the principles of least privilege and separation of duties."
+    mapped_cwes:
+      - CWE-269  # Improper Privilege Management
+      - CWE-862  # Missing Authorization
+      - CWE-863  # Incorrect Authorization
+      - CWE-639  # Authorization Bypass Through User-Controlled Key
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-rbac-*"
+      - "KRG-ac-*"
+    scan_coverage: "Rules detect IDOR, missing authorization checks, and privilege escalation patterns."
+
+  - control_id: PR.DS-1
+    framework: nist-csf
+    function: Protect
+    category: "PR.DS — Data Security"
+    subcategory: "Data-at-rest is protected."
+    mapped_cwes:
+      - CWE-312  # Cleartext Storage of Sensitive Information
+      - CWE-311  # Missing Encryption of Sensitive Data
+      - CWE-326  # Inadequate Encryption Strength
+      - CWE-327  # Use of a Broken or Risky Cryptographic Algorithm
+    mapped_owasp:
+      - "A02:2021"  # Cryptographic Failures
+    mapped_rule_patterns:
+      - "*-crypto-*"
+      - "*-storage-*"
+      - "KRG-crypto-*"
+    scan_coverage: "Semgrep crypto rules flag weak algorithms, missing encryption, and cleartext storage."
+
+  - control_id: PR.DS-2
+    framework: nist-csf
+    function: Protect
+    category: "PR.DS — Data Security"
+    subcategory: "Data-in-transit is protected."
+    mapped_cwes:
+      - CWE-319  # Cleartext Transmission of Sensitive Information
+      - CWE-295  # Improper Certificate Validation
+      - CWE-326
+      - CWE-327
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-tls-*"
+      - "*-transport-*"
+      - "*-crypto-*"
+      - "KRG-tls-*"
+    scan_coverage: "TLS enforcement rules detect HTTP fallback, certificate validation bypass, and weak ciphers."
+
+  - control_id: PR.DS-5
+    framework: nist-csf
+    function: Protect
+    category: "PR.DS — Data Security"
+    subcategory: "Protections against data leaks are implemented."
+    mapped_cwes:
+      - CWE-200  # Exposure of Sensitive Information to an Unauthorized Actor
+      - CWE-532  # Insertion of Sensitive Information into Log File
+      - CWE-209  # Generation of Error Message Containing Sensitive Information
+    mapped_owasp:
+      - "A02:2021"
+      - "A09:2021"
+    mapped_rule_patterns:
+      - "*-data-*"
+      - "*-log-*"
+      - "KRG-data-*"
+      - "KRG-log-*"
+    scan_coverage: "Rules detect PII/sensitive data in logs, error messages exposing stack traces, and debug endpoints."
+
+  - control_id: PR.IP-1
+    framework: nist-csf
+    function: Protect
+    category: "PR.IP — Information Protection Processes and Procedures"
+    subcategory: "A baseline configuration of information technology/industrial control systems is created and maintained incorporating security principles."
+    mapped_cwes:
+      - CWE-16   # Configuration
+      - CWE-1008 # Architectural Concepts
+    mapped_owasp:
+      - "A05:2021"  # Security Misconfiguration
+    mapped_rule_patterns:
+      - "*-config-*"
+      - "KRG-config-*"
+    scan_coverage: "Configuration rules detect insecure defaults, debug mode enabled in production, and exposed admin endpoints."
+
+  - control_id: PR.PT-3
+    framework: nist-csf
+    function: Protect
+    category: "PR.PT — Protective Technology"
+    subcategory: "The principle of least functionality is incorporated by configuring systems to provide only essential capabilities."
+    mapped_cwes:
+      - CWE-269  # Improper Privilege Management
+      - CWE-749  # Exposed Dangerous Method or Function
+    mapped_owasp:
+      - "A05:2021"
+    mapped_rule_patterns:
+      - "*-config-*"
+      - "*-ac-*"
+    scan_coverage: "Rules detect exposed internal endpoints, dangerous function exposure, and excessive permission grants."
+
+  # ─── DETECT ─────────────────────────────────────────────────────────────────
+
+  - control_id: DE.AE-1
+    framework: nist-csf
+    function: Detect
+    category: "DE.AE — Anomalies and Events"
+    subcategory: "A baseline of network operations and expected data flows for users and systems is established and managed."
+    mapped_cwes: []
+    mapped_owasp: []
+    mapped_rule_patterns: []
+    scan_coverage: "Manual — network baseline is established operationally, not via static analysis."
+
+  - control_id: DE.AE-3
+    framework: nist-csf
+    function: Detect
+    category: "DE.AE — Anomalies and Events"
+    subcategory: "Event data are collected and correlated from multiple sources and sensors."
+    mapped_cwes:
+      - CWE-778  # Insufficient Logging
+      - CWE-117  # Improper Output Neutralization for Logs
+    mapped_owasp:
+      - "A09:2021"
+    mapped_rule_patterns:
+      - "*-log-*"
+      - "*-audit-*"
+      - "KRG-log-*"
+    scan_coverage: "Logging rules detect absent audit writes, log injection, and missing event correlation points."
+
+  - control_id: DE.CM-8
+    framework: nist-csf
+    function: Detect
+    category: "DE.CM — Security Continuous Monitoring"
+    subcategory: "Vulnerability scans are performed."
+    mapped_cwes:
+      - CWE-937
+      - CWE-1035
+      - CWE-1104
+    mapped_owasp:
+      - "A06:2021"
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "*-vuln-*"
+      - "KRG-dep-*"
+    scan_coverage: "Continuous scanning via GitHub Actions workflows generated by dream-studio:scan."
+
+  # ─── RESPOND ────────────────────────────────────────────────────────────────
+
+  - control_id: RS.RP-1
+    framework: nist-csf
+    function: Respond
+    category: "RS.RP — Response Planning"
+    subcategory: "Response plan is executed during or after an incident."
+    mapped_cwes: []
+    mapped_owasp: []
+    mapped_rule_patterns: []
+    scan_coverage: "Manual — incident response execution is procedural, not detectable via static analysis."
+
+  - control_id: RS.MI-2
+    framework: nist-csf
+    function: Respond
+    category: "RS.MI — Mitigation"
+    subcategory: "Newly identified vulnerabilities are mitigated or documented as accepted risks."
+    mapped_cwes:
+      - CWE-937
+      - CWE-1035
+    mapped_owasp:
+      - "A06:2021"
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "*-vuln-*"
+    scan_coverage: "Findings feed into dream-studio:mitigate for remediation tracking. Mitigation status tracked in compliance.csv."
+
+  # ─── RECOVER ────────────────────────────────────────────────────────────────
+
+  - control_id: RC.RP-1
+    framework: nist-csf
+    function: Recover
+    category: "RC.RP — Recovery Planning"
+    subcategory: "Recovery plan is executed during or after a cybersecurity incident."
+    mapped_cwes: []
+    mapped_owasp: []
+    mapped_rule_patterns: []
+    scan_coverage: "Manual — recovery plan execution is procedural. Backup and restore validation is out of scope for static analysis."
+
+# ─── Supplemental OWASP Coverage Entries ────────────────────────────────────
+# Ensures all OWASP Top 10 categories have at least one control mapping in this file.
+
+  - control_id: PR.IP-3
+    framework: nist-csf
+    function: Protect
+    category: "PR.IP — Information Protection Processes and Procedures"
+    subcategory: "Configuration change control processes are in place. Insecure design patterns are prevented through architectural review."
+    mapped_cwes:
+      - CWE-73   # External Control of File Name or Path
+      - CWE-434  # Unrestricted Upload of File with Dangerous Type
+      - CWE-400  # Uncontrolled Resource Consumption
+    mapped_owasp:
+      - "A04:2021"  # Insecure Design
+    mapped_rule_patterns:
+      - "*-design-*"
+      - "*-upload-*"
+      - "*-rate-*"
+    scan_coverage: "Rules detect insecure design patterns: unrestricted uploads, missing rate limits, resource exhaustion."
+
+  - control_id: DE.CM-4
+    framework: nist-csf
+    function: Detect
+    category: "DE.CM — Security Continuous Monitoring"
+    subcategory: "Malicious code is detected."
+    mapped_cwes:
+      - CWE-502  # Deserialization of Untrusted Data
+      - CWE-506  # Embedded Malicious Code
+      - CWE-494  # Download of Code Without Integrity Check
+    mapped_owasp:
+      - "A08:2021"  # Software and Data Integrity Failures
+    mapped_rule_patterns:
+      - "*-deser-*"
+      - "*-integrity-*"
+      - "*-dep-*"
+    scan_coverage: "Deserialization vulnerability detection and software integrity check absence detection."
+
+  - control_id: PR.DS-7
+    framework: nist-csf
+    function: Protect
+    category: "PR.DS — Data Security"
+    subcategory: "The development and testing environments are separate from the production environment."
+    mapped_cwes:
+      - CWE-918  # SSRF
+      - CWE-749  # Exposed Dangerous Method or Function
+    mapped_owasp:
+      - "A10:2021"  # Server-Side Request Forgery
+    mapped_rule_patterns:
+      - "*-ssrf-*"
+      - "*-ac-*"
+    scan_coverage: "SSRF and internal service exposure detection in production code paths."

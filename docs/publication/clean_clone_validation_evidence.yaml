@@ -1,0 +1,38 @@
+{
+  "branch": "integration/shared-intelligence-remaining-milestones",
+  "clean_clone_validation_status": "pass",
+  "clean_home_dream_studio_created": false,
+  "clone_path": "<system-temp>/dream-studio-publication-clean-clone-20260514-181631/repo",
+  "clone_source": "local repository clone with no hardlinks",
+  "commands": [
+    {
+      "command": "git clone --no-hardlinks <repo> <system-temp>/repo",
+      "result": "pass"
+    },
+    {
+      "command": "git status --short --branch --untracked-files=all",
+      "result": "clean branch checkout"
+    },
+    {
+      "command": "python -m pytest tests/unit/test_install_bootstrap_sqlite_authority.py tests/unit/test_contract_docs_drift_gate.py tests/unit/test_maturity_ledger.py tests/unit/test_github_pr_cicd_release_gate.py -q --tb=line",
+      "result": "26 passed"
+    },
+    {
+      "command": "python interfaces/cli/contract_docs_drift_gate.py",
+      "result": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    }
+  ],
+  "generated_at": "2026-05-14T22:18:08.566955+00:00",
+  "head_validated": "ce06e56076427576690ea7e4da3a9e5d6f0cb0f3",
+  "home_override": "<system-temp>/dream-studio-publication-clean-clone-20260514-181631/home",
+  "invalid_attempt_excluded": {
+    "reason": "PowerShell $HOME variable name collision prevented temp home assignment on first attempt.",
+    "used_as_evidence": false
+  },
+  "live_dream_studio_state_used": false,
+  "schema": "dream_studio.repo_publication.clean_clone_validation.v1"
+}

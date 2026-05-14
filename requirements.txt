@@ -1,0 +1,31 @@
+pydantic>=2.0
+jsonschema>=4.0
+sentry-sdk
+pandas>=2.0
+Jinja2>=3.1
+PyYAML>=6.0
+
+# Unified Discovery System (Phase 4-5)
+networkx>=3.0
+cachetools>=5.0
+
+# Unified Discovery Phase 8 - Semantic Search
+sentence-transformers>=2.2
+
+# Analytics API (Phase 5)
+fastapi>=0.100
+uvicorn>=0.23
+httpx>=0.24
+python-multipart>=0.0.6
+
+# Security scanning libraries (Wave 4)
+# NOTE: These libraries require Python <3.12, incompatible with current Python 3.14
+# Using stub implementations until Python 3.12 environment available
+# giskard>=2.0
+# rebuff>=0.1
+# llm-guard>=0.3
+
+# Optional: tiktoken (for precise token counting in adapter builds)
+# tiktoken>=0.5
+# Optional: APScheduler (for report scheduler - recommended)
+# apscheduler>=3.10

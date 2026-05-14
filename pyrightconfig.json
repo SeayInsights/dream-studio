@@ -1,0 +1,7 @@
+{
+  "include": ["hooks", "tests"],
+  "extraPaths": ["hooks"],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic",
+  "reportMissingModuleSource": "none"
+}

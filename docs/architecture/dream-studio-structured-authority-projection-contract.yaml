@@ -1,0 +1,333 @@
+schema_version: 1
+artifact_role: structured_authority_projection_contract
+lifecycle_status: draft_generated
+authority_note: >-
+  This contract defines file-backed projection shape for Dream Studio authority
+  domains. It does not mutate runtime SQLite, run migrations, or implement
+  dashboard/API/runtime behavior.
+dashboard_projection_truth_policy:
+  dashboard_projection_is_derived_view: true
+  dashboard_projection_is_primary_truth: false
+  primary_truth_sources:
+    - PRD authority documents
+    - stage-gate authority documents
+    - approved structured state
+    - canonical database authority when separately approved
+    - file-backed evidence artifacts
+  handoffs_are_workflow_authority: false
+  handoffs_are_rendered_views: true
+projection_record_contract:
+  required_fields:
+    projection_id:
+      type: string
+      description: Stable projection record identifier.
+    domain:
+      type: enum
+      values:
+        - prd_authority
+        - stage_gate
+        - milestone
+        - work_order
+        - approval
+        - operator_decision
+        - evidence
+        - validation
+        - artifact
+        - research_decision
+        - handoff
+        - commit
+        - paused_external_validation_target
+    source_authority:
+      type: enum
+      values:
+        - prd
+        - stage_gate
+        - milestone_state
+        - work_order
+        - approval_artifact
+        - operator_decision_artifact
+        - evidence_artifact
+        - validation_artifact
+        - artifact_index
+        - research_evidence
+        - handoff_renderer
+        - git_metadata
+        - strategic_constraint
+    source_refs:
+      type: list[string]
+      min_items: 1
+      description: File paths, commit refs, evidence ids, or structured authority refs.
+    lifecycle_status:
+      type: enum
+      values:
+        - active
+        - draft_generated
+        - user_confirmed
+        - superseded
+        - stale
+        - archived
+        - compacted
+        - retained
+        - not_applicable
+    authority_role:
+      type: enum
+      values:
+        - goal_authority
+        - routing_authority
+        - execution_state
+        - approval_authority
+        - decision_authority
+        - evidence
+        - validation_result
+        - rendered_view
+        - derived_projection
+        - audit_ref
+        - pause_constraint
+    derived_fields:
+      type: map
+      description: Fields computed from primary authority for dashboard/report consumption.
+    confidence:
+      type: enum
+      values:
+        - high
+        - medium
+        - low
+        - unknown
+    stale_superseded_detection:
+      type: map
+      required_keys:
+        - stale_when
+        - superseded_when
+        - refresh_signal
+    stop_gate_implications:
+      type: list[string]
+      description: Stop gates or approvals triggered by this projection record.
+    validation_requirements:
+      type: list[string]
+      min_items: 1
+    dashboard_readiness:
+      type: map
+      required_keys:
+        - visible_in_dashboard
+        - display_status
+        - freshness_label
+        - action_required
+        - primary_truth_warning
+domain_contracts:
+  prd_authority:
+    source_authority: prd
+    authority_role: goal_authority
+    source_refs:
+      - docs/product/dream-studio-prd.md
+    derived_fields:
+      - active_objective
+      - product_goals
+      - strategic_constraints
+      - paused_validation_targets
+    stale_when:
+      - PRD file content changes without projection refresh.
+    stop_gate_implications:
+      - PRD/stage-gate changes require operator approval.
+    validation_requirements:
+      - PRD source ref exists.
+      - Projection marks dashboard as derived.
+  stage_gate:
+    source_authority: stage_gate
+    authority_role: routing_authority
+    source_refs:
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - current_stage
+      - milestone_sequence
+      - required_before
+      - stop_gates
+      - auto_continue_policy
+    stale_when:
+      - Stage gate YAML changes without projection refresh.
+    stop_gate_implications:
+      - Stage-gate-invalid milestone routes to hard_stop.
+    validation_requirements:
+      - Stage-gate source ref exists.
+      - Milestone sequence includes current and next milestone ids.
+  milestone:
+    source_authority: milestone_state
+    authority_role: execution_state
+    source_refs:
+      - docs/product/dream-studio-stage-gates.yaml
+      - file-backed milestone evidence
+    derived_fields:
+      - milestone_status
+      - completed_internal_steps
+      - pending_internal_steps
+      - next_milestone
+      - handoff_required
+    stale_when:
+      - Evidence or validation refs move ahead of milestone state.
+    stop_gate_implications:
+      - Missing milestone authority blocks continuation.
+  work_order:
+    source_authority: work_order
+    authority_role: execution_state
+    source_refs:
+      - file-backed Work Order artifact when applicable
+    derived_fields:
+      - approval_mode
+      - risk_level
+      - allowed_actions
+      - forbidden_actions
+      - validation_commands
+    stale_when:
+      - Work Order status changes without route refresh.
+    stop_gate_implications:
+      - Missing required approval artifact blocks mutation.
+  approval:
+    source_authority: approval_artifact
+    authority_role: approval_authority
+    source_refs:
+      - .dream-studio/meta/work-orders/*/approvals/approval.json
+    derived_fields:
+      - approved_files
+      - approved_actions
+      - forbidden_actions
+      - approval_scope
+    stale_when:
+      - Approved file list does not match dirty or staged files.
+    stop_gate_implications:
+      - Mutation outside approved scope routes to hard_stop.
+  operator_decision:
+    source_authority: operator_decision_artifact
+    authority_role: decision_authority
+    source_refs:
+      - .dream-studio/meta/work-orders/*/decisions/*
+    derived_fields:
+      - decision_id
+      - selected_option
+      - rationale
+      - effective_scope
+    stale_when:
+      - Decision artifact conflicts with current PRD or stage gate.
+    stop_gate_implications:
+      - Ambiguous operator/product decision routes to require_operator_decision.
+  evidence:
+    source_authority: evidence_artifact
+    authority_role: evidence
+    source_refs:
+      - .dream-studio/meta/work-orders/*/evidence/*
+      - .dream-studio/meta/milestones/*/evidence/*
+    derived_fields:
+      - evidence_type
+      - produced_by
+      - command_or_action
+      - result
+    stale_when:
+      - Evidence source is superseded by later validation or report.
+    stop_gate_implications:
+      - Missing required evidence blocks milestone done.
+  validation:
+    source_authority: validation_artifact
+    authority_role: validation_result
+    source_refs:
+      - focused validation output
+      - validation evidence artifacts
+    derived_fields:
+      - command
+      - result
+      - pass_fail
+      - relevant_boundary
+    stale_when:
+      - Source files change after validation.
+    stop_gate_implications:
+      - Failed validation routes to hard_stop or generate_handoff.
+  artifact:
+    source_authority: artifact_index
+    authority_role: audit_ref
+    source_refs:
+      - docs/product/dream-studio-artifact-requirements.md
+      - file-backed artifact index when available
+    derived_fields:
+      - artifact_role
+      - lifecycle_status
+      - source_authority
+      - retention_policy
+    stale_when:
+      - Artifact lifecycle status is unknown or conflicts with source authority.
+    stop_gate_implications:
+      - Compaction/deletion/archive requires separate approval.
+  research_decision:
+    source_authority: research_evidence
+    authority_role: decision_authority
+    source_refs:
+      - docs/product/dream-studio-research-and-verification-policy.md
+      - research evidence artifacts
+    derived_fields:
+      - research_decision_class
+      - source_confidence
+      - operator_verification_required
+      - decision_impact
+    stale_when:
+      - Source confidence expires or source uncertainty is unresolved.
+    stop_gate_implications:
+      - High-risk or uncertain research routes to operator verification.
+  handoff:
+    source_authority: handoff_renderer
+    authority_role: rendered_view
+    source_refs:
+      - route decision state
+      - evidence refs
+      - validation refs
+    derived_fields:
+      - route_decision
+      - handoff_reason
+      - stop_gate
+      - required_operator_action
+    stale_when:
+      - Handoff exists without a valid handoff reason.
+    stop_gate_implications:
+      - Handoff cannot become workflow authority.
+    validation_requirements:
+      - Handoff reason is allowed.
+      - Internal continuation is blocked for a non-routine reason.
+  commit:
+    source_authority: git_metadata
+    authority_role: audit_ref
+    source_refs:
+      - git commit hash
+      - commit evidence artifact
+    derived_fields:
+      - branch
+      - head
+      - committed_files
+      - validation_refs
+    stale_when:
+      - Working tree changes after commit verification.
+    stop_gate_implications:
+      - Commit requires explicit approval unless already approved by milestone.
+  paused_external_validation_target:
+    source_authority: strategic_constraint
+    authority_role: pause_constraint
+    source_refs:
+      - docs/product/dream-studio-prd.md
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - project_name
+      - allowed_reference_mode
+      - implementation_paused
+      - resume_policy
+    stale_when:
+      - External resume policy changes.
+    stop_gate_implications:
+      - External project implementation routes to hard_stop until approved.
+validation_contract:
+  required_checks:
+    - required authority artifacts exist
+    - each domain contract has source_refs
+    - dashboard projection is marked derived and not primary truth
+    - handoffs are rendered views and not workflow authority
+    - no runtime SQLite mutation, migration, DDL/DML, dashboard/API/runtime implementation, package command, external project work, staging, commit, push, or deploy occurs
+next_route_on_success:
+  route_decision: start_next_milestone
+  handoff_required: false
+  operator_action_required: false
+  next_stage_gate: structured_authority_projection
+  next_milestone: dashboard_projection_mapping
+  recommended_next_work_order: none

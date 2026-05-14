@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0.0",
+  "previous_version": null,
+  "description": "Canonical event type taxonomy for Dream Studio",
+  "allowed_event_types": {
+    "research": [
+      "research.query.created",
+      "research.source.fetched",
+      "research.source.ranked"
+    ],
+    "prd": [
+      "prd.created",
+      "prd.updated",
+      "prd.scope.modified",
+      "prd.requirement.proposed",
+      "prd.requirement.approved",
+      "prd.architecture.defined",
+      "prd.approved"
+    ],
+    "decision": [
+      "decision.proposed",
+      "decision.pending_review",
+      "decision.prd.approved",
+      "decision.translation.approved",
+      "decision.research.approved"
+    ],
+    "task": [
+      "task.created",
+      "task.updated",
+      "task.completed",
+      "task.decomposition.suggested"
+    ],
+    "skill": [
+      "skill.execution.started",
+      "skill.execution.completed",
+      "skill.execution.failed"
+    ],
+    "workflow": [
+      "workflow.execution.started",
+      "workflow.execution.completed",
+      "workflow.execution.failed"
+    ],
+    "agent": [
+      "agent.execution.started",
+      "agent.execution.completed",
+      "agent.execution.failed"
+    ],
+    "ingestion": [
+      "ingestion.source.detected",
+      "ingestion.session.created",
+      "ingestion.event.normalized"
+    ],
+    "reconstruction": [
+      "reconstruction.event.inferred",
+      "reconstruction.graph.built"
+    ],
+    "business": [
+      "business.intent.created",
+      "business.requirement.stated"
+    ],
+    "contract": [
+      "contract.generated",
+      "contract.validated",
+      "contract.breaking_change.detected"
+    ],
+    "security": [
+      "security.finding.created",
+      "security.finding.detected",
+      "security.dependency.outdated",
+      "security.cve.detected",
+      "security.scan.started",
+      "security.scan.completed",
+      "security.scan.failed"
+    ],
+    "usage": [
+      "usage.tokens.input",
+      "usage.tokens.output",
+      "usage.cost"
+    ],
+    "validation": [
+      "event.validation.failed"
+    ],
+    "execution": [
+      "execution.started",
+      "execution.completed",
+      "execution.failed",
+      "execution.retrying"
+    ],
+    "analysis": [
+      "analysis.started",
+      "analysis.completed",
+      "finding.created",
+      "finding.resolved"
+    ],
+    "repo": [
+      "repo.analyzed",
+      "repo.extraction.stored",
+      "repo.pattern.extracted",
+      "repo.building_block.extracted"
+    ],
+    "model": [
+      "model.selected",
+      "model.invoked",
+      "model.response.received"
+    ],
+    "session": [
+      "session.started",
+      "session.resumed",
+      "session.compacted",
+      "session.ended"
+    ],
+    "tool": [
+      "tool.invoked",
+      "tool.completed",
+      "tool.failed"
+    ],
+    "hook": [
+      "hook.triggered",
+      "hook.completed",
+      "hook.failed"
+    ],
+    "backfill": [
+      "backfill.started",
+      "backfill.completed"
+    ],
+    "migration": [
+      "migration.applied"
+    ],
+    "database": [
+      "database.merged"
+    ],
+    "alert": [
+      "alert.created",
+      "alert.acknowledged",
+      "alert.resolved"
+    ],
+    "scan": [
+      "scan.started",
+      "scan.completed"
+    ],
+    "vulnerability": [
+      "vulnerability.found",
+      "vulnerability.mitigated"
+    ],
+    "memory": [
+      "memory.stored",
+      "memory.retrieved"
+    ],
+    "plan": [
+      "plan.created",
+      "plan.updated",
+      "plan.activated",
+      "plan.completed",
+      "plan.abandoned",
+      "plan.paused",
+      "plan.resumed"
+    ],
+    "phase": [
+      "phase.started",
+      "phase.completed",
+      "phase.failed",
+      "phase.skipped"
+    ],
+    "wave": [
+      "wave.created",
+      "wave.started",
+      "wave.completed",
+      "wave.failed"
+    ],
+    "system": [
+      "system.startup",
+      "system.shutdown",
+      "system.health_check",
+      "system.error",
+      "system.warning"
+    ],
+    "test": [
+      "test.started",
+      "test.completed",
+      "test.failed",
+      "test.runtime_verification",
+      "test.write_audit"
+    ]
+  }
+}

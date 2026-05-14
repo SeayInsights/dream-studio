@@ -1,0 +1,255 @@
+# Documentation Domain
+# Source: synthesized from Diataxis framework, Keep a Changelog, and production documentation practices
+version: 1
+
+patterns:
+  - id: diataxis-quadrants
+    title: Diataxis quadrants -- right type for the right goal
+    description: >
+      Documentation falls into four distinct quadrants with different reader goals.
+      Tutorial: learning-oriented, guides a beginner through a practical exercise to build
+      competence. How-to guide: task-oriented, solves a specific problem for a practitioner
+      who already has context. Reference: information-oriented, describes the system
+      accurately and completely. Explanation: understanding-oriented, discusses concepts,
+      context, and decisions. Mixing quadrants in a single page degrades all of them.
+    example: |
+      Tutorial:  "Build your first API integration" (step-by-step, holds hand)
+      How-to:    "How to authenticate with OAuth 2.0" (goal-focused, no hand-holding)
+      Reference: "API endpoints -- /users" (complete, dry, no narrative)
+      Explanation: "Why we chose event sourcing over CRUD" (concepts, trade-offs)
+
+  - id: progressive-disclosure
+    title: Progressive disclosure -- overview then details
+    description: >
+      Start every page with the minimum information needed to understand what it covers
+      and whether it is the right page. Add detail in layers. A reader skimming to orient
+      should get value from the first paragraph alone. A reader who needs implementation
+      details finds them by reading further.
+    example: |
+      ## Caching
+      The cache stores API responses to reduce latency and cost. It uses an LRU eviction
+      policy with a configurable TTL.
+
+      ### How the cache works
+      [deeper explanation here]
+
+      ### Configuration reference
+      [full option table here]
+
+  - id: task-oriented-titles
+    title: Task-oriented titles for procedural docs
+    description: >
+      How-to guides and tutorials should have titles phrased as actions or outcomes, not
+      nouns. "How to configure rate limiting" is findable by someone who has a problem.
+      "Rate Limiting Configuration" is findable only by someone who already knows the term.
+      Sentence case for headings. No trailing periods.
+    example: |
+      Good titles:
+        "How to set up authentication"
+        "Deploy to production"
+        "Migrate from v1 to v2"
+
+      Bad titles:
+        "Authentication Setup"
+        "Production Deployment"
+        "Migration Guide" (vague -- from what to what?)
+
+  - id: clean-code-examples
+    title: Code examples that copy-paste clean
+    description: >
+      Every code example must be syntactically valid and runnable as shown. Include all
+      required imports and setup steps if they are not already in a preceding code block
+      on the same page. Use realistic but minimal values (no enterprise-length config
+      files). Test code examples as part of CI -- broken examples are worse than no examples.
+    example: |
+      ```python
+      # Complete, runnable example -- no hidden setup required
+      import httpx
+
+      client = httpx.Client(base_url="https://api.example.com")
+      response = client.get("/users", headers={"Authorization": "Bearer YOUR_TOKEN"})
+      print(response.json())
+      ```
+
+  - id: version-docs-with-code
+    title: Versioning docs with code
+    description: >
+      Documentation must be version-pinned to the code it describes. Storing docs in
+      the same repository as the code (docs-as-code) is the most reliable way to keep
+      them in sync. Tag doc releases with the same version tag as code releases. Use
+      a versioned docs system (Docusaurus versions, ReadTheDocs versions) when multiple
+      major versions are actively supported.
+    example: |
+      # Repository structure: docs live beside the code they describe
+      /
+        src/
+        docs/
+          api-reference.md
+          changelog.md
+        CHANGELOG.md   # top-level, always current
+        package.json   # version here = version docs describe
+
+  - id: api-reference-auto-generation
+    title: API reference auto-generated from code
+    description: >
+      Hand-maintained API reference diverges from the actual code within weeks.
+      Generate reference docs from source -- JSDoc/TSDoc for TypeScript/JavaScript,
+      docstrings + Sphinx for Python, OpenAPI annotations for REST APIs. Keep the
+      generator in CI so docs fail the build if the code and docs desync.
+    example: |
+      # TypeScript: TSDoc comment drives the reference page
+      /**
+       * Authenticates a user and returns a session token.
+       * @param email - The user's email address
+       * @param password - The user's password (min 8 characters)
+       * @returns A JWT session token valid for 24 hours
+       * @throws {AuthError} When credentials are invalid
+       */
+      async function login(email: string, password: string): Promise<string>
+
+  - id: keep-a-changelog
+    title: Changelog format -- Keep a Changelog
+    description: >
+      Use the Keep a Changelog format: each release has a date and version, changes
+      are grouped under Added / Changed / Deprecated / Removed / Fixed / Security.
+      The top entry is always [Unreleased]. Semantic versioning drives the version
+      numbers. Changelogs are written for humans, not generated from commit messages.
+    example: |
+      ## [Unreleased]
+
+      ## [2.1.0] - 2026-04-15
+      ### Added
+      - OAuth 2.0 support for all authentication endpoints
+
+      ### Fixed
+      - Rate limit counter no longer resets on partial window overlap
+
+      ## [2.0.1] - 2026-03-01
+      ### Security
+      - Patched CSRF vulnerability in session cookie handling
+
+  - id: readme-structure
+    title: README structure -- what/why/quickstart/link
+    description: >
+      A README answers four questions in order: what is this, why would I use it,
+      how do I get started in 60 seconds, where is the full documentation. Keep the
+      quickstart under 10 steps. Never bury the install command below a wall of badges
+      or marketing text.
+    example: |
+      # ProjectName
+      One sentence: what it is and what problem it solves.
+
+      ## Why
+      Two to three sentences on the problem and why this approach.
+
+      ## Quickstart
+      ```bash
+      npm install projectname
+      ```
+      Five lines max to get to Hello World.
+
+      ## Documentation
+      Full docs at https://docs.example.com
+
+anti_patterns:
+  - id: mixing-tutorial-and-reference
+    title: Mixing tutorial and reference in the same page
+    description: >
+      Tutorial narrative and dry reference tables serve incompatible reader goals. A
+      learner following a tutorial does not want to be derailed by an exhaustive option
+      table. A practitioner looking up a parameter does not want to read beginner
+      motivation text. Keep them in separate files. Link between them.
+
+  - id: assuming-reader-context
+    title: Assuming reader context -- missing prerequisites
+    description: >
+      Docs that start mid-process without stating prerequisites leave readers stuck at
+      step 1. State the required environment, installed tools, knowledge level, and any
+      prior setup steps at the top of the page. Link to setup guides rather than
+      abbreviating them.
+
+  - id: outdated-code-examples
+    title: Outdated code examples
+    description: >
+      Code examples that reference deprecated APIs, removed parameters, or old syntax
+      actively mislead readers and damage trust in all documentation. An outdated
+      example is worse than no example because it consumes the reader's time debugging
+      code that cannot work. Run examples in CI or remove them.
+
+  - id: what-not-why
+    title: Documentation that describes what, not why
+    description: >
+      "This function returns a list of users" describes what already visible in the
+      function signature. Documentation earns its keep by explaining why: why this
+      design, when to use this vs that, what problem this solves, what the edge cases
+      are. Reference docs can describe what. Explanation docs must explain why.
+
+  - id: wall-of-text
+    title: Wall of text without scannable headers
+    description: >
+      Readers do not read documentation linearly -- they scan to find the relevant
+      section. Long paragraphs without subheadings force linear reading. Use H2 and
+      H3 headings generously. Keep paragraphs under 5 sentences. Use lists and tables
+      where comparison or enumeration is needed.
+
+gotchas:
+  - id: docs-pass-ci-but-dont-run
+    title: Docs that pass CI but do not actually run
+    description: >
+      Markdown code blocks do not execute in most CI pipelines. A lint pass confirms
+      valid markdown syntax but not that the example code runs or produces the correct
+      output. Examples can silently break when the underlying API changes.
+    fix: >
+      Use a doc-testing tool that extracts and runs code examples: doctest for Python,
+      mdBook for Rust, custom extraction scripts. At minimum, have a separate CI job
+      that installs the library and runs the quickstart example end-to-end on every
+      release branch.
+
+  - id: screenshot-drift
+    title: Screenshot drift -- UI changes, screenshot stays
+    description: >
+      Screenshots become stale after every UI change. A screenshot showing a button
+      in the wrong place or a dialog with old text destroys reader trust. Screenshots
+      are high maintenance and not translatable.
+    fix: >
+      Minimize screenshot use. Prefer code examples and text descriptions. When
+      screenshots are required (setup wizards, GUI-only tools), add them to a
+      screenshot refresh checklist that runs before each release. Consider automated
+      screenshot capture tools (Percy, Playwright screenshots) tied to release CI.
+
+  - id: i18n-docs-too-late
+    title: Internationalization of docs forgotten until too late
+    description: >
+      When docs are written without i18n in mind, headings use idioms, code examples
+      use locale-specific values, and anchor links contain non-ASCII characters. Retrofitting
+      i18n after hundreds of pages is extremely expensive.
+    fix: >
+      Decide on an i18n strategy before writing significant docs: will they be translated,
+      and if so by what toolchain (Crowdin, Weblate). Avoid idioms and culture-specific
+      examples even if no translation is planned today. Keep anchor IDs as lowercase
+      ASCII slugs from day one.
+
+  - id: anchor-link-rot
+    title: Anchor link rot from heading changes
+    description: >
+      Most doc tools auto-generate anchor IDs from heading text. Renaming a heading
+      breaks every inbound link to that anchor -- from other docs pages, from external
+      sites, and from support tickets. This is silent: no 404 is thrown for in-page
+      anchors.
+    fix: >
+      Use explicit anchor IDs in tools that support them (remark-slug, Docusaurus id
+      frontmatter). Run a broken link checker (lychee, markdown-link-check) in CI.
+      When renaming a heading, add a redirect or alias for the old anchor if the tool
+      supports it.
+
+  - id: search-missing-versioned-docs
+    title: Search indexing missing for versioned docs
+    description: >
+      When a docs site has versioned sections, search indexes often default to only
+      the latest version. Users on older versions find no results or find results from
+      the wrong version. This causes silent support failures.
+    fix: >
+      Configure the search tool (Algolia DocSearch, Pagefind) to index all supported
+      versions and surface the version label in results. Add a "you are viewing version
+      X" banner with a link to the latest. Test search results explicitly for each
+      major version during the release process.
