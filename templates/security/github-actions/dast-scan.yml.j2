@@ -1,0 +1,131 @@
+name: DAST Scan — {{ client.name }}
+
+on:
+{% if client.scan.schedule == 'nightly' %}
+  schedule:
+    - cron: '0 3 * * *'
+{% elif client.scan.schedule == 'weekly' %}
+  schedule:
+    - cron: '0 3 * * 0'
+{% endif %}
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target name to scan (leave empty for all)'
+        required: false
+        type: string
+
+jobs:
+{% for target in client.targets.web_apps %}
+
+  zap-{{ target.name | lower | replace('-', '_') }}:
+    name: "ZAP — {{ target.name }}"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+{% raw %}
+    if: ${{ github.event.inputs.target == '' || github.event.inputs.target == '{% endraw %}{{ target.name }}{% raw %}' }}
+{% endraw %}
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+
+      - name: Run ZAP Full Scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: "{{ target.url }}"
+          rules_file_name: ".security/dast/{{ target.name }}/zap-config.yaml"
+          cmd_options: >-
+            -J zap-report.json
+{% if target.scan_profile == 'passive' %}
+            -T 5
+{% endif %}
+{% if target.auth is defined and target.auth.type == 'api_key' %}
+{% raw %}
+          docker_env_vars: |
+            {{ {% endraw %}target.auth.header | default('Authorization'){% raw %} }}=${{ secrets.{% endraw %}{{ target.auth.token_env }}{% raw %} }}
+{% endraw %}
+{% endif %}
+
+      - name: Upload ZAP results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-dast-zap-{{ target.name | lower }}
+          path: zap-report.json
+          retention-days: 30
+
+  nuclei-{{ target.name | lower | replace('-', '_') }}:
+    name: "Nuclei — {{ target.name }}"
+    runs-on: ubuntu-latest
+    continue-on-error: true
+{% raw %}
+    if: ${{ github.event.inputs.target == '' || github.event.inputs.target == '{% endraw %}{{ target.name }}{% raw %}' }}
+{% endraw %}
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+
+      - name: Run Nuclei
+        uses: projectdiscovery/nuclei-action@main
+        with:
+          target: "{{ target.url }}"
+{% if target.scan_profile == 'full' %}
+          templates: "cve,misconfig,exposure,takeover"
+{% elif target.scan_profile == 'api-only' %}
+          templates: "cve,misconfig,exposure,api"
+{% elif target.scan_profile == 'auth-only' %}
+          templates: "cve,default-login,misconfig"
+{% else %}
+          templates: "tech-detect,exposure"
+{% endif %}
+          output: "nuclei-output.jsonl"
+          json: true
+{% if target.auth is defined and target.auth.type is defined and target.auth.type != 'none' %}
+{% raw %}
+          flags: "-rate-limit 10 -H 'Authorization: ${{ secrets.{% endraw %}{{ target.auth.token_env }}{% raw %} }}'"
+{% endraw %}
+{% else %}
+          flags: "-rate-limit 10"
+{% endif %}
+
+      - name: Upload Nuclei results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-dast-nuclei-{{ target.name | lower }}
+          path: nuclei-output.jsonl
+          retention-days: 30
+
+{% endfor %}
+
+  collect-dast-results:
+    name: Collect DAST Results
+    runs-on: ubuntu-latest
+    needs:
+{% for target in client.targets.web_apps %}
+      - zap-{{ target.name | lower | replace('-', '_') }}
+      - nuclei-{{ target.name | lower | replace('-', '_') }}
+{% endfor %}
+    if: always()
+    steps:
+      - name: Download all DAST artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dast-results/
+
+      - name: Generate summary
+        run: |
+          echo "## DAST Scan Summary — {{ client.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+{% raw %}
+          echo "**Run:** \`${{ github.run_id }}\`" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | Scanner | Artifact |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+{% for target in client.targets.web_apps %}
+          echo "| {{ target.name }} | ZAP | {{ client.name | lower }}-dast-zap-{{ target.name | lower }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| {{ target.name }} | Nuclei | {{ client.name | lower }}-dast-nuclei-{{ target.name | lower }} |" >> $GITHUB_STEP_SUMMARY
+{% endfor %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Artifacts retained for 30 days._" >> $GITHUB_STEP_SUMMARY

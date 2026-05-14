@@ -1,0 +1,18 @@
+# Default: let git normalize line endings per platform.
+* text=auto
+
+# Shell scripts always use LF — required for `#!/usr/bin/env bash` to work
+# when the repo is cloned on Linux/macOS after being pushed from Windows.
+*.sh text eol=lf
+hooks/run.sh text eol=lf
+
+# Windows batch files stay CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Python and markdown normalize to LF for consistency in CI.
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

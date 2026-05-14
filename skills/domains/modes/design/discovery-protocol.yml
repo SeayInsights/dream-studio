@@ -1,0 +1,317 @@
+# I-Lang Discovery Protocol
+# Maps natural language design intent to structured design system parameters
+
+version: "1.0.0"
+description: "Design intent discovery protocol for translating user preferences into design system selections"
+
+dimensions:
+  - dimension: palette
+    description: "Overall color approach and strategy"
+    values:
+      - monochrome
+      - vibrant
+      - warm
+      - cool
+      - pastel
+      - high-contrast
+    nlp_mappings:
+      monochrome:
+        - "black and white"
+        - "grayscale"
+        - "no color"
+        - "minimal color"
+      vibrant:
+        - "colorful"
+        - "bright"
+        - "energetic colors"
+        - "bold colors"
+      warm:
+        - "warm tones"
+        - "orange and red"
+        - "cozy colors"
+        - "earthy"
+      cool:
+        - "cool tones"
+        - "blue and green"
+        - "calming colors"
+        - "fresh"
+      pastel:
+        - "soft colors"
+        - "muted"
+        - "gentle"
+        - "light tones"
+      high-contrast:
+        - "strong contrast"
+        - "accessible"
+        - "high contrast"
+        - "clear distinction"
+
+  - dimension: accent
+    description: "Primary accent color strategy"
+    values:
+      - blue
+      - green
+      - purple
+      - red
+      - orange
+      - none
+    nlp_mappings:
+      blue:
+        - "brand blue"
+        - "blue accent"
+        - "trust"
+        - "professional blue"
+      green:
+        - "green accent"
+        - "natural"
+        - "growth"
+        - "success green"
+      purple:
+        - "purple accent"
+        - "creative"
+        - "luxury purple"
+      red:
+        - "red accent"
+        - "energetic"
+        - "urgent"
+        - "passionate"
+      orange:
+        - "orange accent"
+        - "warm accent"
+        - "friendly"
+        - "energetic orange"
+      none:
+        - "no accent"
+        - "neutral only"
+        - "monochrome accents"
+        - "no highlight color"
+
+  - dimension: mood
+    description: "Emotional tone and personality"
+    values:
+      - professional
+      - playful
+      - minimal
+      - bold
+      - elegant
+      - modern
+    nlp_mappings:
+      professional:
+        - "serious"
+        - "business"
+        - "corporate"
+        - "formal"
+        - "enterprise"
+      playful:
+        - "fun"
+        - "friendly"
+        - "casual"
+        - "approachable"
+        - "lighthearted"
+      minimal:
+        - "simple"
+        - "clean"
+        - "understated"
+        - "less is more"
+        - "minimalist"
+      bold:
+        - "strong"
+        - "confident"
+        - "impactful"
+        - "statement"
+        - "dramatic"
+      elegant:
+        - "refined"
+        - "sophisticated"
+        - "polished"
+        - "luxury"
+        - "premium"
+      modern:
+        - "contemporary"
+        - "fresh"
+        - "current"
+        - "trendy"
+        - "cutting edge"
+
+  - dimension: density
+    description: "Information density and spatial distribution"
+    values:
+      - spacious
+      - balanced
+      - compact
+      - data-heavy
+    nlp_mappings:
+      spacious:
+        - "lots of space"
+        - "generous spacing"
+        - "airy"
+        - "breathing room"
+        - "open layout"
+      balanced:
+        - "moderate spacing"
+        - "balanced"
+        - "neither too dense nor sparse"
+        - "comfortable"
+      compact:
+        - "tight spacing"
+        - "efficient"
+        - "space-saving"
+        - "condensed"
+      data-heavy:
+        - "dashboard"
+        - "lots of information"
+        - "analytics"
+        - "dense data"
+        - "information rich"
+
+  - dimension: typography
+    description: "Typeface style and character"
+    values:
+      - sans-serif
+      - serif
+      - monospace
+      - mixed
+    nlp_mappings:
+      sans-serif:
+        - "clean"
+        - "modern typeface"
+        - "sans serif"
+        - "simple text"
+        - "web standard"
+      serif:
+        - "traditional"
+        - "classic"
+        - "readable body text"
+        - "serif font"
+        - "editorial"
+      monospace:
+        - "code style"
+        - "technical"
+        - "fixed width"
+        - "developer"
+        - "terminal look"
+      mixed:
+        - "varied fonts"
+        - "serif and sans"
+        - "typographic contrast"
+        - "editorial style"
+
+  - dimension: layout
+    description: "Grid structure and content organization"
+    values:
+      - centered
+      - sidebar
+      - full-width
+      - multi-column
+      - asymmetric
+    nlp_mappings:
+      centered:
+        - "centered content"
+        - "middle aligned"
+        - "focused center"
+        - "single column centered"
+      sidebar:
+        - "side navigation"
+        - "sidebar layout"
+        - "left panel"
+        - "nav on side"
+      full-width:
+        - "edge to edge"
+        - "full width"
+        - "no margins"
+        - "immersive"
+        - "wide layout"
+      multi-column:
+        - "dashboard"
+        - "grid layout"
+        - "multiple columns"
+        - "card grid"
+        - "magazine style"
+      asymmetric:
+        - "dynamic layout"
+        - "broken grid"
+        - "asymmetric"
+        - "unique structure"
+        - "editorial asymmetry"
+
+  - dimension: responsive
+    description: "Mobile and responsive strategy"
+    values:
+      - mobile-first
+      - desktop-first
+      - adaptive
+      - single-breakpoint
+    nlp_mappings:
+      mobile-first:
+        - "works on phone"
+        - "mobile first"
+        - "mobile optimized"
+        - "phone friendly"
+        - "mobile priority"
+      desktop-first:
+        - "desktop optimized"
+        - "large screen focus"
+        - "desktop first"
+        - "web app"
+      adaptive:
+        - "fully responsive"
+        - "all devices"
+        - "adaptive layout"
+        - "multiple breakpoints"
+        - "device agnostic"
+      single-breakpoint:
+        - "simple responsive"
+        - "mobile and desktop"
+        - "two layouts"
+        - "basic responsive"
+
+  - dimension: exclude
+    description: "Design elements to avoid"
+    values:
+      - animations
+      - gradients
+      - shadows
+      - borders
+      - icons
+      - illustrations
+    nlp_mappings:
+      animations:
+        - "no animations"
+        - "static only"
+        - "no motion"
+        - "no transitions"
+        - "performance first"
+      gradients:
+        - "flat design"
+        - "no gradients"
+        - "solid colors only"
+        - "no color blending"
+      shadows:
+        - "flat design"
+        - "no shadows"
+        - "no depth"
+        - "2D only"
+        - "no elevation"
+      borders:
+        - "no borders"
+        - "borderless"
+        - "no outlines"
+        - "clean edges"
+      icons:
+        - "no icons"
+        - "text only"
+        - "no symbols"
+        - "minimal graphics"
+      illustrations:
+        - "no illustrations"
+        - "no graphics"
+        - "photography only"
+        - "no drawings"
+
+# Usage example:
+# User: "I want a professional, clean design with lots of space and no animations"
+# Parsed intent:
+#   mood: professional
+#   typography: sans-serif (from "clean")
+#   density: spacious (from "lots of space")
+#   exclude: animations (from "no animations")

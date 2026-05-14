@@ -1,0 +1,59 @@
+# Layout & Spacing Standards
+# Sources: Material Design (8dp grid), Fluent Design (4px), Web Design Rules
+
+grid_systems:
+  material_design: 8  # 8dp base (4dp for dense UIs)
+  fluent_design: 4  # 4px base
+  web_standard: 16  # 16px base (use multiples)
+
+spacing_scale:
+  xs: 4px
+  sm: 8px
+  md: 16px
+  lg: 24px
+  xl: 32px
+  xxl: 48px
+  xxxl: 64px
+
+whitespace_principles:
+  generous_between_sections: true  # 32-64px
+  law_of_proximity: true  # Related elements close (8-16px)
+  breathing_room_padding: 24px  # Around primary content
+
+responsive_design:
+  breakpoints:
+    mobile: 767px  # 320-767px
+    tablet: 1023px  # 768-1023px
+    desktop: 1024px  # 1024px+
+
+  layout_strategies:
+    fluid_layouts: true  # %, vw, vh units
+    flexible_images: true  # max-width: 100%
+    media_queries: true  # At breakpoints
+
+visual_hierarchy:
+  emphasis_methods:
+    size: "Larger = more important"
+    weight: "Bolder = more important"
+    color: "Brighter/saturated = more important"
+    position: "Top-left = most important (F-pattern)"
+
+  de_emphasis:
+    size: "Smaller"
+    weight: "Lighter (300-400)"
+    contrast: "Lower (gray instead of black)"
+
+alignment:
+  prefer_left_alignment: true
+  center_short_text_only: true
+  avoid_justified: true
+
+z_index_scale:
+  base: 0
+  dropdown: 1000
+  sticky: 1020
+  fixed: 1030
+  modal_backdrop: 1040
+  modal: 1050
+  popover: 1060
+  tooltip: 1070

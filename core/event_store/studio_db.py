@@ -1,0 +1,3432 @@
+"""SQLite analytics backend for dream-studio (WAL, migrations, retry, CLI)."""
+
+from __future__ import annotations
+import sys
+import argparse, functools, hashlib, json, re, sqlite3, sys, time
+from contextlib import contextmanager
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import Optional
+import threading
+import urllib.request
+import urllib.error
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from core.config import paths  # noqa: E402
+from core.config.database import get_connection, transaction
+from core.config.sqlite_bootstrap import (
+    migrations_dir as _canonical_migrations_dir,
+    run_migrations as _canonical_run_migrations,
+    split_statements as _canonical_split_statements,
+)
+
+# Import adapters for skill execution normalization (TC-007)
+try:
+    from interfaces.adapters import EventNormalizer, ClaudeAdapter
+    from interfaces.adapters.models import TraceContext, CanonicalEvent
+
+    _event_normalizer = EventNormalizer()
+    _event_normalizer.register_adapter("claude", ClaudeAdapter())
+    _NORMALIZER_AVAILABLE = True
+except ImportError:
+    _NORMALIZER_AVAILABLE = False
+
+# Import canonical event store for dual-write migration (Phase 1)
+try:
+    from core.event_store.event_store import EventStore
+    from core.event_store.legacy_bridge import LegacyBridge
+    from core.validation.event_validator import EventValidator
+
+    # Initialize EventStore with validation
+    _validator = None
+    _event_store = None
+    _legacy_bridge = None
+    _EVENT_STORE_AVAILABLE = True
+except ImportError as e:
+    _EVENT_STORE_AVAILABLE = False
+    _IMPORT_ERROR = str(e)
+
+_NOW = lambda: datetime.now(timezone.utc).isoformat()
+
+
+def _db_path() -> Path:
+    return paths.state_dir() / "studio.db"
+
+
+# ── Event Store Initialization (Lazy) ──────────────────────────────────────
+
+
+def _get_event_store(
+    override_db_path: Path | None = None, override_conn: sqlite3.Connection | None = None
+):
+    """
+    Lazily initialize EventStore for canonical event emission.
+
+    Args:
+        override_db_path: Optional database path (for testing)
+        override_conn: Optional connection (for testing with temp DB)
+
+    Returns LegacyBridge instance or None if not available.
+    This is called from _insert_activity_log for dual-write.
+    """
+    global _validator, _event_store, _legacy_bridge
+
+    if not _EVENT_STORE_AVAILABLE:
+        return None
+
+    # For testing: create new instance with override
+    if override_db_path is not None or override_conn is not None:
+        try:
+            repo_root = Path(__file__).resolve().parents[2]
+            docs_dir = repo_root / "docs" / "canonical"
+
+            if not docs_dir.exists():
+                return None
+
+            taxonomy_path = str(docs_dir / "event_taxonomy_v1.json")
+            schema_path = str(docs_dir / "canonical_event_v1_schema.json")
+
+            if not Path(taxonomy_path).exists() or not Path(schema_path).exists():
+                return None
+
+            test_validator = EventValidator(taxonomy_path, schema_path)
+            test_event_store = EventStore(
+                db_path=str(override_db_path or _db_path()),
+                validator=test_validator,
+                emit_validation_failures=True,
+                shared_connection=override_conn,
+            )
+            return LegacyBridge(test_event_store)
+        except Exception:
+            return None
+
+    # Production: use global singleton
+    if _event_store is None:
+        try:
+            # Initialize validator with taxonomy and schema from docs/canonical/
+            repo_root = Path(__file__).resolve().parents[2]
+            docs_dir = repo_root / "docs" / "canonical"
+
+            if not docs_dir.exists():
+                # Canonical schema not found - skip event emission
+                return None
+
+            taxonomy_path = str(docs_dir / "event_taxonomy_v1.json")
+            schema_path = str(docs_dir / "canonical_event_v1_schema.json")
+
+            if not Path(taxonomy_path).exists() or not Path(schema_path).exists():
+                # Schema files missing - skip event emission
+                return None
+
+            _validator = EventValidator(taxonomy_path, schema_path)
+            _event_store = EventStore(
+                db_path=str(_db_path()), validator=_validator, emit_validation_failures=True
+            )
+            _legacy_bridge = LegacyBridge(_event_store)
+        except Exception:
+            # Log error for debugging but don't fail legacy writes
+            # This ensures backward compatibility during migration
+            return None
+
+    return _legacy_bridge
+
+
+# ── SQL statement splitter ──────────────────────────────────────────────────
+
+
+def _split_statements(sql_text: str) -> list[str]:
+    """Split SQL into individual statements, respecting trigger BEGIN/END blocks."""
+    return _canonical_split_statements(sql_text)
+
+
+# ── Migration runner ────────────────────────────────────────────────────────
+
+
+def _migrations_dir() -> Path:
+    return _canonical_migrations_dir()
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply pending schema migrations from core/event_store/migrations/*.sql."""
+    _canonical_run_migrations(conn)
+
+
+# ── Connection ──────────────────────────────────────────────────────────────
+
+
+def _connect(db_path: Path | None = None) -> sqlite3.Connection:
+    if db_path is not None:
+        db_path = Path(db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(db_path), timeout=30.0)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA journal_mode = WAL")
+    else:
+        conn = get_connection()
+    conn.execute("PRAGMA synchronous=NORMAL")
+    _run_migrations(conn)
+    return conn
+
+
+@contextmanager
+def _db_transaction(db_path: Path | None = None):
+    """Yield a connection inside a transaction, honoring db_path for test isolation."""
+    if db_path is None:
+        with transaction() as c:
+            yield c
+    else:
+        conn = _connect(db_path)
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+# ── Retry infrastructure ───────────────────────────────────────────────────
+
+
+def _with_retry(fn=None, *, retries=3, backoffs=(0.1, 0.5, 2.0)):
+    """Decorator: retry on SQLITE_BUSY with exponential backoff."""
+    if fn is None:
+        return lambda f: _with_retry(f, retries=retries, backoffs=backoffs)
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        for attempt in range(retries + 1):
+            try:
+                return fn(*args, **kwargs)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < retries:
+                    time.sleep(backoffs[min(attempt, len(backoffs) - 1)])
+                    continue
+                raise
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def _reraise_if_busy(e: Exception) -> None:
+    """Re-raise SQLITE_BUSY so the retry decorator can handle it."""
+    if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
+        raise
+
+
+def _broadcast_hook_execution(
+    hook_name: str, status: str, duration_ms: Optional[int], timestamp: str, is_anomaly: bool
+) -> None:
+    """
+    Broadcast hook execution event to WebSocket clients via API endpoint.
+    Runs in background thread to avoid blocking hook execution.
+    """
+
+    def _send_broadcast():
+        try:
+            payload = {
+                "hook_name": hook_name,
+                "status": status,
+                "duration_ms": duration_ms or 0,
+                "timestamp": timestamp,
+                "is_anomaly": is_anomaly,
+            }
+
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                "http://localhost:8000/api/v1/broadcast/hook-execution",
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            with urllib.request.urlopen(req, timeout=1) as response:
+                if response.status != 200:
+                    # Log error but don't fail the hook
+                    pass
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+            # Silently fail - WebSocket broadcast is best-effort
+            pass
+        except Exception:
+            # Catch all other exceptions to prevent hook failures
+            pass
+
+    # Run broadcast in background thread (fire-and-forget)
+    thread = threading.Thread(target=_send_broadcast, daemon=True)
+    thread.start()
+
+
+# ── Activity Log Helper ────────────────────────────────────────────────────
+
+
+def _insert_activity_log(
+    activity_type: str,
+    stream_id: str,
+    stream_type: str,
+    *,
+    event_data: dict | None = None,
+    status: str = "completed",
+    severity: str = "info",
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    workflow_run_key: str | None = None,
+    skill_id: str | None = None,
+    duration_ms: int | None = None,
+    db_path: Path | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> int | None:
+    """
+    Insert into activity_log and return activity_id for FK linking.
+
+    This is the central hub for all activities. ALL activity generators should
+    call this BEFORE writing to specialized tables (workflows, research, lessons).
+
+    Args:
+        activity_type: 'workflow_node', 'research_completed', 'lesson_captured', etc.
+        stream_id: The ID of the primary entity (task_id, prd_id, workflow_run_key, etc.)
+        stream_type: 'task', 'prd', 'workflow', 'skill', 'session'
+        event_data: JSON-serializable dict of event-specific data
+        status: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        severity: 'info', 'warning', 'error', 'critical'
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        session_id: Optional session ID for cross-domain linkage
+        workflow_run_key: Optional workflow run key for cross-domain linkage
+        skill_id: Optional skill ID for cross-domain linkage
+        duration_ms: Optional duration in milliseconds
+        db_path: Optional database path (used only if conn is None)
+        conn: Optional existing connection to reuse (prevents nested connections)
+
+    Returns:
+        activity_id (int) on success, None on failure
+    """
+    try:
+        # DUAL-WRITE STEP 1: Write to legacy activity_log (backward compatibility)
+        activity_id = None
+        if conn is not None:
+            cur = conn.execute(
+                """INSERT INTO activity_log
+                   (activity_type, stream_id, stream_type, event_timestamp,
+                    event_data, prd_id, task_id, session_id, workflow_run_key,
+                    skill_id, status, severity, duration_ms)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    activity_type,
+                    stream_id,
+                    stream_type,
+                    _NOW(),
+                    json.dumps(event_data) if event_data else None,
+                    prd_id,
+                    task_id,
+                    session_id,
+                    workflow_run_key,
+                    skill_id,
+                    status,
+                    severity,
+                    duration_ms,
+                ),
+            )
+            activity_id = cur.lastrowid
+        else:
+            with _db_transaction(db_path) as c:
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, workflow_run_key,
+                        skill_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        activity_type,
+                        stream_id,
+                        stream_type,
+                        _NOW(),
+                        json.dumps(event_data) if event_data else None,
+                        prd_id,
+                        task_id,
+                        session_id,
+                        workflow_run_key,
+                        skill_id,
+                        status,
+                        severity,
+                        duration_ms,
+                    ),
+                )
+                activity_id = cur.lastrowid
+
+        # DUAL-WRITE STEP 2: Emit canonical event (future-proof)
+        # For testing: pass connection if available
+        bridge = _get_event_store(override_db_path=db_path, override_conn=conn)
+        if bridge is not None:
+            try:
+                bridge.emit_from_legacy(
+                    activity_type=activity_type,
+                    stream_id=stream_id,
+                    stream_type=stream_type,
+                    event_data=event_data,
+                    prd_id=prd_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    workflow_run_key=workflow_run_key,
+                    skill_id=skill_id,
+                    status=status,
+                    severity=severity,
+                )
+            except Exception:
+                # Canonical event emission failed - log but don't fail legacy write
+                # This ensures backward compatibility during migration
+                pass
+
+        return activity_id
+    except Exception as e:
+        _reraise_if_busy(e)
+        return None
+
+
+# ── Workflow functions ──────────────────────────────────────────────────────
+
+
+@_with_retry
+def archive_workflow(
+    run_key: str,
+    wf: dict,
+    db_path: Path | None = None,
+    *,
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+) -> bool:
+    """
+    Archive workflow run to raw_workflow_runs and raw_workflow_nodes.
+
+    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
+
+    Args:
+        run_key: Unique workflow run identifier
+        wf: Workflow dict with keys: workflow, yaml_path, status, started, nodes
+        db_path: Optional database path
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        session_id: Optional session ID for cross-domain linkage
+    """
+    try:
+        nodes = wf.get("nodes", {})
+        started_at = wf.get("started", _NOW())
+        status = wf["status"]
+
+        # Calculate duration if workflow is finished
+        duration_ms = None
+        if wf.get("finished"):
+            try:
+                start = datetime.fromisoformat(started_at)
+                end = datetime.fromisoformat(wf["finished"])
+                duration_ms = int((end - start).total_seconds() * 1000)
+            except (ValueError, TypeError):
+                pass
+
+        with _db_transaction(db_path) as c:
+            # 1. Normalize workflow_run event via EventNormalizer (TC-008)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "workflow_run",
+                    "workflow_name": wf["workflow"],
+                    "yaml_path": wf["yaml_path"],
+                    "status": status,
+                    "started_at": started_at,
+                    "duration_ms": duration_ms,
+                    "node_count": len(nodes),
+                    "nodes_done": sum(
+                        1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
+                    ),
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = run_key
+
+                # Insert normalized event
+                # NOTE: workflow_run_key is set to NULL here because raw_workflow_runs doesn't exist yet
+                # The run_key is already captured in stream_id
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, workflow_run_key,
+                        skill_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "workflow_run",
+                        run_key,
+                        "workflow",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        prd_id,
+                        task_id,
+                        session_id,
+                        None,  # workflow_run_key=NULL (inserted later)
+                        None,
+                        # Map workflow statuses to activity_log statuses
+                        (
+                            "completed"
+                            if status == "success"
+                            else (
+                                "cancelled"
+                                if status == "aborted"
+                                else ("failed" if status == "completed_with_failures" else status)
+                            )
+                        ),
+                        canonical.severity,
+                        duration_ms,
+                    ),
+                )
+                activity_id = cur.lastrowid
+            else:
+                # Fallback: direct insert if normalizer unavailable
+                activity_id = _insert_activity_log(
+                    activity_type="workflow_run",
+                    stream_id=run_key,
+                    stream_type="workflow",
+                    event_data={
+                        "workflow": wf["workflow"],
+                        "yaml_path": wf["yaml_path"],
+                        "node_count": len(nodes),
+                        "nodes_done": sum(
+                            1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
+                        ),
+                    },
+                    status="completed" if status == "success" else status,
+                    severity="info",
+                    prd_id=prd_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    workflow_run_key=run_key,
+                    duration_ms=duration_ms,
+                    conn=c,
+                )
+
+            # 2. Insert into raw_workflow_runs with activity_id FK
+            c.execute(
+                """INSERT INTO raw_workflow_runs
+                   (run_key, workflow, yaml_path, status, started_at,
+                    node_count, nodes_done, activity_id, prd_id, task_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    run_key,
+                    wf["workflow"],
+                    wf["yaml_path"],
+                    status,
+                    started_at,
+                    len(nodes),
+                    sum(1 for n in nodes.values() if n.get("status") in ("completed", "skipped")),
+                    activity_id,
+                    prd_id,
+                    task_id,
+                ),
+            )
+
+            # 3. Insert workflow nodes (with individual activity_id entries)
+            for nid, nd in nodes.items():
+                node_status = nd.get("status", "")
+                node_duration_ms = None
+
+                # Calculate node duration if available
+                if nd.get("started") and nd.get("finished"):
+                    try:
+                        node_start = datetime.fromisoformat(nd["started"])
+                        node_end = datetime.fromisoformat(nd["finished"])
+                        node_duration_ms = int((node_end - node_start).total_seconds() * 1000)
+                    except (ValueError, TypeError):
+                        pass
+
+                # Normalize workflow_node event via EventNormalizer (TC-008)
+                if _NORMALIZER_AVAILABLE:
+                    from interfaces.adapters.models import TraceContext
+
+                    node_raw_output = {
+                        "event_type": "workflow_node",
+                        "node_id": nid,
+                        "workflow_name": wf["workflow"],
+                        "status": node_status,
+                        "output": nd.get("output", ""),
+                        "duration_ms": node_duration_ms,
+                    }
+                    node_trace = TraceContext(
+                        project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                    )
+                    node_canonical = _event_normalizer.normalize(
+                        node_raw_output, model_type="default"
+                    )
+                    node_canonical.trace = node_trace
+                    node_canonical.entity_id = f"{run_key}:{nid}"
+
+                    # Insert normalized event
+                    # NOTE: workflow_run_key is set to NULL because raw_workflow_runs may not exist yet
+                    cur = c.execute(
+                        """INSERT INTO activity_log
+                           (activity_type, stream_id, stream_type, event_timestamp,
+                            event_data, prd_id, task_id, session_id, workflow_run_key,
+                            skill_id, status, severity, duration_ms)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            "workflow_node",
+                            f"{run_key}:{nid}",
+                            "workflow",
+                            node_canonical.timestamp.isoformat(),
+                            json.dumps(node_canonical.payload),
+                            prd_id,
+                            task_id,
+                            session_id,
+                            None,  # workflow_run_key=NULL
+                            None,
+                            "completed" if node_status in ("completed", "skipped") else node_status,
+                            node_canonical.severity,
+                            node_duration_ms,
+                        ),
+                    )
+                    node_activity_id = cur.lastrowid
+                else:
+                    # Fallback: direct insert if normalizer unavailable
+                    node_activity_id = _insert_activity_log(
+                        activity_type="workflow_node",
+                        stream_id=f"{run_key}:{nid}",
+                        stream_type="workflow",
+                        event_data={
+                            "node_id": nid,
+                            "workflow": wf["workflow"],
+                            "output": nd.get("output", ""),
+                        },
+                        status=(
+                            "completed" if node_status in ("completed", "skipped") else node_status
+                        ),
+                        severity="info",
+                        prd_id=prd_id,
+                        task_id=task_id,
+                        session_id=session_id,
+                        workflow_run_key=run_key,
+                        duration_ms=node_duration_ms,
+                        conn=c,
+                    )
+
+                # Insert into raw_workflow_nodes with activity_id FK
+                c.execute(
+                    """INSERT INTO raw_workflow_nodes
+                       (run_key, node_id, status, started_at, finished_at,
+                        duration_s, output, activity_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        run_key,
+                        nid,
+                        node_status,
+                        nd.get("started"),
+                        nd.get("finished"),
+                        nd.get("duration_s"),
+                        nd.get("output"),
+                        node_activity_id,
+                    ),
+                )
+        _emit_workflow_telemetry(
+            run_key=run_key,
+            wf=wf,
+            status=status,
+            duration_ms=duration_ms,
+            prd_id=prd_id,
+            task_id=task_id,
+            session_id=session_id,
+            db_path=db_path,
+        )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def _emit_workflow_telemetry(
+    *,
+    run_key: str,
+    wf: dict,
+    status: str,
+    duration_ms: int | None,
+    prd_id: str | None,
+    task_id: str | None,
+    session_id: str | None,
+    db_path: Path | None,
+) -> None:
+    """Best-effort dual-write from legacy workflow archive tables."""
+
+    try:
+        from core.telemetry.emitters import TelemetryContext, emit_workflow_invocation
+
+        emit_workflow_invocation(
+            workflow_id=str(wf.get("workflow") or "unknown"),
+            status=status,
+            run_key=run_key,
+            yaml_path=str(wf.get("yaml_path") or ""),
+            started_at=wf.get("started"),
+            ended_at=wf.get("finished"),
+            duration_ms=duration_ms,
+            nodes=wf.get("nodes", {}),
+            context=TelemetryContext(
+                project_id="dream-studio",
+                milestone_id=prd_id,
+                task_id=task_id,
+                process_run_id=run_key,
+                source_refs=("core/event_store/studio_db.py",),
+                evidence_refs=(f"raw_workflow_runs:{run_key}",),
+            ),
+            metadata={"session_id": session_id},
+            db_path=db_path,
+        )
+    except Exception:
+        return
+
+
+def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT run_key,status,started_at,finished_at FROM raw_workflow_runs WHERE workflow=? ORDER BY finished_at DESC LIMIT 1",
+            (workflow_name,),
+        ).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def run_count(workflow_name: str, db_path: Path | None = None) -> int:
+    try:
+        c = _connect(db_path)
+        n = c.execute(
+            "SELECT COUNT(*) FROM raw_workflow_runs WHERE workflow=?", (workflow_name,)
+        ).fetchone()[0]
+        c.close()
+        return n
+    except Exception:
+        return 0
+
+
+@_with_retry
+def import_buffer(buffer_path: Path, db_path: Path | None = None) -> int:
+    try:
+        raw = buffer_path.read_bytes()
+        if not raw.strip():
+            return 0
+        bid = hashlib.sha256(raw).hexdigest()
+        with _db_transaction(db_path) as c:
+            if c.execute("SELECT 1 FROM log_batch_imports WHERE batch_id=?", (bid,)).fetchone():
+                return 0
+            rows = [json.loads(l) for l in raw.decode().splitlines() if l.strip()]
+            for r in rows:
+                c.execute(
+                    "INSERT INTO raw_skill_telemetry(skill_name,invoked_at,model,input_tokens,output_tokens,success,execution_time_s) VALUES(?,?,?,?,?,?,?)",
+                    (
+                        r["skill_name"],
+                        r.get("invoked_at", _NOW()),
+                        r.get("model"),
+                        r.get("input_tokens"),
+                        r.get("output_tokens"),
+                        int(r["success"]),
+                        r.get("execution_time_s"),
+                    ),
+                )
+            c.execute(
+                "INSERT INTO log_batch_imports(batch_id,imported_at,row_count) VALUES(?,?,?)",
+                (bid, _NOW(), len(rows)),
+            )
+        return len(rows)
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
+
+
+@_with_retry
+def rebuild_summaries(db_path: Path | None = None) -> None:
+    try:
+        with _db_transaction(db_path) as c:
+            c.executescript(
+                """DELETE FROM sum_skill_summary;
+INSERT INTO sum_skill_summary SELECT skill_name,COUNT(*),AVG(success),AVG(input_tokens),AVG(output_tokens),AVG(execution_time_s),MAX(CASE WHEN success=1 THEN invoked_at END),MAX(CASE WHEN success=0 THEN invoked_at END),datetime('now') FROM (SELECT * FROM effective_skill_runs WHERE skill_name IN (SELECT skill_name FROM raw_skill_telemetry GROUP BY skill_name HAVING COUNT(*)>=5) ORDER BY id DESC LIMIT 30) GROUP BY skill_name;"""
+            )
+    except Exception as e:
+        _reraise_if_busy(e)
+
+
+@_with_retry
+def rolling_window_prune(db_path: Path | None = None) -> int:
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        with _db_transaction(db_path) as c:
+            d1 = c.execute(
+                "DELETE FROM raw_skill_telemetry WHERE id NOT IN (SELECT id FROM raw_skill_telemetry t2 WHERE t2.skill_name=raw_skill_telemetry.skill_name ORDER BY id DESC LIMIT 100)"
+            ).rowcount
+            d2 = c.execute(
+                "DELETE FROM raw_workflow_nodes WHERE run_key IN (SELECT run_key FROM raw_workflow_runs WHERE finished_at<?)",
+                (cutoff,),
+            ).rowcount
+            d3 = c.execute("DELETE FROM raw_workflow_runs WHERE finished_at<?", (cutoff,)).rowcount
+            d4 = c.execute("DELETE FROM raw_approaches WHERE captured_at<?", (cutoff,)).rowcount
+        return d1 + d2 + d3 + d4
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
+
+
+def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM sum_skill_summary").fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            fail_ids = c.execute(
+                "SELECT id FROM effective_skill_runs WHERE skill_name=? AND success=0 ORDER BY id DESC LIMIT 3",
+                (d["skill_name"],),
+            ).fetchall()
+            d["recent_failure_ids"] = [row[0] for row in fail_ids]
+            result.append(d)
+        c.close()
+        return result
+    except Exception:
+        return []
+
+
+@_with_retry
+def skill_correct(
+    telemetry_id: int, success: int, reason: str = "", db_path: Path | None = None
+) -> bool:
+    try:
+        with _db_transaction(db_path) as conn:
+            conn.execute(
+                "INSERT INTO cor_skill_corrections(telemetry_id,corrected_success,reason,corrected_at) VALUES(?,?,?,?)",
+                (telemetry_id, success, reason, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+@_with_retry
+def insert_operational_snapshot(
+    snapshot_date: str,
+    project_slug: str,
+    *,
+    ci_status: str | None = None,
+    open_prs: int | None = None,
+    stale_branches: int | None = None,
+    pending_drafts: int | None = None,
+    open_escalations: int | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO raw_operational_snapshots
+                   (snapshot_date, project_slug, ci_status, open_prs,
+                    stale_branches, pending_drafts, open_escalations, captured_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    snapshot_date,
+                    project_slug,
+                    ci_status,
+                    open_prs,
+                    stale_branches,
+                    pending_drafts,
+                    open_escalations,
+                    _NOW(),
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Approach functions ──────────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_approach(
+    skill_id: str,
+    approach: str,
+    outcome: str,
+    *,
+    context: str = "",
+    why: str = "",
+    tokens_used: int | None = None,
+    duration_s: float | None = None,
+    model: str | None = None,
+    session_date: str | None = None,
+    project_id: str | None = None,
+    session_id: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        if db_path is not None and not Path(db_path).parent.exists():
+            return False
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_approaches
+                   (skill_id, session_date, approach, outcome, context,
+                    why_worked, tokens_used, duration_s, model, captured_at,
+                    project_id, session_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    skill_id,
+                    session_date or _NOW()[:10],
+                    approach,
+                    outcome,
+                    context or None,
+                    why or None,
+                    tokens_used,
+                    duration_s,
+                    model,
+                    _NOW(),
+                    project_id,
+                    session_id,
+                ),
+            )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "approach_captured",
+                    "skill_id": skill_id,
+                    "approach": approach,
+                    "outcome": outcome,
+                    "context": context,
+                    "why_worked": why,
+                    "model": model,
+                    "duration_s": duration_s,
+                    "tokens_used": tokens_used,
+                }
+                trace = TraceContext(
+                    project_id=project_id, task_id=None, prd_id=None, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = skill_id
+
+                try:
+                    c.execute(
+                        """INSERT INTO activity_log
+                           (activity_type, stream_id, stream_type, event_timestamp,
+                            event_data, session_id, skill_id, status, severity, duration_ms)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            "approach_captured",
+                            skill_id,
+                            "skill",
+                            canonical.timestamp.isoformat(),
+                            json.dumps(canonical.payload),
+                            session_id,
+                            skill_id,
+                            "completed",
+                            canonical.severity,
+                            int(duration_s * 1000) if duration_s else None,
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    pass
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_approach_patterns(skill_id: str | None = None, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        if skill_id:
+            rows = c.execute(
+                "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC",
+                (skill_id,),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT * FROM vw_approach_patterns ORDER BY success_pct DESC"
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_best_approaches(skill_id: str, limit: int = 3, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC, times_tried DESC LIMIT ?",
+            (skill_id, limit),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def capture_approach(
+    skill: str,
+    approach: str,
+    outcome: str,
+    context: str = "",
+    why: str = "",
+) -> bool:
+    """High-level convenience: write approach to DB, fall back to text file."""
+    ok = insert_approach(skill, approach, outcome, context=context, why=why, db_path=_db_path())
+    if not ok:
+        try:
+            fallback = paths.meta_dir() / "approaches.log"
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%H:%M")
+            with open(fallback, "a", encoding="utf-8") as f:
+                f.write(f"{ts} | approach:{skill} | {outcome} | {approach}\n")
+            return True
+        except Exception:
+            return False
+    return True
+
+
+# ── Registry query functions ─────────────────────────────────────────────────
+
+
+@_with_retry
+def upsert_skill(
+    skill_id: str,
+    pack: str,
+    mode: str,
+    skill_path: str,
+    *,
+    description: str = "",
+    triggers: str = "",
+    gotchas_path: str | None = None,
+    word_count: int | None = None,
+    chains_to: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_skills
+                   (skill_id, pack, mode, description, triggers, skill_path,
+                    gotchas_path, word_count, chains_to, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    skill_id,
+                    pack,
+                    mode,
+                    description,
+                    triggers,
+                    skill_path,
+                    gotchas_path,
+                    word_count,
+                    chains_to,
+                    _NOW(),
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_skill(skill_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM reg_skills WHERE skill_id=?", (skill_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def find_skills_by_trigger(keyword: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM reg_skills WHERE triggers LIKE ?", (f"%{keyword}%",)
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def upsert_gotcha(
+    gotcha_id: str,
+    skill_id: str,
+    severity: str,
+    title: str,
+    *,
+    context: str = "",
+    fix: str = "",
+    keywords: str = "",
+    discovered: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_gotchas
+                   (gotcha_id, skill_id, severity, title, context, fix,
+                    keywords, discovered, times_hit, last_hit)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+                           COALESCE((SELECT times_hit FROM reg_gotchas WHERE gotcha_id=? AND skill_id=?), 0),
+                           (SELECT last_hit FROM reg_gotchas WHERE gotcha_id=? AND skill_id=?))""",
+                (
+                    gotcha_id,
+                    skill_id,
+                    severity,
+                    title,
+                    context,
+                    fix,
+                    keywords,
+                    discovered,
+                    gotcha_id,
+                    skill_id,
+                    gotcha_id,
+                    skill_id,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def search_gotchas_db(keyword: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        try:
+            rows = c.execute(
+                "SELECT g.* FROM reg_gotchas g "
+                "INNER JOIN fts_gotchas f ON g.rowid = f.rowid "
+                "WHERE fts_gotchas MATCH ? ORDER BY g.severity",
+                (keyword,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = c.execute(
+                "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? "
+                "OR context LIKE ? ORDER BY severity",
+                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_gotchas_for_skill(skill_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM reg_gotchas WHERE skill_id=? ORDER BY severity", (skill_id,)
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def upsert_workflow(
+    workflow_id: str,
+    yaml_path: str,
+    *,
+    description: str = "",
+    node_count: int | None = None,
+    skills_used: str = "",
+    category: str = "",
+    est_tokens: int | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO reg_workflows
+                   (workflow_id, yaml_path, description, node_count,
+                    skills_used, category, est_tokens, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    workflow_id,
+                    yaml_path,
+                    description,
+                    node_count,
+                    skills_used,
+                    category,
+                    est_tokens,
+                    _NOW(),
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_workflows_by_category(category: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_workflows WHERE category=?", (category,)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def upsert_skill_dep(
+    from_skill: str, to_skill: str, dep_type: str, db_path: Path | None = None
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                "INSERT OR REPLACE INTO reg_skill_deps VALUES (?, ?, ?)",
+                (from_skill, to_skill, dep_type),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_skill_deps(skill_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_skill_deps WHERE from_skill=?", (skill_id,)).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def clear_registry(db_path: Path | None = None) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            for t in ("reg_skills", "reg_gotchas", "reg_workflows", "reg_skill_deps"):
+                c.execute(f"DELETE FROM {t}")  # noqa: S608
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Project functions ──────────────────────────────────────────────────────
+
+
+@_with_retry
+def upsert_project(
+    project_id: str,
+    project_path: str,
+    *,
+    project_name: str | None = None,
+    project_type: str | None = None,
+    git_remote: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO reg_projects
+                   (project_id, project_path, project_name, project_type,
+                    git_remote, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(project_id) DO UPDATE SET
+                    project_path=excluded.project_path,
+                    project_name=COALESCE(excluded.project_name, reg_projects.project_name),
+                    project_type=COALESCE(excluded.project_type, reg_projects.project_type),
+                    git_remote=COALESCE(excluded.git_remote, reg_projects.git_remote)""",
+                (project_id, project_path, project_name, project_type, git_remote, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM reg_projects WHERE project_id=?", (project_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def list_projects(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute("SELECT * FROM reg_projects ORDER BY last_session_at DESC").fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def update_project_stats(
+    project_id: str, *, sessions_delta: int = 0, tokens_delta: int = 0, db_path: Path | None = None
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """UPDATE reg_projects SET
+                    total_sessions = total_sessions + ?,
+                    total_tokens = total_tokens + ?,
+                    last_session_at = ?
+                   WHERE project_id = ?""",
+                (sessions_delta, tokens_delta, _NOW(), project_id),
+            )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "project_stats_updated",
+                    "project_id": project_id,
+                    "sessions_delta": sessions_delta,
+                    "tokens_delta": tokens_delta,
+                }
+                trace = TraceContext(
+                    project_id=project_id, task_id=None, prd_id=None, session_id=None
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = project_id
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, status, severity)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "project_stats_updated",
+                        project_id,
+                        "project",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        "completed",
+                        canonical.severity,
+                    ),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Session functions ──────────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_session(
+    session_id: str,
+    project_id: str,
+    *,
+    topic: str | None = None,
+    pipeline_phase: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_sessions
+                   (session_id, project_id, topic, started_at, pipeline_phase)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (session_id, project_id, topic, _NOW(), pipeline_phase),
+            )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "session_started",
+                    "session_id": session_id,
+                    "project_id": project_id,
+                    "topic": topic,
+                    "pipeline_phase": pipeline_phase,
+                }
+                trace = TraceContext(
+                    project_id=project_id, task_id=None, prd_id=None, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = session_id
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, session_id, status, severity)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "session_started",
+                        session_id,
+                        "session",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        None,
+                        "completed",
+                        canonical.severity,
+                    ),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_session(session_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM raw_sessions WHERE session_id=?", (session_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def get_latest_session(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT * FROM raw_sessions WHERE project_id=? ORDER BY started_at DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+@_with_retry
+def mark_handoff_consumed(session_id: str, db_path: Path | None = None) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                "UPDATE raw_sessions SET handoff_consumed=1 WHERE session_id=?", (session_id,)
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+@_with_retry
+def end_session(
+    session_id: str,
+    *,
+    outcome: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    tasks_completed: int | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        started = None
+        with _db_transaction(db_path) as c:
+            row = c.execute(
+                "SELECT started_at FROM raw_sessions WHERE session_id=?", (session_id,)
+            ).fetchone()
+            if row:
+                try:
+                    started = datetime.fromisoformat(row["started_at"])
+                except (ValueError, TypeError):
+                    pass
+            now = _NOW()
+            duration = (datetime.fromisoformat(now) - started).total_seconds() if started else None
+            c.execute(
+                """UPDATE raw_sessions SET
+                    ended_at=?, duration_s=?, outcome=?,
+                    input_tokens=COALESCE(?, input_tokens),
+                    output_tokens=COALESCE(?, output_tokens),
+                    tasks_completed=COALESCE(?, tasks_completed)
+                   WHERE session_id=?""",
+                (now, duration, outcome, input_tokens, output_tokens, tasks_completed, session_id),
+            )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "session_ended",
+                    "session_id": session_id,
+                    "outcome": outcome,
+                    "duration_s": duration,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "tasks_completed": tasks_completed,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=None, prd_id=None, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = session_id
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, session_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "session_ended",
+                        session_id,
+                        "session",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        None,
+                        "completed",
+                        canonical.severity,
+                        int(duration * 1000) if duration else None,
+                    ),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Handoff functions ──────────────────────────────────────────────────────
+
+
+def _extract_prd_id_from_path(plan_path: str | None) -> str | None:
+    """Extract PRD ID from plan_path (e.g., 'prd/unified-discovery/spec.md' -> 'unified-discovery')."""
+    if not plan_path:
+        return None
+    import re
+
+    # Match pattern: .../prd/<prd-id>/...
+    match = re.search(r"/prd/([^/]+)/", plan_path.replace("\\", "/"))
+    if match:
+        return match.group(1)
+    # Fallback: .../planning/<prd-id>/... (old location)
+    match = re.search(r"/planning/([^/]+)/", plan_path.replace("\\", "/"))
+    if match:
+        return match.group(1)
+    return None
+
+
+@_with_retry
+def save_prd_handoff(
+    prd_id: str,
+    *,
+    session_id: str | None = None,
+    current_task_id: str | None = None,
+    current_wave_id: str | None = None,
+    working: list | None = None,
+    broken: list | None = None,
+    pending_decisions: list | None = None,
+    next_action: str | None = None,
+    lessons_json: list | None = None,
+    db_path: Path | None = None,
+) -> int | None:
+    """
+    Write handoff to prd_handoffs table (new PRD schema).
+
+    This is called by insert_handoff() for dual-write compatibility.
+    """
+    try:
+        with _db_transaction(db_path) as c:
+            # Verify PRD exists
+            prd_exists = c.execute(
+                "SELECT 1 FROM prd_documents WHERE prd_id = ?", (prd_id,)
+            ).fetchone()
+
+            if not prd_exists:
+                # PRD not found - skip prd_handoff creation (not an error, just means PRD isn't tracked yet)
+                return None
+
+            cur = c.execute(
+                """INSERT INTO prd_handoffs
+                   (prd_id, session_id, current_task_id, current_wave_id,
+                    working, broken, pending_decisions, next_action,
+                    lessons_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    prd_id,
+                    session_id,
+                    current_task_id,
+                    current_wave_id,
+                    json.dumps(working) if working is not None else None,
+                    json.dumps(broken) if broken is not None else None,
+                    json.dumps(pending_decisions) if pending_decisions is not None else None,
+                    next_action,
+                    json.dumps(lessons_json) if lessons_json is not None else None,
+                    _NOW(),
+                ),
+            )
+            return cur.lastrowid
+    except Exception as e:
+        # Silently fail if prd_handoffs table doesn't exist yet (migration not run)
+        if "no such table" in str(e).lower():
+            return None
+        _reraise_if_busy(e)
+        return None
+
+
+@_with_retry
+def insert_handoff(
+    session_id: str,
+    project_id: str,
+    topic: str,
+    *,
+    plan_path: str | None = None,
+    pipeline_phase: str | None = None,
+    current_task_id: str | None = None,
+    current_task_name: str | None = None,
+    tasks_completed: int | None = None,
+    tasks_total: int | None = None,
+    branch: str | None = None,
+    last_commit: str | None = None,
+    working: list | None = None,
+    broken: list | None = None,
+    pending_decisions: list | None = None,
+    active_files: list | None = None,
+    next_action: str | None = None,
+    lessons_json: list | None = None,
+    gotchas_hit: list | None = None,
+    approaches_json: list | None = None,
+    db_path: Path | None = None,
+) -> int | None:
+    try:
+        with _db_transaction(db_path) as c:
+            # Insert into raw_handoffs (original behavior)
+            cur = c.execute(
+                """INSERT INTO raw_handoffs
+                   (session_id, project_id, topic, plan_path, pipeline_phase,
+                    current_task_id, current_task_name, tasks_completed, tasks_total,
+                    branch, last_commit, working, broken, pending_decisions,
+                    active_files, next_action, lessons_json, gotchas_hit,
+                    approaches_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    session_id,
+                    project_id,
+                    topic,
+                    plan_path,
+                    pipeline_phase,
+                    current_task_id,
+                    current_task_name,
+                    tasks_completed,
+                    tasks_total,
+                    branch,
+                    last_commit,
+                    json.dumps(working) if working is not None else None,
+                    json.dumps(broken) if broken is not None else None,
+                    json.dumps(pending_decisions) if pending_decisions is not None else None,
+                    json.dumps(active_files) if active_files is not None else None,
+                    next_action,
+                    json.dumps(lessons_json) if lessons_json is not None else None,
+                    json.dumps(gotchas_hit) if gotchas_hit is not None else None,
+                    json.dumps(approaches_json) if approaches_json is not None else None,
+                    _NOW(),
+                ),
+            )
+            handoff_id = cur.lastrowid
+
+            # Also write to prd_handoffs if we can extract a prd_id from plan_path
+            prd_id = _extract_prd_id_from_path(plan_path) or topic
+            if prd_id:
+                save_prd_handoff(
+                    prd_id,
+                    session_id=session_id,
+                    current_task_id=current_task_id,
+                    working=working,
+                    broken=broken,
+                    pending_decisions=pending_decisions,
+                    next_action=next_action,
+                    lessons_json=lessons_json,
+                    db_path=db_path,
+                )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "handoff_created",
+                    "session_id": session_id,
+                    "project_id": project_id,
+                    "topic": topic,
+                    "pipeline_phase": pipeline_phase,
+                    "current_task_id": current_task_id,
+                    "tasks_completed": tasks_completed,
+                    "tasks_total": tasks_total,
+                    "branch": branch,
+                    "last_commit": last_commit,
+                }
+                trace = TraceContext(
+                    project_id=project_id,
+                    task_id=current_task_id,
+                    prd_id=prd_id,
+                    session_id=session_id,
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = str(handoff_id)
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, status, severity)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "handoff_created",
+                        str(handoff_id),
+                        "handoff",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        None,
+                        None,
+                        None,
+                        "completed",
+                        canonical.severity,
+                    ),
+                )
+
+            return handoff_id
+    except Exception as e:
+        _reraise_if_busy(e)
+        return None
+
+
+def get_latest_handoff(project_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        c.close()
+        if not r:
+            return None
+        d = dict(r)
+        for col in (
+            "working",
+            "broken",
+            "pending_decisions",
+            "active_files",
+            "lessons_json",
+            "gotchas_hit",
+            "approaches_json",
+        ):
+            if d.get(col):
+                try:
+                    d[col] = json.loads(d[col])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+    except Exception:
+        return None
+
+
+def get_latest_unconsumed_handoff(db_path: Path | None = None) -> dict | None:
+    """Return the most recent handoff that has not been consumed, across all projects."""
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            """SELECT h.* FROM raw_handoffs h
+               LEFT JOIN raw_sessions s ON h.session_id = s.session_id
+               WHERE COALESCE(s.handoff_consumed, 0) = 0
+               ORDER BY h.created_at DESC LIMIT 1""",
+        ).fetchone()
+        c.close()
+        if not r:
+            return None
+        d = dict(r)
+        for col in (
+            "working",
+            "broken",
+            "pending_decisions",
+            "active_files",
+            "lessons_json",
+            "gotchas_hit",
+            "approaches_json",
+        ):
+            if d.get(col):
+                try:
+                    d[col] = json.loads(d[col])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+    except Exception:
+        return None
+
+
+def get_handoffs_for_project(
+    project_id: str, limit: int = 20, db_path: Path | None = None
+) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
+            (project_id, limit),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── PRD functions ──────────────────────────────────────────────────────────
+
+
+@_with_retry
+def upsert_prd_document(
+    prd_id: str,
+    title: str,
+    file_path: str,
+    status: str,
+    *,
+    project_id: str | None = None,
+    approved_at: str | None = None,
+    completed_at: str | None = None,
+    total_tasks: int = 0,
+    completed_tasks: int = 0,
+    db_path: Path | None = None,
+) -> bool:
+    """Insert or update a PRD document in prd_documents table."""
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """
+                INSERT INTO prd_documents (
+                    prd_id, title, file_path, status, project_id,
+                    created_at, approved_at, completed_at,
+                    total_tasks, completed_tasks
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(prd_id) DO UPDATE SET
+                    title = excluded.title,
+                    file_path = excluded.file_path,
+                    status = excluded.status,
+                    project_id = excluded.project_id,
+                    approved_at = excluded.approved_at,
+                    completed_at = excluded.completed_at,
+                    total_tasks = excluded.total_tasks,
+                    completed_tasks = excluded.completed_tasks
+            """,
+                (
+                    prd_id,
+                    title,
+                    file_path,
+                    status,
+                    project_id,
+                    _NOW(),
+                    approved_at,
+                    completed_at,
+                    total_tasks,
+                    completed_tasks,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+@_with_retry
+def upsert_prd_task(
+    task_id: str,
+    plan_id: str,
+    prd_id: str,
+    task_name: str,
+    *,
+    wave_id: str | None = None,
+    description: str | None = None,
+    acceptance_criteria: list | None = None,
+    depends_on: list | None = None,
+    status: str = "pending",
+    phase: str | None = None,
+    started_at: str | None = None,
+    completed_at: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    """Insert or update a PRD task in prd_tasks table."""
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """
+                INSERT INTO prd_tasks (
+                    task_id, plan_id, prd_id, wave_id, task_name, description,
+                    acceptance_criteria, depends_on, status, phase,
+                    started_at, completed_at, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_id) DO UPDATE SET
+                    plan_id = excluded.plan_id,
+                    prd_id = excluded.prd_id,
+                    wave_id = excluded.wave_id,
+                    task_name = excluded.task_name,
+                    description = excluded.description,
+                    acceptance_criteria = excluded.acceptance_criteria,
+                    depends_on = excluded.depends_on,
+                    status = excluded.status,
+                    phase = excluded.phase,
+                    started_at = excluded.started_at,
+                    completed_at = excluded.completed_at
+            """,
+                (
+                    task_id,
+                    plan_id,
+                    prd_id,
+                    wave_id,
+                    task_name,
+                    description,
+                    json.dumps(acceptance_criteria) if acceptance_criteria else None,
+                    json.dumps(depends_on) if depends_on else None,
+                    status,
+                    phase,
+                    started_at,
+                    completed_at,
+                    _NOW(),
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_prd_by_id(prd_id: str, db_path: Path | None = None) -> dict | None:
+    """Get PRD document with progress info."""
+    try:
+        c = _connect(db_path)
+        row = c.execute(
+            """
+            SELECT
+                prd_id, title, file_path, status, project_id,
+                created_at, approved_at, completed_at,
+                total_tasks, completed_tasks,
+                ROUND(100.0 * completed_tasks / NULLIF(total_tasks, 0), 1) AS pct_complete
+            FROM prd_documents
+            WHERE prd_id = ?
+        """,
+            (prd_id,),
+        ).fetchone()
+        c.close()
+
+        if not row:
+            return None
+
+        return {
+            "prd_id": row[0],
+            "title": row[1],
+            "file_path": row[2],
+            "status": row[3],
+            "project_id": row[4],
+            "created_at": row[5],
+            "approved_at": row[6],
+            "completed_at": row[7],
+            "total_tasks": row[8],
+            "completed_tasks": row[9],
+            "pct_complete": row[10],
+        }
+    except Exception:
+        return None
+
+
+def get_tasks_by_prd(
+    prd_id: str, status_filter: str | None = None, db_path: Path | None = None
+) -> list[dict]:
+    """Get all tasks for a PRD, optionally filtered by status."""
+    try:
+        c = _connect(db_path)
+
+        query = """
+            SELECT
+                task_id, plan_id, prd_id, wave_id, task_name, description,
+                acceptance_criteria, depends_on, status, phase,
+                started_at, completed_at, created_at
+            FROM prd_tasks
+            WHERE prd_id = ?
+        """
+        params = [prd_id]
+
+        if status_filter:
+            query += " AND status = ?"
+            params.append(status_filter)
+
+        query += " ORDER BY task_id"
+
+        rows = c.execute(query, params).fetchall()
+        c.close()
+
+        tasks = []
+        for row in rows:
+            task = {
+                "task_id": row[0],
+                "plan_id": row[1],
+                "prd_id": row[2],
+                "wave_id": row[3],
+                "task_name": row[4],
+                "description": row[5],
+                "acceptance_criteria": json.loads(row[6]) if row[6] else [],
+                "depends_on": json.loads(row[7]) if row[7] else [],
+                "status": row[8],
+                "phase": row[9],
+                "started_at": row[10],
+                "completed_at": row[11],
+                "created_at": row[12],
+            }
+            tasks.append(task)
+
+        return tasks
+    except Exception:
+        return []
+
+
+def get_ready_waves(prd_id: str, db_path: Path | None = None) -> list[dict]:
+    """
+    Get waves where all dependencies are complete.
+
+    A wave is ready if:
+    - All tasks in prior waves are completed
+    - All dependency tasks (depends_on) are completed
+    - Wave is not currently in progress
+    """
+    try:
+        c = _connect(db_path)
+
+        # Get all waves for this PRD (via tasks)
+        waves = c.execute(
+            """
+            SELECT DISTINCT wave_id
+            FROM prd_tasks
+            WHERE prd_id = ? AND wave_id IS NOT NULL
+            ORDER BY wave_id
+        """,
+            (prd_id,),
+        ).fetchall()
+
+        ready_waves = []
+
+        for wave_row in waves:
+            wave_id = wave_row[0]
+
+            # Check if all tasks in this wave have their dependencies met
+            blocked_tasks = c.execute(
+                """
+                SELECT COUNT(*)
+                FROM prd_tasks t
+                WHERE t.prd_id = ? AND t.wave_id = ? AND t.status != 'completed'
+                AND EXISTS (
+                    SELECT 1 FROM prd_tasks d
+                    WHERE d.prd_id = t.prd_id
+                    AND d.task_id IN (
+                        -- This is a simplified check; full implementation would parse JSON depends_on
+                        SELECT value FROM json_each(t.depends_on)
+                    )
+                    AND d.status != 'completed'
+                )
+            """,
+                (prd_id, wave_id),
+            ).fetchone()[0]
+
+            if blocked_tasks == 0:
+                # Get wave details
+                wave_tasks = c.execute(
+                    """
+                    SELECT task_id, task_name, status
+                    FROM prd_tasks
+                    WHERE prd_id = ? AND wave_id = ?
+                    ORDER BY task_id
+                """,
+                    (prd_id, wave_id),
+                ).fetchall()
+
+                ready_waves.append(
+                    {
+                        "wave_id": wave_id,
+                        "tasks": [
+                            {"task_id": t[0], "task_name": t[1], "status": t[2]} for t in wave_tasks
+                        ],
+                    }
+                )
+
+        c.close()
+        return ready_waves
+    except Exception:
+        return []
+
+
+# ── Spec + Task functions ──────────────────────────────────────────────────
+
+
+@_with_retry
+def upsert_spec(
+    spec_id: str,
+    project_id: str,
+    title: str,
+    *,
+    status: str = "draft",
+    task_count: int | None = None,
+    spec_content: str | None = None,
+    plan_content: str | None = None,
+    pr_numbers: list | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_specs
+                   (spec_id, project_id, title, status, task_count,
+                    spec_content, plan_content, created_at, pr_numbers)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(spec_id) DO UPDATE SET
+                    title=excluded.title,
+                    status=excluded.status,
+                    task_count=COALESCE(excluded.task_count, raw_specs.task_count),
+                    spec_content=COALESCE(excluded.spec_content, raw_specs.spec_content),
+                    plan_content=COALESCE(excluded.plan_content, raw_specs.plan_content),
+                    pr_numbers=COALESCE(excluded.pr_numbers, raw_specs.pr_numbers),
+                    completed_at=CASE WHEN excluded.status='completed'
+                                      THEN COALESCE(raw_specs.completed_at, ?)
+                                      ELSE raw_specs.completed_at END""",
+                (
+                    spec_id,
+                    project_id,
+                    title,
+                    status,
+                    task_count,
+                    spec_content,
+                    plan_content,
+                    _NOW(),
+                    json.dumps(pr_numbers) if pr_numbers else None,
+                    _NOW(),
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_spec(spec_id: str, db_path: Path | None = None) -> dict | None:
+    try:
+        c = _connect(db_path)
+        r = c.execute("SELECT * FROM raw_specs WHERE spec_id=?", (spec_id,)).fetchone()
+        c.close()
+        return dict(r) if r else None
+    except Exception:
+        return None
+
+
+def list_specs(
+    project_id: str | None = None, status: str | None = None, db_path: Path | None = None
+) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        query = "SELECT * FROM raw_specs"
+        params: list = []
+        clauses: list[str] = []
+        if project_id:
+            clauses.append("project_id=?")
+            params.append(project_id)
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC"
+        rows = c.execute(query, params).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def upsert_task(
+    task_id: str,
+    spec_id: str,
+    project_id: str,
+    title: str,
+    *,
+    status: str = "planned",
+    depends_on: list | None = None,
+    estimated_hours: float | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_tasks
+                   (task_id, spec_id, project_id, title, status,
+                    depends_on, estimated_hours)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(task_id, spec_id) DO UPDATE SET
+                    title=excluded.title,
+                    status=excluded.status,
+                    depends_on=COALESCE(excluded.depends_on, raw_tasks.depends_on),
+                    estimated_hours=COALESCE(excluded.estimated_hours, raw_tasks.estimated_hours)""",
+                (
+                    task_id,
+                    spec_id,
+                    project_id,
+                    title,
+                    status,
+                    json.dumps(depends_on) if depends_on else None,
+                    estimated_hours,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_tasks WHERE spec_id=? ORDER BY task_id",
+            (spec_id,),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_blocked_tasks(project_id: str | None = None, db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        if project_id:
+            rows = c.execute(
+                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                "WHERE t.status='blocked' AND t.project_id=?",
+                (project_id,),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                "WHERE t.status='blocked'",
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def update_task_status(
+    task_id: str,
+    spec_id: str,
+    status: str,
+    *,
+    commit_sha: str | None = None,
+    actual_hours: float | None = None,
+    assigned_session: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            completed_at = _NOW() if status == "completed" else None
+            c.execute(
+                """UPDATE raw_tasks SET
+                    status=?,
+                    commit_sha=COALESCE(?, commit_sha),
+                    actual_hours=COALESCE(?, actual_hours),
+                    assigned_session=COALESCE(?, assigned_session),
+                    completed_at=COALESCE(?, completed_at)
+                   WHERE task_id=? AND spec_id=?""",
+                (
+                    status,
+                    commit_sha,
+                    actual_hours,
+                    assigned_session,
+                    completed_at,
+                    task_id,
+                    spec_id,
+                ),
+            )
+            if status == "completed":
+                c.execute(
+                    "UPDATE raw_specs SET tasks_done = "
+                    "(SELECT COUNT(*) FROM raw_tasks WHERE spec_id=? AND status='completed') "
+                    "WHERE spec_id=?",
+                    (spec_id, spec_id),
+                )
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "task_status_updated",
+                    "task_id": task_id,
+                    "spec_id": spec_id,
+                    "status": status,
+                    "commit_sha": commit_sha,
+                    "actual_hours": actual_hours,
+                    "assigned_session": assigned_session,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=spec_id, session_id=assigned_session
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = f"{spec_id}:{task_id}"
+
+                # Map task status to activity_log status
+                activity_status = (
+                    "completed"
+                    if status == "completed"
+                    else ("failed" if status == "blocked" else "in_progress")
+                )
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, status, severity)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "task_status_updated",
+                        f"{spec_id}:{task_id}",
+                        "task",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        None,
+                        None,
+                        None,
+                        activity_status,
+                        canonical.severity,
+                    ),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+# ── Lesson functions ───────────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_lesson(
+    lesson_id: str,
+    source: str,
+    title: str,
+    *,
+    what_happened: str | None = None,
+    lesson: str | None = None,
+    evidence: str | None = None,
+    confidence: str = "medium",
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    skill_id: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    """
+    Insert lesson into raw_lessons table.
+
+    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
+
+    Args:
+        lesson_id: Unique lesson identifier
+        source: Source of the lesson (e.g., 'build', 'review', 'debug')
+        title: Short lesson title
+        what_happened: Description of what occurred
+        lesson: The actual lesson learned
+        evidence: Evidence supporting the lesson
+        confidence: Confidence level ('low', 'medium', 'high')
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        session_id: Optional session ID for cross-domain linkage
+        skill_id: Optional skill ID for cross-domain linkage
+        db_path: Optional database path
+    """
+    try:
+        with _db_transaction(db_path) as c:
+            # 1. Normalize lesson event via EventNormalizer (TC-008)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "lesson_captured",
+                    "source": source,
+                    "title": title,
+                    "what_happened": what_happened,
+                    "lesson": lesson,
+                    "evidence": evidence,
+                    "confidence": confidence,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = lesson_id
+
+                # Insert normalized event
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, workflow_run_key,
+                        skill_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "lesson_captured",
+                        lesson_id,
+                        "lesson",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        prd_id,
+                        task_id,
+                        session_id,
+                        None,
+                        skill_id,
+                        "completed",
+                        canonical.severity,
+                        None,
+                    ),
+                )
+                activity_id = cur.lastrowid
+            else:
+                # Fallback: direct insert if normalizer unavailable
+                activity_id = _insert_activity_log(
+                    activity_type="lesson_captured",
+                    stream_id=lesson_id,
+                    stream_type="lesson",
+                    event_data={"source": source, "title": title, "confidence": confidence},
+                    status="completed",
+                    severity="info",
+                    prd_id=prd_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    skill_id=skill_id,
+                    db_path=db_path,
+                )
+
+            # 2. Insert into raw_lessons with activity_id FK
+            c.execute(
+                """INSERT OR IGNORE INTO raw_lessons
+                   (lesson_id, source, title, what_happened, lesson,
+                    evidence, confidence, created_at, activity_id,
+                    prd_id, task_id, skill_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    lesson_id,
+                    source,
+                    title,
+                    what_happened,
+                    lesson,
+                    evidence,
+                    confidence,
+                    _NOW(),
+                    activity_id,
+                    prd_id,
+                    task_id,
+                    skill_id,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_lessons(
+    source: str | None = None, status: str | None = None, db_path: Path | None = None
+) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        query = "SELECT * FROM raw_lessons"
+        params: list = []
+        clauses: list[str] = []
+        if source:
+            clauses.append("source=?")
+            params.append(source)
+        if status:
+            clauses.append("status=?")
+            params.append(status)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC"
+        rows = c.execute(query, params).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@_with_retry
+def promote_lesson(lesson_id: str, promoted_to: str, db_path: Path | None = None) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """UPDATE raw_lessons SET
+                    status='promoted', promoted_to=?, reviewed_at=?
+                   WHERE lesson_id=?""",
+                (promoted_to, _NOW(), lesson_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_pending_lessons(db_path: Path | None = None) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            "SELECT * FROM raw_lessons WHERE status='draft' ORDER BY created_at DESC",
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── Research functions ─────────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_research(
+    query: str,
+    source_type: str,
+    findings: str,
+    *,
+    source_url: str | None = None,
+    confidence_score: float = 0.5,
+    trust_score: float = 0.5,
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    """
+    Insert research finding into raw_research table.
+
+    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
+
+    Args:
+        query: The research query/question
+        source_type: Type of source ('stack', 'security', 'docs', 'pattern', 'general')
+        findings: The research findings (markdown or text)
+        source_url: Optional URL of the source
+        confidence_score: Confidence in the findings (0.0-1.0)
+        trust_score: Trust level of the source (0.0-1.0)
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        session_id: Optional session ID for cross-domain linkage
+        db_path: Optional database path
+    """
+    try:
+        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
+
+        with _db_transaction(db_path) as c:
+            # 1. Normalize research event via EventNormalizer (TC-008)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "research_completed",
+                    "query": query,
+                    "source_type": source_type,
+                    "source_url": source_url,
+                    "findings": findings,
+                    "confidence_score": confidence_score,
+                    "trust_score": trust_score,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = query_hash
+
+                # Insert normalized event
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, workflow_run_key,
+                        skill_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "research_completed",
+                        query_hash,
+                        "research",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        prd_id,
+                        task_id,
+                        session_id,
+                        None,
+                        None,
+                        "completed",
+                        canonical.severity,
+                        None,
+                    ),
+                )
+                activity_id = cur.lastrowid
+            else:
+                # Fallback: direct insert if normalizer unavailable
+                activity_id = _insert_activity_log(
+                    activity_type="research_completed",
+                    stream_id=query_hash,
+                    stream_type="research",
+                    event_data={
+                        "query": query,
+                        "source_type": source_type,
+                        "source_url": source_url,
+                        "confidence_score": confidence_score,
+                    },
+                    status="completed",
+                    severity="info",
+                    prd_id=prd_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    db_path=db_path,
+                )
+
+            # 2. Insert into raw_research with activity_id FK
+            c.execute(
+                """INSERT INTO raw_research
+                   (query, query_hash, source_type, source_url, findings,
+                    confidence_score, trust_score, activity_id, prd_id, task_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    query,
+                    query_hash,
+                    source_type,
+                    source_url,
+                    findings,
+                    confidence_score,
+                    trust_score,
+                    activity_id,
+                    prd_id,
+                    task_id,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+@_with_retry
+def cache_research(
+    topic: str,
+    focus_areas: list[str],
+    sources: list[dict],
+    findings: str,
+    *,
+    confidence_score: float = 0.5,
+    triangulation_score: float = 0.5,
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    session_id: str | None = None,
+    ttl_days: int = 30,
+    db_path: Path | None = None,
+) -> bool:
+    """
+    Cache research results in research_cache table.
+
+    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
+
+    Args:
+        topic: Research topic
+        focus_areas: List of focus areas (JSON array)
+        sources: List of source dicts with {url, title, summary, tier}
+        findings: Markdown summary of research findings
+        confidence_score: Overall confidence (0.0-1.0)
+        triangulation_score: Source triangulation score (0.0-1.0)
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        session_id: Optional session ID for cross-domain linkage
+        ttl_days: Time-to-live in days (default 30)
+        db_path: Optional database path
+    """
+    try:
+        cache_id = hashlib.sha256(topic.encode()).hexdigest()[:16]
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+
+        with _db_transaction(db_path) as c:
+            # 1. Normalize research_cached event via EventNormalizer (TC-008)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "research_cached",
+                    "topic": topic,
+                    "focus_areas": focus_areas,
+                    "sources": sources,
+                    "findings": findings,
+                    "confidence_score": confidence_score,
+                    "triangulation_score": triangulation_score,
+                    "source_count": len(sources),
+                    "ttl_days": ttl_days,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = cache_id
+
+                # Insert normalized event
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, workflow_run_key,
+                        skill_id, status, severity, duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "research_cached",
+                        cache_id,
+                        "research",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        prd_id,
+                        task_id,
+                        session_id,
+                        None,
+                        None,
+                        "completed",
+                        canonical.severity,
+                        None,
+                    ),
+                )
+                activity_id = cur.lastrowid
+            else:
+                # Fallback: direct insert if normalizer unavailable
+                activity_id = _insert_activity_log(
+                    activity_type="research_cached",
+                    stream_id=cache_id,
+                    stream_type="research",
+                    event_data={
+                        "topic": topic,
+                        "source_count": len(sources),
+                        "confidence_score": confidence_score,
+                        "triangulation_score": triangulation_score,
+                    },
+                    status="completed",
+                    severity="info",
+                    prd_id=prd_id,
+                    task_id=task_id,
+                    session_id=session_id,
+                    db_path=db_path,
+                )
+
+            # 2. Insert into research_cache with activity_id FK
+            c.execute(
+                """INSERT OR REPLACE INTO research_cache
+                   (cache_id, topic, focus_areas, sources, findings,
+                    confidence_score, triangulation_score, activity_id,
+                    prd_id, task_id, expires_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    cache_id,
+                    topic,
+                    json.dumps(focus_areas),
+                    json.dumps(sources),
+                    findings,
+                    confidence_score,
+                    triangulation_score,
+                    activity_id,
+                    prd_id,
+                    task_id,
+                    expires_at,
+                ),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_research_cache(topic: str, db_path: Path | None = None) -> dict | None:
+    """Get cached research for a topic (if not expired)."""
+    try:
+        cache_id = hashlib.sha256(topic.encode()).hexdigest()[:16]
+        c = _connect(db_path)
+        r = c.execute(
+            """SELECT * FROM research_cache
+               WHERE cache_id=? AND (expires_at IS NULL OR expires_at > ?)""",
+            (cache_id, _NOW()),
+        ).fetchone()
+        c.close()
+        if not r:
+            return None
+        d = dict(r)
+        # Parse JSON fields
+        for col in ("focus_areas", "sources"):
+            if d.get(col):
+                try:
+                    d[col] = json.loads(d[col])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+    except Exception:
+        return None
+
+
+def get_research_by_task(task_id: str, db_path: Path | None = None) -> list[dict]:
+    """Get all research linked to a specific task."""
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            """SELECT * FROM raw_research
+               WHERE task_id=? ORDER BY created_at DESC""",
+            (task_id,),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def get_research_by_prd(prd_id: str, db_path: Path | None = None) -> list[dict]:
+    """Get all research linked to a specific PRD."""
+    try:
+        c = _connect(db_path)
+        rows = c.execute(
+            """SELECT * FROM raw_research
+               WHERE prd_id=? ORDER BY created_at DESC""",
+            (prd_id,),
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── Sentinel functions ─────────────────────────────────────────────────────
+
+
+@_with_retry
+def set_sentinel(
+    sentinel_key: str,
+    sentinel_type: str,
+    *,
+    expires_at: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT OR REPLACE INTO raw_sentinels
+                   (sentinel_key, sentinel_type, created_at, expires_at)
+                   VALUES (?, ?, ?, ?)""",
+                (sentinel_key, sentinel_type, _NOW(), expires_at),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def has_sentinel(sentinel_key: str, db_path: Path | None = None) -> bool:
+    try:
+        c = _connect(db_path)
+        r = c.execute(
+            "SELECT expires_at FROM raw_sentinels WHERE sentinel_key=?", (sentinel_key,)
+        ).fetchone()
+        c.close()
+        if not r:
+            return False
+        if r["expires_at"]:
+            return datetime.fromisoformat(r["expires_at"]) > datetime.now(timezone.utc)
+        return True
+    except Exception:
+        return False
+
+
+@_with_retry
+def clear_expired_sentinels(db_path: Path | None = None) -> int:
+    try:
+        with _db_transaction(db_path) as c:
+            n = c.execute(
+                "DELETE FROM raw_sentinels WHERE expires_at IS NOT NULL AND expires_at < ?",
+                (_NOW(),),
+            ).rowcount
+        return n
+    except Exception as e:
+        _reraise_if_busy(e)
+        return 0
+
+
+# ── Hook tracking functions ────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_hook_execution(
+    hook_name: str,
+    hook_type: str,
+    trigger_context: dict,
+    started_at: str,
+    completed_at: Optional[str] = None,
+    duration_ms: Optional[int] = None,
+    exit_code: int = 0,
+    status: str = "success",
+    output: Optional[str] = None,
+    error_message: Optional[str] = None,
+    cpu_time_ms: Optional[int] = None,
+    memory_mb: Optional[float] = None,
+    prd_id: Optional[str] = None,
+    task_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    db_path: Path | None = None,
+) -> Optional[int]:
+    """
+    Insert hook execution into activity_log + hook_executions tables via EventNormalizer.
+
+    Returns activity_id for linking hook_findings.
+    Uses fire-and-forget pattern with DB lock fallback to text file.
+    """
+    # Map hook_executions.status to activity_log.status
+    # hook_executions: 'pending', 'running', 'success', 'failed', 'timeout'
+    # activity_log: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+    activity_status_map = {
+        "pending": "pending",
+        "running": "in_progress",
+        "success": "completed",
+        "failed": "failed",
+        "timeout": "failed",
+    }
+    activity_status = activity_status_map.get(status, "completed")
+
+    try:
+        with _db_transaction(db_path) as c:
+            # 1. Normalize hook_execution event via EventNormalizer (TC-008)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "hook_execution",
+                    "hook_name": hook_name,
+                    "hook_type": hook_type,
+                    "trigger_context": trigger_context,
+                    "started_at": started_at,
+                    "completed_at": completed_at,
+                    "duration_ms": duration_ms,
+                    "exit_code": exit_code,
+                    "status": status,
+                    "output": output,
+                    "error_message": error_message,
+                    "cpu_time_ms": cpu_time_ms,
+                    "memory_mb": memory_mb,
+                }
+                trace = TraceContext(
+                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
+                )
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = hook_name
+
+                # Determine severity based on status
+                severity = "error" if status == "failed" else "info"
+
+                # Insert normalized event
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, status, severity,
+                        duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "hook_execution",
+                        hook_name,
+                        "hook",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        prd_id,
+                        task_id,
+                        session_id,
+                        activity_status,
+                        severity,
+                        duration_ms,
+                    ),
+                )
+                activity_id = cur.lastrowid
+            else:
+                # Fallback: direct insert if normalizer unavailable
+                cur = c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, prd_id, task_id, session_id, status, severity,
+                        duration_ms)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "hook_execution",
+                        hook_name,
+                        "hook",
+                        started_at,
+                        json.dumps(trigger_context) if trigger_context else None,
+                        prd_id,
+                        task_id,
+                        session_id,
+                        activity_status,
+                        "error" if status == "failed" else "info",
+                        duration_ms,
+                    ),  # type: ignore[arg-type]
+                )
+                activity_id = cur.lastrowid
+
+            # 2. Insert into hook_executions with activity_id
+            c.execute(
+                """INSERT INTO hook_executions
+                   (activity_id, hook_name, hook_type, trigger_context,
+                    started_at, completed_at, duration_ms, exit_code, status,
+                    output, error_message, cpu_time_ms, memory_mb)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    activity_id,
+                    hook_name,
+                    hook_type,
+                    json.dumps(trigger_context) if trigger_context else None,
+                    started_at,
+                    completed_at,
+                    duration_ms,
+                    exit_code,
+                    status,
+                    output,
+                    error_message,
+                    cpu_time_ms,
+                    memory_mb,
+                ),  # type: ignore[arg-type]
+            )
+
+            # 3. Fetch is_anomaly from activity_log for broadcast
+            row = c.execute(
+                "SELECT is_anomaly FROM activity_log WHERE activity_id = ?", (activity_id,)
+            ).fetchone()
+            is_anomaly = bool(row[0]) if row else False
+
+            # 4. Broadcast hook execution to WebSocket clients (fire-and-forget)
+            _broadcast_hook_execution(
+                hook_name=hook_name,
+                status=status,
+                duration_ms=duration_ms,
+                timestamp=started_at,
+                is_anomaly=is_anomaly,
+            )
+
+            return activity_id
+    except Exception as e:
+        # 3. If DB locked: write to fallback file
+        _reraise_if_busy(e)
+        try:
+            fallback = paths.state_dir() / "hook_executions_fallback.jsonl"
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            with open(fallback, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "hook_name": hook_name,
+                            "hook_type": hook_type,
+                            "trigger_context": trigger_context,
+                            "started_at": started_at,
+                            "completed_at": completed_at,
+                            "duration_ms": duration_ms,
+                            "exit_code": exit_code,
+                            "status": status,
+                            "output": output,
+                            "error_message": error_message,
+                            "cpu_time_ms": cpu_time_ms,
+                            "memory_mb": memory_mb,
+                            "prd_id": prd_id,
+                            "task_id": task_id,
+                            "session_id": session_id,
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass  # Fire-and-forget - don't fail the hook
+        return -1  # Return sentinel value for fallback
+
+
+def insert_hook_finding(
+    activity_id: int,
+    hook_exec_id: int,
+    finding_type: str,
+    severity: str,
+    message: str,
+    context: Optional[dict] = None,
+    recommendation: Optional[str] = None,
+    status: str = "open",
+    db_path: Path | None = None,
+) -> Optional[int]:
+    """
+    Insert hook finding linked to activity_log + hook_execution.
+
+    Returns finding_id.
+    """
+    try:
+        with transaction() as c:
+            cur = c.execute(
+                """INSERT INTO hook_findings
+                   (activity_id, hook_exec_id, finding_type, severity,
+                    message, context, recommendation, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    activity_id,
+                    hook_exec_id,
+                    finding_type,
+                    severity,
+                    message,
+                    json.dumps(context) if context else None,
+                    recommendation,
+                    status,
+                    _NOW(),
+                ),  # type: ignore[arg-type]
+            )
+            finding_id = cur.lastrowid
+
+            # Event emission (additive side-effect)
+            if _NORMALIZER_AVAILABLE:
+                from interfaces.adapters.models import TraceContext
+
+                raw_output = {
+                    "event_type": "hook_finding_created",
+                    "finding_id": finding_id,
+                    "activity_id": activity_id,
+                    "hook_exec_id": hook_exec_id,
+                    "finding_type": finding_type,
+                    "severity": severity,
+                    "message": message,
+                    "recommendation": recommendation,
+                    "status": status,
+                }
+                trace = TraceContext(project_id=None, task_id=None, prd_id=None, session_id=None)
+                canonical = _event_normalizer.normalize(raw_output, model_type="default")
+                canonical.trace = trace
+                canonical.entity_id = str(finding_id)
+
+                c.execute(
+                    """INSERT INTO activity_log
+                       (activity_type, stream_id, stream_type, event_timestamp,
+                        event_data, status, severity)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        "hook_finding_created",
+                        str(finding_id),
+                        "hook",
+                        canonical.timestamp.isoformat(),
+                        json.dumps(canonical.payload),
+                        "completed",
+                        severity,
+                    ),
+                )
+
+            return finding_id
+    except Exception as e:
+        # If DB locked: write to fallback file
+        _reraise_if_busy(e)
+        try:
+            fallback = paths.state_dir() / "hook_findings_fallback.jsonl"
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            with open(fallback, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "activity_id": activity_id,
+                            "hook_exec_id": hook_exec_id,
+                            "finding_type": finding_type,
+                            "severity": severity,
+                            "message": message,
+                            "context": context,
+                            "recommendation": recommendation,
+                            "status": status,
+                            "created_at": _NOW(),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass  # Fire-and-forget - don't fail the hook
+        return -1  # Return sentinel value for fallback
+
+
+# ── Skill execution functions (TC-007) ────────────────────────────────────
+
+
+def log_skill_execution(
+    skill_name: str,
+    skill_args: str = "",
+    *,
+    status: str = "success",
+    model: str = "unspecified",
+    session_id: str | None = None,
+    project_id: str | None = None,
+    prd_id: str | None = None,
+    task_id: str | None = None,
+    duration_ms: int | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    error_message: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    """
+    Log skill execution to activity_log via EventNormalizer (TC-007).
+
+    This function integrates the EventNormalizer with skill invocations, ensuring
+    all skill outputs are normalized before being written to activity_log.
+
+    Args:
+        skill_name: Skill identifier (e.g., "ds-core", "ds-quality")
+        skill_args: Skill arguments/mode (e.g., "build", "debug")
+        status: Execution status ("success", "failed", "error")
+        model: Optional tool/model metadata label
+        session_id: Tool/session ID
+        project_id: Project identifier
+        prd_id: Optional PRD ID for cross-domain linkage
+        task_id: Optional task ID for cross-domain linkage
+        duration_ms: Execution duration in milliseconds
+        input_tokens: Input token count
+        output_tokens: Output token count
+        error_message: Optional error message if status != "success"
+        db_path: Optional database path
+
+    Returns:
+        True on success, False on failure
+    """
+    try:
+        # Generate unique skill execution ID
+        skill_exec_id = hashlib.sha256(
+            f"{skill_name}:{skill_args}:{session_id}:{_NOW()}".encode()
+        ).hexdigest()[:16]
+
+        # Build event metadata for activity_log
+        event_data = {
+            "skill_name": skill_name,
+            "skill_args": skill_args,
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "error_message": error_message,
+            "adapter": "default",  # EventNormalizer integration (TC-007)
+            "normalized": _NORMALIZER_AVAILABLE,
+        }
+
+        # Map user-friendly status to DB-compatible status
+        # DB schema only allows: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
+        status_map = {
+            "success": "completed",
+            "error": "failed",
+            "pending": "pending",
+            "in_progress": "in_progress",
+            "completed": "completed",
+            "failed": "failed",
+            "cancelled": "cancelled",
+        }
+        db_status = status_map.get(status, "completed")  # Default to "completed" for unknown
+
+        # Insert directly into activity_log
+        # Note: EventNormalizer will be fully integrated in TC-008 for all callsites
+        with _db_transaction(db_path) as c:
+            activity_id = _insert_activity_log(
+                activity_type="skill_execution",
+                stream_id=skill_exec_id,
+                stream_type="skill",
+                event_data=event_data,
+                status=db_status,
+                severity="error" if status == "failed" else "info",
+                prd_id=prd_id,
+                task_id=task_id,
+                session_id=session_id,
+                skill_id=skill_name,
+                duration_ms=duration_ms,
+                db_path=db_path,
+                conn=c,
+            )
+
+        return activity_id is not None
+    except Exception as e:
+        _reraise_if_busy(e)
+        # Fallback: write to JSONL file if DB write fails
+        try:
+            fallback = paths.state_dir() / "skill_executions_fallback.jsonl"
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            with open(fallback, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "skill_name": skill_name,
+                            "skill_args": skill_args,
+                            "status": status,
+                            "model": model,
+                            "session_id": session_id,
+                            "project_id": project_id,
+                            "error_message": error_message,
+                            "logged_at": _NOW(),
+                        }
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass  # Fire-and-forget - don't fail the hook
+        return False
+
+
+# ── Token usage functions ─────────────────────────────────────────────────
+
+
+@_with_retry
+def insert_token_usage(
+    *,
+    session_id: str | None = None,
+    project_id: str | None = None,
+    skill_name: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    model: str | None = None,
+    db_path: Path | None = None,
+) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                """INSERT INTO raw_token_usage
+                   (session_id, project_id, skill_name, input_tokens,
+                    output_tokens, model, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (session_id, project_id, skill_name, input_tokens, output_tokens, model, _NOW()),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def get_token_summary(
+    project_id: str | None = None, days: int = 7, db_path: Path | None = None
+) -> list[dict]:
+    try:
+        c = _connect(db_path)
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        if project_id:
+            rows = c.execute(
+                """SELECT skill_name,
+                          SUM(input_tokens) AS total_input,
+                          SUM(output_tokens) AS total_output,
+                          SUM(input_tokens + output_tokens) AS total_tokens,
+                          COUNT(*) AS call_count
+                   FROM raw_token_usage
+                   WHERE project_id=? AND recorded_at>=?
+                   GROUP BY skill_name ORDER BY total_tokens DESC""",
+                (project_id, cutoff),
+            ).fetchall()
+        else:
+            rows = c.execute(
+                """SELECT project_id,
+                          SUM(input_tokens) AS total_input,
+                          SUM(output_tokens) AS total_output,
+                          SUM(input_tokens + output_tokens) AS total_tokens,
+                          COUNT(*) AS call_count
+                   FROM raw_token_usage
+                   WHERE recorded_at>=?
+                   GROUP BY project_id ORDER BY total_tokens DESC""",
+                (cutoff,),
+            ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+# ── Schema introspection ───────────────────────────────────────────────────
+
+
+def schema_version(db_path: Path | None = None) -> int:
+    try:
+        c = _connect(db_path)
+        v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+        c.close()
+        return v
+    except Exception:
+        return 0
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="studio_db CLI")
+    sub = ap.add_subparsers(dest="cmd")
+    sc = sub.add_parser("skill-correct")
+    sc.add_argument("telemetry_id")
+    sc.add_argument("result", choices=["success", "failure"])
+    sc.add_argument("--reason", default="")
+    ib = sub.add_parser("import-and-rebuild")
+    ib.add_argument("--buffer", required=True)
+    sub.add_parser("prune")
+    sub.add_parser("status")
+    args = ap.parse_args()
+    if args.cmd == "skill-correct":
+        print(
+            "corrected"
+            if skill_correct(
+                int(args.telemetry_id), 1 if args.result == "success" else 0, args.reason
+            )
+            else "error"
+        )
+    elif args.cmd == "import-and-rebuild":
+        n = import_buffer(Path(args.buffer))
+        rebuild_summaries()
+        print(f"imported {n} rows")
+    elif args.cmd == "prune":
+        print(f"pruned {rolling_window_prune()} rows")
+    elif args.cmd == "status":
+        c = _connect()
+        tables = [
+            "raw_workflow_runs",
+            "raw_workflow_nodes",
+            "raw_skill_telemetry",
+            "cor_skill_corrections",
+            "sum_skill_summary",
+            "log_batch_imports",
+            "raw_pulse_snapshots",
+            "raw_planning_specs",
+            "sum_analytics_run",
+            "raw_operational_snapshots",
+            "raw_approaches",
+            "reg_skills",
+            "reg_gotchas",
+            "reg_workflows",
+            "reg_skill_deps",
+            "reg_projects",
+            "raw_sessions",
+            "raw_handoffs",
+            "raw_specs",
+            "raw_tasks",
+            "raw_lessons",
+            "raw_sentinels",
+            "raw_token_usage",
+            "_schema_version",
+        ]
+        v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+        print(f"Schema version: {v}")
+        fk = c.execute("PRAGMA foreign_keys").fetchone()[0]
+        print(f"Foreign keys: {'ON' if fk else 'OFF'}")
+        print(f"\n{'Table':<30} {'Rows':>8}\n" + "-" * 40)
+        for t in tables:
+            try:
+                n = c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]  # noqa: S608
+                print(f"{t:<30} {n:>8}")
+            except sqlite3.OperationalError:
+                print(f"{t:<30} {'N/A':>8}")
+        c.close()
+    else:
+        ap.print_help()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,22 @@
+{
+  "name": "dream-studio",
+  "owner": {
+    "name": "SeayInsights",
+    "email": "dannis.seay@seayinsights.com"
+  },
+  "metadata": {
+    "description": "Development marketplace entry for the Claude Code adapter surface of Dream Studio.",
+    "homepage": "https://github.com/SeayInsights/dream-studio"
+  },
+  "plugins": [
+    {
+      "name": "dream-studio",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "version": "0.11.0",
+      "description": "Claude Code adapter surface for Dream Studio's local-first orchestration, telemetry, Work Order, and dashboard workflows."
+    }
+  ]
+}

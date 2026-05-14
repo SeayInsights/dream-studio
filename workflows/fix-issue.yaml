@@ -1,0 +1,111 @@
+name: fix-issue
+description: "Diagnose a bug, plan a fix, implement, review, and verify. Resume-safe: if interrupted, re-run to continue from the last completed node."
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve fix approach?"
+  auto-pass:
+    type: conditional
+    condition: quality-score > 3
+  evidence-required:
+    type: pause
+    requires: [screenshots, test-results]
+
+nodes:
+  - id: diagnose
+    skill: debug
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    # Estimated prompt + completion tokens for this node
+    estimated_tokens: 2000
+
+  - id: create-issue
+    depends_on: [diagnose]
+    estimated_tokens: 500
+    command: |
+      Create a GitHub issue for this bug using the diagnose output.
+      Run: gh issue create \
+        --title "[Bug] $(head -1 <<< '{{diagnose.summary}}')" \
+        --body "## Bug Report\n\n### Root Cause\n{{diagnose.root_cause}}\n\n### Debug Log\n{{diagnose.full_log}}\n\n### Reproduce\n{{diagnose.reproduce}}"
+      Print the issue URL so it can be referenced in the PR.
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: write-failing-test
+    depends_on: [create-issue]
+    condition: "{{diagnose.testable}} == true"
+    estimated_tokens: 1500
+    command: |
+      Write a minimal failing test that encodes the reproduction steps from diagnose.
+      Place in: tests/<area>/<bug-slug>_test.<ext>
+      The test MUST fail before the fix is applied and pass after.
+      Commit the test file with message: "test: failing test for [bug slug] (pre-fix)"
+      Print the test file path.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: plan-fix
+    skill: plan
+    depends_on: [write-failing-test]
+    model: haiku
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 1000
+    input: "{{diagnose.output}}"
+
+  - id: implement-fix
+    skill: build
+    depends_on: [plan-fix]
+    gate: director-approval
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
+    estimated_tokens: 4000
+    input: "{{plan-fix.output}}"
+
+  - id: review
+    skill: review
+    depends_on: [implement-fix]
+    gate: auto-pass
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    estimated_tokens: 2000
+
+  - id: verify
+    skill: verify
+    depends_on: [review]
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
+    estimated_tokens: 1500
+
+  - id: report
+    depends_on: [verify]
+    estimated_tokens: 500
+    command: |
+      Summarize the fix: what was wrong, what changed, how it was verified.
+      Include file paths and commit references.
+
+      PERSISTENT STORAGE:
+      Get today's date as YYYY-MM-DD.
+      Save this summary to:
+        .sessions/<YYYY-MM-DD>/fix-report.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path so the user has a session record of what was fixed.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180

@@ -1,0 +1,25 @@
+name: fullstack
+pack: domains
+mode: fullstack
+version: 1.0.0
+description: Full-stack orchestrator — coordinates frontend (website pipeline) and backend (stack-agnostic) with shared API contracts
+triggers:
+  - "fullstack:"
+  - "build fullstack:"
+  - "fullstack frontend:"
+  - "fullstack backend:"
+  - "fullstack integrate:"
+  - "fullstack secure:"
+  - "full-stack:"
+  - "full stack:"
+dependencies:
+  - website
+  - saas-build
+capabilities:
+  - pipeline_orchestration
+  - api_contract_management
+  - stack_detection
+  - frontend_delegation
+  - backend_scaffolding
+  - integration_verification
+  - fullstack_security_review
