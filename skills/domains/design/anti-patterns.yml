@@ -1,0 +1,94 @@
+# Design Anti-Patterns
+# Common design mistakes to avoid. Each pattern includes why it's harmful and the recommended fix.
+
+anti_patterns:
+  purple_gradient_default:
+    id: purple-gradient-default
+    category: layout
+    pattern: "Every AI product uses the same purple-to-pink gradient as default hero background"
+    why_harmful: "Lacks differentiation, signals 'we didn't think about our brand', fatigues users who see same palette everywhere"
+    fix: "Define a unique brand gradient or use solid colors tied to brand identity. If using gradients, test with brand guidelines and ensure they're intentional, not defaulted."
+
+  centered_everything:
+    id: centered-everything
+    category: layout
+    pattern: "All content centered on the page regardless of content type or hierarchy"
+    why_harmful: "Violates visual hierarchy principles, makes reading longer text difficult (optimal line length is 50-75 chars), treats unequal content as equally important"
+    fix: "Center short hero text/CTAs only. Left-align body copy (16px), headlines (with weight emphasis), and long-form content. Use left alignment + size/weight for hierarchy."
+
+  uniform_border_radius:
+    id: uniform-border-radius
+    category: layout
+    pattern: "Same border radius applied to every element (buttons, cards, inputs, images)"
+    why_harmful: "Flattens visual hierarchy, makes design feel uniform/generic, reduces ability to signal interactive vs. static elements"
+    fix: "Establish a scale: subtle (2-4px for small elements), standard (8px for cards/medium), bold (12-16px for hero sections). Match radius to element importance."
+
+  inter_only_typography:
+    id: inter-only-typography
+    category: typography
+    pattern: "Using Inter or single sans-serif font for both headlines and body copy"
+    why_harmful: "Reduces visual contrast, makes hierarchy hard to establish with weight alone, feels flat and generic (like many SaaS apps)"
+    fix: "Pair a display font (serif, geometric, or expressive sans) for headlines with Inter/similar for body. Example: Playfair Display (H1) + Inter (body)."
+
+  generic_hero_section:
+    id: generic-hero-section
+    category: layout
+    pattern: "Stock photo + centered H1 + generic 'Get Started' button in hero"
+    why_harmful: "Looks like every startup website, doesn't communicate brand identity, stock imagery reduces authenticity and trust"
+    fix: "Use authentic brand imagery (product screenshots, customer stories, team photos), custom illustration, or thoughtful design. Pair with specific, benefit-driven CTA ('Start Free Trial', 'See Demo')."
+
+  drop_shadows_everywhere:
+    id: drop-shadows-everywhere
+    category: layout
+    pattern: "Drop shadow (0 2px 4px rgba) applied to every card, button, and floating element"
+    why_harmful: "Visual noise accumulates, reduces emphasis of important shadows, makes UI feel heavy/dated"
+    fix: "Reserve shadows for elevated elements only: modals, dropdowns, tooltips. Use 1-2 shadow styles max (subtle + emphasis). Consider alternative depth cues (borders, bg color)."
+
+  low_contrast_gray_text:
+    id: low-contrast-gray-text
+    category: color
+    pattern: "Light gray text (#999, #AAA) on white or light backgrounds that fails WCAG AA standards"
+    why_harmful: "Fails accessibility (WCAG AA requires 4.5:1 contrast for normal text), hard to read for people with low vision, fatiguing"
+    fix: "Use minimum #666 on white (#FFF) for body text (7:1 contrast). For secondary text, use 3:1 minimum. Test with WebAIM contrast checker."
+
+  bounce_easing:
+    id: bounce-easing
+    category: motion
+    pattern: "Spring/bounce easing applied to all transitions (buttons, panels, modals)"
+    why_harmful: "Feels unprofessional in enterprise/B2B contexts, can trigger motion sickness, reduces perceived speed and stability"
+    fix: "Use ease-in-out (cubic-bezier) for most UI motion. Reserve subtle spring for delight moments (success animation, empty state). Duration: 200-300ms for UI."
+
+  simultaneous_animations:
+    id: simultaneous-animations
+    category: motion
+    pattern: "Many elements animate in at exactly the same time with same duration"
+    why_harmful: "Visual chaos, hard to follow, creates cognitive overload, reduces sense of intentionality"
+    fix: "Stagger animations with 50-100ms delay between elements. Vary durations based on distance/importance. Use sequential motion to guide attention."
+
+  gray_on_color_background:
+    id: gray-on-color-background
+    category: color
+    pattern: "Gray text (#666, #999) placed on colored backgrounds (blue, green, purple)"
+    why_harmful: "Fails WCAG contrast, difficult to read, especially on saturated backgrounds"
+    fix: "Use white or off-white text on colored backgrounds. Test contrast with WebAIM. For dark text, use darker grays (#333, #444)."
+
+  click_here_cta:
+    id: click-here-cta
+    category: copy
+    pattern: "Vague button labels: 'Click Here', 'Learn More', 'Submit', 'Next'"
+    why_harmful: "Users don't know what will happen, reduces conversion, fails accessibility (screen reader users need context)"
+    fix: "Use specific, benefit-driven labels: 'Start Free Trial', 'See Pricing', 'Get Demo', 'Subscribe Now'. Include what user gains."
+
+  passive_error_messages:
+    id: passive-error-messages
+    category: copy
+    pattern: "Error messages that only state what's wrong: 'Invalid email', 'Password too short'"
+    why_harmful: "Users don't know how to fix the problem, increases support burden, feels unhelpful"
+    fix: "State the problem + solution: 'Email must include @domain.com', 'Password needs at least 8 characters, 1 number, 1 symbol'. Use plain language."
+
+  excessive_card_nesting:
+    id: excessive-card-nesting
+    category: layout
+    pattern: "Cards nested inside cards inside cards (dashboard > card > subcard > detail card)"
+    why_harmful: "Visual chaos, unclear hierarchy, wasted space due to repeated padding/borders, reduces scannability"
+    fix: "Limit nesting to 1-2 levels. Use alternative hierarchy: tabs, sections (light dividers), or collapsed/expandable details instead."

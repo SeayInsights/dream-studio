@@ -1,0 +1,51 @@
+# Required fields
+name: skill-name
+version: 1.0.0
+pack: core  # core | security | career | design | analysis
+created_at: 2026-04-28
+updated_at: 2026-04-28
+
+# Evolution tracking (OpenSpace-inspired)
+origin: imported  # imported | captured | derived | fixed
+parent_skills: []  # For derived skills: ["old-skill", "new-skill"]
+generation: 0  # Evolution depth (0 = root)
+created_by: human  # or model name
+
+# Quality & Health
+status: experimental  # experimental | tested | stable | deprecated
+health: active  # active | maintenance | deprecated
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+# Performance metrics
+quality_metrics:
+  times_used: 0
+  success_rate: 0.0
+  avg_token_usage: 0
+  avg_execution_time_seconds: 0
+  last_success: null
+  last_failure: null
+
+# Failure patterns (learns from mistakes)
+common_failures: []
+
+# Dependencies
+dependencies:
+  core_modules: []  # [git, traceability, quality, orchestration, format]
+  tools_required: []  # [git, gh, npm, python, etc.]
+  env_vars_required: []  # [PLUGIN, API_KEY, etc.]
+  files_required: []  # [.planning/, config.yml, etc.]
+  calls_skills: []  # Skills this skill invokes
+
+# Compatibility
+compatibility:
+  min_context_window: 100000
+  works_best_with: sonnet
+  works_with: [haiku, sonnet, opus]
+  platforms: [windows, macos, linux]
+
+# Discovery
+tags: []  # [orchestration, analysis, security, etc.]
+category: workflow  # workflow | tool_guide | reference
+triggers: []  # Keywords that trigger this skill
+description: "Brief description of what this skill does"

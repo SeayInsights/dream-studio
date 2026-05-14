@@ -1,0 +1,199 @@
+# SOC 2 Type II Trust Services Criteria — Compliance Mapping
+# Maps Semgrep rule IDs, CWE codes, and OWASP categories to SOC 2 controls.
+# Used by: dream-studio:comply (map, gaps, evidence modes)
+# Schema version: 1
+
+schema_version: 1
+framework: soc2
+framework_name: "SOC 2 Type II Trust Services Criteria"
+version: "2017 (updated 2022)"
+description: "AICPA Trust Services Criteria for Security, Availability, Processing Integrity, Confidentiality, and Privacy."
+
+controls:
+
+  - control_id: CC6.1
+    framework: soc2
+    category: "Common Criteria — Logical and Physical Access"
+    title: "Logical and Physical Access Controls"
+    description: >
+      The entity implements logical access security software, infrastructure, and architectures
+      over protected information assets to protect them from security events to meet the entity's
+      objectives. This includes restricting access to authorized users, employing authentication
+      mechanisms, and enforcing least privilege.
+    mapped_cwes:
+      - CWE-284  # Improper Access Control
+      - CWE-285  # Improper Authorization
+      - CWE-639  # Authorization Bypass Through User-Controlled Key
+      - CWE-306  # Missing Authentication for Critical Function
+      - CWE-269  # Improper Privilege Management
+      - CWE-798  # Use of Hard-coded Credentials
+      - CWE-287  # Improper Authentication
+      - CWE-862  # Missing Authorization
+      - CWE-863  # Incorrect Authorization
+    mapped_owasp:
+      - "A01:2021"  # Broken Access Control
+      - "A07:2021"  # Identification and Authentication Failures
+    mapped_rule_patterns:
+      - "*-ac-*"     # Access control rules
+      - "*-sec-*"    # Security rules
+      - "*-auth-*"   # Authentication rules
+      - "KRG-ac-*"
+      - "KRG-sec-*"
+    scan_coverage: >
+      Rules KRG-ac-001 through KRG-ac-010, KRG-sec-001 through KRG-sec-006.
+      Covers RBAC enforcement, tenant isolation, session token validation,
+      hard-coded credential detection, and missing authentication guards.
+
+  - control_id: CC6.6
+    framework: soc2
+    category: "Common Criteria — Logical and Physical Access"
+    title: "System Boundaries and Protection"
+    description: >
+      The entity implements controls to prevent or detect and act upon the introduction of
+      unauthorized or malicious software to meet the entity's objectives. Network security
+      controls restrict logical access from outside the boundaries of the system.
+    mapped_cwes:
+      - CWE-78   # OS Command Injection
+      - CWE-77   # Command Injection
+      - CWE-89   # SQL Injection
+      - CWE-79   # Cross-Site Scripting
+      - CWE-94   # Code Injection
+      - CWE-20   # Improper Input Validation
+      - CWE-502  # Deserialization of Untrusted Data
+    mapped_owasp:
+      - "A03:2021"  # Injection
+      - "A04:2021"  # Insecure Design
+      - "A05:2021"  # Security Misconfiguration
+    mapped_rule_patterns:
+      - "*-inj-*"     # Injection rules
+      - "*-val-*"     # Validation rules
+      - "*-config-*"  # Configuration rules
+      - "KRG-inj-*"
+      - "KRG-val-*"
+    scan_coverage: >
+      Rules KRG-inj-001 through KRG-inj-008, KRG-val-001 through KRG-val-005.
+      Covers SQL injection, OS command injection, XSS, deserialization, and
+      input validation at API boundaries.
+
+  - control_id: CC6.7
+    framework: soc2
+    category: "Common Criteria — Logical and Physical Access"
+    title: "Data Transmission Protection"
+    description: >
+      The entity restricts the transmission, movement, and removal of information to authorized
+      internal and external users and processes and protects it during transmission, movement,
+      or removal to meet the entity's objectives. This includes encryption in transit and
+      secure communication protocols.
+    mapped_cwes:
+      - CWE-319  # Cleartext Transmission of Sensitive Information
+      - CWE-326  # Inadequate Encryption Strength
+      - CWE-327  # Use of a Broken or Risky Cryptographic Algorithm
+      - CWE-295  # Improper Certificate Validation
+      - CWE-522  # Insufficiently Protected Credentials
+    mapped_owasp:
+      - "A02:2021"  # Cryptographic Failures
+      - "A09:2021"  # Security Logging and Monitoring Failures
+    mapped_rule_patterns:
+      - "*-tls-*"       # TLS/transport rules
+      - "*-crypto-*"    # Cryptography rules
+      - "*-transport-*"
+      - "KRG-tls-*"
+      - "KRG-crypto-*"
+    scan_coverage: >
+      Rules KRG-tls-001 through KRG-tls-004, KRG-crypto-001 through KRG-crypto-003.
+      Covers HTTP vs HTTPS enforcement, weak cipher detection, certificate validation,
+      and cleartext credential transmission.
+
+  - control_id: CC7.1
+    framework: soc2
+    category: "Common Criteria — System Operations"
+    title: "Monitoring and Detection"
+    description: >
+      To meet its objectives, the entity uses detection and monitoring procedures to identify
+      changes to configurations or the environment, new vulnerabilities, and unusual activities.
+      This includes log collection, alerting, and anomaly detection mechanisms.
+    mapped_cwes:
+      - CWE-778  # Insufficient Logging
+      - CWE-117  # Improper Output Neutralization for Logs
+      - CWE-532  # Insertion of Sensitive Information into Log File
+    mapped_owasp:
+      - "A09:2021"  # Security Logging and Monitoring Failures
+    mapped_rule_patterns:
+      - "*-log-*"       # Logging rules
+      - "*-monitor-*"   # Monitoring rules
+      - "*-audit-*"     # Audit rules
+      - "KRG-log-*"
+    scan_coverage: >
+      Rules KRG-log-001 through KRG-log-004.
+      Covers missing audit log writes, sensitive data in logs, and
+      log injection vulnerabilities.
+
+  - control_id: CC7.2
+    framework: soc2
+    category: "Common Criteria — System Operations"
+    title: "Incident Response and Vulnerability Management"
+    description: >
+      The entity monitors system components and the operation of those components for anomalies
+      that are indicative of malicious acts, natural disasters, and errors affecting the entity's
+      ability to meet its objectives. Vulnerability management processes identify, assess, and
+      remediate security vulnerabilities.
+    mapped_cwes:
+      - CWE-1035  # 2017 Top Ten: Using Components with Known Vulnerabilities
+      - CWE-937   # Using Components with Known Vulnerabilities
+      - CWE-1104  # Use of Unmaintained Third-Party Components
+    mapped_owasp:
+      - "A06:2021"  # Vulnerable and Outdated Components
+      - "A09:2021"  # Security Logging and Monitoring Failures
+    mapped_rule_patterns:
+      - "*-dep-*"     # Dependency rules
+      - "*-vuln-*"    # Vulnerability rules
+      - "KRG-dep-*"
+    scan_coverage: >
+      Covered via dependency-audit mode in dream-studio:secure, using Trivy and pip-audit
+      results ingested by dream-studio:scan. Semgrep rules cover known-vulnerable pattern
+      usage (e.g., deprecated crypto APIs).
+
+# ─── Supplemental OWASP Coverage Entries ────────────────────────────────────
+# Ensures all OWASP Top 10 categories have at least one control mapping in this file.
+
+  - control_id: CC7.3
+    framework: soc2
+    category: "Common Criteria — System Operations"
+    title: "Software Integrity and Supply Chain Security"
+    description: >
+      The entity evaluates security events to determine whether they could or have resulted
+      in a failure of the entity to meet its objectives. This includes monitoring for software
+      supply chain compromises, unauthorized modifications, and integrity failures.
+    mapped_cwes:
+      - CWE-494  # Download of Code Without Integrity Check
+      - CWE-502  # Deserialization of Untrusted Data
+      - CWE-506  # Embedded Malicious Code
+    mapped_owasp:
+      - "A08:2021"  # Software and Data Integrity Failures
+    mapped_rule_patterns:
+      - "*-integrity-*"
+      - "*-deser-*"
+      - "*-dep-*"
+    scan_coverage: >
+      Deserialization vulnerability detection, dependency integrity checks via Trivy,
+      and supply chain risk scanning. Complements CC7.2 vulnerability management.
+
+  - control_id: CC6.8
+    framework: soc2
+    category: "Common Criteria — Logical and Physical Access"
+    title: "Controls to Prevent or Detect Unauthorized Access via External Systems"
+    description: >
+      The entity implements controls to prevent or detect and act upon the introduction of
+      unauthorized or malicious software to meet the entity's objectives. This includes
+      protection against server-side request forgery and external system abuse.
+    mapped_cwes:
+      - CWE-918  # Server-Side Request Forgery
+      - CWE-749  # Exposed Dangerous Method or Function
+    mapped_owasp:
+      - "A10:2021"  # Server-Side Request Forgery
+    mapped_rule_patterns:
+      - "*-ssrf-*"
+      - "*-ac-*"
+    scan_coverage: >
+      SSRF detection covering user-controlled URL parameters in HTTP client calls,
+      cloud metadata endpoint access (169.254.169.254), and internal service URL construction.

@@ -1,0 +1,87 @@
+name: safe-refactor
+description: Plan a refactor, implement, validate with type checks and tests, review, and verify
+version: 1
+on_failure: abort
+
+gates:
+  director-approval:
+    type: pause
+    prompt: "Approve refactor plan?"
+  auto-pass:
+    type: conditional
+    condition: quality-score > 3
+  evidence-required:
+    type: pause
+    requires: [screenshots, test-results]
+
+nodes:
+  - id: plan-refactor
+    skill: think
+    gate: director-approval
+    model: opus
+    context: fresh
+    timeout_seconds: 300
+
+  - id: implement
+    skill: build
+    depends_on: [plan-refactor]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
+    input: "{{plan-refactor.output}}"
+
+  - id: type-check
+    depends_on: [implement]
+    command: |
+      Run the project's type checker (tsc, pyright, mypy, or equivalent).
+      Report pass/fail with error count and details.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  - id: test
+    depends_on: [implement]
+    command: |
+      Run the project's test suite (npm test, pytest, or equivalent).
+      Report pass/fail with test count and any failures.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180
+
+  - id: review
+    skill: review
+    depends_on: [type-check, test]
+    gate: auto-pass
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: verify
+    skill: verify
+    depends_on: [review]
+    gate: evidence-required
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 15
+
+  - id: report
+    depends_on: [verify]
+    command: |
+      Summarize the refactor: what changed, why, type-check and test results,
+      review findings, and verification evidence.
+
+      PERSISTENT STORAGE:
+      Get today's date as YYYY-MM-DD.
+      Save this summary to:
+        .sessions/<YYYY-MM-DD>/refactor-report.md
+      Create the directory if it does not exist (mkdir -p).
+      Print the saved path so the user has a session record of the refactor.
+    model: haiku
+    context: fresh
+    timeout_seconds: 180

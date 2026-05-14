@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Hook: on-first-run — welcome new users and prompt Director profile setup."""
+
+import sys
+from pathlib import Path
+
+from core.config import state
+from core.utils.init_helpers import hydrate_registry_once
+
+
+def main() -> None:
+    try:
+        cfg = state.read_config()
+    except Exception:
+        cfg = {}
+
+    # Always attempt registry hydration (idempotent via sentinel)
+    hydrate_registry_once()
+
+    if cfg.get("director_name"):
+        if not cfg.get("onboarding_mode"):
+            cfg["onboarding_mode"] = "full"
+            state.write_config(cfg)
+        return
+
+    print(
+        "\n[dream-studio] Welcome! Setup is not complete yet.\n\n"
+        "To finish onboarding correctly:\n\n"
+        "  1. Close this session\n"
+        "  2. Open a NEW Claude Code session\n"
+        "  3. Run: workflow: run studio-onboard\n\n"
+        "The onboarding workflow will configure your Director profile, projects root,\n"
+        "and Claude memory path — then audit your environment for any gaps.\n\n"
+        "During onboarding, you'll be asked to choose an onboarding mode:\n"
+        "  • progressive — Start with 5 core modes, unlock more as you use them (recommended for new users)\n"
+        "  • full        — All 40 modes available immediately (recommended for power users)\n\n"
+        "Why a new session? The onboarding workflow needs fresh context to run correctly.\n"
+        "This message will not appear again once setup is complete.\n",
+        flush=True,
+    )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        pass

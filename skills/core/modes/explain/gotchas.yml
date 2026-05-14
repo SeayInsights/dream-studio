@@ -1,0 +1,48 @@
+version: 1.0
+
+avoid:
+  - id: speculative-reads
+    severity: high
+    discovered: 2026-04-29
+    title: "Never read files speculatively — only read what you land on in the trace"
+    context: "Reading every file in a directory to 'understand context' blows context budget and produces explanations that are too broad to be useful."
+    fix: "Start at the entry point. Read only the file you land on. Follow links/imports one hop at a time."
+
+  - id: lineby-line-narration
+    severity: medium
+    discovered: 2026-04-29
+    title: "Never narrate code line by line"
+    context: "Line-by-line narration restates what the code already says. The Director can read the code. The value of explain is WHY it's structured that way."
+    fix: "Explain layers, decisions, constraints, and invariants — not individual lines."
+
+  - id: depth-without-asking
+    severity: medium
+    discovered: 2026-04-29
+    title: "Never go more than 3 hops deep without offering a checkpoint"
+    context: "Deep traces become harder to follow. After 3 hops, the Director may want a different angle rather than going deeper."
+    fix: "After the surface explanation, ask: 'Want to go deeper on any layer, or look at a different angle?'"
+
+best_practices:
+  - id: ssot-per-layer
+    title: "Name the SSOT file for each layer"
+    context: "Naming the file that owns each layer gives the Director a map they can navigate themselves later."
+
+  - id: why-not-what
+    title: "Explain WHY, not WHAT"
+    context: "The code already shows WHAT. The explanation should surface the design decisions, constraints, and trade-offs that aren't obvious from reading the code."
+
+edge_cases:
+  - id: no-entry-point
+    title: "If there's no clear entry point, ask before tracing"
+    context: "Some questions ('how does authentication work') have multiple entry points. Picking the wrong one wastes the trace."
+
+  - id: unfamiliar-codebase
+    title: "For unfamiliar codebases, start with structure-audit before explain"
+    context: "If you don't know the project structure, trace from the wrong point. Run structure-audit or check CLAUDE.md/CONSTITUTION.md first."
+
+limitations:
+  - id: no-runtime-tracing
+    title: "Explain traces static code, not runtime behavior"
+    context: "For runtime issues (memory, performance, concurrency), use debug instead. Explain covers code structure and design."
+
+deprecated: []

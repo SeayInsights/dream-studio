@@ -1,0 +1,232 @@
+<!-- Device Frame: Pixel 8 -->
+<div class="device-frame device-frame--android">
+  <style>
+    .device-frame--android {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+    }
+
+    .device-frame--android .device-body {
+      position: relative;
+      width: 412px;
+      height: 915px;
+      background: #1c1c1c;
+      border-radius: 40px;
+      border: 6px solid #2a2a2a;
+      box-shadow:
+        0 0 0 1px #3d3d3d,
+        0 30px 80px rgba(0, 0, 0, 0.5),
+        0 10px 30px rgba(0, 0, 0, 0.3),
+        inset 0 0 0 1px #111;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .device-frame--android .device-screen {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      border-radius: 35px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .device-frame--android .device-status-bar {
+      position: relative;
+      height: 28px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      background: transparent;
+      z-index: 5;
+    }
+
+    .device-frame--android .status-camera {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      background: #1a1a1a;
+      border-radius: 50%;
+      border: 1px solid #333;
+    }
+
+    .device-frame--android .status-time {
+      font-family: 'Google Sans', 'Roboto', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: #000;
+      letter-spacing: 0.1px;
+    }
+
+    .device-frame--android .status-indicators {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .device-frame--android .status-signal {
+      display: flex;
+      align-items: flex-end;
+      gap: 1.5px;
+      height: 10px;
+    }
+
+    .device-frame--android .status-signal span {
+      display: block;
+      width: 2.5px;
+      background: #000;
+      border-radius: 0.5px;
+    }
+
+    .device-frame--android .status-signal span:nth-child(1) { height: 3px; }
+    .device-frame--android .status-signal span:nth-child(2) { height: 5px; }
+    .device-frame--android .status-signal span:nth-child(3) { height: 7px; }
+    .device-frame--android .status-signal span:nth-child(4) { height: 10px; }
+
+    .device-frame--android .status-wifi {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+      width: 14px;
+      height: 11px;
+      justify-content: flex-end;
+    }
+
+    .device-frame--android .status-wifi span {
+      display: block;
+      border: 1.5px solid #000;
+      border-bottom: none;
+      border-radius: 50% 50% 0 0;
+      background: transparent;
+    }
+
+    .device-frame--android .status-wifi span:nth-child(1) { width: 12px; height: 6px; }
+    .device-frame--android .status-wifi span:nth-child(2) { width: 7px; height: 4px; }
+    .device-frame--android .status-wifi span:nth-child(3) { width: 3px; height: 3px; border-radius: 50%; border: none; background: #000; }
+
+    .device-frame--android .status-battery {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .device-frame--android .status-battery-body {
+      width: 20px;
+      height: 10px;
+      border: 1.5px solid #000;
+      border-radius: 2px;
+      padding: 1.5px;
+      display: flex;
+      align-items: center;
+    }
+
+    .device-frame--android .status-battery-fill {
+      width: 65%;
+      height: 100%;
+      background: #000;
+      border-radius: 1px;
+    }
+
+    .device-frame--android .status-battery-cap {
+      width: 2px;
+      height: 4px;
+      background: #000;
+      border-radius: 0 1px 1px 0;
+      opacity: 0.4;
+    }
+
+    .device-frame--android .device-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .device-frame--android .device-nav-bar {
+      height: 48px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      background: transparent;
+      padding-bottom: 4px;
+    }
+
+    .device-frame--android .nav-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      opacity: 0.6;
+    }
+
+    /* Back — triangle pointing left */
+    .device-frame--android .nav-back {
+      width: 0;
+      height: 0;
+      border-top: 9px solid transparent;
+      border-bottom: 9px solid transparent;
+      border-right: 14px solid #000;
+    }
+
+    /* Home — circle */
+    .device-frame--android .nav-home {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #000;
+      border-radius: 50%;
+      background: transparent;
+    }
+
+    /* Recents — rounded square */
+    .device-frame--android .nav-recents {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #000;
+      border-radius: 3px;
+      background: transparent;
+    }
+  </style>
+
+  <div class="device-body">
+    <div class="device-screen">
+      <div class="device-status-bar">
+        <span class="status-time">12:00</span>
+        <div class="status-camera"></div>
+        <div class="status-indicators">
+          <div class="status-signal">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="status-wifi">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="status-battery">
+            <div class="status-battery-body">
+              <div class="status-battery-fill"></div>
+            </div>
+            <div class="status-battery-cap"></div>
+          </div>
+        </div>
+      </div>
+      <div class="device-content">
+        <!-- CONTENT -->
+      </div>
+      <div class="device-nav-bar">
+        <div class="nav-btn"><div class="nav-back"></div></div>
+        <div class="nav-btn"><div class="nav-home"></div></div>
+        <div class="nav-btn"><div class="nav-recents"></div></div>
+      </div>
+    </div>
+  </div>
+</div>

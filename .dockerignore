@@ -1,0 +1,29 @@
+.git
+.venv
+venv
+env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
+dist/
+build/
+
+# Local Dream Studio runtime state must never enter clean-room images.
+.dream-studio/
+**/.dream-studio/
+**/studio.db
+**/studio.db-*
+**/studio.db.bak
+**/studio.db.pre-restore.bak
+**/*studio*.sqlite
+
+# Logs and temporary artifacts.
+*.log
+*.tmp
+tmp/
+temp/

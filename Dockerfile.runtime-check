@@ -1,0 +1,18 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp/dream-studio-user \
+    DREAM_STUDIO_HOME=/tmp/dream-studio-home
+
+WORKDIR /workspace
+
+RUN mkdir -p "$HOME" "$DREAM_STUDIO_HOME"
+
+COPY requirements.txt requirements-dev.txt pyproject.toml ./
+RUN python -m pip install --upgrade pip \
+    && python -m pip install --no-cache-dir -r requirements-dev.txt
+
+COPY . /workspace
+
+CMD ["python", "scripts/docker_runtime_check.py"]

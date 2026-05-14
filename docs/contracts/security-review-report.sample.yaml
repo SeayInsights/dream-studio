@@ -1,0 +1,134 @@
+# Security Review report sample
+# Documentation/data only. Not execution authority.
+artifact_kind: "SecurityReviewReport"
+artifact_schema_version: "security_review_report_artifact.v0"
+execution_status: "non_executing_report_artifact"
+report_id: "sec.report.sample"
+source_work_order_id: "wo-dream-studio-sample-security-review"
+target_id: "not_applicable"
+security_pack_id: "security_review_profile_pack"
+catalog_ref: "docs/contracts/security-review-scan-catalog.yaml"
+review_scope:
+  posture: "planning_only"
+  target_repo_access: "not_authorized"
+  scan_execution: "not_authorized"
+  exclusions:
+    - "target repositories"
+    - "scan execution"
+    - "runtime implementation"
+approval_mode: "observe_only"
+verdict: "PASS WITH RISKS"
+release_gate_decision:
+  decision: "SECURITY_CLEAR_WITH_RISKS"
+  rationale: "Sample report demonstrates artifact shape only; no target was reviewed."
+  blocking_findings: []
+  accepted_risks:
+    - "sec.risk.sample.accepted"
+  deferred_scans:
+    - "sec.dast.runtime_injection_testing"
+  required_next_actions:
+    - "Open a future approved Work Order before target access or scan execution."
+taxonomy_coverage:
+  reviewed_categories:
+    - "dependency_supply_chain"
+  not_reviewed_categories:
+    - category_id: "static_code_security"
+      reason: "Sample artifact only."
+scan_summary:
+  - scan_id: "sec.dependency.vulnerability_inventory"
+    scan_kind: "artifact_review"
+    status: "reviewed_from_file_backed_evidence"
+    evidence_refs:
+      - "sec.evidence.sample.status"
+    limitations:
+      - "Sample data only."
+findings_summary:
+  counts_by_severity:
+    info: 1
+    low: 0
+    medium: 0
+    high: 0
+    critical: 0
+    blocker: 0
+  counts_by_status:
+    open: 0
+    accepted_risk: 1
+    remediated: 0
+    false_positive: 0
+    deferred: 0
+    unknown: 0
+findings:
+  - finding_id: "sec.finding.sample.info"
+    scan_id: "sec.dependency.vulnerability_inventory"
+    source_item_refs:
+      - item_number: 15
+        item_name: "Known Vulnerability Detection (CVE Scanning)"
+    category_id: "dependency_supply_chain"
+    title: "Sample Informational Finding"
+    summary: "Demonstrates the SecurityFindingRecord shape without reviewing a target."
+    affected_assets:
+      - "not_applicable"
+    severity: "info"
+    confidence: "low"
+    exploitability: "unknown"
+    scope: "local"
+    release_impact: "warn"
+    privacy_impact: "none"
+    remediation_urgency: "backlog"
+    evidence_refs:
+      - "sec.evidence.sample.status"
+    recommended_action: "Use a future scoped Work Order for real review."
+    remediation_scope_hint: "hold_review"
+    status: "accepted_risk"
+evidence_inventory:
+  - evidence_id: "sec.evidence.sample.status"
+    source_work_order_id: "wo-dream-studio-sample-security-review"
+    scan_id: "sec.dependency.vulnerability_inventory"
+    target_id: "not_applicable"
+    evidence_kind: "manual_review"
+    evidence_refs:
+      - "docs/contracts/security-review-report-artifact-contract.md"
+    before_status: "not_applicable"
+    after_status: "not_applicable"
+    command_result: "not_run"
+    external_report_ref: "none"
+    no_forbidden_action_proof: "No scan, target access, mutation, push, stage, commit, runtime, CLI, DB/event, Docker, dashboard, TORII, cloud, org, global, enterprise, dependency, or lockfile action is represented."
+    no_target_mutation_proof: "No target repository is in scope for this sample."
+    no_generated_artifact_proof: "Sample lives under Dream Studio contracts only."
+    evidence_limitations:
+      - "This sample is not a completed security review."
+accepted_risks:
+  - risk_id: "sec.risk.sample.accepted"
+    finding_id: "sec.finding.sample.info"
+    operator_decision_artifact: "not_applicable_for_sample"
+    accepted_by: "operator"
+    reason: "Sample demonstrates shape only."
+    constraints:
+      - "Not valid for release decisions."
+    expiry_or_review_date: "not_applicable_for_sample"
+    residual_risk_summary: "No real target risk was accepted."
+no_forbidden_action_proof:
+  no_target_repo_touched: true
+  no_scans_run: true
+  no_runtime_code_added: true
+  no_dashboard_authority_added: true
+  no_dependency_or_lockfile_changed: true
+next_work_order_recommendation:
+  recommended_work_order_id: "wo-dream-studio-sample-next-security-review"
+  recommended_phase_name: "Sample Security Review Planning"
+  recommended_handoff_type: "normal_next_work_order"
+  recommended_phase_type: "normal_next_work_order"
+  decision_taxonomy:
+    - "CONTINUE_TO_NEXT_WORK_ORDER"
+    - "REQUEST_HUMAN_APPROVAL"
+    - "HOLD"
+    - "FAIL"
+  recommended_decision: "HOLD"
+  scope_summary: "Planning-only sample; real target work requires a future approved Work Order."
+  forbidden_actions:
+    - "target repo access"
+    - "scan execution"
+    - "runtime implementation"
+    - "dashboard authority"
+  requires_operator_decision: false
+ready_to_copy_handoff_packet: null

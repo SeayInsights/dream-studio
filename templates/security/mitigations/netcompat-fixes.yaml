@@ -1,0 +1,168 @@
+# Network Compatibility (Zscaler) Fix Templates
+# Maps ZSC rule IDs to Zscaler proxy compatibility mitigation patterns.
+# rule_pattern is pipe-delimited: any token match triggers this template.
+# Covers ZSC-001 through ZSC-005.
+# All entries require_context: true — Zscaler mitigations depend on the client's proxy config.
+
+- rule_pattern: "ZSC-001|certificate-pinning|cert-pinning|ssl-pinning|pinned-cert|custom-pin"
+  title: "Certificate Pinning — Use System Trust Store Instead of Pinned Certificates"
+  cwe: "ZSC-001"
+  owasp_category: "network-compatibility"
+  immediate_fix:
+    description: "Remove hardcoded certificate pins and rely on the system trust store, which includes the Zscaler proxy CA; Zscaler performs TLS inspection and presents its own certificate — pinning will break in a Zscaler network"
+    code_before: |
+      import ssl, urllib.request
+
+      # Pinned cert fingerprint — breaks behind Zscaler
+      PINNED_FINGERPRINT = "sha256//AbCdEf1234567890..."
+
+      ctx = ssl.create_default_context()
+      ctx.load_verify_locations("/path/to/pinned-cert.pem")  # custom pin
+
+      response = urllib.request.urlopen(
+          "https://api.external-vendor.com/data",
+          context=ctx
+      )
+    code_after: |
+      import urllib.request
+
+      # Use system trust store — includes Zscaler proxy CA
+      response = urllib.request.urlopen(
+          "https://api.external-vendor.com/data"
+          # No custom SSL context — defaults to system trust store
+      )
+  long_term_fix: "Ensure the Zscaler root CA is installed in the system certificate store on all machines running this code (IT provisioning responsibility); use certifi as a fallback for environments where the system store is not updated; document the Zscaler CA requirement in the project README under 'Network Requirements'"
+  verification_test: "python -c \"import urllib.request; urllib.request.urlopen('https://api.external-vendor.com/data')\" exits code 0 from behind Zscaler proxy; verify Zscaler admin console shows the request in TLS inspection logs"
+  effort_estimate: "2h"
+  requires_context: true
+  references:
+    - "https://help.zscaler.com/zia/adding-custom-certificate-application-specific-trust-store"
+    - "https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning"
+
+- rule_pattern: "ZSC-002|custom-ssl-context|custom-ssl-context-no-system-ca|ssl-context-no-proxy-ca|SSLContext-no-system"
+  title: "Custom SSL Context — Include System CA Bundle (Proxy CA)"
+  cwe: "ZSC-002"
+  owasp_category: "network-compatibility"
+  immediate_fix:
+    description: "When creating a custom SSLContext, load the system CA certificates so the Zscaler proxy CA is trusted; do not create an empty context or load only a specific CA file"
+    code_before: |
+      import ssl, requests
+
+      ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+      ctx.load_verify_locations("/app/certs/internal-ca.crt")
+      # System CA store NOT loaded — Zscaler proxy cert will be rejected
+
+      session = requests.Session()
+      session.mount("https://", requests.adapters.HTTPAdapter())
+      response = session.get("https://api.example.com", verify=False)  # workaround
+    code_after: |
+      import ssl, requests
+
+      ctx = ssl.create_default_context()   # loads system CA store (incl. Zscaler CA)
+      ctx.load_verify_locations("/app/certs/internal-ca.crt")  # add internal CA on top
+
+      # Or with requests — point to a combined CA bundle:
+      import certifi, os
+      ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE", certifi.where())
+      response = requests.get("https://api.example.com", verify=ca_bundle)
+  long_term_fix: "Set REQUESTS_CA_BUNDLE environment variable to a CA bundle that includes both the system/Zscaler CA and any internal CAs; configure this in the deployment platform (Kubernetes ConfigMap, GitHub Actions env, etc.) so no code change is needed per environment"
+  verification_test: "REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt python -c \"import requests; requests.get('https://api.example.com')\" exits code 0; grep -rn 'SSLContext.*PROTOCOL\\|ssl.SSLContext' {file} — confirm create_default_context() is used"
+  effort_estimate: "2h"
+  requires_context: true
+  references:
+    - "https://docs.python.org/3/library/ssl.html#ssl.create_default_context"
+    - "https://help.zscaler.com/zia/configuring-ssl-inspection"
+
+- rule_pattern: "ZSC-003|hardcoded-ca-bundle|custom-ca-bundle|pinned-ca-file|ca-bundle-hardcoded"
+  title: "Hardcoded CA Bundle Path — Use certifi or System Store"
+  cwe: "ZSC-003"
+  owasp_category: "network-compatibility"
+  immediate_fix:
+    description: "Replace the hardcoded CA bundle file path with certifi.where() or the REQUESTS_CA_BUNDLE environment variable, which can be overridden per deployment environment to include the Zscaler CA"
+    code_before: |
+      import requests
+
+      CA_BUNDLE = "/app/certs/my-custom-ca.crt"  # hardcoded — no Zscaler CA
+
+      response = requests.get(
+          "https://api.kroger.com/v1/products",
+          verify=CA_BUNDLE
+      )
+    code_after: |
+      import certifi, os, requests
+
+      # Prefer REQUESTS_CA_BUNDLE env var (set by deployment platform to include Zscaler CA)
+      # Fall back to certifi's bundled Mozilla CA store
+      CA_BUNDLE = os.environ.get("REQUESTS_CA_BUNDLE", certifi.where())
+
+      response = requests.get(
+          "https://api.kroger.com/v1/products",
+          verify=CA_BUNDLE
+      )
+  long_term_fix: "Build a combined CA bundle in the CI/CD pipeline that merges certifi's store + the Zscaler root CA + any internal CAs, and distribute it as a build artifact or environment variable; this eliminates the need for per-code-instance CA configuration"
+  verification_test: "REQUESTS_CA_BUNDLE=/etc/ssl/certs/zscaler-combined.crt python -c \"import requests; r = requests.get('https://api.kroger.com/v1/products', headers={'Authorization': 'Bearer test'}); print(r.status_code)\" — expect 401 (auth failure) not SSL error"
+  effort_estimate: "1h per instance + CA bundle build"
+  requires_context: true
+  references:
+    - "https://pypi.org/project/certifi/"
+    - "https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification"
+
+- rule_pattern: "ZSC-004|non-standard-port|non-443-port|outbound-non-https-port|port-8443|port-8080-tls"
+  title: "Non-Standard Port — Use Port 443 or Document Zscaler Exception"
+  cwe: "ZSC-004"
+  owasp_category: "network-compatibility"
+  immediate_fix:
+    description: "Change outbound HTTPS connections to use port 443; if the target service requires a non-standard port, document it and request a Zscaler firewall exception"
+    code_before: |
+      import requests
+
+      # Port 8443 is non-standard — may be blocked by Zscaler or proxy policy
+      response = requests.get("https://api.internal-service.com:8443/v1/data")
+    code_after: |
+      import os, requests
+
+      # Use 443 where possible; make port configurable for non-standard cases
+      API_PORT = os.environ.get("API_PORT", "443")
+      API_HOST = os.environ["API_HOST"]
+
+      response = requests.get(f"https://{API_HOST}:{API_PORT}/v1/data")
+      # Document in .env.example: API_PORT=8443 (requires Zscaler exception KRG-EXC-001)
+    # If 443 is not possible, add to the Zscaler application profile as an allowed destination.
+  long_term_fix: "Work with network/IT to configure the Zscaler policy to allow the specific non-standard port for the specific destination; track the exception in a firewall-exceptions.yaml in the infra repo with a review date; reconfigure the target service to use 443 if owned internally"
+  verification_test: "curl -v https://{API_HOST}:{API_PORT}/v1/data from a Zscaler-connected machine — expect TLS handshake success (not connection refused or proxy error); check Zscaler admin console that the request is allowed"
+  effort_estimate: "2h (code) + IT coordination for firewall exceptions"
+  requires_context: true
+  references:
+    - "https://help.zscaler.com/zia/understanding-zscaler-internet-access"
+    - "https://help.zscaler.com/zia/configuring-firewall-filtering-rules"
+
+- rule_pattern: "ZSC-005|websocket-no-tls|ws-not-wss|websocket-plaintext|ws://"
+  title: "WebSocket Without TLS — Upgrade to wss://"
+  cwe: "ZSC-005"
+  owasp_category: "network-compatibility"
+  immediate_fix:
+    description: "Replace ws:// WebSocket connections with wss:// (WebSocket Secure) to ensure TLS encryption and Zscaler proxy compatibility; plain ws:// is blocked by most corporate proxies"
+    code_before: |
+      import websockets
+
+      async def connect():
+          uri = "ws://realtime.vendor-portal.internal:8080/events"  # plaintext
+          async with websockets.connect(uri) as ws:
+              data = await ws.recv()
+    code_after: |
+      import os, websockets, ssl
+
+      async def connect():
+          uri = f"wss://{os.environ['WS_HOST']}/events"  # TLS — wss://
+          # Use system trust store (includes Zscaler CA if provisioned)
+          ssl_context = ssl.create_default_context()
+
+          async with websockets.connect(uri, ssl=ssl_context) as ws:
+              data = await ws.recv()
+  long_term_fix: "Ensure the WebSocket server has a valid TLS certificate (Let's Encrypt or corporate CA); configure Zscaler WebSocket inspection policy if needed; use the same CA bundle strategy as ZSC-002/003 for the SSL context"
+  verification_test: "python -c \"import asyncio, websockets; asyncio.run(websockets.connect('wss://realtime.vendor-portal.internal/events'))\" exits code 0 from a Zscaler-connected machine; netstat or Wireshark confirms TLS handshake on the connection"
+  effort_estimate: "2h (client) + server TLS cert configuration"
+  requires_context: true
+  references:
+    - "https://websockets.readthedocs.io/en/stable/reference/client.html#websockets.connect"
+    - "https://help.zscaler.com/zia/about-websocket-security-inspection"

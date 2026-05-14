@@ -1,0 +1,31 @@
+# Traceability Registry Template
+# Copy to your project's .planning/traceability.yaml when using dream-studio plan skill
+# Links: spec requirements → plan tasks → commits → tests
+#
+# Populated by: plan skill (requirements + tasks), build skill (commits), verify skill (tests)
+
+project: ""
+spec_path: ""
+plan_path: ""
+created: ""
+updated: ""
+
+# Requirements extracted from the spec
+# Each gets a TR-ID that traces through the entire pipeline
+requirements:
+  # - id: TR-001
+  #   description: "User can log in with email and password"
+  #   source: "spec section 2.1"
+  #   priority: must  # must | should | could
+  #   status: pending  # pending | in_progress | implemented | verified
+  #   tasks: [1, 2]  # plan task numbers that implement this
+  #   commits: []  # SHAs added by build skill
+  #   tests: []  # test file paths added by verify skill
+  #   notes: ""
+
+# Summary — auto-updated by skills
+summary:
+  total_requirements: 0
+  implemented: 0
+  verified: 0
+  coverage: "0%"

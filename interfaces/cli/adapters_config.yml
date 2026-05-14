@@ -1,0 +1,21 @@
+platforms:
+  cursor:
+    name: Cursor
+    template: cursor.j2
+    output_path: .marketplace/adapters/cursor-rules/.cursorrules
+    include_domains: false
+  copilot:
+    name: GitHub Copilot
+    template: copilot.j2
+    output_path: .marketplace/adapters/copilot-instructions/instructions.md
+    include_domains: true
+  windsurf:
+    name: Windsurf
+    template: windsurf.j2
+    output_path: .marketplace/adapters/windsurf/.windsurfrules
+    include_domains: true
+  system-prompt:
+    name: System Prompt (Generic)
+    template: system-prompt.j2
+    output_path: .marketplace/adapters/system-prompt/system-prompt.md
+    include_domains: true

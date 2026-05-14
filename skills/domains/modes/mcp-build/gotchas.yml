@@ -1,0 +1,16 @@
+version: 1.0
+
+# Things to AVOID
+avoid: []
+
+# Best PRACTICES
+best_practices: []
+
+# Edge CASES handled
+edge_cases: []
+
+# Known LIMITATIONS
+limitations: []
+
+# DEPRECATIONS
+deprecated: []

@@ -1,0 +1,28 @@
+name: website
+pack: domains
+mode: website
+version: 1.0.0
+description: End-to-end website design pipeline — discovery, direction, brand, prototype, page, deck, animate, critique
+triggers:
+  - "website:"
+  - "build website:"
+  - "landing page:"
+  - "build page:"
+  - "prototype app:"
+  - "pitch deck:"
+  - "animate:"
+  - "build site:"
+dependencies:
+  - design  # reuses design mode references
+capabilities:
+  - discovery_protocol
+  - direction_picker
+  - brand_extraction
+  - token_generation
+  - device_prototyping
+  - page_building
+  - deck_framework
+  - animation_engine
+  - cip_generation
+  - anti_slop_linting
+  - self_critique

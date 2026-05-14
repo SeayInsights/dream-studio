@@ -1,0 +1,58 @@
+version: 1.0
+
+avoid:
+  - id: combine-owasp-stride
+    severity: high
+    discovered: 2026-04-29
+    title: "Never run OWASP and STRIDE analyses in a single pass"
+    context: "OWASP covers implementation vulnerabilities; STRIDE covers threat modeling. Combining them causes overlap in findings and missed angles — STRIDE threats that have no OWASP category get dropped."
+    fix: "Run parallel analyst subagents: one OWASP-lens, one STRIDE-lens. Synthesis resolves overlap. Each lens catches what the other misses."
+
+  - id: severity-without-context
+    severity: high
+    discovered: 2026-04-29
+    title: "Never report severity without exploitability and impact context"
+    context: "'Critical SQL injection' on a read-only public API with no sensitive data is not the same as the same finding on an admin endpoint. Decontextualized severity causes misallocated remediation effort."
+    fix: "Every finding: severity + exploitability (how hard) + impact (what happens if exploited) + affected data/scope."
+
+  - id: mix-findings-and-fixes
+    severity: medium
+    discovered: 2026-04-29
+    title: "Don't embed fix recommendations inside secure findings"
+    context: "Secure outputs findings. Fix recommendations belong in ds-security mitigate. Mixing them bloats the report and conflates discovery with remediation."
+    fix: "Secure outputs: what's broken, severity, evidence. Run ds-security mitigate separately for fix recommendations."
+
+  - id: fix-stale-audit-findings
+    severity: high
+    discovered: 2026-04-19
+    title: "Always verify a finding still exists before attempting to fix it"
+    context: "Audit reports go stale within hours. Findings already resolved in code will still appear as open if the report has no resolution markers — causing wasted re-fix work."
+    fix: "Before touching any file listed in a finding, grep or read the file to confirm the issue is still present in current code."
+
+  - id: annotate-findings-when-fixed
+    severity: medium
+    discovered: 2026-04-19
+    title: "Annotate audit report findings with fix commit SHA when resolved"
+    context: "A finding with no resolution marker misleads the next session into re-fixing already-committed work."
+    fix: "Immediately after a finding is fixed, add [FIXED: <commit-sha>] to the finding in the source report before continuing."
+
+best_practices:
+  - id: fresh-subagents-per-lens
+    title: "Use fresh subagents for each analyst lens — never inherit review session history"
+    context: "An analyst that has seen OWASP findings will anchor on implementation details when asked to do STRIDE threat modeling. Fresh context = independent analysis."
+
+  - id: blocked-vs-flags
+    title: "Distinguish BLOCKED (ship-stopper) from SHIP WITH FLAGS (document + monitor)"
+    context: "Not every security finding is a ship-stopper. Conflating severity levels delays shipping and erodes trust in security reviews."
+
+edge_cases:
+  - id: third-party-scope
+    title: "Clarify scope: in-scope code vs third-party dependencies vs infrastructure"
+    context: "A finding in a vendored library is not actionable the same way as a finding in your code. Scope the review before starting."
+
+limitations:
+  - id: static-analysis-only
+    title: "Secure is static analysis — it cannot find runtime-only vulnerabilities"
+    context: "Race conditions, timing attacks, and session fixation in production require DAST (ds-security dast). Secure only reads code."
+
+deprecated: []

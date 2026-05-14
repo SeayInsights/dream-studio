@@ -1,0 +1,264 @@
+# Research Methodology and Idea Evaluation
+# Source: synthesized from production repositories and best practices
+version: 1
+
+patterns:
+  - id: primary-vs-secondary-source-hierarchy
+    title: Primary vs Secondary Source Hierarchy
+    description: >
+      Establish a clear source tier before beginning any research. Primary sources
+      (raw data, original studies, direct interviews, official filings, first-party
+      surveys) carry more weight than secondary sources (analyst reports, news
+      articles, blog posts, aggregated data). Cite the tier when presenting evidence
+      so readers can assess reliability at a glance.
+    example: |
+      Tier 1 (primary): SEC 10-K filing, U.S. Census raw microdata, direct customer
+        interview transcript
+      Tier 2 (secondary): Gartner market report citing the Census data, TechCrunch
+        article summarizing the 10-K
+      Rule: when Tier 1 and Tier 2 conflict, Tier 1 wins unless the secondary source
+        documents a correction to the primary.
+
+  - id: triangulation-three-sources
+    title: Triangulation - Three Independent Sources Before Concluding
+    description: >
+      Do not state a finding as established until at least three independent sources
+      agree. "Independent" means each source gathered its data separately -- a news
+      article quoting one study does not add a new data point. Triangulation
+      dramatically reduces the risk of amplifying a single flawed source.
+    example: |
+      Claim: "SMB SaaS churn averages 5-7% monthly"
+      Source A: Profitwell benchmark report (own panel, n=2,400 companies)
+      Source B: ChurnZero 2023 State of Customer Success survey (n=1,000)
+      Source C: First-party cohort analysis from 3 SaaS clients in portfolio
+      Verdict: Triangulated. State with high confidence for SMB SaaS context.
+
+  - id: steel-manning-opposing-views
+    title: Steel-Manning Opposing Views
+    description: >
+      Before finalizing a conclusion, articulate the strongest possible version of
+      the opposing argument -- not a strawman. Present it in the output. If the
+      steel-manned counter-argument cannot be refuted with available evidence, the
+      conclusion should be downgraded to "tentative" or "contested."
+    example: |
+      Conclusion under review: "Remote work increases engineering productivity."
+      Steel-man opposition: "Microsoft Research (2022) found fully remote teams
+        showed reduced cross-team collaboration density, which predicts lower
+        long-horizon innovation output even if short-term task velocity rises.
+        The productivity gain may be a measurement artifact of easier-to-count
+        tasks."
+      Decision: Downgrade to "likely increases individual task velocity; effect
+        on team-level innovation is contested."
+
+  - id: assumption-mapping
+    title: Assumption Mapping Before Research Begins
+    description: >
+      Write down every assumption the research is built on before collecting data.
+      Label each assumption as (a) verified, (b) unverified but testable, or
+      (c) structural (untestable within this research scope). Research effort
+      should prioritize the highest-risk unverified assumptions first.
+    example: |
+      Research question: "Is there demand for a B2B invoicing API?"
+      Assumptions mapped:
+        - [unverified] Finance teams control budget for invoicing tools (~$50K+/yr)
+        - [unverified] Current tools (QuickBooks, NetSuite) have API gaps for
+          multi-entity billing
+        - [structural] B2B buyers make rational purchasing decisions
+      First research sprint: disprove the first two assumptions via 8 customer calls.
+
+  - id: falsifiability-criterion
+    title: Falsifiability Criterion
+    description: >
+      For every major claim, define in advance what evidence would disprove it.
+      If a claim cannot be falsified by any conceivable evidence, it is not a
+      research finding -- it is a belief. Document the falsification condition
+      alongside the claim.
+    example: |
+      Claim: "Developers prefer CLI tooling over GUI for deployment workflows."
+      Falsification condition: "A survey of 200+ developers at companies with
+        >= 50 engineers shows >50% prefer GUI for their primary deploy workflow."
+      Status: not yet falsified -- maintain claim with medium confidence.
+
+  - id: tam-sam-som-market-sizing
+    title: TAM/SAM/SOM for Market Sizing
+    description: >
+      Size markets in three tiers. TAM (Total Addressable Market) is the full
+      global demand for this category. SAM (Serviceable Addressable Market) is
+      the portion your solution's constraints can reach. SOM (Serviceable
+      Obtainable Market) is realistic capture in years 1-3 given current
+      go-to-market resources. Always compute bottoms-up (unit count * price)
+      alongside top-down (% of TAM) and reconcile the gap.
+    example: |
+      TAM: 28M U.S. small businesses * avg $180/yr invoicing software spend = $5B
+      SAM: 4.2M with >= 5 employees using cloud accounting (= API-ready segment)
+        * $180 = $756M
+      SOM (yr 1-3): 0.5% SAM capture via direct sales + PLG = $3.8M ARR target
+      Bottoms-up check: 2,100 customers * $1,800 ACV = $3.78M -- reconciles.
+
+  - id: competitive-analysis-jtbd-lens
+    title: Competitive Analysis Through Jobs-to-Be-Done Lens
+    description: >
+      Map competitors by the job they help customers accomplish, not by feature
+      lists. Two tools can have identical features but compete for different jobs.
+      For each competitor, document: the primary job addressed, the customer
+      segment served, the price point, and the acquisition channel. Identify gaps
+      where a job is underserved.
+    example: |
+      Job: "Reconcile multi-entity AP in under 30 minutes per week"
+      Competitor A (Tipalti): serves job well for >$100M revenue firms, $2K/mo+
+      Competitor B (Bill.com): partial fit, breaks at >5 entities, $50/mo
+      Gap: 200-1,000 employee firms with 3-10 entities have no clean solution
+        in the $150-500/mo range -- job is underserved.
+
+  - id: go-no-go-criteria-upfront
+    title: Go/No-Go Criteria Definition Before Evaluation Starts
+    description: >
+      Before beginning an evaluation, define the specific evidence thresholds that
+      will produce a GO, CONDITIONAL, or NO-GO verdict. This prevents post-hoc
+      rationalization where criteria shift to match a preferred conclusion. The
+      criteria must be written before any data is collected.
+    example: |
+      Evaluation: "Should we build a time-tracking module?"
+      Criteria defined upfront:
+        GO:         >= 40% of existing customers request it in survey AND >= 3
+                    willing to pay $20+/seat/mo AND no direct competitor has
+                    captured >30% of our TAM with this feature
+        CONDITIONAL: >= 20% request it AND 1-2 pay signals AND clear integration
+                    story with existing workflow
+        NO-GO:      < 20% request it OR a dominant competitor already owns the
+                    job in our segment
+
+anti_patterns:
+  - id: confirmation-bias-sourcing
+    title: Confirmation Bias Sourcing
+    description: >
+      Searching only for evidence that supports a pre-existing hypothesis. This
+      produces a research artifact that looks rigorous but systematically omits
+      disconfirming data. It is the most common research failure mode. Symptoms:
+      all sources point the same direction, no contested claims appear in the
+      output, and the conclusion closely matches the hypothesis stated at the start.
+      Fix: actively search for disconfirming sources first. If you cannot find any,
+      document that explicitly -- it is a signal to dig harder, not proof the
+      hypothesis is correct.
+
+  - id: anchoring-on-first-number
+    title: Anchoring on the First Number Found
+    description: >
+      Treating the first market size, growth rate, or benchmark number encountered
+      as the baseline and adjusting from it rather than independently verifying.
+      First numbers in Google results are often press releases, vendor-funded
+      studies, or aggregator sites that copied from each other. The anchor biases
+      all subsequent estimates. Fix: collect three independent numbers, compute the
+      range, and use the median or a weighted average -- never the first number
+      alone.
+
+  - id: survivorship-bias-case-studies
+    title: Survivorship Bias in Case Studies
+    description: >
+      Analyzing only companies or strategies that succeeded and inferring general
+      lessons. Failed companies using the same strategy are invisible in published
+      case studies. This produces false confidence in strategies that have a low
+      base rate of success. Fix: for every success case, explicitly ask "what is
+      the denominator?" -- how many companies tried this approach, and what
+      fraction succeeded?
+
+  - id: false-precision-in-estimates
+    title: False Precision in Estimates
+    description: >
+      Reporting market estimates, revenue projections, or survey findings with more
+      decimal places or apparent certainty than the underlying data supports. A TAM
+      calculated from two assumptions with 30% error bars does not produce a
+      "$847.3M" market -- it produces a "$600M-$1.1B" market. False precision
+      misleads decision-makers. Fix: always attach a confidence range and document
+      the two or three largest uncertainty drivers.
+
+  - id: correlation-causation-market-data
+    title: Conflating Correlation with Causation in Market Data
+    description: >
+      Interpreting co-movement in time-series data (two metrics rising together,
+      a trend following a policy change) as a causal link without testing for
+      confounding variables. Example: "DAU rose 40% after we added dark mode
+      -- dark mode drives retention." This is correlation; a product launch,
+      seasonal pattern, or marketing spend change may explain the same data.
+      Fix: identify at least two plausible confounders for every causal claim,
+      and describe what controlled evidence would be needed to establish causation.
+
+gotchas:
+  - id: llm-research-self-citation-loop
+    title: LLM-Generated Research Loops Back to Itself
+    description: >
+      When an LLM is used to research a topic, its outputs may synthesize earlier
+      LLM-generated content indexed on the web. The result is a closed loop where
+      AI cites AI without any ground-truth primary source. This is undetectable
+      from the surface of the output and produces confident-sounding findings with
+      no empirical basis.
+    fix: >
+      For any statistic or market claim generated by an LLM, require a named
+      primary source with a verifiable URL or publication reference before using
+      it in a deliverable. "According to industry data" with no citation is a
+      red flag, not a source.
+
+  - id: vendor-incentive-bias
+    title: Market Research Vendor Incentive Bias
+    description: >
+      Market research firms (Gartner, IDC, Forrester) are often paid by vendors in
+      the market they cover. Their TAM figures and growth forecasts can be inflated
+      to serve vendor marketing budgets. The bias is not always disclosed and does
+      not invalidate all findings, but it means vendor-funded reports require
+      independent triangulation.
+    fix: >
+      Check whether the report sponsor is a vendor in the studied market. If so,
+      treat the TAM figure as an upper bound and source a non-vendor-funded
+      triangulation data point (government statistics, independent academic study,
+      or bottoms-up model).
+
+  - id: recency-bias-trend-analysis
+    title: Recency Bias in Trend Analysis
+    description: >
+      Over-weighting the most recent 12-18 months of data when characterizing a
+      trend, especially when the recent period is anomalous (post-COVID recovery,
+      interest rate shock, AI hype cycle). A trend that looks linear in a 12-month
+      window may be a cyclical reversion in a 5-year window.
+    fix: >
+      Always pull trend data for at least 5 years when available. Annotate the
+      chart or table with the event that explains any inflection point. State
+      explicitly whether the current trajectory is structural or cyclical.
+
+  - id: small-sample-statistical-significance
+    title: Sample Size Too Small for Statistical Significance
+    description: >
+      Drawing conclusions from surveys, user interviews, or A/B tests with sample
+      sizes too small to detect the effect at acceptable confidence levels.
+      Five customer interviews cannot establish that "60% of the market has this
+      pain" -- they can only suggest a hypothesis worth testing at scale.
+    fix: >
+      For quantitative claims, compute or estimate the minimum detectable effect
+      and required sample size before collecting data. For qualitative research,
+      explicitly label conclusions as "hypothesis-generating" not "market-validated."
+      Rule of thumb: n < 30 is anecdotal, n < 100 is directional, n >= 300 is
+      sufficient for basic segmentation analysis.
+
+  - id: b2b-vs-b2c-market-sizing-confusion
+    title: B2B vs B2C Market Sizing Confusion
+    description: >
+      Mixing B2B unit economics (contract ACV, buyer = company) with B2C unit
+      economics (subscription price, buyer = individual) within the same TAM model.
+      A "30M potential users at $10/mo" B2C TAM cannot be compared to a "$50K ACV
+      * 5,000 companies" B2B TAM without explicit conversion. The confusion
+      produces nonsense revenue forecasts.
+    fix: >
+      Define the buyer unit (individual, team, company, department) and the price
+      unit (per seat, per company, usage-based) before computing any market size.
+      Never mix buyer units within a single TAM calculation.
+
+  - id: tam-top-down-only
+    title: TAM Calculated Top-Down Without Bottoms-Up Validation
+    description: >
+      Top-down TAM (take industry figure, apply percentage) is easy to produce and
+      easy to manipulate. A claim of "1% of a $10B market = $100M opportunity" has
+      zero predictive value without a bottoms-up model showing how to reach 1%.
+      Top-down figures routinely overstate addressability by 5-10x.
+    fix: >
+      Always pair a top-down TAM with a bottoms-up model: (number of identifiable
+      buyers) * (realistic ACV) = bottoms-up TAM. If the two figures differ by more
+      than 3x, investigate why before using either in a decision document.

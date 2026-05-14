@@ -1,0 +1,6 @@
+name: career
+model_tier: sonnet
+description: 'Career pipeline: job search, evaluate, apply, track, resume generation.'
+argument-hint: ops | scan | evaluate | apply | track | pdf
+user_invocable: true
+args: mode

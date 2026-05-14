@@ -1,0 +1,75 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-prompt-dispatch"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-stop-dispatch"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-post-compact"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-skill-metrics"
+          },
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-skill-complete"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-edit-dispatch"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-skill-load"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); runner=next((p/'hooks'/'run.py' for p in (root,*root.parents) if (p/'hooks'/'run.py').is_file()), None); sys.exit('dream-studio hook root not found') if runner is None else None; sys.argv=[str(runner),*sys.argv[1:]]; runpy.run_path(str(runner),run_name='__main__')\" on-tool-activity"
+          }
+        ]
+      }
+    ]
+  }
+}

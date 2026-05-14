@@ -1,0 +1,217 @@
+# Progressive unlock conditions
+# When user's message/invocation matches a trigger pattern, unlock the associated pack
+
+unlock_triggers:
+  # Security pack — unlocks when user shows security intent
+  - pack: security
+    patterns:
+      - "security"
+      - "scan"
+      - "vulnerability"
+      - "vuln"
+      - "CVE"
+      - "DAST"
+      - "penetration test"
+      - "pen test"
+    modes_unlocked:
+      - scan
+      - dast
+      - binary-scan
+      - mitigate
+      - comply
+      - netcompat
+      - dashboard
+    unlock_message: |
+      Security pack unlocked! You now have access to:
+      • scan — org-wide security scans
+      • dast — web application security testing
+      • binary-scan — analyze executables
+      • mitigate — fix security findings
+      • comply — SOC 2, NIST, audit evidence
+      • netcompat — Zscaler compatibility checks
+      • dashboard — security reporting
+
+  # Domains pack (game-dev) — unlocks when user mentions game development
+  - pack: domains
+    mode: game-dev
+    patterns:
+      - "game"
+      - "unity"
+      - "godot"
+      - "game dev"
+      - "gamedev"
+      - "game build"
+      - "game qa"
+    modes_unlocked:
+      - game-dev
+    unlock_message: |
+      Game development mode unlocked!
+      • game-dev — game build, review, QA workflows
+
+  # Domains pack (client-work) — unlocks when user mentions Power BI, client work
+  - pack: domains
+    mode: client-work
+    patterns:
+      - "power bi"
+      - "powerbi"
+      - "power apps"
+      - "powerapps"
+      - "client work"
+      - "sow"
+      - "intake"
+      - "dax"
+      - "power automate"
+    modes_unlocked:
+      - client-work
+    unlock_message: |
+      Client work mode unlocked!
+      • client-work — Power BI, Power Apps, intake, SOW, DAX optimization
+
+  # Domains pack (saas-build) — unlocks when user mentions API, SaaS features
+  - pack: domains
+    mode: saas-build
+    patterns:
+      - "build feature"
+      - "build api"
+      - "saas"
+      - "build page"
+      - "endpoint"
+      - "rest api"
+    modes_unlocked:
+      - saas-build
+    unlock_message: |
+      SaaS build mode unlocked!
+      • saas-build — feature development, API endpoints, page builds
+
+  # Domains pack (mcp-build) — unlocks when user mentions MCP
+  - pack: domains
+    mode: mcp-build
+    patterns:
+      - "mcp"
+      - "build mcp"
+      - "new mcp"
+      - "extend mcp"
+      - "mcp server"
+    modes_unlocked:
+      - mcp-build
+    unlock_message: |
+      MCP build mode unlocked!
+      • mcp-build — build and extend MCP servers
+
+  # Domains pack (dashboard-dev) — unlocks when user mentions dashboards
+  - pack: domains
+    mode: dashboard-dev
+    patterns:
+      - "dashboard"
+      - "tauri"
+      - "feed contract"
+    modes_unlocked:
+      - dashboard-dev
+    unlock_message: |
+      Dashboard development mode unlocked!
+      • dashboard-dev — Tauri dashboards, feed contracts
+
+  # Domains pack (design) — unlocks when user mentions design, branding
+  - pack: domains
+    mode: design
+    patterns:
+      - "design"
+      - "brand"
+      - "poster"
+      - "canvas"
+      - "art"
+      - "creative"
+      - "visual"
+    modes_unlocked:
+      - design
+    unlock_message: |
+      Design mode unlocked!
+      • design — art, branding, posters, canvas work
+
+  # Quality pack — unlocks when user asks for debugging, polish, security review
+  - pack: quality
+    patterns:
+      - "debug"
+      - "diagnose"
+      - "polish"
+      - "harden"
+      - "security review"
+      - "secure"
+      - "structure audit"
+      - "learn"
+      - "coach"
+    modes_unlocked:
+      - debug
+      - polish
+      - harden
+      - secure
+      - structure-audit
+      - learn
+      - coach
+    unlock_message: |
+      Quality pack unlocked! You now have access to:
+      • debug — diagnose and fix issues
+      • polish — UI cleanup and design refinement
+      • harden — project setup and best practices
+      • secure — security review
+      • structure-audit — codebase organization review
+      • learn — capture lessons from builds
+      • coach — workflow guidance
+
+  # Analyze pack — unlocks when user asks for analysis
+  - pack: analyze
+    patterns:
+      - "analyze"
+      - "analysis"
+      - "evaluate"
+      - "assess"
+      - "multi-perspective"
+      - "domain-re"
+      - "real estate"
+    modes_unlocked:
+      - multi
+      - domain-re
+    unlock_message: |
+      Analysis pack unlocked!
+      • multi — multi-perspective analysis
+      • domain-re — real estate domain analysis
+
+  # Career pack — unlocks when user mentions job search, career
+  - pack: career
+    patterns:
+      - "career"
+      - "job search"
+      - "find job"
+      - "apply"
+      - "resume"
+      - "cover letter"
+      - "offer"
+      - "evaluate offer"
+    modes_unlocked:
+      - ops
+      - scan
+      - evaluate
+      - apply
+      - track
+      - pdf
+    unlock_message: |
+      Career pack unlocked!
+      • ops — job search operations
+      • scan — find roles
+      • evaluate — assess offers
+      • apply — cover letters, tailored resumes
+      • track — pipeline tracking
+      • pdf — resume generation
+
+  # Workflow pack — unlocks when user mentions workflow orchestration
+  - pack: workflow
+    patterns:
+      - "workflow"
+      - "orchestrate"
+      - "automate"
+      - "pipeline"
+    modes_unlocked:
+      - workflow
+    unlock_message: |
+      Workflow orchestration unlocked!
+      • workflow — automate multi-step processes

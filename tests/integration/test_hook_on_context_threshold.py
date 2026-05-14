@@ -1,0 +1,134 @@
+"""Integration test for on-context-threshold."""
+
+from __future__ import annotations
+
+import io
+import json
+
+
+def _write_jsonl(projects_dir, session_id: str, kb: float) -> None:
+    projects_dir.mkdir(parents=True, exist_ok=True)
+    p = projects_dir / f"{session_id}.jsonl"
+    p.write_bytes(b"x" * int(kb * 1024))
+
+
+def test_no_jsonl_is_noop(isolated_home, monkeypatch, handler):
+    projects = isolated_home / "projects"
+    projects.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "abc"})))
+
+    mod = handler("on-context-threshold")
+    mod.main()  # no crash, no output needed
+
+
+def test_urgent_blocks_prompt(isolated_home, monkeypatch, capsys, handler):
+    projects = isolated_home / "projects"
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    _write_jsonl(projects, "s1", kb=5000)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "s1"})))
+
+    mod = handler("on-context-threshold")
+    mod.main()
+
+    out = capsys.readouterr().out.strip()
+    result = json.loads(out)
+    assert result["continue"] is False
+    assert "auto-blocked" in result["stopReason"]
+    # sentinel should exist so the next prompt passes through
+    assert (projects / ".compact-sentinel-s1").exists()
+
+
+def test_sentinel_clears_and_passes(isolated_home, monkeypatch, handler):
+    projects = isolated_home / "projects"
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    _write_jsonl(projects, "s2", kb=5000)
+    sentinel = projects / ".compact-sentinel-s2"
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text("5000")
+
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "s2"})))
+    mod = handler("on-context-threshold")
+    mod.main()
+
+    # sentinel is consumed, no stopReason printed
+    assert not sentinel.exists()
+
+
+def test_warn_band_prints_growing(isolated_home, monkeypatch, capsys, handler):
+    projects = isolated_home / "projects"
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    _write_jsonl(projects, "s3", kb=1800)
+    # freshen mtime so it's recent
+    (projects / "s3.jsonl").touch()
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "s3"})))
+
+    mod = handler("on-context-threshold")
+    mod.main()
+
+    assert "growing" in capsys.readouterr().out
+
+
+def test_warn_fires_once_per_5pp(isolated_home, monkeypatch, capsys, handler):
+    """WARN band only prints when crossing a 5pp boundary, not on every prompt."""
+    projects = isolated_home / "projects"
+    monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
+    _write_jsonl(projects, "sw", kb=1800)
+    (projects / "sw.jsonl").touch()
+
+    import json as _json
+    import tempfile
+    import time
+    from pathlib import Path
+
+    session_id = "sw"
+    bridge_file = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id}.json"
+    bridge_file.write_text(
+        _json.dumps(
+            {
+                "used_pct": 57.0,
+                "raw_pct": 47.0,
+                "timestamp": time.time(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    mod = handler("on-context-threshold")
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps({"session_id": session_id})))
+    mod.main()
+    out1 = capsys.readouterr().out
+    assert "growing" in out1  # first crossing at 55pp floor → fires
+
+    # Same percentage again — sentinel exists, should NOT fire
+    monkeypatch.setattr("sys.stdin", io.StringIO(_json.dumps({"session_id": session_id})))
+    mod.main()
+    out2 = capsys.readouterr().out
+    assert "growing" not in out2  # same floor, no re-fire
+
+    bridge_file.unlink(missing_ok=True)
+
+
+def test_projects_dir_slug_replaces_spaces(monkeypatch, handler):
+    """Claude Code slug format replaces `:`, `\\`, `/`, AND spaces with `-`."""
+    from pathlib import Path
+    import sys
+
+    # Add hooks lib to path and import the module where function moved
+    plugin_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from control.context import monitor as context_monitor
+
+    monkeypatch.delenv("CLAUDE_PROJECTS_DIR", raising=False)
+
+    # Windows path with spaces — the common case
+    win = Path("C:\\Users\\Jane Doe\\studio")
+    assert context_monitor.projects_dir_for_cwd(win).name == "C--Users-Jane-Doe-studio"
+
+    # Unix path with spaces
+    unix = Path("/home/some user/work")
+    assert context_monitor.projects_dir_for_cwd(unix).name == "-home-some-user-work"
+
+    # No spaces — unchanged behavior
+    plain = Path("C:\\code\\repo")
+    assert context_monitor.projects_dir_for_cwd(plain).name == "C--code-repo"

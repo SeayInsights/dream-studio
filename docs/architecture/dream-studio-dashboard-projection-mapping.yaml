@@ -1,0 +1,577 @@
+schema_version: 1
+artifact_role: dashboard_projection_mapping
+lifecycle_status: draft_generated
+dashboard_truth_policy:
+  dashboard_is_derived_view: true
+  dashboard_is_primary_truth: false
+  handoffs_are_workflow_authority: false
+  handoffs_are_rendered_views: true
+  primary_truth_note: >-
+    Dashboard projections display structured authority, evidence, validation,
+    decision, and git metadata. They do not own product authority, workflow
+    routing, database authority, or handoff authority.
+source_contract_refs:
+  - docs/architecture/dream-studio-structured-authority-projection-contract.yaml
+  - docs/architecture/dream-studio-structured-authority-projection-model.md
+  - docs/product/dream-studio-prd.md
+  - docs/product/dream-studio-stage-gates.yaml
+projection_defaults:
+  lifecycle_status: draft_generated
+  confidence: medium
+  action_required: false
+  operator_action_required: false
+  stop_gate_active: false
+  handoff_required: false
+  continuation_packet_allowed: true
+  dashboard_readiness:
+    visible_in_dashboard: true
+    display_status: ready_for_projection
+    freshness_label: generated_from_file_backed_authority
+    action_required: false
+    primary_truth_warning: dashboard projection is derived and not primary truth
+projection_mappings:
+  - projection_name: current_product_authority
+    source_authority: prd
+    source_refs:
+      - docs/product/dream-studio-prd.md
+    derived_fields:
+      - product_identity
+      - active_objective
+      - product_goals
+      - strategic_constraints
+      - paused_validation_targets
+    display_fields:
+      - product_name
+      - active_objective
+      - current_goal_summary
+      - constraint_summary
+    freshness_staleness_logic:
+      stale_when:
+        - PRD content changes after projection generation.
+      refresh_when:
+        - PRD hash or timestamp differs from projection source ref.
+      superseded_when:
+        - A newer product authority projection exists for the same PRD id.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: source_ref_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - PRD source ref exists.
+      - Projection is marked derived.
+  - projection_name: current_stage_gate
+    source_authority: stage_gate
+    source_refs:
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - current_stage
+      - stage_gate_id
+      - stage_gate_status
+      - routing_constraints
+      - stop_gates
+    display_fields:
+      - stage_gate_name
+      - stage_gate_status
+      - current_route
+      - stop_gate_summary
+    freshness_staleness_logic:
+      stale_when:
+        - Stage gate YAML changes after projection generation.
+      refresh_when:
+        - Stage gate source ref timestamp or content fingerprint changes.
+      superseded_when:
+        - A newer stage gate projection exists for the same stage gate id.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: source_ref_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Stage gate source ref exists.
+      - Current stage gate is stage-gate-valid.
+  - projection_name: current_milestone
+    source_authority: milestone_state
+    source_refs:
+      - docs/product/dream-studio-stage-gates.yaml
+      - .dream-studio/meta/milestones/structured_authority_projection/*/evidence/*
+    derived_fields:
+      - milestone_id
+      - milestone_status
+      - current_internal_step
+      - completed_internal_steps
+      - pending_internal_steps
+      - next_milestone
+    display_fields:
+      - milestone_title
+      - milestone_status
+      - progress_summary
+      - next_internal_action
+    freshness_staleness_logic:
+      stale_when:
+        - Milestone evidence changes after projection generation.
+      refresh_when:
+        - New validation or evidence ref appears for the milestone.
+      superseded_when:
+        - A newer milestone projection exists for the same milestone id.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: evidence_ref_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Milestone source refs exist or are explicitly marked file-backed evidence refs.
+      - Next milestone is stage-gate-valid.
+  - projection_name: milestone_sequence
+    source_authority: stage_gate
+    source_refs:
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - ordered_milestones
+      - completed_milestones
+      - active_milestone
+      - next_milestone
+    display_fields:
+      - sequence_position
+      - completed_count
+      - next_milestone_label
+      - blocked_milestones
+    freshness_staleness_logic:
+      stale_when:
+        - Stage gate milestone sequence changes after projection generation.
+      refresh_when:
+        - Stage gate file changes or milestone state advances.
+      superseded_when:
+        - A newer sequence projection exists for the stage gate.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: route_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Stage gate milestone sequence exists.
+      - Active and next milestone are members of the sequence.
+  - projection_name: work_order_status
+    source_authority: work_order
+    source_refs:
+      - .dream-studio/meta/work-orders/*/approvals/approval.json
+      - .dream-studio/meta/work-orders/*/evidence/*
+      - .dream-studio/meta/audit/*
+    derived_fields:
+      - work_order_id
+      - phase_type
+      - approval_mode
+      - risk_level
+      - status
+      - forbidden_actions
+    display_fields:
+      - work_order_title
+      - status_badge
+      - risk_badge
+      - scope_summary
+    freshness_staleness_logic:
+      stale_when:
+        - Work Order evidence or report changes after projection generation.
+      refresh_when:
+        - Work Order status, evidence, or final report changes.
+      superseded_when:
+        - A newer Work Order projection exists for the same id.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: evidence_ref_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Work Order source refs are file-backed or explicitly unavailable.
+  - projection_name: approvals
+    source_authority: approval_artifact
+    source_refs:
+      - .dream-studio/meta/work-orders/*/approvals/approval.json
+    derived_fields:
+      - approval_scope
+      - approved_files
+      - approved_actions
+      - forbidden_actions
+      - approval_status
+    display_fields:
+      - approval_status_badge
+      - approved_scope_summary
+      - forbidden_boundary_summary
+    freshness_staleness_logic:
+      stale_when:
+        - Dirty files or requested actions exceed approval scope.
+      refresh_when:
+        - Approval artifact changes.
+      superseded_when:
+        - A newer approval exists for the same Work Order id.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: scope_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Approval source refs are retained when approval is required.
+  - projection_name: operator_decisions
+    source_authority: operator_decision_artifact
+    source_refs:
+      - .dream-studio/meta/work-orders/*/decisions/*
+    derived_fields:
+      - decision_id
+      - selected_option
+      - rationale
+      - impacted_scope
+    display_fields:
+      - decision_status
+      - selected_option_label
+      - decision_required_badge
+    freshness_staleness_logic:
+      stale_when:
+        - Product or architecture authority changes after decision.
+      refresh_when:
+        - Decision artifact changes or new decision request appears.
+      superseded_when:
+        - A newer operator decision exists for the same decision id.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: no_operator_action_required
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Operator decision projection marks missing decisions as action_required only when required by stop gate.
+  - projection_name: evidence_coverage
+    source_authority: evidence_artifact
+    source_refs:
+      - .dream-studio/meta/work-orders/*/evidence/*
+      - .dream-studio/meta/milestones/*/evidence/*
+    derived_fields:
+      - evidence_refs
+      - evidence_types
+      - covered_requirements
+      - missing_required_evidence
+    display_fields:
+      - coverage_percent
+      - evidence_count
+      - missing_evidence_count
+    freshness_staleness_logic:
+      stale_when:
+        - Source artifact changes after evidence capture.
+      refresh_when:
+        - New evidence ref is created.
+      superseded_when:
+        - Evidence is superseded by newer validation or report.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: evidence_ref_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Evidence refs are present for milestone completion claims.
+  - projection_name: validation_status
+    source_authority: validation_artifact
+    source_refs:
+      - focused validation output
+      - .dream-studio/meta/work-orders/*/evidence/*validation*
+      - .dream-studio/meta/milestones/*/evidence/*validation*
+    derived_fields:
+      - validation_refs
+      - latest_validation_result
+      - failed_validations
+      - validation_scope
+    display_fields:
+      - validation_status_badge
+      - latest_validation_summary
+      - failed_validation_count
+    freshness_staleness_logic:
+      stale_when:
+        - Source files change after validation.
+      refresh_when:
+        - New validation command or evidence runs.
+      superseded_when:
+        - A newer validation exists for the same source scope.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: validation_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Failed validation sets stop_gate_active or action_required.
+  - projection_name: artifact_lifecycle_status
+    source_authority: artifact_index
+    source_refs:
+      - docs/product/dream-studio-artifact-requirements.md
+      - docs/architecture/dream-studio-structured-authority-projection-contract.yaml
+    derived_fields:
+      - artifact_role
+      - lifecycle_status
+      - source_authority
+      - retention_policy
+    display_fields:
+      - artifact_name
+      - lifecycle_badge
+      - source_authority_label
+    freshness_staleness_logic:
+      stale_when:
+        - Artifact lifecycle state conflicts with source authority.
+      refresh_when:
+        - Artifact index or requirements change.
+      superseded_when:
+        - A newer artifact lifecycle projection exists.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: lifecycle_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Lifecycle status is explicit.
+      - Compaction/deletion/archive remains separate approval boundary.
+  - projection_name: research_decision_status
+    source_authority: research_evidence
+    source_refs:
+      - docs/product/dream-studio-research-and-verification-policy.md
+    derived_fields:
+      - research_decision_class
+      - source_confidence
+      - operator_verification_required
+      - decision_impact
+    display_fields:
+      - research_status_badge
+      - source_confidence_label
+      - operator_verification_badge
+    freshness_staleness_logic:
+      stale_when:
+        - Research source confidence expires or source uncertainty changes.
+      refresh_when:
+        - Research evidence or source refs change.
+      superseded_when:
+        - A newer research decision exists for the same question.
+    lifecycle_status: draft_generated
+    confidence: medium
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: policy_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - High-risk or uncertain research maps to operator_action_required.
+  - projection_name: handoff_continuation_status
+    source_authority: handoff_renderer
+    source_refs:
+      - core/work_orders/handoff.py
+      - core/work_orders/milestones.py
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - route_decision
+      - handoff_required
+      - handoff_reason
+      - continuation_packet_allowed
+      - operator_action_required
+    display_fields:
+      - route_badge
+      - handoff_status
+      - continuation_packet_status
+    freshness_staleness_logic:
+      stale_when:
+        - Route decision changes after projection generation.
+      refresh_when:
+        - Milestone classifier or handoff renderer changes.
+      superseded_when:
+        - A newer route projection exists for the same milestone.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: route_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Handoffs are rendered views, not workflow authority.
+      - Routine next milestone existence does not set handoff_required.
+  - projection_name: commit_status
+    source_authority: git_metadata
+    source_refs:
+      - git branch --show-current
+      - git rev-parse HEAD
+      - git status --short --branch --untracked-files=all
+    derived_fields:
+      - branch
+      - head
+      - dirty_files
+      - staged_files
+      - last_commit
+    display_fields:
+      - branch_name
+      - short_head
+      - worktree_status
+      - staged_status
+    freshness_staleness_logic:
+      stale_when:
+        - Git HEAD or worktree status changes after projection generation.
+      refresh_when:
+        - Any commit, staged file, or dirty file appears.
+      superseded_when:
+        - A newer commit projection exists for the same branch.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: git_status_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - Staged files are empty unless staging is explicitly approved.
+      - Dirty files are expected carryover or approved milestone outputs.
+  - projection_name: paused_external_validation_targets
+    source_authority: strategic_constraint
+    source_refs:
+      - docs/product/dream-studio-prd.md
+      - docs/product/dream-studio-stage-gates.yaml
+    derived_fields:
+      - project_name
+      - implementation_paused
+      - allowed_reference_mode
+      - resume_policy
+    display_fields:
+      - project_name
+      - paused_badge
+      - allowed_reference_summary
+      - resume_gate
+    freshness_staleness_logic:
+      stale_when:
+        - External project resume policy changes.
+      refresh_when:
+        - PRD or stage gate strategic constraints change.
+      superseded_when:
+        - A newer paused-target projection exists.
+    lifecycle_status: draft_generated
+    confidence: high
+    action_required: false
+    operator_action_required: false
+    stop_gate_active: false
+    handoff_required: false
+    continuation_packet_allowed: true
+    dashboard_readiness:
+      visible_in_dashboard: true
+      display_status: ready_for_projection
+      freshness_label: strategic_constraint_current
+      action_required: false
+      primary_truth_warning: dashboard is derived view, not primary truth
+    validation_requirements:
+      - External projects remain paused implementation targets.
+      - Resume requires separate approval boundary.
+validation_contract:
+  required_checks:
+    - expected carryover dirty files are present and no unexpected dirty files existed before milestone
+    - required authority artifacts exist
+    - structured authority projection contract/model exist
+    - dashboard projection mapping artifacts exist
+    - every mapping includes source refs
+    - every mapping is marked as derived, not primary truth
+    - mappings include freshness/staleness logic
+    - mappings include stop-gate/action-required fields
+    - handoffs are not workflow authority
+    - no forbidden runtime, database, package, staging, commit, push, deploy, or external project action occurred
+next_route_on_success:
+  route_decision: start_next_milestone
+  handoff_required: false
+  operator_action_required: false
+  next_stage_gate: structured_authority_projection
+  next_milestone: runtime_projection_update
+  recommended_next_work_order: none

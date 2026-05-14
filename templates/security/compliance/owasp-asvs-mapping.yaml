@@ -1,0 +1,587 @@
+# OWASP Application Security Verification Standard v4.0 — Compliance Mapping
+# Maps Semgrep rule IDs, CWE codes, and OWASP categories to ASVS controls.
+# Used by: dream-studio:comply (map, gaps, evidence modes)
+# Schema version: 1
+# Level indicators: L1 = basic, L2 = standard, L3 = advanced/high-assurance
+
+schema_version: 1
+framework: owasp-asvs
+framework_name: "OWASP Application Security Verification Standard"
+version: "4.0"
+description: >
+  OWASP ASVS provides a basis for testing web application technical security controls
+  and also provides developers with a list of requirements for secure development.
+  Three verification levels (L1, L2, L3) cover progressively more rigorous security requirements.
+
+controls:
+
+  # ─── V1: Architecture, Design and Threat Modeling ───────────────────────────
+
+  - control_id: V1.2.1
+    framework: owasp-asvs
+    chapter: V1
+    chapter_name: "Architecture, Design and Threat Modeling"
+    level: L2
+    title: "Authentication Architecture"
+    description: "Verify the use of a unique or special low-privilege operating system account for all application components, services, and servers."
+    mapped_cwes:
+      - CWE-269  # Improper Privilege Management
+      - CWE-250  # Execution with Unnecessary Privileges
+    mapped_owasp:
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-config-*"
+    scan_coverage: "Privilege escalation and over-permissioned service account detection."
+
+  - control_id: V1.4.1
+    framework: owasp-asvs
+    chapter: V1
+    chapter_name: "Architecture, Design and Threat Modeling"
+    level: L2
+    title: "Access Control Architecture"
+    description: "Verify that trusted enforcement points such as access control gateways, servers, and serverless functions enforce access controls."
+    mapped_cwes:
+      - CWE-284
+      - CWE-862
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-rbac-*"
+    scan_coverage: "Missing authorization check and IDOR pattern detection."
+
+  # ─── V2: Authentication ──────────────────────────────────────────────────────
+
+  - control_id: V2.1.1
+    framework: owasp-asvs
+    chapter: V2
+    chapter_name: "Authentication"
+    level: L1
+    title: "Password Security"
+    description: "Verify that user set passwords are at least 12 characters in length (after combining multiple spaces)."
+    mapped_cwes:
+      - CWE-521  # Weak Password Requirements
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-password-*"
+    scan_coverage: "Password length validation enforcement at API layer."
+
+  - control_id: V2.2.1
+    framework: owasp-asvs
+    chapter: V2
+    chapter_name: "Authentication"
+    level: L1
+    title: "General Authenticator Security"
+    description: "Verify that anti-automation controls are effective at mitigating breached credential testing, brute force, and account lockout attacks."
+    mapped_cwes:
+      - CWE-307  # Improper Restriction of Excessive Authentication Attempts
+      - CWE-287  # Improper Authentication
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-rate-*"
+    scan_coverage: "Missing rate limiting and brute-force protection detection."
+
+  - control_id: V2.3.1
+    framework: owasp-asvs
+    chapter: V2
+    chapter_name: "Authentication"
+    level: L1
+    title: "Authenticator Lifecycle"
+    description: "Verify that system generated initial passwords or activation codes are randomly generated, at least 6 characters long, may contain letters and numbers."
+    mapped_cwes:
+      - CWE-330  # Use of Insufficiently Random Values
+      - CWE-331  # Insufficient Entropy
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-crypto-*"
+    scan_coverage: "Weak random number generation in authentication context detection."
+
+  - control_id: V2.10.1
+    framework: owasp-asvs
+    chapter: V2
+    chapter_name: "Authentication"
+    level: L2
+    title: "Service Authentication"
+    description: "Verify that integration secrets do not rely on unchanging passwords, such as API keys or shared privileged accounts."
+    mapped_cwes:
+      - CWE-798  # Use of Hard-coded Credentials
+      - CWE-259  # Use of Hard-coded Password
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-sec-*"
+      - "*-secrets-*"
+      - "KRG-sec-*"
+    scan_coverage: "Hard-coded API key and credential detection in source code."
+
+  # ─── V3: Session Management ──────────────────────────────────────────────────
+
+  - control_id: V3.2.1
+    framework: owasp-asvs
+    chapter: V3
+    chapter_name: "Session Management"
+    level: L1
+    title: "Session Binding"
+    description: "Verify the application generates a new session token on user authentication."
+    mapped_cwes:
+      - CWE-384  # Session Fixation
+      - CWE-613  # Insufficient Session Expiration
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-session-*"
+      - "*-auth-*"
+    scan_coverage: "Session fixation and token reuse pattern detection."
+
+  - control_id: V3.4.1
+    framework: owasp-asvs
+    chapter: V3
+    chapter_name: "Session Management"
+    level: L1
+    title: "Cookie-based Session Management"
+    description: "Verify that cookie-based session tokens have the 'Secure' attribute set."
+    mapped_cwes:
+      - CWE-614  # Sensitive Cookie in HTTPS Session Without 'Secure' Attribute
+      - CWE-1004 # Sensitive Cookie Without 'HttpOnly' Flag
+    mapped_owasp:
+      - "A05:2021"
+    mapped_rule_patterns:
+      - "*-session-*"
+      - "*-cookie-*"
+    scan_coverage: "Cookie attribute enforcement detection (Secure, HttpOnly, SameSite)."
+
+  # ─── V4: Access Control ──────────────────────────────────────────────────────
+
+  - control_id: V4.1.1
+    framework: owasp-asvs
+    chapter: V4
+    chapter_name: "Access Control"
+    level: L1
+    title: "General Access Control Design"
+    description: "Verify that the application enforces access control rules on a trusted service layer, especially if client-side access control is present and could be bypassed."
+    mapped_cwes:
+      - CWE-602  # Client-Side Enforcement of Server-Side Security
+      - CWE-284
+      - CWE-862
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-rbac-*"
+      - "KRG-ac-*"
+    scan_coverage: "Server-side authorization enforcement and IDOR detection."
+
+  - control_id: V4.2.1
+    framework: owasp-asvs
+    chapter: V4
+    chapter_name: "Access Control"
+    level: L1
+    title: "Operation Level Access Control"
+    description: "Verify that sensitive data and APIs are protected against Insecure Direct Object Reference (IDOR) attacks targeting creation, reading, updating and deletion of records."
+    mapped_cwes:
+      - CWE-639  # Authorization Bypass Through User-Controlled Key
+      - CWE-285
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-ac-*"
+      - "*-idor-*"
+      - "KRG-ac-*"
+    scan_coverage: "IDOR pattern detection, user-controlled key in database queries."
+
+  - control_id: V4.3.1
+    framework: owasp-asvs
+    chapter: V4
+    chapter_name: "Access Control"
+    level: L1
+    title: "Other Access Control Considerations"
+    description: "Verify administrative interfaces use appropriate multi-factor authentication to prevent unauthorized use."
+    mapped_cwes:
+      - CWE-306  # Missing Authentication for Critical Function
+      - CWE-287
+    mapped_owasp:
+      - "A07:2021"
+    mapped_rule_patterns:
+      - "*-auth-*"
+      - "*-admin-*"
+    scan_coverage: "Missing MFA and authentication enforcement on administrative endpoints."
+
+  # ─── V5: Validation, Sanitization and Encoding ──────────────────────────────
+
+  - control_id: V5.1.3
+    framework: owasp-asvs
+    chapter: V5
+    chapter_name: "Validation, Sanitization and Encoding"
+    level: L1
+    title: "Input Validation"
+    description: "Verify that all input (HTML form fields, REST requests, URL parameters, HTTP headers, cookies, batch files, RSS feeds, etc.) is validated using positive validation (allow lists)."
+    mapped_cwes:
+      - CWE-20   # Improper Input Validation
+      - CWE-79   # Cross-Site Scripting
+      - CWE-89   # SQL Injection
+      - CWE-78   # OS Command Injection
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-val-*"
+      - "*-inj-*"
+      - "KRG-val-*"
+      - "KRG-inj-*"
+    scan_coverage: "Input validation and injection prevention rules across all languages."
+
+  - control_id: V5.2.1
+    framework: owasp-asvs
+    chapter: V5
+    chapter_name: "Validation, Sanitization and Encoding"
+    level: L1
+    title: "Sanitization and Sandboxing"
+    description: "Verify that all untrusted HTML input from WYSIWYG editors or similar is properly sanitized with an HTML sanitizer library or framework feature."
+    mapped_cwes:
+      - CWE-79   # Cross-Site Scripting
+      - CWE-116  # Improper Encoding or Escaping of Output
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-xss-*"
+      - "*-inj-*"
+    scan_coverage: "XSS and HTML injection detection in template rendering and API responses."
+
+  - control_id: V5.3.4
+    framework: owasp-asvs
+    chapter: V5
+    chapter_name: "Validation, Sanitization and Encoding"
+    level: L1
+    title: "Output Encoding and Injection Prevention"
+    description: "Verify that data selection or database queries (e.g. SQL, HQL, ORM, NoSQL) use parameterized queries, ORMs, entity frameworks, or are otherwise protected from database injection attacks."
+    mapped_cwes:
+      - CWE-89   # SQL Injection
+      - CWE-943  # Improper Neutralization of Special Elements in Data Query Logic
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-sql-*"
+      - "*-inj-*"
+      - "KRG-inj-*"
+    scan_coverage: "SQL injection and parameterized query enforcement rules."
+
+  # ─── V6: Stored Cryptography ─────────────────────────────────────────────────
+
+  - control_id: V6.2.1
+    framework: owasp-asvs
+    chapter: V6
+    chapter_name: "Stored Cryptography"
+    level: L1
+    title: "Algorithms"
+    description: "Verify that all cryptographic modules fail securely, and errors are handled in a way that does not enable Padding Oracle attacks."
+    mapped_cwes:
+      - CWE-326  # Inadequate Encryption Strength
+      - CWE-327  # Use of a Broken or Risky Cryptographic Algorithm
+      - CWE-328  # Use of Weak Hash
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-crypto-*"
+      - "KRG-crypto-*"
+    scan_coverage: "Weak algorithm detection (MD5, SHA1, DES, RC4, ECB mode)."
+
+  - control_id: V6.4.1
+    framework: owasp-asvs
+    chapter: V6
+    chapter_name: "Stored Cryptography"
+    level: L2
+    title: "Secret Management"
+    description: "Verify that a secrets management solution such as a key vault is used to securely create, store, control access to and destroy secrets."
+    mapped_cwes:
+      - CWE-798  # Use of Hard-coded Credentials
+      - CWE-312  # Cleartext Storage of Sensitive Information
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-sec-*"
+      - "*-secrets-*"
+      - "KRG-sec-*"
+    scan_coverage: "Hard-coded secret detection in source and config files."
+
+  # ─── V8: Data Protection ─────────────────────────────────────────────────────
+
+  - control_id: V8.1.1
+    framework: owasp-asvs
+    chapter: V8
+    chapter_name: "Data Protection"
+    level: L2
+    title: "General Data Protection"
+    description: "Verify the application protects sensitive data from being cached in server components such as load balancers and application caches."
+    mapped_cwes:
+      - CWE-524  # Use of Cache Containing Sensitive Information
+      - CWE-200  # Exposure of Sensitive Information
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-data-*"
+      - "*-cache-*"
+    scan_coverage: "Cache-control header enforcement and sensitive data in cache detection."
+
+  - control_id: V8.3.1
+    framework: owasp-asvs
+    chapter: V8
+    chapter_name: "Data Protection"
+    level: L1
+    title: "Sensitive Private Data"
+    description: "Verify that sensitive data is sent to the server in the HTTP message body or headers, and that query string parameters from any HTTP verb do not contain sensitive data."
+    mapped_cwes:
+      - CWE-598  # Use of GET Request Method With Sensitive Query Strings
+      - CWE-200
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-data-*"
+      - "*-transport-*"
+    scan_coverage: "Sensitive data in URL query string detection."
+
+  # ─── V9: Communication ───────────────────────────────────────────────────────
+
+  - control_id: V9.1.1
+    framework: owasp-asvs
+    chapter: V9
+    chapter_name: "Communication"
+    level: L1
+    title: "Communication Security"
+    description: "Verify that TLS is used for all client connectivity, and does not fall back to insecure or unencrypted communications."
+    mapped_cwes:
+      - CWE-319  # Cleartext Transmission of Sensitive Information
+      - CWE-295  # Improper Certificate Validation
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-tls-*"
+      - "*-transport-*"
+      - "KRG-tls-*"
+    scan_coverage: "HTTP-only communication, TLS version enforcement, certificate validation bypass detection."
+
+  - control_id: V9.2.1
+    framework: owasp-asvs
+    chapter: V9
+    chapter_name: "Communication"
+    level: L2
+    title: "Server Communication Security"
+    description: "Verify that connections to and from the server use trusted TLS certificates. Where internally generated or self-signed certificates are used, the server must be configured to only trust specific internal CAs."
+    mapped_cwes:
+      - CWE-295  # Improper Certificate Validation
+      - CWE-297  # Improper Validation of Certificate with Host Mismatch
+    mapped_owasp:
+      - "A02:2021"
+    mapped_rule_patterns:
+      - "*-tls-*"
+      - "*-cert-*"
+    scan_coverage: "Self-signed certificate trust and hostname verification bypass detection."
+
+  # ─── V10: Malicious Code ─────────────────────────────────────────────────────
+
+  - control_id: V10.2.1
+    framework: owasp-asvs
+    chapter: V10
+    chapter_name: "Malicious Code"
+    level: L2
+    title: "Malicious Code Search"
+    description: "Verify that the application source code and third party libraries do not contain back doors, Easter eggs, or logic bombs."
+    mapped_cwes:
+      - CWE-506  # Embedded Malicious Code
+      - CWE-912  # Hidden Functionality
+    mapped_owasp:
+      - "A08:2021"  # Software and Data Integrity Failures
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "*-integrity-*"
+    scan_coverage: "Dependency integrity checks via Trivy; source pattern scanning for eval-based backdoors."
+
+  # ─── V12: Files and Resources ────────────────────────────────────────────────
+
+  - control_id: V12.1.1
+    framework: owasp-asvs
+    chapter: V12
+    chapter_name: "Files and Resources"
+    level: L1
+    title: "File Upload"
+    description: "Verify that the application will not accept large files that could fill up storage or cause a denial of service attack."
+    mapped_cwes:
+      - CWE-400  # Uncontrolled Resource Consumption
+      - CWE-434  # Unrestricted Upload of File with Dangerous Type
+    mapped_owasp:
+      - "A04:2021"  # Insecure Design
+    mapped_rule_patterns:
+      - "*-upload-*"
+      - "*-file-*"
+    scan_coverage: "Unrestricted file upload and missing size limit detection."
+
+  - control_id: V12.3.1
+    framework: owasp-asvs
+    chapter: V12
+    chapter_name: "Files and Resources"
+    level: L1
+    title: "File Execution"
+    description: "Verify that user-submitted filename metadata is not used directly by system or framework file APIs, and that the URL API is used to protect against path traversal."
+    mapped_cwes:
+      - CWE-22   # Improper Limitation of a Pathname to a Restricted Directory (Path Traversal)
+      - CWE-73   # External Control of File Name or Path
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-path-*"
+      - "*-file-*"
+      - "*-traversal-*"
+    scan_coverage: "Path traversal and directory traversal detection in file API calls."
+
+  # ─── V13: API and Web Service ────────────────────────────────────────────────
+
+  - control_id: V13.1.1
+    framework: owasp-asvs
+    chapter: V13
+    chapter_name: "API and Web Service"
+    level: L1
+    title: "Generic Web Service Security"
+    description: "Verify that all application components use the same encodings and parsers to avoid parsing attacks that exploit different URI or file parsing behavior."
+    mapped_cwes:
+      - CWE-436  # Interpretation Conflict
+      - CWE-116  # Improper Encoding or Escaping of Output
+    mapped_owasp:
+      - "A03:2021"
+    mapped_rule_patterns:
+      - "*-api-*"
+      - "*-val-*"
+    scan_coverage: "Inconsistent parser and encoding detection at API boundaries."
+
+  - control_id: V13.2.1
+    framework: owasp-asvs
+    chapter: V13
+    chapter_name: "API and Web Service"
+    level: L1
+    title: "RESTful Web Service"
+    description: "Verify that enabled RESTful HTTP methods are a valid choice for the user or action, such as preventing normal users from using DELETE or PUT on protected API or resources."
+    mapped_cwes:
+      - CWE-650  # Trusting HTTP Permission Methods on the Server Side
+      - CWE-284
+    mapped_owasp:
+      - "A01:2021"
+    mapped_rule_patterns:
+      - "*-api-*"
+      - "*-ac-*"
+    scan_coverage: "HTTP method access control and verb-based authorization enforcement detection."
+
+  - control_id: V13.4.1
+    framework: owasp-asvs
+    chapter: V13
+    chapter_name: "API and Web Service"
+    level: L2
+    title: "GraphQL and other Web Service Data Layer"
+    description: "Verify that query allow listing or a combination of depth limiting and amount limiting should be used to prevent GraphQL or data layer expression denial of service (DoS) attacks."
+    mapped_cwes:
+      - CWE-400  # Uncontrolled Resource Consumption
+      - CWE-770  # Allocation of Resources Without Limits or Throttling
+    mapped_owasp:
+      - "A04:2021"
+    mapped_rule_patterns:
+      - "*-graphql-*"
+      - "*-api-*"
+      - "*-rate-*"
+    scan_coverage: "Missing depth limit and rate limit detection on GraphQL and API endpoints."
+
+  # ─── V14: Configuration ──────────────────────────────────────────────────────
+
+  - control_id: V14.1.1
+    framework: owasp-asvs
+    chapter: V14
+    chapter_name: "Configuration"
+    level: L1
+    title: "Build and Deploy"
+    description: "Verify that the application build and deployment processes are performed in a secure and repeatable way."
+    mapped_cwes:
+      - CWE-276  # Incorrect Default Permissions
+      - CWE-16   # Configuration
+    mapped_owasp:
+      - "A05:2021"
+    mapped_rule_patterns:
+      - "*-config-*"
+      - "*-deploy-*"
+    scan_coverage: "Insecure default configuration and permissive file permission detection."
+
+  - control_id: V14.2.1
+    framework: owasp-asvs
+    chapter: V14
+    chapter_name: "Configuration"
+    level: L1
+    title: "Dependency"
+    description: "Verify that all components are up to date, preferably using a dependency checker during build or compile time."
+    mapped_cwes:
+      - CWE-1035
+      - CWE-937
+      - CWE-1104
+    mapped_owasp:
+      - "A06:2021"
+    mapped_rule_patterns:
+      - "*-dep-*"
+      - "KRG-dep-*"
+    scan_coverage: "Outdated dependency detection via Trivy and pip-audit in CI pipeline."
+
+  - control_id: V14.4.1
+    framework: owasp-asvs
+    chapter: V14
+    chapter_name: "Configuration"
+    level: L1
+    title: "HTTP Security Headers"
+    description: "Verify that every HTTP response contains a Content-Type header specifying a safe character set."
+    mapped_cwes:
+      - CWE-116  # Improper Encoding or Escaping of Output
+      - CWE-79   # XSS
+    mapped_owasp:
+      - "A05:2021"
+    mapped_rule_patterns:
+      - "*-header-*"
+      - "*-config-*"
+    scan_coverage: "Missing security header detection (CSP, X-Frame-Options, HSTS, Content-Type)."
+
+# ─── Supplemental OWASP Coverage Entries ────────────────────────────────────
+# Ensures all OWASP Top 10 categories have at least one control mapping in this file.
+
+  - control_id: V7.1.1
+    framework: owasp-asvs
+    chapter: V7
+    chapter_name: "Error Handling and Logging"
+    level: L1
+    title: "Log Content Requirements"
+    description: "Verify that the application does not log credentials or payment details. Session tokens should only be stored in logs in an irreversible, hashed form."
+    mapped_cwes:
+      - CWE-778  # Insufficient Logging
+      - CWE-532  # Insertion of Sensitive Information into Log File
+      - CWE-117  # Improper Output Neutralization for Logs
+    mapped_owasp:
+      - "A09:2021"  # Security Logging and Monitoring Failures
+    mapped_rule_patterns:
+      - "*-log-*"
+      - "*-audit-*"
+      - "KRG-log-*"
+    scan_coverage: "Missing audit event writes, sensitive data in logs, log injection pattern detection."
+
+  - control_id: V13.3.1
+    framework: owasp-asvs
+    chapter: V13
+    chapter_name: "API and Web Service"
+    level: L1
+    title: "SOAP Web Service"
+    description: "Verify that XSD schema validation takes place to ensure a properly formed XML document, followed by validation of each input field before any processing of that data takes place."
+    mapped_cwes:
+      - CWE-918  # Server-Side Request Forgery
+      - CWE-611  # Improper Restriction of XML External Entity Reference (XXE)
+    mapped_owasp:
+      - "A10:2021"  # Server-Side Request Forgery
+    mapped_rule_patterns:
+      - "*-ssrf-*"
+      - "*-xxe-*"
+      - "*-api-*"
+    scan_coverage: "SSRF via user-controlled URLs in API calls, XXE via unsafe XML parser configuration detection."

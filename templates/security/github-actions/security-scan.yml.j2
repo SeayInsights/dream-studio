@@ -1,0 +1,355 @@
+name: Security Scan — {{ client.name }}
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+{% if client.scan.schedule == 'nightly' %}
+  schedule:
+    - cron: '0 2 * * *'
+{% elif client.scan.schedule == 'weekly' %}
+  schedule:
+    - cron: '0 2 * * 0'
+{% endif %}
+  workflow_dispatch:
+
+jobs:
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Prepare custom rules
+        run: |
+          if [ -d ".security/rules" ]; then
+            echo "Custom rules found — including in scan"
+            ls .security/rules/
+          else
+            echo "No custom rules directory found — skipping custom rules"
+            mkdir -p .security/rules
+          fi
+
+      - name: Run Semgrep
+        run: |
+          RULESETS="{{ client.scan.semgrep_rulesets | join(' --config ') }}"
+          CUSTOM_RULES=""
+          if [ -d ".security/rules" ] && [ "$(ls -A .security/rules/*.yml 2>/dev/null | wc -l)" -gt 0 ]; then
+            CUSTOM_RULES="--config .security/rules"
+          fi
+          semgrep \
+            --config $RULESETS \
+            $CUSTOM_RULES \
+            --sarif \
+            --output semgrep-results.sarif \
+            --error \
+            . || true
+
+      - name: Upload Semgrep SARIF
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-semgrep-results
+          path: semgrep-results.sarif
+          retention-days: 30
+
+{% if 'bandit' in client.scan.extra_scanners %}
+  bandit:
+    name: Bandit Python SAST
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Bandit
+        run: pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit \
+            -r . \
+            -f json \
+            -o bandit-results.json \
+            --exclude ./.git,./node_modules,./venv,./.venv \
+            -ll \
+            || true
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-bandit-results
+          path: bandit-results.json
+          retention-days: 30
+
+{% endif %}
+{% if 'trufflehog' in client.scan.extra_scanners %}
+  trufflehog:
+    name: TruffleHog Secrets Scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh \
+            | sh -s -- -b /usr/local/bin
+
+      - name: Run TruffleHog
+        run: |
+          trufflehog git \
+            file://. \
+            --json \
+            --no-update \
+            > trufflehog-results.json 2>&1 || true
+
+      - name: Upload TruffleHog results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-trufflehog-results
+          path: trufflehog-results.json
+          retention-days: 30
+
+{% endif %}
+{% if 'pip-audit' in client.scan.extra_scanners %}
+  pip-audit:
+    name: pip-audit Dependency CVEs
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        run: |
+          if [ -f "requirements.txt" ]; then
+            pip-audit \
+              -r requirements.txt \
+              -f json \
+              -o pip-audit-results.json \
+              || true
+          elif [ -f "pyproject.toml" ]; then
+            pip-audit \
+              -f json \
+              -o pip-audit-results.json \
+              || true
+          else
+            echo '{"dependencies":[],"vulnerabilities":[],"notice":"No requirements.txt or pyproject.toml found"}' \
+              > pip-audit-results.json
+          fi
+
+      - name: Upload pip-audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-pip-audit-results
+          path: pip-audit-results.json
+          retention-days: 30
+
+{% endif %}
+{% if 'npm-audit' in client.scan.extra_scanners %}
+  npm-audit:
+    name: npm audit Dependency CVEs
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run npm audit
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm audit \
+              --audit-level=moderate \
+              --json \
+              > npm-audit-results.json 2>&1 || true
+          elif [ -f "package.json" ]; then
+            npm install --package-lock-only --ignore-scripts 2>/dev/null
+            npm audit \
+              --audit-level=moderate \
+              --json \
+              > npm-audit-results.json 2>&1 || true
+          else
+            echo '{"auditReportVersion":2,"vulnerabilities":{},"metadata":{"notice":"No package.json found"}}' \
+              > npm-audit-results.json
+          fi
+
+      - name: Upload npm-audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-npm-audit-results
+          path: npm-audit-results.json
+          retention-days: 30
+
+{% endif %}
+{% if 'cyclonedx' in client.scan.extra_scanners %}
+  cyclonedx:
+    name: CycloneDX SBOM Generation
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CycloneDX tools
+        run: |
+          pip install cyclonedx-bom || true
+          npm install -g @cyclonedx/cdxgen || true
+
+      - name: Generate Python SBOM
+        run: |
+          if [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+            cyclonedx-py \
+              --format json \
+              --output cyclonedx-python-sbom.json \
+              . || true
+          else
+            echo "No Python manifest found — skipping Python SBOM"
+          fi
+
+      - name: Generate Node SBOM
+        run: |
+          if [ -f "package.json" ]; then
+            cdxgen \
+              -o cyclonedx-node-sbom.json \
+              --spec-version 1.5 \
+              . || true
+          else
+            echo "No package.json found — skipping Node SBOM"
+          fi
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: {{ client.name | lower }}-cyclonedx-sbom
+          path: |
+            cyclonedx-python-sbom.json
+            cyclonedx-node-sbom.json
+          retention-days: 30
+
+{% endif %}
+
+  collect-results:
+    name: Collect and Summarize Results
+    runs-on: ubuntu-latest
+    needs:
+      - semgrep
+{% if 'bandit' in client.scan.extra_scanners %}
+      - bandit
+{% endif %}
+{% if 'trufflehog' in client.scan.extra_scanners %}
+      - trufflehog
+{% endif %}
+{% if 'pip-audit' in client.scan.extra_scanners %}
+      - pip-audit
+{% endif %}
+{% if 'npm-audit' in client.scan.extra_scanners %}
+      - npm-audit
+{% endif %}
+{% if 'cyclonedx' in client.scan.extra_scanners %}
+      - cyclonedx
+{% endif %}
+    if: always()
+    steps:
+      - name: Download all scan artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: scan-results/
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Scan artifacts collected ==="
+          find scan-results/ -type f | sort
+
+      - name: Generate summary
+        run: |
+          echo "## Security Scan Summary — {{ client.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+{% raw %}
+          echo "**Run:** \`${{ github.run_id }}\`  |  **Ref:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scanner | Status | Artifact |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+{% raw %}
+          echo "| Semgrep SAST | ${{ needs.semgrep.result }} | {% endraw %}{{ client.name | lower }}{% raw %}-semgrep-results |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% if 'bandit' in client.scan.extra_scanners %}
+{% raw %}
+          echo "| Bandit Python SAST | ${{ needs.bandit.result }} | {% endraw %}{{ client.name | lower }}{% raw %}-bandit-results |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% endif %}
+{% if 'trufflehog' in client.scan.extra_scanners %}
+{% raw %}
+          echo "| TruffleHog Secrets | ${{ needs.trufflehog.result }} | {% endraw %}{{ client.name | lower }}{% raw %}-trufflehog-results |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% endif %}
+{% if 'pip-audit' in client.scan.extra_scanners %}
+{% raw %}
+          echo "| pip-audit CVEs | ${{ needs['pip-audit'].result }} | {% endraw %}{{ client.name | lower }}{% raw %}-pip-audit-results |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% endif %}
+{% if 'npm-audit' in client.scan.extra_scanners %}
+{% raw %}
+          echo "| npm audit CVEs | ${{ needs['npm-audit'].result }} | {% endraw %}{{ client.name | lower }}{% raw %}-npm-audit-results |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% endif %}
+{% if 'cyclonedx' in client.scan.extra_scanners %}
+{% raw %}
+          echo "| CycloneDX SBOM | ${{ needs.cyclonedx.result }} | {% endraw %}{{ client.name | lower }}{% raw %}-cyclonedx-sbom |" >> $GITHUB_STEP_SUMMARY
+{% endraw %}
+{% endif %}
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Artifacts retained for 30 days. Download from the Actions run page._" >> $GITHUB_STEP_SUMMARY

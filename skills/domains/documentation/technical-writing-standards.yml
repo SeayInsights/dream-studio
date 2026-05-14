@@ -1,0 +1,51 @@
+# Technical Writing Standards
+# Source: testthedocs/awesome-docs (824 stars)
+
+diataxis_framework:
+  tutorials:
+    purpose: "Learning-oriented"
+    format: "Hands-on lessons"
+    example: "Build your first dashboard in 10 minutes"
+
+  how_to:
+    purpose: "Problem-oriented"
+    format: "Step-by-step guides"
+    example: "How to connect to Azure SQL Database"
+
+  reference:
+    purpose: "Information-oriented"
+    format: "Technical descriptions"
+    example: "API endpoint reference"
+
+  explanation:
+    purpose: "Understanding-oriented"
+    format: "Background and context"
+    example: "Why we chose React over Vue"
+
+documentation_completeness:
+  readme: true  # Purpose, setup, usage
+  contributing: true  # Contribution guidelines
+  changelog: true  # Version history (Keep a Changelog format)
+  license: true  # Legal terms
+  api_documentation: true  # If applicable
+  architecture_diagrams: true  # If complex
+
+style_guides:
+  google_developer_docs: "https://developers.google.com/style"
+  microsoft_writing_style: "https://learn.microsoft.com/en-us/style-guide/"
+  write_the_docs: "https://www.writethedocs.org/guide/"
+
+best_practices:
+  active_voice: true
+  present_tense: true
+  second_person: true  # "You can..." not "We can..."
+  short_sentences: true  # <25 words
+  avoid_jargon: true  # Or define it
+  code_examples: true  # Show, don't just tell
+
+api_documentation:
+  openapi_spec: true  # For REST APIs
+  request_examples: true
+  response_examples: true
+  error_codes_documented: true
+  authentication_explained: true
