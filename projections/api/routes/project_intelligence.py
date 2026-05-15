@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 
 from ..websocket.connection_manager import ConnectionManager
 from core.config.database import get_connection
+from core.production_readiness import production_readiness_dashboard_summary
 from core.security.lifecycle import build_security_lifecycle_gate
 from projections.api.routes.sqlite_schema import object_exists, table_columns
 
@@ -538,7 +539,14 @@ async def list_projects(
         )
 
         rows = cursor.execute(query, (limit, offset)).fetchall()
-        projects = [_decorate_project_for_dashboard(dict(row)) for row in rows]
+        projects = []
+        for row in rows:
+            project = _decorate_project_for_dashboard(dict(row))
+            project["project_readiness_status"] = production_readiness_dashboard_summary(
+                conn,
+                project_id=project["project_id"],
+            )["readiness_score"]
+            projects.append(project)
 
         return {
             "total": total,
@@ -566,6 +574,16 @@ async def list_projects(
                 + (
                     ["route_decision_records"]
                     if object_exists(conn, "route_decision_records")
+                    else []
+                )
+                + (
+                    ["production_readiness_assessment_runs"]
+                    if object_exists(conn, "production_readiness_assessment_runs")
+                    else []
+                )
+                + (
+                    ["project_readiness_scorecards"]
+                    if object_exists(conn, "project_readiness_scorecards")
                     else []
                 ),
                 "missing": [] if object_exists(conn, "prd_documents") else ["prd_documents"],
@@ -784,6 +802,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             latest_run_row = cursor.execute(run_query, (project_id,)).fetchone()
             latest_run = dict(latest_run_row) if latest_run_row else None
         availability = _project_surface_availability(conn)
+        production_readiness = production_readiness_dashboard_summary(conn, project_id=project_id)
 
         return {
             "project": project,
@@ -792,6 +811,8 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
                 "security_score": project["security_score"],
                 "maintainability_score": project["maintainability_score"],
             },
+            "readiness": production_readiness["readiness_score"],
+            "production_readiness": production_readiness,
             "violations": violations,
             "bugs": bugs,
             "improvements": improvements,
@@ -818,6 +839,89 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+@router.get("/{project_id}/details")
+async def get_project_details(project_id: str) -> Dict[str, Any]:
+    """Return project detail view data with health and readiness separated."""
+
+    health_payload = await get_project_health(project_id)
+    conn = get_db_connection()
+    try:
+        production_readiness = production_readiness_dashboard_summary(conn, project_id=project_id)
+        security_controls = health_payload["project"]["security_lifecycle_status"]
+        return {
+            "project_id": project_id,
+            "derived_view": True,
+            "primary_authority": False,
+            "health_score": health_payload["health"],
+            "readiness_score": production_readiness["readiness_score"],
+            "readiness_control_coverage": production_readiness["control_summary"],
+            "enterprise_security_controls": security_controls["applicability_summary"],
+            "production_readiness_controls": production_readiness["controls"],
+            "findings_by_severity_status": _finding_summary(
+                production_readiness["findings"],
+                health_payload.get("project", {})
+                .get("security_package_status", {})
+                .get("open_findings", 0),
+            ),
+            "not_applicable_controls": [
+                item
+                for item in production_readiness["controls"]
+                if item.get("status") == "not_applicable"
+            ],
+            "manual_review_controls": [
+                item
+                for item in production_readiness["controls"]
+                if item.get("status") == "manual_review"
+            ],
+            "remediation_work_orders": production_readiness["remediation_work_orders"],
+            "evidence_refs": _collect_evidence_refs(production_readiness["controls"]),
+            "release_blockers": [
+                item for item in production_readiness["controls"] if item.get("blocking")
+            ],
+            "compliance_legal_review_flags": production_readiness["compliance_review_flags"],
+            "stack_status": health_payload["project"].get("stack_evidence"),
+            "dependency_status": health_payload["project"].get("dependency_source_status"),
+            "security_status": health_payload["project"].get("security_package_status"),
+            "source_status": {
+                "classification": (
+                    "fresh" if production_readiness.get("assessment_id") else "empty by design"
+                ),
+                "source_tables": production_readiness.get("source_tables", []),
+                "derived_view": True,
+                "primary_authority": False,
+            },
+        }
+    finally:
+        conn.close()
+
+
+def _finding_summary(findings: list[dict[str, Any]], open_security_findings: int) -> dict[str, Any]:
+    summary: dict[str, int] = {}
+    for finding in findings:
+        key = f"{finding.get('severity', 'unknown')}:{finding.get('status', 'unknown')}"
+        summary[key] = summary.get(key, 0) + 1
+    if open_security_findings:
+        summary["security_open:open"] = int(open_security_findings)
+    return {
+        "counts": summary,
+        "security_open_findings": open_security_findings,
+        "production_readiness_finding_count": len(findings),
+    }
+
+
+def _collect_evidence_refs(controls: list[dict[str, Any]]) -> list[str]:
+    refs: set[str] = set()
+    for control in controls:
+        evidence = control.get("evidence_refs") or control.get("evidence_refs_json") or []
+        if isinstance(evidence, str):
+            try:
+                evidence = json.loads(evidence)
+            except json.JSONDecodeError:
+                evidence = [evidence]
+        refs.update(str(item) for item in evidence if item)
+    return sorted(refs)
 
 
 @router.get("/{project_id}/history")

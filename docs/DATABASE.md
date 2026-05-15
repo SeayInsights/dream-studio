@@ -21,6 +21,7 @@ Dream Studio's SQLite authority covers:
 - hook, tool, skill, token, validation, security, workflow, research, decision, and outcome telemetry;
 - dashboard attention items and read-model inputs;
 - shared intelligence records including adapters, context packets, normalized results, model/provider metadata, learning events, hardening candidates, and evaluation records;
+- secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
 - release/cutover evidence summaries where safe.
 
 ## Runtime Rules

@@ -18,6 +18,7 @@ boundary.
 | Local DB path | `core.config.database` | runtime, tests, dashboard | repo plus local env | Required for default changes |
 | Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
+| Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those

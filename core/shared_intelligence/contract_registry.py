@@ -211,6 +211,39 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "security_findings_public_shape_live_evidence_private",
     },
     {
+        "domain_id": "secure_production_readiness_gate",
+        "domain_name": "Secure Production Readiness Gate",
+        "source_patterns": [
+            "core/production_readiness/**",
+            "core/event_store/migrations/040_production_readiness_authority.sql",
+            "core/release/versioning.py",
+            "projections/api/routes/project_intelligence.py",
+            "projections/api/routes/shared_intelligence.py",
+            "docs/contracts/secure-production-readiness-gate.md",
+            "docs/contracts/security-by-default-development-lifecycle-gate.md",
+        ],
+        "contract_refs": [
+            "docs/contracts/secure-production-readiness-gate.md",
+            "docs/contracts/security-by-default-development-lifecycle-gate.md",
+        ],
+        "docs_refs": [
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            "docs/operations/product-readiness.md",
+            "docs/README.md",
+            PRD_DOC,
+        ],
+        "required_doc_refs": [
+            "docs/contracts/secure-production-readiness-gate.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            "docs/operations/product-readiness.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "production_readiness_control_or_sqlite_changes_require_readiness_docs_refresh",
+        "public_export_boundary": "readiness_scores_are_derived_private_evidence_not_public_claims",
+    },
+    {
         "domain_id": "workflow_and_hooks",
         "domain_name": "Workflow And Hook Runtime",
         "source_patterns": [

@@ -42,6 +42,7 @@ The dashboard mapping covers:
 - Contract Atlas status and boundary violations
 - Installed adapter router status and module/profile health
 - Security lifecycle gate status and 47-control applicability
+- Production readiness status, controls, scorecards, findings, and remediation Work Orders
 
 ## Required Mapping Fields
 
@@ -126,6 +127,21 @@ manual-review controls, unknown controls, required finding fields, security
 skill/control mapping, project health effect, and release-readiness effect. It
 must not run scans, inspect secrets, mutate repositories, write SQLite, or show
 synthetic/demo findings in live operator views.
+
+## Production Readiness Projection
+
+The production readiness projection is exposed through
+`/api/shared-intelligence/production-readiness`, the project detail route, and
+SQLite-backed dashboard summaries. It displays secure production readiness
+control coverage, project readiness score, separate project health score
+inputs, findings, manual-review controls, not-applicable controls with reasons,
+remediation Work Order candidates, release blockers, and compliance/legal review
+flags when evidence supports them.
+
+The dashboard must label partial or unavailable scores honestly. Missing
+evidence is shown as missing evidence, not as a zero score. The projection may
+read SQLite authority records but must not create fake findings or claim legal
+or regulatory compliance.
 
 ## Freshness And Staleness
 

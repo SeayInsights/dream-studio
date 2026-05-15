@@ -65,3 +65,9 @@ Security status affects project health and release readiness:
 The lifecycle gate is non-executing. It classifies, routes, and records the
 required control posture; it does not run scans, inspect secrets, mutate repos,
 or write SQLite.
+
+The secure production readiness gate consumes this lifecycle gate rather than
+forking the 47-control model. Production readiness can add API, database,
+caching, accessibility, observability, performance, dependency, code-quality,
+privacy, rollback, and release controls, but enterprise security control
+authority remains here.

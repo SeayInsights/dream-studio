@@ -39,6 +39,7 @@ The registry currently tracks these release-blocking domains:
 - Dashboard runtime and read models
 - Workflow and hook runtime
 - Security-by-default lifecycle gate
+- Secure production readiness gate
 - Release gate and publication boundary
 
 Each domain declares:
@@ -80,6 +81,11 @@ The security lifecycle gate is also a first-class atlas section. It maps the
 47 enterprise security controls to the security review catalog, security skill,
 project health, and release readiness while preserving the non-execution
 boundary.
+
+The secure production readiness gate is a first-class atlas section and
+maturity input. It maps the security lifecycle gate plus production readiness
+control families into project readiness, release readiness, remediation Work
+Orders, and dashboard detail without turning the atlas into an execution engine.
 
 ## Drift Gate
 

@@ -33,6 +33,7 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 - Treat files, reports, handoffs, and dashboards as evidence or rendered views unless explicitly promoted.
 - Emit telemetry for decisions, hooks, tools, skills, tokens, validations, security findings, workflows, research, outcomes, and operator decisions.
 - Provide dashboard attention queues for approvals, warnings, blockers, prompt-required items, and release gates.
+- Track secure production readiness separately from project health so projects can move toward real users with evidence-backed security, API, database, caching, accessibility, observability, performance, dependency, privacy, code-quality, rollback, and release controls.
 - Generate shared context packets so Claude Code, Codex, Cursor, Copilot, ChatGPT, MCP tools, shell tools, local models, and future adapters can resume from Dream Studio authority.
 - Normalize adapter results into common records: decisions, changes, validation, evidence, risks, artifacts, and outcomes.
 - Learn from failed assumptions, repeated fixes, validation failures, operator corrections, successful hardening, and component performance.
@@ -80,7 +81,16 @@ Dream Studio records events and facts for route decisions, hooks, tools, skills,
 
 ### Dashboard Attention
 
-The dashboard surfaces release blockers, approvals, warnings, prompt-required items, validation status, module availability, component usage, and drilldown entry points. It must show empty states safely and must not claim primary authority.
+The dashboard surfaces release blockers, approvals, warnings, prompt-required items, validation status, module availability, component usage, project health, project readiness, and drilldown entry points. It must show empty states safely and must not claim primary authority.
+
+### Secure Production Readiness
+
+Dream Studio classifies readiness impact for goals, milestones, Work Orders,
+code changes, release gates, project intake, external onboarding, and live
+cutovers. It selects targeted checks for normal development and full applicable
+security/readiness reviews at high-risk lifecycle gates. Readiness records are
+SQLite-backed where safe, but legal/compliance status is only classified unless
+evidence and operator/legal review support a stronger claim.
 
 ### Shared Intelligence
 
