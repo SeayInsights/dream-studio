@@ -16,6 +16,11 @@ from fastapi import APIRouter, HTTPException, Query
 
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
+from core.production_readiness import (
+    build_secure_production_readiness_gate,
+    production_readiness_control_catalog,
+    production_readiness_dashboard_summary,
+)
 from core.security.lifecycle import build_security_lifecycle_gate
 from core.shared_intelligence.adapter_config_projection import (
     adapter_config_projection_report,
@@ -122,6 +127,15 @@ async def get_shared_intelligence_status(
                     "api_path": "/api/shared-intelligence/security-lifecycle",
                     "source_tables": ["security_findings"],
                 },
+                {
+                    "surface_id": "production-readiness",
+                    "api_path": "/api/shared-intelligence/production-readiness",
+                    "source_tables": [
+                        "production_readiness_assessment_runs",
+                        "production_readiness_control_results",
+                        "project_readiness_scorecards",
+                    ],
+                },
             ],
             "source_tables": [
                 "learning_event_records",
@@ -172,6 +186,41 @@ async def get_security_lifecycle_status(
             changed_files=files,
         )
     )
+
+
+@router.get("/production-readiness")
+async def get_production_readiness_status(
+    project_id: str | None = Query(default="dream-studio"),
+    lifecycle_event: str = Query(default="code_change"),
+    changed_files: str | None = Query(default=None),
+    persisted_summary: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Preview or read production readiness without executing checks."""
+
+    if persisted_summary:
+        return _with_connection(
+            lambda conn: production_readiness_dashboard_summary(
+                conn,
+                project_id=project_id or "dream-studio",
+            )
+        )
+    repo_root = Path(__file__).resolve().parents[3]
+    files = _split_query_list(changed_files)
+    return build_secure_production_readiness_gate(
+        repo_root=repo_root,
+        project_id=project_id or "dream-studio",
+        lifecycle_event=lifecycle_event,
+        changed_files=files,
+        persist=False,
+    )
+
+
+@router.get("/production-readiness/controls")
+async def get_production_readiness_controls() -> dict[str, Any]:
+    """Return the reusable production readiness control catalog."""
+
+    repo_root = Path(__file__).resolve().parents[3]
+    return production_readiness_control_catalog(repo_root=repo_root)
 
 
 @router.get("/learning-dashboard")

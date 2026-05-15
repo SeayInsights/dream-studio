@@ -57,6 +57,12 @@ understand which 47-control checks are applicable, deferred, or blocking, but
 they do not become security authority and must normalize results back into
 Dream Studio records.
 
+Production readiness access follows the same model. Adapters may read
+`/api/shared-intelligence/production-readiness` and
+`/api/shared-intelligence/production-readiness/controls` to understand
+readiness posture, but persisted readiness authority remains in Dream Studio
+SQLite records and evidence refs.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 

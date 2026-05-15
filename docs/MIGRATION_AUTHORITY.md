@@ -67,3 +67,9 @@ The root `migrations/011_delete_prd_tables.sql` performed destructive PRD table 
 Schema mutations (CREATE TABLE, ALTER TABLE, DROP TABLE) must only occur inside numbered migration files in `core/event_store/migrations/`. Runtime code must not create or alter tables outside the migration system.
 
 Exception: `CREATE TABLE IF NOT EXISTS _schema_version` in the migration runner bootstrap is allowed as a transitional necessity.
+
+Migration `040_production_readiness_authority.sql` is additive. It introduces
+production readiness assessment, control result, finding, remediation,
+scorecard, release-readiness, compliance flag, and skill/control mapping tables.
+It does not authorize live migration execution by itself; live updates still
+require the normal backup, verification, approval, and rollback boundary.

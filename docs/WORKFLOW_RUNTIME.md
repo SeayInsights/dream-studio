@@ -31,7 +31,7 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 | Tracking hook | `control/execution/workflow/tracking.py` | Hook context extraction |
 | Learning | `control/execution/workflow/learning.py` | Historical performance tracking |
 
-## Workflow Inventory (21 templates)
+## Workflow Inventory (22 templates)
 
 | Workflow | Nodes | Gates | Retry | Timeout | Dashboard Dep | Models |
 |----------|-------|-------|-------|---------|---------------|--------|
@@ -56,6 +56,13 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 | daily-close | multi | — | No | — | No | — |
 | feature-research | 12 | synthesis, director | No | — | **Yes** (GitHub API) | sonnet |
 | studio-onboard | multi | — | No | — | No | — |
+| production-readiness | 5 | no implicit execution gate | No | 60-120s | Yes (SQLite/dashboard read models) | adapter-agnostic |
+
+The `production-readiness` workflow is the canonical workflow template for the
+secure production readiness gate. It classifies impact, builds the gate, persists
+SQLite authority records when authorized, hydrates dashboard/project detail
+surfaces, and creates proposed remediation Work Order records. It does not run
+Docker, inspect secrets, mutate external projects, or execute remediation.
 
 ## Retry Behavior Assessment
 

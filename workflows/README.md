@@ -36,3 +36,4 @@ Workflows are declarative templates. They do not contain executable code and are
 | `studio-onboard.yaml` | First-run setup and validation |
 | `project-audit.yaml` | Comprehensive project health check |
 | `security-audit.yaml` | Security posture review |
+| `production-readiness.yaml` | Secure production readiness classification, persistence, dashboard hydration, and remediation routing |

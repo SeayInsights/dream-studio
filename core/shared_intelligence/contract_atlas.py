@@ -24,6 +24,10 @@ from core.shared_intelligence.authority import REQUIRED_SHARED_INTELLIGENCE_TABL
 from core.shared_intelligence.contract_registry import contract_registry
 from core.installed_runtime import installed_runtime_model
 from core.module_profiles import module_profiles, validate_module_profiles
+from core.production_readiness import (
+    build_secure_production_readiness_gate,
+    production_readiness_control_catalog,
+)
 from core.security.lifecycle import build_security_lifecycle_gate
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
@@ -80,6 +84,12 @@ def build_contract_atlas(
         project_id=effective_project_id,
         lifecycle_event="release_merge",
     )
+    production_readiness_catalog = production_readiness_control_catalog(repo_root=root)
+    production_readiness_gate = build_secure_production_readiness_gate(
+        repo_root=root,
+        project_id=effective_project_id,
+        lifecycle_event="release_merge",
+    )
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -110,6 +120,19 @@ def build_contract_atlas(
         "installed_module_profiles": module_profiles(),
         "analytics_only_profile": _analytics_only_profile(),
         "security_lifecycle_gate": security_lifecycle_gate,
+        "production_readiness_control_catalog": {
+            "control_count": production_readiness_catalog["control_count"],
+            "control_families": production_readiness_catalog["control_families"],
+            "no_duplicate_skill_policy": production_readiness_catalog["no_duplicate_skill_policy"],
+            "overlap_decision_count": len(production_readiness_catalog["overlap_matrix"]),
+        },
+        "secure_production_readiness_gate": {
+            "workflow_id": production_readiness_gate["workflow_id"],
+            "full_review_required": production_readiness_gate["full_review_required"],
+            "control_summary": production_readiness_gate["control_summary"],
+            "release_readiness": production_readiness_gate["release_readiness"],
+            "project_readiness_score": production_readiness_gate["project_readiness_score"],
+        },
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -123,11 +146,13 @@ def build_contract_atlas(
             maturity_errors=maturity_errors,
             profile_errors=profile_errors,
             security_lifecycle_gate=security_lifecycle_gate,
+            production_readiness_gate=production_readiness_gate,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
             staleness_report=staleness_report,
             security_lifecycle_gate=security_lifecycle_gate,
+            production_readiness_gate=production_readiness_gate,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -137,6 +162,7 @@ def build_contract_atlas(
             maturity_errors=maturity_errors,
             profile_errors=profile_errors,
             security_lifecycle_gate=security_lifecycle_gate,
+            production_readiness_gate=production_readiness_gate,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -199,6 +225,8 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "installed_module_profiles",
         "analytics_only_profile",
         "security_lifecycle_gate",
+        "production_readiness_control_catalog",
+        "secure_production_readiness_gate",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -435,6 +463,7 @@ def _maturity_scorecard(
     maturity_errors: list[str],
     profile_errors: list[str],
     security_lifecycle_gate: Mapping[str, Any],
+    production_readiness_gate: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -489,6 +518,15 @@ def _maturity_scorecard(
             ),
             "release_readiness_effect": security_lifecycle_gate.get("release_readiness_effect"),
         },
+        {
+            "area": "secure_production_readiness_gate",
+            "status": production_readiness_gate.get("release_readiness", {}).get("status"),
+            "workflow_id": production_readiness_gate.get("workflow_id"),
+            "control_total": production_readiness_gate.get("control_summary", {}).get("total"),
+            "readiness_score_status": production_readiness_gate.get(
+                "project_readiness_score", {}
+            ).get("status"),
+        },
     ]
 
 
@@ -497,6 +535,7 @@ def _confirmed_dependency_graph(
     projection_report: Mapping[str, Any],
     staleness_report: Mapping[str, Any],
     security_lifecycle_gate: Mapping[str, Any],
+    production_readiness_gate: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -584,6 +623,24 @@ def _confirmed_dependency_graph(
         "mapped_by_catalog",
         str(security_lifecycle_gate.get("source_framework", {}).get("catalog_ref")),
     )
+    add_node("module:production_readiness_workflow", "module", "Production Readiness Workflow")
+    add_node(
+        "contract:secure_production_readiness_gate",
+        "contract",
+        "Secure Production Readiness Gate",
+    )
+    add_edge(
+        "module:production_readiness_workflow",
+        "contract:secure_production_readiness_gate",
+        "implements_readiness_gate",
+        "core.production_readiness.controls.build_secure_production_readiness_gate",
+    )
+    add_edge(
+        "module:production_readiness_workflow",
+        "module:security_lifecycle_gate",
+        "requires_security_lifecycle",
+        str(production_readiness_gate.get("workflow_id")),
+    )
 
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
@@ -633,6 +690,7 @@ def _boundary_violation_report(
     maturity_errors: list[str],
     profile_errors: list[str],
     security_lifecycle_gate: Mapping[str, Any],
+    production_readiness_gate: Mapping[str, Any],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -652,6 +710,15 @@ def _boundary_violation_report(
                 "severity": "error",
                 "area": "security_lifecycle_gate",
                 "message": f"security lifecycle status requires release attention: {security_status}",
+            }
+        )
+    readiness_status = production_readiness_gate.get("project_readiness_score", {}).get("status")
+    if readiness_status == "unknown":
+        issues.append(
+            {
+                "severity": "error",
+                "area": "secure_production_readiness_gate",
+                "message": "production readiness status is unknown",
             }
         )
     for candidate in staleness_report.get("repair_work_order_candidates", []):
@@ -694,6 +761,15 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
     tables.add("security_findings")
+    tables.update(
+        {
+            "production_readiness_assessment_runs",
+            "production_readiness_control_results",
+            "production_readiness_findings",
+            "project_readiness_scorecards",
+            "release_readiness_records",
+        }
+    )
     for module in DASHBOARD_MODULES:
         tables.update(module["source_tables"])
     return sorted(tables)

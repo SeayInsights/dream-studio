@@ -54,6 +54,27 @@ The readiness gate must not run scans, inspect secrets, mutate repositories, or
 write live SQLite unless a separate approved Work Order explicitly authorizes
 that action.
 
+## Secure Production Readiness Gate
+
+Product readiness now includes `secure_production_readiness_gate`. This gate
+combines the 47 enterprise security controls with production readiness controls
+for API resilience, database readiness, caching correctness, accessibility,
+observability, performance, dependency/supply-chain risk, code quality,
+privacy/compliance applicability, backup/restore/rollback, and release
+readiness.
+
+The gate writes authoritative readiness records only through the
+production-readiness workflow and an injected SQLite connection. Project health
+and project readiness stay separate:
+
+- project health describes the current condition and active operational risks.
+- project readiness describes whether the project has enough evidence to move
+  toward real users, release, deployment, publication, enterprise use, or
+  broader rollout.
+
+If evidence is insufficient, readiness is `partial` or `unavailable` with
+missing evidence and blocking factors. Do not display fake precision.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:
