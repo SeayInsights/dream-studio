@@ -57,6 +57,10 @@ If a domain is reviewed and no docs need to change, the gate can record that
 explicitly with `--docs-reviewed-no-change <domain_id>`. That path is for
 evidence-backed review decisions, not a shortcut around stale documentation.
 
+Contract Atlas behavior changes must refresh the atlas contract doc, this
+operations policy, and the docs index together so the release gate, human docs
+surface, and derived atlas view describe the same freshness boundary.
+
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.

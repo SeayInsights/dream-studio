@@ -38,6 +38,7 @@ from core.telemetry.module_registry_contract import (
 
 CONTRACT_ATLAS_SCHEMA = "dream_studio.contract_atlas.v1"
 EXPORT_SCOPES = frozenset({"private", "public"})
+DEFAULT_CONTRACT_ATLAS_PROJECT_ID = "dream-studio"
 
 
 def build_contract_atlas(
@@ -58,20 +59,23 @@ def build_contract_atlas(
         raise ValueError(f"unsupported export_scope: {export_scope}")
 
     root = Path(repo_root).resolve()
-    projection_report = adapter_config_projection_report(conn, project_id=project_id)
-    staleness_report = adapter_staleness_report(conn, config_root=root, project_id=project_id)
+    effective_project_id = project_id or DEFAULT_CONTRACT_ATLAS_PROJECT_ID
+    projection_report = adapter_config_projection_report(conn, project_id=effective_project_id)
+    staleness_report = adapter_staleness_report(
+        conn, config_root=root, project_id=effective_project_id
+    )
     module_contracts = build_module_registry_contracts(DASHBOARD_MODULES)
     module_errors = validate_module_registry_contracts(DASHBOARD_MODULES)
     docker_errors = validate_docker_profile_contracts(DOCKER_MODULE_PROFILES)
     staleness_errors = validate_adapter_staleness_report(staleness_report)
-    current_maturity_ledger = maturity_ledger(project_id=project_id)
+    current_maturity_ledger = maturity_ledger(project_id=effective_project_id)
     maturity_errors = validate_maturity_ledger(current_maturity_ledger)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
         "model_name": "dream_studio_contract_atlas",
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "project_id": project_id,
+        "project_id": effective_project_id,
         "export_scope": "private",
         "private_by_default": True,
         "public_export_requires_sanitization": True,

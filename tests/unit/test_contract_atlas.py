@@ -107,6 +107,27 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     )
 
 
+def test_contract_atlas_defaults_to_dream_studio_scope(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(conn, repo_root=repo_root)
+
+    assert atlas["project_id"] == "dream-studio"
+    assert atlas["boundary_violation_report"]["status"] == "pass"
+    assert (
+        atlas["active_adapter_execution_validation"]["staleness_status"]["repair_candidate_count"]
+        == 0
+    )
+
+
 def test_contract_atlas_public_export_is_sanitized(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     repo_root = tmp_path / "repo"
