@@ -158,6 +158,18 @@ Career data, compensation strategy, application materials, browser traces, and
 private portfolio notes are private by default. Public case studies, resumes,
 portfolio pages, or social content require sanitization and operator approval.
 
+## Capability Center Integration
+
+Expert workflow definitions feed Capability Center as workflow capability
+records. Capability Center can show invocation counts, scorecard availability,
+validation requirements, and hardening candidates, but it does not create a
+parallel workflow system or authorize execution. Missing invocation/evaluation
+evidence stays `unavailable` instead of becoming a fake success rate.
+
+Career-related expert workflows map into the optional private Career Ops
+module. Career data remains local/private authority and is excluded from public
+exports by default.
+
 ## Validation
 
 The expert workflow system is validated by:

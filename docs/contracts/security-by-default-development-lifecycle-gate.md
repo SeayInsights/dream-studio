@@ -92,6 +92,14 @@ workflows require security/readiness evidence, but the route does not run
 scans, inspect secrets, fill application forms, submit applications, mutate
 SQLite, or change 47-control applicability.
 
+Career Ops, Capability Center, scoped-agent, and GitHub repo intake routes are
+also non-executing security-relevant surfaces. Career Ops adds private data and
+publication/privacy controls. Scoped agents add context-minimization and
+permission-boundary checks. GitHub repo intake adds license, security,
+supply-chain, dependency, attribution, and overlap review before third-party
+adoption. These routes do not inspect secrets, execute agents, submit
+applications, mutate external projects, copy code, or add dependencies.
+
 ## Project Portfolio Hydration
 
 All Projects and Project Details consume normalized security findings as a

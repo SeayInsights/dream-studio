@@ -108,6 +108,24 @@ normalize back into Dream Studio authority records when execution is approved.
 The route does not replace existing skills, publish private career data, fill
 applications, or authorize browser automation.
 
+Career Ops follows the same authority boundary. Adapter outputs may help draft
+private career material only after the module is enabled and scoped; career
+profiles, application records, generated materials, and browser automation
+evidence persist in local SQLite authority and stay out of public exports by
+default.
+
+Capability Center and scoped-agent routes are adapter-readable projections.
+They explain which skills, workflows, agents, controls, evaluations, and
+hardening candidates exist, but they do not authorize execution. Scoped agents
+receive only the context named by their task contract and must normalize
+results back into Dream Studio authority.
+
+GitHub repo intake routes are also projections over authority. They record
+license, security, dependency, maintenance, overlap, attribution, and adoption
+decisions before Dream Studio uses third-party repositories. They do not fetch
+or mutate repositories, copy code, add dependencies, fork, vendor, or waive
+legal/security review.
+
 External project validation follows the same projection discipline. External
 targets are registry entries and dashboard cards until the current operator
 decision selects a target and scope. Planning can describe dirty-state capture,

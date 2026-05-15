@@ -18,6 +18,9 @@ The closeout model requires evidence for:
 - Contract Atlas/docs drift check
 - security/readiness classification
 - expert workflow catalog and overlap check
+- Career Ops private-boundary check
+- Capability Center and scoped-agent context check
+- GitHub repo intake workflow check
 - adapter/router status check
 - analytics-only profile check
 
@@ -33,6 +36,10 @@ The validation report blocks when it sees:
 - evidence file sprawl
 - dashboard authority drift
 - expert workflow overlap decisions creating duplicate skill systems
+- private Career Ops data leaking into public exports
+- scoped agents receiving full conversation history, secrets, all Work Orders,
+  all memories, or unrelated private data by default
+- GitHub repo intake skipping license/security/overlap review before adoption
 - old path references returning
 - synthetic/mock/test data leaking into live dashboard views
 - adapter staleness drift

@@ -247,3 +247,15 @@ Installed analytics and dashboard profiles use these declarations to show
 tokens, usage outcomes, and operational value honestly. Cost stays `unknown`
 unless provider metadata, provider export, billing API evidence, or explicit
 operator allocation metadata makes it reportable.
+
+## Private Capability Modules
+
+Productized installs may include `career_ops_only` as an opt-in private module.
+It stores career and application records in local SQLite authority only after
+explicit enablement and excludes them from public exports by default.
+
+Shared-intelligence and full profiles expose Capability Center, scoped-agent
+registry/context previews, and GitHub repo intake summaries. These are
+read-only platform surfaces unless a separate approved command records
+authority. They do not execute agents, publish private career data, mutate
+external repositories, or approve third-party code/dependency adoption.

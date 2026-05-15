@@ -160,3 +160,19 @@ Readiness records should show cost as `unknown` when provider metadata, usage
 exports, billing API data, explicit estimate metadata, or configured
 subscription allocation evidence is absent. Missing cost evidence can lower
 cost-confidence, but it is not scored as zero spend.
+
+## Career, Scoped Agent, And Repo Intake Readiness
+
+Production readiness treats Career Ops as private operational capability, not
+public product evidence. Career scorecards must be evidence-backed or
+unavailable, and public/demo outputs must exclude career data unless redacted
+and approved.
+
+Scoped agents affect readiness through context minimization, permission
+boundaries, output contracts, validation requirements, and result normalization.
+An agent result is never source authority by itself.
+
+GitHub repo intake affects supply-chain, license, attribution, maintainability,
+and integration readiness. A dependency, fork/vendor, or copied-code path is
+not ready unless license/legal/security/maintenance evidence and operator
+approval exist.

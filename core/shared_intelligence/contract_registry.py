@@ -358,6 +358,46 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "freshness_policy": "release_gate_changes_require_release_docs_refresh",
         "public_export_boundary": "release_evidence_private_release_policy_public",
     },
+    {
+        "domain_id": "career_capability_agent_github_intake",
+        "domain_name": "Career Ops, Capability Center, Scoped Agents, And GitHub Repo Intake",
+        "source_patterns": [
+            "core/career_ops.py",
+            "core/shared_intelligence/capability_center.py",
+            "core/shared_intelligence/scoped_agents.py",
+            "core/shared_intelligence/github_repo_intake.py",
+            "core/event_store/migrations/044_career_capability_agent_github_authority.sql",
+            "core/module_contracts.py",
+            "core/module_profiles.py",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/career-ops-capability-center.md",
+            "docs/operations/github-repo-intake-evaluation.md",
+            "docs/architecture/contract-atlas.md",
+        ],
+        "docs_refs": [
+            "README.md",
+            "docs/README.md",
+            PRD_DOC,
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            "docs/PUBLICATION_BOUNDARY.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/career-ops-capability-center.md",
+            "docs/operations/github-repo-intake-evaluation.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/README.md",
+            "docs/PUBLICATION_BOUNDARY.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": (
+            "private_career_capability_agent_or_github_intake_changes_require_docs_and_public_boundary_refresh"
+        ),
+        "public_export_boundary": (
+            "career_data_private_by_default_github_evaluation_evidence_sanitized_before_public_export"
+        ),
+    },
 )
 
 

@@ -150,6 +150,28 @@ Only token-metered/API-metered/credit-metered usage with source-backed cost
 metadata, or an explicit subscription allocation profile, should display a
 reportable cost. Otherwise the dashboard should say `unknown`.
 
+## Career Ops Is Disabled
+
+This is expected unless the operator explicitly enables the private module.
+Career profiles, resumes, applications, browser automation evidence, and
+career scorecards should not appear in public exports or demo packets. If they
+do, treat it as a publication-boundary bug.
+
+## Scoped Agent Context Looks Too Small
+
+This is expected. Scoped agents receive only task-required context. They should
+not receive full conversation history, secrets, all Work Orders, all user
+memories, unrelated project details, raw local evidence, or career-private data
+unless that data class is explicitly enabled and scoped.
+
+## GitHub Repo Intake Blocks Adoption
+
+This is expected when license, attribution, security, maintenance, or overlap
+evidence is missing. The workflow should route unclear licensing to legal
+review and unclear security/supply-chain posture to security review. It should
+not copy code, add dependencies, fork/vendor, or mutate an external repository
+without explicit approval.
+
 ## Final Closeout Blocks
 
 Final installed-platform closeout requires release gate evidence, docs drift

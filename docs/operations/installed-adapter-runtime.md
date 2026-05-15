@@ -159,6 +159,7 @@ any container execution.
 Installed profiles are declared in `core.module_profiles`:
 
 - `core`
+- `career_ops_only`
 - `analytics_only`
 - `security_only`
 - `token_only`
@@ -173,9 +174,10 @@ requirements, agent/workflow requirements, Claude/Codex requirements, Docker
 requirements, expected dashboard/API behavior, and honest empty states.
 
 Module boundaries are separately declared in `core.module_contracts` for:
-`core`, `telemetry`, `dashboard`, `security_only`, `token_only`,
+`core`, `career_ops`, `telemetry`, `dashboard`, `security_only`, `token_only`,
 `analytics_only`, `shared_intelligence`, `adapter_router`,
-`adapter_projection`, `external_project`, `docker_optional`, and `full`.
+`adapter_projection`, `external_project`, `capability_center`,
+`scoped_agents`, `github_repo_intake`, `docker_optional`, and `full`.
 Each contract declares purpose, owned authority, read/write dependencies,
 events, API routes, dashboard surfaces, CLI commands, profile membership,
 disabled-module behavior, empty-state behavior, security/readiness impact,
@@ -190,6 +192,16 @@ and uses honest empty states when no facts exist.
 cost. Unknown or plan-based costs remain unknown unless provider metadata,
 provider exports, billing API data, or explicit allocation metadata makes cost
 reportable.
+
+`career_ops_only` is private and opt-in. It exposes private Career Ops status
+and dashboard routes without requiring hooks, agents, workflows, Claude, Codex,
+or Docker. Career data stays in local SQLite authority and is excluded from
+public exports by default.
+
+`shared_intelligence_only` includes Capability Center, scoped-agent registry
+views, and GitHub repo intake read models. These surfaces are read-only unless a
+separate approved command writes authority records through an injected/current
+SQLite connection.
 
 Analytics-only also exposes explicit normalized ingestion through:
 

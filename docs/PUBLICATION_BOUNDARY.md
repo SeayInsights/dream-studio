@@ -25,6 +25,12 @@ Keep these out of Git unless separately sanitized and approved:
 - raw telemetry, raw logs, hook traces, dashboard runtime logs, and token traces;
 - cutover, cleanup, rollback, dogfood, release, and local audit evidence;
 - generated prompts and private context packets;
+- private career profiles, resumes, cover letters, role strategies,
+  application records, recruiter/contact notes, compensation strategy,
+  browser automation evidence, and career scorecards;
+- GitHub repo intake evidence that includes unsanitized adoption analysis,
+  license/security notes, private Work Orders, or attribution/legal review
+  context;
 - external-project details not intentionally public;
 - private external-target intake evidence, dirty-state snapshots, Work Orders,
   handoffs, validation reports, and route decisions;
@@ -62,6 +68,15 @@ contracts, but must not publish private target details, local scans, target
 dirty-state output, target paths, container runtime evidence, or operational
 approval artifacts. Final productization closeout can be summarized publicly
 only as sanitized readiness status; private release evidence stays local.
+
+Career Ops may be documented as an optional private module, but resumes,
+profile fields, application history, automation traces, and career strategy are
+private by default. Public portfolio or case-study outputs require explicit
+operator approval and redaction.
+
+GitHub repo intake may be documented as a workflow, but actual evaluation
+evidence remains private until license, attribution, security, and publication
+boundaries are satisfied.
 
 ## Contract Atlas Export Rule
 
