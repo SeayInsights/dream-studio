@@ -139,6 +139,16 @@ This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.
 
+## Runtime State Isolation
+
+Local `ci_gate.py` is allowed to execute heavy validation, but its subprocesses
+must not write to the active installed Dream Studio state. Non-test checks run
+with an explicit temporary `DREAM_STUDIO_HOME` and `DREAM_STUDIO_DB_PATH`.
+The pytest subprocess uses an isolated `HOME`, `USERPROFILE`, and
+`DREAM_STUDIO_DB_PATH` while leaving `DREAM_STUDIO_HOME` unset so per-test
+fixtures can redirect runtime state safely. The live SQLite hash guard remains
+the proof that release-gate validation did not mutate the active installed DB.
+
 ## GitHub Actions Cost Boundary
 
 GitHub Actions should stay lightweight by default:

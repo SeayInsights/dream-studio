@@ -24,6 +24,11 @@ The checker reads repository source and Git path metadata only. It does not open
 operator-local runtime state, mutate SQLite, rewrite history, push, tag,
 deploy, or print matched secret values.
 
+Release-gate evidence included in publication or pilot materials must come from
+isolated validation runs and sanitized summaries. Raw command output, local
+runtime paths, active SQLite locations, private Work Orders, and operator-local
+evidence remain private even when the underlying gate passes.
+
 ## Public Repo Allowlist
 
 The public repo may contain product source, schema migrations, tests, public

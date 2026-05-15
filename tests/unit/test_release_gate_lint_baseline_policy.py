@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 from interfaces.cli import ci_gate, lint_baseline
@@ -56,7 +58,21 @@ def test_ci_gate_uses_format_check_and_lint_baseline_not_mutating_format_target(
     assert all(command != ["make", "fmt"] for command in checks.values())
 
 
-def test_ci_gate_test_env_uses_isolated_runtime_state() -> None:
+def test_ci_gate_env_uses_isolated_runtime_state() -> None:
+    env = ci_gate._isolated_check_env()
+    isolated_db = Path(env["DREAM_STUDIO_DB_PATH"])
+    isolated_home = isolated_db.parents[2]
+    dream_studio_home = isolated_home / ".dream-studio"
+
+    assert isolated_home.name.startswith("dream-studio-ci-home-")
+    assert env["DREAM_STUDIO_HOME"] == str(dream_studio_home)
+    assert env["GITHUB_ACTIONS"] == "true"
+    assert env["HOME"] == str(isolated_home)
+    assert env["USERPROFILE"] == str(isolated_home)
+    assert env["DREAM_STUDIO_DB_PATH"] == str(dream_studio_home / "state" / "studio.db")
+
+
+def test_ci_gate_test_env_lets_test_fixtures_control_dream_studio_home() -> None:
     env = ci_gate._isolated_test_env()
     isolated_db = Path(env["DREAM_STUDIO_DB_PATH"])
     isolated_home = isolated_db.parents[2]
@@ -69,6 +85,46 @@ def test_ci_gate_test_env_uses_isolated_runtime_state() -> None:
     assert env["DREAM_STUDIO_DB_PATH"] == str(
         isolated_home / ".dream-studio" / "state" / "studio.db"
     )
+
+
+def test_ci_gate_run_check_uses_isolated_env_for_non_test_checks(monkeypatch) -> None:
+    isolated_env = {
+        **os.environ,
+        "DREAM_STUDIO_HOME": "sentinel-dream-studio-home",
+        "DREAM_STUDIO_DB_PATH": "sentinel-studio.db",
+    }
+    captured: dict[str, object] = {}
+
+    def fake_isolated_env() -> dict[str, str]:
+        return isolated_env
+
+    def fake_run(
+        cmd: list[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        cwd: Path,
+        env: dict[str, str] | None,
+    ) -> subprocess.CompletedProcess[str]:
+        captured.update(
+            {
+                "cmd": cmd,
+                "capture_output": capture_output,
+                "text": text,
+                "cwd": cwd,
+                "env": env,
+            }
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(ci_gate, "_isolated_check_env", fake_isolated_env)
+    monkeypatch.setattr(ci_gate.subprocess, "run", fake_run)
+
+    result = ci_gate.run_check("format", [ci_gate._PYTHON, "--version"])
+
+    assert result["passed"] is True
+    assert captured["env"] is isolated_env
+    assert captured["cwd"] == ci_gate.REPO_ROOT
 
 
 def test_code_history_and_lint_policy_docs_exist() -> None:

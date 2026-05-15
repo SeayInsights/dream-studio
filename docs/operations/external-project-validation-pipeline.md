@@ -54,6 +54,11 @@ Work Orders, handoffs, local evidence, backup dumps, SQLite databases, generated
 runtime state, secrets, or private dogfood traces unless a later publication
 policy explicitly approves a sanitized artifact.
 
+Release-gate or pilot evidence for external-project workflows must use isolated
+Dream Studio runtime state and sanitized summaries. It must not include raw
+target paths, local runtime paths, private route decisions, or target-specific
+evidence unless the current operator decision approves that exact disclosure.
+
 ## Dashboard Behavior
 
 All Projects and Project Details may show a derived external target card with
