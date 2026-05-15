@@ -1408,12 +1408,12 @@
                                         <div id="modal-health-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
                                     </div>
                                     <div class="border border-gray-200 rounded-lg p-4 text-center">
-                                        <div class="text-sm font-medium text-gray-600">Security Score</div>
-                                        <div id="modal-security-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                                        <div class="text-sm font-medium text-gray-600">Readiness</div>
+                                        <div id="modal-readiness-score" class="mt-2 text-3xl font-bold text-gray-900">--</div>
                                     </div>
                                     <div class="border border-gray-200 rounded-lg p-4 text-center">
-                                        <div class="text-sm font-medium text-gray-600">PRD Count</div>
-                                        <div id="modal-prd-count" class="mt-2 text-3xl font-bold text-gray-900">--</div>
+                                        <div class="text-sm font-medium text-gray-600">PRD Status</div>
+                                        <div id="modal-prd-status" class="mt-2 text-2xl font-bold text-gray-900">--</div>
                                     </div>
                                 </div>
 
@@ -1434,6 +1434,10 @@
 
                                 <div id="modal-stack-evidence" class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                                     Stack and dependency evidence will load from current project authority.
+                                </div>
+
+                                <div id="modal-project-authority-evidence" class="mb-6 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                                    Project authority and readiness evidence will load from current SQLite authority.
                                 </div>
 
                                 <div class="mb-6">
@@ -6932,6 +6936,7 @@ if (document.readyState === 'loading') {
             try {
                 // Fetch project health details
                 const healthData = await fetch(`/api/v1/projects/${projectId}/health`).then(r => r.ok ? r.json() : null);
+                const detailsData = await fetch(`/api/v1/projects/${projectId}/details`).then(r => r.ok ? r.json() : null);
 
                 if (!healthData) {
                     console.error('Failed to fetch project details');
@@ -6956,8 +6961,9 @@ if (document.readyState === 'loading') {
                 document.getElementById('modal-project-path').textContent = project.project_path;
 
                 document.getElementById('modal-health-score').textContent = health.overall_score != null ? `${Number(health.overall_score).toFixed(1)}/10` : 'Unavailable';
-                document.getElementById('modal-security-score').textContent = health.security_score != null ? `${health.security_score.toFixed(1)}/10` : '--';
-                document.getElementById('modal-prd-count').textContent = project.prd_status?.count || project.prd_count || 0;
+                const readinessScore = detailsData?.readiness_score || healthData.readiness || {};
+                document.getElementById('modal-readiness-score').textContent = readinessScore.score != null ? `${Number(readinessScore.score).toFixed(1)}/100` : telemetryEscapeHtml(readinessScore.status || 'Unavailable');
+                document.getElementById('modal-prd-status').textContent = project.prd_status?.status || project.prd_status?.latest_status || 'unknown';
 
                 // Bugs
                 const totalBugs = availableSurfaces.bugs_summary
@@ -6974,6 +6980,7 @@ if (document.readyState === 'loading') {
                 // Components
                 document.getElementById('modal-components').textContent = project.total_files || 0;
                 renderProjectStackEvidence(project);
+                renderProjectAuthorityEvidence(project, detailsData);
                 const stackEvidence = document.getElementById('modal-stack-evidence');
                 if (stackEvidence && healthModel.reason) {
                     stackEvidence.insertAdjacentHTML(
@@ -7053,6 +7060,49 @@ if (document.readyState === 'loading') {
                         <div class="text-xs font-semibold uppercase text-gray-500">Entry points</div>
                         <div class="mt-1">${entryPoints.length ? entryPoints.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No confirmed entry points recorded.</span>'}</div>
                     </div>
+                </div>
+            `;
+        }
+
+        function renderProjectAuthorityEvidence(project, details) {
+            const container = document.getElementById('modal-project-authority-evidence');
+            if (!container) return;
+            const authority = project.project_authority_status || {};
+            const prdAuthority = project.prd_status?.authority || {};
+            const readiness = details?.readiness_score || {};
+            const controls = details?.readiness_control_coverage || {};
+            const securityControls = details?.enterprise_security_controls || {};
+            const gaps = details?.known_gaps || [];
+            const nextAction = details?.current_next_action || 'No current next action recorded.';
+            container.innerHTML = `
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Project Authority</div>
+                        <div class="mt-1">${telemetryEscapeHtml(authority.classification || 'unknown')} / ${telemetryEscapeHtml(authority.operational_classification || 'unknown')}</div>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <span class="source-chip">${authority.include_in_default_operator_view ? 'default view' : 'not in default view'}</span>
+                            <span class="source-chip">${telemetryEscapeHtml(authority.retention_class || 'unknown')}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">PRD Authority</div>
+                        <div class="mt-1">${telemetryEscapeHtml(prdAuthority.status || 'unknown')} (${telemetryEscapeHtml(prdAuthority.confidence || 'unknown')} confidence)</div>
+                        <div class="mt-1 text-xs text-gray-600">${telemetryEscapeHtml(prdAuthority.summary || 'No PRD summary available.')}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Security Controls</div>
+                        <div class="mt-1 text-xs text-gray-600">47-control framework: ${telemetryNumber(securityControls.source_control_count || 0)} controls, manual review ${telemetryNumber(securityControls.manual_review_required || 0)}, unknown ${telemetryNumber(securityControls.unknown || 0)}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Production Readiness</div>
+                        <div class="mt-1">${telemetryEscapeHtml(readiness.status || 'unavailable')}: ${telemetryEscapeHtml(readiness.reason || 'No persisted readiness assessment exists.')}</div>
+                        <div class="mt-1 text-xs text-gray-600">Controls: ${telemetryNumber(controls.total || 0)} total, manual review ${telemetryNumber(controls.manual_review || 0)}, unknown ${telemetryNumber(controls.unknown || 0)}</div>
+                    </div>
+                </div>
+                <div class="mt-4 border-t border-gray-200 pt-3">
+                    <div class="text-sm font-semibold text-gray-900">Known gaps</div>
+                    <div class="mt-1">${gaps.length ? gaps.map(gap => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(gap)}</span>`).join('') : '<span class="text-gray-500">No current gaps recorded.</span>'}</div>
+                    <div class="mt-2 text-xs text-gray-600">Next action: ${telemetryEscapeHtml(nextAction)}</div>
                 </div>
             `;
         }
@@ -7178,18 +7228,26 @@ if (document.readyState === 'loading') {
 
                 const data = await response.json();
                 const prds = data.prds || [];
+                const authority = data.prd_authority || {};
 
                 if (prds.length === 0) {
-                    container.innerHTML = '<p class="text-gray-500 text-center py-8">No PRDs found for this project</p>';
+                    container.innerHTML = `
+                        <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                            <div class="font-semibold text-gray-900">PRD authority: ${telemetryEscapeHtml(authority.status || 'draft_generated')}</div>
+                            <div class="mt-1">${telemetryEscapeHtml(authority.reason || 'No current PRD authority row is linked for this project.')}</div>
+                            <div class="mt-2">${(authority.manual_review_flags || []).map(flag => `<span class="source-chip mr-1">${telemetryEscapeHtml(flag)}</span>`).join('')}</div>
+                        </div>
+                    `;
                     return;
                 }
 
                 container.innerHTML = prds.map(prd => `
                     <div class="border border-gray-200 rounded-lg p-4 mb-3 hover:bg-gray-50">
                         <h4 class="font-semibold text-gray-900">${prd.title || 'Untitled'}</h4>
-                        <p class="text-sm text-gray-600 mt-1">${prd.description || 'No description'}</p>
+                        <p class="text-sm text-gray-600 mt-1">${telemetryEscapeHtml(authority.summary || 'No PRD summary available.')}</p>
                         <div class="text-xs text-gray-500 mt-2">
-                            Status: <span class="font-medium">${prd.status || 'Unknown'}</span> |
+                            Authority: <span class="font-medium">${telemetryEscapeHtml(authority.status || 'unknown')}</span> |
+                            Lifecycle: <span class="font-medium">${telemetryEscapeHtml(prd.status || 'Unknown')}</span> |
                             Created: ${prd.created_at ? new Date(prd.created_at).toLocaleDateString() : 'Unknown'}
                         </div>
                     </div>

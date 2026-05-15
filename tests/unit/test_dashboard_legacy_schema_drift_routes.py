@@ -11,6 +11,8 @@ from projections.api.main import app
 
 def _schema_drift_db(tmp_path: Path) -> Path:
     db_path = tmp_path / "dashboard-live-schema-drift.db"
+    project_root = tmp_path / "dream-studio"
+    project_root.mkdir()
     conn = sqlite3.connect(db_path)
     try:
         conn.execute(
@@ -52,8 +54,9 @@ def _schema_drift_db(tmp_path: Path) -> Path:
         conn.execute(
             "INSERT INTO reg_projects(project_id, project_name, project_path, stack_detected, health_score, "
             "security_score, maintainability_score, total_files, lines_of_code, first_analyzed, last_analyzed, total_sessions, status, is_temp) "
-            "VALUES('dream-studio', 'Dream Studio', 'C:/builds/dream-studio', 'python', 90, 90, 90, 10, 1000, "
-            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z', 5, 'active', 0)"
+            "VALUES('dream-studio', 'Dream Studio', ?, 'python', 90, 90, 90, 10, 1000, "
+            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z', 5, 'active', 0)",
+            (str(project_root),),
         )
         conn.execute(
             "INSERT INTO reg_projects(project_id, project_name, project_path, stack_detected, health_score, "

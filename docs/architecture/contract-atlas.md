@@ -113,6 +113,15 @@ maturity input. It maps the security lifecycle gate plus production readiness
 control families into project readiness, release readiness, remediation Work
 Orders, and dashboard detail without turning the atlas into an execution engine.
 
+Project portfolio maturity is reflected through the dashboard runtime,
+security lifecycle, and secure production readiness contracts. All Projects and
+Project Details may display current project authority, PRD authority, stack and
+dependency evidence, security findings, 47-control status, production readiness
+coverage, health, readiness, blockers, remediation, and evidence refs, but they
+remain derived views. Legacy, demo, temp, placeholder, and unmapped findings are
+classified for retention or manual review instead of being promoted into normal
+operator cards.
+
 ## Drift Gate
 
 The drift gate checks changed files against the registry. If source changes
