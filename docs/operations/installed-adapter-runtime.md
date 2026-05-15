@@ -79,6 +79,22 @@ Contract Atlas availability, module profile status, telemetry/evidence capture
 capabilities, and adapter workspace hygiene. It does not execute adapters,
 mutate routing policy, write adapter configs, or write live SQLite by default.
 
+## Usage Accounting
+
+The adapter router also reports `usage_accounting`. This is a derived read
+model over current SQLite authority and includes:
+
+- declared adapter accounting profiles;
+- token usage records grouped by adapter/model/provider;
+- operational value metrics such as run count, files touched, commands run,
+  validation outcome, success/failure, rework, and duration when recorded;
+- billing mode, token visibility, cost visibility, usage source, cost source,
+  and confidence.
+
+Plan-based surfaces do not receive fabricated per-run dollar costs. When cost
+evidence is missing, installed commands and dashboard routes must display
+`unknown`, not `$0.00` or a token-derived estimate.
+
 The shared-intelligence route surface also exposes
 `/api/shared-intelligence/security-lifecycle`. That surface is a read-only
 installed runtime capability for security classification and release-readiness

@@ -53,6 +53,15 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
     }
     if not _has_columns(conn, "token_usage_records", required):
         return None
+    columns = _columns(conn, "token_usage_records")
+    adapter_expr = _column_or_literal(columns, "adapter_id", "NULL")
+    provider_expr = _column_or_literal(columns, "provider", "NULL")
+    billing_expr = _column_or_literal(columns, "billing_mode", "'unknown'")
+    token_visibility_expr = _column_or_literal(columns, "token_visibility", "'exact'")
+    cost_visibility_expr = _column_or_literal(columns, "cost_visibility", "'unknown'")
+    usage_source_expr = _column_or_literal(columns, "usage_source", "'local_telemetry'")
+    cost_source_expr = _column_or_literal(columns, "cost_source", "'unknown'")
+    confidence_expr = _column_or_literal(columns, "accounting_confidence", "'medium'")
     return """
         SELECT
             token_usage_id AS id,
@@ -65,9 +74,26 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
             created_at AS recorded_at,
             NULL AS event_id,
             total_tokens,
-            estimated_cost
+            estimated_cost,
+            {adapter_expr} AS adapter_id,
+            {provider_expr} AS provider,
+            {billing_expr} AS billing_mode,
+            {token_visibility_expr} AS token_visibility,
+            {cost_visibility_expr} AS cost_visibility,
+            {usage_source_expr} AS usage_source,
+            {cost_source_expr} AS cost_source,
+            {confidence_expr} AS accounting_confidence
         FROM token_usage_records
-    """
+    """.format(
+        adapter_expr=adapter_expr,
+        provider_expr=provider_expr,
+        billing_expr=billing_expr,
+        token_visibility_expr=token_visibility_expr,
+        cost_visibility_expr=cost_visibility_expr,
+        usage_source_expr=usage_source_expr,
+        cost_source_expr=cost_source_expr,
+        confidence_expr=confidence_expr,
+    )
 
 
 def _has_columns(conn: sqlite3.Connection, table: str, required: set[str]) -> bool:
@@ -77,5 +103,12 @@ def _has_columns(conn: sqlite3.Connection, table: str, required: set[str]) -> bo
     ).fetchone()
     if exists is None:
         return False
-    columns = {str(row[1]) for row in conn.execute(f'PRAGMA table_info("{table}")')}
-    return required.issubset(columns)
+    return required.issubset(_columns(conn, table))
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row[1]) for row in conn.execute(f'PRAGMA table_info("{table}")')}
+
+
+def _column_or_literal(columns: set[str], column: str, literal: str) -> str:
+    return column if column in columns else literal

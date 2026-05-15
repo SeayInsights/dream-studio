@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from core.config.database import get_connection
 from projections.api.routes.sqlite_schema import (
     has_columns,
     object_exists,
@@ -44,7 +43,7 @@ class SessionCollector:
                 - outcomes: Dict[outcome -> count]
                 - avg_duration_minutes: float
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -230,7 +229,7 @@ class SessionCollector:
         Returns:
             List of session dicts with id, project, started_at, outcome
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

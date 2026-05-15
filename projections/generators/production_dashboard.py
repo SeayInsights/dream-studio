@@ -369,24 +369,26 @@ class ProductionDashboard:
                 },
             }
 
-        # Token cost over time
+        # Reportable token cost over time, only when source records carry cost evidence.
         if "tokens" in metrics and metrics["tokens"].get("timeline"):
             timeline = metrics["tokens"]["timeline"]
-            charts["token_cost"] = {
-                "type": "line",
-                "title": "Token Cost Over Time",
-                "data": {
-                    "labels": [t["date"] for t in timeline],
-                    "datasets": [
-                        {
-                            "label": "Cost (USD)",
-                            "data": [t.get("cost_usd", 0) for t in timeline],
-                            "borderColor": "rgb(245, 158, 11)",
-                            "tension": 0.4,
-                        }
-                    ],
-                },
-            }
+            cost_values = [t.get("cost_usd") for t in timeline]
+            if any(value is not None for value in cost_values):
+                charts["token_cost"] = {
+                    "type": "line",
+                    "title": "Reportable Token Cost Over Time",
+                    "data": {
+                        "labels": [t["date"] for t in timeline],
+                        "datasets": [
+                            {
+                                "label": "Reportable Cost (USD)",
+                                "data": cost_values,
+                                "borderColor": "rgb(245, 158, 11)",
+                                "tension": 0.4,
+                            }
+                        ],
+                    },
+                }
 
         return charts
 
@@ -530,7 +532,8 @@ class ProductionDashboard:
         # Extract key metrics
         total_sessions = metrics.get("sessions", {}).get("total_sessions", 0)
         total_tokens = metrics.get("tokens", {}).get("total_tokens", 0)
-        total_cost = metrics.get("tokens", {}).get("total_cost_usd", 0)
+        total_cost = metrics.get("tokens", {}).get("total_cost_usd")
+        total_cost_display = f"${total_cost:.2f}" if total_cost is not None else "unknown"
         success_rate = metrics.get("sessions", {}).get("outcomes", {}).get("success", 0)
 
         # Get insights
@@ -1010,8 +1013,8 @@ class ProductionDashboard:
                 <div class="metric-value">{total_tokens:,}</div>
             </div>
             <div class="metric-card">
-                <div class="metric-label">Total Cost</div>
-                <div class="metric-value">${total_cost:.2f}</div>
+                <div class="metric-label">Reportable Cost</div>
+                <div class="metric-value">{total_cost_display}</div>
             </div>
         </div>
 

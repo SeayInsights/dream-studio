@@ -18,6 +18,10 @@ from core.shared_intelligence.adapter_config_projection import adapter_config_pr
 from core.shared_intelligence.adapter_staleness import adapter_staleness_report
 from core.shared_intelligence.capability_routing import capability_route_summary
 from core.shared_intelligence.context_packets import generate_shared_context_packet
+from core.shared_intelligence.usage_accounting import (
+    adapter_usage_accounting_summary,
+    register_default_adapter_accounting_profiles,
+)
 
 CONFIG_ENV = "DREAM_STUDIO_CONFIG"
 SOURCE_ENV = "DREAM_STUDIO_SOURCE_ROOT"
@@ -225,6 +229,7 @@ def adapter_router_status(
     projection_report = adapter_config_projection_report(conn, project_id=project_id)
     staleness = adapter_staleness_report(conn, config_root=paths.source_root, project_id=project_id)
     routes = capability_route_summary(conn, project_id=project_id)
+    usage_accounting = adapter_usage_accounting_summary(conn, project_id=project_id)
     return {
         "model_name": "dream_studio_installed_adapter_router",
         "derived_view": True,
@@ -252,6 +257,13 @@ def adapter_router_status(
         "capability_routes": {
             "route_count": routes["route_count"],
             "routing_policy_mutation_authorized": False,
+        },
+        "usage_accounting": {
+            "profile_count": usage_accounting["profile_count"],
+            "token_record_count": usage_accounting["token_record_count"],
+            "operational_record_count": usage_accounting["operational_record_count"],
+            "by_adapter": usage_accounting["by_adapter"],
+            "policy": usage_accounting["policy"],
         },
         "capabilities": [
             "current_route_state",
@@ -294,6 +306,7 @@ def bootstrap_rehearsal_runtime(
     bootstrap_database(paths.sqlite_path)
     with _connect(paths.sqlite_path) as conn:
         register_default_adapter_authority_profiles(conn)
+        register_default_adapter_accounting_profiles(conn)
         conn.commit()
         packet = generate_shared_context_packet(
             conn,

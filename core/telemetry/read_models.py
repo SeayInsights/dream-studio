@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import quote
 
 from core.config.database import get_db_path
+from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 from core.telemetry.execution_spine import dashboard_module_declarations
 
 CORE_TABLES: tuple[str, ...] = (
@@ -32,6 +33,8 @@ FACT_TABLES: tuple[str, ...] = (
     "hook_invocations",
     "tool_invocations",
     "token_usage_records",
+    "ai_adapter_accounting_profiles",
+    "ai_usage_operational_records",
     "security_findings",
     "validation_results",
     "research_evidence_records",
@@ -180,6 +183,7 @@ def global_telemetry_summary(db_path: Path | str | None = None) -> dict[str, Any
                 },
                 "token_usage": _token_rollup(conn),
                 "token_cost_intelligence": _token_cost_intelligence(conn),
+                "ai_usage_accounting": adapter_usage_accounting_summary(conn),
                 "security_findings": _security_rollup(conn),
                 "security_remediation_intelligence": _security_remediation_intelligence(conn),
                 "validation_outcomes": _validation_rollup(conn),
@@ -538,6 +542,9 @@ def _scoped_summary(
             },
             "tokens": _token_rollup(conn, scope=scope),
             "token_cost_intelligence": _token_cost_intelligence(conn, scope),
+            "ai_usage_accounting": adapter_usage_accounting_summary(
+                conn, project_id=scope.project_id
+            ),
             "security_findings": _security_rollup(conn, scope),
             "security_remediation_intelligence": _security_remediation_intelligence(conn, scope),
             "validations": _validation_rollup(conn, scope),
@@ -882,18 +889,35 @@ def _token_rollup(
             COALESCE(skill_id, 'unknown') AS skill_id,
             COALESCE(workflow_id, 'unknown') AS workflow_id,
             COALESCE(hook_id, 'unknown') AS hook_id,
+            COALESCE(adapter_id, 'unknown') AS adapter_id,
             COALESCE(model_id, 'unknown') AS model_id,
             COALESCE(provider, 'unknown') AS provider,
+            COALESCE(billing_mode, 'unknown') AS billing_mode,
+            COALESCE(token_visibility, 'unavailable') AS token_visibility,
+            COALESCE(cost_visibility, 'unknown') AS cost_visibility,
+            COALESCE(usage_source, 'unavailable') AS usage_source,
+            COALESCE(cost_source, 'unknown') AS cost_source,
+            COALESCE(accounting_confidence, 'unknown') AS accounting_confidence,
             SUM(input_tokens) AS input_tokens,
             SUM(output_tokens) AS output_tokens,
             SUM(cached_tokens) AS cached_tokens,
             SUM(total_tokens) AS total_tokens,
-            SUM(estimated_cost) AS estimated_cost,
+            CASE
+                WHEN COALESCE(cost_visibility, 'unknown') IN (
+                    'exact',
+                    'provider_reported',
+                    'estimated',
+                    'allocated_subscription_cost'
+                ) THEN SUM(estimated_cost)
+                ELSE NULL
+            END AS reportable_cost,
             COUNT(*) AS record_count
         FROM token_usage_records
         {where}
         GROUP BY project_id, milestone_id, task_id, process_run_id,
-                 agent_id, skill_id, workflow_id, hook_id, model_id, provider
+                 agent_id, skill_id, workflow_id, hook_id, adapter_id, model_id,
+                 provider, billing_mode, token_visibility, cost_visibility,
+                 usage_source, cost_source, accounting_confidence
         ORDER BY total_tokens DESC, record_count DESC
         """,
         params,
@@ -916,24 +940,47 @@ def _token_cost_intelligence(
             COALESCE(skill_id, 'unknown') AS skill_id,
             COALESCE(workflow_id, 'unknown') AS workflow_id,
             COALESCE(hook_id, 'unknown') AS hook_id,
+            COALESCE(adapter_id, 'unknown') AS adapter_id,
             COALESCE(model_id, 'unknown') AS model_id,
             COALESCE(provider, 'unknown') AS provider,
             COALESCE(purpose, 'unknown') AS purpose,
+            COALESCE(billing_mode, 'unknown') AS billing_mode,
+            COALESCE(token_visibility, 'unavailable') AS token_visibility,
+            COALESCE(cost_visibility, 'unknown') AS cost_visibility,
+            COALESCE(usage_source, 'unavailable') AS usage_source,
+            COALESCE(cost_source, 'unknown') AS cost_source,
+            COALESCE(accounting_confidence, 'unknown') AS accounting_confidence,
             SUM(input_tokens) AS input_tokens,
             SUM(output_tokens) AS output_tokens,
             SUM(cached_tokens) AS cached_tokens,
             SUM(total_tokens) AS total_tokens,
-            SUM(estimated_cost) AS estimated_cost,
+            CASE
+                WHEN COALESCE(cost_visibility, 'unknown') IN (
+                    'exact',
+                    'provider_reported',
+                    'estimated',
+                    'allocated_subscription_cost'
+                ) THEN SUM(estimated_cost)
+                ELSE NULL
+            END AS reportable_cost,
             COUNT(*) AS record_count,
             CASE
-                WHEN SUM(total_tokens) > 0 THEN ROUND((SUM(estimated_cost) / SUM(total_tokens)) * 1000, 6)
-                ELSE 0
-            END AS estimated_cost_per_1k_tokens
+                WHEN COALESCE(cost_visibility, 'unknown') IN (
+                    'exact',
+                    'provider_reported',
+                    'estimated',
+                    'allocated_subscription_cost'
+                ) AND SUM(total_tokens) > 0
+                THEN ROUND((SUM(estimated_cost) / SUM(total_tokens)) * 1000, 6)
+                ELSE NULL
+            END AS reportable_cost_per_1k_tokens
         FROM token_usage_records
         {where}
         GROUP BY project_id, milestone_id, task_id, process_run_id,
-                 agent_id, skill_id, workflow_id, hook_id, model_id, provider, purpose
-        ORDER BY estimated_cost DESC, total_tokens DESC, record_count DESC
+                 agent_id, skill_id, workflow_id, hook_id, adapter_id, model_id,
+                 provider, purpose, billing_mode, token_visibility, cost_visibility,
+                 usage_source, cost_source, accounting_confidence
+        ORDER BY COALESCE(reportable_cost, 0) DESC, total_tokens DESC, record_count DESC
         """,
         params,
     )
@@ -951,10 +998,20 @@ def _token_cost_intelligence(
                 "skill_id": row["skill_id"],
                 "workflow_id": row["workflow_id"],
                 "hook_id": row["hook_id"],
+                "adapter_id": row["adapter_id"],
                 "model_id": row["model_id"],
                 "provider": row["provider"],
                 "total_tokens": row["total_tokens"],
-                "estimated_cost": row["estimated_cost"],
+                "reportable_cost": row["reportable_cost"],
+                "cost_display": (
+                    row["reportable_cost"] if row["reportable_cost"] is not None else "unknown"
+                ),
+                "billing_mode": row["billing_mode"],
+                "token_visibility": row["token_visibility"],
+                "cost_visibility": row["cost_visibility"],
+                "usage_source": row["usage_source"],
+                "cost_source": row["cost_source"],
+                "confidence": row["accounting_confidence"],
                 "outcomes": outcomes,
                 "has_outcome_signal": bool(outcomes),
                 "dashboard_ready": True,
@@ -965,7 +1022,9 @@ def _token_cost_intelligence(
     return {
         "by_model_provider_component": by_model_provider,
         "outcome_correlations": outcome_correlations,
-        "highest_estimated_cost": by_model_provider[:10],
+        "highest_reportable_cost": [
+            row for row in by_model_provider if row["reportable_cost"] is not None
+        ][:10],
         "retry_patterns": {
             "available": False,
             "reason": "token_usage_records does not persist retry attempt metadata yet",
@@ -978,6 +1037,8 @@ def _token_cost_intelligence(
             "derived_view": True,
             "primary_authority": False,
             "provider_billing_authority": False,
+            "tokens_are_usage_not_cost": True,
+            "do_not_convert_plan_tokens_to_dollars": True,
             "execution_authorized": False,
         },
         "empty_state": "No token usage records for the selected scope.",

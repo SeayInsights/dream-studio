@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from core.config.database import get_connection
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
 
@@ -37,7 +36,7 @@ class ModelCollector:
                 - performance_rank: List[(model, score)] ordered by performance
                 - token_efficiency: Dict[model -> tokens_per_second]
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -167,7 +166,7 @@ class ModelCollector:
         Returns:
             List of dicts with date, invocations, success_rate
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

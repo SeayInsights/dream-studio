@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from core.config.database import get_connection
 from projections.core.collectors.authority_sources import skill_usage_sql
 
 
@@ -38,7 +37,7 @@ class SkillCollector:
                 - failures: List[Dict] with recent failures
                 - top_skills: List of (skill, count) tuples
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -215,7 +214,7 @@ class SkillCollector:
         Returns:
             List of dicts with date, count, success_rate
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

@@ -86,3 +86,15 @@ update, uninstall, cleanup, or deletion needs a separate approved scope.
 Do not inspect or print secrets, auth tokens, cookies, private keys, or provider
 credentials while troubleshooting. If a path looks like an auth store, classify
 it as sensitive and route to operator review.
+
+## AI Usage Cost Looks Unknown
+
+This can be correct. Dream Studio records tokens and operational outcomes for
+AI adapters, but it does not convert subscription-plan usage into API-dollar
+costs. Check `ds router`, `ds adapters`, or
+`/api/shared-intelligence/ai-usage-accounting` for the adapter billing mode,
+token visibility, cost visibility, usage source, cost source, and confidence.
+
+Only token-metered/API-metered/credit-metered usage with source-backed cost
+metadata, or an explicit subscription allocation profile, should display a
+reportable cost. Otherwise the dashboard should say `unknown`.

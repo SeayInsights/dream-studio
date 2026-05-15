@@ -41,6 +41,8 @@ The dashboard mapping covers:
 - Paused external validation targets
 - Contract Atlas status and boundary violations
 - Installed adapter router status and module/profile health
+- AI adapter usage accounting, billing mode, token visibility, cost visibility,
+  source confidence, and operational value telemetry
 - Security lifecycle gate status and 47-control applicability
 - Production readiness status, controls, scorecards, findings, and remediation Work Orders
 
@@ -74,6 +76,11 @@ required, and how to warn that the dashboard is a derived view.
 The dashboard must not use a projection as primary truth for routing, database
 authority, approvals, or source-control decisions. It must route operators back
 to the source authority refs when a decision matters.
+
+AI usage cards must distinguish token usage from reportable cost. If the source
+records do not provide exact, provider-reported, explicitly estimated, or
+allocated subscription cost evidence, dashboard cards must render `unknown` and
+show operational value signals instead of fabricated dollar precision.
 
 ## Contract Atlas Projection
 

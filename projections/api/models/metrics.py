@@ -44,7 +44,7 @@ class TokenMetrics(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_hits: int
-    total_cost_usd: float
+    total_cost_usd: Optional[float] = None
     by_model: Dict[str, Dict[str, Any]]
     by_project: Dict[str, Dict[str, Any]]
     daily_average: float

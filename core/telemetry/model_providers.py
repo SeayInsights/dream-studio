@@ -12,7 +12,8 @@ MODEL_PROVIDER_CONTRACTS: tuple[dict[str, Any], ...] = (
         "capabilities": ["chat", "code", "tool_use"],
         "api_call_default": False,
         "billing_authority": False,
-        "cost_records_are_estimates": True,
+        "cost_records_are_estimates": False,
+        "cost_records_require_source": True,
         "fallback_provider": "unknown",
     },
     {
@@ -21,7 +22,8 @@ MODEL_PROVIDER_CONTRACTS: tuple[dict[str, Any], ...] = (
         "capabilities": ["chat", "code", "tool_use"],
         "api_call_default": False,
         "billing_authority": False,
-        "cost_records_are_estimates": True,
+        "cost_records_are_estimates": False,
+        "cost_records_require_source": True,
         "fallback_provider": "unknown",
     },
     {
@@ -30,7 +32,8 @@ MODEL_PROVIDER_CONTRACTS: tuple[dict[str, Any], ...] = (
         "capabilities": ["chat", "code"],
         "api_call_default": False,
         "billing_authority": False,
-        "cost_records_are_estimates": True,
+        "cost_records_are_estimates": False,
+        "cost_records_require_source": True,
         "fallback_provider": "unknown",
     },
     {
@@ -39,7 +42,8 @@ MODEL_PROVIDER_CONTRACTS: tuple[dict[str, Any], ...] = (
         "capabilities": [],
         "api_call_default": False,
         "billing_authority": False,
-        "cost_records_are_estimates": True,
+        "cost_records_are_estimates": False,
+        "cost_records_require_source": True,
         "fallback_provider": None,
     },
 )
@@ -84,6 +88,7 @@ def normalize_model_usage_metadata(
         "provider_metadata_authority": False,
         "billing_authority": False,
         "cost_records_are_estimates": contract["cost_records_are_estimates"],
+        "cost_records_require_source": contract["cost_records_require_source"],
         "api_call_default": False,
         "capabilities": list(contract["capabilities"]),
         "fallback_reason": fallback_reason,
@@ -107,8 +112,8 @@ def validate_model_provider_contracts(
             errors.append(f"api_call_default must be false for provider {provider}")
         if contract.get("billing_authority") is not False:
             errors.append(f"billing_authority must be false for provider {provider}")
-        if contract.get("cost_records_are_estimates") is not True:
-            errors.append(f"cost records must be estimates for provider {provider}")
+        if contract.get("cost_records_require_source") is not True:
+            errors.append(f"cost records must require source evidence for provider {provider}")
     if "unknown" not in providers:
         errors.append("unknown provider fallback is required")
     return errors

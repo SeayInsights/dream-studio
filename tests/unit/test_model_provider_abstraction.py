@@ -14,7 +14,8 @@ def test_model_provider_contracts_are_metadata_only() -> None:
     for contract in provider_contract_map().values():
         assert contract["api_call_default"] is False
         assert contract["billing_authority"] is False
-        assert contract["cost_records_are_estimates"] is True
+        assert contract["cost_records_are_estimates"] is False
+        assert contract["cost_records_require_source"] is True
 
 
 def test_infer_provider_from_model_ids_without_provider_calls() -> None:
@@ -33,7 +34,8 @@ def test_normalized_model_usage_never_claims_billing_authority() -> None:
     assert metadata["inferred_provider"] == "openai"
     assert metadata["provider_metadata_authority"] is False
     assert metadata["billing_authority"] is False
-    assert metadata["cost_records_are_estimates"] is True
+    assert metadata["cost_records_are_estimates"] is False
+    assert metadata["cost_records_require_source"] is True
     assert metadata["api_call_default"] is False
     assert "code" in metadata["capabilities"]
 
@@ -59,7 +61,8 @@ def test_validation_rejects_provider_billing_authority() -> None:
             "capabilities": ["chat"],
             "api_call_default": False,
             "billing_authority": True,
-            "cost_records_are_estimates": True,
+            "cost_records_are_estimates": False,
+            "cost_records_require_source": True,
             "fallback_provider": "unknown",
         },
         {
@@ -68,7 +71,8 @@ def test_validation_rejects_provider_billing_authority() -> None:
             "capabilities": [],
             "api_call_default": False,
             "billing_authority": False,
-            "cost_records_are_estimates": True,
+            "cost_records_are_estimates": False,
+            "cost_records_require_source": True,
             "fallback_provider": None,
         },
     ]

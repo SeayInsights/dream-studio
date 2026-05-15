@@ -69,6 +69,14 @@ Production readiness access follows the same model. Adapters may read
 readiness posture, but persisted readiness authority remains in Dream Studio
 SQLite records and evidence refs.
 
+AI usage accounting follows the same projection rule. Adapter-local files and
+private model memory do not own billing mode, token visibility, cost visibility,
+usage source, cost source, confidence, or operational outcome data. Those
+records live in SQLite through `ai_adapter_accounting_profiles`,
+`ai_usage_operational_records`, and `token_usage_records`, then project into the
+router, Contract Atlas, dashboards, and context packets. Subscription-plan tools
+must display cost as `unknown` unless an explicit allocation profile is present.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 

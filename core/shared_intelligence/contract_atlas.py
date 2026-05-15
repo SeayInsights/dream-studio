@@ -33,6 +33,7 @@ from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
 )
+from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 from core.telemetry.docker_profiles import (
     DOCKER_MODULE_PROFILES,
     validate_docker_profile_contracts,
@@ -90,6 +91,7 @@ def build_contract_atlas(
         project_id=effective_project_id,
         lifecycle_event="release_merge",
     )
+    usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -133,6 +135,15 @@ def build_contract_atlas(
             "release_readiness": production_readiness_gate["release_readiness"],
             "project_readiness_score": production_readiness_gate["project_readiness_score"],
         },
+        "adapter_usage_accounting": {
+            "profile_count": usage_accounting["profile_count"],
+            "operational_record_count": usage_accounting["operational_record_count"],
+            "token_record_count": usage_accounting["token_record_count"],
+            "by_adapter": usage_accounting["by_adapter"],
+            "policy": usage_accounting["policy"],
+            "source_tables": usage_accounting["source_tables"],
+            "schema_status": usage_accounting.get("schema_status", "available"),
+        },
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -147,12 +158,14 @@ def build_contract_atlas(
             profile_errors=profile_errors,
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
+            usage_accounting=usage_accounting,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
             staleness_report=staleness_report,
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
+            usage_accounting=usage_accounting,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -227,6 +240,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "security_lifecycle_gate",
         "production_readiness_control_catalog",
         "secure_production_readiness_gate",
+        "adapter_usage_accounting",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -464,6 +478,7 @@ def _maturity_scorecard(
     profile_errors: list[str],
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
+    usage_accounting: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -527,6 +542,14 @@ def _maturity_scorecard(
                 "project_readiness_score", {}
             ).get("status"),
         },
+        {
+            "area": "adapter_usage_accounting",
+            "status": usage_accounting.get("schema_status", "available"),
+            "profile_count": usage_accounting.get("profile_count"),
+            "token_record_count": usage_accounting.get("token_record_count"),
+            "operational_record_count": usage_accounting.get("operational_record_count"),
+            "cost_policy": usage_accounting.get("policy", {}),
+        },
     ]
 
 
@@ -536,6 +559,7 @@ def _confirmed_dependency_graph(
     staleness_report: Mapping[str, Any],
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
+    usage_accounting: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -641,6 +665,16 @@ def _confirmed_dependency_graph(
         "requires_security_lifecycle",
         str(production_readiness_gate.get("workflow_id")),
     )
+    add_node("module:ai_usage_accounting", "module", "AI Usage Accounting")
+    for table in usage_accounting.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:ai_usage_accounting",
+            table_id,
+            "reads_source_table",
+            "core.shared_intelligence.usage_accounting.adapter_usage_accounting_summary",
+        )
 
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
@@ -763,6 +797,9 @@ def _source_tables() -> list[str]:
     tables.add("security_findings")
     tables.update(
         {
+            "ai_adapter_accounting_profiles",
+            "ai_usage_operational_records",
+            "token_usage_records",
             "production_readiness_assessment_runs",
             "production_readiness_control_results",
             "production_readiness_findings",
