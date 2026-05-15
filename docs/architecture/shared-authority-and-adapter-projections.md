@@ -99,6 +99,19 @@ with `--execute`. It imports into SQLite authority tables and keeps hooks,
 agents, workflows, Claude, Codex, Docker, repo mutation, and cleanup optional or
 out of scope.
 
+External project validation follows the same projection discipline. External
+targets are registry entries and dashboard cards until the current operator
+decision selects a target and scope. Planning can describe dirty-state capture,
+PRD/status detection, stack/dependency discovery, security/readiness
+classification, validation profile, Work Orders, and commit policy, but it does
+not inspect or mutate the target repo.
+
+Long-run multisession validation is also derived evidence. It aggregates
+dashboard/authority, dogfood route, release gate, installed command, docs drift,
+security/readiness, adapter/router, and analytics-only cycles with a live SQLite
+hash guard. It does not turn adapter output, dashboard output, Docker status, or
+external target metadata into source authority.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 
@@ -130,3 +143,5 @@ Docker is optional. It can support scanners, workers, adapters, dashboard/API
 profiles, and validation sandboxes, but it must not create a second authority
 database. Docker-backed modules should receive an explicit SQLite path or a
 read-only/rehearsal copy according to their approved profile.
+Static Docker profile contracts can be used operationally for planning and
+status, but container execution requires separate approval.

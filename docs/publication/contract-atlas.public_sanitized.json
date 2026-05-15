@@ -266,7 +266,77 @@
     }
   ],
   "adapter_usage_accounting": {
-    "by_adapter": {},
+    "by_adapter": {
+      "claude": {
+        "billing_modes": {
+          "unknown": 1791
+        },
+        "commands_run_count": 0,
+        "cost_display": "unknown",
+        "cost_unknown_count": 1791,
+        "cost_visibility": {
+          "unknown": 1791
+        },
+        "failed_runs": 0,
+        "files_touched_count": 0,
+        "reportable_cost": null,
+        "rework_needed_count": 0,
+        "run_count": 0,
+        "successful_runs": 0,
+        "token_records": 1791,
+        "token_visibility": {
+          "exact": 1791
+        },
+        "total_tokens": 189447192,
+        "validation_results": {}
+      },
+      "codex": {
+        "billing_modes": {
+          "unknown": 1
+        },
+        "commands_run_count": 0,
+        "cost_display": "unknown",
+        "cost_unknown_count": 1,
+        "cost_visibility": {
+          "unknown": 1
+        },
+        "failed_runs": 0,
+        "files_touched_count": 0,
+        "reportable_cost": null,
+        "rework_needed_count": 0,
+        "run_count": 0,
+        "successful_runs": 0,
+        "token_records": 1,
+        "token_visibility": {
+          "exact": 1
+        },
+        "total_tokens": 35,
+        "validation_results": {}
+      },
+      "unknown": {
+        "billing_modes": {
+          "unknown": 40
+        },
+        "commands_run_count": 0,
+        "cost_display": "unknown",
+        "cost_unknown_count": 40,
+        "cost_visibility": {
+          "unknown": 40
+        },
+        "failed_runs": 0,
+        "files_touched_count": 0,
+        "reportable_cost": null,
+        "rework_needed_count": 0,
+        "run_count": 0,
+        "successful_runs": 0,
+        "token_records": 40,
+        "token_visibility": {
+          "exact": 40
+        },
+        "total_tokens": 779767,
+        "validation_results": {}
+      }
+    },
     "operational_record_count": 0,
     "policy": {
       "cost_unknown_display": "unknown",
@@ -284,7 +354,7 @@
       "adapter_authority_profiles",
       "model_provider_profiles"
     ],
-    "token_record_count": 0
+    "token_record_count": 1832
   },
   "analytics_only_ingestion": {
     "agents_required": false,
@@ -1976,12 +2046,14 @@
         "contract_refs": [
           "docs/operations/installed-adapter-runtime.md",
           "docs/operations/installed-platform-productization.md",
+          "docs/operations/long-run-multisession-operational-validation.md",
           "docs/operations/troubleshooting.md",
           "docs/architecture/shared-authority-and-adapter-projections.md"
         ],
         "docs_refs": [
           "docs/operations/independent-configuration-model.md",
           "docs/operations/installed-platform-productization.md",
+          "docs/operations/long-run-multisession-operational-validation.md",
           "docs/operations/troubleshooting.md",
           "docs/README.md"
         ],
@@ -1993,6 +2065,7 @@
         "required_doc_refs": [
           "docs/operations/installed-adapter-runtime.md",
           "docs/operations/installed-platform-productization.md",
+          "docs/operations/long-run-multisession-operational-validation.md",
           "docs/operations/troubleshooting.md",
           "docs/architecture/shared-authority-and-adapter-projections.md",
           "docs/operations/independent-configuration-model.md"
@@ -2002,6 +2075,7 @@
           "core/installed_productization.py",
           "core/module_contracts.py",
           "core/module_profiles.py",
+          "core/release/local_dogfood_stability.py",
           "ds.cmd",
           "ds.ps1",
           "interfaces/cli/ds.py",
@@ -2132,7 +2206,9 @@
         "contract_refs": [
           "docs/operations/lint-format-baseline-policy.md",
           "docs/PUBLICATION_BOUNDARY.md",
-          "docs/operations/repo-publication-privacy.md"
+          "docs/operations/repo-publication-privacy.md",
+          "docs/operations/external-project-validation-pipeline.md",
+          "docs/operations/docker-module-profiles.md"
         ],
         "docs_refs": [
           "README.md",
@@ -2148,6 +2224,8 @@
           "docs/operations/lint-format-baseline-policy.md",
           "docs/PUBLICATION_BOUNDARY.md",
           "docs/operations/repo-publication-privacy.md",
+          "docs/operations/external-project-validation-pipeline.md",
+          "docs/operations/docker-module-profiles.md",
           "README.md"
         ],
         "source_patterns": [
@@ -2159,19 +2237,22 @@
           "interfaces/cli/contract_docs_drift_gate.py",
           "interfaces/cli/contract_atlas_lifecycle_gate.py",
           "core/release/repo_publication_readiness.py",
+          "core/projects/external_validation.py",
+          "core/projects/dashboard_views.py",
+          "core/telemetry/docker_profiles.py",
           "runtime/config/release-gates/**"
         ]
       }
     ],
     "empty_state": "No contract domains are registered.",
-    "generated_at": "2026-05-15T15:56:44.881786+00:00",
+    "generated_at": "2026-05-15T16:25:29.569959+00:00",
     "primary_authority": false,
     "routing_authority": false,
     "schema": "dream_studio.contract_registry.v1",
     "tracking_mode": "changed_files_same_change_set"
   },
   "current_maturity_ledger": {
-    "area_count": 23,
+    "area_count": 26,
     "areas": [
       {
         "area_id": "route_first_engine",
@@ -2502,16 +2583,16 @@
         "area_id": "docker_runtime_profiles",
         "area_name": "Docker/runtime profiles",
         "can_claim_publicly": true,
-        "can_use_operationally": false,
+        "can_use_operationally": true,
         "evidence": [
           "docs/operations/docker-module-profiles.md"
         ],
         "known_gaps": [
-          "Docker profiles are optional designs; containers are not started or required"
+          "Docker profile contracts are static-tested; containers are not started or required"
         ],
-        "next_action": "Implement optional Docker runtime profiles only after separate approval.",
+        "next_action": "Run optional Docker runtime validation only after explicit approval.",
         "owner_source": "core/telemetry/docker_profiles.py",
-        "status": "designed_not_proven",
+        "status": "tested_only",
         "validation": [
           "tests/unit/test_docker_module_profiles.py"
         ]
@@ -2520,36 +2601,91 @@
         "area_id": "analytics_only_profile",
         "area_name": "Analytics-only profile",
         "can_claim_publicly": true,
-        "can_use_operationally": false,
+        "can_use_operationally": true,
         "evidence": [
-          "Contract Atlas analytics-only profile"
+          "docs/operations/installed-platform-productization.md"
         ],
         "known_gaps": [
-          "not yet packaged as a standalone runtime mode"
+          "analytics import quality depends on normalized source evidence"
         ],
-        "next_action": "Expose analytics-only runtime option after dashboard profile maturity.",
-        "owner_source": "core/shared_intelligence/contract_atlas.py",
-        "status": "designed_not_proven",
+        "next_action": "Keep ingestion contracts aligned with current authority tables.",
+        "owner_source": "core/analytics_ingestion.py + core/module_profiles.py",
+        "status": "runtime_validated",
         "validation": [
-          "tests/unit/test_contract_atlas.py"
+          "tests/unit/test_analytics_only_deployment_profile.py",
+          "tests/unit/test_installed_platform_productization.py"
         ]
       },
       {
         "area_id": "external_project_pipeline",
         "area_name": "External project pipeline",
-        "can_claim_publicly": false,
-        "can_use_operationally": false,
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
         "evidence": [
-          "tests/unit/test_external_project_dashboard_views.py"
+          "tests/unit/test_external_project_validation_pipeline.py"
         ],
         "known_gaps": [
-          "external project mutation remains out of scope unless explicitly approved"
+          "external project mutation remains approval-scoped and not auto-resumed"
         ],
-        "next_action": "Build reusable external project pipeline under separate registry scope.",
-        "owner_source": "project registry and external validation docs",
-        "status": "designed_not_proven",
+        "next_action": "Use explicit target selection before any read-only external intake.",
+        "owner_source": "core/projects/external_validation.py",
+        "status": "runtime_validated",
         "validation": [
-          "paused target and external dashboard tests"
+          "paused target, read-only intake, and external dashboard tests"
+        ]
+      },
+      {
+        "area_id": "docker_module_runtime_boundary",
+        "area_name": "Docker module runtime boundary",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/docker-module-profiles.md"
+        ],
+        "known_gaps": [
+          "container execution is intentionally not proven without approval"
+        ],
+        "next_action": "Keep Docker optional and non-authoritative unless a profile is approved.",
+        "owner_source": "core/telemetry/docker_profiles.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_docker_module_profiles.py"
+        ]
+      },
+      {
+        "area_id": "long_run_multisession_validation",
+        "area_name": "Long-run multisession validation",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "tests/unit/test_long_run_multisession_operational_validation.py"
+        ],
+        "known_gaps": [
+          "full dogfood evidence must be refreshed before each release decision"
+        ],
+        "next_action": "Run live evidence cycles before public release or external use decisions.",
+        "owner_source": "core/release/local_dogfood_stability.py",
+        "status": "tested_only",
+        "validation": [
+          "multisession cycle and live SQLite hash guard tests"
+        ]
+      },
+      {
+        "area_id": "installed_productization_closeout",
+        "area_name": "Installed productization closeout",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/installed-platform-productization.md"
+        ],
+        "known_gaps": [
+          "public release requires explicit operator decision after closeout"
+        ],
+        "next_action": "Route to operator decision on private dogfood, public release, or external use.",
+        "owner_source": "core/installed_productization.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_installed_platform_productization.py"
         ]
       },
       {
@@ -2600,7 +2736,7 @@
     "db_write_authorized": false,
     "derived_view": true,
     "empty_state": "No maturity areas are registered.",
-    "generated_at": "2026-05-15T15:56:44.259486+00:00",
+    "generated_at": "2026-05-15T16:25:28.929156+00:00",
     "model_name": "dream_studio_current_maturity_ledger",
     "operational_use_boundary": "Areas with can_use_operationally=false remain design or future-work surfaces.",
     "primary_authority": false,
@@ -2610,10 +2746,9 @@
     "schema": "dream_studio.maturity_ledger.v1",
     "source": "repo_backed_maturity_ledger",
     "status_counts": {
-      "designed_not_proven": 3,
       "hardened": 1,
-      "runtime_validated": 13,
-      "tested_only": 6
+      "runtime_validated": 15,
+      "tested_only": 10
     }
   },
   "dashboard_private_export_boundaries": {
@@ -2652,7 +2787,7 @@
   "empty_state": "Contract Atlas has no contracts to display.",
   "execution_authorized": false,
   "export_scope": "public",
-  "generated_at": "2026-05-15T15:56:44.881786+00:00",
+  "generated_at": "2026-05-15T16:25:29.569959+00:00",
   "github_cicd_profile": {
     "deployment_policy": "separate_approval_required",
     "derived_view": true,
@@ -3670,7 +3805,7 @@
       "operational_record_count": 0,
       "profile_count": 10,
       "status": "available",
-      "token_record_count": 0
+      "token_record_count": 1832
     },
     {
       "agents_required": false,
@@ -4339,58 +4474,243 @@
       "runtime_authority": "canonical_path_or_injected_sqlite_path"
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "security_only",
+        "full"
+      ],
       "fallback_execution_mode": "local_unavailable_empty_state",
+      "fallback_when_unavailable": "security dashboard shows docker scanner unavailable",
       "host_state_mount_default": false,
+      "network_exposure": "disabled_by_default",
       "optional": true,
       "profile": "security-scanners",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "repo_source",
+          "runtime_config"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "read_only_repo_source",
+        "explicit_runtime_config"
+      ],
       "role": "scanner_isolation",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "injected_read_only_when_approved_never_printed",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "security_scan_summary"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "full"
+      ],
       "fallback_execution_mode": "local",
+      "fallback_when_unavailable": "worker execution remains native or disabled",
       "host_state_mount_default": false,
+      "network_exposure": "disabled_by_default",
       "optional": true,
       "profile": "agent-workers",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "scoped_worktree_when_approved"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "explicit_runtime_config",
+        "scoped_worktree_when_approved"
+      ],
       "role": "agent_worker_isolation",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "no_secrets_by_default",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "adapter_worker_status"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "full"
+      ],
       "fallback_execution_mode": "local",
+      "fallback_when_unavailable": "workflow execution remains native or disabled",
       "host_state_mount_default": false,
+      "network_exposure": "disabled_by_default",
       "optional": true,
       "profile": "workflow-workers",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "runtime_config"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "explicit_runtime_config"
+      ],
       "role": "workflow_worker_isolation",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "no_secrets_by_default",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "workflow_worker_status"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "security_only",
+        "analytics_only",
+        "full"
+      ],
       "fallback_execution_mode": "approved_local_tests",
+      "fallback_when_unavailable": "approved local tests remain authoritative validation path",
       "host_state_mount_default": false,
+      "network_exposure": "disabled_by_default",
       "optional": true,
       "profile": "validation-sandboxes",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "repo_source"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "read_only_repo_source",
+        "explicit_runtime_config"
+      ],
       "role": "validation_sandbox_isolation",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "secrets_not_mounted",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "validation_sandbox_result"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "dashboard_only",
+        "analytics_only",
+        "full"
+      ],
       "fallback_execution_mode": "native_fastapi_runtime",
+      "fallback_when_unavailable": "native dashboard/API remains supported",
       "host_state_mount_default": false,
+      "network_exposure": "localhost_only_by_default",
       "optional": true,
       "profile": "dashboard-api",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "sqlite_authority"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "explicit_runtime_config"
+      ],
       "role": "dashboard_api_runtime",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "read_only_config_only_no_secret_printing",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "dashboard_api_health"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     },
     {
+      "approval_requirements": [
+        "docker_execution_approval_before_container_start"
+      ],
       "creates_authority_db": false,
+      "enabled_modules": [
+        "adapter_router_only",
+        "full"
+      ],
       "fallback_execution_mode": "adapter_disabled_empty_state",
+      "fallback_when_unavailable": "adapter router reports docker adapter workers unavailable",
       "host_state_mount_default": false,
+      "network_exposure": "disabled_by_default",
       "optional": true,
       "profile": "adapters",
+      "read_write_boundaries": {
+        "host_write": false,
+        "read": [
+          "adapter_runtime_config"
+        ],
+        "write": [
+          "container_temp_only"
+        ]
+      },
+      "required_mounts": [
+        "explicit_runtime_config",
+        "adapter_runtime_dir_when_approved"
+      ],
       "role": "external_adapter_isolation",
-      "runtime_authority": "local_sqlite_path_explicitly_configured"
+      "runtime_authority": "local_sqlite_path_explicitly_configured",
+      "secrets_config_handling": "provider_credentials_never_inspected_or_printed",
+      "sqlite_authority_path": "explicit_host_path_required",
+      "telemetry_emitted": [
+        "docker_profile_checked",
+        "adapter_worker_status"
+      ],
+      "validation_requirements": [
+        "profile_contract_static_validation"
+      ]
     }
   ],
   "sanitized_public_export": true,

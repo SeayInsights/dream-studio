@@ -1,6 +1,6 @@
 # Dream Studio Docker Module Profiles
 
-Lifecycle status: draft_generated
+Lifecycle status: tested_only
 
 Docker is optional for Dream Studio core. The local-first SQLite authority model
 must work without Docker.
@@ -19,7 +19,7 @@ Docker may support:
 
 ## Profile Concepts
 
-Suggested profile names:
+Current optional profile contracts:
 
 - `security-scanners`
 - `agent-workers`
@@ -30,6 +30,19 @@ Suggested profile names:
 
 Each profile should bind or configure the approved SQLite path explicitly. No
 profile should create a competing authority database by default.
+
+Each profile declares:
+
+- enabled modules
+- required mounts
+- explicit SQLite authority path policy
+- secrets/config handling
+- network exposure
+- read/write boundaries
+- telemetry emitted
+- fallback when Docker is unavailable
+- validation requirements
+- approval requirements
 
 ## Fallback Modes
 
@@ -43,6 +56,25 @@ When Docker is unavailable:
 
 ## Boundaries
 
-This document does not start containers, build images, add dependencies, or
-enable dashboard/API runtime behavior. Docker profile implementation requires a
-separate approved runtime milestone.
+This document does not start containers. The static profile tests also do not
+start containers, build images, add dependencies, or enable dashboard/API runtime behavior. Docker
+execution requires a separate explicit operator approval. Docker must never own
+Dream Studio authority, create a competing SQLite database, or become required
+for core, analytics-only, security-only, dashboard, shared-intelligence,
+adapter-router, or local-first operation unless a future profile explicitly
+enables and approves that runtime.
+
+## SQLite Mount Policy
+
+Container profiles receive an explicit host SQLite authority path when approved.
+The default is no host-state mount. Any writable work belongs in container-local
+temporary state unless a later approved runtime Work Order scopes a write
+boundary. A container-local database may be used only as temporary scratch, not
+as Dream Studio authority.
+
+## Validation
+
+The static validation suite checks that every Docker profile is optional,
+declares fallback behavior, does not mount host state by default, does not
+create an authority database, uses an explicit SQLite authority path, and
+forbids host writes by default.

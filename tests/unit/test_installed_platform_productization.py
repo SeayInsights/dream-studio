@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core.installed_productization import (
     backup_runtime,
+    final_installed_modular_platform_closeout,
     first_run_setup,
     install_global_command_surface,
     productization_acceptance_report,
@@ -16,6 +17,7 @@ from core.installed_productization import (
     update_runtime_check,
 )
 from core.module_profiles import module_profile_map
+from core.release.local_dogfood_stability import REQUIRED_MULTISESSION_CYCLES
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -279,6 +281,63 @@ def test_global_command_surface_installs_plain_ds_launcher(tmp_path: Path) -> No
         )
         assert json.loads(install_payload.stdout)["selected_profiles"] == ["analytics_only"]
         assert json.loads(status_payload.stdout)["user_local_state_location"] == str(home.resolve())
+
+
+def test_final_installed_modular_platform_closeout_routes_to_operator_decision(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "closeout-home"
+    first_run_setup(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        profiles=["core", "analytics_only", "security_only", "full"],
+        rehearsal=True,
+    )
+    evidence = {
+        "sqlite_hash_before": "hash",
+        "sqlite_hash_after": "hash",
+        "long_run_cycles": [
+            {
+                "cycle_id": cycle_id,
+                "status": "pass",
+                "evidence_refs": [f"evidence/{cycle_id}.json"],
+            }
+            for cycle_id in REQUIRED_MULTISESSION_CYCLES
+        ],
+        "release_gate_passed": True,
+        "black_passed": True,
+        "lint_baseline_passed": True,
+        "docs_drift_passed": True,
+        "pip_audit_passed": True,
+        "live_sqlite_guard_passed": True,
+        "repo_clean": True,
+        "private_artifacts_tracked": False,
+        "adapter_status_documented": True,
+        "context_packet_fallback_documented": True,
+        "publication_boundary_clean": True,
+        "readme_current": True,
+        "prd_current": True,
+        "contract_atlas_current": True,
+        "sanitized_public_export_current": True,
+        "apache_2_license_consistent": True,
+    }
+
+    closeout = final_installed_modular_platform_closeout(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        validation_evidence=evidence,
+    )
+
+    assert closeout["status"] == "pass"
+    assert closeout["ready_for_broader_local_use"] is True
+    assert closeout["ready_for_public_release"] is False
+    assert (
+        closeout["route_decision"]
+        == "operator_decision_on_public_release_private_dogfood_or_external_project_use"
+    )
+    assert (
+        closeout["verdict"] == "FINAL_INSTALLED_MODULAR_PLATFORM_PRODUCTIZATION_CLOSEOUT_COMPLETE"
+    )
 
 
 def _run_ds(ds: Path, cwd: Path, *args: str) -> dict[str, object]:
