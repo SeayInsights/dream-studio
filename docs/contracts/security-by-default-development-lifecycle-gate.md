@@ -85,6 +85,13 @@ derived view over current security authority. Findings must remain traceable to
 their source rows or evidence refs and include project, file, line, severity,
 status, control or rule where available, and remediation path where available.
 
+Project Details now exposes the 47-control applicability list, summary counts,
+manual-review count, unknown count, and source framework refs alongside project
+health, readiness, stack evidence, validation state, and attention items. This
+dashboard route is still non-executing: it does not run scans, inspect secrets,
+mutate external projects, draw inferred dependency edges as confirmed, or write
+SQLite.
+
 Migrated findings may be assigned to current projects only through
 high-confidence mapping, such as an exact project id or the legacy
 `project_<project_id_with_underscores>` alias. Findings that cannot be assigned

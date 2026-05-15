@@ -53,6 +53,13 @@ understand module ownership, optional dependencies, disabled-module behavior,
 and install profile membership before deciding which readiness controls apply.
 Those contract reads are non-executing and do not write SQLite.
 
+Project Details consumes readiness records as a derived operating view. It may
+show readiness score, control coverage, findings, remediation Work Orders,
+release blockers, module/runtime profile fit, validation state, stack evidence,
+and dependency graph status. Missing readiness or dependency evidence must be
+shown as unavailable or partial; manifest-derived dependency names do not become
+confirmed graph edges or readiness evidence without source refs.
+
 ## Skill And Control Overlap
 
 Existing skills and gates are canonical when they already work:

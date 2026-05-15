@@ -69,6 +69,12 @@ but they do not replace this profile pack or the 47-control framework. Security
 reviewers can use `/api/shared-intelligence/module-contracts` to understand
 module ownership and optional dependencies before selecting controls.
 
+Project Details can display normalized security findings, 47-control
+applicability, and module/profile fit together with stack evidence. That view is
+for operator orientation only. It must not create findings, run scans, inspect
+target repo secrets, or treat inferred dependency evidence as a confirmed
+security control result.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`

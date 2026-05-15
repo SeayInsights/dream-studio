@@ -123,6 +123,14 @@ remain derived views. Legacy, demo, temp, placeholder, and unmapped findings are
 classified for retention or manual review instead of being promoted into normal
 operator cards.
 
+Project Details now treats architecture and stack evidence as part of the
+dashboard runtime/readiness contract. It can show safe read-only repo evidence,
+module/runtime profile fit, confirmed dependency graph edges, inferred or
+unverified dependency names hidden by default, validations, attention items,
+known gaps, and next action. The atlas still treats dashboard output as derived:
+no dependency edge is confirmed unless it comes from current authority such as
+`pi_dependencies` with source/evidence refs.
+
 The atlas also records the analytics-only ingestion contract. That contract
 declares the standalone `analytics_only` profile, the dry-run-by-default
 `ds analytics-ingest` command, the `/api/shared-intelligence/analytics-only`

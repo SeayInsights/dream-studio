@@ -110,6 +110,13 @@ rollout. If evidence is insufficient, the dashboard and API must show
 unavailable or partial status with missing evidence, blockers, and source refs.
 They must not show fake precision.
 
+Project Details is the operating view for production-readiness context. It
+shows safe stack evidence, confirmed dependency graph status, inferred or
+unverified dependencies hidden by default, module/runtime profile fit, security
+findings, 47-control status, readiness controls, validations, attention items,
+known gaps, evidence refs, and the current next action. It is a derived view and
+must not mutate external projects, inspect secrets, run Docker, or write SQLite.
+
 PRD status is part of project authority. Existing safe PRD files can be read
 and summarized. Missing or stale PRD evidence becomes `draft_generated`,
 `needs_update`, `stale_superseded`, or `manual_review_required` status; no
