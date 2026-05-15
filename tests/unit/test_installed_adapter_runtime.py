@@ -34,7 +34,9 @@ def test_installed_runtime_model_separates_source_state_and_router_paths(tmp_pat
     assert model["router_api_service"]["api_routes"] == ["/api/shared-intelligence/adapter-router"]
     assert model["source_state_separation"] is True
     assert model["live_db_write_authorized"] is False
+    assert "ds install" in model["global_command_surface"]
     assert "ds router" in model["global_command_surface"]
+    assert model["productization_surface"]["acceptance_tests"] == "ds acceptance"
 
 
 def test_module_profiles_are_independent_and_analytics_only_is_minimal() -> None:

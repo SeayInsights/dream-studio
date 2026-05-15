@@ -129,20 +129,28 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_name": "Installed Adapter Runtime And Global Router",
         "source_patterns": [
             "core/installed_runtime.py",
+            "core/installed_productization.py",
             "core/module_profiles.py",
+            "ds.ps1",
             "interfaces/cli/ds.py",
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
             "docs/operations/installed-adapter-runtime.md",
+            "docs/operations/installed-platform-productization.md",
+            "docs/operations/troubleshooting.md",
             "docs/architecture/shared-authority-and-adapter-projections.md",
         ],
         "docs_refs": [
             "docs/operations/independent-configuration-model.md",
+            "docs/operations/installed-platform-productization.md",
+            "docs/operations/troubleshooting.md",
             "docs/README.md",
         ],
         "required_doc_refs": [
             "docs/operations/installed-adapter-runtime.md",
+            "docs/operations/installed-platform-productization.md",
+            "docs/operations/troubleshooting.md",
             "docs/architecture/shared-authority-and-adapter-projections.md",
             "docs/operations/independent-configuration-model.md",
         ],

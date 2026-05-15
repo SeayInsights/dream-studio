@@ -17,6 +17,7 @@ boundary.
 | Approval policies | operator decisions, Work Orders, route records | attention queue, release gates | SQLite/evidence | Required |
 | Local DB path | `core.config.database` | runtime, tests, dashboard | repo plus local env | Required for default changes |
 | Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
+| Installed platform productization | `core.installed_productization` | `ds install`, `ds acceptance`, backup/restore/update/uninstall checks | repo code plus explicit runtime home | Required for install/update behavior changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 
@@ -45,3 +46,9 @@ Installed module profiles are declared in `core.module_profiles`. The
 workflows, Claude, Codex, Docker, repo mutation, and cleanup. Optional modules
 must report honest empty states instead of silently requiring unavailable
 adapters or runtime services.
+
+Productized first-run setup must always target an explicit Dream Studio home or
+an approved installed home resolved from configuration. Rehearsal acceptance
+uses temporary homes and must not write to the operator's live
+`~/.dream-studio` state. Launcher files such as `ds.ps1` are repo source that
+resolve source/state boundaries; they are not runtime scratch.
