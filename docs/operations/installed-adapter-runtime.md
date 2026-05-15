@@ -66,6 +66,11 @@ Contract Atlas availability, module profile status, telemetry/evidence capture
 capabilities, and adapter workspace hygiene. It does not execute adapters,
 mutate routing policy, write adapter configs, or write live SQLite by default.
 
+The shared-intelligence route surface also exposes
+`/api/shared-intelligence/security-lifecycle`. That surface is a read-only
+installed runtime capability for security classification and release-readiness
+status; it does not run scans, inspect secrets, or write runtime state.
+
 Supported adapter access modes:
 
 | Mode | Meaning |

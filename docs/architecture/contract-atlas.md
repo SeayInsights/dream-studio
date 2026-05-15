@@ -38,6 +38,7 @@ The registry currently tracks these release-blocking domains:
 - Installed adapter runtime and global router
 - Dashboard runtime and read models
 - Workflow and hook runtime
+- Security-by-default lifecycle gate
 - Release gate and publication boundary
 
 Each domain declares:
@@ -74,6 +75,11 @@ sections. They declare the source/state split, global command surface,
 adapter-router read model, and per-profile dependency expectations so installed
 Dream Studio behavior is visible without making the atlas an installer,
 mutator, or live-state authority.
+
+The security lifecycle gate is also a first-class atlas section. It maps the
+47 enterprise security controls to the security review catalog, security skill,
+project health, and release readiness while preserving the non-execution
+boundary.
 
 ## Drift Gate
 

@@ -17,6 +17,7 @@ This governance contract is documentation and static-test guidance only. It does
 | `docs/contracts/security-review-scan-definition-schema.md` | Schema authority for allowed fields, source-item references, and non-execution posture. |
 | `docs/contracts/security-review-scan-catalog.sample.yaml` | Non-canonical illustrative excerpt for schema examples. |
 | `docs/contracts/security-review-profile-pack-contract.md` | Profile-pack boundary contract for taxonomy, evidence, reporting, and authority constraints. |
+| `docs/contracts/security-by-default-development-lifecycle-gate.md` | Lifecycle policy contract that applies the 47-control framework to goals, milestones, Work Orders, code changes, and release readiness. |
 
 ## Source-Of-Truth Rules
 
@@ -27,6 +28,7 @@ This governance contract is documentation and static-test guidance only. It does
 - The schema document defines allowed fields, source-item reference shape, and non-execution posture.
 - The sample YAML is not canonical and must not be used to infer full catalog coverage.
 - Security Review artifacts remain profile-pack data until a later approved Work Order defines execution scope, target profile inputs, validation profile inputs, evidence profile inputs, and safe failure behavior.
+- The security lifecycle gate may classify applicability and release readiness from these artifacts, but it remains a non-executing read model and cannot authorize scans or mutation.
 
 ## Synchronization Rules
 

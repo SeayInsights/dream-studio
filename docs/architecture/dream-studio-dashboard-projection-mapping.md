@@ -41,6 +41,7 @@ The dashboard mapping covers:
 - Paused external validation targets
 - Contract Atlas status and boundary violations
 - Installed adapter router status and module/profile health
+- Security lifecycle gate status and 47-control applicability
 
 ## Required Mapping Fields
 
@@ -111,6 +112,20 @@ Claude/Codex live-consumption caveats recorded by validation evidence.
 It must not start services, execute hooks, mutate adapter configs, write live
 SQLite, clean worktrees, inspect secrets, or treat the dashboard as primary
 authority.
+
+## Security Lifecycle Projection
+
+The security lifecycle projection is exposed through
+`/api/shared-intelligence/security-lifecycle`. It is a dashboard-consumable
+derived view over the 47 enterprise security controls, the security review
+crosswalk, the structured scan catalog, open security findings, and the current
+lifecycle event or changed-file signal.
+
+The projection may display applicable controls, not-applicable reasons,
+manual-review controls, unknown controls, required finding fields, security
+skill/control mapping, project health effect, and release-readiness effect. It
+must not run scans, inspect secrets, mutate repositories, write SQLite, or show
+synthetic/demo findings in live operator views.
 
 ## Freshness And Staleness
 

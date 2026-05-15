@@ -22,6 +22,7 @@ Dream Studio documentation is split between public product guidance and private 
 - [Execution Telemetry Spine](architecture/dream-studio-execution-telemetry-spine.md)
 - [Dashboard Projection Mapping](architecture/dream-studio-dashboard-projection-mapping.md)
 - [Contracts](contracts/)
+- [Security-By-Default Lifecycle Gate](contracts/security-by-default-development-lifecycle-gate.md)
 
 ## Operations
 

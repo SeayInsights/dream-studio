@@ -51,6 +51,12 @@ profile status, and Contract Atlas availability without making an adapter own
 Dream Studio logic. Adapters that cannot call the router should consume exported
 context packets and return normalized evidence for Dream Studio to ingest.
 
+Security lifecycle access follows the same boundary. Adapters may read
+`/api/shared-intelligence/security-lifecycle` or a generated context packet to
+understand which 47-control checks are applicable, deferred, or blocking, but
+they do not become security authority and must normalize results back into
+Dream Studio records.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 
