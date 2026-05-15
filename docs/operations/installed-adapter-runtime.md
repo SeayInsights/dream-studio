@@ -37,6 +37,10 @@ ds status
 ds install
 ds install-command
 ds dashboard
+ds dashboard --status
+ds dashboard --serve
+ds dashboard --open
+ds dashboard --check
 ds validate
 ds contract-atlas
 ds contract-atlas-refresh --output-dir C:\path\to\private-or-public-export

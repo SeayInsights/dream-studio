@@ -133,7 +133,9 @@ Suggested private operator checks:
 - `ds router`
 - `ds contract-atlas`
 - `ds context-packet`
-- `ds dashboard`
+- `ds dashboard --status`
+- `ds dashboard --serve`
+- `ds dashboard --check`
 
 Do not paste raw outputs into public or pilot-facing materials if they contain local runtime details. Summarize pass/fail and sanitize before sharing.
 

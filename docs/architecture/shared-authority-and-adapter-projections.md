@@ -58,6 +58,14 @@ the global command surface, and `ds install-command` can materialize user-local
 launchers in a PATH directory. They still delegate back to Dream Studio source
 and SQLite authority.
 
+The installed dashboard command follows the same projection boundary. `ds
+dashboard --status` is the safe default/readiness mode, `--serve` starts the
+local dashboard server with explicit source/home/SQLite environment, `--open`
+starts or reuses the server and opens a browser, and `--check` probes route
+health. These commands expose derived dashboard/API surfaces; they do not make
+the dashboard primary authority or authorize migrations, backfills, cleanup, or
+destructive SQLite mutation.
+
 Security lifecycle access follows the same boundary. Adapters may read
 `/api/shared-intelligence/security-lifecycle` or a generated context packet to
 understand which 47-control checks are applicable, deferred, or blocking, but

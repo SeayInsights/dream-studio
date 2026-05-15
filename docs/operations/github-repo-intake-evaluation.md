@@ -50,6 +50,11 @@ workflow and recorded evaluation summaries. It does not fetch remote repos,
 copy code, add dependencies, fork, vendor, mutate external projects, or approve
 adoption by itself.
 
+The installed dashboard command can make this derived route visible when the
+dashboard module is enabled. `ds dashboard --serve`, `--open`, and `--check`
+only start or validate the local dashboard/API surface; they do not inspect
+GitHub repositories or promote intake decisions.
+
 GitHub repo evaluation evidence is private by default until explicitly
 sanitized for publication.
 

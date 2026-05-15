@@ -77,6 +77,11 @@ operations policy, and the docs index together so the release gate, human docs
 surface, lifecycle manifest, sanitized export boundary, and derived atlas view
 describe the same freshness boundary.
 
+Installed dashboard command changes are part of this drift boundary when they
+change public command behavior. The release gate expects the command help,
+Contract Atlas surface, installed runtime docs, troubleshooting guidance, and
+dashboard validation evidence to move together.
+
 Installed runtime and productization changes are release-gate relevant. If code
 changes affect `core/installed_runtime.py`, `core/installed_productization.py`,
 module profile selection, repo-owned launchers such as `ds.cmd` or `ds.ps1`,

@@ -74,6 +74,11 @@ model/provider values remain `unknown`; unavailable file or command data remains
 `unavailable`; imported or untracked work must be classified instead of
 overclaimed.
 
+Dashboard launch commands must use the resolved SQLite path through
+`DREAM_STUDIO_DB_PATH` and `DREAM_STUDIO_HOME` instead of assuming the caller's
+current directory or default home. Serving or checking the dashboard must not
+bootstrap, migrate, backfill, clean, or destructively mutate the live database.
+
 Platform hardening authority lives in migration
 `046_platform_hardening_authority.sql` and covers:
 

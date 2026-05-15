@@ -652,7 +652,14 @@ def dashboard_onboarding_status(
     return {
         "dashboard_enabled": dashboard_enabled,
         "dashboard_command": "ds dashboard",
+        "dashboard_modes": {
+            "status": "ds dashboard --status",
+            "serve": "ds dashboard --serve",
+            "open": "ds dashboard --open",
+            "check": "ds dashboard --check",
+        },
         "starts_server": False,
+        "default_behavior": "status_only_no_server_started",
         "source_root": str(Path(source_root).resolve()),
         "dream_studio_home": str(Path(dream_studio_home).resolve()),
         "api_routes": (
@@ -662,6 +669,11 @@ def dashboard_onboarding_status(
             "Dashboard routes show derived empty states until runtime facts exist."
             if dashboard_enabled
             else "Dashboard module is disabled by selected profiles."
+        ),
+        "start_guidance": (
+            "Run ds dashboard --serve to start the local server, ds dashboard --open to "
+            "start/reuse it and open a browser, and ds dashboard --check to validate "
+            "route health."
         ),
     }
 
@@ -770,6 +782,10 @@ def final_installed_modular_platform_closeout(
         "ds contract-atlas",
         "ds context-packet",
         "ds dashboard",
+        "ds dashboard --status",
+        "ds dashboard --serve",
+        "ds dashboard --open",
+        "ds dashboard --check",
         "ds analytics-ingest",
         "ds install",
         "ds acceptance",

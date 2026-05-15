@@ -60,9 +60,14 @@ The installed command surface includes:
 - `ds repair`
 - `ds policy`
 - `ds platform-hardening`
+- `ds dashboard --status`
+- `ds dashboard --serve`
+- `ds dashboard --check`
 - `ds install --check-legacy`
 - `ds migrate-legacy --dry-run`
 - `ds repair-adapters`
 - `ds rollback-check`
 
-These commands do not authorize destructive changes.
+These commands do not authorize destructive changes. Dashboard serve/check
+validation is a local runtime health surface only; it must not bootstrap,
+migrate, backfill, clean, or mutate external projects.
