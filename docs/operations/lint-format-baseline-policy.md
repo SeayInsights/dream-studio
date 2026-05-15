@@ -163,6 +163,16 @@ change set must run `python interfaces\cli\repo_publication_readiness.py
 --strict`, refresh the public publication evidence when intentional, and keep
 private operational history out of tracked source.
 
+External-project, Docker-boundary, long-run validation, and final
+productization closeout changes are release-gate relevant. If code changes
+affect paused external target intake, target selection gates, Docker profile
+contracts, multisession dogfood evidence, live SQLite hash guards, or final
+installed-platform closeout routing, the same change set must refresh Contract
+Atlas, installed productization docs, Docker/external-project docs, and the
+docs index. Tests should prove that external projects remain paused unless
+selected, Docker stays optional, live SQLite guards stay intact, and closeout
+routes to an explicit operator decision before public release.
+
 ## Future Cleanup
 
 Remaining flake8 debt should be paid down in focused follow-up work. Removing or reducing baseline entries is encouraged when safe. Broad semantic lint cleanup remains a separate approval boundary.

@@ -25,6 +25,9 @@ boundary.
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
 | Analytics-only ingestion | `core.analytics_ingestion` normalized payload contract | `ds analytics-ingest`, `/api/shared-intelligence/analytics-only`, All Projects, Project Details, metrics/security/readiness APIs | explicit SQLite imports plus derived views | Required for analytics import contract changes |
 | GitHub CI/CD profile | `runtime/config/release-gates/dream-studio.json` plus `core.release.github_pr_cicd_gate` | Contract Atlas, release gate packet, GitHub workflows | repo source/config | Required for workflow or merge-policy changes |
+| External project validation | `core.projects.external_validation` | All Projects, Project Details, Work Order plans | repo source plus SQLite/evidence refs | Required for target access or policy changes |
+| Docker module profiles | `core.telemetry.docker_profiles` | module registry, Contract Atlas, runtime status | repo source/config | Required for Docker execution or profile changes |
+| Long-run validation closeout | `core.release.local_dogfood_stability` | release gate packet, Contract Atlas, final closeout | evidence refs plus repo source | Required for release closeout changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those
@@ -45,6 +48,12 @@ surfaces, or generated adapter projections.
 Configuration can be enabled independently. Docker, external project scanning,
 browser smoke automation, and deployment remain optional profiles and cannot
 become core authority without a separate approved Work Order.
+
+External project configuration is paused-by-default. Current target selection
+is required before read-only intake, and scoped approval is required before
+mutation, commit, push, or deploy. Docker profile configuration is optional and
+non-authoritative; profile contracts can be validated without starting
+containers.
 
 Installed module profiles are declared in `core.module_profiles`. The
 `analytics_only` profile is intentionally independent of hooks, agents,

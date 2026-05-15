@@ -173,6 +173,31 @@ level without mutating the database.
 Live restore, update, or uninstall execution requires a separate
 operator-approved scope.
 
+## External Project Pipeline
+
+External projects are supported through a paused-by-default validation pipeline.
+DreamySuite, Bill Stack, TORII, and future targets can be represented in the
+external target registry, but no target is read, scanned, mutated, validated,
+committed, pushed, or deployed unless the current operator decision explicitly
+selects that target and scope.
+
+The pipeline can generate a derived dashboard card, read-only intake plan,
+dirty-state classification requirement, validation profile, Work Order sequence,
+commit policy, push/deploy hold, and private-artifact exclusion policy. Private
+planning artifacts, Work Orders, handoffs, local evidence, backup dumps, SQLite
+databases, generated runtime state, and secrets stay out of target repos unless
+a later sanitized publication policy approves them.
+
+## Docker Boundary
+
+Docker is an optional runtime boundary, not core Dream Studio authority. The
+`docker_optional` module and Docker profile contracts describe scanner,
+validation sandbox, adapter worker, ingestion worker, and dashboard/API
+possibilities, but static validation does not start containers or build images.
+Analytics-only, security-only, dashboard-only, shared-intelligence-only,
+adapter-router-only, and full local operation all continue to work without
+Docker.
+
 ## Acceptance Tests
 
 Fresh-environment acceptance is exercised by:
@@ -188,6 +213,12 @@ The acceptance report validates fresh state creation, selected/unselected
 profile behavior, dashboard status, adapter status, analytics-only independence,
 security-only independence, full profile availability, backup/restore/update
 checks, and uninstall dry-run behavior.
+
+Final productization closeout additionally aggregates long-run multisession
+validation, the live SQLite hash guard, release gate evidence, command-surface
+checks, adapter status documentation, Contract Atlas/docs freshness, sanitized
+public export freshness, and publication boundary checks. Passing closeout
+routes to `operator_decision_on_public_release_private_dogfood_or_external_project_use`.
 
 ## Usage Accounting Setup
 

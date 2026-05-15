@@ -26,6 +26,8 @@ Keep these out of Git unless separately sanitized and approved:
 - cutover, cleanup, rollback, dogfood, release, and local audit evidence;
 - generated prompts and private context packets;
 - external-project details not intentionally public;
+- private external-target intake evidence, dirty-state snapshots, Work Orders,
+  handoffs, validation reports, and route decisions;
 - secret, credential, token, or private data values.
 
 ## Current Repo Hygiene
@@ -54,6 +56,12 @@ refreshing public publication evidence artifacts.
 ## Documentation Rule
 
 Public docs should describe Dream Studio as a local-first AI orchestration and operational intelligence platform. Adapter-specific docs may describe Claude Code, Codex, Cursor, Copilot, ChatGPT, MCP, shell, or local-model surfaces, but must not frame any adapter as the product itself.
+
+External project and Docker docs may describe the public-safe policy and module
+contracts, but must not publish private target details, local scans, target
+dirty-state output, target paths, container runtime evidence, or operational
+approval artifacts. Final productization closeout can be summarized publicly
+only as sanitized readiness status; private release evidence stays local.
 
 ## Contract Atlas Export Rule
 

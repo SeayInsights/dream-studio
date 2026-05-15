@@ -1,0 +1,56 @@
+# Long-Run Multisession Operational Validation
+
+Lifecycle status: tested_only
+
+Long-run validation is a dogfood and stability gate, not a feature expansion
+surface. It consumes evidence from realistic internal cycles and confirms that
+Dream Studio remains stable across sessions, adapters, command surfaces,
+dashboard/API use, installed-state checks, and release gates.
+
+## Required Cycles
+
+The closeout model requires evidence for:
+
+- dashboard/authority inspection
+- local dogfood route cycle
+- release gate cycle
+- installed command surface cycle
+- Contract Atlas/docs drift check
+- security/readiness classification
+- adapter/router status check
+- analytics-only profile check
+
+Each cycle must include evidence refs and pass/fail status. Missing evidence is
+a failure, not a silent pass.
+
+## Boundary Checks
+
+The validation report blocks when it sees:
+
+- prompt-chaining regressions
+- hidden mutation
+- evidence file sprawl
+- dashboard authority drift
+- old path references returning
+- synthetic/mock/test data leaking into live dashboard views
+- adapter staleness drift
+- external project mutation
+- Docker execution without approval
+- unintended live SQLite mutation
+- live SQLite hash changing across a guarded release gate
+
+## SQLite Guard
+
+Release validation supplies the live SQLite hash before and after the gate. The
+closeout can only pass when the hash is unchanged. Tests and release gates must
+not write to the live installed database unless a specific approved live update
+scope says they should.
+
+## Closeout
+
+When all required cycles pass, no forbidden boundary action appears, and the
+SQLite hash guard passes, the milestone verdict is:
+
+```text
+LONG_RUN_MULTISESSION_OPERATIONAL_VALIDATION_COMPLETE
+```

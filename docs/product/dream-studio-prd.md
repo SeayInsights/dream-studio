@@ -41,6 +41,20 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 - Maintain a Contract Atlas lifecycle manifest that regenerates private/internal atlas views, sanitized public exports, maturity status, docs/PRD/README impact detection, dashboard/API freshness, and public-export leakage checks from authority rather than hand-maintained files.
 - Use GitHub Actions as a lightweight remote confidence layer: PR smoke by default, manual full CI for remote parity evidence, manual or tag-triggered release validation for release evidence, and local Dream Studio release gates as the heavy validation authority.
 - Validate repo publication readiness with source-owned checks for tracked files, ignored/local boundaries, Git history path privacy, Apache-2.0 references, README/PRD alignment, and sanitized Contract Atlas exports.
+- Support installed modular productization so a user can run `ds` from outside
+  the repo, select profiles, inspect adapter/router health, use context-packet
+  fallback, run analytics-only/security-only/full modes, and perform
+  backup/restore/update/uninstall checks without understanding internals.
+- Keep external projects paused by default with explicit target selection for
+  read-only intake, scoped approval for mutation, validation and commit policy
+  before commit, and separate approval before push or deploy.
+- Keep Docker optional and non-authoritative through profile contracts for
+  scanner, sandbox, worker, ingestion, and dashboard/API use without making
+  containers required for local-first operation.
+- Run long-run multisession validation before closeout decisions so route-first
+  behavior, docs drift, security/readiness gates, adapter honesty, dashboard
+  derived views, profile independence, and live SQLite hash guards do not
+  regress.
 - Keep private operator state, raw telemetry, local backups, Work Orders, handoffs, cutover records, and audit evidence out of the public repo by default.
 
 ## Non-Goals
@@ -98,6 +112,30 @@ evidence and operator/legal review support a stronger claim.
 ### Shared Intelligence
 
 Adapters are projections over Dream Studio authority. Dream Studio generates context packets and adapter configs, detects stale projections, normalizes results, compares outcomes, and routes work based on capability, risk, cost, validation need, and prior success.
+
+### Installed Modular Platform
+
+Dream Studio installs as a local platform with selected module profiles and a
+global `ds` command surface. Core, analytics-only, security-only,
+telemetry-only, dashboard-only, adapter-router-only, shared-intelligence-only,
+and full profiles must expose honest enabled/disabled behavior and empty states.
+Normal use should not require manually opening the source repo.
+
+### External Project Pipeline
+
+External targets are reusable but paused by default. The pipeline can plan
+read-only intake, PRD/status detection, stack/dependency discovery,
+security/readiness classification, validation profile selection, Work Order
+generation, commit policy, and dashboard visibility without inspecting or
+mutating target repos. Any real external access requires current target
+selection and scope.
+
+### Optional Docker Boundary
+
+Docker can provide optional scanner, sandbox, worker, ingestion, or dashboard/API
+runtime isolation. It must not become canonical authority, create a competing
+SQLite database, mount host state by default, or block core local-first
+operation when unavailable.
 
 ### Contract Atlas And Drift Gate
 

@@ -50,6 +50,9 @@ The registry currently tracks these release-blocking domains:
 - Security-by-default lifecycle gate
 - Secure production readiness gate
 - Release gate and publication boundary
+- External project validation pipeline
+- Docker module runtime boundary
+- Long-run multisession operational validation
 
 Each domain declares:
 
@@ -80,12 +83,12 @@ be used operationally. This prevents Dream Studio from claiming live Claude,
 Codex, Docker, external-project, or release behavior that is only designed or
 tested in isolation.
 
-The installed runtime model, module profiles, and major module contracts are
-now first-class atlas sections. They declare the source/state split, global
-command surface, adapter-router read model, per-profile dependency
-expectations, and explicit module boundaries so installed Dream Studio behavior
-is visible without making the atlas an installer, mutator, or live-state
-authority.
+The installed runtime model, module profiles, major module contracts, final
+productization closeout, and long-run multisession validation are first-class
+atlas sections. They declare the source/state split, global command surface,
+adapter-router read model, per-profile dependency expectations, release gate
+hash guard, and explicit module boundaries so installed Dream Studio behavior is
+visible without making the atlas an installer, mutator, or live-state authority.
 
 Installed platform productization is tracked through the installed adapter
 runtime and global router contracts. The atlas treats `ds.cmd`, `ds.ps1`, and
@@ -139,6 +142,20 @@ unverified dependency names hidden by default, validations, attention items,
 known gaps, and next action. The atlas still treats dashboard output as derived:
 no dependency edge is confirmed unless it comes from current authority such as
 `pi_dependencies` with source/evidence refs.
+
+External project validation is now tracked as a paused-by-default operational
+contract. The atlas records that DreamySuite, Bill Stack, TORII, and future
+external targets require explicit current target selection before read-only
+intake, scoped approval before mutation, validation and commit policy before
+commit, and separate approval before push or deploy. The pipeline can expose
+derived dashboard cards and Work Order plans, but it does not inspect or mutate
+target repos during planning.
+
+Docker module profiles are tracked as optional runtime-boundary contracts. The
+atlas records scanner, sandbox, adapter worker, ingestion worker, and
+dashboard/API profile definitions with explicit SQLite path policy, no default
+host writes, no competing authority database, approval before container
+execution, and native/local fallback when Docker is unavailable.
 
 The atlas also records the analytics-only ingestion contract. That contract
 declares the standalone `analytics_only` profile, the dry-run-by-default

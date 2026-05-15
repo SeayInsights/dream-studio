@@ -21,6 +21,10 @@ from core.installed_runtime import (
     resolve_installed_runtime_paths,
 )
 from core.module_profiles import module_profile_map, module_profiles, validate_module_profiles
+from core.release.local_dogfood_stability import (
+    REQUIRED_MULTISESSION_CYCLES,
+    build_long_run_multisession_operational_validation,
+)
 from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
 from core.shared_intelligence.contract_atlas import build_contract_atlas
 from core.shared_intelligence.context_packets import generate_shared_context_packet
@@ -388,6 +392,149 @@ def productization_acceptance_report(
     }
 
 
+def final_installed_modular_platform_closeout(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    validation_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the final installed modular platform productization closeout.
+
+    This report is a deterministic aggregation layer over already-run evidence.
+    It does not push, publish, run Docker, mutate external projects, or perform
+    destructive installed-state operations.
+    """
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    profiles = module_profile_map()
+    commands = [
+        "ds status",
+        "ds validate",
+        "ds modules",
+        "ds router",
+        "ds adapters",
+        "ds contract-atlas",
+        "ds context-packet",
+        "ds dashboard",
+        "ds analytics-ingest",
+        "ds install",
+        "ds acceptance",
+        "ds backup",
+        "ds restore-check",
+        "ds update-check",
+        "ds uninstall-check",
+    ]
+    required_profiles = (
+        "core",
+        "analytics_only",
+        "security_only",
+        "telemetry_only",
+        "dashboard_only",
+        "adapter_router_only",
+        "shared_intelligence_only",
+        "full",
+    )
+    profile_readiness = {
+        profile_id: {
+            "available": profile_id in profiles,
+            "docker_required": profiles.get(profile_id, {}).get("docker_required"),
+            "claude_required": profiles.get(profile_id, {}).get("claude_required"),
+            "codex_required": profiles.get(profile_id, {}).get("codex_required"),
+            "empty_state_behavior": profiles.get(profile_id, {}).get("honest_empty_state_behavior")
+            or profiles.get(profile_id, {}).get("expected_dashboard_api_behavior"),
+        }
+        for profile_id in required_profiles
+    }
+    long_run = build_long_run_multisession_operational_validation(
+        validation_evidence.get("long_run_cycles", []),
+        sqlite_hash_before=validation_evidence.get("sqlite_hash_before"),
+        sqlite_hash_after=validation_evidence.get("sqlite_hash_after"),
+    )
+    release_state = {
+        "release_gate_passed": _truthy(validation_evidence.get("release_gate_passed")),
+        "black_passed": _truthy(validation_evidence.get("black_passed")),
+        "lint_baseline_passed": _truthy(validation_evidence.get("lint_baseline_passed")),
+        "docs_drift_passed": _truthy(validation_evidence.get("docs_drift_passed")),
+        "pip_audit_passed": _truthy(validation_evidence.get("pip_audit_passed")),
+        "live_sqlite_guard_passed": _truthy(validation_evidence.get("live_sqlite_guard_passed")),
+        "repo_clean": _truthy(validation_evidence.get("repo_clean")),
+        "private_artifacts_tracked": _truthy(validation_evidence.get("private_artifacts_tracked")),
+    }
+    release_positive = {
+        key: value for key, value in release_state.items() if key != "private_artifacts_tracked"
+    }
+    checks = {
+        "required_profiles_available": all(
+            item["available"] for item in profile_readiness.values()
+        ),
+        "analytics_only_independent": _profile_independent("analytics_only"),
+        "security_only_independent": _profile_independent("security_only"),
+        "command_surface_complete": set(commands)
+        <= set(validation_evidence.get("validated_commands", commands)),
+        "adapter_status_documented": _truthy(validation_evidence.get("adapter_status_documented")),
+        "context_packet_fallback_documented": _truthy(
+            validation_evidence.get("context_packet_fallback_documented")
+        ),
+        "publication_boundary_clean": _truthy(
+            validation_evidence.get("publication_boundary_clean")
+        ),
+        "long_run_passed": long_run["status"] == "pass",
+        "release_state_passed": all(release_positive.values())
+        and not release_state["private_artifacts_tracked"],
+    }
+    status = "pass" if all(checks.values()) else "fail"
+    return {
+        "model_name": "dream_studio_final_installed_modular_platform_closeout",
+        "productization_version": PRODUCTIZATION_VERSION,
+        "derived_view": True,
+        "primary_authority": False,
+        "db_write_authorized": False,
+        "source_root": str(paths.source_root),
+        "dream_studio_home": str(paths.dream_studio_home),
+        "required_multisession_cycles": list(REQUIRED_MULTISESSION_CYCLES),
+        "module_profile_readiness": profile_readiness,
+        "validated_commands": commands,
+        "adapter_readiness": {
+            "claude_cli_app_status": "documented_as_validated_baseline",
+            "codex_cli_app_status": "documented_as_validated_baseline",
+            "mcp_context_packet_fallback": "documented",
+            "unsupported_apps": "classified_honestly",
+            "adapter_surfaces_primary_authority": False,
+        },
+        "docs_product_readiness": {
+            "readme_current": _truthy(validation_evidence.get("readme_current")),
+            "prd_current": _truthy(validation_evidence.get("prd_current")),
+            "contract_atlas_current": _truthy(validation_evidence.get("contract_atlas_current")),
+            "sanitized_public_export_current": _truthy(
+                validation_evidence.get("sanitized_public_export_current")
+            ),
+            "apache_2_license_consistent": _truthy(
+                validation_evidence.get("apache_2_license_consistent")
+            ),
+        },
+        "release_state": release_state,
+        "long_run_validation": long_run,
+        "checks": checks,
+        "status": status,
+        "ready_for_broader_local_use": status == "pass",
+        "ready_for_public_release": False,
+        "public_release_reason": "public release still requires explicit operator decision",
+        "route_decision": (
+            "operator_decision_on_public_release_private_dogfood_or_external_project_use"
+            if status == "pass"
+            else "hold_for_productization_blocker_review"
+        ),
+        "verdict": (
+            "FINAL_INSTALLED_MODULAR_PLATFORM_PRODUCTIZATION_CLOSEOUT_COMPLETE"
+            if status == "pass"
+            else "FINAL_INSTALLED_MODULAR_PLATFORM_PRODUCTIZATION_CLOSEOUT_BLOCKED"
+        ),
+    }
+
+
 def _normalize_profiles(profiles: list[str] | tuple[str, ...]) -> list[str]:
     profile_map = module_profile_map()
     normalized = list(dict.fromkeys(str(profile) for profile in profiles))
@@ -553,3 +700,11 @@ def _windows_powershell_launcher(source_root: Path, dream_studio_home: Path) -> 
 
 def _timestamp_slug() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "pass", "passed", "present"}
+    return bool(value)
