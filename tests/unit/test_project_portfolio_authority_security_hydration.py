@@ -22,6 +22,24 @@ def _portfolio_db(tmp_path: Path) -> Path:
     db_path = tmp_path / "project-portfolio-authority.db"
     project_root = tmp_path / "dream-studio"
     project_root.mkdir()
+    (project_root / "pyproject.toml").write_text(
+        """
+[project]
+name = "dream-studio"
+dependencies = ["fastapi", "pydantic"]
+""".strip(),
+        encoding="utf-8",
+    )
+    (project_root / ".github" / "workflows").mkdir(parents=True)
+    (project_root / ".github" / "workflows" / "ci.yml").write_text(
+        "name: ci\n",
+        encoding="utf-8",
+    )
+    (project_root / "projections" / "api" / "routes").mkdir(parents=True)
+    (project_root / "projections" / "api" / "routes" / "example.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n",
+        encoding="utf-8",
+    )
     legacy_root = tmp_path / "historical-prd-project"
     legacy_root.mkdir()
     conn = sqlite3.connect(db_path)
@@ -125,6 +143,15 @@ def _portfolio_db(tmp_path: Path) -> Path:
         )
         conn.execute(
             "CREATE TABLE pi_dependencies(project_id TEXT, from_component TEXT, to_component TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE pi_components(component_id TEXT, project_id TEXT, path TEXT, name TEXT, component_type TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO pi_components VALUES('dashboard', 'dream-studio', 'projections/frontend/dashboard.html', 'Dashboard', 'frontend')"
+        )
+        conn.execute(
+            "INSERT INTO pi_components VALUES('telemetry_api', 'dream-studio', 'projections/api/routes/telemetry.py', 'Telemetry API', 'api')"
         )
         conn.execute(
             "INSERT INTO pi_dependencies VALUES('dream-studio', 'dashboard', 'telemetry_api')"
@@ -253,9 +280,52 @@ def test_project_details_separates_health_and_sqlite_readiness_authority(
         assert payload["readiness_score"]["status"] == "partial"
         assert payload["readiness_control_coverage"]["total"] > 47
         assert payload["enterprise_security_controls"]["source_control_count"] == 47
+        assert payload["enterprise_security_control_status"]["controls"]
+        assert payload["stack_evidence"]["repo_scan"]["classification"] == "confirmed"
+        assert payload["stack_evidence"]["repo_scan"]["secret_contents_read"] is False
+        assert payload["confirmed_dependencies"]["edge_count"] == 1
+        assert payload["confirmed_dependencies"]["edges"][0]["confirmation_status"] == "confirmed"
+        assert payload["confirmed_dependencies"]["edges"][0]["rendered_by_default"] is True
+        assert payload["inferred_or_unverified_dependencies"]["edge_count"] >= 2
+        assert payload["inferred_or_unverified_dependencies"]["rendered_by_default"] is False
+        assert payload["dependency_drilldown"]["confirmed_edges_only_by_default"] is True
+        assert "analytics_only" in [
+            profile["profile_id"]
+            for profile in payload["module_runtime_profile_fit"]["candidate_profiles"]
+        ]
+        assert "external_project" in payload["module_runtime_profile_fit"]["fit_modules"]
+        assert payload["validation_state"]["recent"]["recent_count"] == 2
+        assert payload["attention_items"]["open_count"] == 1
         assert payload["manual_review_controls"]
         assert payload["remediation_work_orders"]
         assert payload["source_status"]["classification"] == "fresh"
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_project_dependencies_render_confirmed_edges_only_by_default(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
+    try:
+        response = client.get("/api/v1/projects/dream-studio/dependencies")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["edge_count"] == 1
+        assert payload["confirmed_edge_count"] == 1
+        assert payload["inferred_edge_count"] == 0
+        assert payload["unverified_edge_count"] == 0
+        assert payload["knowledge_graph_status"]["classification"] == "confirmed"
+        assert payload["knowledge_graph_status"]["placeholder_edges_rendered"] is False
+        assert payload["knowledge_graph_status"]["confirmed_edges_rendered_by_default"] is True
+        assert payload["knowledge_graph_status"]["inferred_edges_rendered_by_default"] is False
+        edge = payload["edges"][0]
+        assert edge["confirmation_status"] == "confirmed"
+        assert edge["source_tables"] == ["pi_dependencies"]
+        assert edge["source_refs"]
+        assert payload["nodes"][0]["source_tables"] == ["pi_components", "pi_dependencies"]
+        assert payload["drilldown"]["confirmed_edges_only_by_default"] is True
     finally:
         DatabaseRuntime.reset_instance()
 
