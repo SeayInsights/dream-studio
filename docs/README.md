@@ -28,6 +28,7 @@ Dream Studio documentation is split between public product guidance and private 
 - [Local Runtime](operations/local-runtime.md)
 - [Work Orders](operations/work-orders.md)
 - [Independent Configuration Model](operations/independent-configuration-model.md)
+- [Adapter Workspace Hygiene](operations/adapter-workspace-hygiene.md)
 - [Verified Legacy Purge Policy](operations/verified-legacy-purge-policy.md)
 - [Windows Development Commands](operations/windows-dev-commands.md)
 - [Docker Clean Room](operations/docker-clean-room.md)

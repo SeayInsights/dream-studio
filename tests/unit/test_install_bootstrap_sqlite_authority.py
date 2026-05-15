@@ -194,6 +194,8 @@ def test_migration_037_exists_in_repo_and_runtime_state_is_gitignored() -> None:
     gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert ".dream-studio/*" in gitignore
     assert "*.db" in gitignore
+    assert ".claude/" not in gitignore
+    assert ".codex/" not in gitignore
 
 
 def test_no_operator_home_path_is_hardcoded_in_source_files() -> None:

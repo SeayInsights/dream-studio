@@ -36,6 +36,13 @@ staleness detection, export, and future sync/install flows. They do not become
 active adapter config merely by existing; active-surface refresh requires an
 explicit approved projection repair or install boundary.
 
+Adapter scratch folders, app-created worktrees, local session histories, and
+runtime caches are not adapter projections. They must stay under user-local
+Dream Studio state or a checkout-local excluded path, and they must not pollute
+repo status. Unknown adapter files require classification before any ignore,
+delete, archive, or cleanup decision. Secret/auth/token paths may be recorded as
+path-level metadata only; do not inspect or print their contents.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 

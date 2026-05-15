@@ -25,6 +25,14 @@ links, or otherwise refreshes an active adapter surface. Local user-specific
 settings that include secrets or credentials are sensitive manual-review items
 and must not be read, printed, copied into public docs, or committed.
 
+Adapter scratch files, app-created worktrees, session transcripts, temporary
+prompts, and runtime caches are not configuration authority. They should live
+under user-local Dream Studio state or a checkout-local excluded area such as
+`.claude/worktrees/` or `.codex/sessions/`. Use `.git/info/exclude` for
+machine-specific adapter scratch paths; reserve repo `.gitignore` for patterns
+that are safe for every user and do not hide product source, active adapter
+surfaces, or generated adapter projections.
+
 Configuration can be enabled independently. Docker, external project scanning,
 browser smoke automation, and deployment remain optional profiles and cannot
 become core authority without a separate approved Work Order.
