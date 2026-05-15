@@ -65,27 +65,32 @@ def test_get_skill_metrics_endpoint():
 
 
 def test_get_all_insights_endpoint():
-    """Test insights endpoint exists"""
+    """Insights returns an honest response instead of a dashboard-breaking 500."""
     response = client.get("/api/v1/insights/?days=7")
-    assert response.status_code in [200, 500]
+    assert response.status_code == 200
+    data = response.json()
+    assert "strengths" in data
+    assert "issues" in data
+    assert "opportunities" in data
+    assert "risks" in data
 
 
 def test_get_strengths_endpoint():
-    """Test strengths endpoint"""
+    """Strengths returns an honest response instead of a dashboard-breaking 500."""
     response = client.get("/api/v1/insights/strengths?days=7")
-    assert response.status_code in [200, 500]
+    assert response.status_code == 200
 
 
 def test_get_issues_endpoint():
-    """Test issues endpoint"""
+    """Issues returns an honest response instead of a dashboard-breaking 500."""
     response = client.get("/api/v1/insights/issues?days=7")
-    assert response.status_code in [200, 500]
+    assert response.status_code == 200
 
 
 def test_get_recommendations_endpoint():
-    """Test recommendations endpoint"""
+    """Recommendations returns an honest response instead of a dashboard-breaking 500."""
     response = client.get("/api/v1/insights/recommendations?days=7")
-    assert response.status_code in [200, 500]
+    assert response.status_code == 200
 
 
 # Reports endpoints tests

@@ -9,15 +9,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi.testclient import TestClient
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from core.config.database import DB_PATH_ENV, DatabaseRuntime
-from core.event_store.studio_db import _connect
-from projections.api.main import app
+from fastapi.testclient import TestClient  # noqa: E402
+
+from core.config.database import DB_PATH_ENV, DatabaseRuntime  # noqa: E402
+from core.event_store.studio_db import _connect  # noqa: E402
+from projections.api.main import app  # noqa: E402
 
 SMOKE_ENDPOINTS: tuple[str, ...] = (
     "/dashboard",
@@ -25,6 +30,7 @@ SMOKE_ENDPOINTS: tuple[str, ...] = (
     "/api/telemetry/attention",
     "/api/telemetry/components",
     "/api/telemetry/modules",
+    "/api/v1/insights/?days=7",
     "/api/v1/hooks/executions?limit=50",
     "/api/v1/hooks/stats",
 )

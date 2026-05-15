@@ -113,11 +113,15 @@ class InsightEngine:
 
         # Cost efficiency
         if "tokens" in metrics:
-            total_cost = metrics["tokens"].get("total_cost_usd", 0)
+            total_cost = metrics["tokens"].get("total_cost_usd")
             total_sessions = metrics.get("sessions", {}).get("total_sessions", 1)
-            cost_per_session = total_cost / total_sessions if total_sessions > 0 else 0
+            cost_per_session = (
+                total_cost / total_sessions
+                if total_cost is not None and total_sessions > 0
+                else None
+            )
 
-            if cost_per_session < 0.50:
+            if cost_per_session is not None and cost_per_session < 0.50:
                 strengths.append(
                     {
                         "category": "cost_efficiency",
@@ -348,8 +352,8 @@ class InsightEngine:
 
         # Cost escalation
         if "tokens" in metrics:
-            total_cost = metrics["tokens"].get("total_cost_usd", 0)
-            if total_cost > 100:
+            total_cost = metrics["tokens"].get("total_cost_usd")
+            if total_cost is not None and total_cost > 100:
                 risks.append(
                     {
                         "category": "cost",

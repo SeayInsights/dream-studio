@@ -107,6 +107,52 @@ unavailable, the dashboard must show `unknown`, `unavailable`, or
 read `task_attribution_records` and related current authority tables; they must
 not use adapter-private memory or reports as primary truth.
 
+## Operator Story Map
+
+The dashboard should read as an operator story, not as a collection of internal
+tables. The first screen should answer: is Dream Studio healthy, what needs
+attention, what changed recently, which projects are active, what is blocked or
+manual-review, and what is the next safe action. Drilldowns then explain the
+evidence, controls, adapters, workflows, and contracts behind those answers.
+
+Recommended top-level structure:
+
+| Area | Operator question | Source routes | Authority | Current decision |
+|------|-------------------|---------------|-----------|------------------|
+| Overview | Is Dream Studio healthy, what changed, and what needs attention now? | `/api/telemetry/*`, `/api/shared-intelligence/*`, `/api/v1/projects` summaries | SQLite telemetry, project authority, adapter/router profiles, Contract Atlas read models | Keep as home; reduce detail cards and link to focused areas |
+| Project Details | What is true for this project, and what is the next safe action? | `/api/v1/projects/{id}/details`, `/health`, `/prds`, `/security`, `/dependencies`, `/activity` | project authority, PRD authority, security/readiness records, dependency evidence, task attribution | Keep as the main operating view |
+| Security/Readiness | What controls, findings, blockers, and remediation exist? | `/api/v1/security/*`, `/api/v1/audits/*`, shared-intelligence readiness routes | security findings, 47-control applicability, readiness controls, audit records | Keep; merge overlapping audit/status cards |
+| Adapter/AI Usage | Which AI/adapter did what work, with what outcome and evidence? | `/api/shared-intelligence/ai-usage-accounting`, `/task-attribution`, metrics model routes | adapter accounting profiles, task attribution, process/validation records | Promote from scattered model/telemetry cards |
+| Capability Center | Which skills, workflows, agents, controls, and evaluations are active? | `/api/shared-intelligence/capability-center`, expert workflow and agent routes | skill/workflow/agent/control authority and evaluation records | Move Skills, Workflows, Learning, and agent details here |
+| Contract Atlas | What contracts, docs, exports, and maturity records are current? | `/api/shared-intelligence/contract-atlas`, `/module-contracts`, `/contract-atlas/freshness` | repo contracts, maturity ledger, docs/export freshness records | Keep as system-maturity drilldown |
+| Evidence | What proves recent outcomes? | task attribution, validation, artifacts, attention, and evidence routes | evidence refs, validation results, artifacts, process runs | Add as focused drilldown when evidence volume grows |
+| Advanced | What low-level telemetry is useful for maintainers? | hooks, anomalies, analytics insights, raw alert routes | hook/tool invocations and advisory analytics records | Hide by default; keep for debugging |
+
+Current area classification:
+
+- `Projects` is current and belongs in Overview summaries plus Project Details.
+- `Project Details` is current and should absorb PRD, stack, security,
+  readiness, recent activity, task attribution, and next-action explanations.
+- `Security` is current but should be framed as Security/Readiness, with audit
+  drilldowns kept secondary.
+- `Skills`, `Workflows`, and `Learning` are useful but belong in Capability
+  Center rather than primary navigation.
+- `Models` belongs under Adapter/AI Usage and must preserve honest token/cost
+  visibility.
+- `Hooks`, `Alerts`, `ML`, `Anomalies`, and `/api/v1/insights/` are advanced
+  or advisory surfaces. They should not be required for the operator's first
+  dashboard story.
+- The standalone `PRD` tab duplicates project authority. Keep PRD status inside
+  Project Details; retain a filtered PRD authority list only if it proves useful.
+- `Knowledge Graph` should remain hidden or project-scoped until confirmed
+  dependency evidence is sufficient. It must not render placeholder graph data.
+
+Immediate safe fixes are reliability and labeling fixes only: dashboard smoke
+coverage should include active frontend routes such as `/api/v1/insights/`, and
+routes that cannot produce current authority data should return honest empty or
+unavailable states instead of 500s. Larger IA changes belong in a separate
+bounded dashboard story implementation Work Order.
+
 ## Contract Atlas Projection
 
 The Contract Atlas projection is exposed through
