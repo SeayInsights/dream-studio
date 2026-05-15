@@ -289,6 +289,49 @@ def step_memory_init() -> StepResult:
         return StepResult(name, False, str(exc))
 
 
+def step_local_adapter_excludes() -> StepResult:
+    """Configure checkout-local adapter scratch/worktree excludes."""
+    name = "Adapter workspace local excludes"
+    try:
+        from core.release.adapter_workspace_hygiene import ensure_local_git_excludes
+
+        result = ensure_local_git_excludes(REPO_ROOT)
+        added = result["added"]
+        if added:
+            return StepResult(name, True, f"added {', '.join(added)}")
+        return StepResult(name, True, "already configured")
+    except Exception as exc:  # noqa: BLE001
+        return StepResult(name, False, str(exc))
+
+
+def _local_adapter_exclude_report() -> dict:
+    """Return local adapter scratch exclude status without writing files."""
+    try:
+        from core.release.adapter_workspace_hygiene import required_local_exclude_patterns
+
+        exclude_path = REPO_ROOT / ".git" / "info" / "exclude"
+        existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
+        configured = {
+            line.strip()
+            for line in existing.splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+        patterns = list(required_local_exclude_patterns())
+        return {
+            "available": True,
+            "exclude_path": str(exclude_path),
+            "patterns": patterns,
+            "missing_patterns": [pattern for pattern in patterns if pattern not in configured],
+            "local_only": True,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "available": False,
+            "error": str(exc),
+            "local_only": True,
+        }
+
+
 def _schema_compatibility_report() -> dict:
     """Return runtime DB/code compatibility details without creating or migrating the DB."""
     try:
@@ -356,6 +399,7 @@ def _check_only_json() -> int:
     results = [step_python_version(emit=False)]
     schema_report = _schema_compatibility_report()
     schema_blocked = bool(schema_report["blocked"])
+    adapter_excludes = _local_adapter_exclude_report()
     files = [
         {"label": label, "path": str(path), "exists": path.exists()}
         for label, path in [
@@ -380,6 +424,7 @@ def _check_only_json() -> int:
                 ],
                 "files": files,
                 "schema_compatibility": schema_report,
+                "adapter_workspace_hygiene": adapter_excludes,
             },
             indent=2,
             sort_keys=True,
@@ -419,6 +464,20 @@ def _check_only() -> int:
         marker = "  ✓" if r.passed else "  ✗"
         suffix = f" ({r.detail})" if r.detail else ""
         print(f"{marker} {r.name}{suffix}")
+
+    adapter_excludes = _local_adapter_exclude_report()
+    if adapter_excludes["available"]:
+        missing = adapter_excludes["missing_patterns"]
+        marker = "  [ok]" if not missing else "  [warn]"
+        detail = (
+            "configured" if not missing else "missing local-only patterns: " + ", ".join(missing)
+        )
+        print(f"{marker} Adapter workspace local excludes - {detail}")
+    else:
+        print(
+            "  [warn] Adapter workspace local excludes unavailable - "
+            f"{adapter_excludes['error']}"
+        )
 
     schema_blocked = _print_schema_compatibility()
     if schema_blocked:
@@ -473,6 +532,7 @@ def main(argv: list[str] | None = None) -> int:
 
     steps = [
         step_python_version,
+        step_local_adapter_excludes,
         step_venv_and_deps,
         step_settings_merge,
         step_memory_init,
