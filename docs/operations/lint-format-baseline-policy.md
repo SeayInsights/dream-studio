@@ -38,6 +38,9 @@ The release gate does not block:
 - resolved baseline findings, which are reported as debt reduction;
 - historical lint debt that has not worsened.
 - unrelated docs that are not impacted by the current change set.
+- adapter scratch/worktree/session folders such as `.claude`, `.codex`,
+  `.adapter-scratch`, and `.ai-scratch`, which are runtime artifacts and not
+  product source.
 
 ## Contract And Docs Drift Gate
 
@@ -74,6 +77,11 @@ python interfaces/cli/lint_baseline.py write-baseline
 ```
 
 Baseline updates should be reviewed like product changes. They must not hide real correctness failures.
+
+Adapter scratch exclusions must stay narrow. They may keep local Claude/Codex
+worktrees, sessions, and temporary runtime files out of the lint gate, but they
+must not exclude active source directories, tests, public docs, templates, or
+generated adapter projections that are intentionally tracked.
 
 ## Future Cleanup
 

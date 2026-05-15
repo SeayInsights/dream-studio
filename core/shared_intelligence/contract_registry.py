@@ -125,6 +125,32 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "schema_docs_public_live_db_private",
     },
     {
+        "domain_id": "installed_adapter_runtime",
+        "domain_name": "Installed Adapter Runtime And Global Router",
+        "source_patterns": [
+            "core/installed_runtime.py",
+            "core/module_profiles.py",
+            "interfaces/cli/ds.py",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/installed-adapter-runtime.md",
+            "docs/architecture/shared-authority-and-adapter-projections.md",
+        ],
+        "docs_refs": [
+            "docs/operations/independent-configuration-model.md",
+            "docs/README.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/installed-adapter-runtime.md",
+            "docs/architecture/shared-authority-and-adapter-projections.md",
+            "docs/operations/independent-configuration-model.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "installed_runtime_or_router_changes_require_runtime_docs_refresh",
+        "public_export_boundary": "installed_runtime_paths_private_global_commands_public",
+    },
+    {
         "domain_id": "dashboard_runtime",
         "domain_name": "Dashboard Runtime And Read Models",
         "source_patterns": [

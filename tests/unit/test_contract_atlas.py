@@ -60,6 +60,8 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "hook_launcher",
     }
     assert atlas["analytics_only_profile"]["writes_authorized"] is False
+    assert atlas["installed_runtime_model"]["source_state_separation"] is True
+    assert atlas["installed_module_profiles"]["profile_count"] == 8
     assert atlas["boundary_violation_report"]["status"] == "pass"
     assert any(
         item["area"] == "current_maturity_ledger" and item["status"] == "validated"

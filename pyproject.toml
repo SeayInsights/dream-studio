@@ -1,6 +1,9 @@
 [tool.black]
 line-length = 100
 
+[project.scripts]
+ds = "interfaces.cli.ds:main"
+
 [tool.flake8]
 max-line-length = 100
 per-file-ignores = [

@@ -59,7 +59,8 @@ def plugin_version() -> str:
 
 def user_data_dir() -> Path:
     """Return `~/.dream-studio/`, creating it if absent."""
-    path = Path.home() / USER_DATA_DIRNAME
+    override = os.environ.get("DREAM_STUDIO_HOME")
+    path = Path(override).expanduser() if override else Path.home() / USER_DATA_DIRNAME
     path.mkdir(parents=True, exist_ok=True)
     return path
 

@@ -87,6 +87,8 @@ The current release gate expects:
 
 - clean repo status;
 - local CI parity validation;
+- CI test checks must use isolated Dream Studio runtime state instead of writing
+  the operator-local SQLite authority;
 - Contract Atlas documentation drift validation;
 - required GitHub checks passing;
 - no release blockers;

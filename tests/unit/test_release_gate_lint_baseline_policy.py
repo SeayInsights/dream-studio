@@ -52,6 +52,21 @@ def test_ci_gate_uses_format_check_and_lint_baseline_not_mutating_format_target(
     assert all(command != ["make", "fmt"] for command in checks.values())
 
 
+def test_ci_gate_test_env_uses_isolated_runtime_state() -> None:
+    env = ci_gate._isolated_test_env()
+    isolated_db = Path(env["DREAM_STUDIO_DB_PATH"])
+    isolated_home = isolated_db.parents[2]
+
+    assert isolated_home.name.startswith("dream-studio-ci-home-")
+    assert "DREAM_STUDIO_HOME" not in env
+    assert env["GITHUB_ACTIONS"] == "true"
+    assert env["HOME"] == str(isolated_home)
+    assert env["USERPROFILE"] == str(isolated_home)
+    assert env["DREAM_STUDIO_DB_PATH"] == str(
+        isolated_home / ".dream-studio" / "state" / "studio.db"
+    )
+
+
 def test_code_history_and_lint_policy_docs_exist() -> None:
     history_policy = REPO_ROOT / "docs" / "operations" / "code-history-impact-guardrail.md"
     lint_policy = REPO_ROOT / "docs" / "operations" / "lint-format-baseline-policy.md"
