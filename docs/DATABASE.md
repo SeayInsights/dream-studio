@@ -24,6 +24,11 @@ Dream Studio's SQLite authority covers:
 - secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
 - release/cutover evidence summaries where safe.
 
+Current token usage authority lives in `token_usage_records`. Reconciled
+legacy token rows must carry `source_refs_json` and `evidence_refs_json` so
+token analytics can use current authority without restoring legacy
+`canonical_events` as an active source.
+
 ## Runtime Rules
 
 - Normal runtime uses the canonical path resolver.

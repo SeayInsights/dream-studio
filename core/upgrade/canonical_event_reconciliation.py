@@ -14,7 +14,7 @@ import json
 import sqlite3
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -179,14 +179,12 @@ def _event_metadata(event: LegacyEvent, *, taxonomy: str, reason: str) -> dict[s
 
 
 def iter_legacy_events(conn: sqlite3.Connection) -> Iterable[LegacyEvent]:
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT event_id, event_type, timestamp, trace, severity, payload, actor,
                confidence_score, source_type, created_at
         FROM canonical_events
         ORDER BY timestamp, event_id
-        """
-    )
+        """)
     for row in rows:
         yield LegacyEvent(
             event_id=str(row["event_id"]),
@@ -196,9 +194,7 @@ def iter_legacy_events(conn: sqlite3.Connection) -> Iterable[LegacyEvent]:
             severity=str(row["severity"]),
             payload=_coerce_dict(_parse_json(row["payload"])),
             actor=(
-                _coerce_dict(_parse_json(row["actor"]))
-                if row["actor"] not in (None, "")
-                else None
+                _coerce_dict(_parse_json(row["actor"])) if row["actor"] not in (None, "") else None
             ),
             confidence_score=row["confidence_score"],
             source_type=row["source_type"],
@@ -212,17 +208,12 @@ def iter_legacy_events(conn: sqlite3.Connection) -> Iterable[LegacyEvent]:
 def profile_canonical_events(backup_conn: sqlite3.Connection) -> dict[str, Any]:
     columns = [dict(row) for row in backup_conn.execute(f"PRAGMA table_info({SOURCE_TABLE})")]
     total = int(backup_conn.execute(f"SELECT COUNT(*) FROM {SOURCE_TABLE}").fetchone()[0])
-    event_types = [
-        {"event_type": row[0], "count": row[1]}
-        for row in backup_conn.execute(
-            f"""
+    event_types = [{"event_type": row[0], "count": row[1]} for row in backup_conn.execute(f"""
             SELECT event_type, COUNT(*) AS count
             FROM {SOURCE_TABLE}
             GROUP BY event_type
             ORDER BY count DESC, event_type
-            """
-        )
-    ]
+            """)]
     bounds = backup_conn.execute(
         f"SELECT MIN(timestamp), MAX(timestamp), MIN(created_at), MAX(created_at) FROM {SOURCE_TABLE}"
     ).fetchone()
@@ -241,8 +232,7 @@ def profile_canonical_events(backup_conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def ensure_import_map_table(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS legacy_canonical_event_import_map (
             import_map_id TEXT PRIMARY KEY,
             legacy_event_id TEXT NOT NULL,
@@ -260,10 +250,8 @@ def ensure_import_map_table(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
-        """
-    )
-    conn.execute(
-        """
+        """)
+    conn.execute("""
         CREATE UNIQUE INDEX IF NOT EXISTS idx_legacy_event_import_map_target
         ON legacy_canonical_event_import_map(
             legacy_event_id,
@@ -271,8 +259,7 @@ def ensure_import_map_table(conn: sqlite3.Connection) -> None:
             COALESCE(target_table, ''),
             COALESCE(target_record_id, '')
         )
-        """
-    )
+        """)
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -324,13 +311,50 @@ def _target_status(
     id_column: str,
     record_id: str,
 ) -> str:
-    return "skipped_duplicate" if _record_exists(active_conn, table, id_column, record_id) else "pending_import"
+    return (
+        "skipped_duplicate"
+        if _record_exists(active_conn, table, id_column, record_id)
+        else "pending_import"
+    )
 
 
 def _status_reason(status: str, import_reason: str) -> str:
     if status == "skipped_duplicate":
         return "Target record already exists in current authority."
     return import_reason
+
+
+def _int_value(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _float_value(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _provider_from_model(model: str | None) -> str | None:
+    if not model:
+        return None
+    normalized = model.lower()
+    if "claude" in normalized or "anthropic" in normalized:
+        return "anthropic"
+    if "gpt" in normalized or "openai" in normalized:
+        return "openai"
+    if "gemini" in normalized or "google" in normalized:
+        return "google"
+    return None
 
 
 def _map_execution_event(
@@ -381,7 +405,9 @@ def _map_skill_event(active_conn: sqlite3.Connection, event: LegacyEvent) -> lis
     ]
 
 
-def _map_workflow_event(active_conn: sqlite3.Connection, event: LegacyEvent) -> list[ImportPlanEntry]:
+def _map_workflow_event(
+    active_conn: sqlite3.Connection, event: LegacyEvent
+) -> list[ImportPlanEntry]:
     workflow_id = event.payload.get("workflow_id") or event.trace.get("workflow_id")
     if not workflow_id:
         return [
@@ -511,6 +537,63 @@ def _map_security_finding_event(
     ]
 
 
+def _map_token_usage_event(
+    active_conn: sqlite3.Connection, event: LegacyEvent
+) -> list[ImportPlanEntry]:
+    input_tokens = _int_value(event.payload.get("input_tokens"))
+    output_tokens = _int_value(event.payload.get("output_tokens"))
+    cached_tokens = _int_value(event.payload.get("cached_tokens")) or 0
+    total_tokens = _int_value(event.payload.get("total_tokens"))
+    model = event.payload.get("model")
+    recorded_at = event.payload.get("recorded_at") or event.timestamp
+    if input_tokens is None or output_tokens is None or not model or not recorded_at:
+        return _single_classification(
+            event,
+            taxonomy="token_usage",
+            status="manual_review_required",
+            confidence=0.45,
+            reason="Token usage event lacks nonnegative token counts, model, or timestamp required for safe import.",
+        )
+    computed_total = input_tokens + output_tokens + cached_tokens
+    if total_tokens is not None and total_tokens != computed_total:
+        return _single_classification(
+            event,
+            taxonomy="token_usage",
+            status="manual_review_required",
+            confidence=0.55,
+            reason="Token usage total does not match input, output, and cached token counts.",
+        )
+    if event.event_type.startswith("raw.migrated.raw_token_usage") and event.payload.get("id"):
+        target_id = f"legacy-raw-token-{event.payload['id']}"
+        reason = (
+            "Raw token usage has stable legacy id, token counts, model, and timestamp; "
+            "cost was not present in the legacy source."
+        )
+    elif event.event_type == "telemetry.token_usage" and event.payload.get("session_id"):
+        target_id = f"legacy-canonical-token-{_stable_suffix(event.event_id)}"
+        reason = "Telemetry token usage has session id, token counts, model, and timestamp."
+    else:
+        return _single_classification(
+            event,
+            taxonomy="token_usage",
+            status="manual_review_required",
+            confidence=0.55,
+            reason="Token usage event lacks stable raw id or session context needed for deduplication.",
+        )
+    status = _target_status(active_conn, "token_usage_records", "token_usage_id", target_id)
+    return [
+        _base_entry(
+            event,
+            taxonomy="token_usage",
+            target_table="token_usage_records",
+            target_record_id=target_id,
+            status=status,
+            confidence=HIGH_CONFIDENCE,
+            reason=_status_reason(status, reason),
+        )
+    ]
+
+
 def _single_classification(
     event: LegacyEvent,
     *,
@@ -576,14 +659,11 @@ def map_event(active_conn: sqlite3.Connection, event: LegacyEvent) -> list[Impor
             confidence=0.8,
             reason="Project authority was rehydrated into current registry/authority tables.",
         )
-    if event_type.startswith("raw.migrated.raw_token_usage") or event_type == "telemetry.token_usage":
-        return _single_classification(
-            event,
-            taxonomy="token_usage",
-            status="manual_review_required",
-            confidence=0.65,
-            reason="Token usage is useful, but current token_usage_records lacks source_refs; requires a separate source-ref-safe path.",
-        )
+    if (
+        event_type.startswith("raw.migrated.raw_token_usage")
+        or event_type == "telemetry.token_usage"
+    ):
+        return _map_token_usage_event(active_conn, event)
     if event_type.startswith("raw.migrated."):
         return _single_classification(
             event,
@@ -626,12 +706,16 @@ def build_import_plan(
     return entries
 
 
-def summarize_plan(profile: Mapping[str, Any], entries: Sequence[ImportPlanEntry]) -> dict[str, Any]:
+def summarize_plan(
+    profile: Mapping[str, Any], entries: Sequence[ImportPlanEntry]
+) -> dict[str, Any]:
     by_status = Counter(entry.import_status for entry in entries)
     by_taxonomy = Counter(entry.taxonomy for entry in entries)
     by_event_type = Counter(entry.event_type for entry in entries)
     target_counts = Counter(
-        entry.target_table for entry in entries if entry.target_table and entry.import_status == "pending_import"
+        entry.target_table
+        for entry in entries
+        if entry.target_table and entry.import_status == "pending_import"
     )
     source_events_with_import = {
         entry.legacy_event_id
@@ -639,7 +723,9 @@ def summarize_plan(profile: Mapping[str, Any], entries: Sequence[ImportPlanEntry
         if entry.import_status == "pending_import" and entry.confidence >= HIGH_CONFIDENCE
     }
     manual_review_events = {
-        entry.legacy_event_id for entry in entries if entry.import_status == "manual_review_required"
+        entry.legacy_event_id
+        for entry in entries
+        if entry.import_status == "manual_review_required"
     }
     duplicate_events = {
         entry.legacy_event_id for entry in entries if entry.import_status == "skipped_duplicate"
@@ -694,7 +780,12 @@ def upsert_import_map_entry(
             :reason, :source_refs_json, :evidence_refs_json
         )
         ON CONFLICT(import_map_id) DO UPDATE SET
-            import_status = excluded.import_status,
+            import_status = CASE
+                WHEN legacy_canonical_event_import_map.import_status = 'imported'
+                  AND excluded.import_status = 'skipped_duplicate'
+                THEN legacy_canonical_event_import_map.import_status
+                ELSE excluded.import_status
+            END,
             confidence = excluded.confidence,
             payload_hash = excluded.payload_hash,
             reason = excluded.reason,
@@ -704,6 +795,31 @@ def upsert_import_map_entry(
         """,
         row,
     )
+
+
+def supersede_resolved_token_manual_entries(active_conn: sqlite3.Connection) -> int:
+    """Mark old token manual-review ledger rows resolved by token_usage_records imports."""
+
+    if not _table_exists(active_conn, IMPORT_MAP_TABLE):
+        return 0
+    result = active_conn.execute(f"""
+        UPDATE {IMPORT_MAP_TABLE}
+        SET import_status = 'superseded_by_current_authority',
+            reason = 'Resolved by source-ref-safe token_usage_records reconciliation.',
+            updated_at = datetime('now')
+        WHERE taxonomy = 'token_usage'
+          AND target_table IS NULL
+          AND import_status = 'manual_review_required'
+          AND EXISTS (
+              SELECT 1
+              FROM {IMPORT_MAP_TABLE} AS imported
+              WHERE imported.legacy_event_id = {IMPORT_MAP_TABLE}.legacy_event_id
+                AND imported.taxonomy = 'token_usage'
+                AND imported.target_table = 'token_usage_records'
+                AND imported.import_status IN ('imported', 'skipped_duplicate')
+          )
+        """)
+    return int(result.rowcount or 0)
 
 
 def _insert_execution_event(
@@ -885,6 +1001,58 @@ def _insert_hook_invocation(
     )
 
 
+def _insert_token_usage(
+    active_conn: sqlite3.Connection,
+    event: LegacyEvent,
+    entry: ImportPlanEntry,
+) -> None:
+    input_tokens = _int_value(event.payload.get("input_tokens")) or 0
+    output_tokens = _int_value(event.payload.get("output_tokens")) or 0
+    cached_tokens = _int_value(event.payload.get("cached_tokens")) or 0
+    total_tokens = _int_value(event.payload.get("total_tokens"))
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens + cached_tokens
+    estimated_cost = _float_value(event.payload.get("cost_usd"))
+    active_conn.execute(
+        """
+        INSERT INTO token_usage_records (
+            token_usage_id, project_id, milestone_id, task_id, process_run_id,
+            agent_id, skill_id, workflow_id, hook_id, model_id, provider,
+            input_tokens, output_tokens, cached_tokens, total_tokens,
+            estimated_cost, purpose, source_refs_json, evidence_refs_json,
+            created_at
+        ) VALUES (
+            :token_usage_id, :project_id, NULL, NULL, :process_run_id,
+            NULL, :skill_id, NULL, NULL, :model_id, :provider,
+            :input_tokens, :output_tokens, :cached_tokens, :total_tokens,
+            :estimated_cost, :purpose, :source_refs_json, :evidence_refs_json,
+            :created_at
+        )
+        """,
+        {
+            "token_usage_id": entry.target_record_id,
+            "project_id": _project_id(event),
+            "process_run_id": _process_run_id(event),
+            "skill_id": event.payload.get("skill_id") or event.payload.get("skill_name"),
+            "model_id": event.payload.get("model"),
+            "provider": _provider_from_model(event.payload.get("model")),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cached_tokens": cached_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost": estimated_cost if estimated_cost is not None else 0,
+            "purpose": (
+                "legacy canonical event reconciliation"
+                if estimated_cost is not None
+                else "legacy canonical event reconciliation; cost unavailable in source"
+            ),
+            "source_refs_json": json.dumps(list(entry.source_refs), sort_keys=True),
+            "evidence_refs_json": json.dumps(list(entry.evidence_refs), sort_keys=True),
+            "created_at": event.payload.get("recorded_at") or event.timestamp,
+        },
+    )
+
+
 def _event_by_id(backup_conn: sqlite3.Connection, event_id: str) -> LegacyEvent:
     row = backup_conn.execute(
         """
@@ -950,20 +1118,29 @@ def apply_import_plan(
             try:
                 event = _event_by_id(backup_conn, entry.legacy_event_id)
                 if entry.target_table == "execution_events":
-                    if _record_exists(active_conn, "execution_events", "event_id", entry.target_record_id or ""):
+                    if _record_exists(
+                        active_conn, "execution_events", "event_id", entry.target_record_id or ""
+                    ):
                         status = "skipped_duplicate"
                     else:
                         _insert_execution_event(active_conn, event, entry)
                         status = "imported"
                 elif entry.target_table == "skill_invocations":
-                    if _record_exists(active_conn, "skill_invocations", "invocation_id", entry.target_record_id or ""):
+                    if _record_exists(
+                        active_conn,
+                        "skill_invocations",
+                        "invocation_id",
+                        entry.target_record_id or "",
+                    ):
                         status = "skipped_duplicate"
                     else:
                         _insert_skill_invocation(
                             active_conn,
                             event,
                             entry,
-                            _execution_event_id_for(entries_by_event[event.event_id], event.event_id),
+                            _execution_event_id_for(
+                                entries_by_event[event.event_id], event.event_id
+                            ),
                         )
                         status = "imported"
                 elif entry.target_table == "workflow_invocations":
@@ -979,19 +1156,39 @@ def apply_import_plan(
                             active_conn,
                             event,
                             entry,
-                            _execution_event_id_for(entries_by_event[event.event_id], event.event_id),
+                            _execution_event_id_for(
+                                entries_by_event[event.event_id], event.event_id
+                            ),
                         )
                         status = "imported"
                 elif entry.target_table == "hook_invocations":
-                    if _record_exists(active_conn, "hook_invocations", "invocation_id", entry.target_record_id or ""):
+                    if _record_exists(
+                        active_conn,
+                        "hook_invocations",
+                        "invocation_id",
+                        entry.target_record_id or "",
+                    ):
                         status = "skipped_duplicate"
                     else:
                         _insert_hook_invocation(
                             active_conn,
                             event,
                             entry,
-                            _execution_event_id_for(entries_by_event[event.event_id], event.event_id),
+                            _execution_event_id_for(
+                                entries_by_event[event.event_id], event.event_id
+                            ),
                         )
+                        status = "imported"
+                elif entry.target_table == "token_usage_records":
+                    if _record_exists(
+                        active_conn,
+                        "token_usage_records",
+                        "token_usage_id",
+                        entry.target_record_id or "",
+                    ):
+                        status = "skipped_duplicate"
+                    else:
+                        _insert_token_usage(active_conn, event, entry)
                         status = "imported"
                 else:
                     status = "manual_review_required"
@@ -1003,9 +1200,11 @@ def apply_import_plan(
                 errors.append({"legacy_event_id": entry.legacy_event_id, "error": str(exc)})
                 upsert_import_map_entry(active_conn, entry, status="error")
                 skipped["error"] += 1
+        superseded_token_manual_entries = supersede_resolved_token_manual_entries(active_conn)
     return {
         "imported_by_target": dict(sorted(imported.items())),
         "skipped_by_status": dict(sorted(skipped.items())),
+        "superseded_token_manual_entries": superseded_token_manual_entries,
         "error_count": len(errors),
         "errors": errors,
     }
@@ -1023,27 +1222,38 @@ def validate_reconciliation(
     map_count = 0
     missing_source_ref_count = 0
     imported_count = 0
+    imported_token_rows_missing_source_refs = 0
     if IMPORT_MAP_TABLE in tables:
         map_count = active_conn.execute(f"SELECT COUNT(*) FROM {IMPORT_MAP_TABLE}").fetchone()[0]
         imported_count = active_conn.execute(
             f"SELECT COUNT(*) FROM {IMPORT_MAP_TABLE} WHERE import_status = 'imported'"
         ).fetchone()[0]
-        missing_source_ref_count = active_conn.execute(
-            f"""
+        missing_source_ref_count = active_conn.execute(f"""
             SELECT COUNT(*)
             FROM {IMPORT_MAP_TABLE}
             WHERE import_status = 'imported'
               AND source_refs_json NOT LIKE '%backup:canonical_events:%'
-            """
-        ).fetchone()[0]
-    execution_missing_refs = active_conn.execute(
-        """
+            """).fetchone()[0]
+        if "token_usage_records" in tables:
+            token_columns = {
+                row[1] for row in active_conn.execute("PRAGMA table_info(token_usage_records)")
+            }
+            if "source_refs_json" in token_columns:
+                imported_token_rows_missing_source_refs = active_conn.execute(f"""
+                    SELECT COUNT(*)
+                    FROM {IMPORT_MAP_TABLE} AS m
+                    JOIN token_usage_records AS t
+                      ON t.token_usage_id = m.target_record_id
+                    WHERE m.import_status = 'imported'
+                      AND m.target_table = 'token_usage_records'
+                      AND t.source_refs_json NOT LIKE '%backup:canonical_events:%'
+                    """).fetchone()[0]
+    execution_missing_refs = active_conn.execute("""
         SELECT COUNT(*)
         FROM execution_events
         WHERE event_id LIKE 'legacy-canonical-event-%'
           AND source_refs_json NOT LIKE '%backup:canonical_events:%'
-        """
-    ).fetchone()[0]
+        """).fetchone()[0]
     quick_check = active_conn.execute("PRAGMA quick_check").fetchone()[0]
     errors = []
     if active_has_canonical_events:
@@ -1052,6 +1262,8 @@ def validate_reconciliation(
         errors.append("import map contains imported rows without backup source refs")
     if execution_missing_refs:
         errors.append("imported execution_events missing backup source refs")
+    if imported_token_rows_missing_source_refs:
+        errors.append("imported token_usage_records missing backup source refs")
     if imported_count < expected_imported_min:
         errors.append("imported row count below expected minimum")
     if quick_check != "ok":
@@ -1065,6 +1277,7 @@ def validate_reconciliation(
         "imported_rows": imported_count,
         "missing_source_ref_count": missing_source_ref_count,
         "imported_execution_events_missing_source_refs": execution_missing_refs,
+        "imported_token_usage_records_missing_source_refs": imported_token_rows_missing_source_refs,
     }
 
 

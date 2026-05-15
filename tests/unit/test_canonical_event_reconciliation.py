@@ -18,8 +18,7 @@ from core.upgrade.canonical_event_reconciliation import (
 def _write_backup_db(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.execute(
-        """
+    conn.execute("""
         CREATE TABLE canonical_events (
             event_id TEXT PRIMARY KEY,
             event_type TEXT NOT NULL,
@@ -32,8 +31,7 @@ def _write_backup_db(path: Path) -> None:
             source_type TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
-        """
-    )
+        """)
     rows = [
         (
             "skill-1",
@@ -80,15 +78,35 @@ def _write_backup_db(path: Path) -> None:
             None,
         ),
         (
-            "token-manual",
+            "token-raw",
             "raw.migrated.raw_token_usage",
             "2026-05-01T00:03:00Z",
             {"migrated_from": "raw_token_usage"},
             "info",
-            {"id": 501, "input_tokens": 1, "output_tokens": 2, "model": "m"},
+            {
+                "id": 501,
+                "session_id": "session-a",
+                "project_id": "dream-studio",
+                "skill_name": "ds-core",
+                "input_tokens": 1,
+                "output_tokens": 2,
+                "model": "claude-test",
+                "recorded_at": "2026-05-01T00:03:00Z",
+            },
             None,
             None,
             "raw_table_migration",
+        ),
+        (
+            "token-manual",
+            "telemetry.token_usage",
+            "2026-05-01T00:04:00Z",
+            {"migrated_from": "canonical_events"},
+            "info",
+            {"session_id": "session-b", "input_tokens": 1, "output_tokens": 2},
+            None,
+            None,
+            None,
         ),
     ]
     conn.executemany(
@@ -135,7 +153,7 @@ def test_profile_opens_backup_read_only(tmp_path: Path) -> None:
     conn = connect_backup_readonly(backup_home)
     profile = profile_canonical_events(conn)
     assert profile["read_only"] is True
-    assert profile["row_count"] == 4
+    assert profile["row_count"] == 5
     try:
         conn.execute("CREATE TABLE should_fail(id TEXT)")
     except sqlite3.OperationalError as exc:
@@ -154,13 +172,11 @@ def test_dry_run_classifies_high_confidence_duplicates_and_manual(tmp_path: Path
     conn = sqlite3.connect(active_db)
     run_migrations(conn)
     ensure_import_map_table(conn)
-    conn.execute(
-        """
+    conn.execute("""
         INSERT INTO hook_invocations (
             invocation_id, hook_id, status, prevented_risky_action
         ) VALUES ('legacy-hook-execution-2', 'on_pulse', 'success', 0)
-        """
-    )
+        """)
     conn.commit()
     backup_conn = connect_backup_readonly(backup_home)
     plan = build_import_plan(backup_conn, conn)
@@ -169,6 +185,7 @@ def test_dry_run_classifies_high_confidence_duplicates_and_manual(tmp_path: Path
     assert statuses[("skill-1", "skill_invocations")] == "pending_import"
     assert statuses[("hook-duplicate", "hook_invocations")] == "skipped_duplicate"
     assert statuses[("validation-noise", None)] == "retention_only"
+    assert statuses[("token-raw", "token_usage_records")] == "pending_import"
     assert statuses[("token-manual", None)] == "manual_review_required"
     backup_conn.close()
     conn.close()
@@ -195,17 +212,25 @@ def test_apply_imports_only_high_confidence_and_keeps_source_refs(tmp_path: Path
         conn.execute(
             "SELECT COUNT(*) FROM legacy_canonical_event_import_map WHERE import_status = 'imported'"
         ).fetchone()[0]
-        == 4
+        == 5
     )
-    refs = conn.execute(
-        """
+    refs = conn.execute("""
         SELECT source_refs_json
         FROM execution_events
         WHERE event_id LIKE 'legacy-canonical-event-%'
-        """
-    ).fetchall()
+        """).fetchall()
     assert refs
     assert all("backup:canonical_events:" in row[0] for row in refs)
+    token_ref = conn.execute("""
+        SELECT source_refs_json, purpose, total_tokens, provider
+        FROM token_usage_records
+        WHERE token_usage_id = 'legacy-raw-token-501'
+        """).fetchone()
+    assert token_ref is not None
+    assert "backup:canonical_events:token-raw" in token_ref[0]
+    assert "cost unavailable" in token_ref[1]
+    assert token_ref[2] == 3
+    assert token_ref[3] == "anthropic"
     assert validate_reconciliation(conn)["valid"] is True
     assert (
         conn.execute(
