@@ -208,7 +208,7 @@ def _repo_slug() -> str:
     Rules:
       - Remove drive colon (C: → C)
       - Replace all path separators (/ and \\) with -
-      - Example: C:\\Users\\foo\\builds\\dream-studio → C--Users-foo-builds-dream-studio
+      - Example: C:\\Users\\Example\\builds\\dream-studio -> C--Users-Example-builds-dream-studio
     """
     raw = str(REPO_ROOT)
     # Remove drive colon (Windows: "C:" → "C")

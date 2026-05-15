@@ -1,7 +1,7 @@
 # Dream Studio Product Requirements
 
 Status: current public product authority
-Last updated: 2026-05-14
+Last updated: 2026-05-15
 
 ## Product Identity
 
@@ -40,6 +40,7 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 - Maintain a Contract Atlas that maps layers, modules, interfaces, runtime profiles, adapter projections, dependency evidence, maturity state, and source-change impact to the docs/contracts that must stay fresh.
 - Maintain a Contract Atlas lifecycle manifest that regenerates private/internal atlas views, sanitized public exports, maturity status, docs/PRD/README impact detection, dashboard/API freshness, and public-export leakage checks from authority rather than hand-maintained files.
 - Use GitHub Actions as a lightweight remote confidence layer: PR smoke by default, manual full CI for remote parity evidence, manual or tag-triggered release validation for release evidence, and local Dream Studio release gates as the heavy validation authority.
+- Validate repo publication readiness with source-owned checks for tracked files, ignored/local boundaries, Git history path privacy, Apache-2.0 references, README/PRD alignment, and sanitized Contract Atlas exports.
 - Keep private operator state, raw telemetry, local backups, Work Orders, handoffs, cutover records, and audit evidence out of the public repo by default.
 
 ## Non-Goals

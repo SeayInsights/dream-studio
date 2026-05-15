@@ -290,14 +290,17 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             ".github/workflows/**",
             "core/release/github_pr_cicd_gate.py",
             "interfaces/cli/ci_gate.py",
+            "interfaces/cli/repo_publication_readiness.py",
             "interfaces/cli/lint_baseline.py",
             "interfaces/cli/contract_docs_drift_gate.py",
             "interfaces/cli/contract_atlas_lifecycle_gate.py",
+            "core/release/repo_publication_readiness.py",
             "runtime/config/release-gates/**",
         ],
         "contract_refs": [
             "docs/operations/lint-format-baseline-policy.md",
             "docs/PUBLICATION_BOUNDARY.md",
+            "docs/operations/repo-publication-privacy.md",
         ],
         "docs_refs": [
             "README.md",
@@ -306,6 +309,8 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         ],
         "required_doc_refs": [
             "docs/operations/lint-format-baseline-policy.md",
+            "docs/PUBLICATION_BOUNDARY.md",
+            "docs/operations/repo-publication-privacy.md",
             "README.md",
         ],
         "release_blocking": True,

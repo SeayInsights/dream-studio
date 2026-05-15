@@ -193,7 +193,7 @@ def test_security_review_tier0_template_and_sample_do_not_grant_forbidden_author
         "git push",
         "npm install",
         "wrangler deploy",
-        "C:\\Users\\",
+        "C:\\Users\\Example\\",
         "DreamySuite",
         "Bill Stack",
         "TORII repo",

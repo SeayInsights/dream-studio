@@ -32,6 +32,18 @@ Keep these out of Git unless separately sanitized and approved:
 
 `.gitignore` excludes local runtime state, database files, backups, logs, and local evidence exports. If a private file has been committed in the past, remove it from current tracking without deleting the local copy, then classify whether history rewrite is required.
 
+Repo publication readiness is checked through the repo-owned command:
+
+```powershell
+python interfaces\cli\repo_publication_readiness.py --strict
+```
+
+The command audits tracked file paths, ignored/untracked boundaries, Git history
+path names, Apache-2.0 references, README/PRD product framing, and
+private-content/secret-pattern rules without printing matched secret values.
+Use `--execute --output-dir docs\publication` only when intentionally
+refreshing public publication evidence artifacts.
+
 ## Git History Policy
 
 - Non-secret historical product docs can usually remain in history after current-state cleanup.
