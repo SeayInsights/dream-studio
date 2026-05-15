@@ -21,6 +21,7 @@ The public demo uses synthetic project names and screenshots. The screenshots ar
 - [5-minute script](5-minute-script.md)
 - [15-minute technical walkthrough](15-minute-technical-walkthrough.md)
 - [Fallback plan](fallback-plan.md)
+- [Rehearsal report](rehearsal-report.md)
 - [Validation manifest](validation-manifest.json)
 - [Observe mode screenshot](screenshots/observe-mode.png)
 - [Assist mode screenshot](screenshots/assist-mode.png)
