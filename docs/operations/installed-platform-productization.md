@@ -94,6 +94,9 @@ ds acceptance
 ds backup
 ds restore-check
 ds update-check
+ds migrate-legacy
+ds repair-adapters
+ds rollback-check
 ds uninstall-check
 ```
 
@@ -191,7 +194,31 @@ non-destructive backup in the selected Dream Studio home or explicit
 `ds restore-check` validates a backup but does not restore it.
 
 `ds update-check` compares installed SQLite state with the current migration
-level without mutating the database.
+level without mutating the database. It also reports legacy-install detection
+metadata so users who previously installed an old checkout do not accidentally
+treat that checkout as a normal pull/update path.
+
+`ds install --check-legacy` detects old source checkouts, old runtime state,
+old SQLite schema versions, legacy file-sprawl folders, stale user-local
+launchers, Dream-Studio-owned Claude/Codex adapter config paths, stale
+environment variables, and unknown/manual-review install states. It is
+read-only and does not print secret values.
+
+`ds migrate-legacy --dry-run` creates the upgrade plan. `ds migrate-legacy
+--execute` is the guarded execution path: it creates a full backup of the
+existing Dream Studio home, writes rollback instructions, creates a fresh active
+home, applies current migrations, migrates compatible SQLite authority rows
+into current tables, refreshes launchers to the clean source checkout, and
+repairs only Dream-Studio-owned adapter hook paths. It does not merge unrelated
+Git histories, inspect secrets, copy old Work Order/handoff/report/evidence
+file sprawl into active state, delete old source checkouts, or delete backups.
+
+`ds repair-adapters` repairs user-local `ds` launchers and Dream-Studio-owned
+adapter hook paths. It plans by default and writes only with `--execute`.
+
+`ds rollback-check` validates that a legacy-upgrade backup exists, contains a
+readable SQLite backup, and includes rollback instructions. It does not restore
+or delete anything.
 
 `ds uninstall-check` inventories local files without deleting anything.
 

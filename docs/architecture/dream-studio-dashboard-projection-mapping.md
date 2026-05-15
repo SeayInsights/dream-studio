@@ -228,6 +228,13 @@ workflows, hooks, skills, adapters, CI/CD files, telemetry, or artifact refs. If
 confirmed evidence is absent, the projection reports unavailable and must not
 draw placeholder nodes or inferred edges.
 
+Installer, update, and legacy migration state is shown only as derived status.
+Dashboard/API surfaces may summarize that a legacy install was detected, that a
+dry-run migration plan exists, or that rollback/adapter repair checks are
+available, but they must not become the authority for executing migration,
+repair, cleanup, restore, or deletion. Raw backup paths, old launcher contents,
+Claude/Codex config values, and legacy file-sprawl inventories stay private.
+
 Dependency visualization separates confirmed edges from `pi_dependencies`,
 inferred or unverified manifest-derived dependencies, and unavailable states.
 Only confirmed persisted edges are rendered by default. Inferred/unverified

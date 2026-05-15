@@ -104,6 +104,13 @@ second telemetry system, infer model/provider precision, infer token or cost
 values, authorize adapter execution, or mutate live SQLite outside the normal
 approved migration boundary.
 
+Legacy install migration is a rehydration flow, not a schema-authority change.
+`ds migrate-legacy` applies the current repo-backed migrations to a fresh active
+database and then copies only compatible rows into current tables. It must not
+recreate old legacy tables as active authority, bulk-copy `canonical_events`,
+copy file-sprawl into active state, or run destructive migrations. Unknown or
+non-mappable legacy data remains in the backup/manual-review retention set.
+
 Migration `046_platform_hardening_authority.sql` is additive. It creates
 records for skill/workflow evaluations, policy decisions, connector ingestion
 runs, privacy/redaction exports, local watch declarations, sanitized team

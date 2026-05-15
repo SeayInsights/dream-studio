@@ -4,14 +4,20 @@ import json
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
+from core.config.sqlite_bootstrap import bootstrap_database
 from core.installed_productization import (
     backup_runtime,
+    detect_legacy_install,
     final_installed_modular_platform_closeout,
     first_run_setup,
     install_global_command_surface,
+    migrate_legacy_install,
     productization_acceptance_report,
+    repair_adapter_surfaces,
+    rollback_runtime_check,
     restore_runtime_check,
     uninstall_runtime_check,
     update_runtime_check,
@@ -173,6 +179,206 @@ def test_productization_ds_commands_run_from_outside_repo(tmp_path: Path) -> Non
     assert validate["ready"] is True
     assert adapters["execution_authorized"] is False
     assert acceptance["status"] == "pass"
+
+
+def test_legacy_install_detection_and_dry_run_are_non_destructive(tmp_path: Path) -> None:
+    old_source = tmp_path / "old-dream-studio"
+    old_source.mkdir()
+    home = tmp_path / ".dream-studio"
+    command_dir = tmp_path / "bin"
+    claude_settings = tmp_path / ".claude" / "settings.json"
+    first_run_setup(
+        source_root=old_source,
+        dream_studio_home=home,
+        profiles=["core"],
+        rehearsal=False,
+    )
+    (home / "meta" / "handoffs").mkdir(parents=True)
+    (home / "meta" / "handoffs" / "legacy.md").write_text("legacy", encoding="utf-8")
+    install_global_command_surface(
+        source_root=old_source,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        execute=True,
+    )
+    claude_settings.parent.mkdir(parents=True)
+    claude_settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "command": (
+                                        f"python {old_source / 'runtime' / 'hooks' / 'dream-studio.py'}"
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    detection = detect_legacy_install(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        claude_settings_path=claude_settings,
+    )
+    dry_run = migrate_legacy_install(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        backup_root=tmp_path / "legacy-backups",
+        command_dir=command_dir,
+        claude_settings_path=claude_settings,
+        execute=False,
+    )
+
+    assert detection["status"] == "legacy_detected"
+    assert detection["old_source_checkout_detected"] is True
+    assert detection["old_file_sprawl_detected"] is True
+    assert detection["launcher_paths"]["stale_launcher_count"] == 2
+    assert detection["adapter_config_paths"]["stale_adapter_config_count"] == 1
+    assert dry_run["status"] == "dry_run"
+    assert dry_run["strategy"]["copy_legacy_file_sprawl_forward"] is False
+    assert dry_run["strategy"]["merge_unrelated_git_histories"] is False
+    assert (home / "meta" / "handoffs" / "legacy.md").exists()
+
+
+def test_legacy_migration_creates_fresh_home_migrates_sqlite_and_keeps_rollback(
+    tmp_path: Path,
+) -> None:
+    old_source = tmp_path / "old-dream-studio"
+    old_source.mkdir()
+    home = tmp_path / ".dream-studio"
+    backup_root = tmp_path / "legacy-backups"
+    command_dir = tmp_path / "bin"
+    claude_settings = tmp_path / ".claude" / "settings.json"
+    (home / "config").mkdir(parents=True)
+    (home / "state").mkdir(parents=True)
+    (home / "config" / "runtime.json").write_text(
+        json.dumps(
+            {
+                "source_root": str(old_source),
+                "dream_studio_home": str(home),
+                "module_profiles": ["core"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bootstrap_database(home / "state" / "studio.db")
+    with _sqlite(home / "state" / "studio.db") as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO decision_records(
+                decision_id, project_id, decision_type, decision_status,
+                selected_option, source_refs_json, evidence_refs_json
+            ) VALUES (?, ?, ?, ?, ?, '[]', '[]')
+            """,
+            ("legacy-decision-1", "dream-studio", "operator_decision", "approved", "upgrade"),
+        )
+        conn.commit()
+    (home / "reports").mkdir()
+    (home / "reports" / "old-report.md").write_text("do not copy", encoding="utf-8")
+    install_global_command_surface(
+        source_root=old_source,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        execute=True,
+    )
+    claude_settings.parent.mkdir(parents=True)
+    claude_settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostToolUse": [
+                        {
+                            "hooks": [
+                                {
+                                    "command": (
+                                        f"python {old_source / 'hooks' / 'run.py'} dream-studio"
+                                    )
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = migrate_legacy_install(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        backup_root=backup_root,
+        command_dir=command_dir,
+        claude_settings_path=claude_settings,
+        execute=True,
+    )
+
+    assert result["status"] == "migrated"
+    assert result["backup_verified"] is True
+    assert result["old_file_sprawl_copied_forward"] is False
+    assert not (home / "reports" / "old-report.md").exists()
+    assert Path(result["backup_runtime_path"], "reports", "old-report.md").exists()
+    with _sqlite(home / "state" / "studio.db") as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM decision_records WHERE decision_id = ?",
+            ("legacy-decision-1",),
+        ).fetchone()[0]
+    assert count == 1
+    assert str(REPO_ROOT) in (command_dir / "ds.cmd").read_text(encoding="utf-8")
+    settings = json.loads(claude_settings.read_text(encoding="utf-8"))
+    repaired_command = settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+    assert str(REPO_ROOT) in repaired_command
+    rollback = rollback_runtime_check(backup_path=result["backup_path"])
+    assert rollback["rollback_ready"] is True
+    assert rollback["sqlite_backup_opens_read_only"] is True
+
+
+def test_repair_adapters_can_refresh_launchers_without_hook_execution(tmp_path: Path) -> None:
+    old_source = tmp_path / "old-dream-studio"
+    old_source.mkdir()
+    home = tmp_path / ".dream-studio"
+    command_dir = tmp_path / "bin"
+    first_run_setup(
+        source_root=old_source,
+        dream_studio_home=home,
+        profiles=["core"],
+        rehearsal=False,
+    )
+    install_global_command_surface(
+        source_root=old_source,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        execute=True,
+    )
+
+    planned = repair_adapter_surfaces(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        previous_source_root=old_source,
+        execute=False,
+    )
+    repaired = repair_adapter_surfaces(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        previous_source_root=old_source,
+        execute=True,
+    )
+
+    assert planned["status"] == "planned"
+    assert planned["secret_values_read"] is False
+    assert repaired["status"] == "repaired"
+    assert repaired["launchers_repaired"] == 2
+    assert str(REPO_ROOT) in (command_dir / "ds.ps1").read_text(encoding="utf-8")
 
 
 def test_windows_ds_launcher_runs_from_outside_repo(tmp_path: Path) -> None:
@@ -349,3 +555,14 @@ def _run_ds(ds: Path, cwd: Path, *args: str) -> dict[str, object]:
         check=True,
     )
     return json.loads(result.stdout)
+
+
+@contextmanager
+def _sqlite(path: Path):
+    import sqlite3
+
+    conn = sqlite3.connect(path)
+    try:
+        yield conn
+    finally:
+        conn.close()

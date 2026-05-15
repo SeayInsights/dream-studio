@@ -39,6 +39,26 @@ Use `ds version` to confirm the source/runtime resolver, `ds doctor` for
 read-only health checks, and `ds repair` for a non-mutating repair plan. These
 commands do not perform cleanup, live SQLite writes, or destructive repair.
 
+## Legacy Install Detected
+
+Symptom: a user previously installed Dream Studio from an old checkout, or
+`ds update-check` reports legacy install metadata.
+
+Check:
+
+- Run `ds install --check-legacy --home <dream-studio-home>`.
+- Run `ds migrate-legacy --dry-run --home <dream-studio-home>` to review the
+  exact backup path, planned writes, compatible SQLite migration scope, adapter
+  repair scope, and rollback instructions.
+- Use `ds repair-adapters` only for Dream-Studio-owned launchers and adapter
+  hook paths.
+- Use `ds rollback-check --backup-path <backup>` before any restore decision.
+
+Do not `git pull` the old repo into the new clean repo. Do not merge unrelated
+Git histories. Do not copy legacy Work Orders, handoffs, reports, evidence
+folders, caches, logs, prompts, or audit clutter into the fresh active runtime.
+Do not delete old source/runtime backups without explicit approval.
+
 ## Unknown Module Profile
 
 Symptom: install or acceptance reports an unknown profile.

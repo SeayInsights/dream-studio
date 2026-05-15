@@ -32,9 +32,13 @@ from core.installed_runtime import (  # noqa: E402
 )
 from core.installed_productization import (  # noqa: E402
     backup_runtime,
+    detect_legacy_install,
     first_run_setup,
     install_global_command_surface,
+    migrate_legacy_install,
     productization_acceptance_report,
+    repair_adapter_surfaces,
+    rollback_runtime_check,
     restore_runtime_check,
     uninstall_runtime_check,
     update_runtime_check,
@@ -104,6 +108,15 @@ def main(argv: list[str] | None = None) -> int:
     install = subcommands.add_parser("install", help="Run first-run setup for selected profiles")
     install.add_argument("--profile", action="append", dest="profiles", default=[])
     install.add_argument("--rehearsal", action="store_true", default=False)
+    install.add_argument(
+        "--check-legacy",
+        action="store_true",
+        default=False,
+        help="Detect legacy install surfaces without mutation",
+    )
+    install.add_argument("--command-dir", default=None)
+    install.add_argument("--claude-settings-path", default=None)
+    install.add_argument("--codex-home", default=None)
 
     install_command = subcommands.add_parser(
         "install-command", help="Install user-local launchers for the plain ds command"
@@ -125,6 +138,31 @@ def main(argv: list[str] | None = None) -> int:
 
     subcommands.add_parser("update-check", help="Check update readiness without mutation")
     subcommands.add_parser("uninstall-check", help="Inventory uninstall targets without deleting")
+
+    migrate_legacy = subcommands.add_parser(
+        "migrate-legacy", help="Plan or execute a guarded legacy install migration"
+    )
+    migrate_legacy.add_argument("--backup-root", default=None)
+    migrate_legacy.add_argument("--command-dir", default=None)
+    migrate_legacy.add_argument("--claude-settings-path", default=None)
+    migrate_legacy.add_argument("--codex-home", default=None)
+    migration_mode = migrate_legacy.add_mutually_exclusive_group()
+    migration_mode.add_argument("--dry-run", action="store_true", default=True)
+    migration_mode.add_argument("--execute", action="store_true", default=False)
+
+    repair_adapters = subcommands.add_parser(
+        "repair-adapters", help="Plan or repair Dream-Studio-owned adapter surfaces"
+    )
+    repair_adapters.add_argument("--command-dir", default=None)
+    repair_adapters.add_argument("--claude-settings-path", default=None)
+    repair_adapters.add_argument("--codex-home", default=None)
+    repair_adapters.add_argument("--previous-source-root", default=None)
+    repair_adapters.add_argument("--execute", action="store_true", default=False)
+
+    rollback = subcommands.add_parser(
+        "rollback-check", help="Validate a legacy-upgrade backup without restoring"
+    )
+    rollback.add_argument("--backup-path", required=True)
 
     packet = subcommands.add_parser("context-packet", help="Preview a context packet")
     packet.add_argument("--adapter", default="codex")
@@ -241,6 +279,16 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         if args.command == "install":
+            if args.check_legacy:
+                return _print(
+                    detect_legacy_install(
+                        source_root=source_root,
+                        dream_studio_home=home or _require_home_for_install(args.command),
+                        command_dir=args.command_dir,
+                        claude_settings_path=args.claude_settings_path,
+                        codex_home=args.codex_home,
+                    )
+                )
             profiles = args.profiles or None
             return _print(
                 first_run_setup(
@@ -298,6 +346,32 @@ def main(argv: list[str] | None = None) -> int:
                     dream_studio_home=home,
                 )
             )
+        if args.command == "migrate-legacy":
+            return _print(
+                migrate_legacy_install(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    backup_root=args.backup_root,
+                    command_dir=args.command_dir,
+                    claude_settings_path=args.claude_settings_path,
+                    codex_home=args.codex_home,
+                    execute=bool(args.execute),
+                )
+            )
+        if args.command == "repair-adapters":
+            return _print(
+                repair_adapter_surfaces(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    command_dir=args.command_dir,
+                    claude_settings_path=args.claude_settings_path,
+                    codex_home=args.codex_home,
+                    previous_source_root=args.previous_source_root,
+                    execute=bool(args.execute),
+                )
+            )
+        if args.command == "rollback-check":
+            return _print(rollback_runtime_check(backup_path=args.backup_path))
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 1
