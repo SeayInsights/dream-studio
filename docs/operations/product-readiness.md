@@ -252,3 +252,6 @@ Stop Phase 15 readiness validation if:
 - schema migrations are added without explicit scope;
 - cloud/org/global sync appears;
 - dashboards, telemetry, adapters, research, or enterprise analytics become canonical authority.
+## Platform Hardening Refresh
+
+Product readiness now includes platform-hardening signals for measurable skills, explicit permission decisions, connector ingestion, privacy boundaries, scheduled validation readiness, team-safe rollups, installer health, and sanitized demos. Missing evidence should remain unavailable or partial; platform-hardening records are readiness inputs, not fake scores.

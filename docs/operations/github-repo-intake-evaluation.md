@@ -58,3 +58,6 @@ task should be linked through task attribution rather than hidden in the intake
 record. Attribution can reference the Work Order, adapter, skills/workflows,
 files, validations, outcome, and evidence refs while preserving the intake
 decision as private evaluation authority.
+## Platform Hardening Refresh
+
+GitHub repo intake can feed the connector ingestion framework and policy engine, but adoption remains gated: reference-only, pattern-only, dependency candidate, fork/vendor candidate, legal review, security review, and manual review decisions must be evidence-backed before Dream Studio uses external code, dependencies, workflows, prompts, or architecture patterns.

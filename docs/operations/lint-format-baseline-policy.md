@@ -205,3 +205,6 @@ or add dependencies without approval.
 ## Future Cleanup
 
 Remaining flake8 debt should be paid down in focused follow-up work. Removing or reducing baseline entries is encouraged when safe. Broad semantic lint cleanup remains a separate approval boundary.
+## Platform Hardening Refresh
+
+The platform-hardening sequence adds a skill/workflow evaluation harness and installer/distribution checks, but it does not relax the lint or format baseline. `ds platform-hardening` and the Contract Atlas freshness views are derived status surfaces; Black, lint baseline checks, docs drift, and the release gate remain the release-blocking authorities for source changes.

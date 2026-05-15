@@ -48,6 +48,17 @@ from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
     model_provider_registry_summary,
 )
+from core.shared_intelligence.platform_hardening import (
+    connector_ingestion_framework_status,
+    demo_case_study_system_status,
+    evaluate_policy_decision,
+    installer_distribution_status,
+    local_watch_scheduler_status,
+    platform_hardening_summary,
+    privacy_redaction_status,
+    skill_evaluation_harness_status,
+    team_pilot_rollup_status,
+)
 from core.shared_intelligence.scoped_agents import scoped_agent_registry, scoped_context_packet
 from core.shared_intelligence.task_attribution import (
     task_attribution_summary,
@@ -239,6 +250,20 @@ async def get_shared_intelligence_status(
                         "github_repo_dependency_findings",
                     ],
                 },
+                {
+                    "surface_id": "platform-hardening",
+                    "api_path": "/api/shared-intelligence/platform-hardening",
+                    "source_tables": [
+                        "skill_evaluation_runs",
+                        "policy_decision_records",
+                        "connector_ingestion_runs",
+                        "privacy_redaction_export_records",
+                        "local_watch_schedule_records",
+                        "team_rollup_records",
+                        "installer_distribution_checks",
+                        "demo_case_study_packets",
+                    ],
+                },
             ],
             "source_tables": [
                 "reg_projects",
@@ -261,6 +286,14 @@ async def get_shared_intelligence_status(
                 "capability_center_records",
                 "agent_registry_records",
                 "github_repo_evaluations",
+                "skill_evaluation_runs",
+                "policy_decision_records",
+                "connector_ingestion_runs",
+                "privacy_redaction_export_records",
+                "local_watch_schedule_records",
+                "team_rollup_records",
+                "installer_distribution_checks",
+                "demo_case_study_packets",
             ],
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
@@ -348,6 +381,85 @@ async def get_github_repo_intake() -> dict[str, Any]:
     """Return GitHub repo intake workflow and persisted evaluation summary."""
 
     return _with_connection(github_repo_intake_dashboard_summary)
+
+
+@router.get("/platform-hardening")
+async def get_platform_hardening() -> dict[str, Any]:
+    """Return platform-hardening status across eval, policy, privacy, install, and demo systems."""
+
+    return _with_connection(platform_hardening_summary)
+
+
+@router.get("/platform-hardening/skill-evaluations")
+async def get_skill_evaluation_harness() -> dict[str, Any]:
+    """Return skill/workflow evaluation harness status and contracts."""
+
+    return _with_connection(skill_evaluation_harness_status)
+
+
+@router.get("/platform-hardening/policy-decision")
+async def preview_policy_decision(
+    actor: str = Query(default="operator"),
+    action: str = Query(default="read_only_action"),
+    target: str | None = Query(default=None),
+    approved: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Preview a policy decision without persisting or authorizing execution."""
+
+    return _dashboard_response(
+        {
+            "model_name": "dream_studio_policy_decision_preview",
+            **evaluate_policy_decision(
+                actor=actor,
+                action=action,
+                target=target,
+                scope={},
+                approved=approved,
+            ),
+        }
+    )
+
+
+@router.get("/platform-hardening/connectors")
+async def get_connector_ingestion_framework() -> dict[str, Any]:
+    """Return engineering connector ingestion contracts."""
+
+    return _with_connection(connector_ingestion_framework_status)
+
+
+@router.get("/platform-hardening/privacy")
+async def get_privacy_redaction_status() -> dict[str, Any]:
+    """Return privacy, redaction, and public-export boundary status."""
+
+    return _with_connection(privacy_redaction_status)
+
+
+@router.get("/platform-hardening/watchers")
+async def get_local_watch_scheduler_status() -> dict[str, Any]:
+    """Return opt-in local watch/scheduled validation declarations."""
+
+    return _with_connection(local_watch_scheduler_status)
+
+
+@router.get("/platform-hardening/team-rollup")
+async def get_team_pilot_rollup_status() -> dict[str, Any]:
+    """Return sanitized team-pilot rollup status."""
+
+    return _with_connection(team_pilot_rollup_status)
+
+
+@router.get("/platform-hardening/installer")
+async def get_installer_distribution_status() -> dict[str, Any]:
+    """Return installer/distribution hardening status."""
+
+    return _with_connection(installer_distribution_status)
+
+
+@router.get("/platform-hardening/demo")
+async def get_demo_case_study_system_status() -> dict[str, Any]:
+    """Return sanitized demo/case-study system status."""
+
+    return _with_connection(demo_case_study_system_status)
 
 
 @router.get("/adapter-router")

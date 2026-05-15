@@ -184,3 +184,6 @@ The validation proves the overlap matrix exists, existing owners are mapped
 instead of duplicated, scoring rubrics require evidence, design specializations
 are declared, career automation behavior is preserved, and application
 automation boundaries are explicit.
+## Platform Hardening Refresh
+
+The skill evaluation harness gives expert workflows a measurable promotion path: golden fixtures, expected-output contracts, rubric scores, pass/warn/fail/manual-review states, promotion thresholds, rollback thresholds, and known limitations. A workflow should not be marked improved unless an evaluation run records evidence in current authority.

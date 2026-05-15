@@ -53,6 +53,10 @@ from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
 )
+from core.shared_intelligence.platform_hardening import (
+    platform_hardening_summary,
+    validate_platform_hardening_summary,
+)
 from core.shared_intelligence.scoped_agents import (
     scoped_agent_registry,
     validate_scoped_agent_registry,
@@ -139,6 +143,8 @@ def build_contract_atlas(
     scoped_agent_errors = validate_scoped_agent_registry(scoped_agents)
     github_repo_intake = github_repo_intake_dashboard_summary(conn)
     github_repo_intake_errors = validate_github_repo_intake_workflow(github_repo_intake)
+    platform_hardening = platform_hardening_summary(conn)
+    platform_hardening_errors = validate_platform_hardening_summary(conn)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -256,6 +262,36 @@ def build_contract_atlas(
             "validation_status": "pass" if not github_repo_intake_errors else "attention_required",
             "validation_errors": github_repo_intake_errors,
         },
+        "platform_hardening": {
+            "source_status": platform_hardening["source_status"],
+            "milestone_ids": sorted(platform_hardening["milestones"]),
+            "skill_evaluation_status": platform_hardening["milestones"]["skill_evaluation_harness"][
+                "status"
+            ],
+            "policy_engine_status": platform_hardening["milestones"]["policy_permission_engine"][
+                "status"
+            ],
+            "connector_ingestion_status": platform_hardening["milestones"][
+                "engineering_connector_ingestion"
+            ]["status"],
+            "privacy_redaction_status": platform_hardening["milestones"][
+                "privacy_redaction_secret_boundary"
+            ]["status"],
+            "local_watch_status": platform_hardening["milestones"][
+                "local_watch_scheduled_validation"
+            ]["status"],
+            "team_rollup_status": platform_hardening["milestones"]["team_pilot_rollup_reporting"][
+                "status"
+            ],
+            "installer_distribution_status": platform_hardening["milestones"][
+                "installer_distribution_hardening"
+            ]["status"],
+            "demo_case_study_status": platform_hardening["milestones"]["demo_case_study_system"][
+                "status"
+            ],
+            "validation_status": "pass" if not platform_hardening_errors else "attention_required",
+            "validation_errors": platform_hardening_errors,
+        },
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -284,6 +320,8 @@ def build_contract_atlas(
             scoped_agent_errors=scoped_agent_errors,
             github_repo_intake=github_repo_intake,
             github_repo_intake_errors=github_repo_intake_errors,
+            platform_hardening=platform_hardening,
+            platform_hardening_errors=platform_hardening_errors,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -299,6 +337,7 @@ def build_contract_atlas(
             capability_center=capability_center,
             scoped_agents=scoped_agents,
             github_repo_intake=github_repo_intake,
+            platform_hardening=platform_hardening,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -314,6 +353,7 @@ def build_contract_atlas(
             scoped_agent_errors=scoped_agent_errors,
             github_repo_intake_errors=github_repo_intake_errors,
             task_attribution_errors=task_attribution_errors,
+            platform_hardening_errors=platform_hardening_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -395,6 +435,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "capability_center",
         "scoped_agent_execution",
         "github_repo_intake",
+        "platform_hardening",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -695,6 +736,8 @@ def _maturity_scorecard(
     scoped_agent_errors: list[str],
     github_repo_intake: Mapping[str, Any],
     github_repo_intake_errors: list[str],
+    platform_hardening: Mapping[str, Any],
+    platform_hardening_errors: list[str],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -837,6 +880,13 @@ def _maturity_scorecard(
             "copy_code_allowed_without_approval": False,
             "error_count": len(github_repo_intake_errors),
         },
+        {
+            "area": "platform_hardening_sequence",
+            "status": "validated" if not platform_hardening_errors else "contract_errors_present",
+            "milestone_ids": sorted(platform_hardening.get("milestones", {})),
+            "source_status": platform_hardening.get("source_status"),
+            "error_count": len(platform_hardening_errors),
+        },
     ]
 
 
@@ -855,6 +905,7 @@ def _confirmed_dependency_graph(
     capability_center: Mapping[str, Any],
     scoped_agents: Mapping[str, Any],
     github_repo_intake: Mapping[str, Any],
+    platform_hardening: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -1140,6 +1191,29 @@ def _confirmed_dependency_graph(
             "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
         )
 
+    add_node("module:platform_hardening_sequence", "module", "Platform Hardening Sequence")
+    add_edge(
+        "module:platform_hardening_sequence",
+        "module:contract_atlas",
+        "feeds_maturity_and_docs_drift",
+        "core.shared_intelligence.platform_hardening.platform_hardening_summary",
+    )
+    add_edge(
+        "module:platform_hardening_sequence",
+        "module:analytics_only_ingestion",
+        "normalizes_connector_evidence",
+        "core.shared_intelligence.platform_hardening.ingest_connector_payload",
+    )
+    for table in platform_hardening.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:platform_hardening_sequence",
+            table_id,
+            "records_platform_hardening_authority",
+            "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        )
+
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
         projection_id = f"projection:{projection['projection_path']}"
@@ -1194,6 +1268,7 @@ def _boundary_violation_report(
     scoped_agent_errors: list[str],
     github_repo_intake_errors: list[str],
     task_attribution_errors: list[str],
+    platform_hardening_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -1216,6 +1291,8 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "github_repo_intake", "message": error})
     for error in task_attribution_errors:
         issues.append({"severity": "error", "area": "task_attribution", "message": error})
+    for error in platform_hardening_errors:
+        issues.append({"severity": "error", "area": "platform_hardening", "message": error})
     security_status = security_lifecycle_gate.get("security_status")
     if security_status not in {"ready", "needs_manual_review"}:
         issues.append(
@@ -1316,6 +1393,14 @@ def _source_tables() -> list[str]:
             "github_repo_adoption_decisions",
             "github_repo_attribution_records",
             "task_attribution_records",
+            "skill_evaluation_runs",
+            "policy_decision_records",
+            "connector_ingestion_runs",
+            "privacy_redaction_export_records",
+            "local_watch_schedule_records",
+            "team_rollup_records",
+            "installer_distribution_checks",
+            "demo_case_study_packets",
         }
     )
     for module in DASHBOARD_MODULES:

@@ -183,3 +183,6 @@ GitHub repo intake affects supply-chain, license, attribution, maintainability,
 and integration readiness. A dependency, fork/vendor, or copied-code path is
 not ready unless license/legal/security/maintenance evidence and operator
 approval exist.
+## Platform Hardening Refresh
+
+Secure production readiness can use platform-hardening records as evidence for permission controls, sanitized export gates, connector provenance, installer health, scheduled validation posture, and demo/case-study readiness. The gate still requires source-backed controls and must not overclaim production readiness from a demo or rollup packet alone.

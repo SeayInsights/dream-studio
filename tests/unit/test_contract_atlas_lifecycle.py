@@ -184,6 +184,8 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
             "--changed-file",
             "docs/operations/installed-platform-productization.md",
             "--changed-file",
+            "docs/operations/platform-hardening-sequence.md",
+            "--changed-file",
             "docs/operations/long-run-multisession-operational-validation.md",
             "--changed-file",
             "docs/operations/troubleshooting.md",

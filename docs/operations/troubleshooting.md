@@ -35,6 +35,10 @@ Check:
 
 Commands are expected to work from outside the repo.
 
+Use `ds version` to confirm the source/runtime resolver, `ds doctor` for
+read-only health checks, and `ds repair` for a non-mutating repair plan. These
+commands do not perform cleanup, live SQLite writes, or destructive repair.
+
 ## Unknown Module Profile
 
 Symptom: install or acceptance reports an unknown profile.

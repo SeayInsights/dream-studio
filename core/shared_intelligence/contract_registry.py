@@ -432,6 +432,42 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "career_data_private_by_default_github_evaluation_evidence_sanitized_before_public_export"
         ),
     },
+    {
+        "domain_id": "platform_hardening_sequence",
+        "domain_name": "Platform Hardening Sequence",
+        "source_patterns": [
+            "core/shared_intelligence/platform_hardening.py",
+            "core/event_store/migrations/046_platform_hardening_authority.sql",
+            "interfaces/cli/ds.py",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/platform-hardening-sequence.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "docs_refs": [
+            "README.md",
+            "docs/README.md",
+            PRD_DOC,
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            "docs/PUBLICATION_BOUNDARY.md",
+            "docs/operations/installed-platform-productization.md",
+            "docs/operations/task-attribution-and-outcomes.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/platform-hardening-sequence.md",
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            "docs/PUBLICATION_BOUNDARY.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "platform_hardening_authority_or_surface_changes_require_policy_privacy_installer_demo_docs_refresh",
+        "public_export_boundary": "private_evidence_stays_private_sanitized_rollups_and_demo_packets_only",
+    },
 )
 
 
