@@ -73,3 +73,9 @@ production readiness assessment, control result, finding, remediation,
 scorecard, release-readiness, compliance flag, and skill/control mapping tables.
 It does not authorize live migration execution by itself; live updates still
 require the normal backup, verification, approval, and rollback boundary.
+
+Migration `042_token_usage_source_refs.sql` is additive. It adds source and
+evidence reference columns to `token_usage_records` so legacy token events can
+be reconciled into current telemetry authority without recreating
+`canonical_events`. The migration is repair-safe for partial historical
+fixtures by ensuring the target table exists before applying column additions.

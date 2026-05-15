@@ -19,6 +19,7 @@ Current high-confidence mappings are intentionally narrow:
 - workflow lifecycle events -> `execution_events` and `workflow_invocations`;
 - hook execution events -> `execution_events` and `hook_invocations`;
 - security scan lifecycle events -> `execution_events`;
+- source-ref-safe token usage events -> `token_usage_records`;
 - existing security finding events -> duplicate-skipped against `security_findings`.
 
-Token-usage legacy events remain `manual_review_required` until `token_usage_records` has a source-ref-safe import path. High-volume legacy validation failures remain `retention_only` unless a current dashboard or release gate explicitly needs them.
+Token-usage import requires stable raw id or session context, nonnegative token counts, model, timestamp, and source refs in `token_usage_records`. Legacy raw token rows do not include cost, so imported records preserve token counts and mark cost as unavailable instead of inventing estimated spend. High-volume legacy validation failures remain `retention_only` unless a current dashboard or release gate explicitly needs them.
