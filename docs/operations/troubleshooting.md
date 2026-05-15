@@ -27,8 +27,9 @@ Check:
 
 - Use `--source-root <dream-studio-source>` explicitly.
 - Use `--home <dream-studio-home>` explicitly for installed or rehearsal state.
-- On Windows, invoke `ds.ps1` directly or place the Dream Studio source root on
-  PATH so `ds.ps1` can resolve its own source root.
+- On Windows, prefer the plain-command launcher `ds.cmd`, or run
+  `ds install-command --execute` to create user-local `ds.cmd` and `ds.ps1`
+  launchers in a PATH directory such as `%USERPROFILE%\.local\bin`.
 - For packaged installs, verify `DREAM_STUDIO_SOURCE_ROOT` and
   `DREAM_STUDIO_HOME`.
 

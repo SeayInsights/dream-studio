@@ -29,6 +29,7 @@ from core.installed_runtime import (  # noqa: E402
 from core.installed_productization import (  # noqa: E402
     backup_runtime,
     first_run_setup,
+    install_global_command_surface,
     productization_acceptance_report,
     restore_runtime_check,
     uninstall_runtime_check,
@@ -61,6 +62,12 @@ def main(argv: list[str] | None = None) -> int:
     install = subcommands.add_parser("install", help="Run first-run setup for selected profiles")
     install.add_argument("--profile", action="append", dest="profiles", default=[])
     install.add_argument("--rehearsal", action="store_true", default=False)
+
+    install_command = subcommands.add_parser(
+        "install-command", help="Install user-local launchers for the plain ds command"
+    )
+    install_command.add_argument("--command-dir", default=None)
+    install_command.add_argument("--execute", action="store_true", default=False)
 
     acceptance = subcommands.add_parser(
         "acceptance", help="Run installed platform acceptance against a rehearsal home"
@@ -147,6 +154,15 @@ def main(argv: list[str] | None = None) -> int:
                     dream_studio_home=home or _require_home_for_install(args.command),
                     profiles=profiles,
                     rehearsal=bool(args.rehearsal),
+                )
+            )
+        if args.command == "install-command":
+            return _print(
+                install_global_command_surface(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    command_dir=args.command_dir,
+                    execute=bool(args.execute),
                 )
             )
         if args.command == "acceptance":

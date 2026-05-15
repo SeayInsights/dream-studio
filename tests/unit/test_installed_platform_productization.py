@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 from core.installed_productization import (
     backup_runtime,
     first_run_setup,
+    install_global_command_surface,
     productization_acceptance_report,
     restore_runtime_check,
     uninstall_runtime_check,
@@ -218,6 +220,65 @@ def test_windows_ds_launcher_runs_from_outside_repo(tmp_path: Path) -> None:
     assert install_payload["selected_profiles"] == ["analytics_only"]
     assert status_payload["source_build_location"] == str(REPO_ROOT)
     assert status_payload["user_local_state_location"] == str(home.resolve())
+
+
+def test_repo_cmd_launcher_exposes_plain_ds_surface() -> None:
+    launcher = REPO_ROOT / "ds.cmd"
+    text = launcher.read_text(encoding="utf-8")
+
+    assert launcher.is_file()
+    assert "interfaces\\cli\\ds.py" in text
+    assert "--source-root" in text
+    assert "%*" in text
+
+
+def test_global_command_surface_installs_plain_ds_launcher(tmp_path: Path) -> None:
+    home = tmp_path / "launcher-home"
+    command_dir = tmp_path / "bin"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+
+    install = install_global_command_surface(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        command_dir=command_dir,
+        execute=True,
+    )
+
+    assert install["destructive"] is False
+    assert install["sqlite_mutation"] is False
+    assert (command_dir / "ds.cmd").is_file()
+    assert (command_dir / "ds.ps1").is_file()
+
+    if sys.platform == "win32":
+        env = os.environ.copy()
+        env["PATH"] = f"{command_dir};{Path(sys.executable).parent};{env.get('PATH', '')}"
+        install_payload = subprocess.run(
+            [
+                "cmd.exe",
+                "/c",
+                "ds",
+                "install",
+                "--rehearsal",
+                "--profile",
+                "analytics_only",
+            ],
+            cwd=outside,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        status_payload = subprocess.run(
+            ["cmd.exe", "/c", "ds", "status"],
+            cwd=outside,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert json.loads(install_payload.stdout)["selected_profiles"] == ["analytics_only"]
+        assert json.loads(status_payload.stdout)["user_local_state_location"] == str(home.resolve())
 
 
 def _run_ds(ds: Path, cwd: Path, *args: str) -> dict[str, object]:

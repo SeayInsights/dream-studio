@@ -131,6 +131,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "core/installed_runtime.py",
             "core/installed_productization.py",
             "core/module_profiles.py",
+            "ds.cmd",
             "ds.ps1",
             "interfaces/cli/ds.py",
             "projections/api/routes/shared_intelligence.py",
