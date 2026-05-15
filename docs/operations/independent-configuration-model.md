@@ -126,3 +126,6 @@ GitHub repo intake configuration is an evaluation workflow, not an adoption
 approval. It may record evidence-backed decisions, but it does not fetch,
 copy, fork, vendor, add dependencies, mutate external repositories, or waive
 license/security/legal review boundaries.
+## Platform Hardening Refresh
+
+The independent configuration model now includes platform-hardening configuration surfaces for policy decisions, connector definitions, opt-in local watchers, installer checks, sanitized rollups, and demo packets. Defaults are dry-run or disabled unless an operator-approved profile enables writes, scheduling, or export generation.

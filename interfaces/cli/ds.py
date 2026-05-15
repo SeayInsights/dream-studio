@@ -45,6 +45,10 @@ from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
     refresh_contract_atlas_exports,
 )
 from core.shared_intelligence.context_packets import generate_shared_context_packet  # noqa: E402
+from core.shared_intelligence.platform_hardening import (  # noqa: E402
+    evaluate_policy_decision,
+    platform_hardening_summary,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
@@ -59,6 +63,9 @@ def main(argv: list[str] | None = None) -> int:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("status", help="Show installed runtime status")
+    subcommands.add_parser("version", help="Show Dream Studio source/runtime version")
+    subcommands.add_parser("doctor", help="Run read-only runtime health checks")
+    subcommands.add_parser("repair", help="Plan repair actions without mutating state")
     subcommands.add_parser("dashboard", help="Show dashboard service status")
     subcommands.add_parser("validate", help="Validate installed runtime readiness")
     subcommands.add_parser("contract-atlas", help="Show Contract Atlas summary")
@@ -75,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("adapters", help="Show adapter status")
     subcommands.add_parser("modules", help="Show module profile status")
     subcommands.add_parser("router", help="Show adapter router status")
+    subcommands.add_parser("platform-hardening", help="Show platform hardening status")
+
+    policy = subcommands.add_parser("policy", help="Preview a policy decision")
+    policy.add_argument("--actor", default="operator")
+    policy.add_argument("--action", default="read_only_action")
+    policy.add_argument("--target", default=None)
+    policy.add_argument("--approved", action="store_true", default=False)
 
     analytics_ingest = subcommands.add_parser(
         "analytics-ingest", help="Import normalized analytics facts into SQLite authority"
@@ -128,6 +142,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "status":
             return _print(installed_runtime_model(source_root=source_root, dream_studio_home=home))
+        if args.command == "version":
+            return _print(_version_status(source_root=source_root, dream_studio_home=home))
+        if args.command == "doctor":
+            return _print(_doctor_status(source_root=source_root, dream_studio_home=home))
+        if args.command == "repair":
+            return _print(_repair_plan(source_root=source_root, dream_studio_home=home))
         if args.command == "dashboard":
             return _print(_dashboard_status(source_root=source_root, dream_studio_home=home))
         if args.command == "validate":
@@ -143,6 +163,28 @@ def main(argv: list[str] | None = None) -> int:
                     source_root=source_root,
                     dream_studio_home=home,
                 ),
+            )
+        if args.command == "platform-hardening":
+            return _with_conn(
+                source_root=source_root,
+                dream_studio_home=home,
+                callback=platform_hardening_summary,
+            )
+        if args.command == "policy":
+            return _print(
+                {
+                    "model_name": "dream_studio_policy_decision_preview",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "execution_authorized": False,
+                    **evaluate_policy_decision(
+                        actor=args.actor,
+                        action=args.action,
+                        target=args.target,
+                        scope={},
+                        approved=bool(args.approved),
+                    ),
+                }
             )
         if args.command == "contract-atlas":
             return _with_conn(
@@ -309,6 +351,60 @@ def _dashboard_status(*, source_root: Path, dream_studio_home: Path | None) -> d
         "sqlite_path": model["canonical_sqlite_path"],
         "starts_server": False,
         "empty_state": "Use the local dashboard service when started; this command reports readiness.",
+    }
+
+
+def _version_status(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    return {
+        "model_name": "dream_studio_version_status",
+        "derived_view": True,
+        "primary_authority": False,
+        "source_root": str(paths.source_root),
+        "dream_studio_home": str(paths.dream_studio_home),
+        "latest_migration_version": latest_migration_version(),
+        "global_command": "ds",
+        "version_source": "repo_migrations_and_installed_runtime_model",
+    }
+
+
+def _doctor_status(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
+    validation = _validate_status(source_root=source_root, dream_studio_home=dream_studio_home)
+    return {
+        "model_name": "dream_studio_doctor_status",
+        "derived_view": True,
+        "primary_authority": False,
+        "status": "pass" if validation["ready"] else "attention_required",
+        "checks": {
+            "sqlite_exists": validation["sqlite_exists"],
+            "schema_version_known": validation["schema_version"] is not None,
+            "module_profiles_valid": not validation["module_profile_errors"],
+            "live_db_write_authorized": False,
+        },
+        "validation": validation,
+    }
+
+
+def _repair_plan(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
+    doctor = _doctor_status(source_root=source_root, dream_studio_home=dream_studio_home)
+    actions = []
+    if not doctor["checks"]["sqlite_exists"]:
+        actions.append("Run ds install --home <explicit-home> --rehearsal for rehearsal setup.")
+    if not doctor["checks"]["module_profiles_valid"]:
+        actions.append("Review module profile validation errors before runtime update.")
+    return {
+        "model_name": "dream_studio_repair_plan",
+        "derived_view": True,
+        "primary_authority": False,
+        "repair_executed": False,
+        "mutation_authorized": False,
+        "delete_authorized": False,
+        "actions": actions,
+        "status": "pass" if not actions else "attention_required",
+        "rollback_guidance": "No rollback required; this command is plan-only.",
     }
 
 

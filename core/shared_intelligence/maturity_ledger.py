@@ -60,6 +60,7 @@ REQUIRED_AREA_IDS: frozenset[str] = frozenset(
         "capability_center_scoped_agents",
         "github_repo_intake_evaluation",
         "task_attribution_outcome_tracking",
+        "platform_hardening_sequence",
     }
 )
 
@@ -468,6 +469,23 @@ MATURITY_AREAS: tuple[dict[str, Any], ...] = (
         "validation": ["tests/unit/test_career_ops_capability_agent_github.py"],
         "known_gaps": ["live GitHub metadata fetch remains a future approval-scoped producer"],
         "next_action": "Use repo intake before adopting third-party code, dependencies, prompts, or patterns.",
+        "can_claim_publicly": True,
+        "can_use_operationally": True,
+    },
+    {
+        "area_id": "platform_hardening_sequence",
+        "area_name": "Platform hardening sequence",
+        "status": "runtime_validated",
+        "owner_source": "core/shared_intelligence/platform_hardening.py",
+        "evidence": [
+            "core/event_store/migrations/046_platform_hardening_authority.sql",
+            "docs/operations/platform-hardening-sequence.md",
+        ],
+        "validation": ["tests/unit/test_platform_hardening_sequence.py"],
+        "known_gaps": [
+            "Real pilot and demo evidence should accumulate through authority records over time"
+        ],
+        "next_action": "Dogfood the policy engine, connector imports, sanitized rollups, and demo packets.",
         "can_claim_publicly": True,
         "can_use_operationally": True,
     },

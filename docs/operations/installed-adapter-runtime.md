@@ -256,3 +256,6 @@ should copy or refresh only installed runtime/router config needed to point
 adapters at the validated source root and local SQLite authority. It must not
 delete, archive, compact, deduplicate, inspect secrets, run Docker, deploy, or
 destructively migrate SQLite.
+## Platform Hardening Refresh
+
+The installed adapter runtime now exposes platform-hardening as a derived status surface through `/api/shared-intelligence/platform-hardening` and `ds platform-hardening`. These additions preserve the installed runtime boundary: adapter/router state remains under user-local Dream Studio state, source remains in the repo, and no adapter surface becomes primary authority.

@@ -74,6 +74,9 @@ The productized command surface includes:
 
 ```text
 ds status
+ds version
+ds doctor
+ds repair
 ds install
 ds install-command
 ds dashboard
@@ -85,6 +88,8 @@ ds context-packet
 ds modules
 ds router
 ds analytics-ingest
+ds policy
+ds platform-hardening
 ds acceptance
 ds backup
 ds restore-check
@@ -113,6 +118,12 @@ python C:\path\to\dream-studio\interfaces\cli\ds.py `
 
 The same commands are available through `python interfaces\cli\ds.py` for
 portable scripting and tests.
+
+Distribution hardening commands are read-only or plan-only by default.
+`ds doctor` reports runtime health, `ds repair` returns a repair plan without
+writing state, `ds policy` previews permission decisions, and
+`ds platform-hardening` reports the product-hardening sequence from SQLite
+authority and repo declarations.
 
 ## Expert Workflow Surface
 

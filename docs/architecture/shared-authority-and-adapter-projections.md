@@ -182,3 +182,6 @@ database. Docker-backed modules should receive an explicit SQLite path or a
 read-only/rehearsal copy according to their approved profile.
 Static Docker profile contracts can be used operationally for planning and
 status, but container execution requires separate approval.
+## Platform Hardening Refresh
+
+Platform-hardening reinforces the shared-authority rule: adapters may produce evidence, usage, connector payloads, policy previews, demo packets, and validation outcomes, but those results must normalize into Dream Studio SQLite authority or sanitized derived exports. Adapter projections remain generated config surfaces and must not become competing source authority.
