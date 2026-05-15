@@ -119,7 +119,7 @@ def test_contract_docs_drift_cli_uses_explicit_changed_files() -> None:
     payload = json.loads(result.stdout)
     assert payload["status"] == "pass"
     assert payload["impacted_domain_count"] == 1
-    assert payload["domains"][-1]["domain_id"] == "release_publication_gate"
+    assert any(domain["domain_id"] == "release_publication_gate" for domain in payload["domains"])
 
 
 def test_contract_docs_drift_cli_fails_on_missing_impacted_docs() -> None:

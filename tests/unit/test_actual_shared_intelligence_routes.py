@@ -238,6 +238,10 @@ def test_actual_app_exposes_contract_atlas_without_authorizing_execution(
     assert private_payload["boundary_violation_report"]["cleanup_execution_authorized"] is False
     assert private_payload["expert_workflow_system"]["workflow_count"] == 11
     assert private_payload["expert_workflow_system"]["validation_status"] == "pass"
+    assert private_payload["career_ops_module"]["private_by_default"] is True
+    assert private_payload["capability_center"]["validation_status"] == "pass"
+    assert private_payload["scoped_agent_execution"]["agent_is_authority"] is False
+    assert private_payload["github_repo_intake"]["copy_code_allowed_without_approval"] is False
     assert public_payload["export_scope"] == "public"
     assert public_payload["sanitized_public_export"] is True
     assert public_payload["repo_root"] == "<sanitized-local-path>"
@@ -263,6 +267,39 @@ def test_actual_app_exposes_expert_workflow_catalog(tmp_path: Path, monkeypatch)
         "do_not_submit_without_explicit_approval_or_policy"
         in payload["application_automation_boundaries"]
     )
+
+
+def test_actual_app_exposes_career_capability_agent_and_github_intake_surfaces(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client, _db_path = _client_with_shared_db(tmp_path, monkeypatch)
+
+    career = client.get("/api/shared-intelligence/career-ops")
+    capability = client.get(
+        "/api/shared-intelligence/capability-center",
+        params={"project_id": "dream-studio"},
+    )
+    agents = client.get("/api/shared-intelligence/agents/registry")
+    context = client.get(
+        "/api/shared-intelligence/agents/context-packet",
+        params={
+            "agent_id": "implementation_worker",
+            "task_summary": "bounded task",
+            "requested_data_classes": "career_private",
+        },
+    )
+    github = client.get("/api/shared-intelligence/github-repo-intake")
+
+    assert career.status_code == 200
+    assert capability.status_code == 200
+    assert agents.status_code == 200
+    assert context.status_code == 200
+    assert github.status_code == 200
+    assert career.json()["private_by_default"] is True
+    assert capability.json()["sections"]["agents"]["count"] >= 1
+    assert agents.json()["agent_is_authority"] is False
+    assert "career_private_data_without_scope" in context.json()["excluded_context"]
+    assert github.json()["do_not_copy_code_without_approval"] is True
 
 
 def test_actual_app_exposes_contract_atlas_maturity_and_docs_drift_views(

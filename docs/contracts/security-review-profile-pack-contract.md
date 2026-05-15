@@ -326,3 +326,18 @@ secret exposure, logging redaction, telemetry integrity, database schema safety,
 provider credential handling, and release-readiness evidence. Cost unknowns are
 not security findings by themselves; fake cost precision or credential
 inspection would be review findings.
+
+## Career, Capability, Agent, And GitHub Intake Review Profile
+
+Career Ops changes must include privacy, publication-boundary, local-storage,
+browser-automation, and evidence-backed-claim checks. Application automation
+must preserve no account creation, no CAPTCHA bypass, no misrepresentation, and
+no submission without approval.
+
+Scoped-agent changes must include context-minimization checks: no full
+conversation history, secrets, all Work Orders, all memories, unrelated
+projects, raw local evidence, or private career data by default.
+
+GitHub repo intake changes must include license, attribution, security,
+supply-chain, dependency health, maintenance, overlap, and legal/security
+review routing checks before any adoption path is considered.

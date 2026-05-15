@@ -105,3 +105,18 @@ credentials. Subscription-plan adapters keep cost unknown unless an approved
 allocation profile is recorded. Token-metered/API-metered adapters may display
 reportable cost only when source metadata, usage exports, billing API evidence,
 or explicit estimate metadata is present.
+
+Career Ops configuration is private and disabled until explicitly enabled. It
+may store career and application records only in approved local SQLite
+authority; it must not leak into public exports, team rollups, sanitized demo
+packets, or repo docs as data.
+
+Capability Center and scoped-agent configuration are authority-backed read
+models and policies. Agents receive only task-required context, never full
+conversation history, secrets, all Work Orders, all memories, raw local
+evidence, or unrelated private data by default.
+
+GitHub repo intake configuration is an evaluation workflow, not an adoption
+approval. It may record evidence-backed decisions, but it does not fetch,
+copy, fork, vendor, add dependencies, mutate external repositories, or waive
+license/security/legal review boundaries.

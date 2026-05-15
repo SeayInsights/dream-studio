@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from core.analytics_ingestion import analytics_only_profile_status
+from core.career_ops import career_ops_dashboard_summary
 from core.installed_runtime import installed_runtime_model
 from core.module_contracts import module_contracts, validate_module_contracts
 from core.module_profiles import module_profiles, validate_module_profiles
@@ -40,9 +41,21 @@ from core.shared_intelligence.expert_workflows import (
     expert_workflow_catalog,
     validate_expert_workflow_catalog,
 )
+from core.shared_intelligence.capability_center import (
+    capability_center_summary,
+    validate_capability_center_summary,
+)
+from core.shared_intelligence.github_repo_intake import (
+    github_repo_intake_dashboard_summary,
+    validate_github_repo_intake_workflow,
+)
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
+)
+from core.shared_intelligence.scoped_agents import (
+    scoped_agent_registry,
+    validate_scoped_agent_registry,
 )
 from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 from core.telemetry.docker_profiles import (
@@ -109,6 +122,17 @@ def build_contract_atlas(
     github_cicd_profile = _github_cicd_profile(root)
     expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
     expert_workflow_errors = validate_expert_workflow_catalog(expert_workflows)
+    career_ops = career_ops_dashboard_summary(conn)
+    capability_center = capability_center_summary(
+        conn,
+        project_id=effective_project_id,
+        repo_root=root,
+    )
+    capability_center_errors = validate_capability_center_summary(capability_center)
+    scoped_agents = scoped_agent_registry(conn)
+    scoped_agent_errors = validate_scoped_agent_registry(scoped_agents)
+    github_repo_intake = github_repo_intake_dashboard_summary(conn)
+    github_repo_intake_errors = validate_github_repo_intake_workflow(github_repo_intake)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -176,6 +200,46 @@ def build_contract_atlas(
             "validation_status": "pass" if not expert_workflow_errors else "attention_required",
             "validation_errors": expert_workflow_errors,
         },
+        "career_ops_module": {
+            "enabled": career_ops["enabled"],
+            "opt_in_required": career_ops["opt_in_required"],
+            "private_by_default": career_ops["private_by_default"],
+            "schema_status": career_ops["schema_status"],
+            "profile_count": career_ops.get("profile_count", 0),
+            "active_profile_count": career_ops.get("active_profile_count", 0),
+            "public_export_excluded": True,
+            "application_automation_boundaries": career_ops["application_automation_boundaries"],
+            "source_tables": career_ops["source_tables"],
+        },
+        "capability_center": {
+            "source_status": capability_center["source_status"],
+            "section_ids": sorted(capability_center["sections"]),
+            "agent_count": capability_center["sections"]["agents"]["count"],
+            "workflow_count": capability_center["sections"]["workflows"]["count"],
+            "control_count": capability_center["sections"]["controls"]["count"],
+            "validation_status": "pass" if not capability_center_errors else "attention_required",
+            "validation_errors": capability_center_errors,
+        },
+        "scoped_agent_execution": {
+            "agent_count": scoped_agents["agent_count"],
+            "agent_is_authority": scoped_agents["agent_is_authority"],
+            "dream_studio_remains_canonical": scoped_agents["dream_studio_remains_canonical"],
+            "forbidden_context_by_default": scoped_agents["forbidden_context_by_default"],
+            "source_tables": scoped_agents["source_tables"],
+            "validation_status": "pass" if not scoped_agent_errors else "attention_required",
+            "validation_errors": scoped_agent_errors,
+        },
+        "github_repo_intake": {
+            "workflow_id": github_repo_intake["workflow_id"],
+            "schema_status": github_repo_intake.get("schema_status", "available"),
+            "evaluation_count": github_repo_intake.get("evaluation_count", 0),
+            "decision_counts": github_repo_intake.get("decision_counts", {}),
+            "outcome_classes": github_repo_intake["outcome_classes"],
+            "copy_code_allowed_without_approval": False,
+            "source_tables": github_repo_intake["source_tables"],
+            "validation_status": "pass" if not github_repo_intake_errors else "attention_required",
+            "validation_errors": github_repo_intake_errors,
+        },
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -195,6 +259,13 @@ def build_contract_atlas(
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
             expert_workflow_errors=expert_workflow_errors,
+            career_ops=career_ops,
+            capability_center=capability_center,
+            capability_center_errors=capability_center_errors,
+            scoped_agents=scoped_agents,
+            scoped_agent_errors=scoped_agent_errors,
+            github_repo_intake=github_repo_intake,
+            github_repo_intake_errors=github_repo_intake_errors,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -205,6 +276,10 @@ def build_contract_atlas(
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
+            career_ops=career_ops,
+            capability_center=capability_center,
+            scoped_agents=scoped_agents,
+            github_repo_intake=github_repo_intake,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -216,6 +291,9 @@ def build_contract_atlas(
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
             expert_workflow_errors=expert_workflow_errors,
+            capability_center_errors=capability_center_errors,
+            scoped_agent_errors=scoped_agent_errors,
+            github_repo_intake_errors=github_repo_intake_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -240,6 +318,13 @@ def sanitize_contract_atlas_for_public_export(atlas: Mapping[str, Any]) -> dict[
     sanitized["export_scope"] = "public"
     sanitized["sanitized_public_export"] = True
     sanitized["repo_root"] = "<sanitized-local-path>"
+    if "career_ops_module" in sanitized:
+        sanitized["career_ops_module"] = {
+            "opt_in_required": True,
+            "private_by_default": True,
+            "public_export_excluded": True,
+            "policy": "career data is private local authority and excluded from public exports by default",
+        }
     for contract in sanitized.get("adapter_projection_contracts", []):
         contract.pop("local_user_surface", None)
         local_hook = contract.get("local_hook_surface")
@@ -285,6 +370,10 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "adapter_usage_accounting",
         "github_cicd_profile",
         "expert_workflow_system",
+        "career_ops_module",
+        "capability_center",
+        "scoped_agent_execution",
+        "github_repo_intake",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -512,6 +601,8 @@ def _dashboard_private_export_boundaries() -> dict[str, Any]:
             "live SQLite rows",
             "local adapter configs",
             "backup and rollback paths",
+            "career profiles, resumes, applications, contacts, automation evidence, and scorecards",
+            "GitHub repo evaluation evidence until explicitly sanitized",
         ],
         "public_surfaces": ["sanitized docs", "source-level contracts", "non-sensitive examples"],
     }
@@ -574,6 +665,13 @@ def _maturity_scorecard(
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
     expert_workflow_errors: list[str],
+    career_ops: Mapping[str, Any],
+    capability_center: Mapping[str, Any],
+    capability_center_errors: list[str],
+    scoped_agents: Mapping[str, Any],
+    scoped_agent_errors: list[str],
+    github_repo_intake: Mapping[str, Any],
+    github_repo_intake_errors: list[str],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -675,6 +773,36 @@ def _maturity_scorecard(
             "no_duplicate_skill_policy": expert_workflows.get("no_duplicate_skill_policy"),
             "error_count": len(expert_workflow_errors),
         },
+        {
+            "area": "career_ops",
+            "status": career_ops.get("schema_status"),
+            "enabled": career_ops.get("enabled"),
+            "opt_in_required": career_ops.get("opt_in_required"),
+            "private_by_default": career_ops.get("private_by_default"),
+            "public_export_excluded": True,
+        },
+        {
+            "area": "capability_center",
+            "status": "validated" if not capability_center_errors else "contract_errors_present",
+            "section_ids": sorted(capability_center.get("sections", {})),
+            "error_count": len(capability_center_errors),
+        },
+        {
+            "area": "scoped_agent_execution",
+            "status": "validated" if not scoped_agent_errors else "contract_errors_present",
+            "agent_count": scoped_agents.get("agent_count"),
+            "agent_is_authority": scoped_agents.get("agent_is_authority"),
+            "forbidden_context_count": len(scoped_agents.get("forbidden_context_by_default", [])),
+            "error_count": len(scoped_agent_errors),
+        },
+        {
+            "area": "github_repo_intake",
+            "status": "validated" if not github_repo_intake_errors else "contract_errors_present",
+            "workflow_id": github_repo_intake.get("workflow_id"),
+            "evaluation_count": github_repo_intake.get("evaluation_count", 0),
+            "copy_code_allowed_without_approval": False,
+            "error_count": len(github_repo_intake_errors),
+        },
     ]
 
 
@@ -688,6 +816,10 @@ def _confirmed_dependency_graph(
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
+    career_ops: Mapping[str, Any],
+    capability_center: Mapping[str, Any],
+    scoped_agents: Mapping[str, Any],
+    github_repo_intake: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -888,6 +1020,74 @@ def _confirmed_dependency_graph(
                 "core.shared_intelligence.expert_workflows.overlap_matrix",
             )
 
+    add_node("module:career_ops", "module", "Career Ops")
+    add_edge(
+        "module:career_ops",
+        "layer:sqlite_authority",
+        "persists_private_authority_to",
+        "core.career_ops.CAREER_OPS_TABLES",
+    )
+    for table in career_ops.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:career_ops",
+            table_id,
+            "owns_private_authority",
+            "core.career_ops.CAREER_OPS_TABLES",
+        )
+
+    add_node("module:capability_center", "module", "Capability Center")
+    for section_id in capability_center.get("sections", {}):
+        section_node = f"dashboard-section:capability-center:{section_id}"
+        add_node(section_node, "dashboard_section", f"Capability Center {section_id}")
+        add_edge(
+            "module:capability_center",
+            section_node,
+            "exposes_derived_section",
+            "core.shared_intelligence.capability_center.capability_center_summary",
+        )
+
+    add_node("module:scoped_agent_execution", "module", "Scoped Agent Execution")
+    for agent in scoped_agents.get("agents", []):
+        agent_id = f"agent:{agent['agent_id']}"
+        add_node(agent_id, "scoped_agent", agent["agent_name"])
+        add_edge(
+            "module:scoped_agent_execution",
+            agent_id,
+            "declares_context_scoped_worker",
+            "core.shared_intelligence.scoped_agents.DEFAULT_SCOPED_AGENTS",
+        )
+    add_edge(
+        "module:scoped_agent_execution",
+        "layer:sqlite_authority",
+        "normalizes_results_to",
+        "agent_result_records and invocation/result authority tables",
+    )
+
+    add_node("module:github_repo_intake", "module", "GitHub Repo Intake")
+    add_edge(
+        "module:github_repo_intake",
+        "module:security_lifecycle_gate",
+        "requires_security_review_before_adoption",
+        "core.shared_intelligence.github_repo_intake.WORKFLOW_STEPS",
+    )
+    add_edge(
+        "module:github_repo_intake",
+        "module:expert_workflow_system",
+        "requires_overlap_review_before_new_skill_or_workflow",
+        "core.shared_intelligence.github_repo_intake.WORKFLOW_STEPS",
+    )
+    for table in github_repo_intake.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:github_repo_intake",
+            table_id,
+            "writes_evaluation_authority",
+            "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        )
+
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
         projection_id = f"projection:{projection['projection_path']}"
@@ -938,6 +1138,9 @@ def _boundary_violation_report(
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
     expert_workflow_errors: list[str],
+    capability_center_errors: list[str],
+    scoped_agent_errors: list[str],
+    github_repo_intake_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -952,6 +1155,12 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "installed_module_profiles", "message": error})
     for error in expert_workflow_errors:
         issues.append({"severity": "error", "area": "expert_workflow_system", "message": error})
+    for error in capability_center_errors:
+        issues.append({"severity": "error", "area": "capability_center", "message": error})
+    for error in scoped_agent_errors:
+        issues.append({"severity": "error", "area": "scoped_agents", "message": error})
+    for error in github_repo_intake_errors:
+        issues.append({"severity": "error", "area": "github_repo_intake", "message": error})
     security_status = security_lifecycle_gate.get("security_status")
     if security_status not in {"ready", "needs_manual_review"}:
         issues.append(
@@ -1023,6 +1232,34 @@ def _source_tables() -> list[str]:
             "reg_projects",
             "release_readiness_records",
             "validation_results",
+            "career_profiles",
+            "career_profile_fields",
+            "career_role_targets",
+            "career_resume_versions",
+            "career_cover_letter_versions",
+            "career_portfolio_artifacts",
+            "career_case_studies",
+            "career_job_opportunities",
+            "career_applications",
+            "career_application_events",
+            "career_application_field_mappings",
+            "career_browser_automation_runs",
+            "career_interview_story_bank",
+            "career_evidence_refs",
+            "career_scorecards",
+            "capability_center_records",
+            "agent_registry_records",
+            "agent_context_scope_policies",
+            "workflow_agent_skill_mappings",
+            "agent_result_records",
+            "github_repo_evaluations",
+            "github_repo_license_findings",
+            "github_repo_security_findings",
+            "github_repo_dependency_findings",
+            "github_repo_integration_candidates",
+            "github_repo_pattern_references",
+            "github_repo_adoption_decisions",
+            "github_repo_attribution_records",
         }
     )
     for module in DASHBOARD_MODULES:

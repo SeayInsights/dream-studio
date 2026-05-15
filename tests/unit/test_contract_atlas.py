@@ -52,11 +52,15 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["module_contracts"]["schema"] == "dream_studio.module_contracts.v1"
     assert {module["module_id"] for module in atlas["module_contracts"]["contracts"]} >= {
         "core",
+        "career_ops",
         "analytics_only",
         "security_only",
         "token_only",
         "adapter_router",
         "docker_optional",
+        "capability_center",
+        "scoped_agents",
+        "github_repo_intake",
     }
     assert {module["module_id"] for module in atlas["telemetry_module_contracts"]} >= {
         "security_analytics",
@@ -86,7 +90,12 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["installed_runtime_model"]["productization_surface"]["installer"].startswith(
         "ds install"
     )
-    assert atlas["installed_module_profiles"]["profile_count"] == 9
+    assert atlas["installed_module_profiles"]["profile_count"] == 10
+    assert atlas["career_ops_module"]["private_by_default"] is True
+    assert atlas["career_ops_module"]["public_export_excluded"] is True
+    assert atlas["capability_center"]["validation_status"] == "pass"
+    assert atlas["scoped_agent_execution"]["dream_studio_remains_canonical"] is True
+    assert atlas["github_repo_intake"]["copy_code_allowed_without_approval"] is False
     assert atlas["github_cicd_profile"]["status"] == "pass"
     assert atlas["github_cicd_profile"]["required_checks"] == ["pr-smoke"]
     assert atlas["github_cicd_profile"]["heavy_validation_layer"] == (
@@ -119,6 +128,10 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     )
     assert any(
         item["area"] == "module_boundary_contracts" and item["status"] == "validated"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "github_repo_intake" and item["copy_code_allowed_without_approval"] is False
         for item in atlas["maturity_scorecard"]
     )
     assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
@@ -186,6 +199,16 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
         and edge["relation"] == "declares_module_contract"
         for edge in graph["edges"]
     )
+    assert any(
+        edge["source"] == "module:github_repo_intake"
+        and edge["target"] == "module:security_lifecycle_gate"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:scoped_agent_execution"
+        and edge["target"] == "layer:sqlite_authority"
+        for edge in graph["edges"]
+    )
 
 
 def test_contract_atlas_defaults_to_dream_studio_scope(tmp_path: Path, monkeypatch) -> None:
@@ -231,6 +254,8 @@ def test_contract_atlas_public_export_is_sanitized(tmp_path: Path, monkeypatch) 
     assert validate_contract_atlas(atlas) == []
     assert atlas["export_scope"] == "public"
     assert atlas["sanitized_public_export"] is True
+    assert atlas["career_ops_module"]["public_export_excluded"] is True
+    assert "profile_count" not in atlas["career_ops_module"]
     assert str(tmp_path) not in payload
     assert all(
         "local_user_surface" not in contract for contract in atlas["adapter_projection_contracts"]

@@ -238,6 +238,28 @@ Missing sections stay honest empty states. It must not require hooks, agents,
 workflows, Claude, Codex, Docker, repo mutation, or full orchestration to render
 analytics-only views.
 
+## Capability And Career Projections
+
+`/api/shared-intelligence/career-ops` is a private dashboard module. It shows
+whether Career Ops is enabled, profile/application/evidence/scorecard counts,
+application automation boundaries, and evidence-backed or unavailable
+scorecards. It does not expose career records in public exports.
+
+`/api/shared-intelligence/capability-center` displays skills, workflows,
+agents, controls, evaluations, and hardening candidates from authority-backed
+records. If invocation or evaluation evidence is missing, sections report
+unavailable or empty states with reasons.
+
+`/api/shared-intelligence/agents/registry` and
+`/api/shared-intelligence/agents/context-packet` expose scoped worker-agent
+contracts and context previews. They do not authorize agent execution and they
+exclude full conversation history, secrets, unrelated project data, and private
+career data unless explicitly scoped.
+
+`/api/shared-intelligence/github-repo-intake` exposes the repo intake workflow
+and recorded evaluation summaries. It is a read model over SQLite authority and
+does not fetch, copy, fork, vendor, mutate, or adopt external repositories.
+
 ## Freshness And Staleness
 
 Projection records are stale when their source refs, evidence refs, validation

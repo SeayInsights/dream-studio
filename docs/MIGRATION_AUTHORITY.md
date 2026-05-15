@@ -87,3 +87,10 @@ not inspect provider billing credentials and does not convert subscription-plan
 tokens into API-dollar costs. Cost is reportable only when visibility/source
 metadata says it is exact, provider-reported, explicitly estimated, or an
 operator-configured subscription allocation.
+
+Migration `044_career_capability_agent_github_authority.sql` is additive. It
+creates private opt-in Career Ops tables, Capability Center records, scoped
+agent registry/context/result tables, and GitHub repo intake evaluation tables.
+It does not enable Career Ops by default, publish career data, inspect external
+repositories, copy code, add dependencies, fork/vendor repositories, submit job
+applications, or authorize agent execution.
