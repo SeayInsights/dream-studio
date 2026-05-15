@@ -24,6 +24,27 @@ Dream Studio's SQLite authority covers:
 - secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
 - release/cutover evidence summaries where safe.
 
+Current Career Ops, Capability Center, scoped-agent, and GitHub repo intake
+authority lives in migration 044:
+
+- `career_profiles` and related `career_*` tables for opt-in private career
+  profiles, fields, role targets, resume/cover-letter variants, portfolio
+  artifacts, case studies, job opportunities, applications, application events,
+  field mappings, browser automation runs, interview stories, evidence refs,
+  and scorecards;
+- `capability_center_records` for optional persisted capability metadata, with
+  dashboard summaries also reading current invocation and hardening records;
+- `agent_registry_records`, `agent_context_scope_policies`,
+  `workflow_agent_skill_mappings`, and `agent_result_records` for scoped worker
+  declarations and normalized results;
+- `github_repo_*` tables for evidence-backed repository evaluations, license,
+  security, dependency, integration, pattern, adoption, and attribution records.
+
+Career data is private by default and excluded from public exports unless
+explicitly redacted and approved. GitHub repo intake records do not authorize
+copying code, adding dependencies, forking, vendoring, or mutating external
+projects.
+
 Current AI usage accounting authority lives in:
 
 - `token_usage_records` for token telemetry with billing, token visibility,

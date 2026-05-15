@@ -183,6 +183,15 @@ docs index. Tests should prove that external projects remain paused unless
 selected, Docker stays optional, live SQLite guards stay intact, and closeout
 routes to an explicit operator decision before public release.
 
+Career Ops, Capability Center, scoped-agent, and GitHub repo intake changes are
+release-gate relevant. If code changes affect private career authority,
+capability/evaluation read models, agent context scoping, or external GitHub
+repo adoption policy, the same change set must refresh database docs, Contract
+Atlas docs, dashboard mapping, publication boundary docs, and the docs index.
+Tests should prove private career data is excluded from public exports, agents
+do not receive forbidden context by default, and repo intake does not copy code
+or add dependencies without approval.
+
 ## Future Cleanup
 
 Remaining flake8 debt should be paid down in focused follow-up work. Removing or reducing baseline entries is encouraged when safe. Broad semantic lint cleanup remains a separate approval boundary.

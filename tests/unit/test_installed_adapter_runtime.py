@@ -44,7 +44,11 @@ def test_module_profiles_are_independent_and_analytics_only_is_minimal() -> None
     by_id = module_profile_map()
 
     assert validate_module_profiles() == []
-    assert profiles["profile_count"] == 9
+    assert profiles["profile_count"] == 10
+    career = by_id["career_ops_only"]
+    assert career["hooks_required"] is False
+    assert career["docker_required"] is False
+    assert "public_exports" in career["excludes"]
     analytics = by_id["analytics_only"]
     assert analytics["hooks_required"] is False
     assert analytics["agents_required"] is False

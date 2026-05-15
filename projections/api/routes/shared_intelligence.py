@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from core.analytics_ingestion import analytics_only_profile_status
+from core.career_ops import career_ops_dashboard_summary
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
 from core.module_contracts import module_contracts
@@ -32,6 +33,7 @@ from core.shared_intelligence.capability_routing import (
     capability_route_summary,
     recommend_capability_route,
 )
+from core.shared_intelligence.capability_center import capability_center_summary
 from core.shared_intelligence.contract_atlas import build_contract_atlas
 from core.shared_intelligence.contract_atlas_lifecycle import (
     build_contract_atlas_freshness_manifest,
@@ -40,11 +42,13 @@ from core.shared_intelligence.contract_registry import change_impact_report
 from core.shared_intelligence.context_packets import generate_shared_context_packet
 from core.shared_intelligence.dashboard_views import learning_hardening_dashboard_view
 from core.shared_intelligence.expert_workflows import expert_workflow_catalog
+from core.shared_intelligence.github_repo_intake import github_repo_intake_dashboard_summary
 from core.shared_intelligence.maturity_ledger import maturity_ledger
 from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
     model_provider_registry_summary,
 )
+from core.shared_intelligence.scoped_agents import scoped_agent_registry, scoped_context_packet
 from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 
 router = APIRouter()
@@ -181,6 +185,46 @@ async def get_shared_intelligence_status(
                     "api_path": "/api/shared-intelligence/expert-workflows",
                     "source_tables": [],
                 },
+                {
+                    "surface_id": "career-ops",
+                    "api_path": "/api/shared-intelligence/career-ops",
+                    "source_tables": [
+                        "career_profiles",
+                        "career_applications",
+                        "career_scorecards",
+                    ],
+                },
+                {
+                    "surface_id": "capability-center",
+                    "api_path": "/api/shared-intelligence/capability-center",
+                    "source_tables": [
+                        "capability_center_records",
+                        "skill_invocations",
+                        "workflow_invocations",
+                        "agent_invocations",
+                        "hardening_candidate_records",
+                    ],
+                },
+                {
+                    "surface_id": "scoped-agents",
+                    "api_path": "/api/shared-intelligence/agents/registry",
+                    "source_tables": [
+                        "agent_registry_records",
+                        "agent_context_scope_policies",
+                        "workflow_agent_skill_mappings",
+                        "agent_result_records",
+                    ],
+                },
+                {
+                    "surface_id": "github-repo-intake",
+                    "api_path": "/api/shared-intelligence/github-repo-intake",
+                    "source_tables": [
+                        "github_repo_evaluations",
+                        "github_repo_license_findings",
+                        "github_repo_security_findings",
+                        "github_repo_dependency_findings",
+                    ],
+                },
             ],
             "source_tables": [
                 "reg_projects",
@@ -196,6 +240,12 @@ async def get_shared_intelligence_status(
                 "ai_adapter_accounting_profiles",
                 "ai_usage_operational_records",
                 "token_usage_records",
+                "career_profiles",
+                "career_applications",
+                "career_scorecards",
+                "capability_center_records",
+                "agent_registry_records",
+                "github_repo_evaluations",
             ],
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
@@ -223,6 +273,66 @@ async def get_expert_workflow_catalog(
     """Return expert workflow definitions, overlap decisions, and rubrics."""
 
     return _dashboard_response(expert_workflow_catalog(project_id=project_id))
+
+
+@router.get("/career-ops")
+async def get_career_ops_status() -> dict[str, Any]:
+    """Return private opt-in Career Ops status and dashboard summary."""
+
+    return _with_connection(career_ops_dashboard_summary)
+
+
+@router.get("/capability-center")
+async def get_capability_center(
+    project_id: str | None = Query(default="dream-studio"),
+) -> dict[str, Any]:
+    """Return Capability Center skills/workflows/agents/controls/evaluations sections."""
+
+    repo_root = Path(__file__).resolve().parents[3]
+    return _with_connection(
+        lambda conn: capability_center_summary(
+            conn,
+            project_id=project_id,
+            repo_root=repo_root,
+        )
+    )
+
+
+@router.get("/agents/registry")
+async def get_scoped_agent_registry() -> dict[str, Any]:
+    """Return scoped agent declarations without authorizing execution."""
+
+    return _with_connection(scoped_agent_registry)
+
+
+@router.get("/agents/context-packet")
+async def preview_scoped_agent_context_packet(
+    agent_id: str = Query(default="implementation_worker"),
+    task_summary: str = Query(default="Scoped Dream Studio task"),
+    project_id: str | None = Query(default="dream-studio"),
+    requested_data_classes: str | None = Query(default=None),
+    career_scope_approved: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Preview a scoped worker context packet without executing an agent."""
+
+    data_classes = _split_query_list(requested_data_classes)
+    return _with_connection(
+        lambda conn: scoped_context_packet(
+            conn,
+            agent_id=agent_id,
+            task_summary=task_summary,
+            project_id=project_id,
+            requested_data_classes=data_classes,
+            career_scope_approved=career_scope_approved,
+        )
+    )
+
+
+@router.get("/github-repo-intake")
+async def get_github_repo_intake() -> dict[str, Any]:
+    """Return GitHub repo intake workflow and persisted evaluation summary."""
+
+    return _with_connection(github_repo_intake_dashboard_summary)
 
 
 @router.get("/adapter-router")

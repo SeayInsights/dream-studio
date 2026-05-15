@@ -36,6 +36,10 @@ from core.shared_intelligence.capability_routing import (
     capability_route_summary,
     recommend_capability_route,
 )
+from core.shared_intelligence.capability_center import (
+    capability_center_summary,
+    validate_capability_center_summary,
+)
 from core.shared_intelligence.context_packets import (
     generate_shared_context_packet,
     shared_context_packet_policy,
@@ -50,6 +54,11 @@ from core.shared_intelligence.dashboard_views import (
     validate_learning_hardening_dashboard_view,
 )
 from core.shared_intelligence.feedback_loop import cross_model_learning_feedback
+from core.shared_intelligence.github_repo_intake import (
+    github_repo_intake_dashboard_summary,
+    github_repo_intake_workflow,
+    validate_github_repo_intake_workflow,
+)
 from core.shared_intelligence.hardening_loop import (
     create_hardening_candidate_from_learning_event,
     hardening_candidate_lifecycle,
@@ -84,6 +93,11 @@ from core.shared_intelligence.skill_versioning import (
     skill_version_evaluation_report,
     validate_skill_version_evaluation_report,
 )
+from core.shared_intelligence.scoped_agents import (
+    scoped_agent_registry,
+    scoped_context_packet,
+    validate_scoped_agent_registry,
+)
 from core.shared_intelligence.usage_accounting import (
     adapter_usage_accounting_summary,
     record_adapter_accounting_profile,
@@ -105,6 +119,8 @@ __all__ = [
     "require_shared_intelligence_tables",
     "capability_route_summary",
     "recommend_capability_route",
+    "capability_center_summary",
+    "validate_capability_center_summary",
     "generate_shared_context_packet",
     "shared_context_packet_policy",
     "adapter_surface_classification",
@@ -113,6 +129,9 @@ __all__ = [
     "learning_hardening_dashboard_view",
     "validate_learning_hardening_dashboard_view",
     "cross_model_learning_feedback",
+    "github_repo_intake_dashboard_summary",
+    "github_repo_intake_workflow",
+    "validate_github_repo_intake_workflow",
     "adapter_alignment_summary",
     "adapter_projection_policy",
     "default_adapter_authority_profiles",
@@ -144,6 +163,9 @@ __all__ = [
     "skill_version_evaluation_policy",
     "skill_version_evaluation_report",
     "validate_skill_version_evaluation_report",
+    "scoped_agent_registry",
+    "scoped_context_packet",
+    "validate_scoped_agent_registry",
     "adapter_usage_accounting_summary",
     "record_adapter_accounting_profile",
     "record_ai_usage_operational_record",

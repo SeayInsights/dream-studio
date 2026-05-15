@@ -195,6 +195,19 @@ edges map each expert workflow back to existing skill/workflow owners rather
 than inventing a parallel skill system. The full catalog is available at
 `/api/shared-intelligence/expert-workflows`.
 
+The atlas now also exposes:
+
+- `career_ops_module`, an opt-in private module summary that reports schema
+  readiness and automation boundaries while excluding career data from public
+  exports;
+- `capability_center`, a derived skills/workflows/agents/controls/evaluations
+  surface backed by authority tables and repo contracts;
+- `scoped_agent_execution`, which declares agents as scoped workers and records
+  forbidden context defaults;
+- `github_repo_intake`, which records evidence-backed external repo evaluation
+  outcomes and blocks unapproved code copy, dependency adoption, fork/vendor,
+  or attribution-sensitive reuse.
+
 ## Drift Gate
 
 The drift gate checks changed files against the registry. If source changes
@@ -251,6 +264,11 @@ The private atlas may include local repo paths and local surface status. Public
 exports must be sanitized and must not include private runtime state, local
 evidence paths, secrets, raw telemetry, backups, or operator-local config
 contents.
+
+Career Ops rows and private application/career evidence are excluded from
+public Contract Atlas exports by default. Public exports may retain only the
+policy statement that Career Ops is private and opt-in. GitHub repo intake
+evidence remains private until a sanitized adoption note is explicitly approved.
 
 ## Visual Layer
 

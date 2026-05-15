@@ -152,6 +152,27 @@ are present. Missing imported sections remain honest empty states. The profile
 must not require hooks, agents, workflows, Claude, Codex, Docker, repo mutation,
 or full orchestration to display current analytics.
 
+## Private Capability Readiness
+
+Career Ops readiness is private and opt-in. A release-ready state requires
+career records to stay local/private, public exports to exclude career data by
+default, application automation boundaries to be explicit, and scorecards to be
+evidence-backed or honestly unavailable.
+
+Capability Center readiness requires skills, workflows, agents, controls,
+evaluations, and hardening candidates to read from Dream Studio authority or
+repo-backed contracts rather than dashboard-only state.
+
+Scoped-agent readiness requires every agent to declare allowed tools, read and
+write scope, sensitivity scope, required/forbidden context, approval boundaries,
+validation requirements, risk level, max context budget, allowed data classes,
+and result schema. Agents are not authority.
+
+GitHub repo intake readiness requires license/security/dependency/maintenance
+and overlap review before adoption. Unclear license routes to legal review,
+unclear security routes to security review, and copying code/forking/vendoring
+requires explicit approval.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:

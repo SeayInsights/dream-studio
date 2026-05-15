@@ -67,6 +67,28 @@ skills. Career and application automation remain private by default and retain
 the no-account-creation, no-CAPTCHA-bypass, no-misrepresentation, and
 operator-approval-before-submit boundaries.
 
+## Career Ops And Capability Center
+
+Career Ops is an opt-in private module backed by local SQLite authority. It can
+store career profiles, role targets, resume/cover-letter variants, portfolio
+artifacts, case studies, job opportunities, application records, browser
+automation evidence, and evidence-backed scorecards. Career data is excluded
+from public exports and demo packets by default.
+
+Capability Center exposes derived views for skills, workflows, agents,
+controls, evaluations, and hardening candidates. Scoped agents are treated as
+workers rather than authority and receive only the context required for their
+task. See [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md).
+
+## GitHub Repo Intake
+
+Dream Studio evaluates third-party GitHub repositories before adopting code,
+dependencies, prompts, skills, workflows, hooks, adapters, docs, or patterns.
+The intake workflow records license, security, maintenance, overlap,
+attribution, and integration decisions in SQLite authority and defaults to
+pattern learning/original implementation over copying. See
+[GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md).
+
 ## AI Usage Accounting
 
 Dream Studio records AI adapter usage as operational telemetry. Tokens are not
@@ -98,6 +120,8 @@ read models, and token/model analytics.
 - [Long-Run Multisession Operational Validation](operations/long-run-multisession-operational-validation.md)
 - [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
 - [Expert Workflow Systems](operations/expert-workflow-systems.md)
+- [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md)
+- [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
 
 ## Publication Rule
 

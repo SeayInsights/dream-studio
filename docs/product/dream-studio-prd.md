@@ -175,6 +175,29 @@ automation must not create accounts, bypass CAPTCHAs, misrepresent the
 operator, or submit applications without explicit approval or an approved
 per-application policy.
 
+### Career Ops, Capability Center, And Scoped Agents
+
+Career Ops is an optional private module. If enabled, it stores career profile,
+resume, application, portfolio, case-study, interview, browser-automation,
+evidence, and scorecard records in local SQLite authority. It must stay out of
+public exports, team rollups, demo packets, and sanitized portfolio outputs
+unless the operator explicitly approves a redacted artifact.
+
+Capability Center makes skills, workflows, scoped agents, controls,
+evaluations, and hardening candidates visible and measurable through derived
+dashboard/API read models. Agents are scoped workers, not authority, and must
+receive only task-required context.
+
+### GitHub Repo Intake
+
+Before Dream Studio adopts ideas, code, dependencies, prompts, skills,
+workflows, hooks, adapters, docs, or architecture patterns from a GitHub repo,
+it must run an evidence-backed intake evaluation. Unclear license status routes
+to legal review, unclear security/supply-chain status routes to security
+review, and overlap with existing Dream Studio capabilities routes to manual
+overlap review. The preferred outcome is pattern learning plus original
+implementation unless dependency/fork/vendor/code-copy approval is explicit.
+
 ### Publication Boundary
 
 The public repo should contain product source, public docs, examples, templates, tests, sanitized demos, and sanitized release notes. Private runtime state remains local: `.dream-studio`, SQLite DB files, backups, raw telemetry, local evidence, Work Orders, handoffs, cutover records, cleanup manifests, and operator decision logs are excluded by default.
