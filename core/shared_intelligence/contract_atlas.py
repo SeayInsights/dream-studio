@@ -15,6 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.analytics_ingestion import analytics_only_profile_status
+from core.installed_runtime import installed_runtime_model
+from core.module_profiles import module_profiles, validate_module_profiles
 from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
 from core.shared_intelligence.adapter_staleness import (
     adapter_staleness_report,
@@ -22,8 +25,6 @@ from core.shared_intelligence.adapter_staleness import (
 )
 from core.shared_intelligence.authority import REQUIRED_SHARED_INTELLIGENCE_TABLES
 from core.shared_intelligence.contract_registry import contract_registry
-from core.installed_runtime import installed_runtime_model
-from core.module_profiles import module_profiles, validate_module_profiles
 from core.production_readiness import (
     build_secure_production_readiness_gate,
     production_readiness_control_catalog,
@@ -92,6 +93,7 @@ def build_contract_atlas(
         lifecycle_event="release_merge",
     )
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
+    analytics_only_status = analytics_only_profile_status(conn)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -121,6 +123,7 @@ def build_contract_atlas(
         ),
         "installed_module_profiles": module_profiles(),
         "analytics_only_profile": _analytics_only_profile(),
+        "analytics_only_ingestion": analytics_only_status,
         "security_lifecycle_gate": security_lifecycle_gate,
         "production_readiness_control_catalog": {
             "control_count": production_readiness_catalog["control_count"],
@@ -159,6 +162,7 @@ def build_contract_atlas(
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
+            analytics_only_status=analytics_only_status,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -166,6 +170,7 @@ def build_contract_atlas(
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
+            analytics_only_status=analytics_only_status,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -237,6 +242,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "installed_runtime_model",
         "installed_module_profiles",
         "analytics_only_profile",
+        "analytics_only_ingestion",
         "security_lifecycle_gate",
         "production_readiness_control_catalog",
         "secure_production_readiness_gate",
@@ -399,12 +405,31 @@ def _runtime_profiles() -> list[dict[str, Any]]:
 def _analytics_only_profile() -> dict[str, Any]:
     return {
         "profile": "analytics-only",
-        "role": "read_only_dashboard_and_reporting",
-        "db_mode": "read_only",
+        "role": "standalone_dashboard_reporting_and_explicit_ingestion",
+        "db_mode": "read_only_by_default_explicit_ingestion_only",
         "writes_authorized": False,
+        "ingestion_write_authorization": "ds analytics-ingest --execute",
         "execution_authorized": False,
-        "allowed_surfaces": ["/api/telemetry/*", "/api/shared-intelligence/*"],
-        "disallowed_surfaces": ["adapter config writes", "cleanup execution", "live migrations"],
+        "hooks_required": False,
+        "agents_required": False,
+        "workflows_required": False,
+        "claude_required": False,
+        "codex_required": False,
+        "docker_required": False,
+        "repo_mutation_required": False,
+        "allowed_surfaces": [
+            "/api/telemetry/*",
+            "/api/v1/projects*",
+            "/api/v1/metrics/*",
+            "/api/shared-intelligence/*",
+        ],
+        "disallowed_surfaces": [
+            "adapter config writes",
+            "cleanup execution",
+            "live migrations",
+            "hook_required_ingestion",
+            "agent_required_ingestion",
+        ],
         "empty_state_policy": "show honest empty states from current authority",
     }
 
@@ -479,6 +504,7 @@ def _maturity_scorecard(
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
+    analytics_only_status: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -550,6 +576,15 @@ def _maturity_scorecard(
             "operational_record_count": usage_accounting.get("operational_record_count"),
             "cost_policy": usage_accounting.get("policy", {}),
         },
+        {
+            "area": "analytics_only_ingestion",
+            "status": "available",
+            "profile_id": analytics_only_status.get("profile_id"),
+            "hooks_required": analytics_only_status.get("hooks_required"),
+            "agents_required": analytics_only_status.get("agents_required"),
+            "docker_required": analytics_only_status.get("docker_required"),
+            "write_authorization": analytics_only_status.get("write_authorization"),
+        },
     ]
 
 
@@ -560,6 +595,7 @@ def _confirmed_dependency_graph(
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
+    analytics_only_status: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -674,6 +710,17 @@ def _confirmed_dependency_graph(
             table_id,
             "reads_source_table",
             "core.shared_intelligence.usage_accounting.adapter_usage_accounting_summary",
+        )
+
+    add_node("module:analytics_only_ingestion", "module", "Analytics-Only Ingestion")
+    for table in analytics_only_status.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:analytics_only_ingestion",
+            table_id,
+            "imports_or_reads_current_authority",
+            "core.analytics_ingestion.analytics_only_ingestion_contract",
         )
 
     for projection in projection_report.get("projections", []):
@@ -803,8 +850,11 @@ def _source_tables() -> list[str]:
             "production_readiness_assessment_runs",
             "production_readiness_control_results",
             "production_readiness_findings",
+            "project_health_scorecards",
             "project_readiness_scorecards",
+            "reg_projects",
             "release_readiness_records",
+            "validation_results",
         }
     )
     for module in DASHBOARD_MODULES:

@@ -60,6 +60,13 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "hook_launcher",
     }
     assert atlas["analytics_only_profile"]["writes_authorized"] is False
+    assert atlas["analytics_only_profile"]["ingestion_write_authorization"].startswith(
+        "ds analytics-ingest"
+    )
+    assert atlas["analytics_only_ingestion"]["write_authorization"] == (
+        "explicit_ingestion_execute_only"
+    )
+    assert atlas["analytics_only_ingestion"]["hooks_required"] is False
     assert atlas["security_lifecycle_gate"]["source_framework"]["source_control_count"] == 47
     assert atlas["security_lifecycle_gate"]["full_review_required"] is True
     assert atlas["production_readiness_control_catalog"]["control_count"] > 47
@@ -84,6 +91,11 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert any(
         item["area"] == "secure_production_readiness_gate"
         and item["workflow_id"] == "production_readiness_workflow"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "analytics_only_ingestion"
+        and item["write_authorization"] == "explicit_ingestion_execute_only"
         for item in atlas["maturity_scorecard"]
     )
     assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
@@ -134,6 +146,11 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     assert any(
         edge["source"] == "module:production_readiness_workflow"
         and edge["target"] == "contract:secure_production_readiness_gate"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:analytics_only_ingestion"
+        and edge["target"] == "table:reg_projects"
         for edge in graph["edges"]
     )
 

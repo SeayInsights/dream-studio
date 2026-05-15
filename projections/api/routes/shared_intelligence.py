@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from core.analytics_ingestion import analytics_only_profile_status
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
 from core.production_readiness import (
@@ -55,6 +56,20 @@ async def get_shared_intelligence_status(
             "model_name": "shared_intelligence_runtime_surface_status",
             "project_id": project_id,
             "surfaces": [
+                {
+                    "surface_id": "analytics-only",
+                    "api_path": "/api/shared-intelligence/analytics-only",
+                    "source_tables": [
+                        "reg_projects",
+                        "validation_results",
+                        "security_findings",
+                        "token_usage_records",
+                        "ai_usage_operational_records",
+                        "pi_dependencies",
+                        "prd_documents",
+                        "production_readiness_assessment_runs",
+                    ],
+                },
                 {
                     "surface_id": "learning-dashboard",
                     "api_path": "/api/shared-intelligence/learning-dashboard",
@@ -148,6 +163,9 @@ async def get_shared_intelligence_status(
                 },
             ],
             "source_tables": [
+                "reg_projects",
+                "validation_results",
+                "security_findings",
                 "learning_event_records",
                 "hardening_candidate_records",
                 "adapter_authority_profiles",
@@ -162,6 +180,13 @@ async def get_shared_intelligence_status(
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
     )
+
+
+@router.get("/analytics-only")
+async def get_analytics_only_status() -> dict[str, Any]:
+    """Return analytics-only profile and ingestion contract status."""
+
+    return _with_connection(analytics_only_profile_status)
 
 
 @router.get("/adapter-router")

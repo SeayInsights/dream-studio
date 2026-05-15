@@ -25,6 +25,18 @@ Dream Studio documentation is split between public product guidance and private 
 - [Security-By-Default Lifecycle Gate](contracts/security-by-default-development-lifecycle-gate.md)
 - [Secure Production Readiness Gate](contracts/secure-production-readiness-gate.md)
 
+## Analytics-Only Profile
+
+`analytics_only` is a standalone deployment profile for dashboard/API analytics.
+It can import normalized project, CI/validation, security, token/usage,
+dependency, stack, PRD, and readiness facts into current SQLite authority with
+`ds analytics-ingest`. The command is dry-run by default and writes only with
+`--execute`.
+
+Analytics-only does not require hooks, agents, workflows, Claude, Codex, Docker,
+repo mutation, or full orchestration. Missing data should appear as honest empty
+states.
+
 ## AI Usage Accounting
 
 Dream Studio records AI adapter usage as operational telemetry. Tokens are not

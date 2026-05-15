@@ -53,6 +53,8 @@ def test_module_profiles_are_independent_and_analytics_only_is_minimal() -> None
     assert analytics["codex_required"] is False
     assert analytics["docker_required"] is False
     assert "repo_mutation" in analytics["excludes"]
+    assert "ds analytics-ingest" in analytics["exposed_commands"]
+    assert analytics["hooks_are_optional_producers"] is True
     assert "ds modules" in by_id["core"]["exposed_commands"]
 
 

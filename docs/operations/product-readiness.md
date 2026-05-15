@@ -108,6 +108,13 @@ and summarized. Missing or stale PRD evidence becomes `draft_generated`,
 `needs_update`, `stale_superseded`, or `manual_review_required` status; no
 unsupported product claims should be invented.
 
+Analytics-only deployments may import product-readiness facts from normalized
+payloads. Imported readiness records can feed Project Details, release
+readiness summaries, and Contract Atlas maturity only when source/evidence refs
+are present. Missing imported sections remain honest empty states. The profile
+must not require hooks, agents, workflows, Claude, Codex, Docker, repo mutation,
+or full orchestration to display current analytics.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:
