@@ -48,6 +48,7 @@ The dashboard mapping covers:
 - Project portfolio authority, PRD authority, security posture, readiness posture,
   health, blockers, remediation, and evidence refs for All Projects and Project
   Details
+- Analytics-only profile status and normalized ingestion contract status
 
 ## Required Mapping Fields
 
@@ -189,6 +190,22 @@ current dependency records, repo/config files, routes, migrations, APIs,
 workflows, hooks, skills, adapters, CI/CD files, telemetry, or artifact refs. If
 confirmed evidence is absent, the projection reports unavailable and must not
 draw placeholder nodes or inferred edges.
+
+## Analytics-Only Projection
+
+The analytics-only projection is exposed through
+`/api/shared-intelligence/analytics-only`, All Projects, Project Details,
+metrics routes, security routes, token/model analytics, and production
+readiness summaries.
+
+It may display normalized imported facts from current SQLite authority tables:
+projects, CI/validation results, security findings, token usage, AI operational
+usage, components, dependencies, PRD authority, and readiness scorecards.
+
+The dashboard must distinguish dry-run ingestion planning from executed imports.
+Missing sections stay honest empty states. It must not require hooks, agents,
+workflows, Claude, Codex, Docker, repo mutation, or full orchestration to render
+analytics-only views.
 
 ## Freshness And Staleness
 

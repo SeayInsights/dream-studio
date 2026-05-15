@@ -91,6 +91,13 @@ project level. Not-applicable controls require reasons, unknown controls route
 to manual review or dashboard attention, and synthetic/demo/test findings must
 not appear in live operator views.
 
+Analytics-only ingestion may import normalized security findings from approved
+external producers into `security_findings`. This is an authority ingestion
+path, not a scanner. It must preserve source/evidence refs, project mapping,
+severity, status, rule/control where available, and remediation path where
+available. Hooks, agents, workflows, Claude, Codex, and Docker are optional
+producers, not required security dependencies.
+
 ## AI Usage Accounting Impact
 
 Changes to adapter billing mode, token visibility, cost visibility, provider

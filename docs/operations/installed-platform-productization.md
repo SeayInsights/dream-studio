@@ -72,6 +72,7 @@ ds adapters
 ds context-packet
 ds modules
 ds router
+ds analytics-ingest
 ds acceptance
 ds backup
 ds restore-check
@@ -100,6 +101,28 @@ python C:\path\to\dream-studio\interfaces\cli\ds.py `
 
 The same commands are available through `python interfaces\cli\ds.py` for
 portable scripting and tests.
+
+## Analytics-Only Ingestion
+
+`analytics_only` can be installed as a standalone analytics deployment profile.
+It does not require hooks, agents, workflows, Claude, Codex, Docker, repo
+mutation, or full orchestration.
+
+External systems, CI jobs, security scanners, adapter wrappers, or manual
+exports can produce normalized JSON payloads. Dream Studio imports them through
+`ds analytics-ingest`. The command plans by default and writes only when
+`--execute` is supplied:
+
+```powershell
+ds analytics-ingest --file C:\path\to\analytics-payload.json
+ds analytics-ingest --file C:\path\to\analytics-payload.json --execute
+```
+
+Supported normalized sections include projects, validations/CI, security
+findings, token usage, AI operational usage, components, dependencies, PRDs,
+and readiness assessments. Imported records go into current SQLite authority
+tables and are consumed by existing dashboard/API read models. Missing sections
+remain honest empty states.
 
 ## Adapter Setup
 

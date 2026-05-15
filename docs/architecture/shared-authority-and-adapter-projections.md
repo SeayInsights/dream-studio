@@ -78,6 +78,14 @@ records live in SQLite through `ai_adapter_accounting_profiles`,
 router, Contract Atlas, dashboards, and context packets. Subscription-plan tools
 must display cost as `unknown` unless an explicit allocation profile is present.
 
+Analytics-only ingestion is a current-authority import path, not adapter
+authority. Tools may produce normalized JSON for projects, CI/validation,
+security findings, token/usage telemetry, components, dependencies, PRDs, and
+readiness assessments. `ds analytics-ingest` plans by default and writes only
+with `--execute`. It imports into SQLite authority tables and keeps hooks,
+agents, workflows, Claude, Codex, Docker, repo mutation, and cleanup optional or
+out of scope.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 

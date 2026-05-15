@@ -120,6 +120,7 @@ def installed_runtime_model(
             "ds context-packet",
             "ds modules",
             "ds router",
+            "ds analytics-ingest",
             "ds acceptance",
             "ds backup",
             "ds restore-check",

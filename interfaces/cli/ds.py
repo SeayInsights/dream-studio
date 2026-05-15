@@ -20,6 +20,10 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.config.sqlite_bootstrap import latest_migration_version  # noqa: E402
 from core.event_store.studio_db import _connect  # noqa: E402
+from core.analytics_ingestion import (  # noqa: E402
+    ingest_analytics_payload,
+    load_analytics_payload,
+)
 from core.installed_runtime import (  # noqa: E402
     adapter_router_status,
     bootstrap_rehearsal_runtime,
@@ -58,6 +62,17 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("adapters", help="Show adapter status")
     subcommands.add_parser("modules", help="Show module profile status")
     subcommands.add_parser("router", help="Show adapter router status")
+
+    analytics_ingest = subcommands.add_parser(
+        "analytics-ingest", help="Import normalized analytics facts into SQLite authority"
+    )
+    analytics_ingest.add_argument("--file", required=True, help="Normalized analytics JSON payload")
+    analytics_ingest.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Write records. Omit for dry-run planning.",
+    )
 
     install = subcommands.add_parser("install", help="Run first-run setup for selected profiles")
     install.add_argument("--profile", action="append", dest="profiles", default=[])
@@ -138,6 +153,14 @@ def main(argv: list[str] | None = None) -> int:
                     project_id=args.project_id,
                     persist=False,
                 ),
+            )
+        if args.command == "analytics-ingest":
+            payload = load_analytics_payload(args.file)
+            return _analytics_ingest(
+                source_root=source_root,
+                dream_studio_home=home,
+                payload=payload,
+                execute=bool(args.execute),
             )
         if args.command == "rehearsal-install":
             return _print(
@@ -222,6 +245,26 @@ def _with_conn(*, source_root: Path, dream_studio_home: Path | None, callback: A
         )
     with _connect(paths.sqlite_path) as conn:
         return _print(callback(conn))
+
+
+def _analytics_ingest(
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+    payload: dict[str, Any],
+    execute: bool,
+) -> int:
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if not paths.sqlite_path.exists():
+        raise RuntimeError(
+            "Dream Studio SQLite authority is missing. Run rehearsal-install for a rehearsal "
+            "home, or install/bootstrap the real runtime through an approved update plan."
+        )
+    with _connect(paths.sqlite_path) as conn:
+        return _print(ingest_analytics_payload(conn, payload, execute=execute))
 
 
 def _dashboard_status(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:

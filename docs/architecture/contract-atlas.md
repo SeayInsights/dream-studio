@@ -122,6 +122,13 @@ remain derived views. Legacy, demo, temp, placeholder, and unmapped findings are
 classified for retention or manual review instead of being promoted into normal
 operator cards.
 
+The atlas also records the analytics-only ingestion contract. That contract
+declares the standalone `analytics_only` profile, the dry-run-by-default
+`ds analytics-ingest` command, the `/api/shared-intelligence/analytics-only`
+status route, and the current SQLite authority tables it can import into when
+explicitly executed. Hooks, agents, workflows, Claude, Codex, Docker, repo
+mutation, and cleanup are not required for analytics-only operation.
+
 ## Drift Gate
 
 The drift gate checks changed files against the registry. If source changes

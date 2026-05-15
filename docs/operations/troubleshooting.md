@@ -76,6 +76,16 @@ This is expected. `analytics_only` intentionally works without hooks, agents,
 workflows, Claude, Codex, repo mutation, or Docker. If a command asks for those
 dependencies in analytics-only mode, treat it as a product boundary bug.
 
+## Analytics Import Shows No Data
+
+`ds analytics-ingest --file <payload>` is a dry run. Add `--execute` only when
+you intend to write normalized records to the selected SQLite authority. Verify
+the same `--home` is used for ingest and dashboard/API checks.
+
+If a payload omits a section, Dream Studio should show an honest empty state
+for that section. Do not create placeholder projects, fake dependency edges,
+fake costs, or synthetic findings to make a dashboard look populated.
+
 ## Restore Or Uninstall Requested
 
 Use `ds restore-check` or `ds uninstall-check` first. These commands inspect the

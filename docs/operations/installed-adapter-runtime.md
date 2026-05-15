@@ -43,6 +43,7 @@ ds adapters
 ds context-packet --adapter codex
 ds modules
 ds router
+ds analytics-ingest --file payload.json
 ds acceptance
 ds backup
 ds restore-check
@@ -156,6 +157,20 @@ requirements, expected dashboard/API behavior, and honest empty states.
 `analytics_only` must work without hooks, agents, workflows, Claude, Codex, repo
 mutation, or Docker. It exposes read-only telemetry/shared-intelligence surfaces
 and uses honest empty states when no facts exist.
+
+Analytics-only also exposes explicit normalized ingestion through:
+
+```powershell
+ds analytics-ingest --file C:\path\to\payload.json
+ds analytics-ingest --file C:\path\to\payload.json --execute
+```
+
+The command is dry-run by default. `--execute` writes idempotent normalized
+records into current SQLite authority tables for projects, CI/validation,
+security findings, token/AI usage, components/dependencies, PRDs, and
+readiness scorecards. Hooks are optional producers of those payloads; they are
+not required dependencies. The command must not mutate repos, require Claude or
+Codex, run Docker, inspect secrets, or create legacy file-sprawl.
 
 ## Rehearsal Install
 
