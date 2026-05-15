@@ -157,6 +157,15 @@ model/provider, token, cost, file, command, or outcome precision.
 The task attribution routes are non-executing derived views. They do not run
 security scans, inspect secrets, mutate SQLite, authorize adapter execution, or
 change 47-control applicability by themselves.
+
+## PRD Lifecycle Impact
+
+Project intake, in-flight PRD formalization, Project Change Orders, and route
+reconciliation all receive lightweight security/readiness impact
+classification. Material changes to security, privacy, data model,
+integrations, release targets, or public/private boundaries require targeted or
+full applicable review according to the lifecycle policy before authority is
+marked current.
 ## Platform Hardening Refresh
 
 The policy/permission engine is a supporting control-plane surface for the security-by-default lifecycle gate. High-risk actions such as secret access, destructive cleanup, external mutation, push/deploy, Docker execution, package changes, and career submission are denied or deferred by default and must record evidence, approval, rollback, and dashboard attention requirements.

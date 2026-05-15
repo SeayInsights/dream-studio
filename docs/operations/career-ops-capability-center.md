@@ -70,3 +70,10 @@ at `/api/shared-intelligence/agents/context-packet` and do not execute agents.
 ## Platform Hardening Refresh
 
 Career Ops participates in platform hardening through privacy profiles, policy decisions, capability evaluations, and sanitized demo/export checks. Career data remains opt-in and private by default; public demos, team rollups, and sanitized exports must exclude resumes, applications, compensation strategy, personal notes, and browser automation traces unless explicitly approved and redacted.
+
+## PRD Lifecycle Boundary
+
+Career Ops data is not included in PRD context packets by default. Capability
+Center may show that PRD lifecycle workflows exist and are evaluated, but
+career/private data must stay out of Project Details, public exports, and
+adapter context unless Career Ops is enabled and the task is explicitly scoped.

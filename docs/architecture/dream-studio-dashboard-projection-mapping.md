@@ -186,6 +186,10 @@ The projection may display:
   section and the full `/api/shared-intelligence/expert-workflows` catalog,
   including overlap decisions, evidence-backed scoring rubrics, career privacy
   boundaries, application automation rules, and existing skill/workflow owners.
+- PRD lifecycle status from the Contract Atlas `prd_authority_lifecycle`
+  section and `/api/shared-intelligence/prd-authority`, including current PRD
+  version, lifecycle status, confidence, milestone authority, Work Order
+  authority, change-order state, route reconciliation, and next safe action.
 
 It must not authorize adapter execution, policy mutation, cleanup, database
 writes, release actions, or public export of private local state.
@@ -268,6 +272,16 @@ PRD dashboard data is not a disconnected primary tab. PRD status is part of the
 project authority surface. Existing PRD files may be read and summarized when
 safe; missing PRDs become draft-generated authority status with explicit
 unknowns and manual-review flags rather than invented claims.
+
+Project Details also exposes the structured PRD lifecycle read model:
+`prd_lifecycle_authority`, `prd_version`, `prd_confidence`,
+`in_flight_formalization_status`, `pending_prd_questions`,
+`prd_assumptions`, `current_milestones`, `active_work_orders`,
+`change_order_history`, `pending_change_orders`,
+`route_reconciliation_status`, and `planned_vs_actual_route_summary`. These
+fields are derived from SQLite lifecycle tables and are meant to help an
+operator or adapter continue from current authority instead of prior chat
+memory.
 
 Security findings may use narrow high-confidence alias mapping, such as
 `project_<project_id_with_underscores>` for legacy migrated rows. Findings that

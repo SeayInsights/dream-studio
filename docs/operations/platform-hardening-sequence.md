@@ -71,3 +71,11 @@ The installed command surface includes:
 These commands do not authorize destructive changes. Dashboard serve/check
 validation is a local runtime health surface only; it must not bootstrap,
 migrate, backfill, clean, or mutate external projects.
+
+## PRD Lifecycle Interaction
+
+Platform hardening treats PRD lifecycle records as control-plane authority for
+scope, milestones, Work Orders, change orders, and route reconciliation.
+Policy, privacy, connector, watcher, team-rollup, installer, and demo surfaces
+may summarize PRD lifecycle status, but they must not overwrite PRDs, create
+file sprawl, expose private project history, or authorize execution.

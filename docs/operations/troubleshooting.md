@@ -230,3 +230,11 @@ Final installed-platform closeout requires release gate evidence, docs drift
 evidence, command-surface evidence, adapter status evidence, long-run cycle
 evidence, publication-boundary evidence, and a live SQLite hash guard. A missing
 evidence ref should remain a blocker instead of being normalized into a pass.
+
+## Project Continuation Lacks PRD Context
+
+Check `/api/shared-intelligence/prd-authority` and Project Details. A safe
+continuation packet should include the current PRD version, milestone, active
+Work Order, assumptions, known unknowns, relevant change orders, validation
+expectations, and stop gates. If those are missing, formalize or review PRD
+authority before continuing implementation.

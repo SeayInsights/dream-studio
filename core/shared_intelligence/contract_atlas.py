@@ -57,6 +57,11 @@ from core.shared_intelligence.platform_hardening import (
     platform_hardening_summary,
     validate_platform_hardening_summary,
 )
+from core.shared_intelligence.prd_authority import (
+    PRD_AUTHORITY_SOURCE_TABLES,
+    project_prd_authority_summary,
+    validate_prd_authority_summary,
+)
 from core.shared_intelligence.scoped_agents import (
     scoped_agent_registry,
     validate_scoped_agent_registry,
@@ -128,6 +133,8 @@ def build_contract_atlas(
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
     task_attribution = task_attribution_summary(conn, project_id=effective_project_id)
     task_attribution_errors = validate_task_attribution_summary(task_attribution)
+    prd_authority = project_prd_authority_summary(conn, project_id=effective_project_id)
+    prd_authority_errors = validate_prd_authority_summary(prd_authority)
     analytics_only_status = analytics_only_profile_status(conn)
     github_cicd_profile = _github_cicd_profile(root)
     expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
@@ -208,6 +215,20 @@ def build_contract_atlas(
             "policy": task_attribution["policy"],
             "validation_status": "pass" if not task_attribution_errors else "attention_required",
             "validation_errors": task_attribution_errors,
+        },
+        "prd_authority_lifecycle": {
+            "prd_count": prd_authority["prd_count"],
+            "lifecycle_counts": prd_authority["lifecycle_counts"],
+            "change_order_counts": prd_authority["change_order_counts"],
+            "pending_change_order_count": len(prd_authority["pending_change_orders"]),
+            "milestone_count": len(prd_authority["current_milestones"]),
+            "active_work_order_count": len(prd_authority["active_work_orders"]),
+            "route_reconciliation_status": prd_authority["route_reconciliation_status"],
+            "next_safe_action": prd_authority["next_safe_action"],
+            "source_tables": prd_authority["source_tables"],
+            "policy": prd_authority["policy"],
+            "validation_status": "pass" if not prd_authority_errors else "attention_required",
+            "validation_errors": prd_authority_errors,
         },
         "github_cicd_profile": github_cicd_profile,
         "expert_workflow_system": {
@@ -309,6 +330,8 @@ def build_contract_atlas(
             usage_accounting=usage_accounting,
             task_attribution=task_attribution,
             task_attribution_errors=task_attribution_errors,
+            prd_authority=prd_authority,
+            prd_authority_errors=prd_authority_errors,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
@@ -330,6 +353,7 @@ def build_contract_atlas(
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
             task_attribution=task_attribution,
+            prd_authority=prd_authority,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
@@ -353,6 +377,7 @@ def build_contract_atlas(
             scoped_agent_errors=scoped_agent_errors,
             github_repo_intake_errors=github_repo_intake_errors,
             task_attribution_errors=task_attribution_errors,
+            prd_authority_errors=prd_authority_errors,
             platform_hardening_errors=platform_hardening_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
@@ -429,6 +454,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "secure_production_readiness_gate",
         "adapter_usage_accounting",
         "task_attribution_model",
+        "prd_authority_lifecycle",
         "github_cicd_profile",
         "expert_workflow_system",
         "career_ops_module",
@@ -725,6 +751,8 @@ def _maturity_scorecard(
     usage_accounting: Mapping[str, Any],
     task_attribution: Mapping[str, Any],
     task_attribution_errors: list[str],
+    prd_authority: Mapping[str, Any],
+    prd_authority_errors: list[str],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
@@ -826,6 +854,23 @@ def _maturity_scorecard(
             "error_count": len(task_attribution_errors),
         },
         {
+            "area": "prd_authority_lifecycle",
+            "status": "validated" if not prd_authority_errors else "attention_required",
+            "prd_count": prd_authority.get("prd_count", 0),
+            "lifecycle_counts": prd_authority.get("lifecycle_counts", {}),
+            "pending_change_order_count": len(prd_authority.get("pending_change_orders", [])),
+            "route_reconciliation_status": prd_authority.get("route_reconciliation_status", {}).get(
+                "status"
+            ),
+            "sqlite_is_prd_authority": prd_authority.get("policy", {}).get(
+                "sqlite_is_prd_authority"
+            ),
+            "change_orders_required": prd_authority.get("policy", {}).get(
+                "change_orders_required_for_material_changes"
+            ),
+            "error_count": len(prd_authority_errors),
+        },
+        {
             "area": "analytics_only_ingestion",
             "status": "available",
             "profile_id": analytics_only_status.get("profile_id"),
@@ -898,6 +943,7 @@ def _confirmed_dependency_graph(
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
     task_attribution: Mapping[str, Any],
+    prd_authority: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
@@ -1056,6 +1102,29 @@ def _confirmed_dependency_graph(
             table_id,
             "reads_or_links_source_table",
             "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        )
+
+    add_node("module:prd_authority_lifecycle", "module", "PRD Authority Lifecycle")
+    add_edge(
+        "module:prd_authority_lifecycle",
+        "module:task_attribution_outcome_tracking",
+        "links_work_orders_to_adapter_outcomes",
+        "core.shared_intelligence.prd_authority.project_prd_authority_summary",
+    )
+    add_edge(
+        "module:prd_authority_lifecycle",
+        "layer:sqlite_authority",
+        "persists_product_authority_to",
+        "core.shared_intelligence.prd_authority.PRD_AUTHORITY_SOURCE_TABLES",
+    )
+    for table in prd_authority.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:prd_authority_lifecycle",
+            table_id,
+            "reads_or_writes_prd_authority",
+            "core.shared_intelligence.prd_authority.PRD_AUTHORITY_SOURCE_TABLES",
         )
 
     add_node("module:analytics_only_ingestion", "module", "Analytics-Only Ingestion")
@@ -1268,6 +1337,7 @@ def _boundary_violation_report(
     scoped_agent_errors: list[str],
     github_repo_intake_errors: list[str],
     task_attribution_errors: list[str],
+    prd_authority_errors: list[str],
     platform_hardening_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
@@ -1291,6 +1361,8 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "github_repo_intake", "message": error})
     for error in task_attribution_errors:
         issues.append({"severity": "error", "area": "task_attribution", "message": error})
+    for error in prd_authority_errors:
+        issues.append({"severity": "error", "area": "prd_authority", "message": error})
     for error in platform_hardening_errors:
         issues.append({"severity": "error", "area": "platform_hardening", "message": error})
     security_status = security_lifecycle_gate.get("security_status")
@@ -1351,6 +1423,7 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
     tables.add("security_findings")
+    tables.update(PRD_AUTHORITY_SOURCE_TABLES)
     tables.update(
         {
             "ai_adapter_accounting_profiles",

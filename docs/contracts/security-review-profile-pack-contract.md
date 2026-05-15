@@ -352,3 +352,11 @@ review routing checks before any adoption path is considered.
 ## Platform Hardening Refresh
 
 Security review profile packs can consume platform-hardening policy decisions, connector-ingested SARIF or dependency evidence, and privacy/export checks as inputs. The pack remains responsible for evidence-backed findings and must not treat connector data, demo packets, or sanitized exports as live security authority without source refs.
+
+## PRD Lifecycle Review Profile
+
+PRD intake, formalization, change orders, and route reconciliation should use
+the same security review profile pack when they touch security, privacy,
+database/schema, integrations, release targets, public/private boundaries, or
+legal/compliance assumptions. The profile maps those impacts to existing
+controls instead of creating a competing PRD-specific security system.

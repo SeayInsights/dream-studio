@@ -66,3 +66,11 @@ decision as private evaluation authority.
 ## Platform Hardening Refresh
 
 GitHub repo intake can feed the connector ingestion framework and policy engine, but adoption remains gated: reference-only, pattern-only, dependency candidate, fork/vendor candidate, legal review, security review, and manual review decisions must be evidence-backed before Dream Studio uses external code, dependencies, workflows, prompts, or architecture patterns.
+
+## PRD Lifecycle Boundary
+
+GitHub repo intake can inform PRD formalization when a repository is explicitly
+selected and approved for read-only intake. It must not mutate the external
+repo, copy PRD files into that repo, or adopt code/dependencies. Any adoption
+path becomes a Project Change Order or Work Order with license, security,
+overlap, and attribution evidence.
