@@ -1,0 +1,50 @@
+# Repo Publication Privacy
+
+Dream Studio can be published only when the public repository contains product
+source and sanitized public documentation without private operational history.
+
+## Publication Readiness Command
+
+Run the non-mutating check:
+
+```powershell
+python interfaces\cli\repo_publication_readiness.py --strict
+```
+
+Refresh public evidence artifacts intentionally:
+
+```powershell
+python interfaces\cli\repo_publication_readiness.py `
+  --clean-clone-status pass `
+  --execute `
+  --output-dir docs\publication
+```
+
+The checker reads repository source and Git path metadata only. It does not open
+operator-local runtime state, mutate SQLite, rewrite history, push, tag,
+deploy, or print matched secret values.
+
+## Public Repo Allowlist
+
+The public repo may contain product source, schema migrations, tests, public
+docs, examples, templates, sanitized adapter projections, sanitized demos,
+sanitized release notes, and sanitized Contract Atlas exports.
+
+## Private By Default
+
+Do not publish Work Orders, handoffs, local evidence, operator decisions, raw
+telemetry, SQLite DBs, backups, private dogfood traces, cutover or rollback
+details, private external-project details, local absolute paths, secrets, or
+sensitive values.
+
+## History Boundary
+
+Current-tree cleanliness is not enough if Git history contains private runtime
+artifacts. History rewrite, force-push, tag, push, deploy, cleanup, or
+publication requires explicit operator approval and release-policy alignment.
+
+## Sanitized Contract Atlas Export
+
+Use `ds contract-atlas-refresh --output-dir docs\publication --execute` only for
+the public sanitized export. Do not use `--include-private` for repo-tracked
+exports.

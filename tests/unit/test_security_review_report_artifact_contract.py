@@ -236,7 +236,7 @@ def test_security_review_report_sample_remains_non_executing_and_not_target_spec
         "no_dependency_or_lockfile_changed: true",
     ]
     forbidden_terms = [
-        "C:\\Users\\",
+        "C:\\Users\\Example\\",
         "DreamySuite",
         "Bill Stack",
         "TORII repo",

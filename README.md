@@ -77,6 +77,7 @@ Dashboard output is useful for attention and review, but it must not become rout
 - [Operator Guide](docs/operator-guide.md)
 - [Documentation Index](docs/README.md)
 - [Publication Boundary](docs/PUBLICATION_BOUNDARY.md)
+- [Repo Publication Privacy](docs/operations/repo-publication-privacy.md)
 - [Changelog](CHANGELOG.md)
 
 ## Release Boundary
@@ -95,6 +96,8 @@ The current release gate expects:
 - manual full GitHub CI only when remote parity evidence is explicitly needed;
 - no release blockers;
 - private/local state excluded from the public repo;
+- repo publication readiness validation for tracked files, Git history path
+  privacy, README/PRD alignment, and sanitized public exports;
 - Apache-2.0 license consistency;
 - explicit approval before push, tag, merge, deploy, cleanup, or history rewrite.
 

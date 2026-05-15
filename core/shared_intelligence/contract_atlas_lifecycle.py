@@ -32,14 +32,14 @@ PUBLIC_SANITIZED_EXPORT_FILENAME = "contract-atlas.public_sanitized.json"
 PRIVATE_INTERNAL_EXPORT_FILENAME = "contract-atlas.private_internal.json"
 FRESHNESS_MANIFEST_FILENAME = "contract-atlas.freshness-manifest.json"
 
-_PRIVATE_LEAK_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"[A-Za-z]:[\\/]"),
-    re.compile(r"\\\\[^\\/\s]+[\\/]"),
-    re.compile(r"\bC:/Users/", re.IGNORECASE),
-    re.compile(r"\bC:\\Users\\", re.IGNORECASE),
-    re.compile(r"\.dream-studio[\\/]", re.IGNORECASE),
-    re.compile(r"Dream Studio Live Backups", re.IGNORECASE),
-    re.compile(r"\bAppData[\\/]", re.IGNORECASE),
+_PRIVATE_LEAK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("absolute_drive_path", re.compile(r"[A-Za-z]:[\\/]")),
+    ("unc_path", re.compile(r"\\\\[^\\/\s]+[\\/]")),
+    ("windows_user_path_forward_slash", re.compile(r"\bC:/Users/", re.IGNORECASE)),
+    ("windows_user_path_backslash", re.compile(r"\bC:\\Users\\", re.IGNORECASE)),
+    ("dream_studio_runtime_path", re.compile(r"\.dream-studio[\\/]", re.IGNORECASE)),
+    ("live_backup_root_name", re.compile(r"Dream Studio Live Backups", re.IGNORECASE)),
+    ("appdata_path", re.compile(r"\bAppData[\\/]", re.IGNORECASE)),
 )
 
 
@@ -267,14 +267,14 @@ def _export_summary(atlas: Mapping[str, Any], errors: list[str]) -> dict[str, An
 
 def _private_data_leakage_check(public_payload: str) -> dict[str, Any]:
     matches: list[str] = []
-    for pattern in _PRIVATE_LEAK_PATTERNS:
+    for rule_id, pattern in _PRIVATE_LEAK_PATTERNS:
         if pattern.search(public_payload):
-            matches.append(f"public export matched private pattern: {pattern.pattern}")
+            matches.append(f"public export matched private pattern: {rule_id}")
     return {
         "status": "fail" if matches else "pass",
         "leak_detected": bool(matches),
         "matches": matches,
-        "patterns_checked": [pattern.pattern for pattern in _PRIVATE_LEAK_PATTERNS],
+        "patterns_checked": [rule_id for rule_id, _pattern in _PRIVATE_LEAK_PATTERNS],
         "secret_files_read": False,
         "raw_runtime_state_included": False,
     }

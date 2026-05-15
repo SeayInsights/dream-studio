@@ -28,7 +28,7 @@ From any directory:
 ```powershell
 python C:\path\to\dream-studio\interfaces\cli\ds.py `
   --source-root C:\path\to\dream-studio `
-  --home C:\Users\you\.dream-studio `
+  --home C:\Users\Example\.dream-studio `
   install --profile analytics_only
 ```
 
@@ -107,7 +107,7 @@ Installed Windows users can create user-local launchers in a PATH directory:
 ```powershell
 python C:\path\to\dream-studio\interfaces\cli\ds.py `
   --source-root C:\path\to\dream-studio `
-  --home C:\Users\you\.dream-studio `
+  --home C:\Users\Example\.dream-studio `
   install-command --execute
 ```
 

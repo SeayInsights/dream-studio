@@ -343,10 +343,19 @@ MATURITY_AREAS: tuple[dict[str, Any], ...] = (
         "area_id": "publication_privacy_readiness",
         "area_name": "Publication/privacy readiness",
         "status": "runtime_validated",
-        "owner_source": "docs/PUBLICATION_BOUNDARY.md",
-        "evidence": ["docs/PUBLICATION_BOUNDARY.md"],
-        "validation": ["publication boundary and private-path scans"],
-        "known_gaps": ["history rewrite remains a separate explicit approval boundary if needed"],
+        "owner_source": "core/release/repo_publication_readiness.py",
+        "evidence": [
+            "docs/PUBLICATION_BOUNDARY.md",
+            "docs/operations/repo-publication-privacy.md",
+            "docs/publication/repo_publication_cleanliness_certificate.yaml",
+        ],
+        "validation": [
+            "python interfaces/cli/repo_publication_readiness.py --strict",
+            "publication boundary and private-path scans",
+        ],
+        "known_gaps": [
+            "history rewrite remains a separate explicit approval boundary if a future scan finds blockers"
+        ],
         "next_action": "Run publication readiness before push/tag/release decisions.",
         "can_claim_publicly": True,
         "can_use_operationally": True,
