@@ -28,6 +28,9 @@ The release gate blocks:
 - increased counts for a baseline finding identity;
 - Black formatting drift;
 - Contract Atlas documentation drift when meaningful source, schema, dashboard, workflow, hook, adapter, or release-gate changes do not refresh the required impacted contracts/docs;
+- Contract Atlas lifecycle drift when private refresh, sanitized public export,
+  maturity ledger, docs/PRD/README impact detection, dashboard/API freshness,
+  or public-export leakage checks fail;
 - failing tests;
 - dependency audit failures;
 - correctness, security, route, dashboard, SQLite, live-state, or release-policy failures.
@@ -50,6 +53,12 @@ The Contract Atlas drift gate is:
 python interfaces/cli/contract_docs_drift_gate.py
 ```
 
+The Contract Atlas lifecycle gate is:
+
+```text
+python interfaces/cli/contract_atlas_lifecycle_gate.py
+```
+
 The gate reads `core/shared_intelligence/contract_registry.py`, maps changed
 files to contract domains, and fails when required docs for an impacted domain
 are not refreshed in the same change set. CI can provide changed files through
@@ -62,7 +71,8 @@ evidence-backed review decisions, not a shortcut around stale documentation.
 
 Contract Atlas behavior changes must refresh the atlas contract doc, this
 operations policy, and the docs index together so the release gate, human docs
-surface, and derived atlas view describe the same freshness boundary.
+surface, lifecycle manifest, sanitized export boundary, and derived atlas view
+describe the same freshness boundary.
 
 Installed runtime and productization changes are release-gate relevant. If code
 changes affect `core/installed_runtime.py`, `core/installed_productization.py`,

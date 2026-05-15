@@ -49,6 +49,10 @@ def test_ci_gate_uses_format_check_and_lint_baseline_not_mutating_format_target(
         ci_gate._PYTHON,
         "interfaces/cli/contract_docs_drift_gate.py",
     ]
+    assert checks["contract-atlas-lifecycle"] == [
+        ci_gate._PYTHON,
+        "interfaces/cli/contract_atlas_lifecycle_gate.py",
+    ]
     assert all(command != ["make", "fmt"] for command in checks.values())
 
 

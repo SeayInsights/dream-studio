@@ -60,6 +60,13 @@ and dependency graph status. Missing readiness or dependency evidence must be
 shown as unavailable or partial; manifest-derived dependency names do not become
 confirmed graph edges or readiness evidence without source refs.
 
+Contract Atlas lifecycle freshness contributes to release/publication
+readiness. The readiness gate can treat the lifecycle manifest as evidence that
+the atlas, maturity ledger, docs drift, PRD/README impact detection, dashboard
+freshness, and sanitized public export checks were evaluated. The manifest is
+derived evidence only; it does not run readiness controls, create findings,
+write SQLite, or claim compliance.
+
 ## Skill And Control Overlap
 
 Existing skills and gates are canonical when they already work:

@@ -50,9 +50,11 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_name": "Contract Atlas",
         "source_patterns": [
             "core/shared_intelligence/contract_atlas.py",
+            "core/shared_intelligence/contract_atlas_lifecycle.py",
             "core/shared_intelligence/contract_registry.py",
             "core/shared_intelligence/maturity_ledger.py",
             "core/module_contracts.py",
+            "interfaces/cli/contract_atlas_lifecycle_gate.py",
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
@@ -289,6 +291,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "interfaces/cli/ci_gate.py",
             "interfaces/cli/lint_baseline.py",
             "interfaces/cli/contract_docs_drift_gate.py",
+            "interfaces/cli/contract_atlas_lifecycle_gate.py",
             "runtime/config/release-gates/**",
         ],
         "contract_refs": [

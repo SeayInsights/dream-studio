@@ -49,3 +49,9 @@ The Contract Atlas is private/local by default. Public atlas exports are allowed
 only when sanitized: local paths, live runtime state, local adapter config
 contents, private evidence paths, backups, raw telemetry, and operator-specific
 metadata must be removed or replaced with non-sensitive placeholders.
+
+`ds contract-atlas-refresh --output-dir <dir> --execute` is the supported export
+refresh surface. It writes the public sanitized atlas and freshness manifest to
+an explicit directory, and writes a private/internal atlas only when
+`--include-private` is supplied. Private/internal exports are not repo-safe and
+must remain in operator-local runtime or review locations.

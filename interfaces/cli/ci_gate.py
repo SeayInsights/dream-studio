@@ -31,6 +31,10 @@ CHECKS = [
         [_PYTHON, "interfaces/cli/contract_docs_drift_gate.py"],
     ),
     (
+        "contract-atlas-lifecycle",
+        [_PYTHON, "interfaces/cli/contract_atlas_lifecycle_gate.py"],
+    ),
+    (
         "security",
         [_PYTHON, "-m", "pip_audit", "-r", "requirements-dev.txt", "-r", "requirements.txt"],
     ),

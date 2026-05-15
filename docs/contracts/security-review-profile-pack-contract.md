@@ -69,6 +69,12 @@ but they do not replace this profile pack or the 47-control framework. Security
 reviewers can use `/api/shared-intelligence/module-contracts` to understand
 module ownership and optional dependencies before selecting controls.
 
+Security reviewers may also use
+`/api/shared-intelligence/contract-atlas/freshness` to confirm that atlas,
+maturity, docs, PRD/README, and sanitized export freshness gates are current.
+That route is a derived release-readiness signal only. It must not create
+findings, run scans, inspect secrets, or replace profile-pack evidence.
+
 Project Details can display normalized security findings, 47-control
 applicability, and module/profile fit together with stack evidence. That view is
 for operator orientation only. It must not create findings, run scans, inspect

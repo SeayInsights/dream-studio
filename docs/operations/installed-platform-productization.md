@@ -79,6 +79,7 @@ ds install-command
 ds dashboard
 ds validate
 ds contract-atlas
+ds contract-atlas-refresh
 ds adapters
 ds context-packet
 ds modules
