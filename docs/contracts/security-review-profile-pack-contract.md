@@ -349,3 +349,6 @@ projects, raw local evidence, or private career data by default.
 GitHub repo intake changes must include license, attribution, security,
 supply-chain, dependency health, maintenance, overlap, and legal/security
 review routing checks before any adoption path is considered.
+## Platform Hardening Refresh
+
+Security review profile packs can consume platform-hardening policy decisions, connector-ingested SARIF or dependency evidence, and privacy/export checks as inputs. The pack remains responsible for evidence-backed findings and must not treat connector data, demo packets, or sanitized exports as live security authority without source refs.

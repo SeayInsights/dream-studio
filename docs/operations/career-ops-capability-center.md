@@ -62,3 +62,6 @@ becoming authority themselves.
 Scoped agent declarations are exposed at
 `/api/shared-intelligence/agents/registry`. Context packet previews are exposed
 at `/api/shared-intelligence/agents/context-packet` and do not execute agents.
+## Platform Hardening Refresh
+
+Career Ops participates in platform hardening through privacy profiles, policy decisions, capability evaluations, and sanitized demo/export checks. Career data remains opt-in and private by default; public demos, team rollups, and sanitized exports must exclude resumes, applications, compensation strategy, personal notes, and browser automation traces unless explicitly approved and redacted.

@@ -55,6 +55,7 @@ The registry currently tracks these release-blocking domains:
 - Docker module runtime boundary
 - Long-run multisession operational validation
 - Expert skills and workflow system
+- Platform hardening sequence
 
 Each domain declares:
 
@@ -122,6 +123,21 @@ and commands were recorded, what validation ran, what outcome occurred, whether
 rework was needed, and what security/readiness impact was observed. It keeps
 unknown model/provider values explicit and never infers fake token or cost
 precision.
+
+## Platform Hardening
+
+The atlas exposes `platform_hardening`, backed by migration
+`046_platform_hardening_authority.sql` and
+`core.shared_intelligence.platform_hardening`. This section summarizes skill
+evaluation harness readiness, policy/permission decisions, engineering
+connector ingestion, privacy/redaction boundaries, opt-in local watchers,
+sanitized team rollups, installer/distribution checks, and demo/case-study
+packets.
+
+The confirmed dependency graph maps the platform-hardening module to its SQLite
+tables and to analytics-only ingestion. This keeps connector imports normalized
+into current authority and prevents policy, demo, or team-rollup outputs from
+becoming separate truth sources.
 runtime domain. Installer, first-run setup, acceptance, backup, restore-check,
 update-check, uninstall-check, module profile selection, and troubleshooting
 docs must drift with changes to the installed runtime or global command

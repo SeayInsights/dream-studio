@@ -74,6 +74,23 @@ model/provider values remain `unknown`; unavailable file or command data remains
 `unavailable`; imported or untracked work must be classified instead of
 overclaimed.
 
+Platform hardening authority lives in migration
+`046_platform_hardening_authority.sql` and covers:
+
+- `skill_evaluation_runs`
+- `policy_decision_records`
+- `connector_ingestion_runs`
+- `privacy_redaction_export_records`
+- `local_watch_schedule_records`
+- `team_rollup_records`
+- `installer_distribution_checks`
+- `demo_case_study_packets`
+
+These records make skill evaluation, permission decisions, connector imports,
+privacy/export checks, opt-in watchers, sanitized team rollups,
+installer/distribution checks, and demo/case-study packets measurable without
+replacing validation, Work Order, security, analytics, or adapter authority.
+
 ## Runtime Rules
 
 - Normal runtime uses the canonical path resolver.

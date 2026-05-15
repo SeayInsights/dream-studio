@@ -103,3 +103,10 @@ commit/PR/result refs, and security/readiness impact. It does not create a
 second telemetry system, infer model/provider precision, infer token or cost
 values, authorize adapter execution, or mutate live SQLite outside the normal
 approved migration boundary.
+
+Migration `046_platform_hardening_authority.sql` is additive. It creates
+records for skill/workflow evaluations, policy decisions, connector ingestion
+runs, privacy/redaction exports, local watch declarations, sanitized team
+rollups, installer/distribution checks, and demo/case-study packets. It does
+not authorize cleanup, external mutation, Docker execution, live SQLite writes,
+push/deploy actions, secret access, or public publication.

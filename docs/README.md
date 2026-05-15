@@ -105,6 +105,15 @@ validation ran, what outcome occurred, whether rework was needed, and what
 security/readiness impact resulted. See
 [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md).
 
+## Platform Hardening
+
+The platform-hardening sequence makes Dream Studio measurable, permissioned,
+privacy-safe, integrated, installable, pilot-ready, and demo-ready. It covers
+skill/workflow evaluation, policy decisions, engineering connector ingestion,
+privacy/redaction, opt-in local watchers, sanitized team rollups,
+installer/distribution checks, and demo/case-study packets. See
+[Platform Hardening Sequence](operations/platform-hardening-sequence.md).
+
 ## Operations
 
 - [Local Runtime](operations/local-runtime.md)
@@ -129,6 +138,7 @@ security/readiness impact resulted. See
 - [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md)
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
 - [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
+- [Platform Hardening Sequence](operations/platform-hardening-sequence.md)
 
 ## Publication Rule
 

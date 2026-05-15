@@ -47,6 +47,9 @@ The dashboard mapping covers:
   source confidence, and operational value telemetry
 - AI/adapter task attribution, skill/workflow usage, files touched, validation,
   execution outcome, rework status, and security/readiness impact
+- Platform-hardening status for skill evaluation, policy decisions, connectors,
+  privacy/redaction, opt-in watchers, team rollups, installer checks, and
+  sanitized demo/case-study packets
 - Security lifecycle gate status and 47-control applicability
 - Production readiness status, controls, scorecards, findings, and remediation Work Orders
 - Project portfolio authority, PRD authority, security posture, readiness posture,
@@ -268,6 +271,14 @@ career data unless explicitly scoped.
 `/api/shared-intelligence/github-repo-intake` exposes the repo intake workflow
 and recorded evaluation summaries. It is a read model over SQLite authority and
 does not fetch, copy, fork, vendor, mutate, or adopt external repositories.
+
+`/api/shared-intelligence/platform-hardening` exposes the next product-hardening
+sequence. It is a read model over SQLite authority and repo declarations for
+skill evaluations, policy decisions, engineering connectors, privacy/redaction,
+local watchers, team rollups, installer/distribution checks, and demo packets.
+It does not authorize execution, cleanup, live SQLite mutation, external
+project mutation, Docker execution, push/deploy, secret inspection, or public
+publication.
 
 ## Freshness And Staleness
 

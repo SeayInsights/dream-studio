@@ -86,6 +86,15 @@ records are private by default. Public examples must be synthetic or sanitized
 and must not expose private Work Orders, file paths, command output, raw
 validation evidence, security findings, or external-project details.
 
+Platform-hardening may be documented as a product capability, but raw
+evaluation evidence, policy decisions, connector payloads, local watch results,
+team rollup source material, installer logs, and demo/case-study evidence are
+private by default. Public outputs must use the `public_sanitized` visibility
+profile and must exclude raw Work Orders, handoffs, operator decisions, local
+paths, raw telemetry, local evidence, cutover/rollback details, private project
+details, career/application data, compensation strategy, secrets/auth/config
+values, and unsanitized security findings.
+
 ## Contract Atlas Export Rule
 
 The Contract Atlas is private/local by default. Public atlas exports are allowed

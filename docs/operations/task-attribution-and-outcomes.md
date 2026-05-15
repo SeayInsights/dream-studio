@@ -94,3 +94,6 @@ Required validation proves:
 - Adapter Usage and Capability Center consume attributed outcomes without
   inventing token or cost precision;
 - Contract Atlas and docs drift recognize the model.
+## Platform Hardening Refresh
+
+Platform-hardening policy, connector, privacy, watch, installer, and demo records can link back to task attribution through Work Orders, validation results, evidence refs, and adapter usage records. They do not replace the attribution model: AI/adapter work remains attributed through current SQLite authority, with unknown model, token, cost, files, or outcome fields shown honestly when unavailable.
