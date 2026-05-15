@@ -242,6 +242,15 @@ The atlas now also exposes:
 - `github_repo_intake`, which records evidence-backed external repo evaluation
   outcomes and blocks unapproved code copy, dependency adoption, fork/vendor,
   or attribution-sensitive reuse.
+- `prd_authority_lifecycle`, which reports PRD version lineage, lifecycle
+  state, milestone authority, Work Order authority, change-order state, route
+  reconciliation status, and the next safe action from SQLite authority.
+
+The full PRD lifecycle read model is available at
+`/api/shared-intelligence/prd-authority`. Contract Atlas treats this as
+product-continuation authority: files are exports, `prd_documents` is a legacy
+compatibility list, and material product changes require change-order or
+amendment records before PRD/milestone/Work Order authority is updated.
 
 ## Drift Gate
 

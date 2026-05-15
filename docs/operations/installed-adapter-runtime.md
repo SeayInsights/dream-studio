@@ -273,3 +273,10 @@ destructively migrate SQLite.
 ## Platform Hardening Refresh
 
 The installed adapter runtime now exposes platform-hardening as a derived status surface through `/api/shared-intelligence/platform-hardening` and `ds platform-hardening`. These additions preserve the installed runtime boundary: adapter/router state remains under user-local Dream Studio state, source remains in the repo, and no adapter surface becomes primary authority.
+
+## PRD Lifecycle Context
+
+Installed adapters consume PRD lifecycle authority through context packets and
+shared-intelligence routes. The adapter runtime does not own PRD state; it
+passes current PRD version, milestone, Work Order, change-order, validation,
+and stop-gate context from SQLite authority to supported tools.

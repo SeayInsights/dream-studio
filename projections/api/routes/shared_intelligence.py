@@ -59,6 +59,7 @@ from core.shared_intelligence.platform_hardening import (
     skill_evaluation_harness_status,
     team_pilot_rollup_status,
 )
+from core.shared_intelligence.prd_authority import project_prd_authority_summary
 from core.shared_intelligence.scoped_agents import scoped_agent_registry, scoped_context_packet
 from core.shared_intelligence.task_attribution import (
     task_attribution_summary,
@@ -264,6 +265,20 @@ async def get_shared_intelligence_status(
                         "demo_case_study_packets",
                     ],
                 },
+                {
+                    "surface_id": "prd-authority-lifecycle",
+                    "api_path": "/api/shared-intelligence/prd-authority",
+                    "source_tables": [
+                        "project_intake_records",
+                        "project_intake_questions",
+                        "project_assumption_records",
+                        "prd_version_records",
+                        "project_milestone_records",
+                        "project_work_order_authority_records",
+                        "project_change_order_records",
+                        "prd_route_reconciliation_records",
+                    ],
+                },
             ],
             "source_tables": [
                 "reg_projects",
@@ -294,6 +309,11 @@ async def get_shared_intelligence_status(
                 "team_rollup_records",
                 "installer_distribution_checks",
                 "demo_case_study_packets",
+                "project_intake_records",
+                "prd_version_records",
+                "project_milestone_records",
+                "project_change_order_records",
+                "prd_route_reconciliation_records",
             ],
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
@@ -460,6 +480,22 @@ async def get_demo_case_study_system_status() -> dict[str, Any]:
     """Return sanitized demo/case-study system status."""
 
     return _with_connection(demo_case_study_system_status)
+
+
+@router.get("/prd-authority")
+async def get_prd_authority_lifecycle(
+    project_id: str | None = Query(default="dream-studio"),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    """Return PRD intake, lifecycle, change-order, milestone, and route authority."""
+
+    return _with_connection(
+        lambda conn: project_prd_authority_summary(
+            conn,
+            project_id=project_id,
+            limit=limit,
+        )
+    )
 
 
 @router.get("/adapter-router")

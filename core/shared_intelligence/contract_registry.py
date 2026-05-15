@@ -138,6 +138,39 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "attribution_examples_synthetic_live_evidence_private",
     },
     {
+        "domain_id": "project_prd_authority_lifecycle",
+        "domain_name": "Project PRD Authority Lifecycle",
+        "source_patterns": [
+            "core/shared_intelligence/prd_authority.py",
+            "core/shared_intelligence/context_packets.py",
+            "core/event_store/migrations/047_prd_lifecycle_authority.sql",
+            "projections/api/routes/project_intelligence.py",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/prd-authority-lifecycle.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "docs_refs": [
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            PRD_DOC,
+            "docs/README.md",
+            "docs/architecture/shared-authority-and-adapter-projections.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/prd-authority-lifecycle.md",
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "prd_lifecycle_or_route_authority_changes_require_database_dashboard_context_packet_docs_refresh",
+        "public_export_boundary": "prd_files_are_exports_sqlite_is_private_authority",
+    },
+    {
         "domain_id": "sqlite_schema_authority",
         "domain_name": "SQLite Schema And Authority",
         "source_patterns": [

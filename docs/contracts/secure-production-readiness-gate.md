@@ -186,3 +186,12 @@ approval exist.
 ## Platform Hardening Refresh
 
 Secure production readiness can use platform-hardening records as evidence for permission controls, sanitized export gates, connector provenance, installer health, scheduled validation posture, and demo/case-study readiness. The gate still requires source-backed controls and must not overclaim production readiness from a demo or rollup packet alone.
+
+## PRD Lifecycle Readiness
+
+PRD authority is a readiness input. New project intake, in-flight
+formalization, material change orders, and route reconciliation classify
+database, API, caching, accessibility, observability, performance,
+dependency/supply-chain, privacy/compliance, backup/rollback, code quality, and
+release-readiness applicability. Missing evidence remains partial or
+unavailable until a targeted or full applicable review supplies evidence.

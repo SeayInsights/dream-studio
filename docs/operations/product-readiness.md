@@ -255,3 +255,11 @@ Stop Phase 15 readiness validation if:
 ## Platform Hardening Refresh
 
 Product readiness now includes platform-hardening signals for measurable skills, explicit permission decisions, connector ingestion, privacy boundaries, scheduled validation readiness, team-safe rollups, installer health, and sanitized demos. Missing evidence should remain unavailable or partial; platform-hardening records are readiness inputs, not fake scores.
+
+## PRD Lifecycle Readiness
+
+Product readiness should read PRD lifecycle state as planning authority:
+current PRD version, milestone map, active Work Orders, pending change orders,
+and route reconciliation. These records explain intended vs actual product
+direction, but readiness scores still require evidence-backed controls and must
+not treat a PRD draft as proof of production readiness.

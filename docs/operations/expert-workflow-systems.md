@@ -187,3 +187,12 @@ automation boundaries are explicit.
 ## Platform Hardening Refresh
 
 The skill evaluation harness gives expert workflows a measurable promotion path: golden fixtures, expected-output contracts, rubric scores, pass/warn/fail/manual-review states, promotion thresholds, rollback thresholds, and known limitations. A workflow should not be marked improved unless an evaluation run records evidence in current authority.
+
+## PRD Lifecycle Interaction
+
+Intentional implementation, code quality, debugging, design, data modeling,
+API integration, documentation, and release workflows should consume the
+current PRD version, milestone, Work Order, assumptions, change orders, and
+stop gates before recommending implementation. Workflow outputs may create
+remediation Work Orders or evidence refs, but they do not silently rewrite PRD
+authority.

@@ -97,3 +97,10 @@ Required validation proves:
 ## Platform Hardening Refresh
 
 Platform-hardening policy, connector, privacy, watch, installer, and demo records can link back to task attribution through Work Orders, validation results, evidence refs, and adapter usage records. They do not replace the attribution model: AI/adapter work remains attributed through current SQLite authority, with unknown model, token, cost, files, or outcome fields shown honestly when unavailable.
+
+## PRD Lifecycle Interaction
+
+Project Details may show task attribution beside current PRD version,
+milestone, active Work Order, change-order, and route reconciliation authority.
+Task attribution does not own or rewrite PRD authority; it links outcomes back
+to recorded Work Order or milestone identifiers when those IDs are available.

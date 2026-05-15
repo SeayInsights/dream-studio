@@ -79,7 +79,7 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 2. Stage gates define the valid sequence of maturity milestones.
 3. Milestones represent meaningful product progress.
 4. Work Orders execute bounded slices inside a milestone.
-5. SQLite records operational state, route decisions, telemetry, learning events, adapters, evidence summaries, release gates, and shared-intelligence records where safe.
+5. SQLite records operational state, route decisions, telemetry, learning events, adapters, evidence summaries, release gates, PRD versions, project intake, change orders, milestone/Work Order authority, route reconciliation, and shared-intelligence records where safe.
 6. Files remain public source, docs, examples, templates, rendered reports, or local evidence exports depending on their classification.
 7. Dashboards and APIs are derived views, never routing authority.
 
@@ -93,9 +93,21 @@ Dream Studio chooses the next valid milestone from product authority and current
 
 Work Orders define scope, allowed files, forbidden actions, validation, rollback, evidence requirements, and route behavior. Large goals are decomposed into sequenced Work Orders instead of prompt-by-prompt babysitting.
 
+### PRD Lifecycle
+
+Project intake creates or formalizes PRD authority before implementation. New
+projects use adaptive question modes, explicit assumptions, known unknowns,
+initial milestones, Work Order authority, and readiness/security
+classification. In-flight projects can be formalized from current evidence
+without relying on prior chat memory. Material product changes create Project
+Change Orders instead of silently overwriting the PRD, milestones, Work Orders,
+security/readiness scope, architecture assumptions, or release criteria. At
+milestone, release, or project closeout, route reconciliation records planned
+vs actual progress and accepted or unresolved deviations.
+
 ### SQLite Authority
 
-SQLite stores structured authority for telemetry, Work Orders, route decisions, artifacts, release gates, adapter outputs, learning records, shared context packets, and dashboard read models. Schema changes must be additive and migration-backed unless a separate approval explicitly allows otherwise.
+SQLite stores structured authority for telemetry, PRD versions, Work Orders, route decisions, artifacts, release gates, adapter outputs, learning records, shared context packets, and dashboard read models. Schema changes must be additive and migration-backed unless a separate approval explicitly allows otherwise.
 
 ### Telemetry Spine
 

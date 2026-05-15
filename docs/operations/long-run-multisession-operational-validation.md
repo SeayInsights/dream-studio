@@ -49,6 +49,8 @@ The validation report blocks when it sees:
 - GitHub repo intake skipping license/security/overlap review before adoption
 - task attribution inventing model/provider, file, command, token, cost,
   validation, outcome, or rework precision that was not recorded
+- PRD lifecycle authority missing current version, milestone, Work Order,
+  change-order, or route reconciliation context needed for safe continuation
 - old path references returning
 - synthetic/mock/test data leaking into live dashboard views
 - adapter staleness drift

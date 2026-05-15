@@ -223,3 +223,10 @@ Remaining flake8 debt should be paid down in focused follow-up work. Removing or
 ## Platform Hardening Refresh
 
 The platform-hardening sequence adds a skill/workflow evaluation harness and installer/distribution checks, but it does not relax the lint or format baseline. `ds platform-hardening` and the Contract Atlas freshness views are derived status surfaces; Black, lint baseline checks, docs drift, and the release gate remain the release-blocking authorities for source changes.
+
+## PRD Lifecycle Refresh
+
+PRD lifecycle source or route changes are release-gate relevant when they add
+schema, dashboard routes, context-packet fields, or Contract Atlas sections.
+They must keep Black and lint-baseline checks clean, refresh the PRD lifecycle
+docs, and prove docs drift without weakening unrelated release-gate checks.

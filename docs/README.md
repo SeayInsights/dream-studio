@@ -114,6 +114,15 @@ validation ran, what outcome occurred, whether rework was needed, and what
 security/readiness impact resulted. See
 [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md).
 
+## PRD Authority Lifecycle
+
+Dream Studio starts and continues project work from SQLite-backed PRD authority:
+adaptive intake, explicit assumptions and unknowns, PRD versions, milestones,
+Work Order authority, Project Change Orders, and planned-vs-actual route
+reconciliation. Project Details and context packets expose the current PRD
+version and next safe action so adapters can continue without relying on prior
+chat memory. See [PRD Authority Lifecycle](operations/prd-authority-lifecycle.md).
+
 ## Platform Hardening
 
 The platform-hardening sequence makes Dream Studio measurable, permissioned,
@@ -153,6 +162,7 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 - [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md)
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
 - [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
+- [PRD Authority Lifecycle](operations/prd-authority-lifecycle.md)
 - [Platform Hardening Sequence](operations/platform-hardening-sequence.md)
 - [Sanitized Demo Readiness Packet](demo/sanitized/README.md)
 

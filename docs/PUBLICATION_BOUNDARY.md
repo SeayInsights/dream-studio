@@ -129,3 +129,12 @@ paths, launcher contents, Claude/Codex settings, adapter projections, local
 runtime paths, or row-level migration evidence. Old Work Orders, handoffs,
 reports, evidence folders, audit files, prompts, caches, logs, backups, and
 rollback details remain private unless separately sanitized and approved.
+
+## PRD Lifecycle Boundary
+
+PRD lifecycle behavior may be documented publicly, but project-specific PRD
+versions, assumptions, open questions, change orders, route reconciliations,
+evidence refs, and Work Order details are private unless explicitly exported
+through a sanitized profile. Public examples must be synthetic or redacted and
+must not expose private operator history, local paths, external-project details,
+career data, or unsanitized security/readiness findings.
