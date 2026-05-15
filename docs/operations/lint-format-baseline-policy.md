@@ -64,6 +64,13 @@ Contract Atlas behavior changes must refresh the atlas contract doc, this
 operations policy, and the docs index together so the release gate, human docs
 surface, and derived atlas view describe the same freshness boundary.
 
+Installed runtime and productization changes are release-gate relevant. If code
+changes affect `core/installed_runtime.py`, `core/installed_productization.py`,
+module profile selection, `ds.ps1`, or the global `ds` command surface, the
+same change set must refresh installed runtime/productization docs,
+troubleshooting docs, adapter-boundary docs, and independent configuration docs
+required by the drift report.
+
 Security lifecycle changes are release-gate relevant. If code changes affect
 `core/security`, security review contracts, project health security hydration,
 shared-intelligence security routes, or release readiness security status, the

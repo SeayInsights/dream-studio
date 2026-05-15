@@ -1,0 +1,88 @@
+# Troubleshooting
+
+This guide covers installed Dream Studio behavior for local users and adapter
+operators. It avoids cleanup instructions that delete unknown files or mutate
+live SQLite state.
+
+## Command Cannot Find State
+
+Symptom: `ds router` or `ds adapters` reports that SQLite authority is missing.
+
+Check:
+
+- Confirm `--home` or `DREAM_STUDIO_HOME` points at the intended Dream Studio
+  home.
+- Run `ds validate` with the same `--source-root` and `--home`.
+- For rehearsal use, run `ds install --rehearsal --home <temp-home>` or
+  `ds acceptance --home <temp-home>`.
+
+Do not copy files from another runtime home unless a restore plan has been
+approved.
+
+## Current Directory Assumptions
+
+Symptom: a command only works from the Dream Studio repo.
+
+Check:
+
+- Use `--source-root <dream-studio-source>` explicitly.
+- Use `--home <dream-studio-home>` explicitly for installed or rehearsal state.
+- On Windows, invoke `ds.ps1` directly or place the Dream Studio source root on
+  PATH so `ds.ps1` can resolve its own source root.
+- For packaged installs, verify `DREAM_STUDIO_SOURCE_ROOT` and
+  `DREAM_STUDIO_HOME`.
+
+Commands are expected to work from outside the repo.
+
+## Unknown Module Profile
+
+Symptom: install or acceptance reports an unknown profile.
+
+Check `ds modules` for the supported profile ids:
+
+- `core`
+- `analytics_only`
+- `security_only`
+- `telemetry_only`
+- `dashboard_only`
+- `adapter_router_only`
+- `shared_intelligence_only`
+- `full`
+
+Do not edit runtime config by hand to invent a profile.
+
+## Dashboard Is Empty
+
+Symptom: dashboard routes are available but show no facts.
+
+This can be valid. Dream Studio uses honest empty states when selected modules
+are installed but no runtime facts, telemetry, or readiness records exist yet.
+Run `ds validate`, `ds modules`, and `ds contract-atlas` to confirm the runtime
+surface is available.
+
+## Adapter Is Unsupported Or Unproven
+
+Symptom: an AI tool is classified as `context_packet_only` or
+`not_proven_in_local_runtime`.
+
+Use `ds context-packet --adapter <adapter>` for fallback context. Do not mark an
+adapter as proven until live consumption evidence exists. Private model memory
+is never Dream Studio authority.
+
+## Analytics-Only Has No Hooks Or Agents
+
+This is expected. `analytics_only` intentionally works without hooks, agents,
+workflows, Claude, Codex, repo mutation, or Docker. If a command asks for those
+dependencies in analytics-only mode, treat it as a product boundary bug.
+
+## Restore Or Uninstall Requested
+
+Use `ds restore-check` or `ds uninstall-check` first. These commands inspect the
+selected local runtime home and do not restore or delete data. Live restore,
+update, uninstall, cleanup, or deletion needs a separate approved scope.
+
+## Secrets And Auth Files
+
+Do not inspect or print secrets, auth tokens, cookies, private keys, or provider
+credentials while troubleshooting. If a path looks like an auth store, classify
+it as sensitive and route to operator review.
