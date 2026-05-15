@@ -69,6 +69,13 @@ Security lifecycle changes are release-gate relevant. If code changes affect
 shared-intelligence security routes, or release readiness security status, the
 same change set must refresh the lifecycle contract and product-readiness docs.
 
+Secure production readiness changes are release-gate relevant too. If code,
+SQLite migrations, shared-intelligence routes, project detail views, release
+readiness, workflow templates, or Contract Atlas sections affect production
+readiness controls or scorecards, the same change set must refresh the
+production readiness contract, dashboard mapping, product-readiness operations
+doc, and any schema/workflow docs required by the drift report.
+
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.

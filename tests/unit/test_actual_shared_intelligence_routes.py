@@ -167,6 +167,34 @@ def test_actual_app_exposes_security_lifecycle_gate_without_persisting(
     )
 
 
+def test_actual_app_exposes_production_readiness_preview_without_persisting(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client, db_path = _client_with_shared_db(tmp_path, monkeypatch)
+    before_runs = _count(db_path, "production_readiness_assessment_runs")
+
+    response = client.get(
+        "/api/shared-intelligence/production-readiness",
+        params={
+            "project_id": "dream-studio",
+            "lifecycle_event": "code_change",
+            "changed_files": "projections/api/routes/project_intelligence.py",
+        },
+    )
+    controls = client.get("/api/shared-intelligence/production-readiness/controls")
+
+    after_runs = _count(db_path, "production_readiness_assessment_runs")
+    payload = response.json()
+    assert response.status_code == 200
+    assert controls.status_code == 200
+    assert before_runs == after_runs
+    assert payload["model_name"] == "secure_production_readiness_gate"
+    assert "api_surface" in payload["impact_classification"]["impact_categories"]
+    assert payload["control_catalog_summary"]["control_count"] > 47
+    assert payload["execution_authorized"] is False
+    assert payload["db_write_authorized"] is False
+
+
 def test_actual_app_exposes_contract_atlas_without_authorizing_execution(
     tmp_path: Path, monkeypatch
 ) -> None:

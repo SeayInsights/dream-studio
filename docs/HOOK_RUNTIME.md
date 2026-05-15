@@ -64,6 +64,11 @@ resolve the plugin root.
 | PostToolUse (Read) | `on-skill-load` | meta (direct) |
 | PostToolUse (default) | `on-tool-activity` | meta (direct) |
 
+Production readiness is not an implicit hook execution path. Hook telemetry may
+be evidence for readiness, and future approved hooks may emit readiness-related
+facts, but readiness control execution and SQLite persistence remain owned by
+the `production-readiness` workflow and explicit runtime authorization.
+
 ## Dispatcher Sub-Handler Mapping
 
 ### on-prompt-dispatch (UserPromptSubmit)

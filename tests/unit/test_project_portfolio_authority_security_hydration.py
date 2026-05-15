@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
+from core.event_store.studio_db import _connect
+from core.production_readiness import build_secure_production_readiness_gate
 from projections.api.main import app
 
 
@@ -184,6 +186,34 @@ def test_project_health_uses_current_authority_when_legacy_tables_are_absent(
         assert payload["available_surfaces"]["violations_summary"] is False
         assert "bugs_summary" in payload["removed_surfaces"]
         assert "violations_summary" in payload["removed_surfaces"]
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_project_details_separates_health_and_sqlite_readiness_authority(
+    tmp_path: Path, monkeypatch
+) -> None:
+    db_path = _portfolio_db(tmp_path)
+    with _connect(db_path) as conn:
+        build_secure_production_readiness_gate(
+            conn=conn,
+            project_id="dream-studio",
+            lifecycle_event="release_merge",
+            persist=True,
+        )
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        response = client.get("/api/v1/projects/dream-studio/details")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["health_score"]["overall_score"] is not None
+        assert payload["readiness_score"]["status"] == "partial"
+        assert payload["readiness_control_coverage"]["total"] > 47
+        assert payload["enterprise_security_controls"]["source_control_count"] == 47
+        assert payload["manual_review_controls"]
+        assert payload["remediation_work_orders"]
+        assert payload["source_status"]["classification"] == "fresh"
     finally:
         DatabaseRuntime.reset_instance()
 

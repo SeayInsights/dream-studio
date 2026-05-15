@@ -71,6 +71,12 @@ The shared-intelligence route surface also exposes
 installed runtime capability for security classification and release-readiness
 status; it does not run scans, inspect secrets, or write runtime state.
 
+It also exposes `/api/shared-intelligence/production-readiness` and
+`/api/shared-intelligence/production-readiness/controls`. These installed
+surfaces preview readiness gates or read persisted SQLite readiness summaries
+without executing checks, mutating adapter config, or writing live state from a
+GET request.
+
 Supported adapter access modes:
 
 | Mode | Meaning |

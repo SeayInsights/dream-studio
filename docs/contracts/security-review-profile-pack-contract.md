@@ -46,6 +46,11 @@ release or merge, publication, deployment, live cutover, dependency/runtime/
 security/database/Docker changes, major architecture changes, external project
 onboarding, and scheduled dogfood gates.
 
+The secure production readiness gate consumes this lifecycle gate and maps
+security review evidence into broader deployment readiness. It must not fork the
+47-control framework or create duplicate security skills when an existing
+security skill mode already covers the control well.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`
