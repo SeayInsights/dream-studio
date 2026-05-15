@@ -39,6 +39,15 @@ Analytics-only does not require hooks, agents, workflows, Claude, Codex, Docker,
 repo mutation, or full orchestration. Missing data should appear as honest empty
 states.
 
+## Installed Dashboard Command
+
+The installed `ds dashboard` command is status-only by default so users can run
+it from any directory without accidentally starting services. Use
+`ds dashboard --serve` to start the local FastAPI dashboard server,
+`ds dashboard --open` to start or reuse the server and open a browser, and
+`ds dashboard --check` to validate `/dashboard` and `/api/health` on a running
+server.
+
 ## Module Contracts
 
 Dream Studio module boundaries are declared in `core.module_contracts` and

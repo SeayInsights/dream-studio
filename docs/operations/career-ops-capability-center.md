@@ -38,6 +38,11 @@ a dashboard surface, not a source of truth. It reads invocation records,
 hardening candidates, expert workflow declarations, scoped-agent declarations,
 readiness controls, and task-attributed skill/workflow outcomes.
 
+Installed dashboard command modes expose Capability Center only as a derived
+view. `ds dashboard --status` reports readiness, `--serve` starts the local
+server, `--open` opens the browser, and `--check` probes route health; none of
+these modes publish Career Ops data or authorize agent execution.
+
 If invocation or evaluation evidence is missing, Capability Center shows an
 honest unavailable state instead of inventing success rates or scores. If task
 attribution is missing, outcome counts remain unavailable rather than being

@@ -21,6 +21,13 @@ evidence references. They are not workflow authority.
 The machine-readable mapping lives in
 `docs/architecture/dream-studio-dashboard-projection-mapping.yaml`.
 
+The installed dashboard command surface is part of the projection boundary:
+`ds dashboard --status` reports readiness, `--serve` starts the local FastAPI
+server, `--open` starts or reuses the server and opens a browser, and `--check`
+validates `/dashboard` and `/api/health`. These modes expose derived views and
+must not bootstrap SQLite, migrate schemas, backfill facts, or become primary
+authority.
+
 ## Projection Domains
 
 The dashboard mapping covers:

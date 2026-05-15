@@ -27,6 +27,9 @@ The closeout model requires evidence for:
   task when such evidence exists
 - legacy install detection and migration dry-run check, including rollback and
   adapter repair boundaries
+- dashboard command mode check, including `ds dashboard --status`,
+  `ds dashboard --serve`, `ds dashboard --check`, and a 200 response from
+  `/dashboard` from outside the source checkout
 
 Each cycle must include evidence refs and pass/fail status. Missing evidence is
 a failure, not a silent pass.

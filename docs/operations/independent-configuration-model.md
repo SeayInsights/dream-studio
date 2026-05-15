@@ -18,6 +18,7 @@ boundary.
 | Local DB path | `core.config.database` | runtime, tests, dashboard | repo plus local env | Required for default changes |
 | Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
 | Installed platform productization | `core.installed_productization` | `ds install`, `ds acceptance`, backup/restore/update/uninstall checks | repo code plus explicit runtime home | Required for install/update behavior changes |
+| Installed dashboard command | `interfaces.cli.ds` plus `projections.api.main` | `ds dashboard --status`, `--serve`, `--open`, `--check` | repo code plus explicit runtime home | Required for dashboard launch behavior changes |
 | Module contracts | `core.module_contracts` | Contract Atlas, profile validation, docs drift, release gate tests | repo source | Required for module boundary changes |
 | Contract Atlas lifecycle | `core.shared_intelligence.contract_atlas_lifecycle` | `ds contract-atlas-refresh`, `/api/shared-intelligence/contract-atlas/freshness`, release gate | generated exports to explicit caller path | Required for atlas/export freshness changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
