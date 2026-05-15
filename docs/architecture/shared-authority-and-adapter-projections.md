@@ -53,9 +53,10 @@ context packets and return normalized evidence for Dream Studio to ingest.
 Productized installs use `ds install` and selected module profiles to create
 the user-local runtime home that these adapter/router surfaces read from.
 Unsupported tools remain context-packet-only rather than receiving overclaimed
-router support. Repo-owned launchers such as `ds.ps1` may expose the global
-command surface, but they still delegate back to Dream Studio source and SQLite
-authority.
+router support. Repo-owned launchers such as `ds.cmd` and `ds.ps1` may expose
+the global command surface, and `ds install-command` can materialize user-local
+launchers in a PATH directory. They still delegate back to Dream Studio source
+and SQLite authority.
 
 Security lifecycle access follows the same boundary. Adapters may read
 `/api/shared-intelligence/security-lifecycle` or a generated context packet to

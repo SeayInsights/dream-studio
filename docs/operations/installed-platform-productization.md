@@ -64,6 +64,7 @@ The productized command surface includes:
 ```text
 ds status
 ds install
+ds install-command
 ds dashboard
 ds validate
 ds contract-atlas
@@ -78,12 +79,23 @@ ds update-check
 ds uninstall-check
 ```
 
-On Windows, `ds.ps1` is a repo-owned launcher that can be placed on PATH or
-invoked directly from any directory. It delegates to the canonical Python CLI
-with an explicit source root:
+On Windows, `ds.cmd` and `ds.ps1` are repo-owned launchers that can be placed
+on PATH or invoked directly from any directory. `ds.cmd` supports the plain
+`ds` command in normal `cmd.exe` and PowerShell shells without requiring
+PowerShell script execution policy changes. Both launchers delegate to the
+canonical Python CLI with an explicit source root:
 
 ```powershell
-C:\path\to\dream-studio\ds.ps1 --home C:\temp\dream-studio status
+C:\path\to\dream-studio\ds.cmd --home C:\temp\dream-studio status
+```
+
+Installed Windows users can create user-local launchers in a PATH directory:
+
+```powershell
+python C:\path\to\dream-studio\interfaces\cli\ds.py `
+  --source-root C:\path\to\dream-studio `
+  --home C:\Users\you\.dream-studio `
+  install-command --execute
 ```
 
 The same commands are available through `python interfaces\cli\ds.py` for

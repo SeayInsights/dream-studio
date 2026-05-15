@@ -28,6 +28,7 @@ from core.shared_intelligence.usage_accounting import register_default_adapter_a
 
 DEFAULT_INSTALL_PROFILES: tuple[str, ...] = ("core", "analytics_only", "adapter_router_only")
 PRODUCTIZATION_VERSION = "dream_studio.installed_productization.v1"
+DEFAULT_GLOBAL_COMMAND_DIR = Path.home() / ".local" / "bin"
 
 
 def first_run_setup(
@@ -103,9 +104,56 @@ def first_run_setup(
             "installed_profile_count": atlas["installed_module_profiles"]["profile_count"],
             "execution_authorized": atlas["execution_authorized"],
         },
+        "global_command_surface": {
+            "status": "available",
+            "command": "ds",
+            "windows_launchers": ["ds.cmd", "ds.ps1"],
+            "default_command_dir": str(DEFAULT_GLOBAL_COMMAND_DIR),
+            "install_command": "ds install-command --execute",
+        },
         "runtime_state_written": True,
         "live_state_mutated": not rehearsal,
         "rehearsal": rehearsal,
+    }
+
+
+def install_global_command_surface(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    command_dir: str | Path | None = None,
+    execute: bool = False,
+) -> dict[str, Any]:
+    """Plan or install user-local launchers for the plain ``ds`` command."""
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    target_dir = Path(command_dir or DEFAULT_GLOBAL_COMMAND_DIR).resolve()
+    launchers = {
+        "ds.cmd": _windows_cmd_launcher(paths.source_root, paths.dream_studio_home),
+        "ds.ps1": _windows_powershell_launcher(paths.source_root, paths.dream_studio_home),
+    }
+    written: list[str] = []
+    if execute:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for name, content in launchers.items():
+            target = target_dir / name
+            target.write_text(content, encoding="utf-8", newline="\n")
+            written.append(str(target))
+    return {
+        "model_name": "dream_studio_global_command_surface_install",
+        "source_root": str(paths.source_root),
+        "dream_studio_home": str(paths.dream_studio_home),
+        "command_dir": str(target_dir),
+        "launchers": sorted(launchers),
+        "written": written,
+        "execute": execute,
+        "destructive": False,
+        "sqlite_mutation": False,
+        "global_command": "ds",
+        "path_requirement": "command_dir must be on PATH",
     }
 
 
@@ -441,6 +489,66 @@ def _backup_manifest(paths: Any, backup_id: str) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _windows_cmd_launcher(source_root: Path, dream_studio_home: Path) -> str:
+    cli = source_root / "interfaces" / "cli" / "ds.py"
+    return "\n".join(
+        [
+            "@echo off",
+            "setlocal",
+            f'set "DREAM_STUDIO_SOURCE_ROOT={source_root}"',
+            f'set "DREAM_STUDIO_HOME={dream_studio_home}"',
+            f'set "DREAM_STUDIO_CLI={cli}"',
+            "where py >nul 2>nul",
+            "if %ERRORLEVEL% EQU 0 (",
+            '  py -3 "%DREAM_STUDIO_CLI%" --source-root "%DREAM_STUDIO_SOURCE_ROOT%" '
+            '--home "%DREAM_STUDIO_HOME%" %*',
+            "  exit /b %ERRORLEVEL%",
+            ")",
+            "where python >nul 2>nul",
+            "if %ERRORLEVEL% EQU 0 (",
+            '  python "%DREAM_STUDIO_CLI%" --source-root "%DREAM_STUDIO_SOURCE_ROOT%" '
+            '--home "%DREAM_STUDIO_HOME%" %*',
+            "  exit /b %ERRORLEVEL%",
+            ")",
+            "echo Python 3.11+ was not found on PATH. >&2",
+            "exit /b 1",
+            "",
+        ]
+    )
+
+
+def _windows_powershell_launcher(source_root: Path, dream_studio_home: Path) -> str:
+    cli = source_root / "interfaces" / "cli" / "ds.py"
+    return "\n".join(
+        [
+            '$ErrorActionPreference = "Stop"',
+            f'$env:DREAM_STUDIO_SOURCE_ROOT = "{source_root}"',
+            f'$env:DREAM_STUDIO_HOME = "{dream_studio_home}"',
+            f'$Cli = "{cli}"',
+            "$PythonCmd = $null",
+            'foreach ($candidate in @("py", "python3", "python")) {',
+            "    if (Get-Command $candidate -ErrorAction SilentlyContinue) {",
+            "        $PythonCmd = $candidate",
+            "        break",
+            "    }",
+            "}",
+            "if (-not $PythonCmd) {",
+            '    Write-Error "Python 3.11+ was not found on PATH."',
+            "    exit 1",
+            "}",
+            'if ($PythonCmd -eq "py") {',
+            "    py -3 $Cli --source-root $env:DREAM_STUDIO_SOURCE_ROOT "
+            "--home $env:DREAM_STUDIO_HOME @args",
+            "} else {",
+            "    & $PythonCmd $Cli --source-root $env:DREAM_STUDIO_SOURCE_ROOT "
+            "--home $env:DREAM_STUDIO_HOME @args",
+            "}",
+            "exit $LASTEXITCODE",
+            "",
+        ]
+    )
 
 
 def _timestamp_slug() -> str:

@@ -78,7 +78,10 @@ Dream Studio behavior is visible without making the atlas an installer,
 mutator, or live-state authority.
 
 Installed platform productization is tracked through the installed adapter
-runtime and global router contracts.
+runtime and global router contracts. The atlas treats `ds.cmd`, `ds.ps1`, and
+`ds install-command` as installed command-surface contract inputs so plain
+`ds` behavior stays visible in drift checks without making the atlas an
+installer or runtime mutator.
 
 ## AI Usage Accounting
 
@@ -96,7 +99,7 @@ marked estimate exists.
 runtime domain. Installer, first-run setup, acceptance, backup, restore-check,
 update-check, uninstall-check, module profile selection, and troubleshooting
 docs must drift with changes to the installed runtime or global command
-surface, including repo-owned launchers such as `ds.ps1`. The atlas can
+surface, including repo-owned launchers such as `ds.cmd` and `ds.ps1`. The atlas can
 describe and validate those contracts, but execution still belongs to the `ds`
 command surface and explicit operator-approved runtime flows.
 

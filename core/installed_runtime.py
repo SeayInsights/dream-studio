@@ -112,6 +112,7 @@ def installed_runtime_model(
         "global_command_surface": [
             "ds status",
             "ds install",
+            "ds install-command",
             "ds dashboard",
             "ds validate",
             "ds contract-atlas",
@@ -126,8 +127,9 @@ def installed_runtime_model(
             "ds uninstall-check",
         ],
         "productization_surface": {
-            "windows_launcher": "ds.ps1",
+            "windows_launchers": ["ds.cmd", "ds.ps1"],
             "installer": "ds install --profile <profile>",
+            "plain_command_installer": "ds install-command --execute",
             "first_run_setup": "ds install",
             "acceptance_tests": "ds acceptance",
             "backup": "ds backup",
