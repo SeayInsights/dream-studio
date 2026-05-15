@@ -147,16 +147,27 @@ def test_actual_app_exposes_contract_atlas_without_authorizing_execution(
         "/api/shared-intelligence/contract-atlas",
         params={"project_id": "dream-studio"},
     )
+    unscoped = client.get("/api/shared-intelligence/contract-atlas")
     public = client.get(
         "/api/shared-intelligence/contract-atlas",
         params={"project_id": "dream-studio", "export_scope": "public"},
     )
 
     assert private.status_code == 200
+    assert unscoped.status_code == 200
     assert public.status_code == 200
     private_payload = private.json()
+    unscoped_payload = unscoped.json()
     public_payload = public.json()
     assert private_payload["model_name"] == "dream_studio_contract_atlas"
+    assert unscoped_payload["project_id"] == "dream-studio"
+    assert unscoped_payload["boundary_violation_report"]["status"] == "pass"
+    assert (
+        unscoped_payload["active_adapter_execution_validation"]["staleness_status"][
+            "repair_candidate_count"
+        ]
+        == 0
+    )
     assert private_payload["private_by_default"] is True
     assert private_payload["derived_view"] is True
     assert private_payload["primary_authority"] is False
