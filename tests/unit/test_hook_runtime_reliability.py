@@ -185,6 +185,31 @@ class TestLauncherCanonicalRoot:
     def test_run_cmd_searches_runtime_hooks(self):
         assert "runtime\\hooks" in self.run_cmd
 
+    @pytest.mark.skipif(os.name != "nt", reason="run.cmd is Windows-specific")
+    def test_run_cmd_resolves_plugin_root_from_launcher_path(self, tmp_path):
+        """Windows launcher must work when the adapter cwd is outside the repo."""
+
+        home = tmp_path / "home"
+        home.mkdir()
+        env = os.environ.copy()
+        env.pop("CLAUDE_PLUGIN_ROOT", None)
+        env["USERPROFILE"] = str(home)
+        env["HOME"] = str(home)
+        env["DREAM_STUDIO_DB_PATH"] = str(tmp_path / "studio.db")
+
+        result = subprocess.run(
+            [str(REPO_ROOT / "hooks" / "run.cmd"), "on-prompt-dispatch"],
+            input="{}",
+            text=True,
+            capture_output=True,
+            cwd=tmp_path,
+            env=env,
+            timeout=45,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "handler not found" not in result.stderr
+
 
 # ── 5. run.sh and run.cmd include PLUGIN_ROOT in PYTHONPATH ────────────────
 

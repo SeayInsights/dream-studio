@@ -51,6 +51,12 @@ Claude Code event (e.g., UserPromptSubmit)
 fresh `UserPromptSubmit` from failing before Dream Studio's own launcher can
 resolve the plugin root.
 
+On Windows, `hooks/run.cmd` must capture its own script directory before
+shifting arguments. Codex app and other adapter surfaces may invoke
+`UserPromptSubmit` from a workspace outside the Dream Studio repo; the launcher
+must resolve `runtime\hooks\...` from the launcher path, not from the adapter
+current working directory.
+
 ## Registered Hooks (from hooks.json)
 
 | Event | Handler | Pack Location |
