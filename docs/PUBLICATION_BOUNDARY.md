@@ -107,3 +107,11 @@ refresh surface. It writes the public sanitized atlas and freshness manifest to
 an explicit directory, and writes a private/internal atlas only when
 `--include-private` is supplied. Private/internal exports are not repo-safe and
 must remain in operator-local runtime or review locations.
+
+## Release-Gate Runtime Boundary
+
+Release-gate validation evidence may be summarized publicly only after the gate
+runs against isolated temporary Dream Studio state and the active installed
+SQLite hash remains unchanged. Public pilot or demo packets should reference
+sanitized release status, not raw gate output containing local paths, runtime
+state locations, or private operational evidence.

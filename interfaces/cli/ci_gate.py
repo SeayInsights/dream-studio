@@ -41,11 +41,26 @@ CHECKS = [
 ]
 
 
+def _isolated_check_env() -> dict[str, str]:
+    env = os.environ.copy()
+    isolated_home = Path(tempfile.mkdtemp(prefix="dream-studio-ci-home-"))
+    dream_studio_home = isolated_home / ".dream-studio"
+    state_dir = dream_studio_home / "state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    env["DREAM_STUDIO_HOME"] = str(dream_studio_home)
+    env["DREAM_STUDIO_DB_PATH"] = str(state_dir / "studio.db")
+    env["GITHUB_ACTIONS"] = env.get("GITHUB_ACTIONS", "true")
+    env["HOME"] = str(isolated_home)
+    env["USERPROFILE"] = str(isolated_home)
+    return env
+
+
 def _isolated_test_env() -> dict[str, str]:
     env = os.environ.copy()
     isolated_home = Path(tempfile.mkdtemp(prefix="dream-studio-ci-home-"))
     state_dir = isolated_home / ".dream-studio" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
+    env.pop("DREAM_STUDIO_HOME", None)
     env["DREAM_STUDIO_DB_PATH"] = str(state_dir / "studio.db")
     env["GITHUB_ACTIONS"] = env.get("GITHUB_ACTIONS", "true")
     env["HOME"] = str(isolated_home)
@@ -54,7 +69,7 @@ def _isolated_test_env() -> dict[str, str]:
 
 
 def run_check(name: str, cmd: list[str]) -> dict:
-    env = _isolated_test_env() if name == "test" else None
+    env = _isolated_test_env() if name == "test" else _isolated_check_env()
     try:
         result = subprocess.run(
             cmd,

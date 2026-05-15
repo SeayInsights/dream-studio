@@ -1,0 +1,70 @@
+{
+  "schema": "dream_studio.company_internal_pilot_packet.v1",
+  "status": "pilot_packet_ready",
+  "recommended_pilot_mode": "analytics_only_observe",
+  "demo_path": "docs/demo/sanitized/README.md",
+  "public_materials_use_sanitized_packet": true,
+  "live_dashboard_private_only_without_separate_sanitization": true,
+  "requires_push": false,
+  "requires_deploy": false,
+  "requires_cloud_hosting": false,
+  "requires_docker": false,
+  "requires_external_project_mutation": false,
+  "requires_secret_access": false,
+  "requires_ai_provider_api_keys": false,
+  "enabled_modules": [
+    "core",
+    "analytics_only",
+    "dashboard_only",
+    "security_only",
+    "telemetry_only",
+    "adapter_router_only",
+    "shared_intelligence_only"
+  ],
+  "optional_modules": [
+    "token_only"
+  ],
+  "disabled_by_default": [
+    "full_local_dogfood",
+    "docker_profiles",
+    "external_project_mutation",
+    "cleanup_delete_archive_dedup_compaction",
+    "push_tag_merge_deploy",
+    "secret_sensitive_access",
+    "career_ops",
+    "browser_automation"
+  ],
+  "forbidden_data_classes": [
+    "private_work_orders",
+    "handoffs",
+    "raw_local_evidence",
+    "raw_telemetry",
+    "operator_decisions",
+    "career_data",
+    "application_data",
+    "compensation_strategy",
+    "private_external_project_details",
+    "sensitive_project_details",
+    "secrets_credentials_tokens_keys_auth_files",
+    "live_local_runtime_paths",
+    "backup_or_rollback_internals",
+    "unsanitized_security_findings"
+  ],
+  "success_metrics": [
+    "setup_clarity",
+    "privacy_confidence",
+    "analytics_only_independence",
+    "evidence_clarity",
+    "security_readiness_usefulness",
+    "adapter_boundary_clarity",
+    "decision_usefulness",
+    "no_go_boundary_adherence"
+  ],
+  "artifacts": [
+    "README.md",
+    "executive-summary.md",
+    "technical-appendix.md",
+    "feedback-template.md",
+    "validation-manifest.json"
+  ]
+}

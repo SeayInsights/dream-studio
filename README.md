@@ -96,8 +96,8 @@ The current release gate expects:
 
 - clean repo status;
 - local CI parity validation as the heavy gate;
-- CI test checks must use isolated Dream Studio runtime state instead of writing
-  the operator-local SQLite authority;
+- release-gate subprocesses must use isolated Dream Studio runtime state instead
+  of writing the operator-local SQLite authority;
 - Contract Atlas documentation drift validation;
 - Contract Atlas lifecycle and sanitized export validation;
 - required GitHub PR smoke checks passing when Actions are available;
