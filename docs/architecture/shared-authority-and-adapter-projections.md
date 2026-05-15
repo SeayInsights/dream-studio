@@ -117,6 +117,14 @@ with `--execute`. It imports into SQLite authority tables and keeps hooks,
 agents, workflows, Claude, Codex, Docker, repo mutation, and cleanup optional or
 out of scope.
 
+PRD lifecycle access is read-only by default for adapters. Context packets and
+`/api/shared-intelligence/prd-authority` expose current PRD version, milestone,
+active Work Order, assumptions, known unknowns, relevant change orders,
+security/readiness constraints, evidence refs, allowed scope, validation
+expectations, and stop gates. They exclude unrelated project history, full
+private operational history, career data, secrets, and raw local evidence
+unless explicitly scoped.
+
 Expert workflow access is read-only by default. Adapters may read
 `/api/shared-intelligence/expert-workflows` or a context packet summary to
 understand the intentional implementation, code quality, debugging,

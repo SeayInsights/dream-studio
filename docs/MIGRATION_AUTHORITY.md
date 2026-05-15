@@ -122,3 +122,13 @@ runs, privacy/redaction exports, local watch declarations, sanitized team
 rollups, installer/distribution checks, and demo/case-study packets. It does
 not authorize cleanup, external mutation, Docker execution, live SQLite writes,
 push/deploy actions, secret access, or public publication.
+
+Migration `047_prd_lifecycle_authority.sql` is additive. It creates project
+intake, intake question, assumption, PRD version, milestone, Work Order
+authority, change-order, amendment, and route-reconciliation tables. It does
+not delete or rewrite legacy `prd_documents`; that table remains a
+compatibility list surface while `prd_version_records` and related lifecycle
+tables carry current continuation authority. It does not authorize writing PRD
+files into external repositories, overwriting PRDs without version lineage,
+skipping change orders for material scope changes, or mutating live SQLite
+outside the normal approved migration boundary.

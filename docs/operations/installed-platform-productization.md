@@ -326,3 +326,9 @@ registry/context previews, and GitHub repo intake summaries. These are
 read-only platform surfaces unless a separate approved command records
 authority. They do not execute agents, publish private career data, mutate
 external repositories, or approve third-party code/dependency adoption.
+
+Installed shared-intelligence profiles also expose PRD lifecycle context.
+Project intake, current PRD version, milestones, Work Orders, change orders,
+and route reconciliation remain SQLite authority; productized installs surface
+them through Project Details and context packets without requiring users to open
+the source repo.

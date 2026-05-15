@@ -135,6 +135,12 @@ GitHub repo intake configuration is an evaluation workflow, not an adoption
 approval. It may record evidence-backed decisions, but it does not fetch,
 copy, fork, vendor, add dependencies, mutate external repositories, or waive
 license/security/legal review boundaries.
+
+PRD lifecycle configuration is not adapter-local memory. Intake mode,
+assumptions, current PRD version, milestone sequence, Work Order authority,
+change orders, and route reconciliation are stored in SQLite authority and may
+be projected into context packets. Adapter configs must not maintain a
+competing PRD copy.
 ## Platform Hardening Refresh
 
 The independent configuration model now includes platform-hardening configuration surfaces for policy decisions, connector definitions, opt-in local watchers, installer checks, sanitized rollups, and demo packets. Defaults are dry-run or disabled unless an operator-approved profile enables writes, scheduling, or export generation.

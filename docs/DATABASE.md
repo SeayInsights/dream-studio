@@ -96,6 +96,32 @@ privacy/export checks, opt-in watchers, sanitized team rollups,
 installer/distribution checks, and demo/case-study packets queryable without
 promoting local files to authority.
 
+PRD lifecycle authority lives in migration
+`047_prd_lifecycle_authority.sql` and covers:
+
+- `project_intake_records` and `project_intake_questions` for adaptive
+  new-project and import-existing-project intake;
+- `project_assumption_records` for explicit assumptions and operator
+  confirmation state;
+- `prd_version_records` for PRD lifecycle state, confidence, version lineage,
+  source refs, evidence refs, known unknowns, and current-version selection;
+- `project_milestone_records` for ordered milestone authority, stage gates,
+  validation expectations, security/readiness checks, evidence requirements,
+  and adapter context requirements;
+- `project_work_order_authority_records` for Work Order purpose, scope,
+  approved surfaces, stop gates, verdict taxonomy, route expectations, and
+  rollback strategy;
+- `project_change_order_records` and `prd_amendment_records` for material and
+  lightweight PRD changes without silently overwriting current authority;
+- `prd_route_reconciliation_records` for planned-vs-actual milestone, release,
+  or project closeout reconciliation.
+
+`prd_documents` remains a compatibility/list surface. It is not sufficient as
+the only PRD authority for in-flight continuation because it lacks change-order
+lineage, milestone impact, route reconciliation, and adapter context-scoping
+fields. PRD files, when generated, are exports and must not become a competing
+source of truth.
+
 Legacy install upgrades do not add legacy tables to the current schema. The
 upgrade flow creates a fresh current SQLite database through the normal
 migration runner, then imports only compatible rows into tables that already

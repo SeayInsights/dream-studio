@@ -158,6 +158,8 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
             "--changed-file",
             "docs/operations/task-attribution-and-outcomes.md",
             "--changed-file",
+            "docs/operations/prd-authority-lifecycle.md",
+            "--changed-file",
             "docs/DATABASE.md",
             "--changed-file",
             "docs/MIGRATION_AUTHORITY.md",
