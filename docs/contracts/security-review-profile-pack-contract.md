@@ -327,6 +327,14 @@ provider credential handling, and release-readiness evidence. Cost unknowns are
 not security findings by themselves; fake cost precision or credential
 inspection would be review findings.
 
+## Task Attribution Review Profile
+
+Task attribution changes use the same profile pack. Applicable checks include
+evidence integrity, source classification, logging redaction, security/readiness
+impact linkage, and no fake model/provider, file, command, validation, outcome,
+token, or cost precision. Imported or untracked adapter work must remain
+classified as such until high-confidence Dream Studio authority exists.
+
 ## Career, Capability, Agent, And GitHub Intake Review Profile
 
 Career Ops changes must include privacy, publication-boundary, local-storage,

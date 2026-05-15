@@ -36,11 +36,13 @@ Capability Center summarizes skills, workflows, agents, controls, evaluations,
 and hardening candidates from SQLite authority and repo-backed contracts. It is
 a dashboard surface, not a source of truth. It reads invocation records,
 hardening candidates, expert workflow declarations, scoped-agent declarations,
-and readiness controls.
+readiness controls, and task-attributed skill/workflow outcomes.
 
 If invocation or evaluation evidence is missing, Capability Center shows an
-honest unavailable state instead of inventing success rates or scores. The
-dashboard route is `/api/shared-intelligence/capability-center`.
+honest unavailable state instead of inventing success rates or scores. If task
+attribution is missing, outcome counts remain unavailable rather than being
+inferred from adapter memory or reports. The dashboard route is
+`/api/shared-intelligence/capability-center`.
 
 ## Scoped Agents
 

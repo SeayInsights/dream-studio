@@ -125,6 +125,16 @@ overlap matrix exists, existing skills are mapped instead of duplicated,
 scoring remains evidence-backed, and private career automation boundaries are
 preserved.
 
+Task attribution changes are release-gate relevant. If code changes affect
+`task_attribution_records`, `core.shared_intelligence.task_attribution`,
+adapter usage outcome rollups, Project Details recent work, Work Order
+attribution drilldowns, or Capability Center outcome counts, the same change
+set must refresh database/migration docs, Contract Atlas, dashboard mapping,
+and the task attribution operations doc. Tests should prove unknown
+model/provider values remain explicit, unavailable files/commands are not
+invented, outcomes and rework are visible, and no fake token or cost precision
+is introduced.
+
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.

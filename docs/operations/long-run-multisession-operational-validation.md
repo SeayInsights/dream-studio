@@ -23,6 +23,8 @@ The closeout model requires evidence for:
 - GitHub repo intake workflow check
 - adapter/router status check
 - analytics-only profile check
+- task attribution outcome check for a completed Work Order or recent project
+  task when such evidence exists
 
 Each cycle must include evidence refs and pass/fail status. Missing evidence is
 a failure, not a silent pass.
@@ -40,6 +42,8 @@ The validation report blocks when it sees:
 - scoped agents receiving full conversation history, secrets, all Work Orders,
   all memories, or unrelated private data by default
 - GitHub repo intake skipping license/security/overlap review before adoption
+- task attribution inventing model/provider, file, command, token, cost,
+  validation, outcome, or rework precision that was not recorded
 - old path references returning
 - synthetic/mock/test data leaking into live dashboard views
 - adapter staleness drift

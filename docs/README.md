@@ -99,6 +99,12 @@ unknown/custom adapters are represented through SQLite-backed accounting
 profiles and surfaced through the adapter router, Contract Atlas, dashboard
 read models, and token/model analytics.
 
+Task attribution extends this by showing which AI/adapter did meaningful work,
+which skills/workflows were used, what files and commands were recorded, what
+validation ran, what outcome occurred, whether rework was needed, and what
+security/readiness impact resulted. See
+[AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md).
+
 ## Operations
 
 - [Local Runtime](operations/local-runtime.md)
@@ -122,6 +128,7 @@ read models, and token/model analytics.
 - [Expert Workflow Systems](operations/expert-workflow-systems.md)
 - [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md)
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
+- [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
 
 ## Publication Rule
 

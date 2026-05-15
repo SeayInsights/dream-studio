@@ -150,6 +150,15 @@ Only token-metered/API-metered/credit-metered usage with source-backed cost
 metadata, or an explicit subscription allocation profile, should display a
 reportable cost. Otherwise the dashboard should say `unknown`.
 
+## Task Attribution Looks Incomplete
+
+This can be correct when work was imported, untracked, or not routed through
+Dream Studio. Check `/api/shared-intelligence/task-attribution` or the Project
+Details `recent_attributed_work` section. Unknown model/provider values,
+unavailable files or commands, uncertain validation, and
+`manual_review_required` outcomes should remain visible instead of being
+filled with guesses.
+
 ## Career Ops Is Disabled
 
 This is expected unless the operator explicitly enables the private module.

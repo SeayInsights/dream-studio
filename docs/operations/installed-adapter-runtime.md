@@ -193,6 +193,13 @@ cost. Unknown or plan-based costs remain unknown unless provider metadata,
 provider exports, billing API data, or explicit allocation metadata makes cost
 reportable.
 
+Task attribution is available to installed shared-intelligence, dashboard, and
+adapter-router profiles through read-only SQLite-backed routes. It reports
+adapter, skill/workflow, file, command, validation, outcome, rework, and
+security/readiness impact facts when recorded, while preserving `unknown` or
+`unavailable` values for unobserved model/provider, file, command, token, or
+cost details.
+
 `career_ops_only` is private and opt-in. It exposes private Career Ops status
 and dashboard routes without requiring hooks, agents, workflows, Claude, Codex,
 or Docker. Career data stays in local SQLite authority and is excluded from

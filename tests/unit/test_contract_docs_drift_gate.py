@@ -162,4 +162,7 @@ def test_contract_docs_drift_cli_accepts_reviewed_no_change() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)
     assert payload["status"] == "pass"
-    assert payload["domains"][2]["freshness_status"] == "docs_reviewed_no_change_needed"
+    sqlite_domain = next(
+        domain for domain in payload["domains"] if domain["domain_id"] == "sqlite_schema_authority"
+    )
+    assert sqlite_domain["freshness_status"] == "docs_reviewed_no_change_needed"

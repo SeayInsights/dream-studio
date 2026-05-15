@@ -104,6 +104,40 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "adapter_configs_are_projection_docs_only",
     },
     {
+        "domain_id": "task_attribution_outcomes",
+        "domain_name": "AI Adapter Task Attribution And Outcomes",
+        "source_patterns": [
+            "core/shared_intelligence/task_attribution.py",
+            "core/shared_intelligence/usage_accounting.py",
+            "core/shared_intelligence/capability_center.py",
+            "core/event_store/migrations/045_task_attribution_authority.sql",
+            "projections/api/routes/project_intelligence.py",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/task-attribution-and-outcomes.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "docs_refs": [
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            "docs/architecture/shared-authority-and-adapter-projections.md",
+            PRD_DOC,
+            "docs/README.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/task-attribution-and-outcomes.md",
+            "docs/DATABASE.md",
+            "docs/MIGRATION_AUTHORITY.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "attribution_schema_or_read_model_changes_require_dashboard_and_database_docs_refresh",
+        "public_export_boundary": "attribution_examples_synthetic_live_evidence_private",
+    },
+    {
         "domain_id": "sqlite_schema_authority",
         "domain_name": "SQLite Schema And Authority",
         "source_patterns": [

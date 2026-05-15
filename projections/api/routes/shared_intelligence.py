@@ -49,6 +49,10 @@ from core.shared_intelligence.model_registry import (
     model_provider_registry_summary,
 )
 from core.shared_intelligence.scoped_agents import scoped_agent_registry, scoped_context_packet
+from core.shared_intelligence.task_attribution import (
+    task_attribution_summary,
+    work_order_task_attribution,
+)
 from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 
 router = APIRouter()
@@ -125,6 +129,16 @@ async def get_shared_intelligence_status(
                         "ai_adapter_accounting_profiles",
                         "ai_usage_operational_records",
                         "token_usage_records",
+                    ],
+                },
+                {
+                    "surface_id": "task-attribution",
+                    "api_path": "/api/shared-intelligence/task-attribution",
+                    "source_tables": [
+                        "task_attribution_records",
+                        "ai_usage_operational_records",
+                        "adapter_result_records",
+                        "validation_results",
                     ],
                 },
                 {
@@ -240,6 +254,7 @@ async def get_shared_intelligence_status(
                 "ai_adapter_accounting_profiles",
                 "ai_usage_operational_records",
                 "token_usage_records",
+                "task_attribution_records",
                 "career_profiles",
                 "career_applications",
                 "career_scorecards",
@@ -550,6 +565,38 @@ async def get_ai_usage_accounting(
 
     return _with_connection(
         lambda conn: adapter_usage_accounting_summary(conn, project_id=project_id)
+    )
+
+
+@router.get("/task-attribution")
+async def get_task_attribution(
+    project_id: str | None = Query(default=None),
+    work_order_id: str | None = Query(default=None),
+    adapter_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    """Return AI/adapter task attribution and execution outcome drilldowns."""
+
+    return _with_connection(
+        lambda conn: task_attribution_summary(
+            conn,
+            project_id=project_id,
+            work_order_id=work_order_id,
+            adapter_id=adapter_id,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/task-attribution/work-orders/{work_order_id}")
+async def get_work_order_task_attribution(
+    work_order_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    """Return Work Order-specific adapter/skill/workflow attribution."""
+
+    return _with_connection(
+        lambda conn: work_order_task_attribution(conn, work_order_id, limit=limit)
     )
 
 

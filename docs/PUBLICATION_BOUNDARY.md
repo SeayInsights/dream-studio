@@ -23,6 +23,9 @@ Keep these out of Git unless separately sanitized and approved:
 - SQLite DB files, WAL/SHM files, dumps, and backups;
 - local Work Orders, handoffs, continuation packets, approval artifacts, and operator decisions;
 - raw telemetry, raw logs, hook traces, dashboard runtime logs, and token traces;
+- unsanitized task attribution evidence, including private file paths,
+  commands, Work Order context, validation output, adapter traces, or
+  security/readiness impact details that expose private operational history;
 - cutover, cleanup, rollback, dogfood, release, and local audit evidence;
 - generated prompts and private context packets;
 - private career profiles, resumes, cover letters, role strategies,
@@ -77,6 +80,11 @@ operator approval and redaction.
 GitHub repo intake may be documented as a workflow, but actual evaluation
 evidence remains private until license, attribution, security, and publication
 boundaries are satisfied.
+
+Task attribution may be documented as a product capability, but live operator
+records are private by default. Public examples must be synthetic or sanitized
+and must not expose private Work Orders, file paths, command output, raw
+validation evidence, security findings, or external-project details.
 
 ## Contract Atlas Export Rule
 

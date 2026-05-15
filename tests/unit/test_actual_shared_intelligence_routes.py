@@ -375,6 +375,7 @@ def test_actual_app_shared_intelligence_status_is_non_authoritative(
         "capability-routes",
         "model-providers",
         "contract-atlas",
+        "task-attribution",
         "expert-workflows",
         "maturity-ledger",
         "contract-docs-drift",
