@@ -144,6 +144,7 @@ Installed profiles are declared in `core.module_profiles`:
 - `core`
 - `analytics_only`
 - `security_only`
+- `token_only`
 - `telemetry_only`
 - `dashboard_only`
 - `adapter_router_only`
@@ -154,9 +155,24 @@ Each profile declares includes, excludes, dependencies, commands/routes, hook
 requirements, agent/workflow requirements, Claude/Codex requirements, Docker
 requirements, expected dashboard/API behavior, and honest empty states.
 
+Module boundaries are separately declared in `core.module_contracts` for:
+`core`, `telemetry`, `dashboard`, `security_only`, `token_only`,
+`analytics_only`, `shared_intelligence`, `adapter_router`,
+`adapter_projection`, `external_project`, `docker_optional`, and `full`.
+Each contract declares purpose, owned authority, read/write dependencies,
+events, API routes, dashboard surfaces, CLI commands, profile membership,
+disabled-module behavior, empty-state behavior, security/readiness impact,
+Contract Atlas maturity, and validation tests.
+The direct read-only API surface is `/api/shared-intelligence/module-contracts`.
+
 `analytics_only` must work without hooks, agents, workflows, Claude, Codex, repo
 mutation, or Docker. It exposes read-only telemetry/shared-intelligence surfaces
 and uses honest empty states when no facts exist.
+
+`token_only` reports token and AI usage telemetry without inventing per-run
+cost. Unknown or plan-based costs remain unknown unless provider metadata,
+provider exports, billing API data, or explicit allocation metadata makes cost
+reportable.
 
 Analytics-only also exposes explicit normalized ingestion through:
 

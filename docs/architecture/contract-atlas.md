@@ -71,11 +71,12 @@ be used operationally. This prevents Dream Studio from claiming live Claude,
 Codex, Docker, external-project, or release behavior that is only designed or
 tested in isolation.
 
-The installed runtime model and module profiles are now first-class atlas
-sections. They declare the source/state split, global command surface,
-adapter-router read model, and per-profile dependency expectations so installed
-Dream Studio behavior is visible without making the atlas an installer,
-mutator, or live-state authority.
+The installed runtime model, module profiles, and major module contracts are
+now first-class atlas sections. They declare the source/state split, global
+command surface, adapter-router read model, per-profile dependency
+expectations, and explicit module boundaries so installed Dream Studio behavior
+is visible without making the atlas an installer, mutator, or live-state
+authority.
 
 Installed platform productization is tracked through the installed adapter
 runtime and global router contracts. The atlas treats `ds.cmd`, `ds.ps1`, and
@@ -128,6 +129,20 @@ declares the standalone `analytics_only` profile, the dry-run-by-default
 status route, and the current SQLite authority tables it can import into when
 explicitly executed. Hooks, agents, workflows, Claude, Codex, Docker, repo
 mutation, and cleanup are not required for analytics-only operation.
+
+`core.module_contracts` is the source-level registry for major module
+boundaries: `core`, `telemetry`, `dashboard`, `security_only`, `token_only`,
+`analytics_only`, `shared_intelligence`, `adapter_router`,
+`adapter_projection`, `external_project`, `docker_optional`, and `full`. The
+atlas exposes those contracts separately from lower-level telemetry dashboard
+module declarations so product/runtime boundaries are not confused with
+individual dashboard cards. `token_only` preserves unknown or plan-based costs
+as unknown, `dashboard_only` shows unavailable optional data honestly,
+`shared_intelligence` and `adapter_router` work without live Claude/Codex
+execution, and Docker remains optional non-authoritative infrastructure.
+The same contract payload is available directly at
+`/api/shared-intelligence/module-contracts` for dashboard/API consumers that do
+not need the full atlas.
 
 ## Drift Gate
 

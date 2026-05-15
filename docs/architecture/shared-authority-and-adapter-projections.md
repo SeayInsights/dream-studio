@@ -70,6 +70,12 @@ Production readiness access follows the same model. Adapters may read
 readiness posture, but persisted readiness authority remains in Dream Studio
 SQLite records and evidence refs.
 
+Module contract access is read-only. Adapters and dashboard tools may read
+`/api/shared-intelligence/module-contracts` or the Contract Atlas section to
+understand which modules own authority, which dependencies are optional, and how
+disabled modules should behave. Those contracts do not authorize adapter
+execution, repo mutation, Docker execution, or live SQLite writes.
+
 AI usage accounting follows the same projection rule. Adapter-local files and
 private model memory do not own billing mode, token visibility, cost visibility,
 usage source, cost source, confidence, or operational outcome data. Those

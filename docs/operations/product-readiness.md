@@ -82,6 +82,13 @@ the adapter accounting record marks it as exact, provider-reported, explicitly
 estimated, or allocated subscription cost with supporting source/evidence refs.
 Unknown cost should remain `unknown`, not zero.
 
+Module contract maturity is part of readiness evidence. `core.module_contracts`
+declares which modules own authority, which dependencies are optional, what
+disabled-module and empty-state behavior should look like, and which validation
+tests enforce each boundary. The read-only module-contracts API and Contract
+Atlas section can inform readiness, but they do not execute checks or authorize
+state mutation.
+
 ## Project Portfolio Readiness Surface
 
 All Projects and Project Details are the normal operator surfaces for project

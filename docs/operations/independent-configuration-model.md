@@ -18,6 +18,7 @@ boundary.
 | Local DB path | `core.config.database` | runtime, tests, dashboard | repo plus local env | Required for default changes |
 | Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
 | Installed platform productization | `core.installed_productization` | `ds install`, `ds acceptance`, backup/restore/update/uninstall checks | repo code plus explicit runtime home | Required for install/update behavior changes |
+| Module contracts | `core.module_contracts` | Contract Atlas, profile validation, docs drift, release gate tests | repo source | Required for module boundary changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
@@ -45,9 +46,15 @@ become core authority without a separate approved Work Order.
 
 Installed module profiles are declared in `core.module_profiles`. The
 `analytics_only` profile is intentionally independent of hooks, agents,
-workflows, Claude, Codex, Docker, repo mutation, and cleanup. Optional modules
-must report honest empty states instead of silently requiring unavailable
-adapters or runtime services.
+workflows, Claude, Codex, Docker, repo mutation, and cleanup. `token_only`
+keeps token and AI usage telemetry independent from fabricated cost claims.
+Optional modules must report honest empty states instead of silently requiring
+unavailable adapters or runtime services.
+
+Major module contracts are declared in `core.module_contracts` and surfaced
+through Contract Atlas. They are boundary declarations, not runtime execution
+authority. A module contract may exist without becoming an installable profile,
+and an installable profile may include multiple module contracts.
 
 Analytics-only ingestion is explicit. Hooks, adapters, CI jobs, or manual
 exports may produce normalized payloads, but analytics-only does not require

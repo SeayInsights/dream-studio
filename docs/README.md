@@ -37,6 +37,20 @@ Analytics-only does not require hooks, agents, workflows, Claude, Codex, Docker,
 repo mutation, or full orchestration. Missing data should appear as honest empty
 states.
 
+## Module Contracts
+
+Dream Studio module boundaries are declared in `core.module_contracts` and
+surfaced through Contract Atlas. Contracts cover `core`, `telemetry`,
+`dashboard`, `security_only`, `token_only`, `analytics_only`,
+`shared_intelligence`, `adapter_router`, `adapter_projection`,
+`external_project`, `docker_optional`, and `full`.
+
+Each contract names owned authority, read/write dependencies, routes, dashboard
+surfaces, commands, disabled-module behavior, empty states, profile membership,
+security/readiness impact, maturity level, and validation tests. `token_only`
+keeps cost unknown unless cost evidence exists, and Docker remains optional
+non-authoritative infrastructure.
+
 ## AI Usage Accounting
 
 Dream Studio records AI adapter usage as operational telemetry. Tokens are not

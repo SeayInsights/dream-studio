@@ -49,7 +49,16 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "adapter_projection",
         "runtime_profiles",
     }
-    assert {module["module_id"] for module in atlas["module_contracts"]} >= {
+    assert atlas["module_contracts"]["schema"] == "dream_studio.module_contracts.v1"
+    assert {module["module_id"] for module in atlas["module_contracts"]["contracts"]} >= {
+        "core",
+        "analytics_only",
+        "security_only",
+        "token_only",
+        "adapter_router",
+        "docker_optional",
+    }
+    assert {module["module_id"] for module in atlas["telemetry_module_contracts"]} >= {
         "security_analytics",
         "token_analytics",
         "route_milestone_analytics",
@@ -77,7 +86,7 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["installed_runtime_model"]["productization_surface"]["installer"].startswith(
         "ds install"
     )
-    assert atlas["installed_module_profiles"]["profile_count"] == 8
+    assert atlas["installed_module_profiles"]["profile_count"] == 9
     assert atlas["boundary_violation_report"]["status"] == "pass"
     assert any(
         item["area"] == "current_maturity_ledger" and item["status"] == "validated"
@@ -96,6 +105,10 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert any(
         item["area"] == "analytics_only_ingestion"
         and item["write_authorization"] == "explicit_ingestion_execute_only"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "module_boundary_contracts" and item["status"] == "validated"
         for item in atlas["maturity_scorecard"]
     )
     assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
@@ -151,6 +164,12 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     assert any(
         edge["source"] == "module:analytics_only_ingestion"
         and edge["target"] == "table:reg_projects"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "system:dream-studio"
+        and edge["target"] == "module:token_only"
+        and edge["relation"] == "declares_module_contract"
         for edge in graph["edges"]
     )
 
