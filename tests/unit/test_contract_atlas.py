@@ -67,6 +67,9 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "production_readiness_workflow"
     )
     assert atlas["installed_runtime_model"]["source_state_separation"] is True
+    assert atlas["installed_runtime_model"]["productization_surface"]["installer"].startswith(
+        "ds install"
+    )
     assert atlas["installed_module_profiles"]["profile_count"] == 8
     assert atlas["boundary_violation_report"]["status"] == "pass"
     assert any(

@@ -77,6 +77,14 @@ adapter-router read model, and per-profile dependency expectations so installed
 Dream Studio behavior is visible without making the atlas an installer,
 mutator, or live-state authority.
 
+Installed platform productization is tracked through the installed adapter
+runtime domain. Installer, first-run setup, acceptance, backup, restore-check,
+update-check, uninstall-check, module profile selection, and troubleshooting
+docs must drift with changes to the installed runtime or global command
+surface, including repo-owned launchers such as `ds.ps1`. The atlas can
+describe and validate those contracts, but execution still belongs to the `ds`
+command surface and explicit operator-approved runtime flows.
+
 The security lifecycle gate is also a first-class atlas section. It maps the
 47 enterprise security controls to the security review catalog, security skill,
 project health, and release readiness while preserving the non-execution

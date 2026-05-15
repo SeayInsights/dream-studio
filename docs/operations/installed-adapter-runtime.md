@@ -34,6 +34,7 @@ The installed command surface is `ds`:
 
 ```text
 ds status
+ds install
 ds dashboard
 ds validate
 ds contract-atlas
@@ -41,12 +42,24 @@ ds adapters
 ds context-packet --adapter codex
 ds modules
 ds router
+ds acceptance
+ds backup
+ds restore-check
+ds update-check
+ds uninstall-check
 ```
 
 When running directly from a checkout before packaging, use:
 
 ```powershell
 python C:\path\to\dream-studio\interfaces\cli\ds.py --source-root C:\path\to\dream-studio status
+```
+
+On Windows, `ds.ps1` is the repo-owned launcher for the same global command
+surface:
+
+```powershell
+C:\path\to\dream-studio\ds.ps1 --home C:\temp\dream-studio status
 ```
 
 The command surface resolves source/state from explicit configuration, opens
@@ -134,6 +147,17 @@ This creates temp state, bootstraps SQLite, writes rehearsal runtime config,
 creates adapter/router/context packet directories, registers default adapter
 profiles, and previews a context packet. It does not mutate live installed
 state.
+
+The productized first-run path also supports selected module profiles:
+
+```powershell
+python interfaces\cli\ds.py --source-root C:\path\to\dream-studio --home C:\temp\dream-studio-home install --rehearsal --profile analytics_only
+```
+
+Use `ds acceptance` against a temporary home to validate fresh setup,
+selected/unselected module behavior, dashboard status, adapter status,
+analytics-only independence, security-only independence, full profile behavior,
+backup/restore/update checks, and uninstall dry-run behavior.
 
 ## Live Update Readiness
 

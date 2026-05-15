@@ -26,6 +26,14 @@ from core.installed_runtime import (  # noqa: E402
     installed_runtime_model,
     resolve_installed_runtime_paths,
 )
+from core.installed_productization import (  # noqa: E402
+    backup_runtime,
+    first_run_setup,
+    productization_acceptance_report,
+    restore_runtime_check,
+    uninstall_runtime_check,
+    update_runtime_check,
+)
 from core.module_profiles import module_profiles, validate_module_profiles  # noqa: E402
 from core.shared_intelligence.contract_atlas import build_contract_atlas  # noqa: E402
 from core.shared_intelligence.context_packets import generate_shared_context_packet  # noqa: E402
@@ -49,6 +57,25 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("adapters", help="Show adapter status")
     subcommands.add_parser("modules", help="Show module profile status")
     subcommands.add_parser("router", help="Show adapter router status")
+
+    install = subcommands.add_parser("install", help="Run first-run setup for selected profiles")
+    install.add_argument("--profile", action="append", dest="profiles", default=[])
+    install.add_argument("--rehearsal", action="store_true", default=False)
+
+    acceptance = subcommands.add_parser(
+        "acceptance", help="Run installed platform acceptance against a rehearsal home"
+    )
+    acceptance.add_argument("--profile", action="append", dest="profiles", default=[])
+
+    backup = subcommands.add_parser("backup", help="Plan or create a runtime backup")
+    backup.add_argument("--backup-dir", default=None)
+    backup.add_argument("--execute", action="store_true", default=False)
+
+    restore = subcommands.add_parser("restore-check", help="Validate a backup without restoring it")
+    restore.add_argument("--backup-path", required=True)
+
+    subcommands.add_parser("update-check", help="Check update readiness without mutation")
+    subcommands.add_parser("uninstall-check", help="Inventory uninstall targets without deleting")
 
     packet = subcommands.add_parser("context-packet", help="Preview a context packet")
     packet.add_argument("--adapter", default="codex")
@@ -110,6 +137,55 @@ def main(argv: list[str] | None = None) -> int:
                 bootstrap_rehearsal_runtime(
                     source_root=source_root,
                     dream_studio_home=args.rehearsal_home,
+                )
+            )
+        if args.command == "install":
+            profiles = args.profiles or None
+            return _print(
+                first_run_setup(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    profiles=profiles,
+                    rehearsal=bool(args.rehearsal),
+                )
+            )
+        if args.command == "acceptance":
+            return _print(
+                productization_acceptance_report(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    profiles=args.profiles or ["core", "analytics_only", "security_only", "full"],
+                )
+            )
+        if args.command == "backup":
+            return _print(
+                backup_runtime(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    backup_dir=args.backup_dir,
+                    execute=args.execute,
+                )
+            )
+        if args.command == "restore-check":
+            return _print(
+                restore_runtime_check(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    backup_path=args.backup_path,
+                )
+            )
+        if args.command == "update-check":
+            return _print(
+                update_runtime_check(
+                    source_root=source_root,
+                    dream_studio_home=home,
+                )
+            )
+        if args.command == "uninstall-check":
+            return _print(
+                uninstall_runtime_check(
+                    source_root=source_root,
+                    dream_studio_home=home,
                 )
             )
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
@@ -178,6 +254,13 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
 def _print(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def _require_home_for_install(command: str) -> Path:
+    raise RuntimeError(
+        f"{command} requires --home for this productization flow unless a live install scope "
+        "has been explicitly approved."
+    )
 
 
 if __name__ == "__main__":
