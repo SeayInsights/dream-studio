@@ -114,6 +114,11 @@ privacy/redaction, opt-in local watchers, sanitized team rollups,
 installer/distribution checks, and demo/case-study packets. See
 [Platform Hardening Sequence](operations/platform-hardening-sequence.md).
 
+The sanitized public demo packet lives at
+[Sanitized Demo Readiness Packet](demo/sanitized/README.md). It contains the
+5-minute script, 15-minute technical walkthrough, fallback plan, validation
+manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
+
 ## Operations
 
 - [Local Runtime](operations/local-runtime.md)
@@ -139,6 +144,7 @@ installer/distribution checks, and demo/case-study packets. See
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
 - [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
 - [Platform Hardening Sequence](operations/platform-hardening-sequence.md)
+- [Sanitized Demo Readiness Packet](demo/sanitized/README.md)
 
 ## Publication Rule
 
