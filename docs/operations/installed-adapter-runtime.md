@@ -39,6 +39,7 @@ ds install-command
 ds dashboard
 ds validate
 ds contract-atlas
+ds contract-atlas-refresh --output-dir C:\path\to\private-or-public-export
 ds adapters
 ds context-packet --adapter codex
 ds modules

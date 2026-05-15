@@ -64,7 +64,8 @@ Symptom: dashboard routes are available but show no facts.
 This can be valid. Dream Studio uses honest empty states when selected modules
 are installed but no runtime facts, telemetry, or readiness records exist yet.
 Run `ds validate`, `ds modules`, and `ds contract-atlas` to confirm the runtime
-surface is available.
+surface is available. Run `ds contract-atlas-refresh` without `--execute` to
+preview sanitized export and docs/PRD/README freshness without writing files.
 
 ## Adapter Is Unsupported Or Unproven
 

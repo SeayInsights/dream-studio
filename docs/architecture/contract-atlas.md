@@ -18,8 +18,14 @@ Current implementation:
 - `core/shared_intelligence/contract_atlas.py` builds the atlas read model.
 - `core/shared_intelligence/contract_registry.py` defines the contract domains
   and changed-file-to-docs impact mapping.
+- `core/shared_intelligence/contract_atlas_lifecycle.py` builds the freshness
+  manifest that ties private atlas refresh, sanitized public export refresh,
+  maturity ledger validation, docs drift, PRD/README impact detection, and
+  leakage checks together.
 - `/api/shared-intelligence/contract-atlas` exposes the atlas for local
   dashboard and tooling consumption.
+- `/api/shared-intelligence/contract-atlas/freshness` exposes the lifecycle
+  freshness manifest without writing exports or SQLite rows.
 - If no `project_id` is supplied, the Contract Atlas defaults to the local
   Dream Studio project scope (`dream-studio`) so adapter projection staleness is
   compared against the same generated project-scoped files used by the active
@@ -27,6 +33,9 @@ Current implementation:
   inspection.
 - `interfaces/cli/contract_docs_drift_gate.py` blocks release closure when
   impacted contracts or docs are stale.
+- `interfaces/cli/contract_atlas_lifecycle_gate.py` validates the atlas
+  lifecycle, maturity ledger, docs/PRD/README impact detection, and sanitized
+  public-export leakage boundary in an isolated temp runtime.
 
 ## Registry Foundation
 
@@ -173,6 +182,28 @@ The gate distinguishes:
 The gate is intentionally scoped. It does not rewrite every doc blindly and it
 does not require PRD updates for implementation details that do not change
 product authority.
+
+## Lifecycle And Export Refresh
+
+Contract Atlas lifecycle management is generated from Dream Studio authority,
+not maintained by hand. `ds contract-atlas-refresh` plans or writes explicit
+exports to a caller-supplied directory. The command is dry-run by default,
+does not mutate SQLite, and writes only when `--execute` is supplied.
+
+The lifecycle manifest includes:
+
+- private/internal Contract Atlas refresh status;
+- public sanitized export refresh status;
+- maturity ledger validation;
+- docs, PRD, README, and publication-boundary impact detection;
+- public-export private-data leakage checks;
+- release-gate status for stale contracts, docs, and exports;
+- dashboard/API freshness status.
+
+Public exports must use `contract-atlas.public_sanitized.json` and may be
+shared only after the leakage check passes. Private/internal exports are for
+operator-local runtime or review directories only and are not repo-safe
+artifacts.
 
 ## Export Boundary
 

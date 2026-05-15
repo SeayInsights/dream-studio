@@ -78,6 +78,13 @@ security classification. A change to `security_only`, `analytics_only`,
 controls are applicable, but the module contract route remains read-only and
 does not execute scans, mutate repositories, run Docker, or write SQLite.
 
+Contract Atlas lifecycle freshness is a release-gate signal, not a security
+scan. The `/api/shared-intelligence/contract-atlas/freshness` route may appear
+beside the security lifecycle route in the shared-intelligence router; it does
+not inspect secrets, create findings, mutate SQLite, or change 47-control
+applicability. Security docs still drift with router changes to confirm the
+non-execution boundary.
+
 ## Project Portfolio Hydration
 
 All Projects and Project Details consume normalized security findings as a
