@@ -20,6 +20,11 @@ Current implementation:
   and changed-file-to-docs impact mapping.
 - `/api/shared-intelligence/contract-atlas` exposes the atlas for local
   dashboard and tooling consumption.
+- If no `project_id` is supplied, the Contract Atlas defaults to the local
+  Dream Studio project scope (`dream-studio`) so adapter projection staleness is
+  compared against the same generated project-scoped files used by the active
+  clean checkout. Callers can still pass an explicit `project_id` for scoped
+  inspection.
 - `interfaces/cli/contract_docs_drift_gate.py` blocks release closure when
   impacted contracts or docs are stale.
 
