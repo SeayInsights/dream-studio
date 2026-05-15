@@ -73,6 +73,7 @@ read models, and token/model analytics.
 - [Installed Platform Productization](operations/installed-platform-productization.md) -
   includes the Windows `ds.cmd` and `ds.ps1` launcher surfaces plus
   `ds install-command` for user-local plain-command setup.
+- [External Project Validation Pipeline](operations/external-project-validation-pipeline.md)
 - [Lightweight GitHub CI Strategy](operations/lightweight-github-ci-strategy.md)
 - [Repo Publication Privacy](operations/repo-publication-privacy.md)
 - [Troubleshooting](operations/troubleshooting.md)
@@ -80,6 +81,7 @@ read models, and token/model analytics.
 - [Windows Development Commands](operations/windows-dev-commands.md)
 - [Docker Clean Room](operations/docker-clean-room.md)
 - [Docker Module Profiles](operations/docker-module-profiles.md)
+- [Long-Run Multisession Operational Validation](operations/long-run-multisession-operational-validation.md)
 - [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
 
 ## Publication Rule

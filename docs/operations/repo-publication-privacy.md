@@ -37,6 +37,12 @@ telemetry, SQLite DBs, backups, private dogfood traces, cutover or rollback
 details, private external-project details, local absolute paths, secrets, or
 sensitive values.
 
+External project pipeline docs may publish the generic paused-by-default policy,
+but not target-specific intake evidence, dirty-state output, validation reports,
+or private route decisions. Docker profile docs may publish optional profile
+contracts, but not container runtime evidence, mounted paths, secrets, or local
+scanner output.
+
 ## History Boundary
 
 Current-tree cleanliness is not enough if Git history contains private runtime
@@ -48,3 +54,7 @@ publication requires explicit operator approval and release-policy alignment.
 Use `ds contract-atlas-refresh --output-dir docs\publication --execute` only for
 the public sanitized export. Do not use `--include-private` for repo-tracked
 exports.
+
+Final installed-platform closeout should remain private dogfood evidence until
+the operator explicitly chooses public release. The public repo can state that
+the closeout route exists and requires operator approval before publication.

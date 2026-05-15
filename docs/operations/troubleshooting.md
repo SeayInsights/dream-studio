@@ -82,6 +82,23 @@ This is expected. `analytics_only` intentionally works without hooks, agents,
 workflows, Claude, Codex, repo mutation, or Docker. If a command asks for those
 dependencies in analytics-only mode, treat it as a product boundary bug.
 
+## External Project Stays Paused
+
+This is expected unless the current operator decision explicitly selects a
+target and read-only scope. External targets such as DreamySuite, Bill Stack,
+and TORII should not be read, scanned, validated, mutated, committed, pushed, or
+deployed from stale route state. Use the external project validation pipeline to
+plan target selection, dirty-state classification, validation profile, and Work
+Order evidence before any target access.
+
+## Docker Profile Is Unavailable
+
+This is expected on local-first installs. Docker is optional and does not block
+core, analytics-only, security-only, dashboard-only, shared-intelligence-only,
+adapter-router-only, or full local operation. Do not start or build containers
+while troubleshooting unless a current operator decision approves Docker
+runtime validation.
+
 ## Analytics Import Shows No Data
 
 `ds analytics-ingest --file <payload>` is a dry run. Add `--execute` only when
@@ -115,3 +132,10 @@ token visibility, cost visibility, usage source, cost source, and confidence.
 Only token-metered/API-metered/credit-metered usage with source-backed cost
 metadata, or an explicit subscription allocation profile, should display a
 reportable cost. Otherwise the dashboard should say `unknown`.
+
+## Final Closeout Blocks
+
+Final installed-platform closeout requires release gate evidence, docs drift
+evidence, command-surface evidence, adapter status evidence, long-run cycle
+evidence, publication-boundary evidence, and a live SQLite hash guard. A missing
+evidence ref should remain a blocker instead of being normalized into a pass.

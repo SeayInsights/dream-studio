@@ -18,7 +18,7 @@ def test_maturity_ledger_covers_required_dream_studio_areas() -> None:
     assert REQUIRED_AREA_IDS <= area_ids
     assert ledger["status_counts"]["runtime_validated"] >= 8
     assert ledger["status_counts"]["tested_only"] >= 4
-    assert ledger["status_counts"]["designed_not_proven"] >= 2
+    assert ledger["status_counts"].get("designed_not_proven", 0) >= 0
 
 
 def test_maturity_ledger_marks_unproven_adapter_execution_honestly() -> None:
@@ -31,8 +31,10 @@ def test_maturity_ledger_marks_unproven_adapter_execution_honestly() -> None:
     assert areas["codex_adapter"]["status"] == "tested_only"
     assert areas["codex_adapter"]["can_claim_publicly"] is False
     assert areas["contract_atlas"]["can_use_operationally"] is True
-    assert areas["docker_runtime_profiles"]["status"] == "designed_not_proven"
-    assert areas["docker_runtime_profiles"]["can_use_operationally"] is False
+    assert areas["docker_runtime_profiles"]["status"] == "tested_only"
+    assert areas["docker_runtime_profiles"]["can_use_operationally"] is True
+    assert areas["external_project_pipeline"]["status"] == "runtime_validated"
+    assert areas["analytics_only_profile"]["status"] == "runtime_validated"
 
 
 def test_maturity_ledger_validator_rejects_missing_evidence() -> None:

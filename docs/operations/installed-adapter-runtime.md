@@ -87,6 +87,11 @@ Contract Atlas availability, module profile status, telemetry/evidence capture
 capabilities, and adapter workspace hygiene. It does not execute adapters,
 mutate routing policy, write adapter configs, or write live SQLite by default.
 
+The final productization closeout also treats the adapter router as one of the
+long-run validation cycles. Passing closeout requires adapter status evidence,
+context-packet fallback documentation, and no drift from the proven Claude/Codex
+baseline unless Dream Studio explicitly detects adapter staleness.
+
 ## Usage Accounting
 
 The adapter router also reports `usage_accounting`. This is a derived read
@@ -137,6 +142,11 @@ Current baseline:
 - MCP-capable clients: `router_contract_available`
 - shell tools: `supported_via_global_ds_command`
 - plain web/chat tools: `context_packet_only`
+
+External project and Docker profile status remain adjacent runtime surfaces,
+not adapter authority. External targets require current target selection before
+read-only intake, and Docker profiles require explicit operator approval before
+any container execution.
 
 ## Module Profiles
 

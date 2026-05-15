@@ -19,6 +19,7 @@ Claude Code, Codex, Cursor, Copilot, ChatGPT, MCP servers, shell tools, and loca
 - Human-in-the-loop gates for live state mutation, database migration, cleanup, deletion, archive execution, push, tag, deploy, and material risk decisions.
 - Adapter projections that can generate shared context packets and adapter-specific configuration without making any one AI tool the product identity.
 - A Contract Atlas, maturity ledger, sanitized export lifecycle, and docs drift gate that map source changes to impacted contracts, runtime profiles, module boundaries, evidence-backed maturity status, public docs freshness obligations, and public-export leakage checks.
+- Installed modular profiles, paused-by-default external project intake, optional Docker profile contracts, and long-run validation closeout that keep local-first operation usable without external mutation or container requirements.
 
 ## Current Public Architecture
 
@@ -78,6 +79,8 @@ Dashboard output is useful for attention and review, but it must not become rout
 - [Documentation Index](docs/README.md)
 - [Publication Boundary](docs/PUBLICATION_BOUNDARY.md)
 - [Repo Publication Privacy](docs/operations/repo-publication-privacy.md)
+- [Installed Platform Productization](docs/operations/installed-platform-productization.md)
+- [External Project Validation Pipeline](docs/operations/external-project-validation-pipeline.md)
 - [Changelog](CHANGELOG.md)
 
 ## Release Boundary
