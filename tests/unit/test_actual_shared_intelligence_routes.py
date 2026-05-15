@@ -138,6 +138,35 @@ def test_actual_app_exposes_capability_and_model_provider_surfaces(
     assert matrix.json()["matches"][0]["model_profile_id"] == "openai-gpt-route"
 
 
+def test_actual_app_exposes_security_lifecycle_gate_without_persisting(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client, db_path = _client_with_shared_db(tmp_path, monkeypatch)
+    before_findings = _count(db_path, "security_findings")
+
+    response = client.get(
+        "/api/shared-intelligence/security-lifecycle",
+        params={
+            "project_id": "dream-studio",
+            "lifecycle_event": "dependency_change",
+            "changed_files": "pyproject.toml",
+        },
+    )
+
+    after_findings = _count(db_path, "security_findings")
+    payload = response.json()
+    assert response.status_code == 200
+    assert before_findings == after_findings
+    assert payload["source_framework"]["source_control_count"] == 47
+    assert payload["full_review_required"] is True
+    assert payload["execution_authorized"] is False
+    assert payload["db_write_authorized"] is False
+    assert (
+        payload["finding_normalization_policy"]["synthetic_demo_findings_in_live_operator_views"]
+        is False
+    )
+
+
 def test_actual_app_exposes_contract_atlas_without_authorizing_execution(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -249,6 +278,11 @@ def test_actual_app_shared_intelligence_status_is_non_authoritative(
 
 def _seed_shared_intelligence(conn) -> None:
     register_default_adapter_authority_profiles(conn)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS security_findings("
+        "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, "
+        "file_path TEXT, start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
+    )
     record_learning_event(
         conn,
         learning_event_id="learn-route-runtime-1",

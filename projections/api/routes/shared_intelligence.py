@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
+from core.security.lifecycle import build_security_lifecycle_gate
 from core.shared_intelligence.adapter_config_projection import (
     adapter_config_projection_report,
 )
@@ -116,6 +117,11 @@ async def get_shared_intelligence_status(
                         "capability_route_records",
                     ],
                 },
+                {
+                    "surface_id": "security-lifecycle",
+                    "api_path": "/api/shared-intelligence/security-lifecycle",
+                    "source_tables": ["security_findings"],
+                },
             ],
             "source_tables": [
                 "learning_event_records",
@@ -143,6 +149,27 @@ async def get_adapter_router_status(
             conn,
             source_root=repo_root,
             project_id=project_id,
+        )
+    )
+
+
+@router.get("/security-lifecycle")
+async def get_security_lifecycle_status(
+    project_id: str | None = Query(default="dream-studio"),
+    lifecycle_event: str = Query(default="code_change"),
+    changed_files: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Preview the security-by-default lifecycle gate without executing scans."""
+
+    repo_root = Path(__file__).resolve().parents[3]
+    files = _split_query_list(changed_files)
+    return _with_connection(
+        lambda conn: build_security_lifecycle_gate(
+            conn=conn,
+            repo_root=repo_root,
+            project_id=project_id or "dream-studio",
+            lifecycle_event=lifecycle_event,
+            changed_files=files,
         )
     )
 

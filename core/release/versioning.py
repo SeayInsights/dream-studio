@@ -6,6 +6,8 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from core.security.lifecycle import build_security_lifecycle_gate
+
 SEMVER_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 
 
@@ -19,6 +21,7 @@ def build_release_readiness_packet(
     known_caveats: Sequence[str] = (),
     rollback_notes: Sequence[str] = (),
     distribution_decision: str = "local_dogfood",
+    security_lifecycle_status: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a release readiness packet without tagging, pushing, or deploying."""
 
@@ -46,6 +49,11 @@ def build_release_readiness_packet(
         "known_caveats": [str(item) for item in known_caveats],
         "rollback_notes": [str(item) for item in rollback_notes],
         "evidence_refs": [str(ref) for ref in evidence_refs],
+        "security_lifecycle_status": (
+            dict(security_lifecycle_status)
+            if security_lifecycle_status is not None
+            else build_security_lifecycle_gate(lifecycle_event="release_merge")
+        ),
         "approval_requirements": {
             "tag_requires_operator_approval": True,
             "push_requires_operator_approval": True,
@@ -74,6 +82,19 @@ def validate_release_readiness_packet(packet: Mapping[str, Any]) -> list[str]:
         issues.append("rollback_notes_required")
     if not packet.get("evidence_refs"):
         issues.append("evidence_refs_required")
+    security_lifecycle = packet.get("security_lifecycle_status")
+    if not isinstance(security_lifecycle, Mapping):
+        issues.append("security_lifecycle_status_required")
+    else:
+        status = security_lifecycle.get("security_status")
+        if status == "blocked_by_open_findings":
+            issues.append("security_lifecycle_open_findings_block_release")
+        elif status == "unknown_requires_review":
+            issues.append("security_lifecycle_unknown_controls_require_review")
+        elif status == "needs_manual_review":
+            issues.append("security_lifecycle_manual_review_required")
+        elif status != "ready":
+            issues.append("security_lifecycle_ready_status_required")
     return issues
 
 

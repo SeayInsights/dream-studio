@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 
 from ..websocket.connection_manager import ConnectionManager
 from core.config.database import get_connection
+from core.security.lifecycle import build_security_lifecycle_gate
 from projections.api.routes.sqlite_schema import object_exists, table_columns
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,12 @@ def _build_health_model(project: dict[str, Any]) -> dict[str, Any]:
         "route_blocker_count": _as_int(project.get("route_blocker_count")),
         "telemetry_event_count": _as_int(project.get("telemetry_event_count")),
         "dependency_count": _as_int(project.get("dependency_count")),
+        "security_lifecycle_manual_review_count": _as_int(
+            project.get("security_lifecycle_manual_review_count")
+        ),
+        "security_lifecycle_unknown_count": _as_int(
+            project.get("security_lifecycle_unknown_count")
+        ),
     }
     evidence_points = sum(
         1
@@ -123,6 +130,8 @@ def _build_health_model(project: dict[str, Any]) -> dict[str, Any]:
             signals["route_blocker_count"],
             signals["telemetry_event_count"],
             signals["dependency_count"],
+            signals["security_lifecycle_manual_review_count"],
+            signals["security_lifecycle_unknown_count"],
         )
         if value > 0
     )
@@ -164,6 +173,18 @@ def _build_health_model(project: dict[str, Any]) -> dict[str, Any]:
     if signals["dependency_count"] == 0:
         score -= 5
         penalties.append("no confirmed dependency evidence")
+    if signals["security_lifecycle_manual_review_count"]:
+        penalty = min(20, signals["security_lifecycle_manual_review_count"] * 4)
+        score -= penalty
+        penalties.append(
+            f"{signals['security_lifecycle_manual_review_count']} security lifecycle manual review control(s)"
+        )
+    if signals["security_lifecycle_unknown_count"]:
+        penalty = min(30, signals["security_lifecycle_unknown_count"] * 10)
+        score -= penalty
+        penalties.append(
+            f"{signals['security_lifecycle_unknown_count']} unknown security lifecycle control(s)"
+        )
 
     score = max(0, min(100, score))
     if score >= 85:
@@ -237,6 +258,18 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
         "derived_view": True,
         "primary_authority": False,
     }
+    security_lifecycle = build_security_lifecycle_gate(
+        lifecycle_event="project_health",
+        project_id=str(project.get("project_id") or "dream-studio"),
+        open_finding_count=_as_int(project.get("security_open_count")),
+    )
+    project["security_lifecycle_status"] = security_lifecycle
+    project["security_lifecycle_manual_review_count"] = security_lifecycle["applicability_summary"][
+        "manual_review_required"
+    ]
+    project["security_lifecycle_unknown_count"] = security_lifecycle["applicability_summary"][
+        "unknown"
+    ]
     project["work_order_status"] = {
         "route_blockers": _as_int(project.get("route_blocker_count")),
         "attention_open": _as_int(project.get("attention_open_count")),

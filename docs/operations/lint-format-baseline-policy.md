@@ -64,6 +64,11 @@ Contract Atlas behavior changes must refresh the atlas contract doc, this
 operations policy, and the docs index together so the release gate, human docs
 surface, and derived atlas view describe the same freshness boundary.
 
+Security lifecycle changes are release-gate relevant. If code changes affect
+`core/security`, security review contracts, project health security hydration,
+shared-intelligence security routes, or release readiness security status, the
+same change set must refresh the lifecycle contract and product-readiness docs.
+
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.

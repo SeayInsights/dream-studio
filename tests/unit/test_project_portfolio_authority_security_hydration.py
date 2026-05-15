@@ -139,6 +139,16 @@ def test_all_projects_defaults_to_current_local_builds_authority(
         project = payload["projects"][0]
         assert project["prd_status"]["latest_status"] == "in-progress"
         assert project["security_package_status"]["open_findings"] == 1
+        assert (
+            project["security_lifecycle_status"]["source_framework"]["source_control_count"] == 47
+        )
+        assert project["security_lifecycle_status"]["security_status"] == "blocked_by_open_findings"
+        assert (
+            project["security_lifecycle_status"]["finding_normalization_policy"][
+                "synthetic_demo_findings_in_live_operator_views"
+            ]
+            is False
+        )
         assert project["work_order_status"]["attention_open"] == 1
         assert project["telemetry_status"]["event_count"] == 1
         assert project["health_model"]["derived_view"] is True
@@ -163,6 +173,10 @@ def test_project_health_uses_current_authority_when_legacy_tables_are_absent(
         payload = response.json()
         assert payload["project"]["prd_status"]["count"] == 1
         assert payload["project"]["security_package_status"]["open_findings"] == 1
+        assert (
+            payload["project"]["security_lifecycle_status"]["security_status"]
+            == "blocked_by_open_findings"
+        )
         assert payload["project"]["health_model"]["status"] == "scored"
         assert payload["health"]["overall_score"] == payload["project"]["health_score"]
         assert payload["health"]["security_score"] == payload["project"]["security_score"]

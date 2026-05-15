@@ -60,11 +60,18 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "hook_launcher",
     }
     assert atlas["analytics_only_profile"]["writes_authorized"] is False
+    assert atlas["security_lifecycle_gate"]["source_framework"]["source_control_count"] == 47
+    assert atlas["security_lifecycle_gate"]["full_review_required"] is True
     assert atlas["installed_runtime_model"]["source_state_separation"] is True
     assert atlas["installed_module_profiles"]["profile_count"] == 8
     assert atlas["boundary_violation_report"]["status"] == "pass"
     assert any(
         item["area"] == "current_maturity_ledger" and item["status"] == "validated"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "security_lifecycle_gate"
+        and item["canonical_framework"] == "47_enterprise_security_controls"
         for item in atlas["maturity_scorecard"]
     )
     assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
@@ -105,6 +112,11 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     assert any(
         edge["source"] == "adapter:codex"
         and edge["target"] == "projection:adapter-projections/codex/AGENTS.md"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:security_lifecycle_gate"
+        and edge["target"] == "contract:47_enterprise_security_controls"
         for edge in graph["edges"]
     )
 

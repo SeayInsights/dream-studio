@@ -24,6 +24,7 @@ from core.shared_intelligence.authority import REQUIRED_SHARED_INTELLIGENCE_TABL
 from core.shared_intelligence.contract_registry import contract_registry
 from core.installed_runtime import installed_runtime_model
 from core.module_profiles import module_profiles, validate_module_profiles
+from core.security.lifecycle import build_security_lifecycle_gate
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
@@ -73,6 +74,12 @@ def build_contract_atlas(
     current_maturity_ledger = maturity_ledger(project_id=effective_project_id)
     maturity_errors = validate_maturity_ledger(current_maturity_ledger)
     profile_errors = validate_module_profiles()
+    security_lifecycle_gate = build_security_lifecycle_gate(
+        conn=conn,
+        repo_root=root,
+        project_id=effective_project_id,
+        lifecycle_event="release_merge",
+    )
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -102,6 +109,7 @@ def build_contract_atlas(
         ),
         "installed_module_profiles": module_profiles(),
         "analytics_only_profile": _analytics_only_profile(),
+        "security_lifecycle_gate": security_lifecycle_gate,
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -114,10 +122,12 @@ def build_contract_atlas(
             docker_errors=docker_errors,
             maturity_errors=maturity_errors,
             profile_errors=profile_errors,
+            security_lifecycle_gate=security_lifecycle_gate,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
             staleness_report=staleness_report,
+            security_lifecycle_gate=security_lifecycle_gate,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -126,6 +136,7 @@ def build_contract_atlas(
             staleness_errors=staleness_errors,
             maturity_errors=maturity_errors,
             profile_errors=profile_errors,
+            security_lifecycle_gate=security_lifecycle_gate,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -187,6 +198,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "installed_runtime_model",
         "installed_module_profiles",
         "analytics_only_profile",
+        "security_lifecycle_gate",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -422,6 +434,7 @@ def _maturity_scorecard(
     docker_errors: list[str],
     maturity_errors: list[str],
     profile_errors: list[str],
+    security_lifecycle_gate: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -465,6 +478,17 @@ def _maturity_scorecard(
             "status": "validated" if not maturity_errors else "contract_errors_present",
             "error_count": len(maturity_errors),
         },
+        {
+            "area": "security_lifecycle_gate",
+            "status": security_lifecycle_gate.get("security_status"),
+            "canonical_framework": security_lifecycle_gate.get("source_framework", {}).get(
+                "canonical_framework"
+            ),
+            "source_control_count": security_lifecycle_gate.get("source_framework", {}).get(
+                "source_control_count"
+            ),
+            "release_readiness_effect": security_lifecycle_gate.get("release_readiness_effect"),
+        },
     ]
 
 
@@ -472,6 +496,7 @@ def _confirmed_dependency_graph(
     *,
     projection_report: Mapping[str, Any],
     staleness_report: Mapping[str, Any],
+    security_lifecycle_gate: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -536,6 +561,30 @@ def _confirmed_dependency_graph(
             "core.telemetry.docker_profiles.DOCKER_MODULE_PROFILES",
         )
 
+    add_node("module:security_lifecycle_gate", "module", "Security Lifecycle Gate")
+    add_node(
+        "contract:47_enterprise_security_controls",
+        "contract",
+        "47 Enterprise Security Controls",
+    )
+    add_node(
+        "doc:docs/contracts/security-review-scan-catalog.yaml",
+        "contract_doc",
+        "Security Review Scan Catalog",
+    )
+    add_edge(
+        "module:security_lifecycle_gate",
+        "contract:47_enterprise_security_controls",
+        "implements_control_framework",
+        "core.security.lifecycle.build_security_lifecycle_gate",
+    )
+    add_edge(
+        "contract:47_enterprise_security_controls",
+        "doc:docs/contracts/security-review-scan-catalog.yaml",
+        "mapped_by_catalog",
+        str(security_lifecycle_gate.get("source_framework", {}).get("catalog_ref")),
+    )
+
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
         projection_id = f"projection:{projection['projection_path']}"
@@ -583,6 +632,7 @@ def _boundary_violation_report(
     staleness_errors: list[str],
     maturity_errors: list[str],
     profile_errors: list[str],
+    security_lifecycle_gate: Mapping[str, Any],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -595,6 +645,15 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "maturity_ledger", "message": error})
     for error in profile_errors:
         issues.append({"severity": "error", "area": "installed_module_profiles", "message": error})
+    security_status = security_lifecycle_gate.get("security_status")
+    if security_status not in {"ready", "needs_manual_review"}:
+        issues.append(
+            {
+                "severity": "error",
+                "area": "security_lifecycle_gate",
+                "message": f"security lifecycle status requires release attention: {security_status}",
+            }
+        )
     for candidate in staleness_report.get("repair_work_order_candidates", []):
         issues.append(
             {
@@ -634,6 +693,7 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
+    tables.add("security_findings")
     for module in DASHBOARD_MODULES:
         tables.update(module["source_tables"])
     return sorted(tables)

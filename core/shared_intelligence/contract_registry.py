@@ -175,6 +175,42 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "dashboard_derived_not_primary_authority",
     },
     {
+        "domain_id": "security_lifecycle_gate",
+        "domain_name": "Security-By-Default Lifecycle Gate",
+        "source_patterns": [
+            "core/security/**",
+            "skills/security/**",
+            "guardrails/rules/security.yaml",
+            "docs/contracts/security-review-*.md",
+            "docs/contracts/security-review-*.yaml",
+            "projections/api/routes/security.py",
+            "projections/api/routes/project_intelligence.py",
+            "projections/api/routes/shared_intelligence.py",
+            "core/release/versioning.py",
+        ],
+        "contract_refs": [
+            "docs/contracts/security-by-default-development-lifecycle-gate.md",
+            "docs/contracts/security-review-source-47-enterprise-scans.md",
+            "docs/contracts/security-review-47-scan-crosswalk.md",
+            "docs/contracts/security-review-scan-catalog.yaml",
+        ],
+        "docs_refs": [
+            "docs/contracts/security-review-profile-pack-contract.md",
+            "docs/contracts/security-review-catalog-governance.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            "docs/operations/product-readiness.md",
+        ],
+        "required_doc_refs": [
+            "docs/contracts/security-by-default-development-lifecycle-gate.md",
+            "docs/contracts/security-review-profile-pack-contract.md",
+            "docs/operations/product-readiness.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "security_lifecycle_changes_require_control_mapping_and_readiness_docs_refresh",
+        "public_export_boundary": "security_findings_public_shape_live_evidence_private",
+    },
+    {
         "domain_id": "workflow_and_hooks",
         "domain_name": "Workflow And Hook Runtime",
         "source_patterns": [
