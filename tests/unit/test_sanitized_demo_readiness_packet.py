@@ -10,6 +10,7 @@ TEXT_FILES = [
     PACKET_DIR / "5-minute-script.md",
     PACKET_DIR / "15-minute-technical-walkthrough.md",
     PACKET_DIR / "fallback-plan.md",
+    PACKET_DIR / "rehearsal-report.md",
     PACKET_DIR / "validation-manifest.json",
     PACKET_DIR / "screenshots/demo-screens.html",
 ]
@@ -18,11 +19,13 @@ SCREENSHOTS = [
     PACKET_DIR / "screenshots/assist-mode.png",
     PACKET_DIR / "screenshots/operate-mode.png",
 ]
+WINDOWS_USER_PATH_FORWARD = "C:" + "/Users/"
+LIVE_BACKUP_ROOT = "Dream Studio " + "Live Backups"
 PRIVATE_PATTERNS = [
     re.compile(r"[A-Za-z]:\\Users\\", re.IGNORECASE),
-    re.compile(r"C:/Users/", re.IGNORECASE),
+    re.compile(re.escape(WINDOWS_USER_PATH_FORWARD), re.IGNORECASE),
     re.compile(r"\\.dream-studio\\", re.IGNORECASE),
-    re.compile(r"Dream Studio Live Backups", re.IGNORECASE),
+    re.compile(re.escape(LIVE_BACKUP_ROOT), re.IGNORECASE),
     re.compile(r"api[_-]?key\\s*[:=]", re.IGNORECASE),
     re.compile(r"token\\s*[:=]\\s*[A-Za-z0-9_\\-]{16,}", re.IGNORECASE),
     re.compile(r"password\\s*[:=]", re.IGNORECASE),
