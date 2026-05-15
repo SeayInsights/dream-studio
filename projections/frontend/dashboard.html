@@ -591,9 +591,9 @@
                     <div class="mt-2 text-xs text-gray-500">Last 30 days</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="text-sm font-medium text-gray-600">Total Cost</div>
+                    <div class="text-sm font-medium text-gray-600">Reportable Cost</div>
                     <div class="mt-2 text-3xl font-bold text-gray-900" id="kpi-total-cost">--</div>
-                    <div class="mt-2 text-xs text-gray-500">Estimated USD</div>
+                    <div class="mt-2 text-xs text-gray-500">Unknown unless source-backed</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Success Rate</div>
@@ -929,9 +929,9 @@
                     <div class="mt-1 text-xs text-gray-500">Last 30 days</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
-                    <div class="text-sm font-medium text-gray-600">Total Cost</div>
+                    <div class="text-sm font-medium text-gray-600">Reportable Cost</div>
                     <div class="mt-2 text-2xl font-bold text-gray-900" id="models-total-cost">--</div>
-                    <div class="mt-1 text-xs text-gray-500">Estimated USD</div>
+                    <div class="mt-1 text-xs text-gray-500">Unknown unless source-backed</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Cache Hit Rate</div>
@@ -2595,12 +2595,16 @@
 
             const tokenRows = summary?.token_cost_intelligence?.by_model_provider_component || summary?.token_usage || [];
             const tokenTotal = telemetrySum(tokenRows, 'total_tokens');
-            const estimatedCost = tokenRows.reduce((total, row) => total + Number(row.estimated_cost || 0), 0);
+            const reportableCost = tokenRows.reduce((total, row) => {
+                const value = row.reportable_cost;
+                return value === null || value === undefined ? total : total + Number(value || 0);
+            }, 0);
+            const hasReportableCost = tokenRows.some(row => row.reportable_cost !== null && row.reportable_cost !== undefined);
             const topModel = tokenRows[0]?.model_id || 'no model rows';
             if (tokenContainer) {
                 tokenContainer.innerHTML = [
                     telemetryRollupRow('Total tokens', telemetryNumber(tokenTotal), 'Grouped by project, model, provider, and component.'),
-                    telemetryRollupRow('Estimated cost', `$${estimatedCost.toFixed(4)}`),
+                    telemetryRollupRow('Reportable cost', hasReportableCost ? `$${reportableCost.toFixed(4)}` : 'unknown'),
                     telemetryRollupRow('Top model/provider', `${topModel} / ${tokenRows[0]?.provider || 'unknown'}`)
                 ].join('');
             }
@@ -2913,9 +2917,9 @@
             }
 
             if (tokens) {
-                const totalCost = tokens.total_cost || 0;
+                const totalCost = tokens.total_cost;
                 document.getElementById('kpi-total-cost').textContent =
-                    `$${totalCost.toFixed(2)}`;
+                    totalCost === null || totalCost === undefined ? 'unknown' : `$${totalCost.toFixed(2)}`;
             }
 
             const activeAlerts = Array.isArray(alertHistory)
@@ -3112,8 +3116,8 @@
         // Initialize Cost Over Time Chart
         async function initCostOverTimeChart() {
             const data = await fetchMetrics('/tokens');
-            if (!data || !data.cost_timeline) {
-                console.warn('No cost timeline data available');
+            if (!data || !data.cost_timeline || !data.cost_timeline.some(d => d.cost !== null && d.cost !== undefined)) {
+                console.warn('No reportable cost timeline data available');
                 return;
             }
 
@@ -3133,7 +3137,7 @@
                 data: {
                     labels: data.cost_timeline.map(d => d.date),
                     datasets: [{
-                        label: 'Cost (USD)',
+                        label: 'Reportable Cost (USD)',
                         data: data.cost_timeline.map(d => d.cost),
                         borderColor: '#22c55e',
                         backgroundColor: gradient,
@@ -3644,8 +3648,12 @@ if (document.readyState === 'loading') {
                     if (data.total_cost !== undefined) {
                         const element = document.getElementById('kpi-total-cost');
                         if (element) {
-                            const cost = parseFloat(data.total_cost);
-                            animateNumber(element, cost, '$', '');
+                            if (data.total_cost === null) {
+                                element.textContent = 'unknown';
+                            } else {
+                                const cost = parseFloat(data.total_cost);
+                                animateNumber(element, cost, '$', '');
+                            }
                         }
                     }
                 }
@@ -4061,8 +4069,8 @@ if (document.readyState === 'loading') {
                         bVal = b.avg_duration_minutes || 0;
                         break;
                     case 'cost':
-                        aVal = a.avg_cost || 0;
-                        bVal = b.avg_cost || 0;
+                        aVal = a.avg_cost ?? -1;
+                        bVal = b.avg_cost ?? -1;
                         break;
                 }
 
@@ -4083,7 +4091,7 @@ if (document.readyState === 'loading') {
                         </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.avg_duration_minutes.toFixed(1)}m</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">$${skill.avg_cost.toFixed(3)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${skill.avg_cost === null || skill.avg_cost === undefined ? 'unknown' : '$' + skill.avg_cost.toFixed(3)}</td>
                 </tr>
             `).join('');
 
@@ -4389,7 +4397,7 @@ if (document.readyState === 'loading') {
                 const combinedData = {
                     summary: {
                         total_tokens: tokensData.total_tokens || 0,
-                        total_cost: tokensData.total_cost || 0,
+                        total_cost: tokensData.total_cost,
                         cache_hit_rate: tokensData.cache_hit_rate || 0,
                         most_efficient_model: modelsData.most_efficient_model || '--',
                         most_efficient_rate: modelsData.most_efficient_rate || 0
@@ -4427,7 +4435,7 @@ if (document.readyState === 'loading') {
         // Update summary cards
         function updateModelsSummary(summary) {
             const totalTokens = summary.total_tokens || 0;
-            const totalCost = summary.total_cost || 0;
+            const totalCost = summary.total_cost;
             const cacheHitRate = summary.cache_hit_rate || 0;
             const mostEfficient = summary.most_efficient_model || '--';
             const mostEfficientRate = summary.most_efficient_rate || 0;
@@ -4440,7 +4448,8 @@ if (document.readyState === 'loading') {
             };
 
             document.getElementById('models-total-tokens').textContent = formatLargeNumber(totalTokens);
-            document.getElementById('models-total-cost').textContent = `$${totalCost.toFixed(2)}`;
+            document.getElementById('models-total-cost').textContent =
+                totalCost === null || totalCost === undefined ? 'unknown' : `$${totalCost.toFixed(2)}`;
             document.getElementById('models-cache-hit-rate').textContent = `${(cacheHitRate * 100).toFixed(1)}%`;
             document.getElementById('models-most-efficient').textContent = mostEfficient;
             document.getElementById('models-most-efficient-rate').textContent = `${mostEfficientRate.toFixed(0)} tokens/sec`;
@@ -4633,8 +4642,9 @@ if (document.readyState === 'loading') {
                 charts.costByModel.destroy();
             }
 
-            if (!costData || costData.length === 0) {
-                console.warn('No cost by model data available');
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by model data available');
                 return;
             }
 
@@ -4648,10 +4658,10 @@ if (document.readyState === 'loading') {
             charts.costByModel = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: costData.map(d => d.model_name),
+                    labels: reportableData.map(d => d.model_name),
                     datasets: [{
-                        data: costData.map(d => d.cost),
-                        backgroundColor: costData.map(d => {
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map(d => {
                             const modelKey = d.model_name.toLowerCase();
                             for (const [key, color] of Object.entries(modelColors)) {
                                 if (modelKey.includes(key)) return color;
@@ -4697,8 +4707,9 @@ if (document.readyState === 'loading') {
                 charts.costByProject.destroy();
             }
 
-            if (!costData || costData.length === 0) {
-                console.warn('No cost by project data available');
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by project data available');
                 return;
             }
 
@@ -4711,10 +4722,10 @@ if (document.readyState === 'loading') {
             charts.costByProject = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: costData.map(d => d.project_name || 'Unknown'),
+                    labels: reportableData.map(d => d.project_name || 'Unknown'),
                     datasets: [{
-                        data: costData.map(d => d.cost),
-                        backgroundColor: costData.map((_, i) => colors[i % colors.length]),
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map((_, i) => colors[i % colors.length]),
                         borderWidth: 2,
                         borderColor: '#fff'
                     }]
@@ -4754,8 +4765,9 @@ if (document.readyState === 'loading') {
                 charts.costBySkill.destroy();
             }
 
-            if (!costData || costData.length === 0) {
-                console.warn('No cost by skill data available');
+            const reportableData = (costData || []).filter(d => d.cost !== null && d.cost !== undefined);
+            if (reportableData.length === 0) {
+                console.warn('No reportable cost by skill data available');
                 return;
             }
 
@@ -4768,10 +4780,10 @@ if (document.readyState === 'loading') {
             charts.costBySkill = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: costData.map(d => d.skill_name || 'Unknown'),
+                    labels: reportableData.map(d => d.skill_name || 'Unknown'),
                     datasets: [{
-                        data: costData.map(d => d.cost),
-                        backgroundColor: costData.map((_, i) => colors[i % colors.length]),
+                        data: reportableData.map(d => d.cost),
+                        backgroundColor: reportableData.map((_, i) => colors[i % colors.length]),
                         borderWidth: 2,
                         borderColor: '#fff'
                     }]

@@ -20,6 +20,7 @@ boundary.
 | Installed platform productization | `core.installed_productization` | `ds install`, `ds acceptance`, backup/restore/update/uninstall checks | repo code plus explicit runtime home | Required for install/update behavior changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
+| AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those
@@ -52,3 +53,9 @@ an approved installed home resolved from configuration. Rehearsal acceptance
 uses temporary homes and must not write to the operator's live
 `~/.dream-studio` state. Launcher files such as `ds.ps1` are repo source that
 resolve source/state boundaries; they are not runtime scratch.
+
+Adapter billing declarations are configuration, not provider billing
+credentials. Subscription-plan adapters keep cost unknown unless an approved
+allocation profile is recorded. Token-metered/API-metered adapters may display
+reportable cost only when source metadata, usage exports, billing API evidence,
+or explicit estimate metadata is present.

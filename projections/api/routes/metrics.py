@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 
 from core.config.database import get_connection
+from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 
 from ..models.metrics import (
     MetricsQuery,
@@ -37,16 +38,25 @@ def get_db_path() -> str:
     return str(_canonical())
 
 
-def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    m = model.lower()
-    if "opus" in m:
-        return input_tokens * 15.0 / 1e6 + output_tokens * 75.0 / 1e6
-    elif "haiku" in m:
-        return input_tokens * 0.80 / 1e6 + output_tokens * 4.0 / 1e6
-    return input_tokens * 3.0 / 1e6 + output_tokens * 15.0 / 1e6
+def _reportable_sql_placeholders() -> str:
+    return ",".join("?" for _ in REPORTABLE_COST_VISIBILITIES)
 
 
-def _build_skill_costs(db_path: str, days: int, total_cost: float) -> Dict[str, Any]:
+def _round_optional(value: float | None) -> float | None:
+    return round(value, 2) if value is not None else None
+
+
+def _sum_optional(current: float | None, value: float | None) -> float | None:
+    if value is None:
+        return current
+    return (current or 0.0) + value
+
+
+def _optional_float(value: Any) -> float | None:
+    return None if value is None else float(value)
+
+
+def _build_skill_costs(db_path: str, days: int, total_cost: float | None) -> Dict[str, Any]:
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     conn = get_connection()
     conn.row_factory = sqlite3.Row
@@ -63,17 +73,16 @@ def _build_skill_costs(db_path: str, days: int, total_cost: float) -> Dict[str, 
         """,
             (cutoff,),
         ).fetchall()
-        total_inv = sum(r["cnt"] for r in rows) or 1
         result = {}
         for r in rows:
-            share = r["cnt"] / total_inv
-            est_cost = round(total_cost * share, 2)
             result[r["skill_name"]] = {
                 "skill_name": r["skill_name"],
                 "total_tokens": 0,
                 "invocations": r["cnt"],
-                "cost_usd": est_cost,
-                "cost": est_cost,
+                "cost_usd": None,
+                "cost": None,
+                "cost_visibility": "unavailable",
+                "cost_status": "unknown",
             }
         return result
     finally:
@@ -123,20 +132,26 @@ def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
             SELECT DATE(recorded_at) as date,
                    SUM(input_tokens) as input_tokens,
                    SUM(output_tokens) as output_tokens,
-                   model
+                   SUM(
+                       CASE
+                           WHEN cost_visibility IN ({_reportable_sql_placeholders()})
+                           THEN estimated_cost
+                           ELSE NULL
+                       END
+                   ) as reportable_cost
             FROM ({source_sql}) token_usage
             WHERE recorded_at >= ?
-            GROUP BY DATE(recorded_at), model
+            GROUP BY DATE(recorded_at)
             ORDER BY date ASC
         """,
-            (cutoff,),
+            (*REPORTABLE_COST_VISIBILITIES, cutoff),
         ).fetchall()
         by_date: Dict[str, Dict[str, Any]] = {}
         for r in rows:
             d = r["date"]
             inp = r["input_tokens"] or 0
             out = r["output_tokens"] or 0
-            cost = _estimate_cost(r["model"] or "sonnet", inp, out)
+            cost = _optional_float(r["reportable_cost"])
             if d not in by_date:
                 by_date[d] = {
                     "date": d,
@@ -144,12 +159,12 @@ def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
                     "output_tokens": 0,
                     "cached_tokens": 0,
                     "tokens": 0,
-                    "cost_usd": 0.0,
+                    "cost_usd": None,
                 }
             by_date[d]["input_tokens"] += inp
             by_date[d]["output_tokens"] += out
             by_date[d]["tokens"] += inp + out
-            by_date[d]["cost_usd"] = round(by_date[d]["cost_usd"] + cost, 2)
+            by_date[d]["cost_usd"] = _round_optional(_sum_optional(by_date[d]["cost_usd"], cost))
         return sorted(by_date.values(), key=lambda x: x["date"])
     finally:
         conn.close()
@@ -296,8 +311,6 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
 
             input_tok = skill_data.get("avg_input_tokens", 0)
             output_tok = skill_data.get("avg_output_tokens", 0)
-            avg_cost = (input_tok / 1000 * 0.003) + (output_tok / 1000 * 0.015)
-
             leaderboard.append(
                 {
                     "skill_name": skill_name,
@@ -307,7 +320,9 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
                     "avg_duration_minutes": avg_duration_minutes,
                     "min_duration_minutes": ranges.get("min_m", 0),
                     "max_duration_minutes": ranges.get("max_m", 0),
-                    "avg_cost": avg_cost,
+                    "avg_cost": None,
+                    "cost_visibility": "unavailable",
+                    "cost_status": "unknown",
                     "avg_input_tokens": input_tok,
                     "avg_output_tokens": output_tok,
                 }
@@ -363,28 +378,28 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
 
         cache_hit_rate = data.get("cache_hits", 0) / max(data.get("total_tokens", 1), 1)
 
-        cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd", 0)} for t in timeline]
+        cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd")} for t in timeline]
 
         by_project = {
-            k: {**v, "project_name": k, "cost": v.get("cost_usd", 0)}
+            k: {**v, "project_name": k, "cost": v.get("cost_usd")}
             for k, v in data.get("by_project", {}).items()
         }
         raw_by_skill = data.get("by_skill", {})
-        has_skill_costs = any(v.get("cost_usd", 0) > 0 for v in raw_by_skill.values())
+        has_skill_costs = any(v.get("cost_usd") is not None for v in raw_by_skill.values())
 
         if has_skill_costs:
             by_skill = {
-                k: {**v, "skill_name": k, "cost": v.get("cost_usd", 0)}
+                k: {**v, "skill_name": k, "cost": v.get("cost_usd")}
                 for k, v in raw_by_skill.items()
             }
         else:
-            by_skill = _build_skill_costs(db_path, days, data.get("total_cost_usd", 0))
+            by_skill = _build_skill_costs(db_path, days, data.get("total_cost_usd"))
 
         return {
             **data,
             "timeline": timeline,
             "cost_timeline": cost_timeline,
-            "total_cost": data.get("total_cost_usd", 0),
+            "total_cost": data.get("total_cost_usd"),
             "cache_hit_rate": cache_hit_rate,
             "by_project": by_project,
             "by_skill": by_skill,
@@ -409,12 +424,19 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
                 SELECT model,
                        COUNT(*) as record_count,
                        SUM(input_tokens) as input_tok,
-                       SUM(output_tokens) as output_tok
+                       SUM(output_tokens) as output_tok,
+                       SUM(
+                           CASE
+                               WHEN cost_visibility IN ({_reportable_sql_placeholders()})
+                               THEN estimated_cost
+                               ELSE NULL
+                           END
+                       ) as reportable_cost
                 FROM ({source_sql}) token_usage
                 WHERE recorded_at >= ? AND model IS NOT NULL AND model != '<synthetic>'
                 GROUP BY model ORDER BY (input_tok + output_tok) DESC
             """,
-                (cutoff,),
+                (*REPORTABLE_COST_VISIBILITIES, cutoff),
             ).fetchall()
             if source_sql is not None
             else []
@@ -437,7 +459,7 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
             out = r["output_tok"] or 0
             tok = inp + out
             pct = round(tok / total_tokens * 100, 1) if total_tokens else 0
-            cost = _estimate_cost(name, inp, out)
+            cost = _optional_float(r["reportable_cost"])
             tps = round(tok / max(r["record_count"], 1), 1)
             raw_tps.append(tps)
 
@@ -448,35 +470,38 @@ async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
                 "record_count": r["record_count"],
                 "percentage": pct,
                 "model_name": name,
-                "cost": round(cost, 2),
-                "cost_usd": round(cost, 2),
+                "cost": _round_optional(cost),
+                "cost_usd": _round_optional(cost),
+                "cost_visibility": "reportable" if cost is not None else "unavailable",
             }
             distribution.append({"model": name, "percentage": pct})
             model_distribution.append({"model_name": name, "usage_count": r["record_count"]})
             token_efficiency.append({"model_name": name, "tokens_per_second": tps})
 
         max_tps = max(raw_tps) if raw_tps else 1
-        max_cost_eff = 0
-        cost_effs = []
-        for i, r in enumerate(rows):
-            name = r["model"]
+        max_operational_eff = 0
+        operational_effs = []
+        for r in rows:
             tok = (r["input_tok"] or 0) + (r["output_tok"] or 0)
-            cost = _estimate_cost(name, r["input_tok"] or 0, r["output_tok"] or 0) or 1
-            ce = tok / cost if cost > 0 else 0
-            cost_effs.append(ce)
-            max_cost_eff = max(max_cost_eff, ce)
+            oe = tok / max(r["record_count"], 1)
+            operational_effs.append(oe)
+            max_operational_eff = max(max_operational_eff, oe)
 
         top_n = sorted(range(len(rows)), key=lambda i: rows[i]["record_count"], reverse=True)[:4]
         for i in top_n:
             name = rows[i]["model"]
             tps = raw_tps[i]
-            ce = cost_effs[i]
+            operational_efficiency = operational_effs[i]
             model_performance.append(
                 {
                     "model_name": name,
                     "speed": round(tps / max_tps, 3),
                     "success_rate": round(by_model[name]["percentage"] / 100, 3),
-                    "efficiency": round(ce / max_cost_eff, 3) if max_cost_eff else 0,
+                    "efficiency": (
+                        round(operational_efficiency / max_operational_eff, 3)
+                        if max_operational_eff
+                        else 0
+                    ),
                 }
             )
 

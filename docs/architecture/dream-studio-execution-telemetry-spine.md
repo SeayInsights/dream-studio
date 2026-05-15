@@ -38,6 +38,8 @@ The first additive telemetry spine defines:
 - `hook_invocations`
 - `tool_invocations`
 - `token_usage_records`
+- `ai_adapter_accounting_profiles`
+- `ai_usage_operational_records`
 - `security_findings`
 - `decision_records`
 - `research_evidence_records`
@@ -67,6 +69,12 @@ Dashboard modules can be enabled independently:
 Each module declares source tables, required core tables, optional tables,
 dashboard cards, drilldown paths, validation requirements, and empty-state
 behavior when disabled or empty.
+
+Token analytics report usage and operational value, not fake billing. Plan
+adapters such as Claude Code subscription and Codex via ChatGPT plan can record
+observed tokens or run outcomes while showing cost as unknown. Token-metered or
+API-metered adapters may report exact/provider-reported cost only when the
+source metadata, export, or billing API evidence exists.
 
 Dashboard projections remain derived views and not primary truth.
 

@@ -84,6 +84,12 @@ from core.shared_intelligence.skill_versioning import (
     skill_version_evaluation_report,
     validate_skill_version_evaluation_report,
 )
+from core.shared_intelligence.usage_accounting import (
+    adapter_usage_accounting_summary,
+    record_adapter_accounting_profile,
+    record_ai_usage_operational_record,
+    register_default_adapter_accounting_profiles,
+)
 
 __all__ = [
     "REQUIRED_SHARED_INTELLIGENCE_TABLES",
@@ -138,4 +144,8 @@ __all__ = [
     "skill_version_evaluation_policy",
     "skill_version_evaluation_report",
     "validate_skill_version_evaluation_report",
+    "adapter_usage_accounting_summary",
+    "record_adapter_accounting_profile",
+    "record_ai_usage_operational_record",
+    "register_default_adapter_accounting_profiles",
 ]

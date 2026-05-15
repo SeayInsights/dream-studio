@@ -141,3 +141,17 @@ The acceptance report validates fresh state creation, selected/unselected
 profile behavior, dashboard status, adapter status, analytics-only independence,
 security-only independence, full profile availability, backup/restore/update
 checks, and uninstall dry-run behavior.
+
+## Usage Accounting Setup
+
+First-run setup registers default non-secret adapter accounting profiles for
+Claude Code subscription, Claude API token-metered, Codex via ChatGPT plan,
+Codex token-metered/flexible, ChatGPT plan, Cursor plan, Copilot subscription,
+MCP, local model runtime, and shell tools. Users can later replace or extend
+these declarations through approved SQLite-backed configuration, but setup must
+not inspect provider billing credentials.
+
+Installed analytics and dashboard profiles use these declarations to show
+tokens, usage outcomes, and operational value honestly. Cost stays `unknown`
+unless provider metadata, provider export, billing API evidence, or explicit
+operator allocation metadata makes it reportable.

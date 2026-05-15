@@ -8,6 +8,7 @@ from typing import Dict, Any, List
 from core.config.database import get_connection
 from projections.api.routes.sqlite_schema import has_columns
 from projections.core.collectors.authority_sources import token_usage_sql
+from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 
 router = APIRouter()
 
@@ -182,15 +183,15 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
                        SUM(input_tokens + output_tokens) as tokens,
                        SUM(
                            CASE
-                               WHEN model LIKE '%opus%' THEN input_tokens * 0.015 / 1000.0 + output_tokens * 0.075 / 1000.0
-                               WHEN model LIKE '%haiku%' THEN input_tokens * 0.00025 / 1000.0 + output_tokens * 0.00125 / 1000.0
-                               ELSE input_tokens * 0.003 / 1000.0 + output_tokens * 0.015 / 1000.0
+                               WHEN cost_visibility IN ({','.join('?' for _ in REPORTABLE_COST_VISIBILITIES)})
+                               THEN estimated_cost
+                               ELSE NULL
                            END
                        ) as cost
                 FROM ({token_sql}) token_usage WHERE recorded_at >= ?
                 GROUP BY DATE(recorded_at) ORDER BY date
             """,
-                (cutoff,),
+                (*REPORTABLE_COST_VISIBILITIES, cutoff),
             ).fetchall()
         else:
             token_rows = []
@@ -206,7 +207,7 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
 
         sess_map = {r["date"]: r["count"] for r in session_rows}
         tok_map = {r["date"]: r["tokens"] for r in token_rows}
-        cost_map = {r["date"]: r["cost"] or 0 for r in token_rows}
+        cost_map = {r["date"]: r["cost"] for r in token_rows if r["cost"] is not None}
 
         def _regression(values: List[float]):
             n = len(values)
@@ -224,7 +225,11 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
         trends = {}
         up = down = stable = 0
 
-        for name, lookup in [("sessions", sess_map), ("tokens", tok_map), ("cost", cost_map)]:
+        metric_inputs = [("sessions", sess_map), ("tokens", tok_map)]
+        if cost_map:
+            metric_inputs.append(("reportable_cost", cost_map))
+
+        for name, lookup in metric_inputs:
             actual = [lookup.get(d, 0) for d in dates]
             reg, slope = _regression([float(v) for v in actual])
             trends[name] = {"actual": actual, "regression": reg}

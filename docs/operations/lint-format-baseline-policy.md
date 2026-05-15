@@ -102,6 +102,14 @@ worktrees, sessions, and temporary runtime files out of the lint gate, but they
 must not exclude active source directories, tests, public docs, templates, or
 generated adapter projections that are intentionally tracked.
 
+AI usage accounting changes are release-gate relevant. If code changes affect
+token/model cost display, adapter billing modes, telemetry collectors, or
+dashboard token analytics, the same change set must keep formatter output clean,
+avoid new lint findings, and refresh the database, dashboard, Contract Atlas,
+installed runtime, and readiness docs required by the drift report. Regression
+tests should block hard-coded token-to-dollar pricing from returning to live
+operator surfaces.
+
 ## Future Cleanup
 
 Remaining flake8 debt should be paid down in focused follow-up work. Removing or reducing baseline entries is encouraged when safe. Broad semantic lint cleanup remains a separate approval boundary.

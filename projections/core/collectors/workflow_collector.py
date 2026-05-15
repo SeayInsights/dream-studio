@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from core.config.database import get_connection
 
 
 class WorkflowCollector:
@@ -38,7 +37,7 @@ class WorkflowCollector:
                 - avg_completion_time: float (minutes)
                 - total_nodes_executed: int
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -179,7 +178,7 @@ class WorkflowCollector:
         Returns:
             List of dicts with date, runs, completions
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -215,7 +214,7 @@ class WorkflowCollector:
         Returns:
             List of dicts with node_id, avg_duration, failure_rate
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

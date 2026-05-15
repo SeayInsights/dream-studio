@@ -79,3 +79,11 @@ evidence reference columns to `token_usage_records` so legacy token events can
 be reconciled into current telemetry authority without recreating
 `canonical_events`. The migration is repair-safe for partial historical
 fixtures by ensuring the target table exists before applying column additions.
+
+Migration `043_ai_usage_accounting.sql` is additive. It extends
+`token_usage_records` with adapter accounting visibility fields and creates
+`ai_adapter_accounting_profiles` plus `ai_usage_operational_records`. It does
+not inspect provider billing credentials and does not convert subscription-plan
+tokens into API-dollar costs. Cost is reportable only when visibility/source
+metadata says it is exact, provider-reported, explicitly estimated, or an
+operator-configured subscription allocation.

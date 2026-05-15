@@ -4,7 +4,6 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from core.config.database import get_connection
 
 
 class LessonCollector:
@@ -39,7 +38,7 @@ class LessonCollector:
                 - promoted_count: int
                 - recent_lessons: List[Dict] (10 most recent)
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -153,7 +152,7 @@ class LessonCollector:
         Returns:
             List of dicts with date, count, sources
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -186,7 +185,7 @@ class LessonCollector:
         Returns:
             List of dicts with source, count, promoted_rate, avg_confidence_score
         """
-        conn = get_connection()
+        conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

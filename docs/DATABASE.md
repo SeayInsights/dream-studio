@@ -24,10 +24,24 @@ Dream Studio's SQLite authority covers:
 - secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
 - release/cutover evidence summaries where safe.
 
-Current token usage authority lives in `token_usage_records`. Reconciled
-legacy token rows must carry `source_refs_json` and `evidence_refs_json` so
-token analytics can use current authority without restoring legacy
-`canonical_events` as an active source.
+Current AI usage accounting authority lives in:
+
+- `token_usage_records` for token telemetry with billing, token visibility,
+  cost visibility, usage source, cost source, and confidence metadata;
+- `ai_adapter_accounting_profiles` for operator-declared adapter billing modes
+  such as Claude Code subscription, Claude API token-metered, Codex ChatGPT
+  plan, Codex token-metered/flexible, local model, and unknown/custom;
+- `ai_usage_operational_records` for operational value telemetry such as run
+  count, project/milestone/task/Work Order context, files touched, commands
+  run, validation outcome, PR/result outcome, rework, duration, and evidence.
+
+Tokens are usage telemetry. They are not dollars unless the adapter billing
+mode and source metadata explicitly make cost reportable. Plan/subscription
+usage preserves observed tokens where available and shows cost as unknown
+unless an explicit allocation profile exists. Reconciled legacy token rows must
+carry `source_refs_json` and `evidence_refs_json` so token analytics can use
+current authority without restoring legacy `canonical_events` as an active
+source.
 
 ## Runtime Rules
 
