@@ -4,6 +4,7 @@ import ast
 import json
 import logging
 import sqlite3
+import tomllib
 import uuid
 from collections import Counter
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -12,6 +13,8 @@ from typing import Dict, Any, List, Optional
 
 from ..websocket.connection_manager import ConnectionManager
 from core.config.database import get_connection
+from core.module_contracts import module_contract_map
+from core.module_profiles import module_profile_map
 from core.production_readiness import production_readiness_dashboard_summary
 from core.security.lifecycle import build_security_lifecycle_gate
 from projections.api.routes.sqlite_schema import object_exists, table_columns
@@ -22,6 +25,44 @@ router = APIRouter()
 
 # Global connection manager instance for project intelligence subscriptions
 pi_connection_manager = ConnectionManager()
+
+SAFE_STACK_FILE_NAMES = {
+    "pyproject.toml",
+    "package.json",
+    "requirements.txt",
+    "requirements-dev.txt",
+    "go.mod",
+    "Cargo.toml",
+    "Dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "Makefile",
+    "justfile",
+}
+SAFE_STACK_DIR_NAMES = {
+    ".github",
+    "adapter-projections",
+    "core",
+    "docs",
+    "hooks",
+    "interfaces",
+    "migrations",
+    "projections",
+    "runtime",
+    "skills",
+    "tests",
+    "workflows",
+}
+SENSITIVE_PATH_PARTS = {
+    ".git",
+    ".claude",
+    ".codex",
+    ".env",
+    ".venv",
+    "secrets",
+    "credentials",
+    "node_modules",
+}
 
 
 def get_db_path() -> str:
@@ -260,6 +301,422 @@ def _parse_stack_json(raw: str | None) -> dict[str, Any]:
         except (SyntaxError, ValueError):
             return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _safe_project_root(project: dict[str, Any]) -> Path | None:
+    raw_path = project.get("project_path")
+    if not raw_path:
+        return None
+    root = Path(str(raw_path))
+    if not root.is_absolute():
+        root = Path.home() / "builds" / root
+    try:
+        resolved = root.resolve()
+    except OSError:
+        return None
+    if not resolved.exists() or not resolved.is_dir():
+        return None
+    lowered_parts = {part.lower() for part in resolved.parts}
+    if lowered_parts.intersection(SENSITIVE_PATH_PARTS):
+        return None
+    if "appdata" in lowered_parts and "temp" not in lowered_parts:
+        return None
+    return resolved
+
+
+def _safe_rel(root: Path, path: Path) -> str:
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except (OSError, ValueError):
+        return path.name
+
+
+def _safe_read_text(path: Path, *, max_bytes: int = 200_000) -> str | None:
+    try:
+        if path.stat().st_size > max_bytes:
+            return None
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _safe_manifest_dependencies(path: Path) -> list[str]:
+    name = path.name.lower()
+    if name == "package.json":
+        text = _safe_read_text(path)
+        if not text:
+            return []
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        dependencies: set[str] = set()
+        for key in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            section = payload.get(key)
+            if isinstance(section, dict):
+                dependencies.update(str(item) for item in section if item)
+        return sorted(dependencies)
+    if name == "pyproject.toml":
+        try:
+            if path.stat().st_size > 200_000:
+                return []
+            payload = tomllib.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, tomllib.TOMLDecodeError):
+            return []
+        dependencies: set[str] = set()
+        project = payload.get("project")
+        if isinstance(project, dict):
+            for dep in project.get("dependencies") or []:
+                if isinstance(dep, str):
+                    dependencies.add(dep.split(";", 1)[0].strip())
+            optional = project.get("optional-dependencies")
+            if isinstance(optional, dict):
+                for deps in optional.values():
+                    if isinstance(deps, list):
+                        dependencies.update(
+                            dep.split(";", 1)[0].strip() for dep in deps if isinstance(dep, str)
+                        )
+        return sorted(dep for dep in dependencies if dep)
+    if name.startswith("requirements") and name.endswith(".txt"):
+        text = _safe_read_text(path)
+        if not text:
+            return []
+        dependencies = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("#", "-", "http:", "https:", "git+")):
+                continue
+            dependencies.append(stripped.split(";", 1)[0].strip())
+        return sorted(dict.fromkeys(dependencies))
+    if name == "go.mod":
+        text = _safe_read_text(path)
+        if not text:
+            return []
+        dependencies = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith(("module ", "go ", "require (", ")")):
+                dependencies.append(stripped.split()[0])
+        return sorted(dict.fromkeys(dependencies))
+    if name == "cargo.toml":
+        text = _safe_read_text(path)
+        if not text:
+            return []
+        dependencies = []
+        in_deps = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("["):
+                in_deps = stripped in {"[dependencies]", "[dev-dependencies]"}
+                continue
+            if in_deps and stripped and not stripped.startswith("#") and "=" in stripped:
+                dependencies.append(stripped.split("=", 1)[0].strip())
+        return sorted(dict.fromkeys(dependencies))
+    return []
+
+
+def _repo_stack_evidence(project: dict[str, Any]) -> dict[str, Any]:
+    root = _safe_project_root(project)
+    if root is None:
+        return {
+            "classification": "unavailable",
+            "reason": "Project path is missing, unverified, or in a sensitive runtime area.",
+            "source_refs": [],
+            "confirmed_dependency_edges": False,
+            "inferred_dependency_edges": [],
+            "secret_contents_read": False,
+            "derived_view": True,
+            "primary_authority": False,
+        }
+
+    manifests: list[dict[str, Any]] = []
+    config_files: list[str] = []
+    workflow_files: list[str] = []
+    frontend_surfaces: list[str] = []
+    api_route_files: list[str] = []
+    migration_files: list[str] = []
+    skill_files: list[str] = []
+    hook_files: list[str] = []
+    adapter_projection_files: list[str] = []
+    language_counts: Counter[str] = Counter()
+    inferred_edges: list[dict[str, Any]] = []
+
+    for path in root.rglob("*"):
+        if len(config_files) + len(workflow_files) + len(frontend_surfaces) > 600:
+            break
+        if not path.is_file():
+            continue
+        rel = _safe_rel(root, path)
+        lowered_parts = {part.lower() for part in Path(rel).parts}
+        if lowered_parts.intersection(SENSITIVE_PATH_PARTS):
+            continue
+        suffix = path.suffix.lower()
+        if suffix in {".py", ".js", ".jsx", ".ts", ".tsx", ".html", ".css", ".go", ".rs"}:
+            language_counts[suffix.lstrip(".")] += 1
+        if path.name in SAFE_STACK_FILE_NAMES:
+            deps = _safe_manifest_dependencies(path)
+            manifests.append(
+                {
+                    "path": rel,
+                    "dependency_names": deps[:50],
+                    "dependency_count": len(deps),
+                    "evidence_kind": "package_or_runtime_manifest",
+                    "source_ref": rel,
+                }
+            )
+            for dep in deps[:50]:
+                inferred_edges.append(
+                    {
+                        "from": rel,
+                        "to": dep,
+                        "type": "manifest_declared_dependency",
+                        "confirmation_status": "inferred_unverified",
+                        "rendered_by_default": False,
+                        "source_refs": [rel],
+                    }
+                )
+        if path.name in SAFE_STACK_FILE_NAMES or any(
+            part in SAFE_STACK_DIR_NAMES for part in Path(rel).parts
+        ):
+            config_files.append(rel)
+        if rel.startswith(".github/workflows/"):
+            workflow_files.append(rel)
+        if suffix in {".html", ".jsx", ".tsx"} and any(
+            part in {"frontend", "src", "app", "pages", "components", "projections"}
+            for part in Path(rel).parts
+        ):
+            frontend_surfaces.append(rel)
+        if suffix == ".py" and ("routes" in Path(rel).parts or "api" in Path(rel).parts):
+            api_route_files.append(rel)
+        if "migrations" in Path(rel).parts:
+            migration_files.append(rel)
+        if Path(rel).name == "SKILL.md" or "skills" in Path(rel).parts:
+            skill_files.append(rel)
+        if "hooks" in Path(rel).parts:
+            hook_files.append(rel)
+        if "adapter-projections" in Path(rel).parts:
+            adapter_projection_files.append(rel)
+
+    evidence_refs = sorted(
+        dict.fromkeys(
+            [item["path"] for item in manifests]
+            + config_files[:40]
+            + workflow_files[:20]
+            + api_route_files[:20]
+            + frontend_surfaces[:20]
+            + migration_files[:20]
+            + skill_files[:20]
+            + hook_files[:20]
+            + adapter_projection_files[:20]
+        )
+    )
+    return {
+        "classification": "confirmed" if evidence_refs else "honest_empty_state",
+        "reason": (
+            "Read-only repo scan found stack/config evidence."
+            if evidence_refs
+            else "No safe stack/config evidence was found under the project path."
+        ),
+        "project_root": str(root),
+        "package_manifests": manifests[:20],
+        "config_files": sorted(dict.fromkeys(config_files))[:80],
+        "workflow_files": sorted(dict.fromkeys(workflow_files))[:40],
+        "api_route_files": sorted(dict.fromkeys(api_route_files))[:60],
+        "frontend_surfaces": sorted(dict.fromkeys(frontend_surfaces))[:60],
+        "migration_files": sorted(dict.fromkeys(migration_files))[:60],
+        "skill_files": sorted(dict.fromkeys(skill_files))[:60],
+        "hook_files": sorted(dict.fromkeys(hook_files))[:60],
+        "adapter_projection_files": sorted(dict.fromkeys(adapter_projection_files))[:60],
+        "languages": dict(sorted(language_counts.items())),
+        "source_refs": evidence_refs,
+        "inferred_dependency_edges": inferred_edges[:200],
+        "inferred_dependency_count": len(inferred_edges),
+        "confirmed_dependency_edges": False,
+        "secret_contents_read": False,
+        "repo_mutation_authorized": False,
+        "derived_view": True,
+        "primary_authority": False,
+    }
+
+
+def _module_runtime_fit(
+    project: dict[str, Any],
+    stack_evidence: dict[str, Any],
+    dependency_graph: dict[str, Any],
+) -> dict[str, Any]:
+    contracts = module_contract_map()
+    profiles = module_profile_map()
+    candidate_profiles = ["core"]
+    reasons = ["core fits every installed Dream Studio project authority view"]
+    if project.get("security_package_status", {}).get("open_findings", 0) or project.get(
+        "security_lifecycle_status"
+    ):
+        candidate_profiles.append("security_only")
+        reasons.append("security authority or lifecycle status is present")
+    if stack_evidence.get("classification") == "confirmed" or dependency_graph.get("edge_count"):
+        candidate_profiles.append("analytics_only")
+        reasons.append("stack/dependency evidence can be consumed by analytics-only")
+    if project.get("telemetry_status", {}).get("event_count") or project.get(
+        "telemetry_status", {}
+    ).get("validation_passed_count"):
+        candidate_profiles.append("telemetry_only")
+        reasons.append("telemetry or validation evidence exists")
+    if project.get("project_id") == "dream-studio":
+        candidate_profiles.extend(["shared_intelligence_only", "adapter_router_only", "full"])
+        reasons.append(
+            "Dream Studio project exposes shared-intelligence and adapter-router surfaces"
+        )
+    candidate_profiles = list(dict.fromkeys(candidate_profiles))
+    fit_modules = [
+        module_id
+        for module_id, contract in contracts.items()
+        if set(contract.get("install_runtime_profile_membership", [])).intersection(
+            candidate_profiles
+        )
+    ]
+    return {
+        "classification": "evidence_backed_profile_fit",
+        "candidate_profiles": [
+            {
+                "profile_id": profile_id,
+                "commands": profiles.get(profile_id, {}).get("exposed_commands", []),
+                "routes": profiles.get(profile_id, {}).get("exposed_routes", []),
+                "docker_required": profiles.get(profile_id, {}).get("docker_required"),
+                "empty_state": profiles.get(profile_id, {}).get("honest_empty_state"),
+            }
+            for profile_id in candidate_profiles
+            if profile_id in profiles
+        ],
+        "fit_modules": sorted(fit_modules),
+        "reasons": reasons,
+        "source_refs": ["core.module_profiles", "core.module_contracts"],
+        "derived_view": True,
+        "primary_authority": False,
+    }
+
+
+def _recent_validation_state(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
+    if not object_exists(conn, "validation_results"):
+        return {
+            "classification": "unavailable",
+            "reason": "validation_results table is not present.",
+            "recent": [],
+            "source_tables": [],
+        }
+    columns = table_columns(conn, "validation_results")
+    validation_id = "validation_id" if "validation_id" in columns else "result_id"
+    validation_type = (
+        "validation_type" if "validation_type" in columns else "NULL AS validation_type"
+    )
+    command = "command" if "command" in columns else "NULL AS command"
+    summary = "summary" if "summary" in columns else "NULL AS summary"
+    evidence = (
+        "evidence_refs_json" if "evidence_refs_json" in columns else "'[]' AS evidence_refs_json"
+    )
+    created = "created_at" if "created_at" in columns else "NULL AS created_at"
+    rows = conn.execute(
+        f"""
+        SELECT {validation_id} AS validation_id, {validation_type}, status, {command},
+               {summary}, {evidence}, {created}
+        FROM validation_results
+        WHERE project_id = ?
+        ORDER BY created_at DESC
+        LIMIT 10
+        """,
+        (project_id,),
+    ).fetchall()
+    recent = [
+        {
+            **dict(row),
+            "evidence_refs": _json_list(row["evidence_refs_json"]),
+        }
+        for row in rows
+    ]
+    failed = sum(1 for row in recent if row.get("status") in {"failed", "error", "incomplete"})
+    return {
+        "classification": "fresh" if recent else "honest_empty_state",
+        "recent": recent,
+        "recent_count": len(recent),
+        "failed_recent_count": failed,
+        "source_tables": ["validation_results"],
+        "derived_view": True,
+        "primary_authority": False,
+    }
+
+
+def _attention_detail_items(conn: sqlite3.Connection, project_id: str) -> dict[str, Any]:
+    if not object_exists(conn, "dashboard_attention_items"):
+        return {
+            "classification": "unavailable",
+            "items": [],
+            "source_tables": [],
+        }
+    columns = table_columns(conn, "dashboard_attention_items")
+    attention_id = "attention_id" if "attention_id" in columns else "item_id"
+    title = "title" if "title" in columns else "NULL AS title"
+    summary = "summary" if "summary" in columns else "NULL AS summary"
+    severity = "severity" if "severity" in columns else "NULL AS severity"
+    evidence = (
+        "evidence_refs_json" if "evidence_refs_json" in columns else "'[]' AS evidence_refs_json"
+    )
+    source_refs = (
+        "source_refs_json" if "source_refs_json" in columns else "'[]' AS source_refs_json"
+    )
+    created = "created_at" if "created_at" in columns else "NULL AS created_at"
+    rows = conn.execute(
+        f"""
+        SELECT {attention_id} AS attention_id, status, {severity}, {title}, {summary},
+               {source_refs}, {evidence}, {created}
+        FROM dashboard_attention_items
+        WHERE project_id = ?
+          AND COALESCE(status, 'open') NOT IN ('resolved', 'closed', 'dismissed')
+        ORDER BY created_at DESC
+        LIMIT 20
+        """,
+        (project_id,),
+    ).fetchall()
+    items = [
+        {
+            **dict(row),
+            "source_refs": _json_list(row["source_refs_json"]),
+            "evidence_refs": _json_list(row["evidence_refs_json"]),
+        }
+        for row in rows
+    ]
+    return {
+        "classification": "fresh" if items else "honest_empty_state",
+        "items": items,
+        "open_count": len(items),
+        "source_tables": ["dashboard_attention_items"],
+        "derived_view": True,
+        "primary_authority": False,
+    }
+
+
+def _component_index(conn: sqlite3.Connection, project_id: str) -> dict[str, dict[str, Any]]:
+    if not object_exists(conn, "pi_components"):
+        return {}
+    columns = table_columns(conn, "pi_components")
+    select_cols = ["component_id"]
+    for column in ("name", "path", "component_type", "lines", "complexity_score", "last_analyzed"):
+        if column in columns:
+            select_cols.append(column)
+    rows = conn.execute(
+        f"SELECT {', '.join(select_cols)} FROM pi_components WHERE project_id = ?",
+        (project_id,),
+    ).fetchall()
+    index: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        item = dict(row)
+        component_id = str(item.get("component_id") or "")
+        if component_id:
+            index[component_id] = {
+                **item,
+                "evidence_refs": [item.get("path")] if item.get("path") else [],
+                "source_tables": ["pi_components"],
+                "confirmation_status": "confirmed_component_record",
+            }
+    return index
 
 
 def _as_int(value: Any) -> int:
@@ -1222,6 +1679,15 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
     try:
         production_readiness = production_readiness_dashboard_summary(conn, project_id=project_id)
         security_controls = health_payload["project"]["security_lifecycle_status"]
+        dependency_graph = await get_project_dependencies(project_id, limit=200)
+        repo_stack = _repo_stack_evidence(health_payload["project"])
+        module_fit = _module_runtime_fit(
+            health_payload["project"],
+            repo_stack,
+            dependency_graph,
+        )
+        validation_state = _recent_validation_state(conn, project_id)
+        attention_detail = _attention_detail_items(conn, project_id)
         return {
             "project_id": project_id,
             "derived_view": True,
@@ -1243,6 +1709,17 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
             "readiness_score": production_readiness["readiness_score"],
             "readiness_control_coverage": production_readiness["control_summary"],
             "enterprise_security_controls": security_controls["applicability_summary"],
+            "enterprise_security_control_status": {
+                "controls": security_controls.get("applicability", []),
+                "summary": security_controls["applicability_summary"],
+                "source_framework": security_controls["source_framework"],
+                "manual_review_required": security_controls["applicability_summary"].get(
+                    "manual_review_required", 0
+                ),
+                "unknown": security_controls["applicability_summary"].get("unknown", 0),
+                "derived_view": True,
+                "primary_authority": False,
+            },
             "production_readiness_controls": production_readiness["controls"],
             "findings_by_severity_status": _finding_summary(
                 production_readiness["findings"],
@@ -1267,18 +1744,56 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
             ],
             "compliance_legal_review_flags": production_readiness["compliance_review_flags"],
             "stack_status": health_payload["project"].get("stack_evidence"),
-            "dependency_status": health_payload["project"].get("dependency_source_status"),
-            "security_status": health_payload["project"].get("security_package_status"),
-            "validation_state": health_payload["project"].get("telemetry_status"),
-            "work_order_status": health_payload["project"].get("work_order_status"),
-            "attention_items": {
-                "open_count": health_payload["project"]
-                .get("work_order_status", {})
-                .get("attention_open", 0),
-                "source_tables": ["dashboard_attention_items"],
+            "stack_evidence": {
+                "registry_stack": health_payload["project"].get("stack_evidence"),
+                "repo_scan": repo_stack,
+                "source_refs": sorted(
+                    set(
+                        (repo_stack.get("source_refs") or [])
+                        + (
+                            health_payload["project"]
+                            .get("stack_evidence", {})
+                            .get("config_files", [])
+                        )
+                    )
+                ),
+                "secret_contents_read": False,
+                "repo_mutation_authorized": False,
                 "derived_view": True,
                 "primary_authority": False,
             },
+            "confirmed_dependencies": {
+                "nodes": dependency_graph.get("nodes", []),
+                "edges": dependency_graph.get("edges", []),
+                "node_count": dependency_graph.get("node_count", 0),
+                "edge_count": dependency_graph.get("edge_count", 0),
+                "rendered_by_default": True,
+                "source_status": dependency_graph.get("source_status"),
+                "knowledge_graph_status": dependency_graph.get("knowledge_graph_status"),
+            },
+            "inferred_or_unverified_dependencies": {
+                "edges": dependency_graph.get("inferred_edges", [])
+                + repo_stack.get("inferred_dependency_edges", []),
+                "edge_count": dependency_graph.get("inferred_edge_count", 0)
+                + repo_stack.get("inferred_dependency_count", 0),
+                "rendered_by_default": False,
+                "reason": "Manifest-derived or unverified dependencies are labeled separately and hidden from the default confirmed graph.",
+            },
+            "dependency_drilldown": {
+                "project_to_stack_component": "/api/v1/projects/{project_id}/details",
+                "stack_component_to_dependency": "/api/v1/projects/{project_id}/dependencies",
+                "dependency_to_evidence": "edge.source_refs and node.evidence_refs",
+                "confirmed_edges_only_by_default": True,
+            },
+            "dependency_status": health_payload["project"].get("dependency_source_status"),
+            "module_runtime_profile_fit": module_fit,
+            "security_status": health_payload["project"].get("security_package_status"),
+            "validation_state": {
+                "summary": health_payload["project"].get("telemetry_status"),
+                "recent": validation_state,
+            },
+            "work_order_status": health_payload["project"].get("work_order_status"),
+            "attention_items": attention_detail,
             "known_gaps": _project_detail_known_gaps(health_payload, production_readiness),
             "current_next_action": _project_detail_next_action(
                 health_payload, production_readiness
@@ -2104,10 +2619,16 @@ async def get_project_dependencies(
             else "'confirmed' AS dependency_type"
         )
         strength_expr = "strength" if "strength" in dependency_columns else "1.0 AS strength"
+        dependency_id_expr = (
+            "dependency_id"
+            if "dependency_id" in dependency_columns
+            else "from_component || '->' || to_component AS dependency_id"
+        )
 
         # Get dependencies
         deps_query = """
         SELECT
+            {dependency_id_expr},
             from_component,
             to_component,
             {dependency_type_expr},
@@ -2115,15 +2636,21 @@ async def get_project_dependencies(
         FROM pi_dependencies
         WHERE project_id = ?
         LIMIT ?
-        """.format(dependency_type_expr=dependency_type_expr, strength_expr=strength_expr)
+        """.format(
+            dependency_id_expr=dependency_id_expr,
+            dependency_type_expr=dependency_type_expr,
+            strength_expr=strength_expr,
+        )
 
         rows = cursor.execute(deps_query, (project_id, limit)).fetchall()
+        components = _component_index(conn, project_id)
 
         # Build nodes and edges
         nodes = {}
         edges = []
 
         for row in rows:
+            dependency_id = row["dependency_id"]
             from_comp = row["from_component"]
             to_comp = row["to_component"]
             dep_type = row["dependency_type"]
@@ -2135,12 +2662,44 @@ async def get_project_dependencies(
 
             # Add nodes
             if from_comp not in nodes:
-                nodes[from_comp] = {"id": from_comp, "name": from_name, "type": dep_type}
+                nodes[from_comp] = {
+                    "id": from_comp,
+                    "name": components.get(from_comp, {}).get("name") or from_name,
+                    "type": components.get(from_comp, {}).get("component_type") or "component",
+                    "path": components.get(from_comp, {}).get("path"),
+                    "evidence_refs": components.get(from_comp, {}).get("evidence_refs", []),
+                    "confirmation_status": "confirmed",
+                    "source_tables": ["pi_components", "pi_dependencies"],
+                }
             if to_comp not in nodes:
-                nodes[to_comp] = {"id": to_comp, "name": to_name, "type": dep_type}
+                nodes[to_comp] = {
+                    "id": to_comp,
+                    "name": components.get(to_comp, {}).get("name") or to_name,
+                    "type": components.get(to_comp, {}).get("component_type") or "component",
+                    "path": components.get(to_comp, {}).get("path"),
+                    "evidence_refs": components.get(to_comp, {}).get("evidence_refs", []),
+                    "confirmation_status": "confirmed",
+                    "source_tables": ["pi_components", "pi_dependencies"],
+                }
 
             # Add edge
-            edges.append({"from": from_comp, "to": to_comp, "type": dep_type, "strength": strength})
+            edge_source_refs = []
+            for component_id in (from_comp, to_comp):
+                edge_source_refs.extend(components.get(component_id, {}).get("evidence_refs", []))
+            edges.append(
+                {
+                    "id": dependency_id,
+                    "from": from_comp,
+                    "to": to_comp,
+                    "type": dep_type,
+                    "strength": strength,
+                    "confirmation_status": "confirmed",
+                    "rendered_by_default": True,
+                    "source_tables": ["pi_dependencies"],
+                    "source_refs": sorted(dict.fromkeys(edge_source_refs)),
+                    "evidence_refs": sorted(dict.fromkeys(edge_source_refs)),
+                }
+            )
 
         # Group by dependency type
         type_counts = {}
@@ -2152,8 +2711,14 @@ async def get_project_dependencies(
             "project_id": project_id,
             "nodes": list(nodes.values()),
             "edges": edges,
+            "confirmed_edges": edges,
+            "inferred_edges": [],
+            "unverified_edges": [],
             "node_count": len(nodes),
             "edge_count": len(edges),
+            "confirmed_edge_count": len(edges),
+            "inferred_edge_count": 0,
+            "unverified_edge_count": 0,
             "type_counts": type_counts,
             "knowledge_graph_status": {
                 "classification": "confirmed" if edges else "unavailable",
@@ -2164,14 +2729,23 @@ async def get_project_dependencies(
                 ),
                 "source_tables": ["pi_dependencies"],
                 "placeholder_edges_rendered": False,
+                "confirmed_edges_rendered_by_default": True,
+                "inferred_edges_rendered_by_default": False,
                 "derived_view": True,
                 "primary_authority": False,
             },
             "source_status": {
                 "classification": "fresh" if edges else "honest_empty_state",
-                "source_tables": ["pi_dependencies"],
+                "source_tables": ["pi_dependencies"]
+                + (["pi_components"] if object_exists(conn, "pi_components") else []),
                 "derived_view": True,
                 "primary_authority": False,
+            },
+            "drilldown": {
+                "project": project_id,
+                "node_to_component_evidence": "nodes[].evidence_refs",
+                "edge_to_dependency_evidence": "edges[].source_refs",
+                "confirmed_edges_only_by_default": True,
             },
         }
 

@@ -160,6 +160,12 @@ def test_dashboard_modernization_preserves_legacy_behavior_with_professional_con
     assert "graph-source-status" in html
     assert "Confirmed Stack Evidence" in html
     assert "Confirmed Dependency Summary" in html
+    assert "Module/Profile Fit" in html
+    assert "Validation And Attention" in html
+    assert "Inferred/unverified hidden" in html
+    assert "edge.confirmation_status" in html
+    assert "repoScan.package_manifests" in html
+    assert "details?.module_runtime_profile_fit" in html
     assert "No confirmed dependencies found" in html
     assert "Security Findings" in html
     assert "Attention Items" in html

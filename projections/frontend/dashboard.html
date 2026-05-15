@@ -6979,7 +6979,7 @@ if (document.readyState === 'loading') {
 
                 // Components
                 document.getElementById('modal-components').textContent = project.total_files || 0;
-                renderProjectStackEvidence(project);
+                renderProjectStackEvidence(project, detailsData);
                 renderProjectAuthorityEvidence(project, detailsData);
                 const stackEvidence = document.getElementById('modal-stack-evidence');
                 if (stackEvidence && healthModel.reason) {
@@ -7032,22 +7032,30 @@ if (document.readyState === 'loading') {
             }
         }
 
-        function renderProjectStackEvidence(project) {
+        function renderProjectStackEvidence(project, details) {
             const container = document.getElementById('modal-stack-evidence');
             if (!container) return;
             const stack = project.stack_evidence || {};
+            const detailStack = details?.stack_evidence || {};
+            const repoScan = detailStack.repo_scan || {};
+            const confirmedDeps = details?.confirmed_dependencies || {};
+            const inferredDeps = details?.inferred_or_unverified_dependencies || {};
             const dependencies = project.dependency_source_status || {};
-            const configFiles = (stack.config_files || []).slice(0, 5);
+            const configFiles = (repoScan.config_files || stack.config_files || []).slice(0, 5);
             const entryPoints = (stack.entry_points || []).slice(0, 5);
+            const manifests = (repoScan.package_manifests || []).slice(0, 4);
+            const apiRoutes = (repoScan.api_route_files || []).slice(0, 5);
+            const workflows = (repoScan.workflow_files || []).slice(0, 5);
             container.innerHTML = `
                 <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                         <div class="text-sm font-semibold text-gray-900">Confirmed Stack Evidence</div>
                         <div class="mt-1 text-gray-700">${telemetryEscapeHtml(stack.framework || project.stack_detected || 'Stack not analyzed')}</div>
-                        <div class="mt-1 text-xs text-gray-500">Classification: ${telemetryEscapeHtml(stack.classification || 'unknown')} / path=${telemetryEscapeHtml(project.path_status || 'unverified')}</div>
+                        <div class="mt-1 text-xs text-gray-500">Registry: ${telemetryEscapeHtml(stack.classification || 'unknown')} / repo scan: ${telemetryEscapeHtml(repoScan.classification || 'unavailable')} / path=${telemetryEscapeHtml(project.path_status || 'unverified')}</div>
                     </div>
                     <div class="text-xs text-gray-600 md:text-right">
-                        <div>Dependency edges: ${telemetryNumber(project.dependency_count || 0)}</div>
+                        <div>Confirmed edges: ${telemetryNumber(confirmedDeps.edge_count || project.dependency_count || 0)}</div>
+                        <div>Inferred/unverified hidden: ${telemetryNumber(inferredDeps.edge_count || 0)}</div>
                         <div>${telemetryEscapeHtml(dependencies.reason || 'No dependency source status reported.')}</div>
                     </div>
                 </div>
@@ -7059,6 +7067,14 @@ if (document.readyState === 'loading') {
                     <div>
                         <div class="text-xs font-semibold uppercase text-gray-500">Entry points</div>
                         <div class="mt-1">${entryPoints.length ? entryPoints.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No confirmed entry points recorded.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Package manifests</div>
+                        <div class="mt-1">${manifests.length ? manifests.map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item.path)} (${telemetryNumber(item.dependency_count || 0)})</span>`).join('') : '<span class="text-gray-500">No safe package manifests detected.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase text-gray-500">Routes and CI</div>
+                        <div class="mt-1">${[...apiRoutes, ...workflows].length ? [...apiRoutes, ...workflows].map(item => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(item)}</span>`).join('') : '<span class="text-gray-500">No route or CI evidence detected.</span>'}</div>
                     </div>
                 </div>
             `;
@@ -7072,6 +7088,9 @@ if (document.readyState === 'loading') {
             const readiness = details?.readiness_score || {};
             const controls = details?.readiness_control_coverage || {};
             const securityControls = details?.enterprise_security_controls || {};
+            const moduleFit = details?.module_runtime_profile_fit || {};
+            const validation = details?.validation_state?.recent || {};
+            const attention = details?.attention_items || {};
             const gaps = details?.known_gaps || [];
             const nextAction = details?.current_next_action || 'No current next action recorded.';
             container.innerHTML = `
@@ -7097,6 +7116,16 @@ if (document.readyState === 'loading') {
                         <div class="text-sm font-semibold text-gray-900">Production Readiness</div>
                         <div class="mt-1">${telemetryEscapeHtml(readiness.status || 'unavailable')}: ${telemetryEscapeHtml(readiness.reason || 'No persisted readiness assessment exists.')}</div>
                         <div class="mt-1 text-xs text-gray-600">Controls: ${telemetryNumber(controls.total || 0)} total, manual review ${telemetryNumber(controls.manual_review || 0)}, unknown ${telemetryNumber(controls.unknown || 0)}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Module/Profile Fit</div>
+                        <div class="mt-1 text-xs text-gray-600">${telemetryEscapeHtml(moduleFit.classification || 'unavailable')}</div>
+                        <div class="mt-2">${(moduleFit.candidate_profiles || []).slice(0, 6).map(profile => `<span class="source-chip mr-1 mb-1">${telemetryEscapeHtml(profile.profile_id)}</span>`).join('') || '<span class="text-gray-500">No profile fit evidence recorded.</span>'}</div>
+                    </div>
+                    <div>
+                        <div class="text-sm font-semibold text-gray-900">Validation And Attention</div>
+                        <div class="mt-1 text-xs text-gray-600">Recent validations: ${telemetryNumber(validation.recent_count || 0)}, failed/incomplete: ${telemetryNumber(validation.failed_recent_count || 0)}</div>
+                        <div class="mt-1 text-xs text-gray-600">Open attention items: ${telemetryNumber(attention.open_count || 0)}</div>
                     </div>
                 </div>
                 <div class="mt-4 border-t border-gray-200 pt-3">
@@ -7339,14 +7368,19 @@ if (document.readyState === 'loading') {
                 const depList = topDeps.map(edge => {
                     const fromName = edge.from.split(':').pop();
                     const toName = edge.to.split(':').pop();
+                    const refs = (edge.source_refs || edge.evidence_refs || []).slice(0, 2);
                     return `
-                        <div class="flex items-center gap-2 py-2 border-b border-gray-100 text-sm">
-                            <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(fromName)}</div>
-                            <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
-                            </svg>
-                            <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(toName)}</div>
-                            <span class="text-xs text-gray-500 flex-shrink-0">${telemetryEscapeHtml(edge.type)}</span>
+                        <div class="py-2 border-b border-gray-100 text-sm">
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(fromName)}</div>
+                                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                </svg>
+                                <div class="flex-1 truncate text-gray-700">${telemetryEscapeHtml(toName)}</div>
+                                <span class="text-xs text-gray-500 flex-shrink-0">${telemetryEscapeHtml(edge.type)}</span>
+                                <span class="source-chip">${telemetryEscapeHtml(edge.confirmation_status || 'confirmed')}</span>
+                            </div>
+                            <div class="mt-1 text-xs text-gray-500">${refs.length ? refs.map(ref => telemetryEscapeHtml(ref)).join(' / ') : 'No file-level evidence ref recorded.'}</div>
                         </div>
                     `;
                 }).join('');
@@ -7356,6 +7390,7 @@ if (document.readyState === 'loading') {
                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                             <div class="text-sm font-medium text-blue-900 mb-2">Confirmed Dependency Summary</div>
                             <div class="mb-3 text-xs text-blue-800">Only persisted dependency edges are rendered. Inferred or unverified edges are not shown by default.</div>
+                            <div class="mb-3 text-xs text-blue-800">Inferred edges available but hidden: ${telemetryNumber((data.inferred_edge_count || 0) + (data.unverified_edge_count || 0))}</div>
                             <div class="grid grid-cols-2 gap-3 mb-3">
                                 <div class="text-center">
                                     <div class="text-2xl font-bold text-blue-600">${data.node_count}</div>

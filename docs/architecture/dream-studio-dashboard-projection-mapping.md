@@ -180,6 +180,14 @@ readiness, blockers, attention, evidence refs, manual-review items, known gaps,
 and the current next action. Missing evidence must render as unavailable,
 partial, manual-review, or honest empty state with a reason.
 
+Project Details is also the main architecture and stack operating view. The
+`/api/v1/projects/{project_id}/details` response includes safe read-only stack
+evidence for package manifests, config files, API route files, frontend
+surfaces, CI workflows, migrations, skills, hooks, and adapter projections. It
+records source refs and manifest dependency names, but it does not inspect
+secrets, mutate repos, or promote manifest-derived dependencies to confirmed
+graph edges.
+
 PRD dashboard data is not a disconnected primary tab. PRD status is part of the
 project authority surface. Existing PRD files may be read and summarized when
 safe; missing PRDs become draft-generated authority status with explicit
@@ -196,6 +204,12 @@ current dependency records, repo/config files, routes, migrations, APIs,
 workflows, hooks, skills, adapters, CI/CD files, telemetry, or artifact refs. If
 confirmed evidence is absent, the projection reports unavailable and must not
 draw placeholder nodes or inferred edges.
+
+Dependency visualization separates confirmed edges from `pi_dependencies`,
+inferred or unverified manifest-derived dependencies, and unavailable states.
+Only confirmed persisted edges are rendered by default. Inferred/unverified
+dependencies are labeled separately and hidden by default. The drilldown path is
+project -> stack component -> dependency edge -> source/evidence refs.
 
 ## Analytics-Only Projection
 
