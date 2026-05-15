@@ -69,6 +69,16 @@ def _portfolio_db(tmp_path: Path) -> Path:
             "VALUES('pytest-temp-project', '/tmp/pytest-temp-project', 'pytest-temp-project', 'unknown', '{}', "
             "0, 0, 0, 0, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0, 1, 'quarantined', 'local_builds')"
         )
+        demo_root = tmp_path / "demo-project"
+        demo_root.mkdir()
+        conn.execute(
+            "INSERT INTO reg_projects(project_id, project_path, project_name, stack_detected, stack_json, "
+            "health_score, security_score, maintainability_score, total_files, lines_of_code, first_analyzed, "
+            "last_analyzed, total_sessions, is_temp, status, project_source) "
+            "VALUES('demo-project', ?, 'demo-project', 'unknown', '{}', "
+            "0, 0, 0, 1, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0, 0, 'active', 'local_builds')",
+            (str(demo_root),),
+        )
         conn.execute(
             "CREATE TABLE prd_documents("
             "prd_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, status TEXT, file_path TEXT, created_at TEXT)"
@@ -138,7 +148,15 @@ def test_all_projects_defaults_to_current_local_builds_authority(
         assert payload["primary_authority"] is False
         assert payload["total"] == 1
         assert {project["project_id"] for project in payload["projects"]} == {"dream-studio"}
+        assert payload["source_status"]["excluded_from_default_view"]["count"] == 1
+        assert (
+            "demo-project"
+            in payload["source_status"]["excluded_from_default_view"]["sample_project_ids"]
+        )
         project = payload["projects"][0]
+        assert project["project_authority_status"]["include_in_default_operator_view"] is True
+        assert project["project_authority_status"]["classification"] == "current_legitimate_project"
+        assert project["prd_status"]["status"] == "needs_update"
         assert project["prd_status"]["latest_status"] == "in-progress"
         assert project["security_package_status"]["open_findings"] == 1
         assert (
@@ -160,6 +178,30 @@ def test_all_projects_defaults_to_current_local_builds_authority(
         assert "security_findings" in payload["source_status"]["source_tables"]
         assert "dashboard_attention_items" in payload["source_status"]["source_tables"]
         assert "execution_events" in payload["source_status"]["source_tables"]
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_project_security_uses_high_confidence_legacy_alias(tmp_path: Path, monkeypatch) -> None:
+    db_path = _portfolio_db(tmp_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO security_findings(finding_id, project_id, severity, category, file_path, start_line, "
+            "description, status, created_at) VALUES('finding-alias', 'project_dream_studio', 'HIGH', 'legacy', "
+            "'core/security/lifecycle.py', 10, 'Legacy mapped finding', 'open', '2026-05-14T00:00:00Z')"
+        )
+        conn.commit()
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        health = client.get("/api/v1/projects/dream-studio/health").json()
+        assert health["project"]["security_package_status"]["open_findings"] == 2
+
+        security = client.get("/api/v1/projects/dream-studio/security").json()
+        assert security["count"] == 2
+        alias = [finding for finding in security["findings"] if finding["id"] == "finding-alias"][0]
+        assert alias["project_id"] == "dream-studio"
+        assert alias["source_project_id"] == "project_dream_studio"
+        assert "project_dream_studio" in security["alias_policy"]["aliases"]
     finally:
         DatabaseRuntime.reset_instance()
 

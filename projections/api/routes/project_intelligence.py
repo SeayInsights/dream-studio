@@ -5,6 +5,7 @@ import json
 import logging
 import sqlite3
 import uuid
+from collections import Counter
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -64,6 +65,118 @@ def _active_project_where(conn) -> str:
     return " AND ".join(clauses)
 
 
+def _optional_column_expr(
+    columns: set[str],
+    column: str,
+    *,
+    table_alias: str = "p",
+    alias: str | None = None,
+) -> str:
+    output = alias or column
+    return f"{table_alias}.{column} AS {output}" if column in columns else f"NULL AS {output}"
+
+
+def _security_alias_expr(project_ref: str) -> str:
+    return (
+        f"project_id IN ({project_ref}, "
+        f"'project_' || replace({project_ref}, '-', '_'), "
+        f"replace({project_ref}, '_', '-'))"
+    )
+
+
+def _security_aliases(project_id: str) -> list[str]:
+    aliases = [
+        project_id,
+        f"project_{project_id.replace('-', '_')}",
+        project_id.replace("_", "-"),
+    ]
+    return list(dict.fromkeys(alias for alias in aliases if alias))
+
+
+def _default_operator_exclusion_terms(value: str) -> bool:
+    lowered = value.lower()
+    return any(term in lowered for term in ("pytest", "temp", "demo", "placeholder"))
+
+
+def _classify_project_authority(project: dict[str, Any]) -> dict[str, Any]:
+    """Classify whether a project belongs in normal operator portfolio views."""
+
+    project_id = str(project.get("project_id") or "")
+    project_name = str(project.get("project_name") or "")
+    raw_path = str(project.get("project_path") or "")
+    project_type = str(project.get("project_type") or "")
+    project_source = str(project.get("project_source") or "")
+    status = str(project.get("status") or "")
+    path = Path(raw_path) if raw_path else None
+    if path and not path.is_absolute():
+        path = Path.home() / "builds" / path
+    path_exists = bool(path and path.exists())
+    path_text = str(path or raw_path)
+
+    reasons: list[str] = []
+    include_default = True
+    classification = "current_legitimate_project"
+    operational_classification = "local_active"
+    retention_class = "current_authority"
+
+    if not project_name:
+        include_default = False
+        classification = "manual_review_required"
+        retention_class = "manual_review_required"
+        reasons.append("project_name is missing")
+    if not path_exists:
+        include_default = False
+        classification = "manual_review_required"
+        retention_class = "manual_review_required"
+        reasons.append("project path is missing or unverified")
+    if status.lower() in {"inactive", "archived", "deactivated", "quarantined"}:
+        include_default = False
+        classification = "quarantined"
+        retention_class = "retention_only"
+        operational_classification = "inactive_or_quarantined"
+        reasons.append(f"status is {status}")
+    if _default_operator_exclusion_terms(" ".join((project_id, project_name))):
+        include_default = False
+        classification = "retention_only"
+        retention_class = "retention_only"
+        operational_classification = "excluded_test_demo_or_placeholder"
+        reasons.append("project id/name/path matches test, temp, demo, or placeholder policy")
+    if any(part in path_text.lower() for part in (".claude", ".codex", "worktrees")):
+        include_default = False
+        classification = "retention_only"
+        retention_class = "retention_only"
+        operational_classification = "adapter_runtime_scratch"
+        reasons.append("path is adapter scratch/worktree state")
+    if project_source and project_source not in {"local_builds", "current_authority"}:
+        include_default = False
+        classification = "retention_only"
+        retention_class = "retention_only"
+        operational_classification = "legacy_or_external_retained"
+        reasons.append(f"project_source is {project_source}")
+    if project_type and project_type not in {
+        "local_first_project",
+        "local_first_ai_ops",
+        "external_project",
+    }:
+        include_default = False
+        classification = "manual_review_required"
+        retention_class = "manual_review_required"
+        reasons.append(f"project_type is {project_type}")
+
+    return {
+        "include_in_default_operator_view": include_default,
+        "classification": classification,
+        "operational_classification": operational_classification,
+        "retention_class": retention_class,
+        "source_authority": "reg_projects",
+        "path_status": "confirmed" if path_exists else "unverified_missing_path",
+        "reasons": reasons or ["current project path and authority record are confirmed"],
+        "manual_review_required": classification == "manual_review_required",
+        "derived_view": True,
+        "primary_authority": False,
+    }
+
+
 def _optional_count_expr(table: str, where_column: str, *, condition: str | None = None) -> str:
     base = f"(SELECT COUNT(*) FROM {table} WHERE {where_column} = p.project_id"
     if condition:
@@ -78,6 +191,62 @@ def _project_path_exists(project_path: str | None) -> bool:
     if not path.is_absolute():
         path = Path.home() / "builds" / project_path
     return path.exists()
+
+
+def _resolve_prd_file(project: dict[str, Any], file_path: str | None) -> Path | None:
+    if not file_path:
+        return None
+    candidate = Path(file_path)
+    if candidate.is_absolute():
+        return candidate
+    project_path = project.get("project_path")
+    if not project_path:
+        return None
+    root = Path(str(project_path))
+    if not root.is_absolute():
+        root = Path.home() / "builds" / root
+    return root / candidate
+
+
+def _safe_prd_summary(project: dict[str, Any]) -> dict[str, Any]:
+    prd_file = _resolve_prd_file(project, project.get("latest_prd_file_path"))
+    if not prd_file or not prd_file.exists() or not prd_file.is_file():
+        return {
+            "available": False,
+            "summary": "PRD content was not available from the recorded source ref.",
+            "source_ref": project.get("latest_prd_file_path"),
+            "safe_read": False,
+        }
+    lowered_parts = {part.lower() for part in prd_file.parts}
+    if lowered_parts.intersection({".git", ".claude", ".codex", "secrets", "credentials"}):
+        return {
+            "available": False,
+            "summary": "PRD path is in a sensitive or adapter-runtime area and was not read.",
+            "source_ref": str(prd_file),
+            "safe_read": False,
+        }
+    try:
+        text = prd_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {
+            "available": False,
+            "summary": "PRD source ref could not be read.",
+            "source_ref": str(prd_file),
+            "safe_read": False,
+        }
+    lines = [
+        line.strip("# ").strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("<!--")
+    ]
+    summary_lines = lines[:6]
+    return {
+        "available": True,
+        "summary": " / ".join(summary_lines)[:800] if summary_lines else "PRD file exists.",
+        "source_ref": str(prd_file),
+        "safe_read": True,
+        "line_count": len(text.splitlines()),
+    }
 
 
 def _parse_stack_json(raw: str | None) -> dict[str, Any]:
@@ -98,6 +267,68 @@ def _as_int(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _json_list(raw: Any) -> list[Any]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, list):
+        return raw
+    if not isinstance(raw, str):
+        return [raw]
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return [raw]
+    return parsed if isinstance(parsed, list) else [parsed]
+
+
+def _build_prd_authority_status(project: dict[str, Any]) -> dict[str, Any]:
+    prd_count = _as_int(project.get("prd_count"))
+    latest_status = str(project.get("latest_prd_status") or "").lower()
+    summary = _safe_prd_summary(project) if prd_count else None
+    if not prd_count:
+        status = "draft_generated"
+        confidence = "low"
+        reason = "No current PRD authority row is linked; the dashboard exposes an explicit draft-required state instead of inventing claims."
+        manual_review_flags = ["prd_missing_current_authority"]
+    elif latest_status in {"superseded", "stale", "archived"}:
+        status = "stale_superseded"
+        confidence = "medium"
+        reason = "Latest linked PRD status indicates stale or superseded authority."
+        manual_review_flags = ["prd_supersession_review"]
+    elif summary and summary["available"]:
+        status = "current"
+        confidence = "medium"
+        reason = "A linked PRD authority row and readable source ref are available."
+        manual_review_flags = []
+    else:
+        status = "needs_update"
+        confidence = "low"
+        reason = "A PRD row exists but the recorded source ref is missing or unreadable."
+        manual_review_flags = ["prd_source_ref_review"]
+    return {
+        "status": status,
+        "latest_lifecycle_status": project.get("latest_prd_status"),
+        "title": project.get("latest_prd_title"),
+        "file_path": project.get("latest_prd_file_path"),
+        "created_at": project.get("latest_prd_created_at"),
+        "count": prd_count,
+        "confidence": confidence,
+        "reason": reason,
+        "summary": (
+            summary["summary"]
+            if summary
+            else "Draft PRD required; evidence is insufficient for product claims."
+        ),
+        "source_refs": (
+            [project.get("latest_prd_file_path")] if project.get("latest_prd_file_path") else []
+        ),
+        "evidence_refs": [summary["source_ref"]] if summary and summary.get("source_ref") else [],
+        "manual_review_flags": manual_review_flags,
+        "derived_view": True,
+        "primary_authority": False,
+    }
 
 
 def _build_health_model(project: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +446,13 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
     path_exists = _project_path_exists(project.get("project_path"))
     framework = project.get("stack_detected") or stack.get("framework")
     project["path_status"] = "confirmed" if path_exists else "unverified_missing_path"
+    project["project_authority_status"] = _classify_project_authority(project)
+    project["authority_source"] = {
+        "source_table": "reg_projects",
+        "source_authority": "current_project_registry",
+        "derived_view": True,
+        "primary_authority": False,
+    }
     project["stack_evidence"] = {
         "classification": (
             "confirmed" if framework and framework != "unknown" else "honest_empty_state"
@@ -241,12 +479,15 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
         "inferred": False,
     }
     prd_status = project.get("latest_prd_status")
+    prd_authority = _build_prd_authority_status(project)
     project["prd_status"] = {
         "count": _as_int(project.get("prd_count")),
         "latest_status": prd_status,
         "latest_title": project.get("latest_prd_title"),
         "latest_file_path": project.get("latest_prd_file_path"),
-        "classification": "fresh" if _as_int(project.get("prd_count")) else "empty by design",
+        "status": prd_authority["status"],
+        "classification": prd_authority["status"],
+        "authority": prd_authority,
         "source_tables": ["prd_documents"],
         "derived_view": True,
         "primary_authority": False,
@@ -333,8 +574,65 @@ def _project_surface_availability(conn) -> dict[str, bool]:
     }
 
 
+def _project_row_for_authority(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
+    if not object_exists(conn, "reg_projects"):
+        return None
+    row = conn.execute(
+        "SELECT * FROM reg_projects WHERE project_id = ? LIMIT 1", (project_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _unavailable_project_surfaces(availability: dict[str, bool]) -> list[str]:
     return [name for name, available in availability.items() if not available]
+
+
+def _security_assignment_summary(
+    conn: sqlite3.Connection,
+    visible_projects: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not object_exists(conn, "security_findings"):
+        return {
+            "classification": "unavailable",
+            "unassigned_legacy_finding_count": 0,
+            "unassigned_project_ids": [],
+            "source_tables": [],
+        }
+    if "project_id" not in table_columns(conn, "security_findings"):
+        return {
+            "classification": "unavailable",
+            "reason": "security_findings has no project_id column in this schema snapshot.",
+            "mapped_project_alias_count": 0,
+            "unassigned_legacy_finding_count": 0,
+            "unassigned_project_ids": [],
+            "source_tables": ["security_findings"],
+            "derived_view": True,
+            "primary_authority": False,
+        }
+    aliases: set[str] = set()
+    for project in visible_projects:
+        aliases.update(_security_aliases(str(project.get("project_id") or "")))
+    rows = conn.execute("""
+        SELECT COALESCE(project_id, '<null>') AS project_id, COUNT(*) AS count
+        FROM security_findings
+        GROUP BY COALESCE(project_id, '<null>')
+        ORDER BY count DESC
+        """).fetchall()
+    unassigned = [
+        {"project_id": row["project_id"], "count": row["count"]}
+        for row in rows
+        if row["project_id"] not in aliases
+    ]
+    return {
+        "classification": "fresh",
+        "mapped_project_alias_count": len(aliases),
+        "unassigned_legacy_finding_count": sum(item["count"] for item in unassigned),
+        "unassigned_project_ids": unassigned,
+        "unassigned_policy": "manual_review_required_or_retention_only; not shown in normal project cards until mapped",
+        "source_tables": ["security_findings"],
+        "derived_view": True,
+        "primary_authority": False,
+    }
 
 
 # ── HTTP Endpoints ───────────────────────────────────────────────────────────
@@ -374,8 +672,10 @@ async def list_projects(
         stack_json_expr = (
             "p.stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
         )
-        count_query = f"SELECT COUNT(DISTINCT project_path) as total FROM reg_projects WHERE {active_project_where}"
-        total = cursor.execute(count_query).fetchone()["total"]
+        project_type_expr = _optional_column_expr(project_columns, "project_type")
+        project_source_expr = _optional_column_expr(project_columns, "project_source")
+        status_expr = _optional_column_expr(project_columns, "status")
+        is_temp_expr = _optional_column_expr(project_columns, "is_temp")
 
         # Get projects with pagination (deduplicated by path, prioritizing entries with most sessions)
         prd_columns = (
@@ -401,6 +701,11 @@ async def list_projects(
             if "file_path" in prd_columns
             else "NULL"
         )
+        latest_prd_created_at_expr = (
+            "(SELECT created_at FROM prd_documents WHERE project_id = p.project_id ORDER BY created_at DESC LIMIT 1)"
+            if "created_at" in prd_columns
+            else "NULL"
+        )
         bug_count_expr = (
             _optional_count_expr("pi_bugs", "project_id", condition="status != 'fixed'")
             if object_exists(conn, "pi_bugs")
@@ -423,13 +728,18 @@ async def list_projects(
             if object_exists(conn, "pi_dependencies")
             else "0"
         )
+        security_columns = (
+            table_columns(conn, "security_findings")
+            if object_exists(conn, "security_findings")
+            else set()
+        )
         security_open_count_expr = (
             _optional_count_expr(
                 "security_findings",
                 "project_id",
                 condition="status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed')",
-            )
-            if object_exists(conn, "security_findings")
+            ).replace("project_id = p.project_id", _security_alias_expr("p.project_id"))
+            if "project_id" in security_columns
             else "0"
         )
         attention_open_count_expr = (
@@ -487,6 +797,10 @@ async def list_projects(
             p.project_id,
             p.project_name,
             p.project_path,
+            {project_type_expr},
+            {project_source_expr},
+            {status_expr},
+            {is_temp_expr},
             {stack_detected_expr},
             {stack_json_expr},
             p.health_score,
@@ -504,6 +818,7 @@ async def list_projects(
             {latest_prd_status_expr} as latest_prd_status,
             {latest_prd_title_expr} as latest_prd_title,
             {latest_prd_file_path_expr} as latest_prd_file_path,
+            {latest_prd_created_at_expr} as latest_prd_created_at,
             COALESCE({bug_count_expr}, 0) as bug_count,
             COALESCE({critical_bug_count_expr}, 0) as critical_bug_count,
             COALESCE({violation_count_expr}, 0) as violation_count,
@@ -517,15 +832,19 @@ async def list_projects(
         FROM ranked_projects p
         WHERE p.rn = 1
         ORDER BY p.total_sessions DESC, p.last_analyzed DESC
-        LIMIT ? OFFSET ?
         """.format(
             active_project_where=active_project_where,
+            project_type_expr=project_type_expr,
+            project_source_expr=project_source_expr,
+            status_expr=status_expr,
+            is_temp_expr=is_temp_expr,
             stack_detected_expr=stack_detected_expr,
             stack_json_expr=stack_json_expr,
             prd_count_expr=prd_count_expr,
             latest_prd_status_expr=latest_prd_status_expr,
             latest_prd_title_expr=latest_prd_title_expr,
             latest_prd_file_path_expr=latest_prd_file_path_expr,
+            latest_prd_created_at_expr=latest_prd_created_at_expr,
             bug_count_expr=bug_count_expr,
             critical_bug_count_expr=critical_bug_count_expr,
             violation_count_expr=violation_count_expr,
@@ -538,15 +857,24 @@ async def list_projects(
             route_blocker_count_expr=route_blocker_count_expr,
         )
 
-        rows = cursor.execute(query, (limit, offset)).fetchall()
-        projects = []
+        rows = cursor.execute(query).fetchall()
+        candidate_projects = []
+        excluded_projects = []
         for row in rows:
             project = _decorate_project_for_dashboard(dict(row))
+            if not project["project_authority_status"]["include_in_default_operator_view"]:
+                excluded_projects.append(project)
+                continue
             project["project_readiness_status"] = production_readiness_dashboard_summary(
                 conn,
                 project_id=project["project_id"],
             )["readiness_score"]
-            projects.append(project)
+            candidate_projects.append(project)
+        total = len(candidate_projects)
+        projects = candidate_projects[offset : offset + limit]  # noqa: E203
+        excluded_summary = Counter(
+            project["project_authority_status"]["retention_class"] for project in excluded_projects
+        )
 
         return {
             "total": total,
@@ -557,7 +885,7 @@ async def list_projects(
             "primary_authority": False,
             "source_status": {
                 "classification": "fresh",
-                "reason": "Projects are read from current active reg_projects rows; quarantined, temp, inactive, archived, and deactivated records are excluded.",
+                "reason": "Default All Projects shows only current legitimate project authority rows; temp, pytest, demo, placeholder, inactive, adapter-worktree, missing-path, and retained legacy rows are excluded from normal operator views.",
                 "source_tables": ["reg_projects"]
                 + (["prd_documents"] if object_exists(conn, "prd_documents") else [])
                 + (["pi_bugs"] if object_exists(conn, "pi_bugs") else [])
@@ -587,6 +915,16 @@ async def list_projects(
                     else []
                 ),
                 "missing": [] if object_exists(conn, "prd_documents") else ["prd_documents"],
+                "excluded_from_default_view": {
+                    "count": len(excluded_projects),
+                    "by_retention_class": dict(excluded_summary),
+                    "sample_project_ids": [
+                        project["project_id"] for project in excluded_projects[:12]
+                    ],
+                },
+                "security_finding_assignment_summary": _security_assignment_summary(
+                    conn, candidate_projects
+                ),
             },
         }
 
@@ -619,6 +957,18 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             "stack_detected" if "stack_detected" in project_columns else "NULL AS stack_detected"
         )
         stack_json_expr = "stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
+        project_type_expr = (
+            "project_type AS project_type"
+            if "project_type" in project_columns
+            else "NULL AS project_type"
+        )
+        project_source_expr = (
+            "project_source AS project_source"
+            if "project_source" in project_columns
+            else "NULL AS project_source"
+        )
+        status_expr = "status AS status" if "status" in project_columns else "NULL AS status"
+        is_temp_expr = "is_temp AS is_temp" if "is_temp" in project_columns else "NULL AS is_temp"
         prd_columns = (
             table_columns(conn, "prd_documents") if object_exists(conn, "prd_documents") else set()
         )
@@ -642,14 +992,26 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             if "file_path" in prd_columns
             else "NULL"
         )
+        latest_prd_created_at_expr = (
+            "(SELECT created_at FROM prd_documents WHERE project_id = reg_projects.project_id ORDER BY created_at DESC LIMIT 1)"
+            if "created_at" in prd_columns
+            else "NULL"
+        )
         dependency_count_expr = (
             "(SELECT COUNT(*) FROM pi_dependencies WHERE project_id = reg_projects.project_id)"
             if object_exists(conn, "pi_dependencies")
             else "0"
         )
-        security_open_count_expr = (
-            "(SELECT COUNT(*) FROM security_findings WHERE project_id = reg_projects.project_id AND status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed'))"
+        security_columns = (
+            table_columns(conn, "security_findings")
             if object_exists(conn, "security_findings")
+            else set()
+        )
+        security_open_count_expr = (
+            "(SELECT COUNT(*) FROM security_findings WHERE "
+            f"{_security_alias_expr('reg_projects.project_id')} "
+            "AND status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed'))"
+            if "project_id" in security_columns
             else "0"
         )
         attention_open_count_expr = (
@@ -684,6 +1046,10 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             project_id,
             project_name,
             project_path,
+            {project_type_expr},
+            {project_source_expr},
+            {status_expr},
+            {is_temp_expr},
             {stack_detected_expr},
             {stack_json_expr},
             health_score,
@@ -700,6 +1066,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             {latest_prd_status_expr} as latest_prd_status,
             {latest_prd_title_expr} as latest_prd_title,
             {latest_prd_file_path_expr} as latest_prd_file_path,
+            {latest_prd_created_at_expr} as latest_prd_created_at,
             COALESCE({dependency_count_expr}, 0) as dependency_count,
             COALESCE({security_open_count_expr}, 0) as security_open_count,
             COALESCE({attention_open_count_expr}, 0) as attention_open_count,
@@ -712,10 +1079,15 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         """.format(
             stack_detected_expr=stack_detected_expr,
             stack_json_expr=stack_json_expr,
+            project_type_expr=project_type_expr,
+            project_source_expr=project_source_expr,
+            status_expr=status_expr,
+            is_temp_expr=is_temp_expr,
             prd_count_expr=prd_count_expr,
             latest_prd_status_expr=latest_prd_status_expr,
             latest_prd_title_expr=latest_prd_title_expr,
             latest_prd_file_path_expr=latest_prd_file_path_expr,
+            latest_prd_created_at_expr=latest_prd_created_at_expr,
             dependency_count_expr=dependency_count_expr,
             security_open_count_expr=security_open_count_expr,
             attention_open_count_expr=attention_open_count_expr,
@@ -854,6 +1226,19 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
             "project_id": project_id,
             "derived_view": True,
             "primary_authority": False,
+            "project_identity": {
+                "project_id": project_id,
+                "project_name": health_payload["project"].get("project_name"),
+                "project_path": health_payload["project"].get("project_path"),
+                "project_authority_status": health_payload["project"].get(
+                    "project_authority_status"
+                ),
+                "authority_source": health_payload["project"].get("authority_source"),
+            },
+            "prd_status": health_payload["project"].get("prd_status"),
+            "prd_summary": (health_payload["project"].get("prd_status") or {})
+            .get("authority", {})
+            .get("summary"),
             "health_score": health_payload["health"],
             "readiness_score": production_readiness["readiness_score"],
             "readiness_control_coverage": production_readiness["control_summary"],
@@ -884,6 +1269,20 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
             "stack_status": health_payload["project"].get("stack_evidence"),
             "dependency_status": health_payload["project"].get("dependency_source_status"),
             "security_status": health_payload["project"].get("security_package_status"),
+            "validation_state": health_payload["project"].get("telemetry_status"),
+            "work_order_status": health_payload["project"].get("work_order_status"),
+            "attention_items": {
+                "open_count": health_payload["project"]
+                .get("work_order_status", {})
+                .get("attention_open", 0),
+                "source_tables": ["dashboard_attention_items"],
+                "derived_view": True,
+                "primary_authority": False,
+            },
+            "known_gaps": _project_detail_known_gaps(health_payload, production_readiness),
+            "current_next_action": _project_detail_next_action(
+                health_payload, production_readiness
+            ),
             "source_status": {
                 "classification": (
                     "fresh" if production_readiness.get("assessment_id") else "empty by design"
@@ -922,6 +1321,39 @@ def _collect_evidence_refs(controls: list[dict[str, Any]]) -> list[str]:
                 evidence = [evidence]
         refs.update(str(item) for item in evidence if item)
     return sorted(refs)
+
+
+def _project_detail_known_gaps(
+    health_payload: dict[str, Any],
+    production_readiness: dict[str, Any],
+) -> list[str]:
+    gaps: list[str] = []
+    project = health_payload.get("project", {})
+    prd_authority = (project.get("prd_status") or {}).get("authority") or {}
+    if prd_authority.get("status") != "current":
+        gaps.append(f"prd_status:{prd_authority.get('status', 'unknown')}")
+    if production_readiness.get("status") == "unavailable":
+        gaps.append("production_readiness_assessment_missing")
+    dependency_status = project.get("dependency_source_status") or {}
+    if dependency_status.get("classification") != "confirmed":
+        gaps.append("confirmed_dependency_graph_unavailable")
+    if project.get("health_model", {}).get("status") != "scored":
+        gaps.append("health_score_unavailable")
+    return gaps
+
+
+def _project_detail_next_action(
+    health_payload: dict[str, Any],
+    production_readiness: dict[str, Any],
+) -> str:
+    gaps = _project_detail_known_gaps(health_payload, production_readiness)
+    if "production_readiness_assessment_missing" in gaps:
+        return "Run or persist a project-scoped production readiness assessment when approved."
+    if any(gap.startswith("prd_status:") for gap in gaps):
+        return "Review or update PRD authority before release planning."
+    if "confirmed_dependency_graph_unavailable" in gaps:
+        return "Collect confirmed dependency evidence before drawing a Knowledge Graph."
+    return "Continue with the next evidence-backed Work Order."
 
 
 @router.get("/{project_id}/history")
@@ -1256,17 +1688,34 @@ async def get_project_prds(project_id: str) -> Dict[str, Any]:
                 ),
             }
 
-        query = """
+        prd_columns = table_columns(conn, "prd_documents")
+        file_path_expr = "file_path" if "file_path" in prd_columns else "NULL AS file_path"
+        approved_at_expr = "approved_at" if "approved_at" in prd_columns else "NULL AS approved_at"
+        completed_at_expr = (
+            "completed_at" if "completed_at" in prd_columns else "NULL AS completed_at"
+        )
+        total_tasks_expr = "total_tasks" if "total_tasks" in prd_columns else "0 AS total_tasks"
+        completed_tasks_expr = (
+            "completed_tasks" if "completed_tasks" in prd_columns else "0 AS completed_tasks"
+        )
+        pct_complete_expr = (
+            "ROUND(100.0 * completed_tasks / NULLIF(total_tasks, 0), 1) AS pct_complete"
+            if {"completed_tasks", "total_tasks"}.issubset(prd_columns)
+            else "NULL AS pct_complete"
+        )
+
+        query = f"""
         SELECT
             prd_id,
             title,
             status,
+            {file_path_expr},
             created_at,
-            approved_at,
-            completed_at,
-            total_tasks,
-            completed_tasks,
-            ROUND(100.0 * completed_tasks / NULLIF(total_tasks, 0), 1) AS pct_complete
+            {approved_at_expr},
+            {completed_at_expr},
+            {total_tasks_expr},
+            {completed_tasks_expr},
+            {pct_complete_expr}
         FROM prd_documents
         WHERE project_id = ?
         ORDER BY created_at DESC
@@ -1274,8 +1723,42 @@ async def get_project_prds(project_id: str) -> Dict[str, Any]:
 
         rows = cursor.execute(query, (project_id,)).fetchall()
         prds = [dict(row) for row in rows]
+        project = _project_row_for_authority(conn, project_id)
+        if project:
+            project.update(
+                {
+                    "prd_count": len(prds),
+                    "latest_prd_status": prds[0].get("status") if prds else None,
+                    "latest_prd_title": prds[0].get("title") if prds else None,
+                    "latest_prd_file_path": prds[0].get("file_path") if prds else None,
+                    "latest_prd_created_at": prds[0].get("created_at") if prds else None,
+                }
+            )
+            prd_authority = _build_prd_authority_status(project)
+        else:
+            prd_authority = {
+                "status": "manual_review_required",
+                "reason": "Project authority row is missing for this PRD request.",
+                "manual_review_flags": ["project_authority_missing"],
+            }
 
-        return {"project_id": project_id, "prds": prds, "count": len(prds)}
+        return {
+            "project_id": project_id,
+            "prds": prds,
+            "count": len(prds),
+            "prd_authority": prd_authority,
+            "source_status": {
+                "classification": "fresh" if prds else "honest_empty_state",
+                "reason": (
+                    "PRD records are linked to current project authority."
+                    if prds
+                    else "No PRD authority rows are linked; draft_generated/manual review status is exposed instead."
+                ),
+                "source_tables": ["prd_documents", "reg_projects"],
+                "derived_view": True,
+                "primary_authority": False,
+            },
+        }
 
     except Exception as e:
         logger.error(f"Error getting project PRDs: {e}")
@@ -1294,38 +1777,86 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
         cursor = conn.cursor()
 
         if object_exists(conn, "security_findings"):
+            finding_columns = table_columns(conn, "security_findings")
+            if "project_id" not in finding_columns:
+                return {
+                    "project_id": project_id,
+                    "findings": [],
+                    "count": 0,
+                    "source_status": {
+                        "classification": "unavailable",
+                        "reason": "security_findings has no project_id column in this schema snapshot.",
+                        "source_tables": ["security_findings"],
+                        "derived_view": True,
+                        "primary_authority": False,
+                    },
+                }
+            aliases = _security_aliases(project_id)
+            placeholders = ",".join("?" for _ in aliases)
+            rule_id_expr = "rule_id" if "rule_id" in finding_columns else "NULL AS rule_id"
+            recommendation_expr = (
+                "recommendation"
+                if "recommendation" in finding_columns
+                else "NULL AS recommendation"
+            )
+            end_line_expr = "end_line" if "end_line" in finding_columns else "NULL AS end_line"
+            evidence_refs_expr = (
+                "evidence_refs_json"
+                if "evidence_refs_json" in finding_columns
+                else "'[]' AS evidence_refs_json"
+            )
             query = """
             SELECT
                 finding_id,
+                project_id,
                 category,
+                {rule_id_expr},
                 severity,
                 description,
+                {recommendation_expr},
                 file_path,
                 start_line,
+                {end_line_expr},
                 status,
+                {evidence_refs_expr},
                 created_at
             FROM security_findings
-            WHERE project_id = ? AND COALESCE(status, 'open') NOT IN ('resolved', 'mitigated', 'false_positive')
+            WHERE project_id IN ({placeholders})
+              AND COALESCE(status, 'open') NOT IN ('resolved', 'mitigated', 'false_positive')
             ORDER BY
-                CASE severity
+                CASE lower(severity)
                     WHEN 'critical' THEN 1
                     WHEN 'high' THEN 2
                     WHEN 'medium' THEN 3
                     ELSE 4
                 END,
                 created_at DESC
-            """
-            rows = cursor.execute(query, (project_id,)).fetchall()
+            """.format(
+                placeholders=placeholders,
+                rule_id_expr=rule_id_expr,
+                recommendation_expr=recommendation_expr,
+                end_line_expr=end_line_expr,
+                evidence_refs_expr=evidence_refs_expr,
+            )
+            rows = cursor.execute(query, aliases).fetchall()
             findings = [
                 {
                     "id": row["finding_id"],
+                    "source_project_id": row["project_id"],
+                    "project_id": project_id,
                     "title": row["category"] or "security finding",
-                    "severity": row["severity"],
+                    "rule_id": row["rule_id"],
+                    "severity": str(row["severity"] or "unknown").lower(),
                     "description": row["description"],
+                    "recommendation": row["recommendation"],
+                    "file_path": row["file_path"],
+                    "line": row["start_line"],
+                    "end_line": row["end_line"],
                     "location": (
                         f"{row['file_path']}:{row['start_line']}" if row["file_path"] else "Unknown"
                     ),
                     "status": row["status"],
+                    "evidence_refs": _json_list(row["evidence_refs_json"]),
                     "created_at": row["created_at"],
                 }
                 for row in rows
@@ -1334,6 +1865,10 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                 "project_id": project_id,
                 "findings": findings,
                 "count": len(findings),
+                "alias_policy": {
+                    "aliases": aliases,
+                    "reason": "Migrated legacy findings may use high-confidence project_<id_with_underscores> aliases.",
+                },
                 "source_status": {
                     "classification": "fresh",
                     "reason": "Project security detail is read from current security_findings authority.",
@@ -1620,6 +2155,24 @@ async def get_project_dependencies(
             "node_count": len(nodes),
             "edge_count": len(edges),
             "type_counts": type_counts,
+            "knowledge_graph_status": {
+                "classification": "confirmed" if edges else "unavailable",
+                "reason": (
+                    "Confirmed dependency edges are available from pi_dependencies."
+                    if edges
+                    else "No confirmed dependency edges exist; the dashboard must not draw placeholder graph nodes or inferred edges."
+                ),
+                "source_tables": ["pi_dependencies"],
+                "placeholder_edges_rendered": False,
+                "derived_view": True,
+                "primary_authority": False,
+            },
+            "source_status": {
+                "classification": "fresh" if edges else "honest_empty_state",
+                "source_tables": ["pi_dependencies"],
+                "derived_view": True,
+                "primary_authority": False,
+            },
         }
 
     except Exception as e:
