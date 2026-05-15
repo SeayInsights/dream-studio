@@ -1,8 +1,8 @@
 {
-  "branch": "integration/shared-intelligence-remaining-milestones",
+  "branch": "main",
   "clean_clone_validation_status": "pass",
   "clean_home_dream_studio_created": false,
-  "clone_path": "<system-temp>/dream-studio-publication-clean-clone-20260514-181631/repo",
+  "clone_path": "<system-temp>/dream-studio-publication-clean-clone-20260515-120714/repo",
   "clone_source": "local repository clone with no hardlinks",
   "commands": [
     {
@@ -14,11 +14,15 @@
       "result": "clean branch checkout"
     },
     {
-      "command": "python -m pytest tests/unit/test_install_bootstrap_sqlite_authority.py tests/unit/test_contract_docs_drift_gate.py tests/unit/test_maturity_ledger.py tests/unit/test_github_pr_cicd_release_gate.py -q --tb=line",
-      "result": "26 passed"
+      "command": "python -m pytest tests/unit/test_install_bootstrap_sqlite_authority.py tests/unit/test_contract_docs_drift_gate.py tests/unit/test_contract_atlas_lifecycle.py tests/unit/test_repo_publication_readiness.py tests/unit/test_maturity_ledger.py tests/unit/test_github_pr_cicd_release_gate.py -q --tb=line",
+      "result": "35 passed"
     },
     {
       "command": "python interfaces/cli/contract_docs_drift_gate.py",
+      "result": "pass"
+    },
+    {
+      "command": "python interfaces/cli/repo_publication_readiness.py --strict",
       "result": "pass"
     },
     {
@@ -26,9 +30,9 @@
       "result": "pass"
     }
   ],
-  "generated_at": "2026-05-14T22:18:08.566955+00:00",
-  "head_validated": "ce06e56076427576690ea7e4da3a9e5d6f0cb0f3",
-  "home_override": "<system-temp>/dream-studio-publication-clean-clone-20260514-181631/home",
+  "generated_at": "2026-05-15T16:07:42.324289+00:00",
+  "head_validated": "6452137ff237acbaf431a15022383443fdb3963f",
+  "home_override": "<system-temp>/dream-studio-publication-clean-clone-20260515-120714/home",
   "invalid_attempt_excluded": {
     "reason": "PowerShell $HOME variable name collision prevented temp home assignment on first attempt.",
     "used_as_evidence": false

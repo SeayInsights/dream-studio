@@ -1,10 +1,10 @@
 # Docs Publication Readiness Report
 
-Generated: 2026-05-15T15:56:46.463837+00:00
+Generated: 2026-05-15T16:07:58.391685+00:00
 
 ## Verdict
 
-`CURRENT_TREE_AND_HISTORY_CLEAN_CLEAN_CLONE_VALIDATION_REQUIRED`
+`PUBLICATION_READY_NO_PRIVATE_ARTIFACTS_DETECTED`
 
 The current tracked tree is publication-safe when the checks below pass. Dream
 Studio keeps product source, public docs, tests, templates, adapter projection
@@ -14,7 +14,7 @@ belongs in operator-local runtime state and is not source authority.
 ## Current Tree
 
 - Branch: `main`
-- Head: `afe91411ce74072c0a7e7d16939fda74070a16d3`
+- Head: `6452137ff237acbaf431a15022383443fdb3963f`
 - Tracked files audited: 1604
 - Private/local artifacts currently tracked: 0
 - Untracked publication-risk files: 0
@@ -36,7 +36,7 @@ details, local absolute paths, secrets, and sensitive values.
 
 ## Clean Clone
 
-Clean-clone validation status: `not_run`.
+Clean-clone validation status: `pass`.
 
 ## Git History Privacy
 
