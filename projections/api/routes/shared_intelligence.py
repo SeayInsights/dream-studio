@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Query
 from core.analytics_ingestion import analytics_only_profile_status
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
+from core.module_contracts import module_contracts
 from core.production_readiness import (
     build_secure_production_readiness_gate,
     production_readiness_control_catalog,
@@ -128,6 +129,11 @@ async def get_shared_intelligence_status(
                     ],
                 },
                 {
+                    "surface_id": "module-contracts",
+                    "api_path": "/api/shared-intelligence/module-contracts",
+                    "source_tables": [],
+                },
+                {
                     "surface_id": "maturity-ledger",
                     "api_path": "/api/shared-intelligence/contract-atlas/maturity-ledger",
                     "source_tables": [],
@@ -187,6 +193,13 @@ async def get_analytics_only_status() -> dict[str, Any]:
     """Return analytics-only profile and ingestion contract status."""
 
     return _with_connection(analytics_only_profile_status)
+
+
+@router.get("/module-contracts")
+async def get_module_contracts() -> dict[str, Any]:
+    """Return major module boundary contracts without runtime execution."""
+
+    return _dashboard_response(module_contracts())
 
 
 @router.get("/adapter-router")

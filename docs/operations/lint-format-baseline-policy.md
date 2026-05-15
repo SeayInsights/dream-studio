@@ -81,6 +81,15 @@ productization, troubleshooting, and independent configuration docs required by
 the drift report. Tests should prove dry-run behavior, explicit write
 authorization, idempotent current-authority imports, and honest empty states.
 
+Module contract changes are release-gate relevant. If code changes affect
+`core.module_contracts`, installed profile declarations, module/profile
+Contract Atlas sections, or module dependency boundaries, the same change set
+must refresh Contract Atlas, installed runtime/productization docs,
+troubleshooting, and independent configuration docs. Tests should prove
+required module contracts exist, optional dependencies remain optional,
+token-only cost honesty is preserved, and standalone modules do not import
+unrelated hook/agent/workflow/Docker surfaces.
+
 Security lifecycle changes are release-gate relevant. If code changes affect
 `core/security`, security review contracts, project health security hydration,
 shared-intelligence security routes, or release readiness security status, the

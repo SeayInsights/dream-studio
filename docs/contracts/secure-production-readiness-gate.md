@@ -47,6 +47,12 @@ applicability rules, evidence requirements, allowed states, blocking policy,
 remediation path, dashboard visibility, health/readiness/release impact,
 Contract Atlas impact, and overlap mapping.
 
+Module contracts are readiness inputs. The gate may use
+`core.module_contracts` and `/api/shared-intelligence/module-contracts` to
+understand module ownership, optional dependencies, disabled-module behavior,
+and install profile membership before deciding which readiness controls apply.
+Those contract reads are non-executing and do not write SQLite.
+
 ## Skill And Control Overlap
 
 Existing skills and gates are canonical when they already work:

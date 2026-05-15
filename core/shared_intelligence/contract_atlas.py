@@ -17,6 +17,7 @@ from typing import Any
 
 from core.analytics_ingestion import analytics_only_profile_status
 from core.installed_runtime import installed_runtime_model
+from core.module_contracts import module_contracts, validate_module_contracts
 from core.module_profiles import module_profiles, validate_module_profiles
 from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
 from core.shared_intelligence.adapter_staleness import (
@@ -73,8 +74,10 @@ def build_contract_atlas(
     staleness_report = adapter_staleness_report(
         conn, config_root=root, project_id=effective_project_id
     )
-    module_contracts = build_module_registry_contracts(DASHBOARD_MODULES)
-    module_errors = validate_module_registry_contracts(DASHBOARD_MODULES)
+    telemetry_module_contracts = build_module_registry_contracts(DASHBOARD_MODULES)
+    telemetry_module_errors = validate_module_registry_contracts(DASHBOARD_MODULES)
+    major_module_contracts = module_contracts()
+    major_module_errors = validate_module_contracts()
     docker_errors = validate_docker_profile_contracts(DOCKER_MODULE_PROFILES)
     staleness_errors = validate_adapter_staleness_report(staleness_report)
     current_maturity_ledger = maturity_ledger(project_id=effective_project_id)
@@ -114,7 +117,8 @@ def build_contract_atlas(
         "whole_system_contract": _whole_system_contract(),
         "contract_registry": contract_registry(),
         "layer_contracts": _layer_contracts(),
-        "module_contracts": module_contracts["modules"],
+        "module_contracts": major_module_contracts,
+        "telemetry_module_contracts": telemetry_module_contracts["modules"],
         "interface_contracts": _interface_contracts(),
         "runtime_profiles": _runtime_profiles(),
         "installed_runtime_model": installed_runtime_model(
@@ -155,7 +159,7 @@ def build_contract_atlas(
         "dashboard_private_export_boundaries": _dashboard_private_export_boundaries(),
         "maturity_scorecard": _maturity_scorecard(
             staleness_report=staleness_report,
-            module_errors=module_errors,
+            module_errors=[*telemetry_module_errors, *major_module_errors],
             docker_errors=docker_errors,
             maturity_errors=maturity_errors,
             profile_errors=profile_errors,
@@ -174,7 +178,7 @@ def build_contract_atlas(
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
-            module_errors=module_errors,
+            module_errors=[*telemetry_module_errors, *major_module_errors],
             docker_errors=docker_errors,
             staleness_errors=staleness_errors,
             maturity_errors=maturity_errors,
@@ -237,6 +241,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "whole_system_contract",
         "layer_contracts",
         "module_contracts",
+        "telemetry_module_contracts",
         "interface_contracts",
         "runtime_profiles",
         "installed_runtime_model",
@@ -534,6 +539,11 @@ def _maturity_scorecard(
             "error_count": len(profile_errors),
         },
         {
+            "area": "module_boundary_contracts",
+            "status": "validated" if not module_errors else "contract_errors_present",
+            "error_count": len(module_errors),
+        },
+        {
             "area": "dependency_graph",
             "status": "confirmed_edges_only",
             "reason": "Edges are generated from repo constants, route declarations, and adapter authority profiles.",
@@ -621,6 +631,25 @@ def _confirmed_dependency_graph(
         add_edge(
             "system:dream-studio", layer_id, "contains_layer", "contract_atlas.layer_contracts"
         )
+
+    for contract in module_contracts()["contracts"]:
+        module_id = f"module:{contract['module_id']}"
+        add_node(module_id, "module", contract["module_id"])
+        add_edge(
+            "system:dream-studio",
+            module_id,
+            "declares_module_contract",
+            "core.module_contracts.MODULE_CONTRACTS",
+        )
+        for table in contract.get("owned_tables", []):
+            table_id = f"table:{table}"
+            add_node(table_id, "sqlite_table", str(table))
+            add_edge(
+                module_id,
+                table_id,
+                "owns_or_writes_authority",
+                "core.module_contracts.MODULE_CONTRACTS",
+            )
 
     for module in DASHBOARD_MODULES:
         module_id = f"module:{module['module_id']}"

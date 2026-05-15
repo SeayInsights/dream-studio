@@ -41,6 +41,8 @@ The dashboard mapping covers:
 - Paused external validation targets
 - Contract Atlas status and boundary violations
 - Installed adapter router status and module/profile health
+- Module boundary contracts, install profile membership, disabled-module
+  behavior, and empty-state policy
 - AI adapter usage accounting, billing mode, token visibility, cost visibility,
   source confidence, and operational value telemetry
 - Security lifecycle gate status and 47-control applicability
@@ -89,14 +91,18 @@ show operational value signals instead of fabricated dollar precision.
 ## Contract Atlas Projection
 
 The Contract Atlas projection is exposed through
-`/api/shared-intelligence/contract-atlas`. It is a dashboard-consumable derived
-view over repo-backed contract declarations, module declarations, runtime
-profiles, adapter projection state, and SQLite shared-intelligence authority.
+`/api/shared-intelligence/contract-atlas`; the major module contract subset is
+also exposed through `/api/shared-intelligence/module-contracts`. Both are
+dashboard-consumable derived views over repo-backed contract declarations,
+major module contracts, telemetry module declarations, runtime profiles,
+adapter projection state, and SQLite shared-intelligence authority.
 
 The projection may display:
 
 - whole-system, layer, module, interface, runtime profile, and adapter
   projection contracts;
+- major module contract fields such as owned tables, read/write dependencies,
+  profile membership, disabled-module behavior, and validation tests;
 - docs freshness tracking and the release-gate drift policy;
 - maturity scorecard;
 - confirmed dependency graph;

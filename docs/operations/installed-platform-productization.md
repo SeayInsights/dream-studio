@@ -45,6 +45,7 @@ Supported installed profiles:
 - `core`
 - `analytics_only`
 - `security_only`
+- `token_only`
 - `telemetry_only`
 - `dashboard_only`
 - `adapter_router_only`
@@ -54,8 +55,18 @@ Supported installed profiles:
 Unselected modules are disabled cleanly and should report honest empty states.
 `analytics_only` works without hooks, agents, workflows, Claude, Codex, repo
 mutation, or Docker. `security_only` works independently of Claude, Codex, and
-Docker. `full` enables the complete local surface but still respects adapter
-and live-state guardrails.
+Docker. `token_only` reports usage telemetry without converting plan-based or
+unknown token visibility into fabricated cost. `full` enables the complete local
+surface but still respects adapter and live-state guardrails.
+
+Major module contracts live in `core.module_contracts`. They are independent of
+the installed profile list and declare the operational boundary for `core`,
+`telemetry`, `dashboard`, `security_only`, `token_only`, `analytics_only`,
+`shared_intelligence`, `adapter_router`, `adapter_projection`,
+`external_project`, `docker_optional`, and `full`. These contracts define owned
+tables/authority, dependencies, events, routes, dashboard surfaces, commands,
+disabled-module behavior, empty states, profile membership, readiness impact,
+Contract Atlas maturity, and validation tests.
 
 ## Global Commands
 

@@ -64,6 +64,11 @@ dependency installation, Docker, or remediation. Imported findings still need
 source refs, evidence refs, severity, status, project id, file/line when
 available, and remediation path when available.
 
+Module contracts may declare that a module affects security/readiness posture,
+but they do not replace this profile pack or the 47-control framework. Security
+reviewers can use `/api/shared-intelligence/module-contracts` to understand
+module ownership and optional dependencies before selecting controls.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`

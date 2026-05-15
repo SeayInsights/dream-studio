@@ -8,6 +8,7 @@ PROFILE_IDS: tuple[str, ...] = (
     "core",
     "analytics_only",
     "security_only",
+    "token_only",
     "telemetry_only",
     "dashboard_only",
     "adapter_router_only",
@@ -85,6 +86,40 @@ MODULE_PROFILES: tuple[dict[str, Any], ...] = (
         "docker_required": False,
         "expected_dashboard_api_behavior": "security_empty_state_when_no_findings",
         "honest_empty_state": "No security findings recorded for the selected scope.",
+    },
+    {
+        "profile_id": "token_only",
+        "includes": [
+            "token_usage_read_models",
+            "ai_usage_accounting",
+            "operational_value_metrics",
+        ],
+        "excludes": [
+            "fake_cost_estimation",
+            "hooks",
+            "agents",
+            "workflows",
+            "claude",
+            "codex",
+            "docker",
+            "repo_mutation",
+        ],
+        "required_dependencies": ["python", "sqlite"],
+        "optional_dependencies": ["provider_usage_export"],
+        "exposed_commands": ["ds status", "ds modules"],
+        "exposed_routes": [
+            "/api/v1/metrics/tokens",
+            "/api/shared-intelligence/ai-usage-accounting",
+        ],
+        "hooks_required": False,
+        "agents_required": False,
+        "workflows_required": False,
+        "claude_required": False,
+        "codex_required": False,
+        "docker_required": False,
+        "expected_dashboard_api_behavior": "usage_read_models_with_unknown_costs_when_unavailable",
+        "honest_empty_state": "No token or AI usage records have been imported or captured.",
+        "cost_policy": "unknown_cost_stays_unknown_unless_provider_or_manual_allocation_exists",
     },
     {
         "profile_id": "telemetry_only",
@@ -258,4 +293,24 @@ def validate_module_profiles(profiles: tuple[dict[str, Any], ...] = MODULE_PROFI
         errors.append("analytics_only must expose explicit analytics ingestion")
     if analytics.get("hooks_are_optional_producers") is not True:
         errors.append("analytics_only must classify hooks as optional producers")
+    token = next(
+        (profile for profile in profiles if profile.get("profile_id") == "token_only"),
+        {},
+    )
+    for field in (
+        "hooks_required",
+        "agents_required",
+        "workflows_required",
+        "claude_required",
+        "codex_required",
+        "docker_required",
+    ):
+        if token.get(field) is not False:
+            errors.append(f"token_only must not require {field.removesuffix('_required')}")
+    if "fake_cost_estimation" not in token.get("excludes", []):
+        errors.append("token_only must explicitly exclude fake cost estimation")
+    if token.get("cost_policy") != (
+        "unknown_cost_stays_unknown_unless_provider_or_manual_allocation_exists"
+    ):
+        errors.append("token_only must preserve unknown costs honestly")
     return errors

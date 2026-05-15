@@ -52,6 +52,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "core/shared_intelligence/contract_atlas.py",
             "core/shared_intelligence/contract_registry.py",
             "core/shared_intelligence/maturity_ledger.py",
+            "core/module_contracts.py",
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
@@ -130,6 +131,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "source_patterns": [
             "core/installed_runtime.py",
             "core/installed_productization.py",
+            "core/module_contracts.py",
             "core/module_profiles.py",
             "ds.cmd",
             "ds.ps1",
