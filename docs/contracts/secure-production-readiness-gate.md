@@ -76,6 +76,8 @@ Existing skills and gates are canonical when they already work:
 - quality harden and structure-audit map to code quality and architecture.
 - `ci_gate.py`, lint baseline, docs drift, and pip-audit map to release and
   supply-chain readiness.
+- lightweight GitHub PR smoke maps to remote confidence, while local
+  `ci_gate.py` remains the heavy release-readiness evidence layer.
 - project intelligence health stays health; production readiness is tracked
   separately.
 

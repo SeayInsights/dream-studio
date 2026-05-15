@@ -87,6 +87,11 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
         "ds install"
     )
     assert atlas["installed_module_profiles"]["profile_count"] == 9
+    assert atlas["github_cicd_profile"]["status"] == "pass"
+    assert atlas["github_cicd_profile"]["required_checks"] == ["pr-smoke"]
+    assert atlas["github_cicd_profile"]["heavy_validation_layer"] == (
+        "local_dream_studio_release_gate"
+    )
     assert atlas["boundary_violation_report"]["status"] == "pass"
     assert any(
         item["area"] == "current_maturity_ledger" and item["status"] == "validated"
@@ -105,6 +110,11 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert any(
         item["area"] == "analytics_only_ingestion"
         and item["write_authorization"] == "explicit_ingestion_execute_only"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "github_cicd_profile"
+        and item["github_actions_role"] == "lightweight_remote_confidence_layer"
         for item in atlas["maturity_scorecard"]
     )
     assert any(
@@ -164,6 +174,10 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     assert any(
         edge["source"] == "module:analytics_only_ingestion"
         and edge["target"] == "table:reg_projects"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:github_cicd_profile" and edge["target"] == "workflow:pr-smoke"
         for edge in graph["edges"]
     )
     assert any(

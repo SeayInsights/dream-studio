@@ -1,102 +1,71 @@
-name: CI
+name: PR Smoke
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
-    name: test (${{ matrix.os }} / py${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+  pr-smoke:
+    name: pr-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          fetch-depth: 0
 
-      - name: Validate plugin.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Validate plugin manifest
         shell: python
         run: |
-          import json, sys
+          import json
+          import sys
           from pathlib import Path
+
           manifest = Path(".claude-plugin/plugin.json")
-          with manifest.open() as f:
-              m = json.load(f)
+          data = json.loads(manifest.read_text(encoding="utf-8"))
           required = ["name", "version", "description", "license"]
-          missing = [k for k in required if k not in m]
+          missing = [key for key in required if key not in data]
           if missing:
               print(f"plugin.json missing keys: {missing}")
               sys.exit(1)
-          print(f"plugin.json OK: {m['name']}@{m['version']}")
+          print(f"plugin.json OK: {data['name']}@{data['version']}")
 
-      - name: Install dev deps
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+      - name: Contract docs drift
+        env:
+          DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
+        run: python interfaces/cli/contract_docs_drift_gate.py
 
-      - name: Run tests with coverage
-        shell: bash
-        run: |
-          pytest tests/ -v --cov=hooks/lib --cov=packs/domains/domain_lib --cov-report=term-missing
+      - name: Contract Atlas lifecycle
+        env:
+          DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
+        run: python interfaces/cli/contract_atlas_lifecycle_gate.py
 
-      - name: Validate coach analyst coverage
-        shell: bash
-        run: python interfaces/cli/validate_analysts.py
+      - name: Format check
+        run: python -m black --check .
 
-  ci-gate:
-    name: ci-gate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dev deps
-        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
-      - name: Run CI gate
-        run: python interfaces/cli/ci_gate.py
+      - name: Lint baseline check
+        run: python interfaces/cli/lint_baseline.py check
 
-  analytics:
-    name: analytics dashboard
-    runs-on: ubuntu-latest
-    needs: [test]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install deps
-        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
-      - name: Render dashboard
-        run: python interfaces/cli/ds_analytics/main.py
-      - name: Upload dashboard artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: analytics-dashboard
-          path: ~/.dream-studio/analytics/dashboard.html
-          retention-days: 30
-
-  audit:
-    name: dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install dev deps
-        run: python -m pip install --upgrade pip && pip install -r requirements-dev.txt
-      - name: pip-audit
-        run: pip-audit -r requirements-dev.txt
+      - name: Focused smoke tests
+        run: >
+          python -m pytest
+          tests/unit/test_contract_docs_drift_gate.py
+          tests/unit/test_contract_atlas_lifecycle.py
+          tests/unit/test_github_pr_cicd_release_gate.py
+          tests/unit/test_release_gate_lint_baseline_policy.py
+          -q --tb=short

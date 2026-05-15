@@ -35,7 +35,14 @@ class CICDProfile:
     release_branch_naming: str
     workflow_files: tuple[str, ...]
     required_checks: tuple[str, ...]
+    optional_checks: tuple[str, ...]
+    manual_workflows: tuple[str, ...]
+    release_workflows: tuple[str, ...]
     local_preflight_commands: tuple[str, ...]
+    github_actions_role: str
+    heavy_validation_layer: str
+    github_actions_minutes_policy: str
+    github_actions_unavailable_policy: str
     merge_policy: str
     deployment_policy: str
     rollback_notes: tuple[str, ...]
@@ -50,7 +57,14 @@ class CICDProfile:
             "release_branch_naming": self.release_branch_naming,
             "workflow_files": list(self.workflow_files),
             "required_checks": list(self.required_checks),
+            "optional_checks": list(self.optional_checks),
+            "manual_workflows": list(self.manual_workflows),
+            "release_workflows": list(self.release_workflows),
             "local_preflight_commands": list(self.local_preflight_commands),
+            "github_actions_role": self.github_actions_role,
+            "heavy_validation_layer": self.heavy_validation_layer,
+            "github_actions_minutes_policy": self.github_actions_minutes_policy,
+            "github_actions_unavailable_policy": self.github_actions_unavailable_policy,
             "merge_policy": self.merge_policy,
             "deployment_policy": self.deployment_policy,
             "rollback_notes": list(self.rollback_notes),
@@ -76,7 +90,14 @@ def profile_from_mapping(data: Mapping[str, Any]) -> CICDProfile:
         release_branch_naming=_required_text(data, "release_branch_naming"),
         workflow_files=tuple(_text_sequence(data.get("workflow_files"))),
         required_checks=tuple(_text_sequence(data.get("required_checks"))),
+        optional_checks=tuple(_text_sequence(data.get("optional_checks"))),
+        manual_workflows=tuple(_text_sequence(data.get("manual_workflows"))),
+        release_workflows=tuple(_text_sequence(data.get("release_workflows"))),
         local_preflight_commands=tuple(_text_sequence(data.get("local_preflight_commands"))),
+        github_actions_role=_required_text(data, "github_actions_role"),
+        heavy_validation_layer=_required_text(data, "heavy_validation_layer"),
+        github_actions_minutes_policy=_required_text(data, "github_actions_minutes_policy"),
+        github_actions_unavailable_policy=_required_text(data, "github_actions_unavailable_policy"),
         merge_policy=_required_text(data, "merge_policy"),
         deployment_policy=_required_text(data, "deployment_policy"),
         rollback_notes=tuple(_text_sequence(data.get("rollback_notes"))),
@@ -114,8 +135,20 @@ def validate_cicd_profile(
         issues.append("workflow_files_required")
     if not profile.required_checks:
         issues.append("required_checks_required")
+    if not profile.manual_workflows:
+        issues.append("manual_workflows_required")
+    if not profile.release_workflows:
+        issues.append("release_workflows_required")
     if not profile.local_preflight_commands:
         issues.append("local_preflight_commands_required")
+    if profile.github_actions_role != "lightweight_remote_confidence_layer":
+        issues.append("github_actions_must_remain_lightweight_confidence_layer")
+    if profile.heavy_validation_layer != "local_dream_studio_release_gate":
+        issues.append("heavy_validation_must_remain_local_release_gate")
+    if "avoid_full_matrix_on_push" not in profile.github_actions_minutes_policy:
+        issues.append("github_actions_minutes_policy_must_avoid_full_matrix_on_push")
+    if "local_release_gate" not in profile.github_actions_unavailable_policy:
+        issues.append("github_actions_unavailable_policy_must_preserve_local_gate")
     if profile.merge_policy != MERGE_POLICY_AUTO:
         issues.append("unsupported_merge_policy")
     if profile.deployment_policy != DEPLOYMENT_SEPARATE_APPROVAL:
@@ -127,6 +160,9 @@ def validate_cicd_profile(
     for workflow in profile.workflow_files:
         if discovered and workflow not in discovered:
             issues.append(f"workflow_missing:{workflow}")
+    for workflow in (*profile.manual_workflows, *profile.release_workflows):
+        if workflow not in profile.workflow_files:
+            issues.append(f"workflow_not_declared:{workflow}")
 
     if any(
         _is_direct_main_command(command, profile.default_branch)
@@ -147,28 +183,27 @@ def build_dream_studio_cicd_profile(repo_path: str) -> CICDProfile:
         release_branch_naming="integration/{milestone_or_release}",
         workflow_files=(
             ".github/workflows/ci.yml",
+            ".github/workflows/full-ci.yml",
+            ".github/workflows/release-validation.yml",
             ".github/workflows/validate-skills.yml",
         ),
-        required_checks=(
-            "ci-gate",
-            "dependency audit",
-            "test (ubuntu-latest / py3.10)",
-            "test (ubuntu-latest / py3.11)",
-            "test (ubuntu-latest / py3.12)",
-            "test (macos-latest / py3.10)",
-            "test (macos-latest / py3.11)",
-            "test (macos-latest / py3.12)",
-            "test (windows-latest / py3.10)",
-            "test (windows-latest / py3.11)",
-            "test (windows-latest / py3.12)",
-        ),
+        required_checks=("pr-smoke",),
+        optional_checks=("validate-skills", "full-ci", "release-validation"),
+        manual_workflows=(".github/workflows/full-ci.yml",),
+        release_workflows=(".github/workflows/release-validation.yml",),
         local_preflight_commands=(
-            "python -m pytest tests/unit/test_entry_point_reliability.py tests/unit/test_native_readiness_gates.py tests/unit/test_runtime_preflight.py -q --tb=line",
-            "python -m pytest tests/unit/test_install_bootstrap_sqlite_authority.py tests/unit/test_work_order_milestones.py tests/unit/test_work_order_milestone_handoff_integration.py tests/unit/test_handoff_prompt_eval.py tests/unit/test_work_order_next_prompt_handoff.py -q --tb=line",
-            "python -m pytest tests/unit/test_telemetry_read_models.py tests/unit/test_actual_dashboard_telemetry_routes.py tests/unit/test_end_to_end_traceability_loop.py tests/unit/test_frontend_dashboard_telemetry_surface.py tests/unit/test_dashboard_legacy_hook_routes.py -q --tb=line",
-            "python -m pytest tests/unit/test_work_order_target_profile_boundary.py tests/unit/test_project_registry_paused_targets.py tests/unit/test_hook_lifecycle_governance.py -q --tb=line",
-            "python -m pytest -q --tb=line",
+            "python scripts/runtime_state_hash_guard.py --label local_release_gate -- python interfaces/cli/ci_gate.py",
             "git diff --check",
+        ),
+        github_actions_role="lightweight_remote_confidence_layer",
+        heavy_validation_layer="local_dream_studio_release_gate",
+        github_actions_minutes_policy=(
+            "avoid_full_matrix_on_push; run cheap pr-smoke on pull_request; "
+            "full-ci is workflow_dispatch only"
+        ),
+        github_actions_unavailable_policy=(
+            "do_not_block_development; preserve local_release_gate as primary; "
+            "manual review required before merge if required remote smoke is unavailable"
         ),
         merge_policy=MERGE_POLICY_AUTO,
         deployment_policy=DEPLOYMENT_SEPARATE_APPROVAL,
@@ -179,7 +214,8 @@ def build_dream_studio_cicd_profile(repo_path: str) -> CICDProfile:
         ),
         project_validation_commands=(
             "python interfaces/cli/ci_gate.py",
-            "python interfaces/cli/validate_analysts.py",
+            "python interfaces/cli/contract_docs_drift_gate.py",
+            "python interfaces/cli/contract_atlas_lifecycle_gate.py",
             "python scripts/runtime_state_hash_guard.py --help",
         ),
     )
@@ -227,7 +263,14 @@ def build_release_gate_packet(
         "pr_url": pr_url,
         "workflow_files": list(profile.workflow_files),
         "required_checks": list(profile.required_checks),
+        "optional_checks": list(profile.optional_checks),
+        "manual_workflows": list(profile.manual_workflows),
+        "release_workflows": list(profile.release_workflows),
         "local_preflight_commands": list(profile.local_preflight_commands),
+        "github_actions_role": profile.github_actions_role,
+        "heavy_validation_layer": profile.heavy_validation_layer,
+        "github_actions_minutes_policy": profile.github_actions_minutes_policy,
+        "github_actions_unavailable_policy": profile.github_actions_unavailable_policy,
         "release_branch_required": True,
         "direct_to_main_allowed": False,
         "merge_decision": merge,
@@ -256,7 +299,20 @@ def evaluate_merge_decision(
     check_map = {_text(check.get("name")): check for check in checks}
     missing = [name for name in profile.required_checks if name not in check_map]
     if missing:
-        return _blocked("required_checks_missing", missing_required_checks=missing)
+        if not checks:
+            return _blocked(
+                "github_actions_unavailable_or_disabled",
+                missing_required_checks=missing,
+                development_blocked=False,
+                local_release_gate_remains_primary=True,
+                unavailable_policy=profile.github_actions_unavailable_policy,
+            )
+        return _blocked(
+            "required_checks_missing",
+            missing_required_checks=missing,
+            development_blocked=False,
+            local_release_gate_remains_primary=True,
+        )
 
     blocked_external = [
         _text(check.get("name")) for check in checks if is_external_ci_blocker(check)
@@ -285,6 +341,7 @@ def evaluate_merge_decision(
         "merge_method": "merge",
         "deployment_allowed": False,
         "deployment_policy": profile.deployment_policy,
+        "heavy_validation_layer": profile.heavy_validation_layer,
     }
 
 

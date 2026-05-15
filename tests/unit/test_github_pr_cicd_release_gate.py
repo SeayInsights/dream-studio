@@ -35,20 +35,17 @@ def test_dream_studio_profile_records_release_gate_contract() -> None:
     assert profile.merge_policy == MERGE_POLICY_AUTO
     assert profile.deployment_policy == "separate_approval_required"
     assert ".github/workflows/ci.yml" in profile.workflow_files
-    assert "ci-gate" in profile.required_checks
-    assert "dependency audit" in profile.required_checks
-    assert "test (windows-latest / py3.12)" in profile.required_checks
-    assert any(
-        "test_install_bootstrap_sqlite_authority.py" in command
-        for command in profile.local_preflight_commands
-    )
-    assert any(
-        "test_telemetry_read_models.py" in command for command in profile.local_preflight_commands
-    )
-    assert any(
-        "test_work_order_target_profile_boundary.py" in command
-        for command in profile.local_preflight_commands
-    )
+    assert ".github/workflows/full-ci.yml" in profile.workflow_files
+    assert ".github/workflows/release-validation.yml" in profile.workflow_files
+    assert profile.required_checks == ("pr-smoke",)
+    assert "full-ci" in profile.optional_checks
+    assert profile.manual_workflows == (".github/workflows/full-ci.yml",)
+    assert profile.release_workflows == (".github/workflows/release-validation.yml",)
+    assert profile.github_actions_role == "lightweight_remote_confidence_layer"
+    assert profile.heavy_validation_layer == "local_dream_studio_release_gate"
+    assert "avoid_full_matrix_on_push" in profile.github_actions_minutes_policy
+    assert "local_release_gate" in profile.github_actions_unavailable_policy
+    assert any("ci_gate.py" in command for command in profile.local_preflight_commands)
     assert validate_cicd_profile(profile, discovered_workflows=discovered) == []
 
 
@@ -115,14 +112,14 @@ def test_merge_decision_blocks_direct_to_main_and_failed_required_checks() -> No
     )
     assert failed["can_merge"] is False
     assert failed["reason"] == "required_checks_failed"
-    assert failed["failed_required_checks"] == ["ci-gate"]
+    assert failed["failed_required_checks"] == ["pr-smoke"]
 
 
 def test_ci_billing_blocker_requires_operator_action_not_repo_repair() -> None:
     profile = build_dream_studio_cicd_profile(str(REPO_ROOT))
     checks = _success_checks(profile)
     checks[0] = {
-        "name": "ci-gate",
+        "name": "pr-smoke",
         "status": "COMPLETED",
         "conclusion": "FAILURE",
         "annotation": "The job was not started because recent account payments have failed or your spending limit needs to be increased.",
@@ -140,6 +137,22 @@ def test_ci_billing_blocker_requires_operator_action_not_repo_repair() -> None:
     assert decision["requires_operator_action"] is True
 
 
+def test_github_actions_unavailable_does_not_block_local_development() -> None:
+    profile = build_dream_studio_cicd_profile(str(REPO_ROOT))
+
+    decision = evaluate_merge_decision(
+        profile=profile,
+        current_branch="integration/lightweight-ci",
+        target_branch="main",
+        checks=[],
+    )
+
+    assert decision["can_merge"] is False
+    assert decision["reason"] == "github_actions_unavailable_or_disabled"
+    assert decision["development_blocked"] is False
+    assert decision["local_release_gate_remains_primary"] is True
+
+
 def test_failure_work_orders_are_generated_from_failed_checks() -> None:
     profile = build_dream_studio_cicd_profile(str(REPO_ROOT))
     work_orders = build_failure_work_orders(
@@ -151,7 +164,7 @@ def test_failure_work_orders_are_generated_from_failed_checks() -> None:
                 "conclusion": "FAILURE",
             },
             {
-                "name": "ci-gate",
+                "name": "pr-smoke",
                 "status": "COMPLETED",
                 "conclusion": "FAILURE",
                 "annotation": "The job was not started because recent account payments have failed.",
@@ -162,7 +175,7 @@ def test_failure_work_orders_are_generated_from_failed_checks() -> None:
 
     assert [item["source_check"] for item in work_orders] == [
         "test (ubuntu-latest / py3.10)",
-        "ci-gate",
+        "pr-smoke",
     ]
     assert work_orders[0]["recommended_route"] == "continue_internal_bounded_repair"
     assert work_orders[1]["recommended_route"] == "require_operator_action"
@@ -185,4 +198,23 @@ def test_release_gate_packet_is_dashboard_consumable_and_non_authoritative() -> 
     assert packet["routing_authority"] is False
     assert packet["release_branch_required"] is True
     assert packet["direct_to_main_allowed"] is False
+    assert packet["github_actions_role"] == "lightweight_remote_confidence_layer"
+    assert packet["heavy_validation_layer"] == "local_dream_studio_release_gate"
     assert packet["merge_decision"]["can_merge"] is True
+
+
+def test_github_workflows_are_lightweight_manual_or_release_scoped() -> None:
+    pr_smoke = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    full_ci = (REPO_ROOT / ".github" / "workflows" / "full-ci.yml").read_text(encoding="utf-8")
+    release = (REPO_ROOT / ".github" / "workflows" / "release-validation.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pull_request:" in pr_smoke
+    assert "python interfaces/cli/ci_gate.py" not in pr_smoke
+    assert "workflow_dispatch:" in full_ci
+    assert "pull_request:" not in full_ci
+    assert "python interfaces/cli/ci_gate.py" in full_ci
+    assert "workflow_dispatch:" in release
+    assert "tags:" in release
+    assert "Release validation is evidence only." in release
