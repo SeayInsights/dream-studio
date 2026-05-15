@@ -45,6 +45,9 @@ The dashboard mapping covers:
   source confidence, and operational value telemetry
 - Security lifecycle gate status and 47-control applicability
 - Production readiness status, controls, scorecards, findings, and remediation Work Orders
+- Project portfolio authority, PRD authority, security posture, readiness posture,
+  health, blockers, remediation, and evidence refs for All Projects and Project
+  Details
 
 ## Required Mapping Fields
 
@@ -149,6 +152,43 @@ The dashboard must label partial or unavailable scores honestly. Missing
 evidence is shown as missing evidence, not as a zero score. The projection may
 read SQLite authority records but must not create fake findings or claim legal
 or regulatory compliance.
+
+## Project Portfolio Projection
+
+All Projects and Project Details are the canonical operator-facing project
+intelligence surfaces. They are still derived views: project authority remains
+in SQLite/project records, PRD authority records, source repos, Contract Atlas
+records, security/readiness authority, and evidence refs.
+
+The default All Projects view includes only current legitimate projects. It
+excludes temp, pytest, demo, placeholder, inactive/quarantined, adapter
+scratch/worktree, missing-path, and legacy fallback rows. Excluded rows remain
+retained or manual-review authority when the data cannot be safely removed, but
+they must not contaminate normal operator views.
+
+Project Details displays project identity/status, PRD status and summary,
+stack/dependency evidence, security findings, 47-control coverage, production
+readiness coverage, validation state, remediation Work Orders, health,
+readiness, blockers, attention, evidence refs, manual-review items, known gaps,
+and the current next action. Missing evidence must render as unavailable,
+partial, manual-review, or honest empty state with a reason.
+
+PRD dashboard data is not a disconnected primary tab. PRD status is part of the
+project authority surface. Existing PRD files may be read and summarized when
+safe; missing PRDs become draft-generated authority status with explicit
+unknowns and manual-review flags rather than invented claims.
+
+Security findings may use narrow high-confidence alias mapping, such as
+`project_<project_id_with_underscores>` for legacy migrated rows. Findings that
+cannot be mapped to a current project remain retention-only or manual-review
+items outside default cards. Synthetic, test, temp, and demo findings must not
+appear in live operator views.
+
+Knowledge Graph and stack/dependency displays must use confirmed evidence from
+current dependency records, repo/config files, routes, migrations, APIs,
+workflows, hooks, skills, adapters, CI/CD files, telemetry, or artifact refs. If
+confirmed evidence is absent, the projection reports unavailable and must not
+draw placeholder nodes or inferred edges.
 
 ## Freshness And Staleness
 

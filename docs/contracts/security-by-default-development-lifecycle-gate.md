@@ -72,6 +72,25 @@ caching, accessibility, observability, performance, dependency, code-quality,
 privacy, rollback, and release controls, but enterprise security control
 authority remains here.
 
+## Project Portfolio Hydration
+
+All Projects and Project Details consume normalized security findings as a
+derived view over current security authority. Findings must remain traceable to
+their source rows or evidence refs and include project, file, line, severity,
+status, control or rule where available, and remediation path where available.
+
+Migrated findings may be assigned to current projects only through
+high-confidence mapping, such as an exact project id or the legacy
+`project_<project_id_with_underscores>` alias. Findings that cannot be assigned
+without ambiguity must be classified as `manual_review_required`,
+`unassigned_legacy_finding`, `retention_only`, or `not_applicable` and kept out
+of normal operator project cards until reviewed.
+
+The 47 enterprise controls must be visible or honestly unavailable at the
+project level. Not-applicable controls require reasons, unknown controls route
+to manual review or dashboard attention, and synthetic/demo/test findings must
+not appear in live operator views.
+
 ## AI Usage Accounting Impact
 
 Changes to adapter billing mode, token visibility, cost visibility, provider

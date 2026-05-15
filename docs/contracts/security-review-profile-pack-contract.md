@@ -51,6 +51,13 @@ security review evidence into broader deployment readiness. It must not fork the
 47-control framework or create duplicate security skills when an existing
 security skill mode already covers the control well.
 
+Project portfolio hydration consumes the same normalized finding contract for
+All Projects and Project Details. Live operator views must summarize only
+current legitimate project findings by default. Legacy findings that lack a
+high-confidence current project mapping stay retention-only or manual-review
+records; they are not copied into project cards and are not recreated as a
+parallel finding system.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`

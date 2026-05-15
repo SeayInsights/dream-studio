@@ -82,6 +82,32 @@ the adapter accounting record marks it as exact, provider-reported, explicitly
 estimated, or allocated subscription cost with supporting source/evidence refs.
 Unknown cost should remain `unknown`, not zero.
 
+## Project Portfolio Readiness Surface
+
+All Projects and Project Details are the normal operator surfaces for project
+health, PRD status, security posture, production readiness, remediation, and
+release blockers. They are derived views over current project authority,
+current PRD authority, security/readiness records, validation records,
+attention items, evidence refs, and source repos.
+
+Default project lists must include only current legitimate projects. Temp,
+pytest, demo, placeholder, inactive/quarantined, adapter scratch/worktree,
+missing-path, and legacy fallback records stay out of normal operator views and
+are retained only as manual-review or retention-only records when they cannot
+be safely removed.
+
+Project health and project readiness remain separate. Health describes current
+condition and operational risk; readiness describes whether evidence supports
+real users, release, deployment, publication, enterprise use, or broader
+rollout. If evidence is insufficient, the dashboard and API must show
+unavailable or partial status with missing evidence, blockers, and source refs.
+They must not show fake precision.
+
+PRD status is part of project authority. Existing safe PRD files can be read
+and summarized. Missing or stale PRD evidence becomes `draft_generated`,
+`needs_update`, `stale_superseded`, or `manual_review_required` status; no
+unsupported product claims should be invented.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:
