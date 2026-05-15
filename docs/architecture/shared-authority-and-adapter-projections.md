@@ -99,6 +99,15 @@ with `--execute`. It imports into SQLite authority tables and keeps hooks,
 agents, workflows, Claude, Codex, Docker, repo mutation, and cleanup optional or
 out of scope.
 
+Expert workflow access is read-only by default. Adapters may read
+`/api/shared-intelligence/expert-workflows` or a context packet summary to
+understand the intentional implementation, code quality, debugging,
+performance, frontend design, SEO/content, documentation, data modeling, API
+integration, case-study, and career/portfolio workflow contracts. Results must
+normalize back into Dream Studio authority records when execution is approved.
+The route does not replace existing skills, publish private career data, fill
+applications, or authorize browser automation.
+
 External project validation follows the same projection discipline. External
 targets are registry entries and dashboard cards until the current operator
 decision selects a target and scope. Planning can describe dirty-state capture,

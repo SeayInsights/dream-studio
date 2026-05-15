@@ -53,6 +53,20 @@ security/readiness impact, maturity level, and validation tests. `token_only`
 keeps cost unknown unless cost evidence exists, and Docker remains optional
 non-authoritative infrastructure.
 
+## Expert Workflows
+
+Dream Studio expert workflows map existing skills into evaluated reusable
+workflow contracts for intentional implementation, code quality, debugging,
+performance, frontend design, SEO/content, documentation, data modeling, API
+integration, product demos/case studies, and career/portfolio operations. The
+catalog lives in `core.shared_intelligence.expert_workflows` and is exposed at
+`/api/shared-intelligence/expert-workflows`.
+
+The workflow system strengthens existing owners instead of creating duplicate
+skills. Career and application automation remain private by default and retain
+the no-account-creation, no-CAPTCHA-bypass, no-misrepresentation, and
+operator-approval-before-submit boundaries.
+
 ## AI Usage Accounting
 
 Dream Studio records AI adapter usage as operational telemetry. Tokens are not
@@ -83,6 +97,7 @@ read models, and token/model analytics.
 - [Docker Module Profiles](operations/docker-module-profiles.md)
 - [Long-Run Multisession Operational Validation](operations/long-run-multisession-operational-validation.md)
 - [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
+- [Expert Workflow Systems](operations/expert-workflow-systems.md)
 
 ## Publication Rule
 

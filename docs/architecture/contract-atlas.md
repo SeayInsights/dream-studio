@@ -53,6 +53,7 @@ The registry currently tracks these release-blocking domains:
 - External project validation pipeline
 - Docker module runtime boundary
 - Long-run multisession operational validation
+- Expert skills and workflow system
 
 Each domain declares:
 
@@ -185,6 +186,14 @@ execution, and Docker remains optional non-authoritative infrastructure.
 The same contract payload is available directly at
 `/api/shared-intelligence/module-contracts` for dashboard/API consumers that do
 not need the full atlas.
+
+The atlas also exposes `expert_workflow_system`, a derived section backed by
+`core.shared_intelligence.expert_workflows`. It summarizes the expert workflow
+catalog, overlap decisions, no-duplicate-skill policy, career/application
+automation boundaries, and authority write targets. Confirmed dependency graph
+edges map each expert workflow back to existing skill/workflow owners rather
+than inventing a parallel skill system. The full catalog is available at
+`/api/shared-intelligence/expert-workflows`.
 
 ## Drift Gate
 

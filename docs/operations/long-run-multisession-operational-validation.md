@@ -17,6 +17,7 @@ The closeout model requires evidence for:
 - installed command surface cycle
 - Contract Atlas/docs drift check
 - security/readiness classification
+- expert workflow catalog and overlap check
 - adapter/router status check
 - analytics-only profile check
 
@@ -31,6 +32,7 @@ The validation report blocks when it sees:
 - hidden mutation
 - evidence file sprawl
 - dashboard authority drift
+- expert workflow overlap decisions creating duplicate skill systems
 - old path references returning
 - synthetic/mock/test data leaking into live dashboard views
 - adapter staleness drift

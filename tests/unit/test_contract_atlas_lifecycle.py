@@ -164,6 +164,8 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
             "--changed-file",
             "docs/operations/product-readiness.md",
             "--changed-file",
+            "docs/operations/expert-workflow-systems.md",
+            "--changed-file",
             "docs/PUBLICATION_BOUNDARY.md",
             "--changed-file",
             "docs/operations/repo-publication-privacy.md",

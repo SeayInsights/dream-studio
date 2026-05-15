@@ -67,6 +67,23 @@ Run `ds validate`, `ds modules`, and `ds contract-atlas` to confirm the runtime
 surface is available. Run `ds contract-atlas-refresh` without `--execute` to
 preview sanitized export and docs/PRD/README freshness without writing files.
 
+## Expert Workflow Catalog Is Empty Or Missing
+
+Symptom: `/api/shared-intelligence/expert-workflows` is unavailable or does not
+list the expected expert workflow contracts.
+
+Check:
+
+- Run `ds contract-atlas` and confirm `expert_workflow_system` has
+  `validation_status: pass`.
+- Run `python -m pytest tests/unit/test_expert_workflow_catalog.py -q` from the
+  source checkout.
+- Confirm the installed source root points at a checkout that contains
+  `core/shared_intelligence/expert_workflows.py`.
+
+Do not create duplicate skill folders to make the route pass. The route should
+map to existing skill/workflow owners and report missing evidence honestly.
+
 ## Adapter Is Unsupported Or Unproven
 
 Symptom: an AI tool is classified as `context_packet_only` or

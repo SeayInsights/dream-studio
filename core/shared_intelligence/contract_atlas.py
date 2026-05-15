@@ -36,6 +36,10 @@ from core.release.github_pr_cicd_gate import (
     validate_cicd_profile,
 )
 from core.security.lifecycle import build_security_lifecycle_gate
+from core.shared_intelligence.expert_workflows import (
+    expert_workflow_catalog,
+    validate_expert_workflow_catalog,
+)
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
@@ -103,6 +107,8 @@ def build_contract_atlas(
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
     analytics_only_status = analytics_only_profile_status(conn)
     github_cicd_profile = _github_cicd_profile(root)
+    expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
+    expert_workflow_errors = validate_expert_workflow_catalog(expert_workflows)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -158,6 +164,18 @@ def build_contract_atlas(
             "schema_status": usage_accounting.get("schema_status", "available"),
         },
         "github_cicd_profile": github_cicd_profile,
+        "expert_workflow_system": {
+            "workflow_count": expert_workflows["workflow_count"],
+            "overlap_decision_counts": expert_workflows["overlap_decision_counts"],
+            "no_duplicate_skill_policy": expert_workflows["no_duplicate_skill_policy"],
+            "career_preserved_behavior_count": len(expert_workflows["career_preserved_behaviors"]),
+            "application_automation_boundaries": expert_workflows[
+                "application_automation_boundaries"
+            ],
+            "authority_write_targets": expert_workflows["authority_write_targets"],
+            "validation_status": "pass" if not expert_workflow_errors else "attention_required",
+            "validation_errors": expert_workflow_errors,
+        },
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -175,6 +193,8 @@ def build_contract_atlas(
             usage_accounting=usage_accounting,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
+            expert_workflows=expert_workflows,
+            expert_workflow_errors=expert_workflow_errors,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -184,6 +204,7 @@ def build_contract_atlas(
             usage_accounting=usage_accounting,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
+            expert_workflows=expert_workflows,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -194,6 +215,7 @@ def build_contract_atlas(
             profile_errors=profile_errors,
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
+            expert_workflow_errors=expert_workflow_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -262,6 +284,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "secure_production_readiness_gate",
         "adapter_usage_accounting",
         "github_cicd_profile",
+        "expert_workflow_system",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -549,6 +572,8 @@ def _maturity_scorecard(
     usage_accounting: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
+    expert_workflows: Mapping[str, Any],
+    expert_workflow_errors: list[str],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -642,6 +667,14 @@ def _maturity_scorecard(
             "required_checks": github_cicd_profile.get("required_checks"),
             "manual_workflows": github_cicd_profile.get("manual_workflows"),
         },
+        {
+            "area": "expert_workflow_system",
+            "status": "validated" if not expert_workflow_errors else "contract_errors_present",
+            "workflow_count": expert_workflows.get("workflow_count"),
+            "overlap_decision_counts": expert_workflows.get("overlap_decision_counts"),
+            "no_duplicate_skill_policy": expert_workflows.get("no_duplicate_skill_policy"),
+            "error_count": len(expert_workflow_errors),
+        },
     ]
 
 
@@ -654,6 +687,7 @@ def _confirmed_dependency_graph(
     usage_accounting: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
+    expert_workflows: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -823,6 +857,37 @@ def _confirmed_dependency_graph(
         "runtime/config/release-gates/dream-studio.json",
     )
 
+    add_node("module:expert_workflow_system", "module", "Expert Workflow System")
+    add_node(
+        "module:skill_workflow_hook_telemetry",
+        "module",
+        "Skill, Workflow, And Hook Telemetry",
+    )
+    add_edge(
+        "module:expert_workflow_system",
+        "module:skill_workflow_hook_telemetry",
+        "emits_structured_outputs_to",
+        "core.shared_intelligence.expert_workflows.AUTHORITY_WRITE_TARGETS",
+    )
+    for workflow in expert_workflows.get("workflows", []):
+        workflow_id = f"workflow:{workflow['workflow_id']}"
+        add_node(workflow_id, "expert_workflow", workflow["workflow_id"])
+        add_edge(
+            "module:expert_workflow_system",
+            workflow_id,
+            "declares_expert_workflow",
+            "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        )
+        for owner in workflow.get("existing_owners", []):
+            owner_id = f"skill:{owner}"
+            add_node(owner_id, "skill_or_workflow_surface", str(owner))
+            add_edge(
+                workflow_id,
+                owner_id,
+                "maps_to_existing_owner",
+                "core.shared_intelligence.expert_workflows.overlap_matrix",
+            )
+
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"
         projection_id = f"projection:{projection['projection_path']}"
@@ -872,6 +937,7 @@ def _boundary_violation_report(
     profile_errors: list[str],
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
+    expert_workflow_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -884,6 +950,8 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "maturity_ledger", "message": error})
     for error in profile_errors:
         issues.append({"severity": "error", "area": "installed_module_profiles", "message": error})
+    for error in expert_workflow_errors:
+        issues.append({"severity": "error", "area": "expert_workflow_system", "message": error})
     security_status = security_lifecycle_gate.get("security_status")
     if security_status not in {"ready", "needs_manual_review"}:
         issues.append(
