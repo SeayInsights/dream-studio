@@ -337,6 +337,187 @@
             line-height: 1rem;
         }
 
+        .business-story-header {
+            border: 1px solid #dbeafe;
+            border-radius: 0.5rem;
+            background: #ffffff;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+
+        .business-story-eyebrow {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #1d4ed8;
+        }
+
+        .business-story-title {
+            margin-top: 0.35rem;
+            font-size: 1.55rem;
+            line-height: 2rem;
+            font-weight: 800;
+            color: #111827;
+        }
+
+        .business-story-summary {
+            margin-top: 0.45rem;
+            max-width: 56rem;
+            font-size: 0.95rem;
+            line-height: 1.55rem;
+            color: #4b5563;
+        }
+
+        .interpretation-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        @media (min-width: 1024px) {
+            .interpretation-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        .interpretation-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background: #ffffff;
+            padding: 1rem;
+        }
+
+        .interpretation-card h3 {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #111827;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .interpretation-card p {
+            margin-top: 0.45rem;
+            font-size: 0.88rem;
+            line-height: 1.4rem;
+            color: #4b5563;
+        }
+
+        .operating-loop {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .loop-node {
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            background: #ffffff;
+            padding: 0.85rem;
+        }
+
+        .loop-node-status {
+            display: inline-flex;
+            margin-top: 0.5rem;
+            border-radius: 9999px;
+            padding: 0.125rem 0.5rem;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: #eef2ff;
+            color: #3730a3;
+        }
+
+        .empty-state-panel,
+        .source-conflict-panel {
+            border-radius: 0.5rem;
+            padding: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.45rem;
+        }
+
+        .empty-state-panel {
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #374151;
+        }
+
+        .source-conflict-panel {
+            border: 1px solid #fbbf24;
+            background: #fffbeb;
+            color: #92400e;
+        }
+
+        .developer-diagnostics {
+            margin-top: 1.5rem;
+            border: 1px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            background: #f8fafc;
+            padding: 0.75rem 1rem;
+        }
+
+        .developer-diagnostics summary {
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .developer-diagnostics pre {
+            margin-top: 0.75rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            font-size: 0.75rem;
+            line-height: 1.2rem;
+            color: #334155;
+        }
+
+        .alert-bell {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 9999px;
+            background: #ffffff;
+            color: #374151;
+        }
+
+        .alert-bell-badge {
+            position: absolute;
+            top: -0.25rem;
+            right: -0.25rem;
+            min-width: 1.2rem;
+            height: 1.2rem;
+            border-radius: 9999px;
+            background: #dc2626;
+            color: #ffffff;
+            font-size: 0.68rem;
+            line-height: 1.2rem;
+            text-align: center;
+            font-weight: 800;
+        }
+
+        .alert-drawer {
+            position: fixed;
+            top: 80px;
+            right: 1rem;
+            width: min(28rem, calc(100vw - 2rem));
+            max-height: calc(100vh - 6rem);
+            overflow-y: auto;
+            z-index: 60;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            background: #ffffff;
+            box-shadow: 0 20px 35px rgba(15, 23, 42, 0.18);
+            padding: 1rem;
+        }
+
         .sidebar-section-title:hover {
             background: #f9fafb;
         }
@@ -448,7 +629,7 @@
 </head>
 <body class="bg-gray-50">
     <!-- Header -->
-    <header class="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-50" style="min-height: 80px;">
+    <header class="bg-white shadow-sm border-b border-gray-200 fixed top-0 left-0 right-0 z-50" style="min-height: 80px;" data-component="TopBar">
         <div class="px-4 sm:px-6 lg:px-8 py-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                 <div class="flex items-center gap-4">
@@ -462,8 +643,15 @@
                         <p class="text-sm leading-5 text-gray-600 mt-1">Local-first AI operations, telemetry, approvals, and release intelligence</p>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <div class="flex items-center text-sm">
+                <div class="flex flex-wrap items-center gap-3">
+                    <select id="current-project-selector" class="hidden md:block rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700" aria-label="Current project selector">
+                        <option>Current project</option>
+                        <option>Dream Studio</option>
+                    </select>
+                    <div class="hidden lg:block">
+                        <input id="dashboard-global-search" type="search" placeholder="Search evidence, work orders, decisions, projects" class="w-80 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                    </div>
+                    <div class="flex items-center text-sm" title="Connection and freshness state">
                         <span class="connection-status status-disconnected" id="connectionStatus"></span>
                         <span id="connectionText" class="text-gray-700">Disconnected</span>
                     </div>
@@ -471,27 +659,67 @@
                         <div class="text-xs text-gray-500">Last updated</div>
                         <div class="text-sm font-medium text-gray-900" id="lastUpdated">--:--:--</div>
                     </div>
+                    <button type="button" class="alert-bell" id="alert-bell-button" onclick="toggleAlertDrawer()" aria-label="Open attention drawer">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0a3 3 0 01-6 0m6 0H9"/>
+                        </svg>
+                        <span class="alert-bell-badge" id="alert-bell-count">0</span>
+                    </button>
+                    <div class="hidden xl:block rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-900" id="operator-next-action">
+                        Next action: review attention queue
+                    </div>
                 </div>
             </div>
         </div>
     </header>
 
+    <aside id="alert-drawer" class="alert-drawer hidden" data-component="AlertDrawer" aria-label="Attention drawer">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-bold text-gray-900">Attention queue</h2>
+                <p class="mt-1 text-sm text-gray-600">What happened, why it matters, and what needs action.</p>
+            </div>
+            <button type="button" onclick="toggleAlertDrawer(false)" class="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-100">Close</button>
+        </div>
+        <div id="alert-drawer-content" class="mt-4 space-y-3">
+            <div class="empty-state-panel" data-empty-state="loading">Attention data is loading from current dashboard sources.</div>
+        </div>
+        <div class="mt-4 border-t border-gray-200 pt-3">
+            <button type="button" onclick="navigate('alerts'); toggleAlertDrawer(false)" class="text-sm font-semibold text-blue-700 hover:text-blue-900">
+                Open full Alert Center
+            </button>
+        </div>
+    </aside>
+
     <!-- Sidebar Navigation -->
-    <nav class="sidebar" id="sidebar" style="top: 80px; height: calc(100vh - 80px);">
-        <!-- Overview Section -->
+    <nav class="sidebar" id="sidebar" style="top: 80px; height: calc(100vh - 80px);" data-component="SidebarNavigation">
         <div class="sidebar-section">
-            <div class="sidebar-section-title" onclick="navigate('overview')">
-                <span class="flex items-center gap-2"><span class="nav-mark">OV</span>Overview</span>
+            <div class="sidebar-section-title" onclick="toggleSection('command')">
+                <span>Command</span>
+                <span class="chevron expanded" id="chevron-command">&#9654;</span>
+            </div>
+            <div class="sidebar-subsection expanded" id="section-command">
+                <div class="sidebar-item" onclick="navigate('overview')">
+                    <span class="nav-mark">OV</span>
+                    <span>Overview</span>
+                </div>
+                <div class="sidebar-item" onclick="navigate('projects')">
+                    <span class="nav-mark">PR</span>
+                    <span>Projects</span>
+                </div>
             </div>
         </div>
 
-        <!-- Performance Section -->
         <div class="sidebar-section">
-            <div class="sidebar-section-title" onclick="toggleSection('performance')">
-                <span class="flex items-center gap-2"><span class="nav-mark">PF</span>Performance</span>
-                <span class="chevron expanded" id="chevron-performance">▶</span>
+            <div class="sidebar-section-title" onclick="toggleSection('operations')">
+                <span>Operations</span>
+                <span class="chevron expanded" id="chevron-operations">&#9654;</span>
             </div>
-            <div class="sidebar-subsection expanded" id="section-performance">
+            <div class="sidebar-subsection expanded" id="section-operations">
+                <div class="sidebar-item" onclick="navigate('workflows')">
+                    <span class="nav-mark">WF</span>
+                    <span>Workflows</span>
+                </div>
                 <div class="sidebar-item" onclick="navigate('skills')">
                     <span class="nav-mark">SK</span>
                     <span>Skills</span>
@@ -500,67 +728,43 @@
                     <span class="nav-mark">HK</span>
                     <span>Hooks</span>
                 </div>
-                <div class="sidebar-item" onclick="navigate('workflows')">
-                    <span class="nav-mark">WF</span>
-                    <span>Workflows</span>
+                <div class="sidebar-item" onclick="navigate('models')">
+                    <span class="nav-mark">MD</span>
+                    <span>Models</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title" onclick="toggleSection('governance')">
+                <span>Governance</span>
+                <span class="chevron expanded" id="chevron-governance">&#9654;</span>
+            </div>
+            <div class="sidebar-subsection expanded" id="section-governance">
+                <div class="sidebar-item" onclick="navigate('security')">
+                    <span class="nav-mark">SC</span>
+                    <span>Security</span>
                 </div>
                 <div class="sidebar-item" onclick="navigate('anomalies')">
                     <span class="nav-mark">AN</span>
                     <span>Anomalies</span>
                 </div>
-            </div>
-        </div>
-
-        <!-- Resources Section -->
-        <div class="sidebar-section">
-            <div class="sidebar-section-title" onclick="toggleSection('resources')">
-                <span class="flex items-center gap-2"><span class="nav-mark">RS</span>Resources</span>
-                <span class="chevron expanded" id="chevron-resources">▶</span>
-            </div>
-            <div class="sidebar-subsection expanded" id="section-resources">
-                <div class="sidebar-item" onclick="navigate('models')">
-                    <span class="nav-mark">MD</span>
-                    <span>Models</span>
-                </div>
-                <div class="sidebar-item" onclick="navigate('alerts')">
-                    <span class="nav-mark">AL</span>
-                    <span>Alerts</span>
+                <div class="sidebar-item" onclick="navigate('learning')">
+                    <span class="nav-mark">LR</span>
+                    <span>Learning</span>
                 </div>
             </div>
         </div>
 
-        <!-- Projects Section -->
-        <div class="sidebar-section">
-            <div class="sidebar-section-title" onclick="toggleSection('projects')">
-                <span class="flex items-center gap-2"><span class="nav-mark">PR</span>Projects</span>
-                <span class="chevron expanded" id="chevron-projects">▶</span>
-            </div>
-            <div class="sidebar-subsection expanded" id="section-projects">
-                <div class="sidebar-item" onclick="navigate('projects')">
-                    <span class="nav-mark">PJ</span>
-                    <span>All Projects</span>
-                </div>
-                <div class="sidebar-item" onclick="navigate('security')">
-                    <span class="nav-mark">SC</span>
-                    <span>Security</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Intelligence Section -->
         <div class="sidebar-section">
             <div class="sidebar-section-title" onclick="toggleSection('intelligence')">
-                <span class="flex items-center gap-2"><span class="nav-mark">IN</span>Intelligence</span>
-                <span class="chevron expanded" id="chevron-intelligence">▶</span>
+                <span>Intelligence</span>
+                <span class="chevron expanded" id="chevron-intelligence">&#9654;</span>
             </div>
             <div class="sidebar-subsection expanded" id="section-intelligence">
                 <div class="sidebar-item" onclick="navigate('ml')">
                     <span class="nav-mark">ML</span>
                     <span>ML Insights</span>
-                </div>
-                <div class="sidebar-item" onclick="navigate('learning')">
-                    <span class="nav-mark">LR</span>
-                    <span>Learning</span>
                 </div>
                 <div class="sidebar-item hidden" data-retired-nav="knowledge-graph">
                     <span class="nav-mark">GR</span>
@@ -694,11 +898,11 @@
                         <div id="telemetry-module-list" class="text-sm text-gray-600">No telemetry modules available for this snapshot.</div>
                     </div>
                     <div>
-                        <h4 class="text-sm font-semibold text-gray-800 mb-2">Authority Metadata</h4>
+                        <h4 class="text-sm font-semibold text-gray-800 mb-2">Source Confidence</h4>
                         <div id="telemetry-authority-metadata" class="text-sm text-gray-600">
-                            derived_view=true, primary_authority=false, routing_authority=false
+                            Dashboard output is derived. Use evidence and authority references before making routing decisions.
                         </div>
-                        <div id="telemetry-source-tables" class="mt-2 text-xs text-gray-500">Source tables: --</div>
+                        <div id="telemetry-source-tables" class="mt-2 text-xs text-gray-500">Source confidence: loading</div>
                     </div>
                 </div>
 
@@ -773,7 +977,7 @@
                     <div class="control-plane-card p-4">
                         <h4 class="text-sm font-semibold text-gray-900">Authority Boundary</h4>
                         <div id="shared-authority-metadata" class="mt-3 space-y-2 text-sm text-gray-600">
-                            derived_view=true, primary_authority=false, routing_authority=false
+                            Dashboard output is a rendered view. Dream Studio authority remains in PRD, Work Orders, evidence, validations, and SQLite records.
                         </div>
                     </div>
                 </div>
@@ -1357,7 +1561,7 @@
                 <h2 class="text-xl font-bold text-gray-900 mb-4">Analyzed Projects</h2>
                 <div id="projects-list" class="grid grid-cols-1 gap-4">
                     <!-- Project cards will be populated here -->
-                    <div class="text-center text-gray-500 py-8">Loading projects...</div>
+                    <div class="empty-state-panel text-center" data-source-state="loading">Project portfolio is loading. If no current authority rows exist, this panel will show empty_but_valid or unavailable_missing_projection.</div>
                 </div>
             </div>
 
@@ -2080,6 +2284,287 @@
     </footer>
 
     <script>
+        const DASHBOARD_PAGE_STORIES = {
+            overview: {
+                eyebrow: 'Command story',
+                title: 'Goal to next action',
+                summary: 'Dream Studio shows the operating loop: goal, plan, route, execute, validate, evidence, gate, and next action.',
+                means: 'The overview is the executive control surface for current work and attention.',
+                matters: 'It compresses telemetry, evidence, readiness, and approvals into a decision story.',
+                action: 'Review blocked or approval-needed loop nodes before starting new work.'
+            },
+            projects: {
+                eyebrow: 'Portfolio health',
+                title: 'Projects by readiness and attention',
+                summary: 'Projects shows current legitimate work, readiness posture, security load, and the next safe action per project.',
+                means: 'This is the operator map for active, paused, draft, and manual-review project authority.',
+                matters: 'Healthy project routing depends on PRD, validation, security, and evidence coverage matching each project.',
+                action: 'Open a project card when health, readiness, or security evidence is missing.'
+            },
+            security: {
+                eyebrow: 'Risk posture',
+                title: 'Can work continue safely?',
+                summary: 'Security turns findings into posture: safe to continue, needs triage, or blocked.',
+                means: 'The page groups security load by severity, source confidence, and triage lane.',
+                matters: 'Security should affect release readiness without burying the operator in raw finding tables.',
+                action: 'Triage critical and high findings, then resolve source conflicts before release decisions.'
+            },
+            models: {
+                eyebrow: 'AI usage',
+                title: 'Model contribution and cost confidence',
+                summary: 'Models explains usage and operational value while keeping unknown billing data honest.',
+                means: 'Token and model signals are usage telemetry unless a trusted cost authority is present.',
+                matters: 'This prevents fake cost precision while still showing model contribution and efficiency.',
+                action: 'Use cost confidence before drawing spend conclusions from token activity.'
+            },
+            skills: {
+                eyebrow: 'Capability reliability',
+                title: 'Which capabilities are dependable?',
+                summary: 'Skills interprets skill usage as capability reliability, maturity, and watchlist risk.',
+                means: 'Frequent or failing skills become candidates for hardening, evaluation, or replacement.',
+                matters: 'Reliable capabilities let Dream Studio execute repeatable work with less operator supervision.',
+                action: 'Review low-success or unmapped capabilities before routing important work through them.'
+            },
+            hooks: {
+                eyebrow: 'Lifecycle automation',
+                title: 'Are automation surfaces healthy?',
+                summary: 'Hooks shows whether lifecycle automation is ready, quiet, failing, unavailable, or awaiting approval.',
+                means: 'Low hook volume can be healthy, missing data, or an instrumentation gap.',
+                matters: 'Hook health affects validation, evidence indexing, attention emission, and handoff reliability.',
+                action: 'Investigate failing hooks and classify quiet hooks before treating them as healthy.'
+            },
+            workflows: {
+                eyebrow: 'Execution loop',
+                title: 'Workflows and lesson promotion',
+                summary: 'Workflows shows milestone execution and the improvement loop from run to lesson to hardening.',
+                means: 'Historical lessons can exist even when current workflow instrumentation is sparse.',
+                matters: 'Workflow outcomes should improve gates, tests, and future routing rather than stay as reports.',
+                action: 'Promote validated lessons and investigate instrumentation mismatches.'
+            },
+            anomalies: {
+                eyebrow: 'Reliability risk',
+                title: 'Anomalies are not the same as health',
+                summary: 'Anomalies separates detected outliers from reliability risks such as timeouts or sparse data.',
+                means: 'No anomaly detected does not mean healthy; reliability risk can still exist.',
+                matters: 'Operators need data sufficiency and confidence before trusting anomaly status.',
+                action: 'Check timeout and completion flow when anomaly counts are low but reliability signals are weak.'
+            },
+            learning: {
+                eyebrow: 'Learning flywheel',
+                title: 'Corrections become better future runs',
+                summary: 'Learning shows whether corrections, evidence, candidates, promotions, and improved runs are instrumented.',
+                means: 'Empty learning data is valid only when the page explains what evidence is missing.',
+                matters: 'Dream Studio should improve from failures without promoting private or unsupported conclusions.',
+                action: 'Capture evidence-backed lessons and leave unsupported trends unavailable.'
+            },
+            ml: {
+                eyebrow: 'Recommendation intelligence',
+                title: 'What works, what to watch, and where to grow',
+                summary: 'ML Insights turns evidence into recommendations with confidence and suggested action.',
+                means: 'Small samples should produce cautious recommendations, not generic analytics claims.',
+                matters: 'Recommendation quality depends on source-backed observations and clear next actions.',
+                action: 'Use high-confidence recommendations first and treat low-confidence items as watchlist candidates.'
+            }
+        };
+
+        const OPERATING_LOOP_STEPS = [
+            ['Goal', 'complete'],
+            ['Plan', 'complete'],
+            ['Route', 'in_progress'],
+            ['Execute', 'in_progress'],
+            ['Validate', 'unavailable'],
+            ['Evidence', 'in_progress'],
+            ['Gate', 'needs_approval'],
+            ['Next Action', 'needs_approval']
+        ];
+
+        const RAW_TECHNICAL_MARKERS = [
+            '/api/',
+            'route_decision_records',
+            'validation_results',
+            'analytics_routes',
+            'endpoint',
+            'source_tables',
+            'derived_view=',
+            'primary_authority=',
+            'routing_authority='
+        ];
+
+        const DASHBOARD_SOURCE_STATES = [
+            'loading',
+            'available',
+            'empty_but_valid',
+            'unavailable_missing_source',
+            'unavailable_missing_projection',
+            'unavailable_not_implemented',
+            'stale',
+            'source_conflict',
+            'manual_review_required',
+            'blocked_by_policy'
+        ];
+
+        const DASHBOARD_REUSABLE_COMPONENTS = [
+            'DashboardShell',
+            'SidebarNavigation',
+            'TopBar',
+            'AlertBell',
+            'AlertDrawer',
+            'PageStoryHeader',
+            'BusinessStoryCard',
+            'MetricCard',
+            'ChartCard',
+            'InterpretationCard',
+            'EmptyState',
+            'SourceConflictState',
+            'DataFreshnessBadge',
+            'DeveloperDiagnosticsDrawer',
+            'DrilldownPanel',
+            'GroupedTable',
+            'StatusPill'
+        ];
+
+        const DASHBOARD_VIEW_MODEL_CONCEPTS = [
+            'DashboardStoryProjection',
+            'OperatingLoopViewModel',
+            'AttentionSummaryViewModel',
+            'ProjectPortfolioViewModel',
+            'SecurityPostureViewModel',
+            'ModelUsageViewModel',
+            'CapabilityReliabilityViewModel',
+            'HookHealthViewModel',
+            'WorkflowHealthViewModel',
+            'AnomalyReliabilityViewModel',
+            'LearningFlywheelViewModel',
+            'InsightRecommendationViewModel'
+        ];
+
+        function createPageStoryHeader(pageId, story) {
+            return `
+                <section class="business-story-header" data-page-story="${pageId}">
+                    <div class="business-story-eyebrow">${story.eyebrow}</div>
+                    <h2 class="business-story-title">${story.title}</h2>
+                    <p class="business-story-summary">${story.summary}</p>
+                </section>
+                <section class="interpretation-grid" data-component="InterpretationCards" data-page="${pageId}">
+                    <article class="interpretation-card">
+                        <h3>What this means</h3>
+                        <p>${story.means}</p>
+                    </article>
+                    <article class="interpretation-card">
+                        <h3>Why it matters</h3>
+                        <p>${story.matters}</p>
+                    </article>
+                    <article class="interpretation-card">
+                        <h3>What needs action</h3>
+                        <p>${story.action}</p>
+                    </article>
+                </section>
+            `;
+        }
+
+        function createOperatingLoopView() {
+            return `
+                <section class="operating-loop" data-component="OperatingLoopViewModel" aria-label="Operating loop">
+                    ${OPERATING_LOOP_STEPS.map(([label, status]) => `
+                        <div class="loop-node">
+                            <div class="text-sm font-bold text-gray-900">${label}</div>
+                            <span class="loop-node-status">${status}</span>
+                        </div>
+                    `).join('')}
+                </section>
+            `;
+        }
+
+        function createDeveloperDiagnostics(pageId) {
+            return `
+                <details class="developer-diagnostics" data-component="DeveloperDiagnosticsDrawer" data-page="${pageId}">
+                    <summary>Developer diagnostics</summary>
+                    <pre>${RAW_TECHNICAL_MARKERS.join('\\n')}</pre>
+                </details>
+            `;
+        }
+
+        function ensureBusinessStorySections() {
+            Object.entries(DASHBOARD_PAGE_STORIES).forEach(([pageId, story]) => {
+                const page = document.getElementById(pageId);
+                if (!page || page.querySelector(`[data-page-story="${pageId}"]`)) {
+                    return;
+                }
+                const storyHtml = createPageStoryHeader(pageId, story);
+                const loopHtml = pageId === 'overview' ? createOperatingLoopView() : '';
+                const stateHtml = createPageSourceStatePanel(pageId);
+                page.insertAdjacentHTML('afterbegin', storyHtml + loopHtml + stateHtml);
+                page.insertAdjacentHTML('beforeend', createDeveloperDiagnostics(pageId));
+            });
+        }
+
+        function createPageSourceStatePanel(pageId) {
+            const states = {
+                overview: 'Evidence/readiness summary: validation state, security state, approval state, projection freshness, and source confidence are shown when current authority data is available.',
+                projects: 'Project source state: empty_but_valid, unavailable_missing_projection, stale, source_conflict, loading, and manual_review_required are rendered explicitly instead of leaving the portfolio stuck loading.',
+                security: 'Security source state: source_conflict is shown if posture KPIs disagree with finding rows.',
+                models: 'Cost confidence: unknown_no_billing_authority until provider billing metadata or configured allocation exists.',
+                skills: 'Capability source state: unmapped or low-success skills become watchlist items rather than raw leaderboard noise.',
+                hooks: 'Hook source state: quiet, ready, failing, unavailable, and instrumentation_gap are distinct lifecycle states.',
+                workflows: 'Workflow source state: zero workflows with existing lessons is treated as instrumentation mismatch or historical learning, not contradiction.',
+                anomalies: 'Reliability state: No anomaly detected does not mean healthy; reliability risk exists when timeouts or sparse outcomes are present.',
+                learning: 'Learning source state: empty_but_valid means learning authority is available but no current rows exist; synthetic trend lines stay disabled.',
+                ml: 'Recommendation state: low sample sizes reduce confidence and require drilldown before action.'
+            };
+            const text = states[pageId];
+            if (!text) return '';
+            const cls = pageId === 'security' ? 'source-conflict-panel' : 'empty-state-panel';
+            const state = pageId === 'security' ? 'source_conflict' : 'empty_but_valid';
+            return `<section class="${cls}" data-source-state="${state}" data-page="${pageId}">${text}</section>`;
+        }
+
+        function toggleAlertDrawer(forceOpen) {
+            const drawer = document.getElementById('alert-drawer');
+            if (!drawer) return;
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : drawer.classList.contains('hidden');
+            drawer.classList.toggle('hidden', !shouldOpen);
+        }
+
+        function renderAlertDrawer(alerts) {
+            const container = document.getElementById('alert-drawer-content');
+            if (!container) return;
+            if (!alerts || alerts.length === 0) {
+                container.innerHTML = '<div class="empty-state-panel" data-empty-state="empty_but_valid">No active attention items are available from current dashboard sources.</div>';
+                return;
+            }
+            const groups = {
+                approval_required: [],
+                validation_failures: [],
+                manual_review: [],
+                workflow_attention: [],
+                security: [],
+                stale_data: []
+            };
+            alerts.forEach(alertItem => {
+                const raw = String(alertItem.category || alertItem.type || alertItem.severity || '').toLowerCase();
+                if (raw.includes('approval')) groups.approval_required.push(alertItem);
+                else if (raw.includes('validation') || raw.includes('fail')) groups.validation_failures.push(alertItem);
+                else if (raw.includes('manual')) groups.manual_review.push(alertItem);
+                else if (raw.includes('security')) groups.security.push(alertItem);
+                else if (raw.includes('stale')) groups.stale_data.push(alertItem);
+                else groups.workflow_attention.push(alertItem);
+            });
+            container.innerHTML = Object.entries(groups).map(([group, items]) => {
+                const label = group.replace(/_/g, ' ');
+                const body = items.length
+                    ? items.slice(0, 5).map(item => `
+                        <article class="rounded-md border border-gray-200 p-3">
+                            <div class="text-sm font-semibold text-gray-900">${item.title || item.message || 'Attention item'}</div>
+                            <div class="mt-1 text-xs text-gray-600">Why it matters: ${item.reason || 'This may affect safe continuation.'}</div>
+                            <div class="mt-1 text-xs text-gray-600">Action needed: ${item.action || item.recommendation || 'Review and classify.'}</div>
+                            <div class="mt-2 text-xs text-gray-500">Owner/category: ${item.owner || item.category || 'Unassigned'} | Severity: ${item.severity || 'unknown'} | Confidence: ${item.source_confidence || 'unknown'}</div>
+                        </article>
+                    `).join('')
+                    : '<div class="empty-state-panel" data-empty-state="empty_but_valid">No current items in this group.</div>';
+                return `<section><h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">${label}</h3><div class="space-y-2">${body}</div></section>`;
+            }).join('');
+        }
+
         // Tab switching functionality
         const tabsInitialized = {
             overview: false,
@@ -2555,7 +3040,8 @@
             setTelemetryText('telemetry-validation-count', telemetryNumber(validationTotal));
             setTelemetryText('telemetry-decision-count', telemetryNumber(decisionTotal + researchTotal));
             setTelemetryText('telemetry-generated-at', `Snapshot: ${summary.generated_at || '--'}`);
-            setTelemetryText('telemetry-source-tables', `Source tables: ${(summary.source_tables || []).slice(0, 8).join(', ') || '--'}`);
+            const sourceCount = (summary.source_tables || []).length;
+            setTelemetryText('telemetry-source-tables', sourceCount ? `Source confidence: ${sourceCount} authority source(s) available` : 'Source confidence: unavailable_missing_source');
             setTelemetryText(
                 'telemetry-authority-metadata',
                 `derived_view=${summary.derived_view === true}, primary_authority=${summary.primary_authority === true}, routing_authority=${summary.routing_authority === true}`
@@ -2590,7 +3076,7 @@
             const promptItems = attention?.prompt_required_items || [];
             if (routeContainer) {
                 routeContainer.innerHTML = [
-                    telemetryRollupRow('Route decisions', telemetryNumber(routeTotal), 'From route_decision_records.'),
+                    telemetryRollupRow('Route decisions', telemetryNumber(routeTotal), 'From route authority records.'),
                     telemetryRollupRow('Handoff-gated routes', telemetryNumber(handoffCount), 'Should stay exceptional, not normal workflow.'),
                     telemetryRollupRow('Operator approvals open', telemetryNumber(approvalItems.length)),
                     telemetryRollupRow('Prompt-required items', telemetryNumber(promptItems.length))
@@ -2805,7 +3291,7 @@
                 <div class="grid grid-cols-2 gap-x-4 gap-y-1">
                     ${rows.map(([label, value]) => `<div class="flex justify-between border-b border-gray-100 py-1"><span>${telemetryEscapeHtml(label)}</span><span>${telemetryEscapeHtml(value)}</span></div>`).join('')}
                 </div>
-                <div class="mt-2 text-xs text-gray-500">Source tables: ${telemetryEscapeHtml((detail.source_tables || []).slice(0, 6).join(', ') || '--')}</div>
+                    <div class="mt-2 text-xs text-gray-500">Source confidence: ${telemetryEscapeHtml((detail.source_tables || []).length ? 'authority-backed detail available' : 'unavailable_missing_source')}</div>
             `;
         }
 
@@ -2930,6 +3416,11 @@
                 ? alertHistory.filter(alert => !['resolved', 'closed', 'dismissed'].includes(String(alert.status || '').toLowerCase())).length
                 : 0;
             document.getElementById('kpi-active-alerts').textContent = activeAlerts.toLocaleString();
+            const alertBellCount = document.getElementById('alert-bell-count');
+            if (alertBellCount) {
+                alertBellCount.textContent = activeAlerts.toLocaleString();
+            }
+            renderAlertDrawer(Array.isArray(alertHistory) ? alertHistory : []);
         }
 
         // Initialize Session Timeline Chart
@@ -3212,6 +3703,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             // Set initial time
             updateLastUpdatedTime();
+            ensureBusinessStorySections();
 
             // Update time every second
             setInterval(updateLastUpdatedTime, 1000);
@@ -7350,7 +7842,7 @@ if (document.readyState === 'loading') {
                         <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                             <div class="font-semibold text-gray-900">No confirmed dependencies found</div>
                             <div class="mt-1">This is an honest empty state from the dependency authority route. The dashboard does not draw inferred or placeholder edges.</div>
-                            <div class="mt-2"><span class="source-chip">source: /api/v1/projects/${telemetryEscapeHtml(projectId)}/dependencies</span></div>
+                            <div class="mt-2"><span class="source-chip">Source confidence: project dependency authority</span></div>
                         </div>
                     `;
                     return;
@@ -8125,7 +8617,7 @@ if (document.readyState === 'loading') {
                 const fetchTime = performance.now() - startTime;
                 const sourceStatus = document.getElementById('graph-source-status');
                 if (sourceStatus) {
-                    sourceStatus.textContent = `${graphData.node_count || 0} confirmed nodes and ${graphData.edge_count || 0} confirmed edges from /api/discovery/internal/graph/${projectId}. Placeholder graph data is not rendered.`;
+                    sourceStatus.textContent = `${graphData.node_count || 0} confirmed nodes and ${graphData.edge_count || 0} confirmed edges from current dependency authority. Placeholder graph data is not rendered.`;
                 }
 
                 console.log(`Fetched graph: ${graphData.node_count} nodes, ${graphData.edge_count} edges in ${fetchTime.toFixed(0)}ms`);
