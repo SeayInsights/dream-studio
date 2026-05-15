@@ -109,6 +109,14 @@ readiness as `unavailable` with missing evidence and a next action rather than
 inventing a score. Missing evidence is not zero readiness unless a specific
 control declares missing evidence to be a failure.
 
+Analytics-only ingestion may import source-backed readiness assessments,
+control results, findings, and health/readiness scorecards into the existing
+SQLite authority tables. This supports standalone analytics deployments where
+another system produced the evidence. Imported readiness must remain
+evidence-backed and partial or unavailable when evidence is insufficient; it
+must not claim compliance or release readiness merely because a score field is
+present.
+
 ## AI Adapter Usage Readiness
 
 Production readiness includes honest AI adapter usage accounting. A project can

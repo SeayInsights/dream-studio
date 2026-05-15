@@ -35,20 +35,39 @@ MODULE_PROFILES: tuple[dict[str, Any], ...] = (
     },
     {
         "profile_id": "analytics_only",
-        "includes": ["telemetry_read_models", "dashboard_readonly_routes", "global_ds_commands"],
+        "includes": [
+            "telemetry_read_models",
+            "dashboard_readonly_routes",
+            "normalized_analytics_ingestion",
+            "project_portfolio_read_models",
+            "token_usage_read_models",
+            "readiness_scorecard_reads",
+            "global_ds_commands",
+        ],
         "excludes": ["hooks", "agents", "workflows", "claude", "codex", "docker", "repo_mutation"],
         "required_dependencies": ["python", "sqlite"],
         "optional_dependencies": ["fastapi_testclient_for_validation"],
-        "exposed_commands": ["ds status", "ds validate", "ds modules"],
-        "exposed_routes": ["/api/telemetry/*", "/api/shared-intelligence/status"],
+        "exposed_commands": ["ds status", "ds validate", "ds modules", "ds analytics-ingest"],
+        "exposed_routes": [
+            "/api/telemetry/*",
+            "/api/v1/projects*",
+            "/api/v1/metrics/*",
+            "/api/v1/security/*",
+            "/api/shared-intelligence/status",
+            "/api/shared-intelligence/analytics-only",
+            "/api/shared-intelligence/ai-usage-accounting",
+            "/api/shared-intelligence/production-readiness",
+        ],
         "hooks_required": False,
         "agents_required": False,
         "workflows_required": False,
         "claude_required": False,
         "codex_required": False,
         "docker_required": False,
-        "expected_dashboard_api_behavior": "read_only_with_honest_empty_states",
-        "honest_empty_state": "Analytics routes return empty sections when no facts exist.",
+        "expected_dashboard_api_behavior": "read_only_with_honest_empty_states_and_explicit_ingestion",
+        "honest_empty_state": "Analytics routes return empty sections when no normalized facts exist.",
+        "ingestion_write_authorization": "explicit_ds_analytics_ingest_execute_only",
+        "hooks_are_optional_producers": True,
     },
     {
         "profile_id": "security_only",
@@ -235,4 +254,8 @@ def validate_module_profiles(profiles: tuple[dict[str, Any], ...] = MODULE_PROFI
             errors.append(f"analytics_only must not require {field.removesuffix('_required')}")
     if "repo_mutation" not in analytics.get("excludes", []):
         errors.append("analytics_only must exclude repo mutation")
+    if "ds analytics-ingest" not in analytics.get("exposed_commands", []):
+        errors.append("analytics_only must expose explicit analytics ingestion")
+    if analytics.get("hooks_are_optional_producers") is not True:
+        errors.append("analytics_only must classify hooks as optional producers")
     return errors

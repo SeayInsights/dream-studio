@@ -72,6 +72,15 @@ must refresh installed runtime/productization docs,
 troubleshooting docs, adapter-boundary docs, and independent configuration docs
 required by the drift report.
 
+Analytics-only ingestion changes are release-gate relevant. If code changes
+affect `core.analytics_ingestion`, `ds analytics-ingest`, analytics-only module
+profile declarations, shared-intelligence analytics-only routes, or the
+dashboard/API surfaces that consume imported analytics records, the same change
+set must refresh Contract Atlas, dashboard mapping, installed runtime,
+productization, troubleshooting, and independent configuration docs required by
+the drift report. Tests should prove dry-run behavior, explicit write
+authorization, idempotent current-authority imports, and honest empty states.
+
 Security lifecycle changes are release-gate relevant. If code changes affect
 `core/security`, security review contracts, project health security hydration,
 shared-intelligence security routes, or release readiness security status, the

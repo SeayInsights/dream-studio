@@ -21,6 +21,7 @@ boundary.
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
+| Analytics-only ingestion | `core.analytics_ingestion` normalized payload contract | `ds analytics-ingest`, `/api/shared-intelligence/analytics-only`, All Projects, Project Details, metrics/security/readiness APIs | explicit SQLite imports plus derived views | Required for analytics import contract changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those
@@ -47,6 +48,12 @@ Installed module profiles are declared in `core.module_profiles`. The
 workflows, Claude, Codex, Docker, repo mutation, and cleanup. Optional modules
 must report honest empty states instead of silently requiring unavailable
 adapters or runtime services.
+
+Analytics-only ingestion is explicit. Hooks, adapters, CI jobs, or manual
+exports may produce normalized payloads, but analytics-only does not require
+them. `ds analytics-ingest` dry-runs by default and writes only with
+`--execute`, targeting current SQLite authority tables instead of creating
+legacy file-sprawl or competing dashboard-only stores.
 
 Productized first-run setup must always target an explicit Dream Studio home or
 an approved installed home resolved from configuration. Rehearsal acceptance

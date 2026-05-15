@@ -58,6 +58,12 @@ high-confidence current project mapping stay retention-only or manual-review
 records; they are not copied into project cards and are not recreated as a
 parallel finding system.
 
+Analytics-only ingestion can import already-normalized finding records into the
+same finding contract. It does not authorize scans, target repo inspection,
+dependency installation, Docker, or remediation. Imported findings still need
+source refs, evidence refs, severity, status, project id, file/line when
+available, and remediation path when available.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`
