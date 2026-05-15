@@ -13,6 +13,12 @@ from core.release.packaging_boundary import (
     classify_packaging_path,
     validate_packaging_boundary_manifest,
 )
+from core.release.adapter_workspace_hygiene import (
+    adapter_workspace_policy,
+    classify_adapter_workspace_path,
+    ensure_local_git_excludes,
+    required_local_exclude_patterns,
+)
 from core.release.github_pr_cicd_gate import (
     DEPLOYMENT_SEPARATE_APPROVAL,
     MERGE_POLICY_AUTO,
@@ -37,11 +43,15 @@ __all__ = [
     "build_goal_to_release_validation_packet",
     "build_release_branch_name",
     "build_release_gate_packet",
+    "adapter_workspace_policy",
+    "classify_adapter_workspace_path",
     "classify_packaging_path",
     "discover_workflow_files",
+    "ensure_local_git_excludes",
     "evaluate_merge_decision",
     "evaluate_local_dogfood_stability",
     "load_cicd_profile",
+    "required_local_exclude_patterns",
     "validate_goal_to_release_validation_packet",
     "validate_packaging_boundary_manifest",
     "validate_cicd_profile",
