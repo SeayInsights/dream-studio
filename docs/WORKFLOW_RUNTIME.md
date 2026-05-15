@@ -31,6 +31,13 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 | Tracking hook | `control/execution/workflow/tracking.py` | Hook context extraction |
 | Learning | `control/execution/workflow/learning.py` | Historical performance tracking |
 
+Hook launchers are part of the workflow/runtime boundary because workflow and
+skill events can be routed through adapter hook surfaces. On Windows,
+`hooks/run.cmd` must resolve its plugin root from the launcher path before
+argument shifting. Adapter apps such as Codex may invoke `UserPromptSubmit`
+from a workspace outside the Dream Studio repo, so launcher root resolution must
+not depend on the current working directory.
+
 ## Workflow Inventory (22 templates)
 
 | Workflow | Nodes | Gates | Retry | Timeout | Dashboard Dep | Models |

@@ -9,6 +9,8 @@ REM hooks\handlers\ path during migration.
 
 setlocal enabledelayedexpansion
 
+set "SCRIPT_DIR=%~dp0"
+
 if "%~1"=="" (
     >&2 echo usage: run.cmd ^<handler-name^> [args...]
     exit /b 2
@@ -17,7 +19,6 @@ if "%~1"=="" (
 set "HANDLER=%~1"
 shift
 
-set "SCRIPT_DIR=%~dp0"
 if defined CLAUDE_PLUGIN_ROOT (
     set "PLUGIN_ROOT=%CLAUDE_PLUGIN_ROOT%"
 ) else (
