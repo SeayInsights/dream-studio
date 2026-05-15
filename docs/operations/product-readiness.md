@@ -75,6 +75,13 @@ and project readiness stay separate:
 If evidence is insufficient, readiness is `partial` or `unavailable` with
 missing evidence and blocking factors. Do not display fake precision.
 
+AI usage accounting contributes operational value signals but not fabricated
+cost. Readiness may use run count, validation result, rework, security/readiness
+findings, files touched, commands run, and duration. It may use cost only when
+the adapter accounting record marks it as exact, provider-reported, explicitly
+estimated, or allocated subscription cost with supporting source/evidence refs.
+Unknown cost should remain `unknown`, not zero.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:

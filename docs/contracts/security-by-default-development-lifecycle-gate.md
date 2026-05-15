@@ -71,3 +71,16 @@ forking the 47-control model. Production readiness can add API, database,
 caching, accessibility, observability, performance, dependency, code-quality,
 privacy, rollback, and release controls, but enterprise security control
 authority remains here.
+
+## AI Usage Accounting Impact
+
+Changes to adapter billing mode, token visibility, cost visibility, provider
+usage source handling, telemetry collectors, or dashboard cost display receive
+lightweight security impact classification. They normally target privacy,
+secrets, logging, telemetry integrity, and release-readiness controls rather
+than running the full 47-control review on every edit.
+
+Full applicable review is still required if the accounting change affects
+provider credentials, billing APIs, deployment, live cutover, external project
+onboarding, database schema, or release/merge readiness. Findings must avoid
+printing secrets or provider billing credentials.

@@ -281,3 +281,12 @@ This contract does not authorize:
 - Findings are evidence, not automatic authority.
 - Accepted risk requires a file-backed operator decision.
 - Security reports must not claim release readiness when required scan, evidence, severity, approval, or decision context is missing.
+
+## Usage Accounting Review Profile
+
+AI usage accounting changes should use the existing security review profile
+pack instead of creating a separate security skill. Applicable checks include
+secret exposure, logging redaction, telemetry integrity, database schema safety,
+provider credential handling, and release-readiness evidence. Cost unknowns are
+not security findings by themselves; fake cost precision or credential
+inspection would be review findings.

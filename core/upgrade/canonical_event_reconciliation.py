@@ -1013,6 +1013,8 @@ def _insert_token_usage(
     if total_tokens is None:
         total_tokens = input_tokens + output_tokens + cached_tokens
     estimated_cost = _float_value(event.payload.get("cost_usd"))
+    cost_visibility = "estimated" if estimated_cost is not None else "unavailable"
+    cost_source = "local_estimate" if estimated_cost is not None else "unavailable"
     active_conn.execute(
         """
         INSERT INTO token_usage_records (
@@ -1020,13 +1022,15 @@ def _insert_token_usage(
             agent_id, skill_id, workflow_id, hook_id, model_id, provider,
             input_tokens, output_tokens, cached_tokens, total_tokens,
             estimated_cost, purpose, source_refs_json, evidence_refs_json,
-            created_at
+            adapter_id, billing_mode, token_visibility, cost_visibility,
+            usage_source, cost_source, accounting_confidence, created_at
         ) VALUES (
             :token_usage_id, :project_id, NULL, NULL, :process_run_id,
             NULL, :skill_id, NULL, NULL, :model_id, :provider,
             :input_tokens, :output_tokens, :cached_tokens, :total_tokens,
             :estimated_cost, :purpose, :source_refs_json, :evidence_refs_json,
-            :created_at
+            :adapter_id, :billing_mode, :token_visibility, :cost_visibility,
+            :usage_source, :cost_source, :accounting_confidence, :created_at
         )
         """,
         {
@@ -1048,9 +1052,28 @@ def _insert_token_usage(
             ),
             "source_refs_json": json.dumps(list(entry.source_refs), sort_keys=True),
             "evidence_refs_json": json.dumps(list(entry.evidence_refs), sort_keys=True),
+            "adapter_id": _adapter_id_from_provider(
+                _provider_from_model(event.payload.get("model"))
+            ),
+            "billing_mode": "unknown",
+            "token_visibility": "exact",
+            "cost_visibility": cost_visibility,
+            "usage_source": "local_telemetry",
+            "cost_source": cost_source,
+            "accounting_confidence": "medium",
             "created_at": event.payload.get("recorded_at") or event.timestamp,
         },
     )
+
+
+def _adapter_id_from_provider(provider: str | None) -> str | None:
+    if provider == "anthropic":
+        return "claude"
+    if provider == "openai":
+        return "codex"
+    if provider == "google":
+        return "local-model"
+    return None
 
 
 def _event_by_id(backup_conn: sqlite3.Connection, event_id: str) -> LegacyEvent:

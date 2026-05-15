@@ -25,6 +25,16 @@ Dream Studio documentation is split between public product guidance and private 
 - [Security-By-Default Lifecycle Gate](contracts/security-by-default-development-lifecycle-gate.md)
 - [Secure Production Readiness Gate](contracts/secure-production-readiness-gate.md)
 
+## AI Usage Accounting
+
+Dream Studio records AI adapter usage as operational telemetry. Tokens are not
+treated as billable dollars unless the adapter billing mode and recorded source
+metadata make cost reportable. Claude Code subscription, Codex via ChatGPT
+plan, Cursor plan, Copilot subscription, MCP, local models, shell tools, and
+unknown/custom adapters are represented through SQLite-backed accounting
+profiles and surfaced through the adapter router, Contract Atlas, dashboard
+read models, and token/model analytics.
+
 ## Operations
 
 - [Local Runtime](operations/local-runtime.md)

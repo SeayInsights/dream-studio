@@ -27,7 +27,8 @@ def test_model_provider_registry_summary_uses_recorded_sqlite_facts(tmp_path: Pa
     assert summary["source_tables"] == ["model_provider_profiles"]
     assert summary["provider_api_calls_performed"] is False
     assert summary["billing_authority"] is False
-    assert summary["cost_records_are_estimates"] is True
+    assert summary["cost_records_are_estimates"] is False
+    assert summary["cost_records_require_source"] is True
     assert summary["model_count"] == 3
     assert summary["provider_counts"] == {
         "anthropic": 1,
@@ -84,7 +85,8 @@ def test_model_provider_registry_policy_requires_fresh_verification_for_latest_c
     assert policy["source_authority"] == "sqlite"
     assert policy["provider_api_calls_default"] is False
     assert policy["billing_authority"] is False
-    assert policy["cost_records_are_estimates"] is True
+    assert policy["cost_records_are_estimates"] is False
+    assert policy["cost_records_require_source"] is True
     assert policy["latest_model_claims_require_fresh_verification"] is True
     assert policy["profile_writes_require_injected_connection"] is True
 

@@ -39,6 +39,7 @@ from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
     model_provider_registry_summary,
 )
+from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 
 router = APIRouter()
 
@@ -94,6 +95,15 @@ async def get_shared_intelligence_status(
                     "source_tables": ["model_provider_profiles"],
                 },
                 {
+                    "surface_id": "ai-usage-accounting",
+                    "api_path": "/api/shared-intelligence/ai-usage-accounting",
+                    "source_tables": [
+                        "ai_adapter_accounting_profiles",
+                        "ai_usage_operational_records",
+                        "token_usage_records",
+                    ],
+                },
+                {
                     "surface_id": "contract-atlas",
                     "api_path": "/api/shared-intelligence/contract-atlas",
                     "source_tables": [
@@ -145,6 +155,9 @@ async def get_shared_intelligence_status(
                 "shared_context_packets",
                 "adapter_result_records",
                 "capability_route_records",
+                "ai_adapter_accounting_profiles",
+                "ai_usage_operational_records",
+                "token_usage_records",
             ],
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
@@ -355,6 +368,17 @@ async def get_model_provider_capability_matrix(
             min_context_tokens=min_context_tokens,
             provider=provider,
         )
+    )
+
+
+@router.get("/ai-usage-accounting")
+async def get_ai_usage_accounting(
+    project_id: str | None = Query(default=None),
+) -> dict[str, Any]:
+    """Return honest AI adapter usage and operational value telemetry."""
+
+    return _with_connection(
+        lambda conn: adapter_usage_accounting_summary(conn, project_id=project_id)
     )
 
 

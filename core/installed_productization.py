@@ -24,6 +24,7 @@ from core.module_profiles import module_profile_map, module_profiles, validate_m
 from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
 from core.shared_intelligence.contract_atlas import build_contract_atlas
 from core.shared_intelligence.context_packets import generate_shared_context_packet
+from core.shared_intelligence.usage_accounting import register_default_adapter_accounting_profiles
 
 DEFAULT_INSTALL_PROFILES: tuple[str, ...] = ("core", "analytics_only", "adapter_router_only")
 PRODUCTIZATION_VERSION = "dream_studio.installed_productization.v1"
@@ -48,6 +49,7 @@ def first_run_setup(
     schema_version = bootstrap_database(paths.sqlite_path)
     with _connect(paths.sqlite_path) as conn:
         register_default_adapter_authority_profiles(conn)
+        register_default_adapter_accounting_profiles(conn)
         conn.commit()
         router = adapter_router_status(
             conn,

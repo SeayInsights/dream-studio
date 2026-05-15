@@ -336,7 +336,7 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
     )
     assert (
         summary["token_cost_intelligence"]["by_model_provider_component"][0][
-            "estimated_cost_per_1k_tokens"
+            "reportable_cost_per_1k_tokens"
         ]
         > 0
     )

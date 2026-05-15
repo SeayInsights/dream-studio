@@ -9,7 +9,6 @@ from projections.core.collectors.token_collector import TokenCollector
 from projections.core.collectors.model_collector import ModelCollector
 from projections.core.collectors.lesson_collector import LessonCollector
 from projections.core.collectors.workflow_collector import WorkflowCollector
-from core.config.database import get_connection
 
 
 @pytest.fixture
@@ -17,7 +16,7 @@ def test_db(tmp_path):
     """Create a temporary test database with sample data"""
     db_path = tmp_path / "test_studio.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     # Create raw_sessions table
@@ -200,7 +199,7 @@ def test_skill_db(tmp_path):
     """Create a temporary test database with skill telemetry data"""
     db_path = tmp_path / "test_studio_skills.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     # Create raw_skill_telemetry table
@@ -405,63 +404,122 @@ def test_token_db(tmp_path):
     """Create a temporary test database with token usage data"""
     db_path = tmp_path / "test_studio_tokens.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    # Create raw_token_usage table
+    # Create current token authority table.
     cursor.execute("""
-        CREATE TABLE raw_token_usage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
+        CREATE TABLE token_usage_records (
+            token_usage_id TEXT PRIMARY KEY,
+            process_run_id TEXT,
             project_id TEXT,
-            skill_name TEXT,
+            skill_id TEXT,
             input_tokens INTEGER,
             output_tokens INTEGER,
-            model TEXT,
-            recorded_at TEXT NOT NULL
+            total_tokens INTEGER,
+            model_id TEXT,
+            provider TEXT,
+            estimated_cost REAL,
+            cost_visibility TEXT,
+            created_at TEXT NOT NULL
         )
     """)
 
     # Insert sample data
     now = datetime.now()
     test_data = [
-        ("sess-1", "proj-a", "ds-core", 1000, 500, "sonnet", (now - timedelta(days=1)).isoformat()),
-        ("sess-2", "proj-a", "ds-core", 1200, 600, "sonnet", (now - timedelta(days=2)).isoformat()),
         (
+            "token-1",
+            "sess-1",
+            "proj-a",
+            "ds-core",
+            1000,
+            500,
+            1500,
+            "sonnet",
+            "anthropic",
+            0.01,
+            "provider_reported",
+            (now - timedelta(days=1)).isoformat(),
+        ),
+        (
+            "token-2",
+            "sess-2",
+            "proj-a",
+            "ds-core",
+            1200,
+            600,
+            1800,
+            "sonnet",
+            "anthropic",
+            0.01,
+            "provider_reported",
+            (now - timedelta(days=2)).isoformat(),
+        ),
+        (
+            "token-3",
             "sess-3",
             "proj-b",
             "ds-quality",
             500,
             200,
+            700,
             "haiku",
+            "anthropic",
+            0.01,
+            "provider_reported",
             (now - timedelta(days=3)).isoformat(),
         ),
-        ("sess-4", "proj-a", "ds-core", 2000, 1000, "opus", (now - timedelta(days=4)).isoformat()),
         (
+            "token-4",
+            "sess-4",
+            "proj-a",
+            "ds-core",
+            2000,
+            1000,
+            3000,
+            "opus",
+            "anthropic",
+            0.01,
+            "provider_reported",
+            (now - timedelta(days=4)).isoformat(),
+        ),
+        (
+            "token-5",
             "sess-5",
             "proj-c",
             "ds-security",
             800,
             400,
+            1200,
             "sonnet",
+            "anthropic",
+            0.01,
+            "provider_reported",
             (now - timedelta(days=5)).isoformat(),
         ),
         (
+            "token-6",
             "sess-6",
             "proj-a",
             "ds-core",
             1000,
             500,
+            1500,
             "sonnet",
+            "anthropic",
+            0.01,
+            "provider_reported",
             (now - timedelta(days=100)).isoformat(),
         ),  # Too old
     ]
 
     cursor.executemany(
         """
-        INSERT INTO raw_token_usage
-        (session_id, project_id, skill_name, input_tokens, output_tokens, model, recorded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO token_usage_records
+        (token_usage_id, process_run_id, project_id, skill_id, input_tokens, output_tokens,
+         total_tokens, model_id, provider, estimated_cost, cost_visibility, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         test_data,
     )
@@ -588,7 +646,7 @@ def test_model_db(tmp_path):
     """Create a temporary test database with model performance data"""
     db_path = tmp_path / "test_studio_models.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     # Create tables
@@ -838,7 +896,7 @@ def test_lesson_db(tmp_path):
     """Create a temporary test database with lesson data"""
     db_path = tmp_path / "test_studio_lessons.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1047,7 +1105,7 @@ def test_workflow_db(tmp_path):
     """Create a temporary test database with workflow data"""
     db_path = tmp_path / "test_studio_workflows.db"
 
-    conn = get_connection()
+    conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     cursor.execute("""
