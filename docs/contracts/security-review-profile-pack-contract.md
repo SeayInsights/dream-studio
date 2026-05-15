@@ -31,6 +31,21 @@ The pack binds to existing Dream Studio primitives:
 
 The pack may provide security-specific data and templates, but it must not replace these primitives.
 
+## Lifecycle Gate Integration
+
+The Security Review Profile Pack is consumed by
+`core/security/lifecycle.py` as Dream Studio's security-by-default development
+lifecycle gate. The gate uses the 47 enterprise security controls as the
+canonical framework, maps applicable controls to this pack and the security
+skill, and reports whether each control is applicable, not applicable with a
+reason, deferred to manual review, or unknown.
+
+The lifecycle gate applies to every goal, milestone, Work Order, and code
+change. Full applicable 47-control review is required for project intake,
+release or merge, publication, deployment, live cutover, dependency/runtime/
+security/database/Docker changes, major architecture changes, external project
+onboarding, and scheduled dogfood gates.
+
 Companion artifact-shape contracts:
 
 - Report, finding, evidence, accepted-risk, release-gate, and next Work Order shapes: `docs/contracts/security-review-report-artifact-contract.md`
@@ -150,14 +165,19 @@ Required fields:
 
 - `finding_id`
 - `scan_id`
+- `control_id`
+- `project_id`
 - `category_id`
 - `title`
 - `summary`
 - `affected_assets`
+- `file_path`
+- `line`
 - `severity`
 - `confidence`
 - `release_impact`
 - `evidence_refs`
+- `remediation_path`
 - `recommended_action`
 - `remediation_scope_hint`
 - `status`

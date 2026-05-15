@@ -33,6 +33,27 @@ python -m pytest tests/unit/test_product_readiness_baseline.py -q --tb=line
 
 It is not a replacement for hash-guarded `verify` or `test`.
 
+## Security Lifecycle Gate
+
+Release readiness must include the security-by-default lifecycle gate. The gate
+uses the 47 enterprise security controls as the canonical framework and records
+which controls are applicable, not applicable with a reason, manual-review
+required, or unknown.
+
+Security lifecycle statuses affect readiness:
+
+- `ready` allows the release gate to continue.
+- `needs_manual_review` holds release closure until the applicable manual
+  reviews are recorded.
+- `unknown_requires_review` holds release closure until unknown controls are
+  classified.
+- `blocked_by_open_findings` blocks release closure until findings are
+  remediated or formally accepted.
+
+The readiness gate must not run scans, inspect secrets, mutate repositories, or
+write live SQLite unless a separate approved Work Order explicitly authorizes
+that action.
+
 ## Optional Adjacent Enterprise Spot-Check
 
 Enterprise remains adjacent and excluded from main normal validation. If a separately approved adjacent enterprise repo is present, use it only as separate evidence with that repo's explicit path:

@@ -15,6 +15,7 @@ def test_release_readiness_packet_supports_local_dogfood_without_push_or_tag() -
         evidence_refs=["meta/audit/release.md"],
         known_caveats=["Browser automation deferred"],
         rollback_notes=["Reset to previous local backup"],
+        security_lifecycle_status={"security_status": "ready"},
     )
 
     assert packet["version_valid"] is True
@@ -23,7 +24,22 @@ def test_release_readiness_packet_supports_local_dogfood_without_push_or_tag() -
     assert packet["deployed"] is False
     assert packet["distribution_decision"] == "local_dogfood"
     assert "Telemetry dashboard wired" in packet["release_notes"]
+    assert packet["security_lifecycle_status"]["security_status"] == "ready"
     assert validate_release_readiness_packet(packet) == []
+
+
+def test_default_release_packet_holds_for_manual_security_lifecycle_review() -> None:
+    packet = build_release_readiness_packet(
+        version="v0.1.0",
+        branch="integration/example",
+        git_head="abc123",
+        changelog_entries=["Telemetry dashboard wired"],
+        evidence_refs=["meta/audit/release.md"],
+        rollback_notes=["Reset to previous local backup"],
+    )
+
+    assert packet["security_lifecycle_status"]["full_review_required"] is True
+    assert "security_lifecycle_manual_review_required" in validate_release_readiness_packet(packet)
 
 
 def test_release_packet_validator_blocks_execution_flags_and_missing_evidence() -> None:
@@ -49,3 +65,4 @@ def test_release_packet_validator_blocks_execution_flags_and_missing_evidence() 
     assert "deploy_not_allowed_in_readiness_packet" in issues
     assert "rollback_notes_required" in issues
     assert "evidence_refs_required" in issues
+    assert "security_lifecycle_status_required" in issues
