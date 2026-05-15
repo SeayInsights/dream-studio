@@ -31,6 +31,16 @@ def test_user_data_dir_idempotent(isolated_home):
     assert first == second
 
 
+def test_user_data_dir_honors_installed_runtime_home(tmp_path, monkeypatch):
+    installed_home = tmp_path / "installed-home"
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(installed_home))
+
+    result = paths.user_data_dir()
+
+    assert result == installed_home
+    assert result.is_dir()
+
+
 def test_meta_dir_under_user_data(isolated_home):
     result = paths.meta_dir()
     assert result == isolated_home / ".dream-studio" / "meta"

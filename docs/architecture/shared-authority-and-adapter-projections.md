@@ -43,6 +43,14 @@ repo status. Unknown adapter files require classification before any ignore,
 delete, archive, or cleanup decision. Secret/auth/token paths may be recorded as
 path-level metadata only; do not inspect or print their contents.
 
+Installed adapter access should prefer the local Dream Studio router where
+possible. The router is exposed through `ds router`, `ds adapters`, and
+`/api/shared-intelligence/adapter-router`; it reports adapter health, route
+state, context packet generation, evidence capture, telemetry capture, module
+profile status, and Contract Atlas availability without making an adapter own
+Dream Studio logic. Adapters that cannot call the router should consume exported
+context packets and return normalized evidence for Dream Studio to ingest.
+
 Private model memory is never authority. If another AI resumes work, Dream
 Studio should provide a shared context packet from SQLite/evidence records.
 
