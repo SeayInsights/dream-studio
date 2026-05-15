@@ -94,3 +94,12 @@ agent registry/context/result tables, and GitHub repo intake evaluation tables.
 It does not enable Career Ops by default, publish career data, inspect external
 repositories, copy code, add dependencies, fork/vendor repositories, submit job
 applications, or authorize agent execution.
+
+Migration `045_task_attribution_authority.sql` is additive. It creates
+`task_attribution_records` so meaningful AI/adapter execution units can be
+linked to project/milestone/task/Work Order/process-run context, skills,
+workflows, tools, files touched, commands, validation, outcome, rework,
+commit/PR/result refs, and security/readiness impact. It does not create a
+second telemetry system, infer model/provider precision, infer token or cost
+values, authorize adapter execution, or mutate live SQLite outside the normal
+approved migration boundary.

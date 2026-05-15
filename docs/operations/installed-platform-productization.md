@@ -248,6 +248,13 @@ tokens, usage outcomes, and operational value honestly. Cost stays `unknown`
 unless provider metadata, provider export, billing API evidence, or explicit
 operator allocation metadata makes it reportable.
 
+Installed dashboard and adapter usage views also read task attribution records
+when available. Those records explain which adapter did meaningful work, which
+skills/workflows were used, what files and commands were recorded, what
+validation ran, what outcome occurred, whether rework was needed, and what
+security/readiness impact resulted. Missing model/provider, token, cost, file,
+or command detail remains explicit rather than inferred.
+
 ## Private Capability Modules
 
 Productized installs may include `career_ops_only` as an opt-in private module.

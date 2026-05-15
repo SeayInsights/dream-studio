@@ -17,6 +17,7 @@ from core.module_contracts import module_contract_map
 from core.module_profiles import module_profile_map
 from core.production_readiness import production_readiness_dashboard_summary
 from core.security.lifecycle import build_security_lifecycle_gate
+from core.shared_intelligence.task_attribution import project_recent_attributed_work
 from projections.api.routes.sqlite_schema import object_exists, table_columns
 
 logger = logging.getLogger(__name__)
@@ -1688,6 +1689,7 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
         )
         validation_state = _recent_validation_state(conn, project_id)
         attention_detail = _attention_detail_items(conn, project_id)
+        attributed_work = project_recent_attributed_work(conn, project_id, limit=10)
         return {
             "project_id": project_id,
             "derived_view": True,
@@ -1792,6 +1794,7 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
                 "summary": health_payload["project"].get("telemetry_status"),
                 "recent": validation_state,
             },
+            "recent_attributed_work": attributed_work,
             "work_order_status": health_payload["project"].get("work_order_status"),
             "attention_items": attention_detail,
             "known_gaps": _project_detail_known_gaps(health_payload, production_readiness),

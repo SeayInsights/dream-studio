@@ -161,6 +161,13 @@ exports, billing API data, explicit estimate metadata, or configured
 subscription allocation evidence is absent. Missing cost evidence can lower
 cost-confidence, but it is not scored as zero spend.
 
+Task attribution can strengthen readiness evidence by linking adapter work to
+project, milestone, task, Work Order, process run, skills/workflows,
+hooks/tools, files, commands, validation, outcome, rework, and
+security/readiness impact. Unknown model/provider, unavailable file/command
+data, and manual-review outcomes remain confidence or missing-evidence inputs,
+not fake pass/fail or cost signals.
+
 ## Career, Scoped Agent, And Repo Intake Readiness
 
 Production readiness treats Career Ops as private operational capability, not

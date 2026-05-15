@@ -162,9 +162,10 @@ portfolio pages, or social content require sanitization and operator approval.
 
 Expert workflow definitions feed Capability Center as workflow capability
 records. Capability Center can show invocation counts, scorecard availability,
-validation requirements, and hardening candidates, but it does not create a
-parallel workflow system or authorize execution. Missing invocation/evaluation
-evidence stays `unavailable` instead of becoming a fake success rate.
+validation requirements, hardening candidates, and task-attributed outcomes,
+but it does not create a parallel workflow system or authorize execution.
+Missing invocation/evaluation or attribution evidence stays `unavailable`
+instead of becoming a fake success rate.
 
 Career-related expert workflows map into the optional private Career Ops
 module. Career data remains local/private authority and is excluded from public

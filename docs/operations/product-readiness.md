@@ -140,6 +140,12 @@ findings, 47-control status, readiness controls, validations, attention items,
 known gaps, evidence refs, and the current next action. It is a derived view and
 must not mutate external projects, inspect secrets, run Docker, or write SQLite.
 
+Project Details may also show recent attributed work. Those records link
+adapter, skill/workflow, file, command, validation, outcome, rework, and
+security/readiness impact evidence to the project when available. Unknown
+model/provider, unavailable file/command data, and manual-review outcomes
+remain partial evidence and must not be converted into fake readiness scores.
+
 PRD status is part of project authority. Existing safe PRD files can be read
 and summarized. Missing or stale PRD evidence becomes `draft_generated`,
 `needs_update`, `stale_superseded`, or `manual_review_required` status; no

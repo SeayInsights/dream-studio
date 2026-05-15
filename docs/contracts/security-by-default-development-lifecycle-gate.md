@@ -145,3 +145,15 @@ Full applicable review is still required if the accounting change affects
 provider credentials, billing APIs, deployment, live cutover, external project
 onboarding, database schema, or release/merge readiness. Findings must avoid
 printing secrets or provider billing credentials.
+
+## Task Attribution Impact
+
+Task attribution changes receive lightweight security classification because
+they link AI/adapter work to files, commands, validation, outcomes, and
+security/readiness impact. Applicable checks include telemetry integrity,
+evidence refs, logging redaction, source classification, and prevention of fake
+model/provider, token, cost, file, command, or outcome precision.
+
+The task attribution routes are non-executing derived views. They do not run
+security scans, inspect secrets, mutate SQLite, authorize adapter execution, or
+change 47-control applicability by themselves.

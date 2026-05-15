@@ -45,6 +45,8 @@ The dashboard mapping covers:
   behavior, and empty-state policy
 - AI adapter usage accounting, billing mode, token visibility, cost visibility,
   source confidence, and operational value telemetry
+- AI/adapter task attribution, skill/workflow usage, files touched, validation,
+  execution outcome, rework status, and security/readiness impact
 - Security lifecycle gate status and 47-control applicability
 - Production readiness status, controls, scorecards, findings, and remediation Work Orders
 - Project portfolio authority, PRD authority, security posture, readiness posture,
@@ -87,6 +89,13 @@ AI usage cards must distinguish token usage from reportable cost. If the source
 records do not provide exact, provider-reported, explicitly estimated, or
 allocated subscription cost evidence, dashboard cards must render `unknown` and
 show operational value signals instead of fabricated dollar precision.
+
+Task attribution cards must distinguish observed facts from unknowns. If
+model/provider, files touched, commands, validation, or outcome details are
+unavailable, the dashboard must show `unknown`, `unavailable`, or
+`manual_review_required` rather than filling placeholders. Attribution cards
+read `task_attribution_records` and related current authority tables; they must
+not use adapter-private memory or reports as primary truth.
 
 ## Contract Atlas Projection
 

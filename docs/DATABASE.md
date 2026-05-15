@@ -55,6 +55,10 @@ Current AI usage accounting authority lives in:
 - `ai_usage_operational_records` for operational value telemetry such as run
   count, project/milestone/task/Work Order context, files touched, commands
   run, validation outcome, PR/result outcome, rework, duration, and evidence.
+- `task_attribution_records` for execution-unit attribution: which adapter,
+  model/provider where known, skills/workflows, tools/hooks, files, commands,
+  validations, outcome, rework state, commit/PR/result refs, and
+  security/readiness impact belong to a meaningful task or Work Order.
 
 Tokens are usage telemetry. They are not dollars unless the adapter billing
 mode and source metadata explicitly make cost reportable. Plan/subscription
@@ -63,6 +67,12 @@ unless an explicit allocation profile exists. Reconciled legacy token rows must
 carry `source_refs_json` and `evidence_refs_json` so token analytics can use
 current authority without restoring legacy `canonical_events` as an active
 source.
+
+Task attribution links usage, adapter results, validation, security/readiness,
+and Work Order facts without becoming token/cost authority. Unknown
+model/provider values remain `unknown`; unavailable file or command data remains
+`unavailable`; imported or untracked work must be classified instead of
+overclaimed.
 
 ## Runtime Rules
 

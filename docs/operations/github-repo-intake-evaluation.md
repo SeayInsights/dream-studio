@@ -52,3 +52,9 @@ adoption by itself.
 
 GitHub repo evaluation evidence is private by default until explicitly
 sanitized for publication.
+
+If a GitHub repo evaluation later becomes implementation work, the resulting
+task should be linked through task attribution rather than hidden in the intake
+record. Attribution can reference the Work Order, adapter, skills/workflows,
+files, validations, outcome, and evidence refs while preserving the intake
+decision as private evaluation authority.

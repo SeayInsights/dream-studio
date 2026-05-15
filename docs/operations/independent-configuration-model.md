@@ -106,6 +106,12 @@ allocation profile is recorded. Token-metered/API-metered adapters may display
 reportable cost only when source metadata, usage exports, billing API evidence,
 or explicit estimate metadata is present.
 
+Task attribution records are also configuration/runtime authority, not adapter
+private memory. They can connect adapter usage to a project, Work Order,
+skills/workflows, files, commands, validation, outcome, rework, and
+security/readiness impact, but they must keep unknown or unavailable values
+explicit and must not infer token or cost precision.
+
 Career Ops configuration is private and disabled until explicitly enabled. It
 may store career and application records only in approved local SQLite
 authority; it must not leak into public exports, team rollups, sanitized demo
