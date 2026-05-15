@@ -15,55 +15,21 @@
   "docs_drift_status": {
     "blocking_domain_count": 0,
     "blocking_domains": [],
-    "changed_file_count": 26,
-    "changed_files": [
-      "README.md",
-      "core/installed_productization.py",
-      "core/projects/external_validation.py",
-      "core/release/local_dogfood_stability.py",
-      "core/shared_intelligence/contract_registry.py",
-      "core/shared_intelligence/maturity_ledger.py",
-      "core/telemetry/docker_profiles.py",
-      "docs/PUBLICATION_BOUNDARY.md",
-      "docs/README.md",
-      "docs/architecture/contract-atlas.md",
-      "docs/architecture/shared-authority-and-adapter-projections.md",
-      "docs/operations/docker-module-profiles.md",
-      "docs/operations/external-project-validation-pipeline.md",
-      "docs/operations/independent-configuration-model.md",
-      "docs/operations/installed-adapter-runtime.md",
-      "docs/operations/installed-platform-productization.md",
-      "docs/operations/lint-format-baseline-policy.md",
-      "docs/operations/long-run-multisession-operational-validation.md",
-      "docs/operations/repo-publication-privacy.md",
-      "docs/operations/troubleshooting.md",
-      "docs/product/dream-studio-prd.md",
-      "tests/unit/test_docker_module_profiles.py",
-      "tests/unit/test_external_project_validation_pipeline.py",
-      "tests/unit/test_installed_platform_productization.py",
-      "tests/unit/test_long_run_multisession_operational_validation.py",
-      "tests/unit/test_maturity_ledger.py"
-    ],
+    "changed_file_count": 0,
+    "changed_files": [],
     "db_write_authorized": false,
     "derived_view": true,
     "domains": [
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "README.md",
-          "docs/PUBLICATION_BOUNDARY.md",
-          "docs/README.md",
-          "docs/architecture/contract-atlas.md",
-          "docs/operations/lint-format-baseline-policy.md",
-          "docs/product/dream-studio-prd.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "contract_atlas",
         "domain_name": "Contract Atlas",
         "freshness_policy": "source_changes_require_same_change_set_contract_or_docs_refresh",
-        "freshness_status": "fresh",
-        "impacted": true,
+        "freshness_status": "not_impacted",
+        "impacted": false,
         "missing_required_doc_refs": [],
         "prd_update_required": false,
         "public_export_boundary": "sanitized_public_export_only",
@@ -76,19 +42,11 @@
           "docs/README.md",
           "docs/operations/lint-format-baseline-policy.md"
         ],
-        "source_hits": [
-          "core/shared_intelligence/contract_registry.py",
-          "core/shared_intelligence/maturity_ledger.py"
-        ]
+        "source_hits": []
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "README.md",
-          "docs/architecture/shared-authority-and-adapter-projections.md",
-          "docs/operations/independent-configuration-model.md",
-          "docs/product/dream-studio-prd.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "shared_intelligence_adapters",
@@ -110,9 +68,33 @@
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "docs/product/dream-studio-prd.md"
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "task_attribution_outcomes",
+        "domain_name": "AI Adapter Task Attribution And Outcomes",
+        "freshness_policy": "attribution_schema_or_read_model_changes_require_dashboard_and_database_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "attribution_examples_synthetic_live_evidence_private",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/task-attribution-and-outcomes.md",
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
         ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "sqlite_schema_authority",
@@ -135,22 +117,14 @@
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "docs/README.md",
-          "docs/architecture/shared-authority-and-adapter-projections.md",
-          "docs/operations/independent-configuration-model.md",
-          "docs/operations/installed-adapter-runtime.md",
-          "docs/operations/installed-platform-productization.md",
-          "docs/operations/long-run-multisession-operational-validation.md",
-          "docs/operations/troubleshooting.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "installed_adapter_runtime",
         "domain_name": "Installed Adapter Runtime And Global Router",
         "freshness_policy": "installed_runtime_or_router_changes_require_runtime_docs_refresh",
-        "freshness_status": "fresh",
-        "impacted": true,
+        "freshness_status": "not_impacted",
+        "impacted": false,
         "missing_required_doc_refs": [],
         "prd_update_required": false,
         "public_export_boundary": "installed_runtime_paths_private_global_commands_public",
@@ -166,16 +140,11 @@
           "docs/architecture/shared-authority-and-adapter-projections.md",
           "docs/operations/independent-configuration-model.md"
         ],
-        "source_hits": [
-          "core/installed_productization.py",
-          "core/release/local_dogfood_stability.py"
-        ]
+        "source_hits": []
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "docs/product/dream-studio-prd.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "dashboard_runtime",
@@ -197,9 +166,7 @@
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "docs/architecture/contract-atlas.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "security_lifecycle_gate",
@@ -223,11 +190,7 @@
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "docs/README.md",
-          "docs/architecture/contract-atlas.md",
-          "docs/product/dream-studio-prd.md"
-        ],
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "secure_production_readiness_gate",
@@ -275,22 +238,38 @@
       },
       {
         "contract_atlas_update_required": false,
-        "doc_hits": [
-          "README.md",
-          "docs/PUBLICATION_BOUNDARY.md",
-          "docs/operations/docker-module-profiles.md",
-          "docs/operations/external-project-validation-pipeline.md",
-          "docs/operations/lint-format-baseline-policy.md",
-          "docs/operations/repo-publication-privacy.md",
-          "docs/product/dream-studio-prd.md"
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "expert_workflow_system",
+        "domain_name": "Expert Skills And Workflow System",
+        "freshness_policy": "expert_skill_or_workflow_changes_require_overlap_matrix_and_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "career_data_private_by_default_public_outputs_sanitized_and_operator_approved",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/expert-workflow-systems.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/README.md"
         ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
         "docs_reviewed_no_change_needed": false,
         "docs_update_required": false,
         "domain_id": "release_publication_gate",
         "domain_name": "Release Gate And Publication Boundary",
         "freshness_policy": "release_gate_changes_require_release_docs_refresh",
-        "freshness_status": "fresh",
-        "impacted": true,
+        "freshness_status": "not_impacted",
+        "impacted": false,
         "missing_required_doc_refs": [],
         "prd_update_required": false,
         "public_export_boundary": "release_evidence_private_release_policy_public",
@@ -306,10 +285,60 @@
           "docs/operations/docker-module-profiles.md",
           "README.md"
         ],
-        "source_hits": [
-          "core/projects/external_validation.py",
-          "core/telemetry/docker_profiles.py"
-        ]
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "career_capability_agent_github_intake",
+        "domain_name": "Career Ops, Capability Center, Scoped Agents, And GitHub Repo Intake",
+        "freshness_policy": "private_career_capability_agent_or_github_intake_changes_require_docs_and_public_boundary_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "career_data_private_by_default_github_evaluation_evidence_sanitized_before_public_export",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/career-ops-capability-center.md",
+          "docs/operations/github-repo-intake-evaluation.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/README.md",
+          "docs/PUBLICATION_BOUNDARY.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "platform_hardening_sequence",
+        "domain_name": "Platform Hardening Sequence",
+        "freshness_policy": "platform_hardening_authority_or_surface_changes_require_policy_privacy_installer_demo_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "private_evidence_stays_private_sanitized_rollups_and_demo_packets_only",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/platform-hardening-sequence.md",
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/PUBLICATION_BOUNDARY.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "source_hits": []
       }
     ],
     "empty_state": "No changed files were supplied, so no docs drift is detected.",
@@ -321,34 +350,16 @@
       "publication_risk_detected",
       "private_artifact_risk_detected"
     ],
-    "generated_at": "2026-05-15T16:25:28.901386+00:00",
-    "impacted_domain_count": 3,
+    "generated_at": "2026-05-15T22:09:47.917138+00:00",
+    "impacted_domain_count": 0,
     "primary_authority": false,
     "publication_risk": {
       "private_artifact_hits": [],
       "private_artifact_risk_detected": false,
-      "publication_hits": [
-        "README.md",
-        "docs/PUBLICATION_BOUNDARY.md",
-        "docs/README.md",
-        "docs/architecture/contract-atlas.md",
-        "docs/architecture/shared-authority-and-adapter-projections.md",
-        "docs/operations/docker-module-profiles.md",
-        "docs/operations/external-project-validation-pipeline.md",
-        "docs/operations/independent-configuration-model.md",
-        "docs/operations/installed-adapter-runtime.md",
-        "docs/operations/installed-platform-productization.md",
-        "docs/operations/lint-format-baseline-policy.md",
-        "docs/operations/long-run-multisession-operational-validation.md",
-        "docs/operations/repo-publication-privacy.md",
-        "docs/operations/troubleshooting.md",
-        "docs/product/dream-studio-prd.md"
-      ],
-      "publication_risk_detected": true,
+      "publication_hits": [],
+      "publication_risk_detected": false,
       "release_blocking": false,
-      "required_actions": [
-        "publication_boundary_review"
-      ]
+      "required_actions": []
     },
     "reviewed_no_change_domains": [],
     "routing_authority": false,
@@ -357,35 +368,17 @@
     "tracking_mode": "changed_files_same_change_set"
   },
   "docs_prd_readme_impact": {
-    "changed_file_count": 26,
+    "changed_file_count": 0,
     "docs_update_required_domains": [],
-    "impacted_domain_count": 3,
+    "impacted_domain_count": 0,
     "prd_update_required_domains": [],
     "publication_risk": {
       "private_artifact_hits": [],
       "private_artifact_risk_detected": false,
-      "publication_hits": [
-        "README.md",
-        "docs/PUBLICATION_BOUNDARY.md",
-        "docs/README.md",
-        "docs/architecture/contract-atlas.md",
-        "docs/architecture/shared-authority-and-adapter-projections.md",
-        "docs/operations/docker-module-profiles.md",
-        "docs/operations/external-project-validation-pipeline.md",
-        "docs/operations/independent-configuration-model.md",
-        "docs/operations/installed-adapter-runtime.md",
-        "docs/operations/installed-platform-productization.md",
-        "docs/operations/lint-format-baseline-policy.md",
-        "docs/operations/long-run-multisession-operational-validation.md",
-        "docs/operations/repo-publication-privacy.md",
-        "docs/operations/troubleshooting.md",
-        "docs/product/dream-studio-prd.md"
-      ],
-      "publication_risk_detected": true,
+      "publication_hits": [],
+      "publication_risk_detected": false,
       "release_blocking": false,
-      "required_actions": [
-        "publication_boundary_review"
-      ]
+      "required_actions": []
     },
     "readme_update_required_domains": [],
     "status": "pass"
@@ -423,25 +416,25 @@
       "summary": "Changed files map to required docs, PRD, README, and contract refs."
     }
   ],
-  "generated_at": "2026-05-15T16:25:28.916534+00:00",
+  "generated_at": "2026-05-15T22:09:47.936844+00:00",
   "maturity_ledger_refresh": {
-    "area_count": 26,
+    "area_count": 32,
     "status": "pass",
     "status_counts": {
       "hardened": 1,
-      "runtime_validated": 15,
-      "tested_only": 10
+      "runtime_validated": 17,
+      "tested_only": 14
     },
     "validation_errors": []
   },
   "model_name": "contract_atlas_lifecycle_freshness_manifest",
   "primary_authority": false,
   "private_internal_refresh": {
-    "byte_length": 187011,
+    "byte_length": 252606,
     "export_scope": "private",
     "sanitized_public_export": false,
     "schema": "dream_studio.contract_atlas.v1",
-    "sha256": "45ffa04a63f0b56a5a70ce18dd52d5e94813914a6a96f4187bdee971a249fed6",
+    "sha256": "b7b65b3c85c2a2e24232e82997db25dae5ad1987a717f22c1af8d806312f9ec5",
     "status": "pass",
     "validation_errors": []
   },
@@ -463,11 +456,11 @@
     "status": "pass"
   },
   "public_sanitized_export_refresh": {
-    "byte_length": 185599,
+    "byte_length": 250355,
     "export_scope": "public",
     "sanitized_public_export": true,
     "schema": "dream_studio.contract_atlas.v1",
-    "sha256": "8919c6b8ada235b66b865af995d068e9054f9946da075832ed9021c0a6070266",
+    "sha256": "3e037468c364dc44845252fd1a38ad98c4fd7b405d4d76c679d311c955c78d91",
     "status": "pass",
     "validation_errors": []
   },

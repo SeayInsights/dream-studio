@@ -4,7 +4,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from core.config.sqlite_bootstrap import bootstrap_database
@@ -24,6 +26,7 @@ from core.installed_productization import (
 )
 from core.module_profiles import module_profile_map
 from core.release.local_dogfood_stability import REQUIRED_MULTISESSION_CYCLES
+from interfaces.cli.ds import _dashboard_check
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -179,6 +182,74 @@ def test_productization_ds_commands_run_from_outside_repo(tmp_path: Path) -> Non
     assert validate["ready"] is True
     assert adapters["execution_authorized"] is False
     assert acceptance["status"] == "pass"
+
+
+def test_dashboard_command_modes_are_explicit_and_safe_by_default(tmp_path: Path) -> None:
+    home = tmp_path / "dashboard-home"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    ds = REPO_ROOT / "interfaces" / "cli" / "ds.py"
+    first_run_setup(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        profiles=["dashboard_only"],
+        rehearsal=True,
+    )
+
+    default_status = _run_ds(
+        ds, outside, "--source-root", str(REPO_ROOT), "--home", str(home), "dashboard"
+    )
+    explicit_status = _run_ds(
+        ds,
+        outside,
+        "--source-root",
+        str(REPO_ROOT),
+        "--home",
+        str(home),
+        "dashboard",
+        "--status",
+    )
+
+    assert default_status["mode"] == "status"
+    assert explicit_status["mode"] == "status"
+    assert default_status["starts_server"] is False
+    assert default_status["default_behavior"] == "status_only_no_server_started"
+    assert default_status["available_modes"]["serve"] == "ds dashboard --serve"
+    assert default_status["available_modes"]["open"] == "ds dashboard --open"
+    assert default_status["available_modes"]["check"] == "ds dashboard --check"
+    assert default_status["source_root"] == str(REPO_ROOT)
+    assert default_status["sqlite_path"] == str(home / "state" / "studio.db")
+
+
+def test_dashboard_check_reports_running_dashboard_and_api_routes(tmp_path: Path) -> None:
+    home = tmp_path / "dashboard-home"
+    first_run_setup(
+        source_root=REPO_ROOT,
+        dream_studio_home=home,
+        profiles=["dashboard_only"],
+        rehearsal=True,
+    )
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _DashboardHealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        payload = _dashboard_check(
+            source_root=REPO_ROOT,
+            dream_studio_home=home,
+            host="127.0.0.1",
+            port=server.server_port,
+            timeout_seconds=2.0,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert payload["ok"] is True
+    assert payload["routes"]["dashboard"]["status_code"] == 200
+    assert payload["routes"]["api_health"]["status_code"] == 200
+    assert payload["live_db_destructive_mutation_authorized"] is False
 
 
 def test_legacy_install_detection_and_dry_run_are_non_destructive(tmp_path: Path) -> None:
@@ -555,6 +626,20 @@ def _run_ds(ds: Path, cwd: Path, *args: str) -> dict[str, object]:
         check=True,
     )
     return json.loads(result.stdout)
+
+
+class _DashboardHealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path in {"/dashboard", "/api/health"}:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, _format: str, *args: object) -> None:
+        return
 
 
 @contextmanager

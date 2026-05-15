@@ -88,6 +88,11 @@ tokens into API-dollar costs. Cost is reportable only when visibility/source
 metadata says it is exact, provider-reported, explicitly estimated, or an
 operator-configured subscription allocation.
 
+Dashboard launch command changes are runtime-surface changes, not migration
+authority changes. `ds dashboard --serve`, `--open`, and `--check` must use the
+existing resolved SQLite path and must not create schema, run migrations,
+backfill records, or treat dashboard output as authority.
+
 Migration `044_career_capability_agent_github_authority.sql` is additive. It
 creates private opt-in Career Ops tables, Capability Center records, scoped
 agent registry/context/result tables, and GitHub repo intake evaluation tables.

@@ -80,6 +80,10 @@ ds repair
 ds install
 ds install-command
 ds dashboard
+ds dashboard --status
+ds dashboard --serve
+ds dashboard --open
+ds dashboard --check
 ds validate
 ds contract-atlas
 ds contract-atlas-refresh
@@ -180,10 +184,28 @@ Adapter setup never treats private model memory as authority.
 
 ## Dashboard Onboarding
 
-`ds dashboard` reports dashboard readiness and the derived API routes. It does
-not start a server by itself. Dashboard-enabled profiles show derived empty
-states when no runtime facts exist. Disabled profiles report that dashboard
-routes are disabled by the selected module profile.
+`ds dashboard` defaults to safe status-only behavior. It reports dashboard
+readiness, the selected source/state paths, the derived API routes, and the
+exact commands for starting or checking the local server. It does not start a
+server by itself.
+
+Dashboard command modes:
+
+```powershell
+ds dashboard --status   # readiness only; same as ds dashboard
+ds dashboard --serve    # start the local FastAPI dashboard server
+ds dashboard --open     # start or reuse the server and open a browser
+ds dashboard --check    # validate /dashboard and /api/health on a running server
+```
+
+`--serve` starts `projections.api.main:app` through uvicorn using resolved
+Dream Studio source/home/SQLite environment variables. It does not bootstrap,
+migrate, backfill, or clean runtime state. Use `ds install`, `ds validate`, or
+approved migration flows for state setup.
+
+Dashboard-enabled profiles show derived empty states when no runtime facts
+exist. Disabled profiles report that dashboard routes are disabled by the
+selected module profile.
 
 ## Backup, Restore, Update, And Uninstall
 

@@ -66,6 +66,11 @@ refreshing public publication evidence artifacts.
 
 Public docs should describe Dream Studio as a local-first AI orchestration and operational intelligence platform. Adapter-specific docs may describe Claude Code, Codex, Cursor, Copilot, ChatGPT, MCP, shell, or local-model surfaces, but must not frame any adapter as the product itself.
 
+Installed command docs may include `ds dashboard --status`, `--serve`,
+`--open`, and `--check` as public-safe command names. They must not include
+private local URLs, local runtime paths, dashboard screenshots from live
+operator state, or raw dashboard/API payloads unless separately sanitized.
+
 External project and Docker docs may describe the public-safe policy and module
 contracts, but must not publish private target details, local scans, target
 dirty-state output, target paths, container runtime evidence, or operational

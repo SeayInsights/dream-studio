@@ -266,83 +266,14 @@
     }
   ],
   "adapter_usage_accounting": {
-    "by_adapter": {
-      "claude": {
-        "billing_modes": {
-          "unknown": 1791
-        },
-        "commands_run_count": 0,
-        "cost_display": "unknown",
-        "cost_unknown_count": 1791,
-        "cost_visibility": {
-          "unknown": 1791
-        },
-        "failed_runs": 0,
-        "files_touched_count": 0,
-        "reportable_cost": null,
-        "rework_needed_count": 0,
-        "run_count": 0,
-        "successful_runs": 0,
-        "token_records": 1791,
-        "token_visibility": {
-          "exact": 1791
-        },
-        "total_tokens": 189447192,
-        "validation_results": {}
-      },
-      "codex": {
-        "billing_modes": {
-          "unknown": 1
-        },
-        "commands_run_count": 0,
-        "cost_display": "unknown",
-        "cost_unknown_count": 1,
-        "cost_visibility": {
-          "unknown": 1
-        },
-        "failed_runs": 0,
-        "files_touched_count": 0,
-        "reportable_cost": null,
-        "rework_needed_count": 0,
-        "run_count": 0,
-        "successful_runs": 0,
-        "token_records": 1,
-        "token_visibility": {
-          "exact": 1
-        },
-        "total_tokens": 35,
-        "validation_results": {}
-      },
-      "unknown": {
-        "billing_modes": {
-          "unknown": 40
-        },
-        "commands_run_count": 0,
-        "cost_display": "unknown",
-        "cost_unknown_count": 40,
-        "cost_visibility": {
-          "unknown": 40
-        },
-        "failed_runs": 0,
-        "files_touched_count": 0,
-        "reportable_cost": null,
-        "rework_needed_count": 0,
-        "run_count": 0,
-        "successful_runs": 0,
-        "token_records": 40,
-        "token_visibility": {
-          "exact": 40
-        },
-        "total_tokens": 779767,
-        "validation_results": {}
-      }
-    },
+    "by_adapter": {},
     "operational_record_count": 0,
     "policy": {
       "cost_unknown_display": "unknown",
       "no_token_to_dollar_conversion_without_cost_source": true,
       "plan_usage_uses_operational_value_metrics": true,
       "provider_billing_credentials_inspected": false,
+      "task_outcomes_linked_without_fake_cost": true,
       "tokens_are_usage_not_cost": true
     },
     "profile_count": 10,
@@ -352,9 +283,23 @@
       "ai_usage_operational_records",
       "token_usage_records",
       "adapter_authority_profiles",
-      "model_provider_profiles"
+      "model_provider_profiles",
+      "task_attribution_records"
     ],
-    "token_record_count": 1832
+    "task_attribution": {
+      "by_project_milestone_task": {},
+      "by_skill": {},
+      "by_workflow": {},
+      "manual_review_count": 0,
+      "outcome_counts": {},
+      "record_count": 0,
+      "source_status": {
+        "missing_tables": [],
+        "status": "available"
+      },
+      "validation_counts": {}
+    },
+    "token_record_count": 0
   },
   "analytics_only_ingestion": {
     "agents_required": false,
@@ -565,7 +510,7 @@
       "token_usage_records",
       "validation_results"
     ],
-    "table_count": 143,
+    "table_count": 180,
     "workflows_required": false,
     "write_authorization": "explicit_ingestion_execute_only"
   },
@@ -604,6 +549,31 @@
     "issue_count": 0,
     "issues": [],
     "status": "pass"
+  },
+  "capability_center": {
+    "agent_count": 4,
+    "control_count": 58,
+    "section_ids": [
+      "agents",
+      "controls",
+      "evaluations",
+      "hardening_candidates",
+      "skills",
+      "workflows"
+    ],
+    "source_status": {
+      "missing_tables": [],
+      "status": "available"
+    },
+    "validation_errors": [],
+    "validation_status": "pass",
+    "workflow_count": 11
+  },
+  "career_ops_module": {
+    "opt_in_required": true,
+    "policy": "career data is private local authority and excluded from public exports by default",
+    "private_by_default": true,
+    "public_export_excluded": true
   },
   "confirmed_dependency_graph": {
     "edges": [
@@ -906,6 +876,13 @@
         "relation": "reads_source_table",
         "source": "module:ai_usage_accounting",
         "source_evidence": "core.shared_intelligence.usage_accounting.adapter_usage_accounting_summary",
+        "target": "table:task_attribution_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_source_table",
+        "source": "module:ai_usage_accounting",
+        "source_evidence": "core.shared_intelligence.usage_accounting.adapter_usage_accounting_summary",
         "target": "table:token_usage_records"
       },
       {
@@ -1015,10 +992,360 @@
       },
       {
         "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:agents"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:controls"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:evaluations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:hardening_candidates"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:skills"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "exposes_derived_section",
+        "source": "module:capability_center",
+        "source_evidence": "core.shared_intelligence.capability_center.capability_center_summary",
+        "target": "dashboard-section:capability-center:workflows"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:capability_center",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:capability_center_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "persists_private_authority_to",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "layer:sqlite_authority"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_application_events"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_application_events"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_application_field_mappings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_application_field_mappings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_applications"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_applications"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_browser_automation_runs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_browser_automation_runs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_case_studies"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_case_studies"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_cover_letter_versions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_cover_letter_versions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_evidence_refs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_evidence_refs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_interview_story_bank"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_interview_story_bank"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_job_opportunities"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_job_opportunities"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_portfolio_artifacts"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_portfolio_artifacts"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_profile_fields"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_profile_fields"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_profiles"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_profiles"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_resume_versions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_resume_versions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_role_targets"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_role_targets"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:career_scorecards"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_private_authority",
+        "source": "module:career_ops",
+        "source_evidence": "core.career_ops.CAREER_OPS_TABLES",
+        "target": "table:career_scorecards"
+      },
+      {
+        "edge_status": "confirmed",
         "relation": "owns_or_writes_authority",
         "source": "module:core",
         "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
         "target": "table:schema_migrations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "emits_structured_outputs_to",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.AUTHORITY_WRITE_TARGETS",
+        "target": "module:skill_workflow_hook_telemetry"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:api_integration_design_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:career_strategy_and_portfolio_ops_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:code_quality_architecture_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:data_modeling_authority_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:documentation_quality_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:frontend_design_excellence_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:intentional_implementation_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:performance_efficiency_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:product_demo_and_case_study_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:root_cause_debugging_workflow"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_expert_workflow",
+        "source": "module:expert_workflow_system",
+        "source_evidence": "core.shared_intelligence.expert_workflows.REQUIRED_WORKFLOW_IDS",
+        "target": "workflow:seo_content_growth_workflow"
       },
       {
         "edge_status": "confirmed",
@@ -1071,6 +1398,132 @@
       },
       {
         "edge_status": "confirmed",
+        "relation": "requires_overlap_review_before_new_skill_or_workflow",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.WORKFLOW_STEPS",
+        "target": "module:expert_workflow_system"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "requires_security_review_before_adoption",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.WORKFLOW_STEPS",
+        "target": "module:security_lifecycle_gate"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_adoption_decisions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_adoption_decisions"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_attribution_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_attribution_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_dependency_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_dependency_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_evaluations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_evaluations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_integration_candidates"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_integration_candidates"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_license_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_license_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_pattern_references"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_pattern_references"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:github_repo_security_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "writes_evaluation_authority",
+        "source": "module:github_repo_intake",
+        "source_evidence": "core.shared_intelligence.github_repo_intake.GITHUB_REPO_TABLES",
+        "target": "table:github_repo_security_findings"
+      },
+      {
+        "edge_status": "confirmed",
         "relation": "reads_source_table",
         "source": "module:hook_analytics",
         "source_evidence": "core.telemetry.execution_spine.DASHBOARD_MODULES",
@@ -1082,6 +1535,76 @@
         "source": "module:hook_analytics",
         "source_evidence": "core.telemetry.execution_spine.DASHBOARD_MODULES",
         "target": "table:hook_invocations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "normalizes_connector_evidence",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.ingest_connector_payload",
+        "target": "module:analytics_only_ingestion"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "feeds_maturity_and_docs_drift",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.platform_hardening_summary",
+        "target": "module:contract_atlas"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:connector_ingestion_runs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:demo_case_study_packets"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:installer_distribution_checks"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:local_watch_schedule_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:policy_decision_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:privacy_redaction_export_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:skill_evaluation_runs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "records_platform_hardening_authority",
+        "source": "module:platform_hardening_sequence",
+        "source_evidence": "core.shared_intelligence.platform_hardening.PLATFORM_HARDENING_TABLES",
+        "target": "table:team_rollup_records"
       },
       {
         "edge_status": "confirmed",
@@ -1138,6 +1661,69 @@
         "source": "module:route_milestone_analytics",
         "source_evidence": "core.telemetry.execution_spine.DASHBOARD_MODULES",
         "target": "table:route_decision_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_context_scoped_worker",
+        "source": "module:scoped_agent_execution",
+        "source_evidence": "core.shared_intelligence.scoped_agents.DEFAULT_SCOPED_AGENTS",
+        "target": "agent:career_application_assistant"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_context_scoped_worker",
+        "source": "module:scoped_agent_execution",
+        "source_evidence": "core.shared_intelligence.scoped_agents.DEFAULT_SCOPED_AGENTS",
+        "target": "agent:github_repo_intake_reviewer"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_context_scoped_worker",
+        "source": "module:scoped_agent_execution",
+        "source_evidence": "core.shared_intelligence.scoped_agents.DEFAULT_SCOPED_AGENTS",
+        "target": "agent:implementation_worker"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_context_scoped_worker",
+        "source": "module:scoped_agent_execution",
+        "source_evidence": "core.shared_intelligence.scoped_agents.DEFAULT_SCOPED_AGENTS",
+        "target": "agent:review_worker"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "normalizes_results_to",
+        "source": "module:scoped_agent_execution",
+        "source_evidence": "agent_result_records and invocation/result authority tables",
+        "target": "layer:sqlite_authority"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:scoped_agents",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:agent_context_scope_policies"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:scoped_agents",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:agent_registry_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:scoped_agents",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:agent_result_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "owns_or_writes_authority",
+        "source": "module:scoped_agents",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "table:workflow_agent_skill_mappings"
       },
       {
         "edge_status": "confirmed",
@@ -1208,6 +1794,97 @@
         "source": "module:skill_analytics",
         "source_evidence": "core.telemetry.execution_spine.DASHBOARD_MODULES",
         "target": "table:skill_invocations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "feeds_adapter_usage_outcomes",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.task_attribution_summary",
+        "target": "module:ai_usage_accounting"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:adapter_result_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:ai_usage_operational_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:execution_events"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:hook_invocations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:process_runs"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:production_readiness_control_results"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:security_findings"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:skill_invocations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:task_attribution_records"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:tool_invocations"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:validation_results"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "reads_or_links_source_table",
+        "source": "module:task_attribution_outcome_tracking",
+        "source_evidence": "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
+        "target": "table:workflow_invocations"
       },
       {
         "edge_status": "confirmed",
@@ -1410,6 +2087,20 @@
         "relation": "declares_module_contract",
         "source": "system:dream-studio",
         "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "module:capability_center"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_module_contract",
+        "source": "system:dream-studio",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "module:career_ops"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_module_contract",
+        "source": "system:dream-studio",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
         "target": "module:core"
       },
       {
@@ -1445,6 +2136,20 @@
         "relation": "declares_module_contract",
         "source": "system:dream-studio",
         "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "module:github_repo_intake"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_module_contract",
+        "source": "system:dream-studio",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
+        "target": "module:scoped_agents"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "declares_module_contract",
+        "source": "system:dream-studio",
+        "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
         "target": "module:security_only"
       },
       {
@@ -1467,6 +2172,174 @@
         "source": "system:dream-studio",
         "source_evidence": "core.module_contracts.MODULE_CONTRACTS",
         "target": "module:token_only"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:api_integration_design_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/production_readiness"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:api_integration_design_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/domains/modes/fullstack"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:career_strategy_and_portfolio_ops_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/career/SKILL.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:career_strategy_and_portfolio_ops_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/career/modes/apply/SKILL.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:career_strategy_and_portfolio_ops_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/career/modes/pdf/SKILL.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:career_strategy_and_portfolio_ops_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/career/modes/track/SKILL.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:code_quality_architecture_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/core/modes/review"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:code_quality_architecture_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/quality/modes/structure-audit"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:data_modeling_authority_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/analytics_ingestion.py"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:data_modeling_authority_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/event_store"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:data_modeling_authority_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:docs/DATABASE.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:documentation_quality_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/shared_intelligence/contract_registry.py"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:documentation_quality_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:docs/README.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:frontend_design_excellence_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/domains/modes/design"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:frontend_design_excellence_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/quality/modes/polish"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:intentional_implementation_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/work_orders"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:intentional_implementation_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/core/modes/build"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:performance_efficiency_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:core/shared_intelligence/usage_accounting.py"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:performance_efficiency_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/quality/modes/debug/references/performance-issues.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:product_demo_and_case_study_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:docs/demo-script.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:product_demo_and_case_study_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:docs/portfolio-case-study.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:root_cause_debugging_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/quality/modes/debug/SKILL.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:seo_content_growth_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:docs/PUBLICATION_BOUNDARY.md"
+      },
+      {
+        "edge_status": "confirmed",
+        "relation": "maps_to_existing_owner",
+        "source": "workflow:seo_content_growth_workflow",
+        "source_evidence": "core.shared_intelligence.expert_workflows.overlap_matrix",
+        "target": "skill:skills/domains/modes/website"
       }
     ],
     "graph_type": "confirmed_dependency_graph",
@@ -1523,6 +2396,26 @@
         "type": "adapter"
       },
       {
+        "id": "agent:career_application_assistant",
+        "label": "Career Application Assistant",
+        "type": "scoped_agent"
+      },
+      {
+        "id": "agent:github_repo_intake_reviewer",
+        "label": "GitHub Repo Intake Reviewer",
+        "type": "scoped_agent"
+      },
+      {
+        "id": "agent:implementation_worker",
+        "label": "Implementation Worker",
+        "type": "scoped_agent"
+      },
+      {
+        "id": "agent:review_worker",
+        "label": "Review Worker",
+        "type": "scoped_agent"
+      },
+      {
         "id": "contract:47_enterprise_security_controls",
         "label": "47 Enterprise Security Controls",
         "type": "contract"
@@ -1531,6 +2424,36 @@
         "id": "contract:secure_production_readiness_gate",
         "label": "Secure Production Readiness Gate",
         "type": "contract"
+      },
+      {
+        "id": "dashboard-section:capability-center:agents",
+        "label": "Capability Center agents",
+        "type": "dashboard_section"
+      },
+      {
+        "id": "dashboard-section:capability-center:controls",
+        "label": "Capability Center controls",
+        "type": "dashboard_section"
+      },
+      {
+        "id": "dashboard-section:capability-center:evaluations",
+        "label": "Capability Center evaluations",
+        "type": "dashboard_section"
+      },
+      {
+        "id": "dashboard-section:capability-center:hardening_candidates",
+        "label": "Capability Center hardening_candidates",
+        "type": "dashboard_section"
+      },
+      {
+        "id": "dashboard-section:capability-center:skills",
+        "label": "Capability Center skills",
+        "type": "dashboard_section"
+      },
+      {
+        "id": "dashboard-section:capability-center:workflows",
+        "label": "Capability Center workflows",
+        "type": "dashboard_section"
       },
       {
         "id": "doc:docs/contracts/security-review-scan-catalog.yaml",
@@ -1603,6 +2526,16 @@
         "type": "module"
       },
       {
+        "id": "module:capability_center",
+        "label": "capability_center",
+        "type": "module"
+      },
+      {
+        "id": "module:career_ops",
+        "label": "career_ops",
+        "type": "module"
+      },
+      {
         "id": "module:core",
         "label": "core",
         "type": "module"
@@ -1615,6 +2548,11 @@
       {
         "id": "module:docker_optional",
         "label": "docker_optional",
+        "type": "module"
+      },
+      {
+        "id": "module:expert_workflow_system",
+        "label": "Expert Workflow System",
         "type": "module"
       },
       {
@@ -1633,8 +2571,18 @@
         "type": "module"
       },
       {
+        "id": "module:github_repo_intake",
+        "label": "github_repo_intake",
+        "type": "module"
+      },
+      {
         "id": "module:hook_analytics",
         "label": "Hook Analytics",
+        "type": "module"
+      },
+      {
+        "id": "module:platform_hardening_sequence",
+        "label": "Platform Hardening Sequence",
         "type": "module"
       },
       {
@@ -1650,6 +2598,16 @@
       {
         "id": "module:route_milestone_analytics",
         "label": "Route And Milestone Analytics",
+        "type": "module"
+      },
+      {
+        "id": "module:scoped_agent_execution",
+        "label": "Scoped Agent Execution",
+        "type": "module"
+      },
+      {
+        "id": "module:scoped_agents",
+        "label": "scoped_agents",
         "type": "module"
       },
       {
@@ -1675,6 +2633,16 @@
       {
         "id": "module:skill_analytics",
         "label": "Skill Analytics",
+        "type": "module"
+      },
+      {
+        "id": "module:skill_workflow_hook_telemetry",
+        "label": "Skill, Workflow, And Hook Telemetry",
+        "type": "module"
+      },
+      {
+        "id": "module:task_attribution_outcome_tracking",
+        "label": "Task Attribution",
         "type": "module"
       },
       {
@@ -1773,6 +2741,126 @@
         "type": "runtime_profile"
       },
       {
+        "id": "skill:core/analytics_ingestion.py",
+        "label": "core/analytics_ingestion.py",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:core/event_store",
+        "label": "core/event_store",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:core/production_readiness",
+        "label": "core/production_readiness",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:core/shared_intelligence/contract_registry.py",
+        "label": "core/shared_intelligence/contract_registry.py",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:core/shared_intelligence/usage_accounting.py",
+        "label": "core/shared_intelligence/usage_accounting.py",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:core/work_orders",
+        "label": "core/work_orders",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:docs/DATABASE.md",
+        "label": "docs/DATABASE.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:docs/PUBLICATION_BOUNDARY.md",
+        "label": "docs/PUBLICATION_BOUNDARY.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:docs/README.md",
+        "label": "docs/README.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:docs/demo-script.md",
+        "label": "docs/demo-script.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:docs/portfolio-case-study.md",
+        "label": "docs/portfolio-case-study.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/career/SKILL.md",
+        "label": "skills/career/SKILL.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/career/modes/apply/SKILL.md",
+        "label": "skills/career/modes/apply/SKILL.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/career/modes/pdf/SKILL.md",
+        "label": "skills/career/modes/pdf/SKILL.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/career/modes/track/SKILL.md",
+        "label": "skills/career/modes/track/SKILL.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/core/modes/build",
+        "label": "skills/core/modes/build",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/core/modes/review",
+        "label": "skills/core/modes/review",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/domains/modes/design",
+        "label": "skills/domains/modes/design",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/domains/modes/fullstack",
+        "label": "skills/domains/modes/fullstack",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/domains/modes/website",
+        "label": "skills/domains/modes/website",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/quality/modes/debug/SKILL.md",
+        "label": "skills/quality/modes/debug/SKILL.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/quality/modes/debug/references/performance-issues.md",
+        "label": "skills/quality/modes/debug/references/performance-issues.md",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/quality/modes/polish",
+        "label": "skills/quality/modes/polish",
+        "type": "skill_or_workflow_surface"
+      },
+      {
+        "id": "skill:skills/quality/modes/structure-audit",
+        "label": "skills/quality/modes/structure-audit",
+        "type": "skill_or_workflow_surface"
+      },
+      {
         "id": "system:dream-studio",
         "label": "Dream Studio",
         "type": "system"
@@ -1783,8 +2871,28 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:adapter_result_records",
+        "label": "adapter_result_records",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:agent_context_scope_policies",
+        "label": "agent_context_scope_policies",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:agent_invocations",
         "label": "agent_invocations",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:agent_registry_records",
+        "label": "agent_registry_records",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:agent_result_records",
+        "label": "agent_result_records",
         "type": "sqlite_table"
       },
       {
@@ -1813,6 +2921,91 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:capability_center_records",
+        "label": "capability_center_records",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_application_events",
+        "label": "career_application_events",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_application_field_mappings",
+        "label": "career_application_field_mappings",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_applications",
+        "label": "career_applications",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_browser_automation_runs",
+        "label": "career_browser_automation_runs",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_case_studies",
+        "label": "career_case_studies",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_cover_letter_versions",
+        "label": "career_cover_letter_versions",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_evidence_refs",
+        "label": "career_evidence_refs",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_interview_story_bank",
+        "label": "career_interview_story_bank",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_job_opportunities",
+        "label": "career_job_opportunities",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_portfolio_artifacts",
+        "label": "career_portfolio_artifacts",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_profile_fields",
+        "label": "career_profile_fields",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_profiles",
+        "label": "career_profiles",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_resume_versions",
+        "label": "career_resume_versions",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_role_targets",
+        "label": "career_role_targets",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:career_scorecards",
+        "label": "career_scorecards",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:connector_ingestion_runs",
+        "label": "connector_ingestion_runs",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:dashboard_attention_items",
         "label": "dashboard_attention_items",
         "type": "sqlite_table"
@@ -1823,13 +3016,68 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:demo_case_study_packets",
+        "label": "demo_case_study_packets",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:execution_events",
         "label": "execution_events",
         "type": "sqlite_table"
       },
       {
+        "id": "table:github_repo_adoption_decisions",
+        "label": "github_repo_adoption_decisions",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_attribution_records",
+        "label": "github_repo_attribution_records",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_dependency_findings",
+        "label": "github_repo_dependency_findings",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_evaluations",
+        "label": "github_repo_evaluations",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_integration_candidates",
+        "label": "github_repo_integration_candidates",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_license_findings",
+        "label": "github_repo_license_findings",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_pattern_references",
+        "label": "github_repo_pattern_references",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:github_repo_security_findings",
+        "label": "github_repo_security_findings",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:hook_invocations",
         "label": "hook_invocations",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:installer_distribution_checks",
+        "label": "installer_distribution_checks",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:local_watch_schedule_records",
+        "label": "local_watch_schedule_records",
         "type": "sqlite_table"
       },
       {
@@ -1853,8 +3101,18 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:policy_decision_records",
+        "label": "policy_decision_records",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:prd_documents",
         "label": "prd_documents",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:privacy_redaction_export_records",
+        "label": "privacy_redaction_export_records",
         "type": "sqlite_table"
       },
       {
@@ -1918,8 +3176,23 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:skill_evaluation_runs",
+        "label": "skill_evaluation_runs",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:skill_invocations",
         "label": "skill_invocations",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:task_attribution_records",
+        "label": "task_attribution_records",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:team_rollup_records",
+        "label": "team_rollup_records",
         "type": "sqlite_table"
       },
       {
@@ -1928,8 +3201,18 @@
         "type": "sqlite_table"
       },
       {
+        "id": "table:tool_invocations",
+        "label": "tool_invocations",
+        "type": "sqlite_table"
+      },
+      {
         "id": "table:validation_results",
         "label": "validation_results",
+        "type": "sqlite_table"
+      },
+      {
+        "id": "table:workflow_agent_skill_mappings",
+        "label": "workflow_agent_skill_mappings",
         "type": "sqlite_table"
       },
       {
@@ -1938,9 +3221,49 @@
         "type": "sqlite_table"
       },
       {
+        "id": "workflow:api_integration_design_workflow",
+        "label": "api_integration_design_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:career_strategy_and_portfolio_ops_workflow",
+        "label": "career_strategy_and_portfolio_ops_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:code_quality_architecture_workflow",
+        "label": "code_quality_architecture_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:data_modeling_authority_workflow",
+        "label": "data_modeling_authority_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:documentation_quality_workflow",
+        "label": "documentation_quality_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:frontend_design_excellence_workflow",
+        "label": "frontend_design_excellence_workflow",
+        "type": "expert_workflow"
+      },
+      {
         "id": "workflow:full-ci",
         "label": "Manual Full CI",
         "type": "github_workflow"
+      },
+      {
+        "id": "workflow:intentional_implementation_workflow",
+        "label": "intentional_implementation_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:performance_efficiency_workflow",
+        "label": "performance_efficiency_workflow",
+        "type": "expert_workflow"
       },
       {
         "id": "workflow:pr-smoke",
@@ -1948,9 +3271,24 @@
         "type": "github_workflow"
       },
       {
+        "id": "workflow:product_demo_and_case_study_workflow",
+        "label": "product_demo_and_case_study_workflow",
+        "type": "expert_workflow"
+      },
+      {
         "id": "workflow:release-validation",
         "label": "Release Validation",
         "type": "github_workflow"
+      },
+      {
+        "id": "workflow:root_cause_debugging_workflow",
+        "label": "root_cause_debugging_workflow",
+        "type": "expert_workflow"
+      },
+      {
+        "id": "workflow:seo_content_growth_workflow",
+        "label": "seo_content_growth_workflow",
+        "type": "expert_workflow"
       }
     ],
     "unverified_edges_included": false
@@ -1958,7 +3296,7 @@
   "contract_registry": {
     "db_write_authorized": false,
     "derived_view": true,
-    "domain_count": 9,
+    "domain_count": 13,
     "domains": [
       {
         "contract_refs": [
@@ -2016,6 +3354,40 @@
           "adapter-projections/**",
           "AGENTS.md",
           "CLAUDE.md"
+        ]
+      },
+      {
+        "contract_refs": [
+          "docs/operations/task-attribution-and-outcomes.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "docs_refs": [
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/architecture/shared-authority-and-adapter-projections.md",
+          "docs/product/dream-studio-prd.md",
+          "docs/README.md"
+        ],
+        "domain_id": "task_attribution_outcomes",
+        "domain_name": "AI Adapter Task Attribution And Outcomes",
+        "freshness_policy": "attribution_schema_or_read_model_changes_require_dashboard_and_database_docs_refresh",
+        "public_export_boundary": "attribution_examples_synthetic_live_evidence_private",
+        "release_blocking": true,
+        "required_doc_refs": [
+          "docs/operations/task-attribution-and-outcomes.md",
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "source_patterns": [
+          "core/shared_intelligence/task_attribution.py",
+          "core/shared_intelligence/usage_accounting.py",
+          "core/shared_intelligence/capability_center.py",
+          "core/event_store/migrations/045_task_attribution_authority.sql",
+          "projections/api/routes/project_intelligence.py",
+          "projections/api/routes/shared_intelligence.py"
         ]
       },
       {
@@ -2204,6 +3576,34 @@
       },
       {
         "contract_refs": [
+          "docs/operations/expert-workflow-systems.md",
+          "docs/architecture/contract-atlas.md"
+        ],
+        "docs_refs": [
+          "README.md",
+          "docs/README.md",
+          "docs/product/dream-studio-prd.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "domain_id": "expert_workflow_system",
+        "domain_name": "Expert Skills And Workflow System",
+        "freshness_policy": "expert_skill_or_workflow_changes_require_overlap_matrix_and_docs_refresh",
+        "public_export_boundary": "career_data_private_by_default_public_outputs_sanitized_and_operator_approved",
+        "release_blocking": true,
+        "required_doc_refs": [
+          "docs/operations/expert-workflow-systems.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/README.md"
+        ],
+        "source_patterns": [
+          "core/shared_intelligence/expert_workflows.py",
+          "skills/**",
+          "workflows/**",
+          "projections/api/routes/shared_intelligence.py"
+        ]
+      },
+      {
+        "contract_refs": [
           "docs/operations/lint-format-baseline-policy.md",
           "docs/PUBLICATION_BOUNDARY.md",
           "docs/operations/repo-publication-privacy.md",
@@ -2242,17 +3642,89 @@
           "core/telemetry/docker_profiles.py",
           "runtime/config/release-gates/**"
         ]
+      },
+      {
+        "contract_refs": [
+          "docs/operations/career-ops-capability-center.md",
+          "docs/operations/github-repo-intake-evaluation.md",
+          "docs/architecture/contract-atlas.md"
+        ],
+        "docs_refs": [
+          "README.md",
+          "docs/README.md",
+          "docs/product/dream-studio-prd.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+          "docs/PUBLICATION_BOUNDARY.md"
+        ],
+        "domain_id": "career_capability_agent_github_intake",
+        "domain_name": "Career Ops, Capability Center, Scoped Agents, And GitHub Repo Intake",
+        "freshness_policy": "private_career_capability_agent_or_github_intake_changes_require_docs_and_public_boundary_refresh",
+        "public_export_boundary": "career_data_private_by_default_github_evaluation_evidence_sanitized_before_public_export",
+        "release_blocking": true,
+        "required_doc_refs": [
+          "docs/operations/career-ops-capability-center.md",
+          "docs/operations/github-repo-intake-evaluation.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/README.md",
+          "docs/PUBLICATION_BOUNDARY.md"
+        ],
+        "source_patterns": [
+          "core/career_ops.py",
+          "core/shared_intelligence/capability_center.py",
+          "core/shared_intelligence/scoped_agents.py",
+          "core/shared_intelligence/github_repo_intake.py",
+          "core/event_store/migrations/044_career_capability_agent_github_authority.sql",
+          "core/module_contracts.py",
+          "core/module_profiles.py",
+          "projections/api/routes/shared_intelligence.py"
+        ]
+      },
+      {
+        "contract_refs": [
+          "docs/operations/platform-hardening-sequence.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "docs_refs": [
+          "README.md",
+          "docs/README.md",
+          "docs/product/dream-studio-prd.md",
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/PUBLICATION_BOUNDARY.md",
+          "docs/operations/installed-platform-productization.md",
+          "docs/operations/task-attribution-and-outcomes.md"
+        ],
+        "domain_id": "platform_hardening_sequence",
+        "domain_name": "Platform Hardening Sequence",
+        "freshness_policy": "platform_hardening_authority_or_surface_changes_require_policy_privacy_installer_demo_docs_refresh",
+        "public_export_boundary": "private_evidence_stays_private_sanitized_rollups_and_demo_packets_only",
+        "release_blocking": true,
+        "required_doc_refs": [
+          "docs/operations/platform-hardening-sequence.md",
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md",
+          "docs/PUBLICATION_BOUNDARY.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "source_patterns": [
+          "core/shared_intelligence/platform_hardening.py",
+          "core/event_store/migrations/046_platform_hardening_authority.sql",
+          "interfaces/cli/ds.py",
+          "projections/api/routes/shared_intelligence.py"
+        ]
       }
     ],
     "empty_state": "No contract domains are registered.",
-    "generated_at": "2026-05-15T16:25:29.569959+00:00",
+    "generated_at": "2026-05-15T22:09:48.734713+00:00",
     "primary_authority": false,
     "routing_authority": false,
     "schema": "dream_studio.contract_registry.v1",
     "tracking_mode": "changed_files_same_change_set"
   },
   "current_maturity_ledger": {
-    "area_count": 26,
+    "area_count": 32,
     "areas": [
       {
         "area_id": "route_first_engine",
@@ -2544,6 +4016,24 @@
         ]
       },
       {
+        "area_id": "task_attribution_outcome_tracking",
+        "area_name": "Task attribution and execution outcomes",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "core/event_store/migrations/045_task_attribution_authority.sql"
+        ],
+        "known_gaps": [
+          "Real adapter runs must keep supplying complete source refs to reduce unknown fields"
+        ],
+        "next_action": "Use attribution records in Work Order and Project Details dogfood cycles.",
+        "owner_source": "core/shared_intelligence/task_attribution.py",
+        "status": "runtime_validated",
+        "validation": [
+          "tests/unit/test_task_attribution.py"
+        ]
+      },
+      {
         "area_id": "contract_atlas",
         "area_name": "Contract Atlas",
         "can_claim_publicly": true,
@@ -2731,12 +4221,103 @@
           "python interfaces/cli/repo_publication_readiness.py --strict",
           "publication boundary and private-path scans"
         ]
+      },
+      {
+        "area_id": "expert_workflow_system",
+        "area_name": "Expert workflow system",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/expert-workflow-systems.md"
+        ],
+        "known_gaps": [
+          "dashboard rendering can be deepened after the catalog and API route are stable"
+        ],
+        "next_action": "Use the catalog to drive scored workflow outputs during dogfood.",
+        "owner_source": "core/shared_intelligence/expert_workflows.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_expert_workflow_catalog.py"
+        ]
+      },
+      {
+        "area_id": "career_ops_private_module",
+        "area_name": "Career Ops private module",
+        "can_claim_publicly": false,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/career-ops-capability-center.md"
+        ],
+        "known_gaps": [
+          "live profile editing UX remains a private dashboard maturity layer"
+        ],
+        "next_action": "Dogfood private profile/application records only after explicit operator opt-in.",
+        "owner_source": "core/career_ops.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_career_ops_capability_agent_github.py"
+        ]
+      },
+      {
+        "area_id": "capability_center_scoped_agents",
+        "area_name": "Capability Center and scoped agents",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/career-ops-capability-center.md"
+        ],
+        "known_gaps": [
+          "invocation quality scoring improves as more real dogfood evidence accrues"
+        ],
+        "next_action": "Record capability evaluations during future Work Orders.",
+        "owner_source": "core/shared_intelligence/capability_center.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_career_ops_capability_agent_github.py"
+        ]
+      },
+      {
+        "area_id": "github_repo_intake_evaluation",
+        "area_name": "GitHub repo intake evaluation",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "docs/operations/github-repo-intake-evaluation.md"
+        ],
+        "known_gaps": [
+          "live GitHub metadata fetch remains a future approval-scoped producer"
+        ],
+        "next_action": "Use repo intake before adopting third-party code, dependencies, prompts, or patterns.",
+        "owner_source": "core/shared_intelligence/github_repo_intake.py",
+        "status": "tested_only",
+        "validation": [
+          "tests/unit/test_career_ops_capability_agent_github.py"
+        ]
+      },
+      {
+        "area_id": "platform_hardening_sequence",
+        "area_name": "Platform hardening sequence",
+        "can_claim_publicly": true,
+        "can_use_operationally": true,
+        "evidence": [
+          "core/event_store/migrations/046_platform_hardening_authority.sql",
+          "docs/operations/platform-hardening-sequence.md"
+        ],
+        "known_gaps": [
+          "Real pilot and demo evidence should accumulate through authority records over time"
+        ],
+        "next_action": "Dogfood the policy engine, connector imports, sanitized rollups, and demo packets.",
+        "owner_source": "core/shared_intelligence/platform_hardening.py",
+        "status": "runtime_validated",
+        "validation": [
+          "tests/unit/test_platform_hardening_sequence.py"
+        ]
       }
     ],
     "db_write_authorized": false,
     "derived_view": true,
     "empty_state": "No maturity areas are registered.",
-    "generated_at": "2026-05-15T16:25:28.929156+00:00",
+    "generated_at": "2026-05-15T22:09:47.949942+00:00",
     "model_name": "dream_studio_current_maturity_ledger",
     "operational_use_boundary": "Areas with can_use_operationally=false remain design or future-work surfaces.",
     "primary_authority": false,
@@ -2747,8 +4328,8 @@
     "source": "repo_backed_maturity_ledger",
     "status_counts": {
       "hardened": 1,
-      "runtime_validated": 15,
-      "tested_only": 10
+      "runtime_validated": 17,
+      "tested_only": 14
     }
   },
   "dashboard_private_export_boundaries": {
@@ -2758,7 +4339,9 @@
       "operator-local evidence",
       "live SQLite rows",
       "local adapter configs",
-      "backup and rollback paths"
+      "backup and rollback paths",
+      "career profiles, resumes, applications, contacts, automation evidence, and scorecards",
+      "GitHub repo evaluation evidence until explicitly sanitized"
     ],
     "public_export_policy": "sanitize local paths, local user surfaces, and sensitive metadata",
     "public_exports_allowed": true,
@@ -2786,8 +4369,40 @@
   },
   "empty_state": "Contract Atlas has no contracts to display.",
   "execution_authorized": false,
+  "expert_workflow_system": {
+    "application_automation_boundaries": [
+      "do_not_create_accounts",
+      "do_not_bypass_captchas",
+      "do_not_misrepresent_operator",
+      "do_not_submit_without_explicit_approval_or_policy",
+      "pause_on_ambiguous_questions",
+      "store_sensitive_fields_only_in_approved_private_storage",
+      "do_not_print_secrets_or_private_identifiers_unnecessarily",
+      "record_filled_skipped_and_operator_input_needed"
+    ],
+    "authority_write_targets": [
+      "workflow_invocations",
+      "skill_invocations",
+      "decision_records",
+      "research_evidence_records",
+      "validation_results",
+      "artifact_records",
+      "dashboard_attention_items",
+      "work_order_records"
+    ],
+    "career_preserved_behavior_count": 11,
+    "no_duplicate_skill_policy": "strengthen or map existing skills when responsibilities overlap; create only when no owner exists or the responsibility is clearly separate",
+    "overlap_decision_counts": {
+      "keep_existing": 1,
+      "split_existing": 1,
+      "strengthen_existing": 9
+    },
+    "validation_errors": [],
+    "validation_status": "pass",
+    "workflow_count": 11
+  },
   "export_scope": "public",
-  "generated_at": "2026-05-15T16:25:29.569959+00:00",
+  "generated_at": "2026-05-15T22:09:48.734713+00:00",
   "github_cicd_profile": {
     "deployment_policy": "separate_approval_required",
     "derived_view": true,
@@ -2833,11 +4448,45 @@
     ],
     "workflow_mutation_authorized": false
   },
+  "github_repo_intake": {
+    "copy_code_allowed_without_approval": false,
+    "decision_counts": {},
+    "evaluation_count": 0,
+    "outcome_classes": [
+      "reject",
+      "reference_only",
+      "learn_pattern_only",
+      "create_design_note",
+      "create_skill_candidate",
+      "create_workflow_candidate",
+      "create_adapter_candidate",
+      "create_dependency_candidate",
+      "fork_or_vendor_candidate",
+      "manual_review_required",
+      "legal_review_required",
+      "security_review_required",
+      "integration_work_order_ready"
+    ],
+    "schema_status": "available",
+    "source_tables": [
+      "github_repo_evaluations",
+      "github_repo_license_findings",
+      "github_repo_security_findings",
+      "github_repo_dependency_findings",
+      "github_repo_integration_candidates",
+      "github_repo_pattern_references",
+      "github_repo_adoption_decisions",
+      "github_repo_attribution_records"
+    ],
+    "validation_errors": [],
+    "validation_status": "pass",
+    "workflow_id": "github_repo_intake_and_integration_evaluation_workflow"
+  },
   "installed_module_profiles": {
     "derived_view": true,
     "model_name": "dream_studio_installed_module_profiles",
     "primary_authority": false,
-    "profile_count": 9,
+    "profile_count": 10,
     "profiles": [
       {
         "agents_required": false,
@@ -2867,6 +4516,45 @@
         ],
         "optional_dependencies": [],
         "profile_id": "core",
+        "required_dependencies": [
+          "python",
+          "sqlite"
+        ],
+        "workflows_required": false
+      },
+      {
+        "agents_required": false,
+        "claude_required": false,
+        "codex_required": false,
+        "docker_required": false,
+        "excludes": [
+          "public_exports",
+          "team_rollups",
+          "demo_packets",
+          "application_submission_without_approval",
+          "account_creation",
+          "captcha_bypass",
+          "docker"
+        ],
+        "expected_dashboard_api_behavior": "private_module_disabled_until_opt_in",
+        "exposed_commands": [
+          "ds status",
+          "ds modules"
+        ],
+        "exposed_routes": [
+          "/api/shared-intelligence/career-ops"
+        ],
+        "honest_empty_state": "Career Ops is disabled until explicitly enabled by the operator.",
+        "hooks_required": false,
+        "includes": [
+          "career_ops_private_authority",
+          "career_dashboard_private_routes"
+        ],
+        "optional_dependencies": [
+          "playwright_for_approved_field_fill"
+        ],
+        "privacy_boundary": "career_data_private_local_and_excluded_from_public_exports_by_default",
+        "profile_id": "career_ops_only",
         "required_dependencies": [
           "python",
           "sqlite"
@@ -3047,7 +4735,10 @@
         ],
         "expected_dashboard_api_behavior": "dashboard_loads_with_derived_views",
         "exposed_commands": [
-          "ds dashboard",
+          "ds dashboard --status",
+          "ds dashboard --serve",
+          "ds dashboard --open",
+          "ds dashboard --check",
           "ds validate"
         ],
         "exposed_routes": [
@@ -3132,7 +4823,10 @@
           "adapter_profiles",
           "model_profiles",
           "context_packets",
-          "contract_atlas"
+          "contract_atlas",
+          "capability_center",
+          "scoped_agent_registry",
+          "github_repo_intake"
         ],
         "optional_dependencies": [],
         "profile_id": "shared_intelligence_only",
@@ -3156,6 +4850,10 @@
         "exposed_commands": [
           "ds status",
           "ds dashboard",
+          "ds dashboard --status",
+          "ds dashboard --serve",
+          "ds dashboard --open",
+          "ds dashboard --check",
           "ds validate",
           "ds contract-atlas",
           "ds contract-atlas-refresh",
@@ -3176,7 +4874,11 @@
           "dashboard",
           "telemetry",
           "shared_intelligence",
-          "adapter_router"
+          "adapter_router",
+          "career_ops_optional",
+          "capability_center",
+          "scoped_agent_registry",
+          "github_repo_intake"
         ],
         "optional_dependencies": [
           "claude",
@@ -3212,6 +4914,10 @@
       "ds install",
       "ds install-command",
       "ds dashboard",
+      "ds dashboard --status",
+      "ds dashboard --serve",
+      "ds dashboard --open",
+      "ds dashboard --check",
       "ds validate",
       "ds contract-atlas",
       "ds contract-atlas-refresh",
@@ -3224,6 +4930,9 @@
       "ds backup",
       "ds restore-check",
       "ds update-check",
+      "ds migrate-legacy",
+      "ds repair-adapters",
+      "ds rollback-check",
       "ds uninstall-check"
     ],
     "live_db_write_authorized": false,
@@ -3232,7 +4941,7 @@
       "derived_view": true,
       "model_name": "dream_studio_installed_module_profiles",
       "primary_authority": false,
-      "profile_count": 9,
+      "profile_count": 10,
       "profiles": [
         {
           "agents_required": false,
@@ -3262,6 +4971,45 @@
           ],
           "optional_dependencies": [],
           "profile_id": "core",
+          "required_dependencies": [
+            "python",
+            "sqlite"
+          ],
+          "workflows_required": false
+        },
+        {
+          "agents_required": false,
+          "claude_required": false,
+          "codex_required": false,
+          "docker_required": false,
+          "excludes": [
+            "public_exports",
+            "team_rollups",
+            "demo_packets",
+            "application_submission_without_approval",
+            "account_creation",
+            "captcha_bypass",
+            "docker"
+          ],
+          "expected_dashboard_api_behavior": "private_module_disabled_until_opt_in",
+          "exposed_commands": [
+            "ds status",
+            "ds modules"
+          ],
+          "exposed_routes": [
+            "/api/shared-intelligence/career-ops"
+          ],
+          "honest_empty_state": "Career Ops is disabled until explicitly enabled by the operator.",
+          "hooks_required": false,
+          "includes": [
+            "career_ops_private_authority",
+            "career_dashboard_private_routes"
+          ],
+          "optional_dependencies": [
+            "playwright_for_approved_field_fill"
+          ],
+          "privacy_boundary": "career_data_private_local_and_excluded_from_public_exports_by_default",
+          "profile_id": "career_ops_only",
           "required_dependencies": [
             "python",
             "sqlite"
@@ -3442,7 +5190,10 @@
           ],
           "expected_dashboard_api_behavior": "dashboard_loads_with_derived_views",
           "exposed_commands": [
-            "ds dashboard",
+            "ds dashboard --status",
+            "ds dashboard --serve",
+            "ds dashboard --open",
+            "ds dashboard --check",
             "ds validate"
           ],
           "exposed_routes": [
@@ -3527,7 +5278,10 @@
             "adapter_profiles",
             "model_profiles",
             "context_packets",
-            "contract_atlas"
+            "contract_atlas",
+            "capability_center",
+            "scoped_agent_registry",
+            "github_repo_intake"
           ],
           "optional_dependencies": [],
           "profile_id": "shared_intelligence_only",
@@ -3551,6 +5305,10 @@
           "exposed_commands": [
             "ds status",
             "ds dashboard",
+            "ds dashboard --status",
+            "ds dashboard --serve",
+            "ds dashboard --open",
+            "ds dashboard --check",
             "ds validate",
             "ds contract-atlas",
             "ds contract-atlas-refresh",
@@ -3571,7 +5329,11 @@
             "dashboard",
             "telemetry",
             "shared_intelligence",
-            "adapter_router"
+            "adapter_router",
+            "career_ops_optional",
+            "capability_center",
+            "scoped_agent_registry",
+            "github_repo_intake"
           ],
           "optional_dependencies": [
             "claude",
@@ -3592,12 +5354,23 @@
     "primary_authority": false,
     "productization_surface": {
       "acceptance_tests": "ds acceptance",
+      "adapter_repair": "ds repair-adapters",
       "backup": "ds backup",
+      "dashboard": {
+        "check": "ds dashboard --check",
+        "default": "status_only_no_server_started",
+        "open": "ds dashboard --open",
+        "serve": "ds dashboard --serve",
+        "status": "ds dashboard --status"
+      },
       "first_run_setup": "ds install",
       "installer": "ds install --profile <profile>",
+      "legacy_check": "ds install --check-legacy",
+      "legacy_migration": "ds migrate-legacy --dry-run",
       "live_update_requires_guardrail_approval": true,
       "plain_command_installer": "ds install-command --execute",
       "restore_check": "ds restore-check",
+      "rollback_check": "ds rollback-check",
       "uninstall_check": "ds uninstall-check",
       "update_check": "ds update-check",
       "windows_launchers": [
@@ -3800,12 +5573,22 @@
         "no_token_to_dollar_conversion_without_cost_source": true,
         "plan_usage_uses_operational_value_metrics": true,
         "provider_billing_credentials_inspected": false,
+        "task_outcomes_linked_without_fake_cost": true,
         "tokens_are_usage_not_cost": true
       },
       "operational_record_count": 0,
       "profile_count": 10,
       "status": "available",
-      "token_record_count": 1832
+      "token_record_count": 0
+    },
+    {
+      "area": "task_attribution_outcome_tracking",
+      "error_count": 0,
+      "no_fake_cost_precision": true,
+      "outcome_counts": {},
+      "record_count": 0,
+      "status": "validated",
+      "validation_counts": {}
     },
     {
       "agents_required": false,
@@ -3827,12 +5610,141 @@
         "pr-smoke"
       ],
       "status": "pass"
+    },
+    {
+      "area": "expert_workflow_system",
+      "error_count": 0,
+      "no_duplicate_skill_policy": "strengthen or map existing skills when responsibilities overlap; create only when no owner exists or the responsibility is clearly separate",
+      "overlap_decision_counts": {
+        "keep_existing": 1,
+        "split_existing": 1,
+        "strengthen_existing": 9
+      },
+      "status": "validated",
+      "workflow_count": 11
+    },
+    {
+      "area": "career_ops",
+      "enabled": false,
+      "opt_in_required": true,
+      "private_by_default": true,
+      "public_export_excluded": true,
+      "status": "available"
+    },
+    {
+      "area": "capability_center",
+      "error_count": 0,
+      "section_ids": [
+        "agents",
+        "controls",
+        "evaluations",
+        "hardening_candidates",
+        "skills",
+        "workflows"
+      ],
+      "status": "validated"
+    },
+    {
+      "agent_count": 4,
+      "agent_is_authority": false,
+      "area": "scoped_agent_execution",
+      "error_count": 0,
+      "forbidden_context_count": 9,
+      "status": "validated"
+    },
+    {
+      "area": "github_repo_intake",
+      "copy_code_allowed_without_approval": false,
+      "error_count": 0,
+      "evaluation_count": 0,
+      "status": "validated",
+      "workflow_id": "github_repo_intake_and_integration_evaluation_workflow"
+    },
+    {
+      "area": "platform_hardening_sequence",
+      "error_count": 0,
+      "milestone_ids": [
+        "demo_case_study_system",
+        "engineering_connector_ingestion",
+        "installer_distribution_hardening",
+        "local_watch_scheduled_validation",
+        "policy_permission_engine",
+        "privacy_redaction_secret_boundary",
+        "skill_evaluation_harness",
+        "team_pilot_rollup_reporting"
+      ],
+      "source_status": {
+        "missing_tables": [],
+        "status": "available"
+      },
+      "status": "validated"
     }
   ],
   "model_name": "dream_studio_contract_atlas",
   "module_contracts": {
-    "contract_count": 12,
+    "contract_count": 16,
     "contracts": [
+      {
+        "api_routes": [
+          "/api/shared-intelligence/career-ops"
+        ],
+        "cli_commands": [
+          "ds status",
+          "ds modules"
+        ],
+        "contract_atlas_maturity_level": "tested_only",
+        "dashboard_surfaces": [
+          "Private Career Ops"
+        ],
+        "disabled_module_behavior": "Career data is absent from public exports and dashboard shows opt-in disabled.",
+        "emitted_events": [
+          "career_profile_updated",
+          "career_application_event_recorded"
+        ],
+        "empty_state_behavior": "No private career records exist until the operator enables Career Ops.",
+        "install_runtime_profile_membership": [
+          "career_ops_only",
+          "full"
+        ],
+        "module_id": "career_ops",
+        "optional_modules": [
+          "dashboard",
+          "shared_intelligence"
+        ],
+        "owned_tables": [
+          "career_profiles",
+          "career_profile_fields",
+          "career_role_targets",
+          "career_resume_versions",
+          "career_cover_letter_versions",
+          "career_portfolio_artifacts",
+          "career_case_studies",
+          "career_job_opportunities",
+          "career_applications",
+          "career_application_events",
+          "career_application_field_mappings",
+          "career_browser_automation_runs",
+          "career_interview_story_bank",
+          "career_evidence_refs",
+          "career_scorecards"
+        ],
+        "privacy_policy": "private_by_default_no_public_export_without_redacted_operator_approval",
+        "purpose": "Persist private opt-in career profile, application, evidence, and scorecard authority.",
+        "read_dependencies": [
+          "local SQLite authority only when opt-in enabled"
+        ],
+        "required_modules": [
+          "core"
+        ],
+        "security_readiness_impact": "Private career data adds strict publication/privacy boundaries.",
+        "validation_tests": [
+          "tests/unit/test_career_ops_capability_agent_github.py",
+          "tests/unit/test_module_contracts.py"
+        ],
+        "write_dependencies": [
+          "explicit Career Ops profile/application commands or private dashboard edits"
+        ]
+      },
       {
         "api_routes": [],
         "cli_commands": [
@@ -3933,7 +5845,10 @@
           "/api/shared-intelligence/*"
         ],
         "cli_commands": [
-          "ds dashboard",
+          "ds dashboard --status",
+          "ds dashboard --serve",
+          "ds dashboard --open",
+          "ds dashboard --check",
           "ds validate"
         ],
         "contract_atlas_maturity_level": "runtime_validated",
@@ -4334,6 +6249,161 @@
         ]
       },
       {
+        "api_routes": [
+          "/api/shared-intelligence/capability-center"
+        ],
+        "cli_commands": [
+          "ds contract-atlas"
+        ],
+        "contract_atlas_maturity_level": "tested_only",
+        "dashboard_surfaces": [
+          "Capability Center"
+        ],
+        "disabled_module_behavior": "Dashboard sections show unavailable with reasons when no records exist.",
+        "emitted_events": [
+          "capability_evaluation_recorded"
+        ],
+        "empty_state_behavior": "No skill, workflow, agent, control, or hardening evidence has been recorded.",
+        "install_runtime_profile_membership": [
+          "shared_intelligence_only",
+          "full"
+        ],
+        "module_id": "capability_center",
+        "optional_modules": [
+          "dashboard",
+          "career_ops"
+        ],
+        "owned_tables": [
+          "capability_center_records"
+        ],
+        "purpose": "Show skills, workflows, agents, controls, evaluations, and hardening candidates from authority.",
+        "read_dependencies": [
+          "skill_invocations",
+          "workflow_invocations",
+          "agent_invocations",
+          "hardening_candidate_records",
+          "production readiness controls"
+        ],
+        "required_modules": [
+          "core",
+          "shared_intelligence"
+        ],
+        "security_readiness_impact": "Capability evaluations and hardening candidates inform maturity/readiness.",
+        "validation_tests": [
+          "tests/unit/test_career_ops_capability_agent_github.py",
+          "tests/unit/test_module_contracts.py"
+        ],
+        "write_dependencies": [
+          "explicit capability evaluation imports only"
+        ]
+      },
+      {
+        "api_routes": [
+          "/api/shared-intelligence/agents/registry",
+          "/api/shared-intelligence/agents/context-packet"
+        ],
+        "cli_commands": [
+          "ds context-packet"
+        ],
+        "contract_atlas_maturity_level": "tested_only",
+        "dashboard_surfaces": [
+          "Capability Center Agents"
+        ],
+        "disabled_module_behavior": "Agents remain unavailable for execution; context policy can still be inspected.",
+        "emitted_events": [
+          "agent_context_packet_generated",
+          "agent_result_normalized"
+        ],
+        "empty_state_behavior": "Default scoped agent declarations are visible without recorded invocations.",
+        "install_runtime_profile_membership": [
+          "shared_intelligence_only",
+          "full"
+        ],
+        "module_id": "scoped_agents",
+        "optional_modules": [
+          "career_ops",
+          "adapter_router"
+        ],
+        "owned_tables": [
+          "agent_registry_records",
+          "agent_context_scope_policies",
+          "workflow_agent_skill_mappings",
+          "agent_result_records"
+        ],
+        "purpose": "Register scoped worker agents and constrain context, permissions, and result normalization.",
+        "read_dependencies": [
+          "agent_invocations",
+          "career_profiles only when scoped and enabled"
+        ],
+        "required_modules": [
+          "core",
+          "shared_intelligence"
+        ],
+        "security_readiness_impact": "Context minimization and approval boundaries reduce agent execution risk.",
+        "validation_tests": [
+          "tests/unit/test_career_ops_capability_agent_github.py",
+          "tests/unit/test_module_contracts.py"
+        ],
+        "write_dependencies": [
+          "agent registry/setup commands and normalized agent results"
+        ]
+      },
+      {
+        "api_routes": [
+          "/api/shared-intelligence/github-repo-intake"
+        ],
+        "cli_commands": [
+          "ds contract-atlas"
+        ],
+        "contract_atlas_maturity_level": "tested_only",
+        "dashboard_surfaces": [
+          "GitHub Repo Intake"
+        ],
+        "disabled_module_behavior": "No external repo is inspected or adopted automatically.",
+        "emitted_events": [
+          "github_repo_evaluation_recorded"
+        ],
+        "empty_state_behavior": "No external GitHub repositories have been evaluated.",
+        "install_runtime_profile_membership": [
+          "shared_intelligence_only",
+          "full"
+        ],
+        "module_id": "github_repo_intake",
+        "optional_modules": [
+          "security_only",
+          "analytics_only",
+          "external_project"
+        ],
+        "owned_tables": [
+          "github_repo_evaluations",
+          "github_repo_license_findings",
+          "github_repo_security_findings",
+          "github_repo_dependency_findings",
+          "github_repo_integration_candidates",
+          "github_repo_pattern_references",
+          "github_repo_adoption_decisions",
+          "github_repo_attribution_records"
+        ],
+        "purpose": "Evaluate GitHub repositories before adopting code, patterns, dependencies, prompts, or workflows.",
+        "read_dependencies": [
+          "Contract Atlas",
+          "security/readiness controls",
+          "skill/workflow overlap catalog"
+        ],
+        "required_modules": [
+          "core",
+          "shared_intelligence"
+        ],
+        "security_readiness_impact": "License/security/dependency review gates dependency and code adoption.",
+        "validation_tests": [
+          "tests/unit/test_career_ops_capability_agent_github.py",
+          "tests/unit/test_module_contracts.py"
+        ],
+        "write_dependencies": [
+          "explicit repo intake evaluation only; no external repo mutation"
+        ]
+      },
+      {
         "api_routes": [],
         "cli_commands": [
           "scripts/dev.ps1 docker-runtime-check"
@@ -4437,6 +6507,32 @@
     "primary_authority": false,
     "schema": "dream_studio.module_contracts.v1",
     "validation_errors": []
+  },
+  "platform_hardening": {
+    "connector_ingestion_status": "runtime_validated",
+    "demo_case_study_status": "runtime_validated",
+    "installer_distribution_status": "runtime_validated",
+    "local_watch_status": "runtime_validated",
+    "milestone_ids": [
+      "demo_case_study_system",
+      "engineering_connector_ingestion",
+      "installer_distribution_hardening",
+      "local_watch_scheduled_validation",
+      "policy_permission_engine",
+      "privacy_redaction_secret_boundary",
+      "skill_evaluation_harness",
+      "team_pilot_rollup_reporting"
+    ],
+    "policy_engine_status": "runtime_validated",
+    "privacy_redaction_status": "runtime_validated",
+    "skill_evaluation_status": "runtime_validated",
+    "source_status": {
+      "missing_tables": [],
+      "status": "available"
+    },
+    "team_rollup_status": "runtime_validated",
+    "validation_errors": [],
+    "validation_status": "pass"
   },
   "policy_mutation_authorized": false,
   "primary_authority": false,
@@ -4715,6 +6811,31 @@
   ],
   "sanitized_public_export": true,
   "schema": "dream_studio.contract_atlas.v1",
+  "scoped_agent_execution": {
+    "agent_count": 4,
+    "agent_is_authority": false,
+    "dream_studio_remains_canonical": true,
+    "forbidden_context_by_default": [
+      "full_conversation_history",
+      "unrelated_project_details",
+      "career_private_data_without_scope",
+      "secrets",
+      "raw_local_evidence",
+      "unneeded_telemetry",
+      "all_work_orders",
+      "all_user_memories",
+      "private_operator_data_outside_scope"
+    ],
+    "source_tables": [
+      "agent_registry_records",
+      "agent_context_scope_policies",
+      "workflow_agent_skill_mappings",
+      "agent_result_records",
+      "agent_invocations"
+    ],
+    "validation_errors": [],
+    "validation_status": "pass"
+  },
   "secure_production_readiness_gate": {
     "control_summary": {
       "applicable": 58,
@@ -6473,22 +8594,55 @@
   "source_tables": [
     "adapter_authority_profiles",
     "adapter_result_records",
+    "agent_context_scope_policies",
     "agent_invocations",
+    "agent_registry_records",
+    "agent_result_records",
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
     "artifact_authority_records",
     "artifact_records",
     "authority_projection_records",
     "blocker_resolution_records",
+    "capability_center_records",
     "capability_route_records",
+    "career_application_events",
+    "career_application_field_mappings",
+    "career_applications",
+    "career_browser_automation_runs",
+    "career_case_studies",
+    "career_cover_letter_versions",
+    "career_evidence_refs",
+    "career_interview_story_bank",
+    "career_job_opportunities",
+    "career_portfolio_artifacts",
+    "career_profile_fields",
+    "career_profiles",
+    "career_resume_versions",
+    "career_role_targets",
+    "career_scorecards",
+    "connector_ingestion_runs",
     "dashboard_attention_items",
     "decision_records",
+    "demo_case_study_packets",
     "execution_events",
+    "github_repo_adoption_decisions",
+    "github_repo_attribution_records",
+    "github_repo_dependency_findings",
+    "github_repo_evaluations",
+    "github_repo_integration_candidates",
+    "github_repo_license_findings",
+    "github_repo_pattern_references",
+    "github_repo_security_findings",
     "hardening_candidate_records",
     "hook_invocations",
+    "installer_distribution_checks",
     "learning_event_records",
+    "local_watch_schedule_records",
     "model_provider_profiles",
     "outcome_records",
+    "policy_decision_records",
+    "privacy_redaction_export_records",
     "production_readiness_assessment_runs",
     "production_readiness_control_results",
     "production_readiness_findings",
@@ -6500,11 +8654,55 @@
     "route_decision_records",
     "security_findings",
     "shared_context_packets",
+    "skill_evaluation_runs",
     "skill_invocations",
+    "task_attribution_records",
+    "team_rollup_records",
     "token_usage_records",
     "validation_results",
+    "workflow_agent_skill_mappings",
     "workflow_invocations"
   ],
+  "task_attribution_model": {
+    "policy": {
+      "dashboard_is_derived": true,
+      "files_unavailable_requires_reason": true,
+      "model_provider_unknown_is_explicit": true,
+      "token_cost_precision_not_inferred": true,
+      "untracked_work_marked_untracked_or_imported_manual": true
+    },
+    "record_count": 0,
+    "source_status": {
+      "missing_tables": [],
+      "status": "available"
+    },
+    "source_tables": [
+      "task_attribution_records",
+      "ai_usage_operational_records",
+      "adapter_result_records",
+      "execution_events",
+      "process_runs",
+      "skill_invocations",
+      "workflow_invocations",
+      "hook_invocations",
+      "tool_invocations",
+      "validation_results",
+      "security_findings",
+      "production_readiness_control_results"
+    ],
+    "summary": {
+      "by_adapter": {},
+      "by_project_milestone_task": {},
+      "by_skill": {},
+      "by_workflow": {},
+      "manual_review_count": 0,
+      "outcome_counts": {},
+      "rework_needed_count": 0,
+      "validation_counts": {}
+    },
+    "validation_errors": [],
+    "validation_status": "pass"
+  },
   "telemetry_module_contracts": [
     {
       "dashboard_cards": [

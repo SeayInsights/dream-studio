@@ -91,6 +91,25 @@ Run `ds validate`, `ds modules`, and `ds contract-atlas` to confirm the runtime
 surface is available. Run `ds contract-atlas-refresh` without `--execute` to
 preview sanitized export and docs/PRD/README freshness without writing files.
 
+## Dashboard Does Not Open
+
+Symptom: `ds dashboard` reports readiness, but no browser opens and no server
+starts.
+
+This is expected. `ds dashboard` is the safe status-only default. Use one of
+the explicit modes:
+
+- `ds dashboard --status` reports readiness only.
+- `ds dashboard --serve` starts the local dashboard server.
+- `ds dashboard --open` starts or reuses the server and opens a browser.
+- `ds dashboard --check` validates `/dashboard` and `/api/health` on a running
+  server.
+
+If `--check` fails, start the server with `ds dashboard --serve` in a separate
+terminal and rerun the check with the same `--source-root`, `--home`, `--host`,
+and `--port` values. Dashboard serving should not bootstrap, migrate, backfill,
+clean, or destructively mutate live SQLite state.
+
 ## Expert Workflow Catalog Is Empty Or Missing
 
 Symptom: `/api/shared-intelligence/expert-workflows` is unavailable or does not

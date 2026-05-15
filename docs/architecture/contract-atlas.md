@@ -99,6 +99,12 @@ runtime and global router contracts. The atlas treats `ds.cmd`, `ds.ps1`, and
 `ds` behavior stays visible in drift checks without making the atlas an
 installer or runtime mutator.
 
+Dashboard launch behavior is also part of the installed command-surface
+contract. The atlas should distinguish `ds dashboard --status` as the safe
+readiness/default mode, `ds dashboard --serve` as the foreground local server
+mode, `ds dashboard --open` as the browser convenience mode, and
+`ds dashboard --check` as the route-health validation mode.
+
 ## AI Usage Accounting
 
 The Contract Atlas now exposes `adapter_usage_accounting` as a derived section
