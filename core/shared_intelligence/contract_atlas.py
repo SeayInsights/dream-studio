@@ -57,6 +57,10 @@ from core.shared_intelligence.scoped_agents import (
     scoped_agent_registry,
     validate_scoped_agent_registry,
 )
+from core.shared_intelligence.task_attribution import (
+    task_attribution_summary,
+    validate_task_attribution_summary,
+)
 from core.shared_intelligence.usage_accounting import adapter_usage_accounting_summary
 from core.telemetry.docker_profiles import (
     DOCKER_MODULE_PROFILES,
@@ -118,6 +122,8 @@ def build_contract_atlas(
         lifecycle_event="release_merge",
     )
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
+    task_attribution = task_attribution_summary(conn, project_id=effective_project_id)
+    task_attribution_errors = validate_task_attribution_summary(task_attribution)
     analytics_only_status = analytics_only_profile_status(conn)
     github_cicd_profile = _github_cicd_profile(root)
     expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
@@ -183,9 +189,19 @@ def build_contract_atlas(
             "operational_record_count": usage_accounting["operational_record_count"],
             "token_record_count": usage_accounting["token_record_count"],
             "by_adapter": usage_accounting["by_adapter"],
+            "task_attribution": usage_accounting["task_attribution"],
             "policy": usage_accounting["policy"],
             "source_tables": usage_accounting["source_tables"],
             "schema_status": usage_accounting.get("schema_status", "available"),
+        },
+        "task_attribution_model": {
+            "record_count": task_attribution["record_count"],
+            "summary": task_attribution["summary"],
+            "source_tables": task_attribution["source_tables"],
+            "source_status": task_attribution["source_status"],
+            "policy": task_attribution["policy"],
+            "validation_status": "pass" if not task_attribution_errors else "attention_required",
+            "validation_errors": task_attribution_errors,
         },
         "github_cicd_profile": github_cicd_profile,
         "expert_workflow_system": {
@@ -255,6 +271,8 @@ def build_contract_atlas(
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
+            task_attribution=task_attribution,
+            task_attribution_errors=task_attribution_errors,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
@@ -273,6 +291,7 @@ def build_contract_atlas(
             security_lifecycle_gate=security_lifecycle_gate,
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
+            task_attribution=task_attribution,
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
@@ -294,6 +313,7 @@ def build_contract_atlas(
             capability_center_errors=capability_center_errors,
             scoped_agent_errors=scoped_agent_errors,
             github_repo_intake_errors=github_repo_intake_errors,
+            task_attribution_errors=task_attribution_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -368,6 +388,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "production_readiness_control_catalog",
         "secure_production_readiness_gate",
         "adapter_usage_accounting",
+        "task_attribution_model",
         "github_cicd_profile",
         "expert_workflow_system",
         "career_ops_module",
@@ -661,6 +682,8 @@ def _maturity_scorecard(
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
+    task_attribution: Mapping[str, Any],
+    task_attribution_errors: list[str],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
@@ -749,6 +772,17 @@ def _maturity_scorecard(
             "cost_policy": usage_accounting.get("policy", {}),
         },
         {
+            "area": "task_attribution_outcome_tracking",
+            "status": "validated" if not task_attribution_errors else "attention_required",
+            "record_count": task_attribution.get("record_count", 0),
+            "outcome_counts": task_attribution.get("summary", {}).get("outcome_counts", {}),
+            "validation_counts": task_attribution.get("summary", {}).get("validation_counts", {}),
+            "no_fake_cost_precision": task_attribution.get("policy", {}).get(
+                "token_cost_precision_not_inferred"
+            ),
+            "error_count": len(task_attribution_errors),
+        },
+        {
             "area": "analytics_only_ingestion",
             "status": "available",
             "profile_id": analytics_only_status.get("profile_id"),
@@ -813,6 +847,7 @@ def _confirmed_dependency_graph(
     security_lifecycle_gate: Mapping[str, Any],
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
+    task_attribution: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
@@ -953,6 +988,23 @@ def _confirmed_dependency_graph(
             table_id,
             "reads_source_table",
             "core.shared_intelligence.usage_accounting.adapter_usage_accounting_summary",
+        )
+
+    add_node("module:task_attribution_outcome_tracking", "module", "Task Attribution")
+    add_edge(
+        "module:task_attribution_outcome_tracking",
+        "module:ai_usage_accounting",
+        "feeds_adapter_usage_outcomes",
+        "core.shared_intelligence.task_attribution.task_attribution_summary",
+    )
+    for table in task_attribution.get("source_tables", []):
+        table_id = f"table:{table}"
+        add_node(table_id, "sqlite_table", str(table))
+        add_edge(
+            "module:task_attribution_outcome_tracking",
+            table_id,
+            "reads_or_links_source_table",
+            "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
         )
 
     add_node("module:analytics_only_ingestion", "module", "Analytics-Only Ingestion")
@@ -1141,6 +1193,7 @@ def _boundary_violation_report(
     capability_center_errors: list[str],
     scoped_agent_errors: list[str],
     github_repo_intake_errors: list[str],
+    task_attribution_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -1161,6 +1214,8 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "scoped_agents", "message": error})
     for error in github_repo_intake_errors:
         issues.append({"severity": "error", "area": "github_repo_intake", "message": error})
+    for error in task_attribution_errors:
+        issues.append({"severity": "error", "area": "task_attribution", "message": error})
     security_status = security_lifecycle_gate.get("security_status")
     if security_status not in {"ready", "needs_manual_review"}:
         issues.append(
@@ -1260,6 +1315,7 @@ def _source_tables() -> list[str]:
             "github_repo_pattern_references",
             "github_repo_adoption_decisions",
             "github_repo_attribution_records",
+            "task_attribution_records",
         }
     )
     for module in DASHBOARD_MODULES:

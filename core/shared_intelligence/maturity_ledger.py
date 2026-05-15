@@ -59,6 +59,7 @@ REQUIRED_AREA_IDS: frozenset[str] = frozenset(
         "career_ops_private_module",
         "capability_center_scoped_agents",
         "github_repo_intake_evaluation",
+        "task_attribution_outcome_tracking",
     }
 )
 
@@ -258,6 +259,20 @@ MATURITY_AREAS: tuple[dict[str, Any], ...] = (
         "validation": ["normalized adapter result tests"],
         "known_gaps": ["more real adapter result shapes should be sampled during dogfood"],
         "next_action": "Capture real adapter outputs as normalized result fixtures.",
+        "can_claim_publicly": True,
+        "can_use_operationally": True,
+    },
+    {
+        "area_id": "task_attribution_outcome_tracking",
+        "area_name": "Task attribution and execution outcomes",
+        "status": "runtime_validated",
+        "owner_source": "core/shared_intelligence/task_attribution.py",
+        "evidence": ["core/event_store/migrations/045_task_attribution_authority.sql"],
+        "validation": ["tests/unit/test_task_attribution.py"],
+        "known_gaps": [
+            "Real adapter runs must keep supplying complete source refs to reduce unknown fields"
+        ],
+        "next_action": "Use attribution records in Work Order and Project Details dogfood cycles.",
         "can_claim_publicly": True,
         "can_use_operationally": True,
     },

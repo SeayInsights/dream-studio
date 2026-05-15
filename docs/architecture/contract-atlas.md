@@ -43,6 +43,7 @@ The registry currently tracks these release-blocking domains:
 
 - Contract Atlas
 - Shared intelligence and adapter projections
+- AI adapter task attribution and outcomes
 - SQLite schema and authority
 - Installed adapter runtime and global router
 - Dashboard runtime and read models
@@ -102,14 +103,25 @@ installer or runtime mutator.
 The Contract Atlas now exposes `adapter_usage_accounting` as a derived section
 backed by `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, and
 `token_usage_records`. This section records adapter billing modes, token
-visibility, cost visibility, usage source, confidence, and operational value
-signals without claiming provider billing authority.
+visibility, cost visibility, usage source, confidence, operational value
+signals, and task attribution rollups without claiming provider billing
+authority.
 
 Plan/subscription adapters such as Claude Code subscription and Codex through a
 ChatGPT plan show cost as `unknown` unless an explicit allocation profile is
 configured. Token-metered/API-metered adapters can show reportable cost only
 when provider metadata, provider export, billing API data, or an explicitly
 marked estimate exists.
+
+The atlas also exposes `task_attribution_model`, backed by
+`task_attribution_records` and the existing execution, invocation, validation,
+adapter-result, usage, security, and readiness tables. This model lets Project
+Details, Work Order details, Adapter Usage, and Capability Center show which
+AI/adapter did meaningful work, which skills/workflows were used, what files
+and commands were recorded, what validation ran, what outcome occurred, whether
+rework was needed, and what security/readiness impact was observed. It keeps
+unknown model/provider values explicit and never infers fake token or cost
+precision.
 runtime domain. Installer, first-run setup, acceptance, backup, restore-check,
 update-check, uninstall-check, module profile selection, and troubleshooting
 docs must drift with changes to the installed runtime or global command

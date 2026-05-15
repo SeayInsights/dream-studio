@@ -80,9 +80,19 @@ AI usage accounting follows the same projection rule. Adapter-local files and
 private model memory do not own billing mode, token visibility, cost visibility,
 usage source, cost source, confidence, or operational outcome data. Those
 records live in SQLite through `ai_adapter_accounting_profiles`,
-`ai_usage_operational_records`, and `token_usage_records`, then project into the
-router, Contract Atlas, dashboards, and context packets. Subscription-plan tools
-must display cost as `unknown` unless an explicit allocation profile is present.
+`ai_usage_operational_records`, `token_usage_records`, and
+`task_attribution_records`, then project into the router, Contract Atlas,
+dashboards, and context packets. Subscription-plan tools must display cost as
+`unknown` unless an explicit allocation profile is present.
+
+Task attribution is adapter-readable but not adapter-owned. Meaningful
+execution units should normalize back into `task_attribution_records` with
+project, milestone, task, Work Order, process run, adapter, model/provider where
+known, skills/workflows, hooks/tools, files touched, commands, validation,
+outcome, rework, evidence refs, and security/readiness impact. If an adapter
+run was not routed through Dream Studio, the source class should say
+`untracked`, `imported_manual`, or `adapter_reported` instead of pretending the
+execution was fully observed.
 
 Contract Atlas lifecycle access is also read-only by default. Adapters may call
 `ds contract-atlas-refresh` in dry-run mode or read

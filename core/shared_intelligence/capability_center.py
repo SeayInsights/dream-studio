@@ -11,6 +11,7 @@ from core.production_readiness import production_readiness_control_catalog
 from core.shared_intelligence.expert_workflows import expert_workflow_catalog
 from core.shared_intelligence.scoped_agents import scoped_agent_registry
 from core.shared_intelligence.skill_versioning import skill_version_evaluation_report
+from core.shared_intelligence.task_attribution import task_attribution_summary
 
 CAPABILITY_CENTER_SCHEMA = "dream_studio.capability_center.v1"
 
@@ -22,6 +23,7 @@ CAPABILITY_SOURCE_TABLES: tuple[str, ...] = (
     "hardening_candidate_records",
     "capability_route_records",
     "production_readiness_control_results",
+    "task_attribution_records",
 )
 
 
@@ -36,6 +38,7 @@ def capability_center_summary(
     versioning = skill_version_evaluation_report(conn, limit=100)
     controls = _control_summary(repo_root)
     recorded = _recorded_capabilities(conn)
+    attribution = task_attribution_summary(conn, project_id=project_id, limit=200)
     return {
         "schema": CAPABILITY_CENTER_SCHEMA,
         "model_name": "dream_studio_capability_center",
@@ -49,8 +52,8 @@ def capability_center_summary(
         "source_tables": list(CAPABILITY_SOURCE_TABLES),
         "source_status": source_status,
         "sections": {
-            "skills": _skills_section(conn, recorded),
-            "workflows": _workflows_section(conn, workflows),
+            "skills": _skills_section(conn, recorded, attribution),
+            "workflows": _workflows_section(conn, workflows, attribution),
             "agents": _agents_section(conn, agents),
             "controls": controls,
             "evaluations": _evaluations_section(versioning),
@@ -79,14 +82,29 @@ def validate_capability_center_summary(summary: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _skills_section(conn: sqlite3.Connection, recorded: list[dict[str, Any]]) -> dict[str, Any]:
+def _skills_section(
+    conn: sqlite3.Connection,
+    recorded: list[dict[str, Any]],
+    attribution: dict[str, Any],
+) -> dict[str, Any]:
     invocation_counts = _component_counts(conn, "skill_invocations", "skill_id")
+    attributed_outcomes = attribution.get("summary", {}).get("by_skill", {})
     recorded_skills = [item for item in recorded if item.get("component_type") == "skill"]
-    skill_ids = sorted(set(invocation_counts) | {item["component_id"] for item in recorded_skills})
+    skill_ids = sorted(
+        set(invocation_counts)
+        | set(attributed_outcomes)
+        | {item["component_id"] for item in recorded_skills}
+    )
     items = [
         {
             "skill_id": skill_id,
             "invocation_count": invocation_counts.get(skill_id, 0),
+            "attributed_outcomes": attributed_outcomes.get(skill_id, {}),
+            "success_count": _success_count(attributed_outcomes.get(skill_id, {})),
+            "failure_count": attributed_outcomes.get(skill_id, {}).get("failed", 0),
+            "manual_review_count": attributed_outcomes.get(skill_id, {}).get(
+                "manual_review_required", 0
+            ),
             "evaluation_status": _recorded_status(recorded_skills, skill_id),
             "score_available": _recorded_score(recorded_skills, skill_id) is not None,
         }
@@ -102,8 +120,13 @@ def _skills_section(conn: sqlite3.Connection, recorded: list[dict[str, Any]]) ->
     }
 
 
-def _workflows_section(conn: sqlite3.Connection, workflows: dict[str, Any]) -> dict[str, Any]:
+def _workflows_section(
+    conn: sqlite3.Connection,
+    workflows: dict[str, Any],
+    attribution: dict[str, Any],
+) -> dict[str, Any]:
     invocation_counts = _component_counts(conn, "workflow_invocations", "workflow_id")
+    attributed_outcomes = attribution.get("summary", {}).get("by_workflow", {})
     items = []
     for workflow in workflows.get("workflows", []):
         workflow_id = workflow["workflow_id"]
@@ -112,6 +135,9 @@ def _workflows_section(conn: sqlite3.Connection, workflows: dict[str, Any]) -> d
                 "workflow_id": workflow_id,
                 "purpose": workflow.get("purpose"),
                 "invocation_count": invocation_counts.get(workflow_id, 0),
+                "attributed_outcomes": attributed_outcomes.get(workflow_id, {}),
+                "success_count": _success_count(attributed_outcomes.get(workflow_id, {})),
+                "failure_count": attributed_outcomes.get(workflow_id, {}).get("failed", 0),
                 "validation_requirements": workflow.get("validation_requirements", []),
                 "scorecards": workflow.get("scoring_rubric", []),
                 "evaluation_status": (
@@ -121,6 +147,12 @@ def _workflows_section(conn: sqlite3.Connection, workflows: dict[str, Any]) -> d
             }
         )
     return {"count": len(items), "items": items}
+
+
+def _success_count(outcomes: dict[str, int]) -> int:
+    return sum(
+        outcomes.get(status, 0) for status in ("completed", "committed", "pr_opened", "released")
+    )
 
 
 def _agents_section(conn: sqlite3.Connection, agents: dict[str, Any]) -> dict[str, Any]:

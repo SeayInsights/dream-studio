@@ -93,6 +93,8 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["installed_module_profiles"]["profile_count"] == 10
     assert atlas["career_ops_module"]["private_by_default"] is True
     assert atlas["career_ops_module"]["public_export_excluded"] is True
+    assert atlas["task_attribution_model"]["validation_status"] == "pass"
+    assert atlas["task_attribution_model"]["policy"]["token_cost_precision_not_inferred"] is True
     assert atlas["capability_center"]["validation_status"] == "pass"
     assert atlas["scoped_agent_execution"]["dream_studio_remains_canonical"] is True
     assert atlas["github_repo_intake"]["copy_code_allowed_without_approval"] is False
@@ -132,6 +134,11 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     )
     assert any(
         item["area"] == "github_repo_intake" and item["copy_code_allowed_without_approval"] is False
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "task_attribution_outcome_tracking"
+        and item["no_fake_cost_precision"] is True
         for item in atlas["maturity_scorecard"]
     )
     assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
@@ -207,6 +214,11 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     assert any(
         edge["source"] == "module:scoped_agent_execution"
         and edge["target"] == "layer:sqlite_authority"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:task_attribution_outcome_tracking"
+        and edge["target"] == "table:task_attribution_records"
         for edge in graph["edges"]
     )
 
