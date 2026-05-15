@@ -44,6 +44,7 @@ Check `ds modules` for the supported profile ids:
 - `core`
 - `analytics_only`
 - `security_only`
+- `token_only`
 - `telemetry_only`
 - `dashboard_only`
 - `adapter_router_only`
@@ -51,6 +52,10 @@ Check `ds modules` for the supported profile ids:
 - `full`
 
 Do not edit runtime config by hand to invent a profile.
+
+If a module exists in Contract Atlas but not in `ds modules`, check
+`core.module_contracts`: module contracts describe boundaries, while installed
+profiles describe selectable runtime packages.
 
 ## Dashboard Is Empty
 

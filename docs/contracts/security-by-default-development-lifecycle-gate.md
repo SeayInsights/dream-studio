@@ -72,6 +72,12 @@ caching, accessibility, observability, performance, dependency, code-quality,
 privacy, rollback, and release controls, but enterprise security control
 authority remains here.
 
+Module boundary contracts provide the dependency context for lightweight
+security classification. A change to `security_only`, `analytics_only`,
+`adapter_router`, `external_project`, or `docker_optional` can alter which
+controls are applicable, but the module contract route remains read-only and
+does not execute scans, mutate repositories, run Docker, or write SQLite.
+
 ## Project Portfolio Hydration
 
 All Projects and Project Details consume normalized security findings as a

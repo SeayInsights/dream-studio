@@ -44,7 +44,7 @@ def test_module_profiles_are_independent_and_analytics_only_is_minimal() -> None
     by_id = module_profile_map()
 
     assert validate_module_profiles() == []
-    assert profiles["profile_count"] == 8
+    assert profiles["profile_count"] == 9
     analytics = by_id["analytics_only"]
     assert analytics["hooks_required"] is False
     assert analytics["agents_required"] is False
@@ -55,6 +55,9 @@ def test_module_profiles_are_independent_and_analytics_only_is_minimal() -> None
     assert "repo_mutation" in analytics["excludes"]
     assert "ds analytics-ingest" in analytics["exposed_commands"]
     assert analytics["hooks_are_optional_producers"] is True
+    token = by_id["token_only"]
+    assert token["docker_required"] is False
+    assert "fake_cost_estimation" in token["excludes"]
     assert "ds modules" in by_id["core"]["exposed_commands"]
 
 
