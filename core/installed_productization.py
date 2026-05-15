@@ -8,12 +8,20 @@ caller's current working directory is the source checkout.
 from __future__ import annotations
 
 import json
+import gc
+import os
 import shutil
+import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core.config.sqlite_bootstrap import bootstrap_database, latest_migration_version
+from core.config.sqlite_bootstrap import (
+    applied_schema_version,
+    bootstrap_database,
+    latest_migration_version,
+)
 from core.event_store.studio_db import _connect
 from core.installed_runtime import (
     CONFIG_RELATIVE_PATH,
@@ -33,6 +41,39 @@ from core.shared_intelligence.usage_accounting import register_default_adapter_a
 DEFAULT_INSTALL_PROFILES: tuple[str, ...] = ("core", "analytics_only", "adapter_router_only")
 PRODUCTIZATION_VERSION = "dream_studio.installed_productization.v1"
 DEFAULT_GLOBAL_COMMAND_DIR = Path.home() / ".local" / "bin"
+LEGACY_BACKUP_ROOT_NAME = "Dream Studio Legacy Backups"
+LEGACY_SPRAWL_CANDIDATES: tuple[str, ...] = (
+    "work-orders",
+    "handoffs",
+    "reports",
+    "evidence",
+    "audit",
+    "audits",
+    "generated-prompts",
+    "prompts",
+    "cache",
+    "caches",
+    "logs",
+    "meta/work-orders",
+    "meta/handoffs",
+    "meta/reports",
+    "meta/evidence",
+    "meta/audit",
+    "meta/generated-prompts",
+)
+SQLITE_COPY_EXCLUDED_PREFIXES: tuple[str, ...] = ("sqlite_",)
+SQLITE_COPY_EXCLUDED_SUFFIXES: tuple[str, ...] = (
+    "_fts",
+    "_fts_data",
+    "_fts_idx",
+    "_fts_docsize",
+    "_fts_config",
+)
+SQLITE_COPY_EXCLUDED_TABLES: set[str] = {
+    "_schema_version",
+    "canonical_events",
+    "legacy_canonical_event_import_map",
+}
 
 
 def first_run_setup(
@@ -52,7 +93,8 @@ def first_run_setup(
     fresh_state_created = not paths.dream_studio_home.exists()
     _create_runtime_dirs(paths.dream_studio_home)
     schema_version = bootstrap_database(paths.sqlite_path)
-    with _connect(paths.sqlite_path) as conn:
+    conn = _connect(paths.sqlite_path)
+    try:
         register_default_adapter_authority_profiles(conn)
         register_default_adapter_accounting_profiles(conn)
         conn.commit()
@@ -70,6 +112,8 @@ def first_run_setup(
             project_id="dream-studio",
             persist=False,
         )
+    finally:
+        conn.close()
     config_path = _write_runtime_config(
         source_root=paths.source_root,
         dream_studio_home=paths.dream_studio_home,
@@ -244,8 +288,11 @@ def update_runtime_check(
     )
     schema_version = None
     if paths.sqlite_path.exists():
-        with _connect(paths.sqlite_path) as conn:
+        conn = _connect(paths.sqlite_path)
+        try:
             schema_version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
+        finally:
+            conn.close()
     return {
         "model_name": "dream_studio_runtime_update_check",
         "source_root": str(paths.source_root),
@@ -258,6 +305,307 @@ def update_runtime_check(
         "update_executed": False,
         "requires_backup_before_live_update": True,
         "live_state_mutated": False,
+        "legacy_install_detection": detect_legacy_install(
+            source_root=paths.source_root,
+            dream_studio_home=paths.dream_studio_home,
+        ),
+    }
+
+
+def detect_legacy_install(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    command_dir: str | Path | None = None,
+    claude_settings_path: str | Path | None = None,
+    codex_home: str | Path | None = None,
+) -> dict[str, Any]:
+    """Detect old install surfaces without mutating or printing secrets."""
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    config_path = paths.dream_studio_home / CONFIG_RELATIVE_PATH
+    runtime_config = _read_json_if_object(config_path)
+    configured_source = runtime_config.get("source_root") if runtime_config else None
+    source_mismatch = bool(
+        configured_source and Path(configured_source).resolve() != paths.source_root
+    )
+    schema_version = _sqlite_schema_version(paths.sqlite_path)
+    legacy_sprawl = _legacy_sprawl(paths.dream_studio_home)
+    launcher_report = _launcher_path_report(
+        command_dir=Path(command_dir).resolve() if command_dir else DEFAULT_GLOBAL_COMMAND_DIR,
+        current_source=paths.source_root,
+    )
+    adapter_config_report = _adapter_config_path_report(
+        source_root=paths.source_root,
+        claude_settings_path=claude_settings_path,
+        codex_home=codex_home,
+    )
+    stale_env = _stale_environment_report(paths.source_root, paths.dream_studio_home)
+    unknown_manual_review = []
+    if paths.dream_studio_home.exists() and not paths.sqlite_path.exists() and legacy_sprawl:
+        unknown_manual_review.append("runtime_state_without_current_sqlite_authority")
+    if configured_source and not Path(configured_source).exists():
+        unknown_manual_review.append("runtime_config_source_path_missing")
+    old_schema = schema_version is not None and schema_version < latest_migration_version()
+    status = (
+        "legacy_detected"
+        if any(
+            (
+                source_mismatch,
+                paths.dream_studio_home.exists() and old_schema,
+                legacy_sprawl,
+                launcher_report["stale_launcher_count"],
+                adapter_config_report["stale_adapter_config_count"],
+                stale_env["stale_env_count"],
+                unknown_manual_review,
+            )
+        )
+        else "current_or_not_installed"
+    )
+    return {
+        "model_name": "dream_studio_legacy_install_detection",
+        "derived_view": True,
+        "primary_authority": False,
+        "status": status,
+        "current_source_root": str(paths.source_root),
+        "dream_studio_home": str(paths.dream_studio_home),
+        "runtime_config_path": str(config_path),
+        "runtime_config_exists": config_path.exists(),
+        "configured_source_root": configured_source,
+        "old_source_checkout_detected": source_mismatch,
+        "runtime_state_exists": paths.dream_studio_home.exists(),
+        "sqlite_exists": paths.sqlite_path.exists(),
+        "schema_version": schema_version,
+        "latest_migration_version": latest_migration_version(),
+        "old_sqlite_schema_detected": old_schema,
+        "old_file_sprawl_detected": bool(legacy_sprawl),
+        "legacy_file_sprawl": legacy_sprawl,
+        "launcher_paths": launcher_report,
+        "adapter_config_paths": adapter_config_report,
+        "stale_environment": stale_env,
+        "manual_review_items": unknown_manual_review,
+        "destructive_action_authorized": False,
+        "secret_values_read": False,
+    }
+
+
+def migrate_legacy_install(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    backup_root: str | Path | None = None,
+    command_dir: str | Path | None = None,
+    claude_settings_path: str | Path | None = None,
+    codex_home: str | Path | None = None,
+    execute: bool = False,
+) -> dict[str, Any]:
+    """Plan or execute a fresh active install from a legacy runtime home."""
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    backup_base = Path(backup_root or paths.dream_studio_home.parent / LEGACY_BACKUP_ROOT_NAME)
+    backup_path = backup_base / f".dream-studio-legacy-upgrade-{_timestamp_slug()}"
+    detection = detect_legacy_install(
+        source_root=paths.source_root,
+        dream_studio_home=paths.dream_studio_home,
+        command_dir=command_dir,
+        claude_settings_path=claude_settings_path,
+        codex_home=codex_home,
+    )
+    planned_writes = [
+        str(backup_path),
+        str(paths.dream_studio_home),
+        str(paths.sqlite_path),
+        str(paths.dream_studio_home / CONFIG_RELATIVE_PATH),
+    ]
+    if command_dir:
+        planned_writes.extend(
+            [
+                str(Path(command_dir).resolve() / "ds.cmd"),
+                str(Path(command_dir).resolve() / "ds.ps1"),
+            ]
+        )
+    dry_run = {
+        "model_name": "dream_studio_legacy_install_migration",
+        "status": "dry_run" if not execute else "pending",
+        "execute": execute,
+        "current_source_path": str(paths.source_root),
+        "installed_runtime_path": str(paths.dream_studio_home),
+        "backup_path": str(backup_path),
+        "planned_writes": planned_writes,
+        "detection": detection,
+        "strategy": {
+            "backup_first": True,
+            "fresh_active_home": True,
+            "apply_current_migrations": True,
+            "copy_legacy_file_sprawl_forward": False,
+            "compatible_sqlite_authority_only": True,
+            "merge_unrelated_git_histories": False,
+            "delete_old_source_or_backups": False,
+            "inspect_secrets": False,
+        },
+        "rollback_instructions": [
+            "Stop Dream Studio commands.",
+            "Move the fresh active .dream-studio aside.",
+            "Restore the backed-up .dream-studio directory from backup_path.",
+            "Re-run ds rollback-check --backup-path <backup_path> before resuming.",
+        ],
+    }
+    if not execute:
+        return dry_run
+    if not paths.dream_studio_home.exists():
+        raise RuntimeError("Cannot migrate legacy install because the runtime home does not exist.")
+
+    gc.collect()
+    backup_base.mkdir(parents=True, exist_ok=True)
+    backup_runtime_path = backup_path / "runtime-home"
+    shutil.copytree(paths.dream_studio_home, backup_runtime_path)
+    _write_json(backup_path / "legacy-detection.json", detection)
+    _write_text(
+        backup_path / "ROLLBACK.txt",
+        "\n".join(dry_run["rollback_instructions"]) + "\n",
+    )
+    backup_verified = _verify_sqlite_read_only(backup_runtime_path / "state" / "studio.db")
+
+    moved_runtime_path = backup_path / "previous-active-runtime-home"
+    gc.collect()
+    shutil.move(str(paths.dream_studio_home), str(moved_runtime_path))
+    setup = first_run_setup(
+        source_root=paths.source_root,
+        dream_studio_home=paths.dream_studio_home,
+        profiles=DEFAULT_INSTALL_PROFILES,
+        rehearsal=False,
+    )
+    migration = _migrate_compatible_sqlite_authority(
+        source_db=backup_runtime_path / "state" / "studio.db",
+        target_db=paths.sqlite_path,
+    )
+    launcher = None
+    if command_dir:
+        launcher = install_global_command_surface(
+            source_root=paths.source_root,
+            dream_studio_home=paths.dream_studio_home,
+            command_dir=command_dir,
+            execute=True,
+        )
+    adapter_repair = repair_adapter_surfaces(
+        source_root=paths.source_root,
+        dream_studio_home=paths.dream_studio_home,
+        command_dir=command_dir,
+        claude_settings_path=claude_settings_path,
+        codex_home=codex_home,
+        previous_source_root=detection.get("configured_source_root"),
+        execute=True,
+    )
+    return {
+        **dry_run,
+        "status": "migrated",
+        "backup_verified": backup_verified,
+        "backup_runtime_path": str(backup_runtime_path),
+        "moved_previous_runtime_path": str(moved_runtime_path),
+        "fresh_setup": setup,
+        "sqlite_migration": migration,
+        "launcher_refresh": launcher,
+        "adapter_repair": adapter_repair,
+        "old_file_sprawl_copied_forward": False,
+        "destructive_sqlite_mutation": False,
+        "external_projects_mutated": False,
+    }
+
+
+def repair_adapter_surfaces(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    command_dir: str | Path | None = None,
+    claude_settings_path: str | Path | None = None,
+    codex_home: str | Path | None = None,
+    previous_source_root: str | Path | None = None,
+    execute: bool = False,
+) -> dict[str, Any]:
+    """Plan or repair Dream-Studio-owned launchers and adapter hook paths."""
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    command_target = Path(command_dir).resolve() if command_dir else DEFAULT_GLOBAL_COMMAND_DIR
+    detection = detect_legacy_install(
+        source_root=paths.source_root,
+        dream_studio_home=paths.dream_studio_home,
+        command_dir=command_target,
+        claude_settings_path=claude_settings_path,
+        codex_home=codex_home,
+    )
+    planned_writes = [str(command_target / "ds.cmd"), str(command_target / "ds.ps1")]
+    if claude_settings_path:
+        planned_writes.append(str(Path(claude_settings_path).resolve()))
+    result: dict[str, Any] = {
+        "model_name": "dream_studio_adapter_surface_repair",
+        "status": "planned",
+        "execute": execute,
+        "source_root": str(paths.source_root),
+        "dream_studio_home": str(paths.dream_studio_home),
+        "planned_writes": planned_writes,
+        "detection": detection,
+        "secret_values_read": False,
+        "external_projects_mutated": False,
+        "adapter_hooks_repaired": 0,
+        "launchers_repaired": 0,
+    }
+    if not execute:
+        return result
+    launcher = install_global_command_surface(
+        source_root=paths.source_root,
+        dream_studio_home=paths.dream_studio_home,
+        command_dir=command_target,
+        execute=True,
+    )
+    result["launchers_repaired"] = len(launcher["written"])
+    if claude_settings_path and previous_source_root:
+        result["adapter_hooks_repaired"] = sum(
+            _replace_source_in_dream_studio_json_strings(
+                Path(claude_settings_path).resolve(),
+                old=old_source,
+                new=str(paths.source_root),
+            )
+            for old_source in sorted(
+                {str(previous_source_root), str(Path(previous_source_root).resolve())}
+            )
+        )
+    result["status"] = "repaired"
+    result["launcher_refresh"] = launcher
+    return result
+
+
+def rollback_runtime_check(
+    *,
+    backup_path: str | Path,
+) -> dict[str, Any]:
+    """Validate a legacy-upgrade backup without restoring it."""
+
+    backup = Path(backup_path).resolve()
+    runtime_backup = backup / "runtime-home"
+    sqlite_backup = runtime_backup / "state" / "studio.db"
+    rollback = backup / "ROLLBACK.txt"
+    detection = backup / "legacy-detection.json"
+    return {
+        "model_name": "dream_studio_legacy_rollback_check",
+        "backup_path": str(backup),
+        "backup_exists": backup.exists(),
+        "runtime_backup_exists": runtime_backup.exists(),
+        "sqlite_backup_exists": sqlite_backup.exists(),
+        "sqlite_backup_opens_read_only": _verify_sqlite_read_only(sqlite_backup),
+        "rollback_instructions_exist": rollback.exists(),
+        "legacy_detection_exists": detection.exists(),
+        "rollback_ready": backup.exists() and runtime_backup.exists() and rollback.exists(),
+        "restore_executed": False,
+        "delete_authorized": False,
     }
 
 
@@ -351,12 +699,15 @@ def productization_acceptance_report(
     uninstall = uninstall_runtime_check(
         source_root=source_root, dream_studio_home=dream_studio_home
     )
-    with _connect(paths.sqlite_path) as conn:
+    conn = _connect(paths.sqlite_path)
+    try:
         router = adapter_router_status(
             conn,
             source_root=paths.source_root,
             dream_studio_home=paths.dream_studio_home,
         )
+    finally:
+        conn.close()
     checks = {
         "no_existing_state_required": setup["fresh_state_created"] is True,
         "selected_modules_installed": all(
@@ -636,6 +987,270 @@ def _backup_manifest(paths: Any, backup_id: str) -> dict[str, Any]:
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8", newline="\n")
+
+
+def _read_json_if_object(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _sqlite_schema_version(db_path: Path) -> int | None:
+    if not db_path.exists():
+        return None
+    try:
+        with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+            return applied_schema_version(conn)
+    except sqlite3.Error:
+        return None
+
+
+def _verify_sqlite_read_only(db_path: Path) -> bool:
+    if not db_path.exists():
+        return False
+    try:
+        with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as conn:
+            conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def _legacy_sprawl(home: Path) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
+    if not home.exists():
+        return findings
+    for rel in LEGACY_SPRAWL_CANDIDATES:
+        path = home / rel
+        if not path.exists():
+            continue
+        findings.append(
+            {
+                "relative_path": rel,
+                "classification": "legacy_file_sprawl_keep_in_backup_only",
+                "is_dir": path.is_dir(),
+                "file_count": _count_files(path),
+            }
+        )
+    return findings
+
+
+def _count_files(path: Path) -> int:
+    if path.is_file():
+        return 1
+    if not path.is_dir():
+        return 0
+    return sum(1 for child in path.rglob("*") if child.is_file())
+
+
+def _launcher_path_report(*, command_dir: Path, current_source: Path) -> dict[str, Any]:
+    launchers = []
+    stale_count = 0
+    for name in ("ds.cmd", "ds.ps1"):
+        path = command_dir / name
+        stale = False
+        dream_studio_owned = False
+        if path.is_file():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            dream_studio_owned = (
+                "DREAM_STUDIO_SOURCE_ROOT" in text or "interfaces\\cli\\ds.py" in text
+            )
+            stale = dream_studio_owned and str(current_source) not in text
+        stale_count += int(stale)
+        launchers.append(
+            {
+                "path": str(path),
+                "exists": path.exists(),
+                "dream_studio_owned": dream_studio_owned,
+                "stale": stale,
+            }
+        )
+    return {
+        "command_dir": str(command_dir),
+        "launchers": launchers,
+        "stale_launcher_count": stale_count,
+    }
+
+
+def _adapter_config_path_report(
+    *,
+    source_root: Path,
+    claude_settings_path: str | Path | None,
+    codex_home: str | Path | None,
+) -> dict[str, Any]:
+    stale_count = 0
+    surfaces = []
+    if claude_settings_path:
+        path = Path(claude_settings_path).resolve()
+        owned = False
+        stale = False
+        if path.is_file():
+            text = path.read_text(encoding="utf-8", errors="replace")
+            owned = "dream-studio" in text.lower() or "DREAM_STUDIO_SOURCE_ROOT" in text
+            stale = owned and str(source_root) not in text
+        stale_count += int(stale)
+        surfaces.append(
+            {
+                "surface": "claude_settings",
+                "path": str(path),
+                "exists": path.exists(),
+                "dream_studio_owned_entries_detected": owned,
+                "stale": stale,
+            }
+        )
+    if codex_home:
+        path = Path(codex_home).resolve()
+        surfaces.append(
+            {
+                "surface": "codex_home",
+                "path": str(path),
+                "exists": path.exists(),
+                "repair_mode": "projection_regeneration_only",
+                "stale": False,
+            }
+        )
+    return {"surfaces": surfaces, "stale_adapter_config_count": stale_count}
+
+
+def _stale_environment_report(source_root: Path, home: Path) -> dict[str, Any]:
+    checks = {
+        "DREAM_STUDIO_SOURCE_ROOT": str(source_root),
+        "DREAM_STUDIO_HOME": str(home),
+    }
+    stale = []
+    for name, expected in checks.items():
+        value = os.environ.get(name)
+        if value and str(Path(value).resolve()) != expected:
+            stale.append({"name": name, "classification": "stale_environment_variable"})
+    return {"stale_env_count": len(stale), "stale_variables": stale}
+
+
+def _migrate_compatible_sqlite_authority(*, source_db: Path, target_db: Path) -> dict[str, Any]:
+    if not source_db.exists():
+        return {
+            "status": "skipped",
+            "reason": "legacy_sqlite_missing",
+            "migrated_tables": [],
+            "skipped_tables": [],
+        }
+    migrated = []
+    skipped = []
+    with closing(sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)) as src, closing(
+        sqlite3.connect(str(target_db))
+    ) as dst:
+        src.row_factory = sqlite3.Row
+        dst.row_factory = sqlite3.Row
+        source_tables = _table_names(src)
+        target_tables = _table_names(dst)
+        for table in sorted(source_tables & target_tables):
+            if _skip_sqlite_copy_table(table):
+                skipped.append({"table": table, "reason": "excluded_rebuildable_or_legacy"})
+                continue
+            source_columns = _table_columns(src, table)
+            target_columns = _table_columns(dst, table)
+            common_columns = [column for column in source_columns if column in target_columns]
+            if not common_columns:
+                skipped.append({"table": table, "reason": "no_common_columns"})
+                continue
+            rows = src.execute(
+                f"SELECT {', '.join(_q(column) for column in common_columns)} FROM {_q(table)}"
+            ).fetchall()
+            inserted = 0
+            if rows:
+                placeholders = ", ".join("?" for _ in common_columns)
+                sql = (
+                    f"INSERT OR IGNORE INTO {_q(table)} "
+                    f"({', '.join(_q(column) for column in common_columns)}) "
+                    f"VALUES ({placeholders})"
+                )
+                for row in rows:
+                    before = dst.total_changes
+                    dst.execute(sql, [row[column] for column in common_columns])
+                    inserted += dst.total_changes - before
+            migrated.append(
+                {
+                    "table": table,
+                    "source_rows": len(rows),
+                    "inserted_rows": inserted,
+                    "common_column_count": len(common_columns),
+                    "source_ref": f"{source_db.name}:{table}",
+                }
+            )
+        dst.commit()
+    return {
+        "status": "pass",
+        "migrated_tables": migrated,
+        "skipped_tables": skipped,
+        "source_refs_preserved": True,
+        "legacy_tables_recreated": False,
+    }
+
+
+def _table_names(conn: sqlite3.Connection) -> set[str]:
+    return {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        if not str(row[0]).startswith("sqlite_")
+    }
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    return [row[1] for row in conn.execute(f"PRAGMA table_info({_q(table)})")]
+
+
+def _skip_sqlite_copy_table(table: str) -> bool:
+    return (
+        table in SQLITE_COPY_EXCLUDED_TABLES
+        or table.startswith(SQLITE_COPY_EXCLUDED_PREFIXES)
+        or table.endswith(SQLITE_COPY_EXCLUDED_SUFFIXES)
+    )
+
+
+def _q(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _replace_source_in_dream_studio_json_strings(path: Path, *, old: str, new: str) -> int:
+    data = _read_json_if_object(path)
+    if not data:
+        return 0
+    data, changed, replaced = _replace_source_in_value(data, old=old, new=new)
+    if changed:
+        _write_json(path, data)
+    return replaced
+
+
+def _replace_source_in_value(value: Any, *, old: str, new: str) -> tuple[Any, bool, int]:
+    if isinstance(value, dict):
+        changed = False
+        replaced = 0
+        for key, item in value.items():
+            new_item, item_changed, item_replaced = _replace_source_in_value(item, old=old, new=new)
+            changed = changed or item_changed
+            replaced += item_replaced
+            value[key] = new_item
+        return value, changed, replaced
+    if isinstance(value, list):
+        changed = False
+        replaced = 0
+        for index, item in enumerate(value):
+            new_item, item_changed, item_replaced = _replace_source_in_value(item, old=old, new=new)
+            changed = changed or item_changed
+            replaced += item_replaced
+            value[index] = new_item
+        return value, changed, replaced
+    if isinstance(value, str) and old in value and "dream-studio" in value.lower():
+        return value.replace(old, new), True, 1
+    return value, False, 0
 
 
 def _windows_cmd_launcher(source_root: Path, dream_studio_home: Path) -> str:

@@ -139,11 +139,12 @@ tables and to analytics-only ingestion. This keeps connector imports normalized
 into current authority and prevents policy, demo, or team-rollup outputs from
 becoming separate truth sources.
 runtime domain. Installer, first-run setup, acceptance, backup, restore-check,
-update-check, uninstall-check, module profile selection, and troubleshooting
+update-check, legacy install detection/migration, adapter repair,
+rollback-check, uninstall-check, module profile selection, and troubleshooting
 docs must drift with changes to the installed runtime or global command
-surface, including repo-owned launchers such as `ds.cmd` and `ds.ps1`. The atlas can
-describe and validate those contracts, but execution still belongs to the `ds`
-command surface and explicit operator-approved runtime flows.
+surface, including repo-owned launchers such as `ds.cmd` and `ds.ps1`. The
+atlas can describe and validate those contracts, but execution still belongs to
+the `ds` command surface and explicit operator-approved runtime flows.
 
 The security lifecycle gate is also a first-class atlas section. It maps the
 47 enterprise security controls to the security review catalog, security skill,
