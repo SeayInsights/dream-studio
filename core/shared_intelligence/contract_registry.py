@@ -288,6 +288,36 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "runtime_hooks_public_secrets_private",
     },
     {
+        "domain_id": "expert_workflow_system",
+        "domain_name": "Expert Skills And Workflow System",
+        "source_patterns": [
+            "core/shared_intelligence/expert_workflows.py",
+            "skills/**",
+            "workflows/**",
+            "projections/api/routes/shared_intelligence.py",
+        ],
+        "contract_refs": [
+            "docs/operations/expert-workflow-systems.md",
+            "docs/architecture/contract-atlas.md",
+        ],
+        "docs_refs": [
+            "README.md",
+            "docs/README.md",
+            PRD_DOC,
+            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+        ],
+        "required_doc_refs": [
+            "docs/operations/expert-workflow-systems.md",
+            "docs/architecture/contract-atlas.md",
+            "docs/README.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "expert_skill_or_workflow_changes_require_overlap_matrix_and_docs_refresh",
+        "public_export_boundary": (
+            "career_data_private_by_default_public_outputs_sanitized_and_operator_approved"
+        ),
+    },
+    {
         "domain_id": "release_publication_gate",
         "domain_name": "Release Gate And Publication Boundary",
         "source_patterns": [

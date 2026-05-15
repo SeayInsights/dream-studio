@@ -67,6 +67,15 @@ freshness, and sanitized public export checks were evaluated. The manifest is
 derived evidence only; it does not run readiness controls, create findings,
 write SQLite, or claim compliance.
 
+Expert workflow catalog status contributes to readiness when process quality is
+in scope. The readiness gate can treat
+`/api/shared-intelligence/expert-workflows` as evidence that implementation,
+quality, debugging, performance, design, SEO/content, documentation, data/API,
+case-study, and career/portfolio workflows have owners, input/output
+contracts, evidence requirements, validation requirements, scoring rubrics, and
+privacy boundaries. The catalog does not execute workflows, create findings,
+publish career artifacts, fill applications, or write SQLite.
+
 ## Skill And Control Overlap
 
 Existing skills and gates are canonical when they already work:

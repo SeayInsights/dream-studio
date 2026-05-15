@@ -114,6 +114,20 @@ python C:\path\to\dream-studio\interfaces\cli\ds.py `
 The same commands are available through `python interfaces\cli\ds.py` for
 portable scripting and tests.
 
+## Expert Workflow Surface
+
+Installed Dream Studio exposes `/api/shared-intelligence/expert-workflows` as a
+read-only catalog for expert workflow contracts. This lets dashboard, adapter,
+and context-packet consumers discover intentional implementation, code quality,
+debugging, performance, design, SEO/content, documentation, data modeling, API,
+case-study, and career/portfolio workflow expectations without executing a
+skill or relying on the current working directory.
+
+The surface is not a career automation runner and does not publish private
+career data. Career/application operations still require the existing career
+skill modes, configured private storage, Playwright boundaries when used, and
+operator approval before any submission.
+
 ## Analytics-Only Ingestion
 
 `analytics_only` can be installed as a standalone analytics deployment profile.

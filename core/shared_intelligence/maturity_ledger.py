@@ -55,6 +55,7 @@ REQUIRED_AREA_IDS: frozenset[str] = frozenset(
         "installed_productization_closeout",
         "github_pr_ci_release_gate",
         "publication_privacy_readiness",
+        "expert_workflow_system",
     }
 )
 
@@ -399,6 +400,20 @@ MATURITY_AREAS: tuple[dict[str, Any], ...] = (
             "history rewrite remains a separate explicit approval boundary if a future scan finds blockers"
         ],
         "next_action": "Run publication readiness before push/tag/release decisions.",
+        "can_claim_publicly": True,
+        "can_use_operationally": True,
+    },
+    {
+        "area_id": "expert_workflow_system",
+        "area_name": "Expert workflow system",
+        "status": "tested_only",
+        "owner_source": "core/shared_intelligence/expert_workflows.py",
+        "evidence": ["docs/operations/expert-workflow-systems.md"],
+        "validation": ["tests/unit/test_expert_workflow_catalog.py"],
+        "known_gaps": [
+            "dashboard rendering can be deepened after the catalog and API route are stable"
+        ],
+        "next_action": "Use the catalog to drive scored workflow outputs during dogfood.",
         "can_claim_publicly": True,
         "can_use_operationally": True,
     },

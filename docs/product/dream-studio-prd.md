@@ -41,6 +41,11 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 - Maintain a Contract Atlas lifecycle manifest that regenerates private/internal atlas views, sanitized public exports, maturity status, docs/PRD/README impact detection, dashboard/API freshness, and public-export leakage checks from authority rather than hand-maintained files.
 - Use GitHub Actions as a lightweight remote confidence layer: PR smoke by default, manual full CI for remote parity evidence, manual or tag-triggered release validation for release evidence, and local Dream Studio release gates as the heavy validation authority.
 - Validate repo publication readiness with source-owned checks for tracked files, ignored/local boundaries, Git history path privacy, Apache-2.0 references, README/PRD alignment, and sanitized Contract Atlas exports.
+- Formalize expert workflow contracts for intentional implementation, code
+  quality, debugging, performance, frontend design, SEO/content,
+  documentation, data modeling, API integration, demo/case-study creation, and
+  private-by-default career/portfolio operations without duplicating existing
+  skills.
 - Support installed modular productization so a user can run `ds` from outside
   the repo, select profiles, inspect adapter/router health, use context-packet
   fallback, run analytics-only/security-only/full modes, and perform
@@ -153,6 +158,22 @@ public claims and operational use do not exceed evidence.
 ### Learning And Hardening
 
 Dream Studio captures learning events for skill gaps, workarounds, failed assumptions, validation failures, route mistakes, and successful hardening. Lessons can become rules, skill updates, workflow updates, adapter policies, dashboard attention items, or operator approval items through a promotion policy.
+
+### Expert Workflow System
+
+Dream Studio maps existing skills and workflows into reusable expert workflow
+contracts. The system strengthens existing owners instead of creating duplicate
+skills, records an overlap decision matrix, requires evidence-backed scoring,
+and routes structured outputs into Work Orders, dashboard attention, Project
+Details, Contract Atlas maturity, project health/readiness, release readiness,
+and private portfolio/career surfaces where relevant.
+
+Career and application automation remain private by default. Dream Studio must
+not invent career claims, metrics, titles, compensation, employer details,
+deployment outcomes, business impact, or adoption claims. Application
+automation must not create accounts, bypass CAPTCHAs, misrepresent the
+operator, or submit applications without explicit approval or an approved
+per-application policy.
 
 ### Publication Boundary
 

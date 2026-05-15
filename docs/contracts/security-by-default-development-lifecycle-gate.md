@@ -85,6 +85,13 @@ not inspect secrets, create findings, mutate SQLite, or change 47-control
 applicability. Security docs still drift with router changes to confirm the
 non-execution boundary.
 
+The expert workflow route is also non-executing. Security reviewers may use
+`/api/shared-intelligence/expert-workflows` to see whether implementation,
+debugging, design, documentation, API, data modeling, or career/application
+workflows require security/readiness evidence, but the route does not run
+scans, inspect secrets, fill application forms, submit applications, mutate
+SQLite, or change 47-control applicability.
+
 ## Project Portfolio Hydration
 
 All Projects and Project Details consume normalized security findings as a

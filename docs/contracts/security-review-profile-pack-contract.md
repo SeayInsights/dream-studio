@@ -75,6 +75,12 @@ maturity, docs, PRD/README, and sanitized export freshness gates are current.
 That route is a derived release-readiness signal only. It must not create
 findings, run scans, inspect secrets, or replace profile-pack evidence.
 
+Security reviewers may use `/api/shared-intelligence/expert-workflows` to map
+implementation, debugging, design, documentation, API, data modeling, SEO, and
+career/application workflow outputs to existing skill owners and evidence
+requirements. The route is a catalog, not a scanner or browser automation
+surface. It must not inspect secrets, submit applications, or create findings.
+
 Project Details can display normalized security findings, 47-control
 applicability, and module/profile fit together with stack evidence. That view is
 for operator orientation only. It must not create findings, run scans, inspect

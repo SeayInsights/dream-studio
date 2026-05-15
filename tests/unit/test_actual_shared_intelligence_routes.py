@@ -236,10 +236,33 @@ def test_actual_app_exposes_contract_atlas_without_authorizing_execution(
     )
     assert private_payload["confirmed_dependency_graph"]["inferred_edges_included"] is False
     assert private_payload["boundary_violation_report"]["cleanup_execution_authorized"] is False
+    assert private_payload["expert_workflow_system"]["workflow_count"] == 11
+    assert private_payload["expert_workflow_system"]["validation_status"] == "pass"
     assert public_payload["export_scope"] == "public"
     assert public_payload["sanitized_public_export"] is True
     assert public_payload["repo_root"] == "<sanitized-local-path>"
     assert private_payload["current_maturity_ledger"]["area_count"] >= 20
+
+
+def test_actual_app_exposes_expert_workflow_catalog(tmp_path: Path, monkeypatch) -> None:
+    client, _db_path = _client_with_shared_db(tmp_path, monkeypatch)
+
+    response = client.get(
+        "/api/shared-intelligence/expert-workflows",
+        params={"project_id": "dream-studio"},
+    )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["model_name"] == "dream_studio_expert_workflow_catalog"
+    assert payload["workflow_count"] == 11
+    assert payload["primary_authority"] is False
+    assert payload["execution_authorized"] is False
+    assert "frontend_design_excellence_workflow" in payload["specialized_skill_families"]
+    assert (
+        "do_not_submit_without_explicit_approval_or_policy"
+        in payload["application_automation_boundaries"]
+    )
 
 
 def test_actual_app_exposes_contract_atlas_maturity_and_docs_drift_views(
@@ -315,6 +338,7 @@ def test_actual_app_shared_intelligence_status_is_non_authoritative(
         "capability-routes",
         "model-providers",
         "contract-atlas",
+        "expert-workflows",
         "maturity-ledger",
         "contract-docs-drift",
         "contract-atlas-freshness",

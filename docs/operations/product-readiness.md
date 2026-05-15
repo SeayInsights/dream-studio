@@ -89,6 +89,14 @@ tests enforce each boundary. The read-only module-contracts API and Contract
 Atlas section can inform readiness, but they do not execute checks or authorize
 state mutation.
 
+Expert workflow maturity is part of readiness evidence when a change touches
+implementation process, code quality, debugging, performance, design,
+SEO/content, documentation, data modeling, API integration, case studies, or
+career/portfolio operations. The expert workflow catalog can inform readiness
+and dashboard attention, but it is read-only: it does not execute skills,
+publish private career artifacts, fill applications, mutate SQLite, or create a
+parallel skill authority.
+
 Contract Atlas lifecycle freshness is also part of release/publication
 readiness evidence. `ds contract-atlas-refresh` and
 `/api/shared-intelligence/contract-atlas/freshness` can prove that private

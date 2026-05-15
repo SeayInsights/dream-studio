@@ -24,6 +24,7 @@ boundary.
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
 | Analytics-only ingestion | `core.analytics_ingestion` normalized payload contract | `ds analytics-ingest`, `/api/shared-intelligence/analytics-only`, All Projects, Project Details, metrics/security/readiness APIs | explicit SQLite imports plus derived views | Required for analytics import contract changes |
+| Expert workflows | `core.shared_intelligence.expert_workflows` | `/api/shared-intelligence/expert-workflows`, Contract Atlas, Project Details/dashboard attention when executed | repo catalog plus existing SQLite authority targets | Required for skill/workflow overlap or career automation boundary changes |
 | GitHub CI/CD profile | `runtime/config/release-gates/dream-studio.json` plus `core.release.github_pr_cicd_gate` | Contract Atlas, release gate packet, GitHub workflows | repo source/config | Required for workflow or merge-policy changes |
 | External project validation | `core.projects.external_validation` | All Projects, Project Details, Work Order plans | repo source plus SQLite/evidence refs | Required for target access or policy changes |
 | Docker module profiles | `core.telemetry.docker_profiles` | module registry, Contract Atlas, runtime status | repo source/config | Required for Docker execution or profile changes |
@@ -83,6 +84,13 @@ exports may produce normalized payloads, but analytics-only does not require
 them. `ds analytics-ingest` dry-runs by default and writes only with
 `--execute`, targeting current SQLite authority tables instead of creating
 legacy file-sprawl or competing dashboard-only stores.
+
+Expert workflow configuration is repo-backed. It maps existing skill/workflow
+owners into reusable workflow contracts, overlap decisions, scoring rubrics,
+and privacy boundaries. Runtime executions may write structured results through
+existing authority tables, but the catalog itself does not create a competing
+skill database or authorize browser automation, publication, external mutation,
+or live SQLite writes.
 
 Productized first-run setup must always target an explicit Dream Studio home or
 an approved installed home resolved from configuration. Rehearsal acceptance
