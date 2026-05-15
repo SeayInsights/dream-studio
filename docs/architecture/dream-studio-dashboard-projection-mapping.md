@@ -40,6 +40,7 @@ The dashboard mapping covers:
 - Commit status
 - Paused external validation targets
 - Contract Atlas status and boundary violations
+- Installed adapter router status and module/profile health
 
 ## Required Mapping Fields
 
@@ -93,6 +94,23 @@ The projection may display:
 
 It must not authorize adapter execution, policy mutation, cleanup, database
 writes, release actions, or public export of private local state.
+
+## Installed Adapter Router Projection
+
+The installed adapter router projection is exposed through
+`/api/shared-intelligence/adapter-router`. It is a dashboard-consumable derived
+view over installed runtime paths, adapter access modes, adapter projection
+health, module profiles, and shared-intelligence capabilities.
+
+The projection may display route state, skills/workflow/hook availability,
+telemetry/evidence/context-packet capability status, Contract Atlas query
+availability, dashboard attention, and current module/profile health. It must
+show unsupported or context-packet-only adapters honestly and preserve the
+Claude/Codex live-consumption caveats recorded by validation evidence.
+
+It must not start services, execute hooks, mutate adapter configs, write live
+SQLite, clean worktrees, inspect secrets, or treat the dashboard as primary
+authority.
 
 ## Freshness And Staleness
 

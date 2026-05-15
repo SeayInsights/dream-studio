@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from core.config.database import get_connection
+from core.installed_runtime import adapter_router_status
 from core.shared_intelligence.adapter_config_projection import (
     adapter_config_projection_report,
 )
@@ -105,6 +106,16 @@ async def get_shared_intelligence_status(
                     "api_path": "/api/shared-intelligence/contract-atlas/docs-drift",
                     "source_tables": [],
                 },
+                {
+                    "surface_id": "adapter-router",
+                    "api_path": "/api/shared-intelligence/adapter-router",
+                    "source_tables": [
+                        "adapter_authority_profiles",
+                        "shared_context_packets",
+                        "adapter_result_records",
+                        "capability_route_records",
+                    ],
+                },
             ],
             "source_tables": [
                 "learning_event_records",
@@ -117,6 +128,22 @@ async def get_shared_intelligence_status(
             ],
             "empty_state": "Shared-intelligence routes are available; individual surfaces report their own empty states.",
         }
+    )
+
+
+@router.get("/adapter-router")
+async def get_adapter_router_status(
+    project_id: str | None = Query(default="dream-studio"),
+) -> dict[str, Any]:
+    """Return installed adapter/router state without authorizing execution."""
+
+    repo_root = Path(__file__).resolve().parents[3]
+    return _with_connection(
+        lambda conn: adapter_router_status(
+            conn,
+            source_root=repo_root,
+            project_id=project_id,
+        )
     )
 
 

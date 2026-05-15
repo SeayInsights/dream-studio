@@ -22,6 +22,8 @@ from core.shared_intelligence.adapter_staleness import (
 )
 from core.shared_intelligence.authority import REQUIRED_SHARED_INTELLIGENCE_TABLES
 from core.shared_intelligence.contract_registry import contract_registry
+from core.installed_runtime import installed_runtime_model
+from core.module_profiles import module_profiles, validate_module_profiles
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
     validate_maturity_ledger,
@@ -70,6 +72,7 @@ def build_contract_atlas(
     staleness_errors = validate_adapter_staleness_report(staleness_report)
     current_maturity_ledger = maturity_ledger(project_id=effective_project_id)
     maturity_errors = validate_maturity_ledger(current_maturity_ledger)
+    profile_errors = validate_module_profiles()
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -93,6 +96,11 @@ def build_contract_atlas(
         "module_contracts": module_contracts["modules"],
         "interface_contracts": _interface_contracts(),
         "runtime_profiles": _runtime_profiles(),
+        "installed_runtime_model": installed_runtime_model(
+            source_root=root,
+            dream_studio_home=Path.home() / ".dream-studio",
+        ),
+        "installed_module_profiles": module_profiles(),
         "analytics_only_profile": _analytics_only_profile(),
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
@@ -105,6 +113,7 @@ def build_contract_atlas(
             module_errors=module_errors,
             docker_errors=docker_errors,
             maturity_errors=maturity_errors,
+            profile_errors=profile_errors,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -116,6 +125,7 @@ def build_contract_atlas(
             docker_errors=docker_errors,
             staleness_errors=staleness_errors,
             maturity_errors=maturity_errors,
+            profile_errors=profile_errors,
         ),
         "active_adapter_execution_validation": _active_adapter_execution_validation(
             staleness_report
@@ -174,6 +184,8 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "module_contracts",
         "interface_contracts",
         "runtime_profiles",
+        "installed_runtime_model",
+        "installed_module_profiles",
         "analytics_only_profile",
         "contract_registry",
         "docs_freshness_tracking",
@@ -409,6 +421,7 @@ def _maturity_scorecard(
     module_errors: list[str],
     docker_errors: list[str],
     maturity_errors: list[str],
+    profile_errors: list[str],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -431,6 +444,11 @@ def _maturity_scorecard(
             "area": "runtime_profiles",
             "status": "documented_optional" if not docker_errors else "contract_errors_present",
             "error_count": len(docker_errors),
+        },
+        {
+            "area": "installed_module_profiles",
+            "status": "validated" if not profile_errors else "contract_errors_present",
+            "error_count": len(profile_errors),
         },
         {
             "area": "dependency_graph",
@@ -564,6 +582,7 @@ def _boundary_violation_report(
     docker_errors: list[str],
     staleness_errors: list[str],
     maturity_errors: list[str],
+    profile_errors: list[str],
 ) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     for error in module_errors:
@@ -574,6 +593,8 @@ def _boundary_violation_report(
         issues.append({"severity": "error", "area": "adapter_staleness", "message": error})
     for error in maturity_errors:
         issues.append({"severity": "error", "area": "maturity_ledger", "message": error})
+    for error in profile_errors:
+        issues.append({"severity": "error", "area": "installed_module_profiles", "message": error})
     for candidate in staleness_report.get("repair_work_order_candidates", []):
         issues.append(
             {

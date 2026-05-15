@@ -16,6 +16,7 @@ boundary.
 | Docker/runtime profiles | docs plus future module registry fields | optional containers | repo docs/config | Required |
 | Approval policies | operator decisions, Work Orders, route records | attention queue, release gates | SQLite/evidence | Required |
 | Local DB path | `core.config.database` | runtime, tests, dashboard | repo plus local env | Required for default changes |
+| Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those
@@ -36,3 +37,9 @@ surfaces, or generated adapter projections.
 Configuration can be enabled independently. Docker, external project scanning,
 browser smoke automation, and deployment remain optional profiles and cannot
 become core authority without a separate approved Work Order.
+
+Installed module profiles are declared in `core.module_profiles`. The
+`analytics_only` profile is intentionally independent of hooks, agents,
+workflows, Claude, Codex, Docker, repo mutation, and cleanup. Optional modules
+must report honest empty states instead of silently requiring unavailable
+adapters or runtime services.

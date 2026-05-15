@@ -35,6 +35,7 @@ The registry currently tracks these release-blocking domains:
 - Contract Atlas
 - Shared intelligence and adapter projections
 - SQLite schema and authority
+- Installed adapter runtime and global router
 - Dashboard runtime and read models
 - Workflow and hook runtime
 - Release gate and publication boundary
@@ -67,6 +68,12 @@ known gaps, next action, whether it can be claimed publicly, and whether it can
 be used operationally. This prevents Dream Studio from claiming live Claude,
 Codex, Docker, external-project, or release behavior that is only designed or
 tested in isolation.
+
+The installed runtime model and module profiles are now first-class atlas
+sections. They declare the source/state split, global command surface,
+adapter-router read model, and per-profile dependency expectations so installed
+Dream Studio behavior is visible without making the atlas an installer,
+mutator, or live-state authority.
 
 ## Drift Gate
 

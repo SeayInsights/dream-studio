@@ -5,6 +5,10 @@ extend-ignore = E501
 exclude =
     .venv,
     .git,
+    .claude,
+    .codex,
+    .adapter-scratch,
+    .ai-scratch,
     __pycache__,
     .planning,
     templates,
