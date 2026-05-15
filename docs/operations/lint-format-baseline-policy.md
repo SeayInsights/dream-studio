@@ -44,6 +44,9 @@ The release gate does not block:
 - adapter scratch/worktree/session folders such as `.claude`, `.codex`,
   `.adapter-scratch`, and `.ai-scratch`, which are runtime artifacts and not
   product source.
+- unavailable or disabled GitHub Actions for ordinary development, provided
+  the remote-confidence gap is recorded and local release-gate evidence remains
+  available before merge/release approval.
 
 ## Contract And Docs Drift Gate
 
@@ -115,6 +118,20 @@ doc, and any schema/workflow docs required by the drift report.
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.
+
+## GitHub Actions Cost Boundary
+
+GitHub Actions should stay lightweight by default:
+
+- `.github/workflows/ci.yml` runs PR smoke only.
+- `.github/workflows/full-ci.yml` runs `ci_gate.py` manually with
+  `workflow_dispatch`.
+- `.github/workflows/release-validation.yml` runs release evidence manually or
+  on explicit release tags.
+- local `ci_gate.py` remains the heavy release gate.
+
+Do not add full matrix runs to every push unless a future operator-approved
+budget and release policy change explicitly makes that cost acceptable.
 
 ## Baseline Regeneration
 

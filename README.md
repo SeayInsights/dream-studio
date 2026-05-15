@@ -1,6 +1,6 @@
 # Dream Studio
 
-[![CI](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
+[![PR Smoke](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-0.11.0-blue.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-yellow.svg)](LICENSE)
@@ -86,16 +86,22 @@ Dream Studio should release through branch and pull request workflow. Direct pus
 The current release gate expects:
 
 - clean repo status;
-- local CI parity validation;
+- local CI parity validation as the heavy gate;
 - CI test checks must use isolated Dream Studio runtime state instead of writing
   the operator-local SQLite authority;
 - Contract Atlas documentation drift validation;
 - Contract Atlas lifecycle and sanitized export validation;
-- required GitHub checks passing;
+- required GitHub PR smoke checks passing when Actions are available;
+- manual full GitHub CI only when remote parity evidence is explicitly needed;
 - no release blockers;
 - private/local state excluded from the public repo;
 - Apache-2.0 license consistency;
 - explicit approval before push, tag, merge, deploy, cleanup, or history rewrite.
+
+GitHub Actions are a lightweight remote confidence layer. Disabled,
+unavailable, or unaffordable Actions should not block local development; they
+create a remote-confidence gap that requires manual review before merge or
+release approval.
 
 ## Contributing
 

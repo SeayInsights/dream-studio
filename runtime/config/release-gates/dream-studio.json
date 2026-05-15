@@ -6,29 +6,32 @@
   "release_branch_naming": "integration/{milestone_or_release}",
   "workflow_files": [
     ".github/workflows/ci.yml",
+    ".github/workflows/full-ci.yml",
+    ".github/workflows/release-validation.yml",
     ".github/workflows/validate-skills.yml"
   ],
   "required_checks": [
-    "ci-gate",
-    "dependency audit",
-    "test (ubuntu-latest / py3.10)",
-    "test (ubuntu-latest / py3.11)",
-    "test (ubuntu-latest / py3.12)",
-    "test (macos-latest / py3.10)",
-    "test (macos-latest / py3.11)",
-    "test (macos-latest / py3.12)",
-    "test (windows-latest / py3.10)",
-    "test (windows-latest / py3.11)",
-    "test (windows-latest / py3.12)"
+    "pr-smoke"
+  ],
+  "optional_checks": [
+    "validate-skills",
+    "full-ci",
+    "release-validation"
+  ],
+  "manual_workflows": [
+    ".github/workflows/full-ci.yml"
+  ],
+  "release_workflows": [
+    ".github/workflows/release-validation.yml"
   ],
   "local_preflight_commands": [
-    "python -m pytest tests/unit/test_entry_point_reliability.py tests/unit/test_native_readiness_gates.py tests/unit/test_runtime_preflight.py -q --tb=line",
-    "python -m pytest tests/unit/test_install_bootstrap_sqlite_authority.py tests/unit/test_work_order_milestones.py tests/unit/test_work_order_milestone_handoff_integration.py tests/unit/test_handoff_prompt_eval.py tests/unit/test_work_order_next_prompt_handoff.py -q --tb=line",
-    "python -m pytest tests/unit/test_telemetry_read_models.py tests/unit/test_actual_dashboard_telemetry_routes.py tests/unit/test_end_to_end_traceability_loop.py tests/unit/test_frontend_dashboard_telemetry_surface.py tests/unit/test_dashboard_legacy_hook_routes.py -q --tb=line",
-    "python -m pytest tests/unit/test_work_order_target_profile_boundary.py tests/unit/test_project_registry_paused_targets.py tests/unit/test_hook_lifecycle_governance.py -q --tb=line",
-    "python -m pytest -q --tb=line",
+    "python scripts/runtime_state_hash_guard.py --label local_release_gate -- python interfaces/cli/ci_gate.py",
     "git diff --check"
   ],
+  "github_actions_role": "lightweight_remote_confidence_layer",
+  "heavy_validation_layer": "local_dream_studio_release_gate",
+  "github_actions_minutes_policy": "avoid_full_matrix_on_push; run cheap pr-smoke on pull_request; full-ci is workflow_dispatch only",
+  "github_actions_unavailable_policy": "do_not_block_development; preserve local_release_gate as primary; manual review required before merge if required remote smoke is unavailable",
   "merge_policy": "auto_merge_when_required_checks_pass_and_no_release_blockers",
   "deployment_policy": "separate_approval_required",
   "rollback_notes": [
@@ -38,7 +41,8 @@
   ],
   "project_validation_commands": [
     "python interfaces/cli/ci_gate.py",
-    "python interfaces/cli/validate_analysts.py",
+    "python interfaces/cli/contract_docs_drift_gate.py",
+    "python interfaces/cli/contract_atlas_lifecycle_gate.py",
     "python scripts/runtime_state_hash_guard.py --help"
   ]
 }

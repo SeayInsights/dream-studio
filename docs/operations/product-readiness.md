@@ -97,6 +97,13 @@ docs/PRD/README impact detection, dashboard/API freshness, and leakage checks
 ran without mutating SQLite. A failed lifecycle manifest blocks release closure
 until the impacted docs, contracts, exports, or leakage findings are resolved.
 
+GitHub CI evidence is intentionally lightweight by default. The required remote
+check is PR smoke; full CI and release validation are operator-triggered remote
+confidence layers. Product readiness should prefer the local hash-guarded
+release gate for heavy evidence and should treat disabled, unavailable, or
+unaffordable GitHub Actions as a manual-review release gap rather than a reason
+to stop local development.
+
 ## Project Portfolio Readiness Surface
 
 All Projects and Project Details are the normal operator surfaces for project

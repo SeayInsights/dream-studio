@@ -147,6 +147,14 @@ status route, and the current SQLite authority tables it can import into when
 explicitly executed. Hooks, agents, workflows, Claude, Codex, Docker, repo
 mutation, and cleanup are not required for analytics-only operation.
 
+The atlas records the GitHub CI/CD profile as a derived release-authority
+section. That profile declares GitHub Actions as a lightweight remote
+confidence layer, `pr-smoke` as the required PR check, manual `full-ci` as
+remote parity evidence, and manual/tag-triggered release validation as release
+evidence. The local Dream Studio release gate remains the heavy validation
+layer, and unavailable Actions create a manual-review gap instead of blocking
+ordinary local development.
+
 `core.module_contracts` is the source-level registry for major module
 boundaries: `core`, `telemetry`, `dashboard`, `security_only`, `token_only`,
 `analytics_only`, `shared_intelligence`, `adapter_router`,

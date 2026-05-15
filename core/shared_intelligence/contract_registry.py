@@ -288,6 +288,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_name": "Release Gate And Publication Boundary",
         "source_patterns": [
             ".github/workflows/**",
+            "core/release/github_pr_cicd_gate.py",
             "interfaces/cli/ci_gate.py",
             "interfaces/cli/lint_baseline.py",
             "interfaces/cli/contract_docs_drift_gate.py",

@@ -113,6 +113,10 @@ The projection may display:
 - Contract Atlas lifecycle freshness status from
   `/api/shared-intelligence/contract-atlas/freshness`, including PRD/README
   impact detection and public-export leakage validation.
+- GitHub CI/CD profile status from the Contract Atlas `github_cicd_profile`
+  section, including lightweight PR smoke, manual full CI, manual/tag release
+  validation, local heavy-gate authority, and unavailable-Actions manual-review
+  policy.
 
 It must not authorize adapter execution, policy mutation, cleanup, database
 writes, release actions, or public export of private local state.
