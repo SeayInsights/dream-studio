@@ -64,6 +64,11 @@ for core, analytics-only, security-only, dashboard, shared-intelligence,
 adapter-router, or local-first operation unless a future profile explicitly
 enables and approves that runtime.
 
+Release-gate validation for Docker profile contracts runs without Docker and
+with isolated temporary Dream Studio runtime state. A passing release gate does
+not imply container execution, host mounts, network exposure, or access to the
+active installed SQLite database.
+
 ## SQLite Mount Policy
 
 Container profiles receive an explicit host SQLite authority path when approved.
