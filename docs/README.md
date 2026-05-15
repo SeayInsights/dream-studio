@@ -128,7 +128,8 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 - [Installed Adapter Runtime](operations/installed-adapter-runtime.md)
 - [Installed Platform Productization](operations/installed-platform-productization.md) -
   includes the Windows `ds.cmd` and `ds.ps1` launcher surfaces plus
-  `ds install-command` for user-local plain-command setup.
+  `ds install-command` for user-local plain-command setup, legacy install
+  detection, guarded legacy migration, adapter repair, and rollback checks.
 - [External Project Validation Pipeline](operations/external-project-validation-pipeline.md)
 - [Lightweight GitHub CI Strategy](operations/lightweight-github-ci-strategy.md)
 - [Repo Publication Privacy](operations/repo-publication-privacy.md)

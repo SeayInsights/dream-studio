@@ -49,6 +49,9 @@ ds acceptance
 ds backup
 ds restore-check
 ds update-check
+ds migrate-legacy --dry-run
+ds repair-adapters
+ds rollback-check
 ds uninstall-check
 ```
 
@@ -69,6 +72,13 @@ C:\path\to\dream-studio\ds.cmd --home C:\temp\dream-studio status
 
 Installed users can materialize user-local launchers with
 `ds install-command --execute` after the source and home paths are configured.
+
+Legacy installs are not treated as ordinary Git updates. `ds install
+--check-legacy` and `ds migrate-legacy --dry-run` detect old source/runtime
+paths and stale adapter surfaces before any write. `ds repair-adapters` updates
+only Dream-Studio-owned launcher and adapter hook paths after a backup or
+explicit repair approval; it must not inspect secrets or rewrite unrelated
+Claude, Codex, Cursor, Copilot, MCP, or shell configuration.
 
 The command surface resolves source/state from explicit configuration, opens
 SQLite authority through Dream Studio's existing bootstrap/access layer, and

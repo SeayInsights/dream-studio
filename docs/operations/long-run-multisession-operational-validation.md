@@ -25,6 +25,8 @@ The closeout model requires evidence for:
 - analytics-only profile check
 - task attribution outcome check for a completed Work Order or recent project
   task when such evidence exists
+- legacy install detection and migration dry-run check, including rollback and
+  adapter repair boundaries
 
 Each cycle must include evidence refs and pass/fail status. Missing evidence is
 a failure, not a silent pass.

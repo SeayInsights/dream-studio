@@ -166,6 +166,14 @@ When duplicate legacy state exists:
 
 Rollback backups remain protected until a separate cleanup approval boundary.
 
+Legacy install upgrades follow the same convergence rule. Old repo checkouts,
+old `.dream-studio` homes, old launchers, old Claude/Codex hook paths, and old
+adapter projections are detection inputs, not authority. Compatible records may
+be rehydrated into current SQLite tables with source references and row-count
+evidence; legacy Work Order, handoff, report, prompt, cache, log, audit, and
+raw evidence file-sprawl stays in backup/manual review and must not become an
+active competing store.
+
 ## Cross-AI Continuity
 
 Dream Studio records adapter profiles, model/provider profiles, generated

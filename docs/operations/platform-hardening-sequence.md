@@ -12,7 +12,7 @@ The sequence is implemented as a single authority-backed read model over current
 - `privacy_redaction_and_secret_boundary_maturation`: visibility modes and redaction profiles for private operation, team/client-safe packets, and public sanitized exports.
 - `local_watch_and_scheduled_validation_runtime`: opt-in local watchers for dashboard health, release gate, adapter staleness, Contract Atlas freshness, docs drift, project registry, security/readiness, and backup/restore health.
 - `team_pilot_rollup_and_sanitized_reporting`: local-first team rollups that share summaries without raw private state.
-- `installer_distribution_hardening`: user-facing install, version, doctor, repair, update-check, backup, restore-check, uninstall-check, and acceptance flows.
+- `installer_distribution_hardening`: user-facing install, version, doctor, repair, legacy detection, legacy migration dry run, adapter repair, rollback-check, update-check, backup, restore-check, uninstall-check, and acceptance flows.
 - `dream_studio_demo_and_case_study_system`: evidence-backed, sanitized demo scripts, proof packets, screenshots checklists, architecture packets, and case studies.
 
 ## Authority
@@ -60,5 +60,9 @@ The installed command surface includes:
 - `ds repair`
 - `ds policy`
 - `ds platform-hardening`
+- `ds install --check-legacy`
+- `ds migrate-legacy --dry-run`
+- `ds repair-adapters`
+- `ds rollback-check`
 
 These commands do not authorize destructive changes.

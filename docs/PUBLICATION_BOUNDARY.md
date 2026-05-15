@@ -115,3 +115,12 @@ runs against isolated temporary Dream Studio state and the active installed
 SQLite hash remains unchanged. Public pilot or demo packets should reference
 sanitized release status, not raw gate output containing local paths, runtime
 state locations, or private operational evidence.
+
+## Legacy Upgrade Boundary
+
+Legacy install detection and migration docs may describe the generic safe
+upgrade process, but public exports must not include old source paths, backup
+paths, launcher contents, Claude/Codex settings, adapter projections, local
+runtime paths, or row-level migration evidence. Old Work Orders, handoffs,
+reports, evidence folders, audit files, prompts, caches, logs, backups, and
+rollback details remain private unless separately sanitized and approved.

@@ -88,6 +88,16 @@ Platform hardening authority lives in migration
 
 These records make skill evaluation, permission decisions, connector imports,
 privacy/export checks, opt-in watchers, sanitized team rollups,
+installer/distribution checks, and demo/case-study packets queryable without
+promoting local files to authority.
+
+Legacy install upgrades do not add legacy tables to the current schema. The
+upgrade flow creates a fresh current SQLite database through the normal
+migration runner, then imports only compatible rows into tables that already
+exist in the current schema. Legacy-only tables, FTS/shadow tables,
+`canonical_events`, backup/import-map tables, and old file-sprawl remain in the
+backup/manual-review set unless a future additive migration gives them current
+authority semantics.
 installer/distribution checks, and demo/case-study packets measurable without
 replacing validation, Work Order, security, analytics, or adapter authority.
 
