@@ -1,0 +1,36 @@
+name: Manual Full CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why the full local parity gate is being run"
+        required: true
+        default: "manual release-readiness validation"
+
+permissions:
+  contents: read
+
+jobs:
+  full-ci:
+    name: full-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Run local parity release gate
+        run: python interfaces/cli/ci_gate.py

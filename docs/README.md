@@ -73,6 +73,7 @@ read models, and token/model analytics.
 - [Installed Platform Productization](operations/installed-platform-productization.md) -
   includes the Windows `ds.cmd` and `ds.ps1` launcher surfaces plus
   `ds install-command` for user-local plain-command setup.
+- [Lightweight GitHub CI Strategy](operations/lightweight-github-ci-strategy.md)
 - [Troubleshooting](operations/troubleshooting.md)
 - [Verified Legacy Purge Policy](operations/verified-legacy-purge-policy.md)
 - [Windows Development Commands](operations/windows-dev-commands.md)

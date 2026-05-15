@@ -30,6 +30,11 @@ from core.production_readiness import (
     build_secure_production_readiness_gate,
     production_readiness_control_catalog,
 )
+from core.release.github_pr_cicd_gate import (
+    build_dream_studio_cicd_profile,
+    discover_workflow_files,
+    validate_cicd_profile,
+)
 from core.security.lifecycle import build_security_lifecycle_gate
 from core.shared_intelligence.maturity_ledger import (
     maturity_ledger,
@@ -97,6 +102,7 @@ def build_contract_atlas(
     )
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
     analytics_only_status = analytics_only_profile_status(conn)
+    github_cicd_profile = _github_cicd_profile(root)
 
     atlas = {
         "schema": CONTRACT_ATLAS_SCHEMA,
@@ -151,6 +157,7 @@ def build_contract_atlas(
             "source_tables": usage_accounting["source_tables"],
             "schema_status": usage_accounting.get("schema_status", "available"),
         },
+        "github_cicd_profile": github_cicd_profile,
         "docs_freshness_tracking": _docs_freshness_tracking(),
         "current_maturity_ledger": current_maturity_ledger,
         "adapter_projection_contracts": _adapter_projection_contracts(
@@ -167,6 +174,7 @@ def build_contract_atlas(
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
             analytics_only_status=analytics_only_status,
+            github_cicd_profile=github_cicd_profile,
         ),
         "confirmed_dependency_graph": _confirmed_dependency_graph(
             projection_report=projection_report,
@@ -175,6 +183,7 @@ def build_contract_atlas(
             production_readiness_gate=production_readiness_gate,
             usage_accounting=usage_accounting,
             analytics_only_status=analytics_only_status,
+            github_cicd_profile=github_cicd_profile,
         ),
         "boundary_violation_report": _boundary_violation_report(
             staleness_report=staleness_report,
@@ -252,6 +261,7 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "production_readiness_control_catalog",
         "secure_production_readiness_gate",
         "adapter_usage_accounting",
+        "github_cicd_profile",
         "contract_registry",
         "docs_freshness_tracking",
         "current_maturity_ledger",
@@ -499,6 +509,34 @@ def _docs_freshness_tracking() -> dict[str, Any]:
     }
 
 
+def _github_cicd_profile(repo_root: Path) -> dict[str, Any]:
+    profile = build_dream_studio_cicd_profile(str(repo_root))
+    discovered = discover_workflow_files(repo_root)
+    validation_errors = validate_cicd_profile(profile, discovered_workflows=discovered)
+    return {
+        "model_name": "dream_studio_github_cicd_profile",
+        "derived_view": True,
+        "primary_authority": False,
+        "github_actions_role": profile.github_actions_role,
+        "heavy_validation_layer": profile.heavy_validation_layer,
+        "github_actions_minutes_policy": profile.github_actions_minutes_policy,
+        "github_actions_unavailable_policy": profile.github_actions_unavailable_policy,
+        "workflow_files": list(profile.workflow_files),
+        "discovered_workflow_files": list(discovered),
+        "required_checks": list(profile.required_checks),
+        "optional_checks": list(profile.optional_checks),
+        "manual_workflows": list(profile.manual_workflows),
+        "release_workflows": list(profile.release_workflows),
+        "local_preflight_commands": list(profile.local_preflight_commands),
+        "merge_policy": profile.merge_policy,
+        "deployment_policy": profile.deployment_policy,
+        "validation_errors": validation_errors,
+        "status": "pass" if not validation_errors else "attention_required",
+        "github_api_calls_performed": False,
+        "workflow_mutation_authorized": False,
+    }
+
+
 def _maturity_scorecard(
     *,
     staleness_report: Mapping[str, Any],
@@ -510,6 +548,7 @@ def _maturity_scorecard(
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
+    github_cicd_profile: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     adapter_status = (
         "validated_command_level_alignment"
@@ -595,6 +634,14 @@ def _maturity_scorecard(
             "docker_required": analytics_only_status.get("docker_required"),
             "write_authorization": analytics_only_status.get("write_authorization"),
         },
+        {
+            "area": "github_cicd_profile",
+            "status": github_cicd_profile.get("status"),
+            "github_actions_role": github_cicd_profile.get("github_actions_role"),
+            "heavy_validation_layer": github_cicd_profile.get("heavy_validation_layer"),
+            "required_checks": github_cicd_profile.get("required_checks"),
+            "manual_workflows": github_cicd_profile.get("manual_workflows"),
+        },
     ]
 
 
@@ -606,6 +653,7 @@ def _confirmed_dependency_graph(
     production_readiness_gate: Mapping[str, Any],
     usage_accounting: Mapping[str, Any],
     analytics_only_status: Mapping[str, Any],
+    github_cicd_profile: Mapping[str, Any],
 ) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -751,6 +799,29 @@ def _confirmed_dependency_graph(
             "imports_or_reads_current_authority",
             "core.analytics_ingestion.analytics_only_ingestion_contract",
         )
+
+    add_node("module:github_cicd_profile", "module", "GitHub CI/CD Profile")
+    add_node("workflow:pr-smoke", "github_workflow", "PR Smoke")
+    add_node("workflow:full-ci", "github_workflow", "Manual Full CI")
+    add_node("workflow:release-validation", "github_workflow", "Release Validation")
+    add_edge(
+        "module:github_cicd_profile",
+        "workflow:pr-smoke",
+        "requires_lightweight_remote_confidence",
+        "core.release.github_pr_cicd_gate.build_dream_studio_cicd_profile",
+    )
+    add_edge(
+        "module:github_cicd_profile",
+        "workflow:full-ci",
+        "manual_heavy_validation",
+        str(github_cicd_profile.get("heavy_validation_layer")),
+    )
+    add_edge(
+        "module:github_cicd_profile",
+        "workflow:release-validation",
+        "manual_or_tag_release_validation",
+        "runtime/config/release-gates/dream-studio.json",
+    )
 
     for projection in projection_report.get("projections", []):
         adapter_id = f"adapter:{projection['adapter_id']}"

@@ -4,8 +4,8 @@
 
 ## Checklist
 
-- [ ] Tests pass (`make test`)
-- [ ] Lint clean (`make lint`)
+- [ ] Local heavy gate passed when release readiness is claimed (`python interfaces/cli/ci_gate.py`)
+- [ ] PR smoke is expected to pass, or GitHub Actions gap is documented
 - [ ] CHANGELOG updated (entry under `[Unreleased]`)
 - [ ] PR uses squash merge
 

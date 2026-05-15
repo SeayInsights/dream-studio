@@ -8,7 +8,7 @@ Dream Studio workflows coordinate local AI operations through route decisions, W
 | --- | --- |
 | Goal to milestone | Interpret a goal, choose the next stage-gate-valid milestone, and produce bounded Work Orders |
 | Work Order execution | Execute approved source, validation, research, or evidence steps with file scope and rollback guidance |
-| Release gate | Verify CI/CD profile, local parity validation, branch/PR state, GitHub checks, blockers, and merge policy |
+| Release gate | Verify CI/CD profile, local heavy parity validation, branch/PR state, lightweight GitHub PR smoke, blockers, and merge policy |
 | Dashboard attention | Surface approvals, warnings, blockers, prompt-required items, and route state |
 | Shared intelligence | Generate context packets, normalize adapter results, capture learning events, and harden components |
 | Backup/cutover | Rehearse and perform local installed-state changes only under explicit approval |
@@ -49,6 +49,15 @@ Separate approval is required for:
 - push, tag, merge, deploy, or history rewrite;
 - external project mutation;
 - secret or sensitive value inspection.
+
+## CI/CD Workflow Strategy
+
+GitHub Actions are a remote confidence layer, not the heavy Dream Studio gate.
+PRs run cheap smoke validation. Full GitHub CI is manual, and release
+validation is manual or tag-triggered. The local release gate remains the
+primary evidence source for release readiness. If GitHub Actions are disabled
+or unavailable, development may continue with local release-gate evidence, but
+merge/release approval requires manual review of the remote-confidence gap.
 
 ## Adapter Use
 

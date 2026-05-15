@@ -24,6 +24,7 @@ boundary.
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
 | Analytics-only ingestion | `core.analytics_ingestion` normalized payload contract | `ds analytics-ingest`, `/api/shared-intelligence/analytics-only`, All Projects, Project Details, metrics/security/readiness APIs | explicit SQLite imports plus derived views | Required for analytics import contract changes |
+| GitHub CI/CD profile | `runtime/config/release-gates/dream-studio.json` plus `core.release.github_pr_cicd_gate` | Contract Atlas, release gate packet, GitHub workflows | repo source/config | Required for workflow or merge-policy changes |
 
 Adapter files are allowed to exist only as projections. Repo-root `CLAUDE.md`
 and `AGENTS.md` are active project surfaces for Claude and Codex when those
@@ -62,6 +63,11 @@ exports and freshness manifests can be written only to an explicit output path
 with `ds contract-atlas-refresh --execute`; private/internal exports require
 `--include-private` and are not repo-safe. The lifecycle gate runs in an
 isolated temp runtime and must not touch live installed SQLite.
+
+GitHub CI/CD profile changes are repo-backed release-policy changes. GitHub
+Actions provide PR smoke and manual remote evidence only; local Dream Studio
+release gates remain the heavy authority. Disabled or unaffordable Actions
+create a manual-review release gap rather than a local development blocker.
 
 Analytics-only ingestion is explicit. Hooks, adapters, CI jobs, or manual
 exports may produce normalized payloads, but analytics-only does not require
