@@ -39,6 +39,7 @@ from core.shared_intelligence.contract_atlas_lifecycle import (
 from core.shared_intelligence.contract_registry import change_impact_report
 from core.shared_intelligence.context_packets import generate_shared_context_packet
 from core.shared_intelligence.dashboard_views import learning_hardening_dashboard_view
+from core.shared_intelligence.expert_workflows import expert_workflow_catalog
 from core.shared_intelligence.maturity_ledger import maturity_ledger
 from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
@@ -175,6 +176,11 @@ async def get_shared_intelligence_status(
                         "project_readiness_scorecards",
                     ],
                 },
+                {
+                    "surface_id": "expert-workflows",
+                    "api_path": "/api/shared-intelligence/expert-workflows",
+                    "source_tables": [],
+                },
             ],
             "source_tables": [
                 "reg_projects",
@@ -208,6 +214,15 @@ async def get_module_contracts() -> dict[str, Any]:
     """Return major module boundary contracts without runtime execution."""
 
     return _dashboard_response(module_contracts())
+
+
+@router.get("/expert-workflows")
+async def get_expert_workflow_catalog(
+    project_id: str | None = Query(default="dream-studio"),
+) -> dict[str, Any]:
+    """Return expert workflow definitions, overlap decisions, and rubrics."""
+
+    return _dashboard_response(expert_workflow_catalog(project_id=project_id))
 
 
 @router.get("/adapter-router")

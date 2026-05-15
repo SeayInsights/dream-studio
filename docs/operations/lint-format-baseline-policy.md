@@ -115,6 +115,16 @@ readiness controls or scorecards, the same change set must refresh the
 production readiness contract, dashboard mapping, product-readiness operations
 doc, and any schema/workflow docs required by the drift report.
 
+Expert workflow changes are release-gate relevant. If code changes affect
+`core.shared_intelligence.expert_workflows`, shared-intelligence expert
+workflow routes, skill/workflow overlap decisions, scoring rubrics, or
+career/application automation boundaries, the same change set must refresh the
+expert workflow operations doc, Contract Atlas doc, docs index, and any
+dashboard/readiness docs required by the drift report. Tests should prove the
+overlap matrix exists, existing skills are mapped instead of duplicated,
+scoring remains evidence-backed, and private career automation boundaries are
+preserved.
+
 This gate is deliberately targeted. It should update impacted docs, not rewrite
 every README, PRD, workflow doc, operator doc, or publication boundary by
 default. The PRD changes only when product authority changes.

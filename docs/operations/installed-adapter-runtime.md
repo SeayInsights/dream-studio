@@ -119,6 +119,12 @@ surfaces preview readiness gates or read persisted SQLite readiness summaries
 without executing checks, mutating adapter config, or writing live state from a
 GET request.
 
+It also exposes `/api/shared-intelligence/expert-workflows`. This is a
+read-only installed surface for expert workflow definitions, overlap decisions,
+evidence-backed scoring rubrics, career privacy boundaries, and application
+automation rules. It does not execute skills, fill applications, publish
+career artifacts, mutate SQLite, or replace the existing skill/workflow owners.
+
 Supported adapter access modes:
 
 | Mode | Meaning |

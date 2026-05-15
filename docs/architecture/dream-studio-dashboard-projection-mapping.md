@@ -117,6 +117,10 @@ The projection may display:
   section, including lightweight PR smoke, manual full CI, manual/tag release
   validation, local heavy-gate authority, and unavailable-Actions manual-review
   policy.
+- Expert workflow status from the Contract Atlas `expert_workflow_system`
+  section and the full `/api/shared-intelligence/expert-workflows` catalog,
+  including overlap decisions, evidence-backed scoring rubrics, career privacy
+  boundaries, application automation rules, and existing skill/workflow owners.
 
 It must not authorize adapter execution, policy mutation, cleanup, database
 writes, release actions, or public export of private local state.
