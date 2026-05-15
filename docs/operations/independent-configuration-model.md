@@ -19,6 +19,7 @@ boundary.
 | Installed adapter router | `core.installed_runtime` | `ds router`, `/api/shared-intelligence/adapter-router` | repo plus local state | Required for router changes |
 | Installed platform productization | `core.installed_productization` | `ds install`, `ds acceptance`, backup/restore/update/uninstall checks | repo code plus explicit runtime home | Required for install/update behavior changes |
 | Module contracts | `core.module_contracts` | Contract Atlas, profile validation, docs drift, release gate tests | repo source | Required for module boundary changes |
+| Contract Atlas lifecycle | `core.shared_intelligence.contract_atlas_lifecycle` | `ds contract-atlas-refresh`, `/api/shared-intelligence/contract-atlas/freshness`, release gate | generated exports to explicit caller path | Required for atlas/export freshness changes |
 | Security lifecycle gate | `core.security.lifecycle` plus 47-control security contracts | `/api/shared-intelligence/security-lifecycle`, Contract Atlas, release readiness | repo docs/code plus SQLite findings | Required for policy changes |
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
@@ -55,6 +56,12 @@ Major module contracts are declared in `core.module_contracts` and surfaced
 through Contract Atlas. They are boundary declarations, not runtime execution
 authority. A module contract may exist without becoming an installable profile,
 and an installable profile may include multiple module contracts.
+
+Contract Atlas lifecycle exports are generated on demand. Public sanitized
+exports and freshness manifests can be written only to an explicit output path
+with `ds contract-atlas-refresh --execute`; private/internal exports require
+`--include-private` and are not repo-safe. The lifecycle gate runs in an
+isolated temp runtime and must not touch live installed SQLite.
 
 Analytics-only ingestion is explicit. Hooks, adapters, CI jobs, or manual
 exports may produce normalized payloads, but analytics-only does not require

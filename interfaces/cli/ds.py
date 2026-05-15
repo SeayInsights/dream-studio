@@ -41,6 +41,9 @@ from core.installed_productization import (  # noqa: E402
 )
 from core.module_profiles import module_profiles, validate_module_profiles  # noqa: E402
 from core.shared_intelligence.contract_atlas import build_contract_atlas  # noqa: E402
+from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
+    refresh_contract_atlas_exports,
+)
 from core.shared_intelligence.context_packets import generate_shared_context_packet  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -59,6 +62,16 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("dashboard", help="Show dashboard service status")
     subcommands.add_parser("validate", help="Validate installed runtime readiness")
     subcommands.add_parser("contract-atlas", help="Show Contract Atlas summary")
+    atlas_refresh = subcommands.add_parser(
+        "contract-atlas-refresh",
+        help="Plan or refresh Contract Atlas lifecycle exports",
+    )
+    atlas_refresh.add_argument("--output-dir", default=None)
+    atlas_refresh.add_argument("--execute", action="store_true", default=False)
+    atlas_refresh.add_argument("--include-private", action="store_true", default=False)
+    atlas_refresh.add_argument("--changed-file", action="append", default=[])
+    atlas_refresh.add_argument("--changed-files", default=None)
+    atlas_refresh.add_argument("--docs-reviewed-no-change", action="append", default=[])
     subcommands.add_parser("adapters", help="Show adapter status")
     subcommands.add_parser("modules", help="Show module profile status")
     subcommands.add_parser("router", help="Show adapter router status")
@@ -139,6 +152,22 @@ def main(argv: list[str] | None = None) -> int:
                     conn,
                     repo_root=source_root,
                     project_id="dream-studio",
+                ),
+            )
+        if args.command == "contract-atlas-refresh":
+            changed_files = _changed_files_from_args(args)
+            return _with_conn(
+                source_root=source_root,
+                dream_studio_home=home,
+                callback=lambda conn: refresh_contract_atlas_exports(
+                    conn,
+                    repo_root=source_root,
+                    output_dir=Path(args.output_dir).resolve() if args.output_dir else None,
+                    project_id="dream-studio",
+                    changed_files=changed_files,
+                    reviewed_no_change_domains=args.docs_reviewed_no_change,
+                    include_private=bool(args.include_private),
+                    execute=bool(args.execute),
                 ),
             )
         if args.command == "context-packet":
@@ -313,6 +342,14 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
 def _print(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def _changed_files_from_args(args: argparse.Namespace) -> list[str]:
+    files = list(args.changed_file or [])
+    if args.changed_files:
+        normalized = str(args.changed_files).replace(";", "\n").replace(",", "\n")
+        files.extend(item.strip() for item in normalized.splitlines() if item.strip())
+    return sorted({item for item in files if item})
 
 
 def _require_home_for_install(command: str) -> Path:

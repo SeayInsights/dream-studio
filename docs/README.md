@@ -17,7 +17,9 @@ Dream Studio documentation is split between public product guidance and private 
 - [AI Orchestration Architecture](architecture/dream-studio-ai-orchestration-architecture.md)
 - [Contract Atlas and Maturity Ledger](architecture/contract-atlas.md) - local
   Dream Studio scope by default, with explicit project scoping available for
-  future project-specific atlas inspection.
+  future project-specific atlas inspection. The atlas lifecycle manifest also
+  validates private refresh, sanitized public export refresh, docs/PRD/README
+  impact detection, and public-export leakage checks.
 - [Shared Authority And Adapter Projections](architecture/shared-authority-and-adapter-projections.md)
 - [Execution Telemetry Spine](architecture/dream-studio-execution-telemetry-spine.md)
 - [Dashboard Projection Mapping](architecture/dream-studio-dashboard-projection-mapping.md)

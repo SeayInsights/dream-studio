@@ -110,6 +110,9 @@ The projection may display:
 - current maturity ledger;
 - contract/docs drift status;
 - sanitized public export status.
+- Contract Atlas lifecycle freshness status from
+  `/api/shared-intelligence/contract-atlas/freshness`, including PRD/README
+  impact detection and public-export leakage validation.
 
 It must not authorize adapter execution, policy mutation, cleanup, database
 writes, release actions, or public export of private local state.

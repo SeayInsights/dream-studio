@@ -38,6 +38,7 @@ Agentic work becomes fragile when progress depends on prompt chaining, hidden ch
 - Normalize adapter results into common records: decisions, changes, validation, evidence, risks, artifacts, and outcomes.
 - Learn from failed assumptions, repeated fixes, validation failures, operator corrections, successful hardening, and component performance.
 - Maintain a Contract Atlas that maps layers, modules, interfaces, runtime profiles, adapter projections, dependency evidence, maturity state, and source-change impact to the docs/contracts that must stay fresh.
+- Maintain a Contract Atlas lifecycle manifest that regenerates private/internal atlas views, sanitized public exports, maturity status, docs/PRD/README impact detection, dashboard/API freshness, and public-export leakage checks from authority rather than hand-maintained files.
 - Keep private operator state, raw telemetry, local backups, Work Orders, handoffs, cutover records, and audit evidence out of the public repo by default.
 
 ## Non-Goals

@@ -18,7 +18,7 @@ Claude Code, Codex, Cursor, Copilot, ChatGPT, MCP servers, shell tools, and loca
 - A FastAPI and dashboard surface for derived operational intelligence, attention queues, module availability, drilldown entry points, and release readiness.
 - Human-in-the-loop gates for live state mutation, database migration, cleanup, deletion, archive execution, push, tag, deploy, and material risk decisions.
 - Adapter projections that can generate shared context packets and adapter-specific configuration without making any one AI tool the product identity.
-- A Contract Atlas, maturity ledger, and docs drift gate that map source changes to impacted contracts, runtime profiles, module boundaries, evidence-backed maturity status, and public docs freshness obligations.
+- A Contract Atlas, maturity ledger, sanitized export lifecycle, and docs drift gate that map source changes to impacted contracts, runtime profiles, module boundaries, evidence-backed maturity status, public docs freshness obligations, and public-export leakage checks.
 
 ## Current Public Architecture
 
@@ -90,6 +90,7 @@ The current release gate expects:
 - CI test checks must use isolated Dream Studio runtime state instead of writing
   the operator-local SQLite authority;
 - Contract Atlas documentation drift validation;
+- Contract Atlas lifecycle and sanitized export validation;
 - required GitHub checks passing;
 - no release blockers;
 - private/local state excluded from the public repo;

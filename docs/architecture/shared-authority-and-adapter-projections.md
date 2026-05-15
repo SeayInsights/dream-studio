@@ -84,6 +84,13 @@ records live in SQLite through `ai_adapter_accounting_profiles`,
 router, Contract Atlas, dashboards, and context packets. Subscription-plan tools
 must display cost as `unknown` unless an explicit allocation profile is present.
 
+Contract Atlas lifecycle access is also read-only by default. Adapters may call
+`ds contract-atlas-refresh` in dry-run mode or read
+`/api/shared-intelligence/contract-atlas/freshness` to understand contract,
+maturity, docs, PRD, README, dashboard/API, and sanitized export freshness.
+Writing export files requires an explicit output directory and `--execute`; it
+does not authorize SQLite mutation or adapter config repair.
+
 Analytics-only ingestion is a current-authority import path, not adapter
 authority. Tools may produce normalized JSON for projects, CI/validation,
 security findings, token/usage telemetry, components, dependencies, PRDs, and

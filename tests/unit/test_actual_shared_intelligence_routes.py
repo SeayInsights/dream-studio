@@ -262,13 +262,29 @@ def test_actual_app_exposes_contract_atlas_maturity_and_docs_drift_views(
             )
         },
     )
+    freshness = client.get(
+        "/api/shared-intelligence/contract-atlas/freshness",
+        params={
+            "changed_files": (
+                "core/shared_intelligence/contract_atlas.py,"
+                "docs/architecture/contract-atlas.md,"
+                "docs/README.md,"
+                "docs/operations/lint-format-baseline-policy.md"
+            )
+        },
+    )
 
     assert maturity.status_code == 200
     assert drift.status_code == 200
+    assert freshness.status_code == 200
     assert maturity.json()["model_name"] == "dream_studio_current_maturity_ledger"
     assert maturity.json()["status_counts"]["runtime_validated"] >= 8
     assert maturity.json()["primary_authority"] is False
     assert drift.json()["status"] == "pass"
+    assert freshness.json()["model_name"] == "contract_atlas_lifecycle_freshness_manifest"
+    assert freshness.json()["status"] == "pass"
+    assert freshness.json()["public_private_data_leakage_check"]["status"] == "pass"
+    assert freshness.json()["dashboard_api_freshness_status"]["dashboard_consumable"] is True
     assert set(drift.json()["gate_distinctions"]) >= {
         "docs_update_required",
         "docs_reviewed_no_change_needed",
@@ -301,6 +317,7 @@ def test_actual_app_shared_intelligence_status_is_non_authoritative(
         "contract-atlas",
         "maturity-ledger",
         "contract-docs-drift",
+        "contract-atlas-freshness",
     }
 
 

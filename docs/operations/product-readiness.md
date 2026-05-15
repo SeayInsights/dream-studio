@@ -89,6 +89,14 @@ tests enforce each boundary. The read-only module-contracts API and Contract
 Atlas section can inform readiness, but they do not execute checks or authorize
 state mutation.
 
+Contract Atlas lifecycle freshness is also part of release/publication
+readiness evidence. `ds contract-atlas-refresh` and
+`/api/shared-intelligence/contract-atlas/freshness` can prove that private
+atlas refresh, public sanitized export refresh, maturity ledger status,
+docs/PRD/README impact detection, dashboard/API freshness, and leakage checks
+ran without mutating SQLite. A failed lifecycle manifest blocks release closure
+until the impacted docs, contracts, exports, or leakage findings are resolved.
+
 ## Project Portfolio Readiness Surface
 
 All Projects and Project Details are the normal operator surfaces for project
