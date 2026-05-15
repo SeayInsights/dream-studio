@@ -35,6 +35,7 @@ The installed command surface is `ds`:
 ```text
 ds status
 ds install
+ds install-command
 ds dashboard
 ds validate
 ds contract-atlas
@@ -55,12 +56,17 @@ When running directly from a checkout before packaging, use:
 python C:\path\to\dream-studio\interfaces\cli\ds.py --source-root C:\path\to\dream-studio status
 ```
 
-On Windows, `ds.ps1` is the repo-owned launcher for the same global command
-surface:
+On Windows, `ds.cmd` and `ds.ps1` are repo-owned launchers for the same global
+command surface. `ds.cmd` is the preferred plain-command launcher because it
+works in normal `cmd.exe` and PowerShell shells without changing script
+execution policy:
 
 ```powershell
-C:\path\to\dream-studio\ds.ps1 --home C:\temp\dream-studio status
+C:\path\to\dream-studio\ds.cmd --home C:\temp\dream-studio status
 ```
+
+Installed users can materialize user-local launchers with
+`ds install-command --execute` after the source and home paths are configured.
 
 The command surface resolves source/state from explicit configuration, opens
 SQLite authority through Dream Studio's existing bootstrap/access layer, and

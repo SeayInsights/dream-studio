@@ -43,7 +43,8 @@ read models, and token/model analytics.
 - [Adapter Workspace Hygiene](operations/adapter-workspace-hygiene.md)
 - [Installed Adapter Runtime](operations/installed-adapter-runtime.md)
 - [Installed Platform Productization](operations/installed-platform-productization.md) -
-  includes the Windows `ds.ps1` launcher surface.
+  includes the Windows `ds.cmd` and `ds.ps1` launcher surfaces plus
+  `ds install-command` for user-local plain-command setup.
 - [Troubleshooting](operations/troubleshooting.md)
 - [Verified Legacy Purge Policy](operations/verified-legacy-purge-policy.md)
 - [Windows Development Commands](operations/windows-dev-commands.md)

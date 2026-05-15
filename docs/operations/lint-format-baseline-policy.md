@@ -66,8 +66,9 @@ surface, and derived atlas view describe the same freshness boundary.
 
 Installed runtime and productization changes are release-gate relevant. If code
 changes affect `core/installed_runtime.py`, `core/installed_productization.py`,
-module profile selection, `ds.ps1`, or the global `ds` command surface, the
-same change set must refresh installed runtime/productization docs,
+module profile selection, repo-owned launchers such as `ds.cmd` or `ds.ps1`,
+`ds install-command`, or the global `ds` command surface, the same change set
+must refresh installed runtime/productization docs,
 troubleshooting docs, adapter-boundary docs, and independent configuration docs
 required by the drift report.
 
