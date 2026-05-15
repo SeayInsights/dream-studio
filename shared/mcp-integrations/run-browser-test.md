@@ -102,7 +102,7 @@ mcp__firecrawl-mcp__firecrawl_browser_delete({
 
 **Screenshot not found:**
 - Check Downloads folder permissions
-- Verify path uses forward slashes (C:/Users/...)
+- Verify path uses forward slashes for any user-supplied path.
 - Check disk space available
 
 **Session cleanup fails:**

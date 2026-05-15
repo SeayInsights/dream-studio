@@ -150,7 +150,7 @@ echo (Get-Location)
 # Vite: check vite.config.ts outDir
 
 # Temp directory
-# Windows: C:\Users\<user>\AppData\Local\Temp
+# Windows: %TEMP%
 # Linux: /tmp
 # Mac: /var/folders/...
 ```

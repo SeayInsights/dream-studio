@@ -122,8 +122,8 @@ def test_projects_dir_slug_replaces_spaces(monkeypatch, handler):
     monkeypatch.delenv("CLAUDE_PROJECTS_DIR", raising=False)
 
     # Windows path with spaces — the common case
-    win = Path("C:\\Users\\Jane Doe\\studio")
-    assert context_monitor.projects_dir_for_cwd(win).name == "C--Users-Jane-Doe-studio"
+    win = Path("C:\\Users\\Example User\\studio")
+    assert context_monitor.projects_dir_for_cwd(win).name == "C--Users-Example-User-studio"
 
     # Unix path with spaces
     unix = Path("/home/some user/work")

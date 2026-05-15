@@ -1,0 +1,405 @@
+{
+  "dashboard_api_freshness_status": {
+    "dashboard_consumable": true,
+    "routes": [
+      "/api/shared-intelligence/contract-atlas",
+      "/api/shared-intelligence/contract-atlas/maturity-ledger",
+      "/api/shared-intelligence/contract-atlas/docs-drift",
+      "/api/shared-intelligence/contract-atlas/freshness"
+    ],
+    "status": "pass",
+    "writes_authorized": false
+  },
+  "db_write_authorized": false,
+  "derived_view": true,
+  "docs_drift_status": {
+    "blocking_domain_count": 0,
+    "blocking_domains": [],
+    "changed_file_count": 0,
+    "changed_files": [],
+    "db_write_authorized": false,
+    "derived_view": true,
+    "domains": [
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "contract_atlas",
+        "domain_name": "Contract Atlas",
+        "freshness_policy": "source_changes_require_same_change_set_contract_or_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "sanitized_public_export_only",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/architecture/contract-atlas.md",
+          "docs/README.md",
+          "docs/operations/lint-format-baseline-policy.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "shared_intelligence_adapters",
+        "domain_name": "Shared Intelligence And Adapter Projections",
+        "freshness_policy": "adapter_surface_changes_require_adapter_boundary_doc_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "adapter_configs_are_projection_docs_only",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/architecture/shared-authority-and-adapter-projections.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "sqlite_schema_authority",
+        "domain_name": "SQLite Schema And Authority",
+        "freshness_policy": "schema_or_path_changes_require_database_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "schema_docs_public_live_db_private",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/DATABASE.md",
+          "docs/MIGRATION_AUTHORITY.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "installed_adapter_runtime",
+        "domain_name": "Installed Adapter Runtime And Global Router",
+        "freshness_policy": "installed_runtime_or_router_changes_require_runtime_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "installed_runtime_paths_private_global_commands_public",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/installed-adapter-runtime.md",
+          "docs/operations/installed-platform-productization.md",
+          "docs/operations/troubleshooting.md",
+          "docs/architecture/shared-authority-and-adapter-projections.md",
+          "docs/operations/independent-configuration-model.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "dashboard_runtime",
+        "domain_name": "Dashboard Runtime And Read Models",
+        "freshness_policy": "dashboard_contract_changes_require_projection_mapping_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "dashboard_derived_not_primary_authority",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "security_lifecycle_gate",
+        "domain_name": "Security-By-Default Lifecycle Gate",
+        "freshness_policy": "security_lifecycle_changes_require_control_mapping_and_readiness_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "security_findings_public_shape_live_evidence_private",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/contracts/security-by-default-development-lifecycle-gate.md",
+          "docs/contracts/security-review-profile-pack-contract.md",
+          "docs/operations/product-readiness.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "secure_production_readiness_gate",
+        "domain_name": "Secure Production Readiness Gate",
+        "freshness_policy": "production_readiness_control_or_sqlite_changes_require_readiness_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "readiness_scores_are_derived_private_evidence_not_public_claims",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/contracts/secure-production-readiness-gate.md",
+          "docs/architecture/contract-atlas.md",
+          "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+          "docs/operations/product-readiness.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "workflow_and_hooks",
+        "domain_name": "Workflow And Hook Runtime",
+        "freshness_policy": "hook_or_workflow_changes_require_runtime_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "runtime_hooks_public_secrets_private",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/HOOK_RUNTIME.md",
+          "docs/WORKFLOW_RUNTIME.md"
+        ],
+        "source_hits": []
+      },
+      {
+        "contract_atlas_update_required": false,
+        "doc_hits": [],
+        "docs_reviewed_no_change_needed": false,
+        "docs_update_required": false,
+        "domain_id": "release_publication_gate",
+        "domain_name": "Release Gate And Publication Boundary",
+        "freshness_policy": "release_gate_changes_require_release_docs_refresh",
+        "freshness_status": "not_impacted",
+        "impacted": false,
+        "missing_required_doc_refs": [],
+        "prd_update_required": false,
+        "public_export_boundary": "release_evidence_private_release_policy_public",
+        "publication_boundary_review_required": false,
+        "readme_update_required": false,
+        "release_blocking": true,
+        "required_actions": [],
+        "required_doc_refs": [
+          "docs/operations/lint-format-baseline-policy.md",
+          "docs/PUBLICATION_BOUNDARY.md",
+          "docs/operations/repo-publication-privacy.md",
+          "README.md"
+        ],
+        "source_hits": []
+      }
+    ],
+    "empty_state": "No changed files were supplied, so no docs drift is detected.",
+    "gate_distinctions": [
+      "docs_update_required",
+      "docs_reviewed_no_change_needed",
+      "prd_update_required",
+      "contract_atlas_update_required",
+      "publication_risk_detected",
+      "private_artifact_risk_detected"
+    ],
+    "generated_at": "2026-05-15T15:56:44.227614+00:00",
+    "impacted_domain_count": 0,
+    "primary_authority": false,
+    "publication_risk": {
+      "private_artifact_hits": [],
+      "private_artifact_risk_detected": false,
+      "publication_hits": [],
+      "publication_risk_detected": false,
+      "release_blocking": false,
+      "required_actions": []
+    },
+    "reviewed_no_change_domains": [],
+    "routing_authority": false,
+    "schema": "dream_studio.contract_docs_drift_gate.v1",
+    "status": "pass",
+    "tracking_mode": "changed_files_same_change_set"
+  },
+  "docs_prd_readme_impact": {
+    "changed_file_count": 0,
+    "docs_update_required_domains": [],
+    "impacted_domain_count": 0,
+    "prd_update_required_domains": [],
+    "publication_risk": {
+      "private_artifact_hits": [],
+      "private_artifact_risk_detected": false,
+      "publication_hits": [],
+      "publication_risk_detected": false,
+      "release_blocking": false,
+      "required_actions": []
+    },
+    "readme_update_required_domains": [],
+    "status": "pass"
+  },
+  "empty_state": "No changed files were supplied, so the manifest reports current on-demand atlas freshness.",
+  "execution_authorized": false,
+  "export_write_authorized": false,
+  "freshness_checks": [
+    {
+      "blocking": false,
+      "check_id": "private_internal_contract_atlas_refresh",
+      "errors": [],
+      "status": "pass",
+      "summary": "Private/internal Contract Atlas can be regenerated from authority."
+    },
+    {
+      "blocking": false,
+      "check_id": "public_sanitized_contract_atlas_refresh",
+      "errors": [],
+      "status": "pass",
+      "summary": "Public sanitized Contract Atlas export can be regenerated."
+    },
+    {
+      "blocking": false,
+      "check_id": "maturity_ledger_refresh",
+      "errors": [],
+      "status": "pass",
+      "summary": "Maturity ledger is available and evidence-backed."
+    },
+    {
+      "blocking": false,
+      "check_id": "docs_prd_readme_impact_detection",
+      "errors": [],
+      "status": "pass",
+      "summary": "Changed files map to required docs, PRD, README, and contract refs."
+    }
+  ],
+  "generated_at": "2026-05-15T15:56:44.246650+00:00",
+  "maturity_ledger_refresh": {
+    "area_count": 23,
+    "status": "pass",
+    "status_counts": {
+      "designed_not_proven": 3,
+      "hardened": 1,
+      "runtime_validated": 13,
+      "tested_only": 6
+    },
+    "validation_errors": []
+  },
+  "model_name": "contract_atlas_lifecycle_freshness_manifest",
+  "primary_authority": false,
+  "private_internal_refresh": {
+    "byte_length": 179319,
+    "export_scope": "private",
+    "sanitized_public_export": false,
+    "schema": "dream_studio.contract_atlas.v1",
+    "sha256": "1f7fe2dc120348e012ccc2cffdb1635799ce5455b50d60f2b886e52f8ef29f22",
+    "status": "pass",
+    "validation_errors": []
+  },
+  "project_id": "dream-studio",
+  "public_private_data_leakage_check": {
+    "leak_detected": false,
+    "matches": [],
+    "patterns_checked": [
+      "absolute_drive_path",
+      "unc_path",
+      "windows_user_path_forward_slash",
+      "windows_user_path_backslash",
+      "dream_studio_runtime_path",
+      "live_backup_root_name",
+      "appdata_path"
+    ],
+    "raw_runtime_state_included": false,
+    "secret_files_read": false,
+    "status": "pass"
+  },
+  "public_sanitized_export_refresh": {
+    "byte_length": 177907,
+    "export_scope": "public",
+    "sanitized_public_export": true,
+    "schema": "dream_studio.contract_atlas.v1",
+    "sha256": "f96cc9835a7ae0870b46e866dcd85edf19e0ecfefdecf204a2977114efdd254b",
+    "status": "pass",
+    "validation_errors": []
+  },
+  "release_gate_checks": {
+    "blocking_check_count": 0,
+    "checks": [
+      {
+        "blocking": false,
+        "check_id": "private_internal_contract_atlas_refresh",
+        "errors": [],
+        "status": "pass",
+        "summary": "Private/internal Contract Atlas can be regenerated from authority."
+      },
+      {
+        "blocking": false,
+        "check_id": "public_sanitized_contract_atlas_refresh",
+        "errors": [],
+        "status": "pass",
+        "summary": "Public sanitized Contract Atlas export can be regenerated."
+      },
+      {
+        "blocking": false,
+        "check_id": "maturity_ledger_refresh",
+        "errors": [],
+        "status": "pass",
+        "summary": "Maturity ledger is available and evidence-backed."
+      },
+      {
+        "blocking": false,
+        "check_id": "docs_prd_readme_impact_detection",
+        "errors": [],
+        "status": "pass",
+        "summary": "Changed files map to required docs, PRD, README, and contract refs."
+      }
+    ],
+    "ci_gate_entry": "interfaces/cli/contract_atlas_lifecycle_gate.py",
+    "status": "pass"
+  },
+  "routing_authority": false,
+  "schema": "dream_studio.contract_atlas_lifecycle.v1",
+  "source_refs": [
+    "core.shared_intelligence.contract_atlas.build_contract_atlas",
+    "core.shared_intelligence.contract_registry.change_impact_report",
+    "core.shared_intelligence.maturity_ledger.maturity_ledger"
+  ],
+  "status": "pass"
+}

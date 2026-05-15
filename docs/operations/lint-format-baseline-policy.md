@@ -156,6 +156,13 @@ installed runtime, and readiness docs required by the drift report. Regression
 tests should block hard-coded token-to-dollar pricing from returning to live
 operator surfaces.
 
+Repo publication readiness changes are release-gate relevant. If code changes
+affect publication checks, privacy scans, sanitized export behavior, Git history
+path classification, README/PRD alignment, or Apache-2.0 references, the same
+change set must run `python interfaces\cli\repo_publication_readiness.py
+--strict`, refresh the public publication evidence when intentional, and keep
+private operational history out of tracked source.
+
 ## Future Cleanup
 
 Remaining flake8 debt should be paid down in focused follow-up work. Removing or reducing baseline entries is encouraged when safe. Broad semantic lint cleanup remains a separate approval boundary.

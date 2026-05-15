@@ -213,6 +213,12 @@ shared only after the leakage check passes. Private/internal exports are for
 operator-local runtime or review directories only and are not repo-safe
 artifacts.
 
+Repo publication readiness is a release/publication gate input. Contract Atlas
+tracks the publication/privacy maturity area and the release-publication domain
+so changes to publication checks, history privacy classification, sanitized
+exports, README/PRD alignment, or Apache-2.0 references require same-change-set
+docs refresh and publication evidence review.
+
 ## Export Boundary
 
 The private atlas may include local repo paths and local surface status. Public

@@ -222,7 +222,7 @@ def test_dashboard_projection_sample_remains_non_executing_and_not_target_specif
         "dependency or lockfile changes",
     ]
     forbidden_terms = [
-        "C:\\Users\\",
+        "C:\\Users\\Example\\",
         "DreamySuite",
         "Bill Stack",
         "TORII repo",

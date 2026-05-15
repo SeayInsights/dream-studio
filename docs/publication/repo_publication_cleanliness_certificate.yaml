@@ -1,70 +1,14 @@
 {
   "apache_2_license_consistent": true,
-  "branch": "integration/shared-intelligence-remaining-milestones",
-  "clean_clone_validation_status": "pass",
+  "branch": "main",
+  "clean_clone_validation_status": "not_run",
   "current_tracked_tree_publication_safe": true,
-  "final_publication_readiness_verdict": "CURRENT_TREE_CLEAN_HISTORY_REWRITE_OR_RISK_ACCEPTANCE_REQUIRED_BEFORE_PUBLICATION",
-  "generated_at": "2026-05-14T22:18:08.566955+00:00",
-  "git_history_publication_blockers": [
-    {
-      "classification": "private_artifact_in_history",
-      "path": ".dream-studio/team/conventions.md",
-      "rules": [
-        "runtime_state_path"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": ".dream-studio/team/gotchas.yml",
-      "rules": [
-        "runtime_state_path"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": ".dream-studio/team/pack-overrides.yml",
-      "rules": [
-        "runtime_state_path"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": "backups/analytics.db.2026-05-06-135343.bak",
-      "rules": [
-        "backup_file"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": "backups/checksums.txt",
-      "rules": [
-        "backup_file"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": "backups/studio-state.db.2026-05-06-135343.bak",
-      "rules": [
-        "backup_file"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": "backups/studio.db.2026-05-06-135343.bak",
-      "rules": [
-        "backup_file"
-      ]
-    },
-    {
-      "classification": "private_artifact_in_history",
-      "path": "test_output/multiple/tokens.csv",
-      "rules": [
-        "secret_or_auth_path"
-      ]
-    }
-  ],
-  "head": "ce06e56076427576690ea7e4da3a9e5d6f0cb0f3",
-  "history_rewrite_operator_approval_required": true,
+  "final_publication_readiness_verdict": "CURRENT_TREE_AND_HISTORY_CLEAN_CLEAN_CLONE_VALIDATION_REQUIRED",
+  "generated_at": "2026-05-15T15:56:46.463837+00:00",
+  "git_history_publication_blockers": [],
+  "git_history_publication_safe": true,
+  "head": "afe91411ce74072c0a7e7d16939fda74070a16d3",
+  "history_rewrite_operator_approval_required": false,
   "history_rewrite_performed": false,
   "ignored_untracked_boundary_ok": true,
   "prd_current_product_authority": true,
@@ -72,5 +16,5 @@
   "readme_current_product_framing": true,
   "schema": "dream_studio.repo_publication.cleanliness_certificate.v1",
   "secret_scan_findings": 0,
-  "status": "blocked_by_git_history_private_artifacts"
+  "status": "pass"
 }
