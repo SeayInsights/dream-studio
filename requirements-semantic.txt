@@ -1,0 +1,11 @@
+# Optional semantic retrieval extras.
+#
+# Install with:
+#   pip install -r requirements-semantic.txt
+#
+# Required only when explicitly requesting embedding-based search:
+#   search_tools(..., use_embeddings=True)
+#   hybrid_search(...)
+#
+# Default Dream Studio operation uses TF-IDF and FTS5 and does NOT require this.
+sentence-transformers>=2.2
