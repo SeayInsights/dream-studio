@@ -196,6 +196,29 @@ class ToolDetail:
     confidence_score: float
 
 
+@dataclass
+class SearchResultWithStatus:
+    """Tool search results with explicit retrieval mode metadata.
+
+    Retrieval mode values:
+        tfidf_default                      — TF-IDF used; embeddings not requested (default path).
+        semantic_embeddings                — sentence-transformers embeddings used successfully.
+        tfidf_fallback_dependency_missing  — Embeddings requested but sentence-transformers not installed.
+        tfidf_fallback_semantic_error      — Embeddings requested, dep present, but runtime error; TF-IDF used.
+        disabled_by_default                — No query provided; no search attempted.
+
+    Semantic status values mirror semantic_retrieval_status():
+        available                      — sentence-transformers is installed.
+        unavailable_dependency_missing — sentence-transformers not installed.
+        disabled_by_default            — Embeddings not requested (use_embeddings=False).
+    """
+
+    results: List[ToolMatch]
+    retrieval_mode: str
+    semantic_status: str
+    embeddings_used: bool
+
+
 def _parse_tags(raw_tags: str | None) -> list[str]:
     if not raw_tags:
         return []
@@ -881,6 +904,126 @@ def clear_cache() -> None:
     global _query_cache
     _query_cache.clear()
     logger.info("Query cache cleared")
+
+
+def search_tools_with_status(
+    query: str, top_k: int = 5, category: Optional[str] = None, use_embeddings: bool = False
+) -> SearchResultWithStatus:
+    """search_tools() with explicit retrieval mode metadata.
+
+    Preserves search_tools() behavior exactly. Returns SearchResultWithStatus so
+    callers can inspect which retrieval path was actually taken.
+
+    When use_embeddings=False (default): always returns tfidf_default.
+    When use_embeddings=True: probes sentence-transformers availability first
+    and reports tfidf_fallback_dependency_missing or tfidf_fallback_semantic_error
+    if the dep is absent or fails at runtime.
+    """
+    if not use_embeddings:
+        return SearchResultWithStatus(
+            results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
+            retrieval_mode="tfidf_default",
+            semantic_status="disabled_by_default",
+            embeddings_used=False,
+        )
+
+    st_status = semantic_retrieval_status()
+    if not st_status["available"]:
+        return SearchResultWithStatus(
+            results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
+            retrieval_mode="tfidf_fallback_dependency_missing",
+            semantic_status="unavailable_dependency_missing",
+            embeddings_used=False,
+        )
+
+    try:
+        build_embedding_index()
+        return SearchResultWithStatus(
+            results=search_tools(query, top_k=top_k, category=category, use_embeddings=True),
+            retrieval_mode="semantic_embeddings",
+            semantic_status="available",
+            embeddings_used=True,
+        )
+    except (ImportError, RuntimeError):
+        return SearchResultWithStatus(
+            results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
+            retrieval_mode="tfidf_fallback_semantic_error",
+            semantic_status="available",
+            embeddings_used=False,
+        )
+
+
+def hybrid_search_with_status(
+    query: str, top_k: int = 5, category: Optional[str] = None
+) -> SearchResultWithStatus:
+    """hybrid_search() with explicit retrieval mode metadata.
+
+    Reports whether results used semantic embeddings or fell back to TF-IDF,
+    and why. Probes sentence-transformers availability before attempting to
+    build the embedding index so the failure reason is unambiguous.
+
+    When sentence-transformers is missing: returns tfidf_fallback_dependency_missing.
+    When dep is present and embeddings build successfully: returns semantic_embeddings.
+    When dep is present but embedding build fails at runtime: returns tfidf_fallback_semantic_error.
+    """
+    if not query or not query.strip():
+        return SearchResultWithStatus(
+            results=[],
+            retrieval_mode="disabled_by_default",
+            semantic_status="disabled_by_default",
+            embeddings_used=False,
+        )
+
+    st_status = semantic_retrieval_status()
+    if not st_status["available"]:
+        return SearchResultWithStatus(
+            results=_search_with_tfidf(query, top_k, category),
+            retrieval_mode="tfidf_fallback_dependency_missing",
+            semantic_status="unavailable_dependency_missing",
+            embeddings_used=False,
+        )
+
+    try:
+        build_embedding_index()
+        return SearchResultWithStatus(
+            results=hybrid_search(query, top_k=top_k, category=category),
+            retrieval_mode="semantic_embeddings",
+            semantic_status="available",
+            embeddings_used=True,
+        )
+    except (ImportError, RuntimeError):
+        return SearchResultWithStatus(
+            results=_search_with_tfidf(query, top_k, category),
+            retrieval_mode="tfidf_fallback_semantic_error",
+            semantic_status="available",
+            embeddings_used=False,
+        )
+
+
+def semantic_retrieval_status() -> dict:
+    """Return controlled status for the optional semantic retrieval provider.
+
+    Safe to call without sentence-transformers installed.
+    Never imports sentence_transformers at module level — check is lazy.
+
+    Status values:
+        available                      — sentence-transformers is installed
+        unavailable_dependency_missing — sentence-transformers not installed
+
+    Returns:
+        dict with keys: status, available, default_active, default_provider
+    """
+    base: dict = {"default_active": False, "default_provider": "tfidf"}
+    try:
+        import sentence_transformers  # noqa: F401
+        return {**base, "status": "available", "available": True}
+    except ImportError:
+        return {
+            **base,
+            "status": "unavailable_dependency_missing",
+            "available": False,
+            "hint": "pip install -r requirements-semantic.txt",
+        }
 
 
 if __name__ == "__main__":

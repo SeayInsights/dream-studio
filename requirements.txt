@@ -9,8 +9,7 @@ PyYAML>=6.0
 networkx>=3.0
 cachetools>=5.0
 
-# Unified Discovery Phase 8 - Semantic Search
-sentence-transformers>=2.2
+# Semantic search is optional — install with: pip install -r requirements-semantic.txt
 
 # Analytics API (Phase 5)
 fastapi>=0.100

@@ -28,6 +28,26 @@ from core.memory.store import (
 logger = logging.getLogger(__name__)
 
 
+def check_fts5_capability() -> dict:
+    """Probe FTS5 support using a throwaway in-memory SQLite connection.
+
+    Does NOT touch the active Dream Studio database.
+    Safe to call during startup or health checks.
+
+    Returns:
+        dict with keys: available (bool), status (str)
+        Status values: fts5_available, unavailable_fts5_missing
+    """
+    probe = sqlite3.connect(":memory:")
+    try:
+        probe.execute("CREATE VIRTUAL TABLE _fts5_probe USING fts5(content)")
+        return {"available": True, "status": "fts5_available"}
+    except sqlite3.OperationalError:
+        return {"available": False, "status": "unavailable_fts5_missing"}
+    finally:
+        probe.close()
+
+
 class MemoryRetriever(Protocol):
     def search(
         self, query: str, filters: Optional[MemoryQuery] = None, top_k: int = 10
