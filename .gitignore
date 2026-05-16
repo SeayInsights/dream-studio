@@ -128,3 +128,5 @@ docs/convergence/
 docs/phase8/
 docs/intelligence/
 docs/repo_actions/
+.claude/
+.claude-plugin/
