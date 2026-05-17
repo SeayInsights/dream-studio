@@ -8,6 +8,12 @@ RUN apt-get update && apt-get install -y \
 
 # Create non-root developer user
 RUN useradd -m -s /bin/bash developer
+
+# Install Python deps as root so they land in the system site-packages
+# (avoids --user path complexity for non-root user)
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
 USER developer
 WORKDIR /home/developer
 
