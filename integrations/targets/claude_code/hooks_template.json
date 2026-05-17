@@ -1,0 +1,96 @@
+[
+  {
+    "event": "UserPromptSubmit",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/run.py\" UserPromptSubmit"
+      }
+    ]
+  },
+  {
+    "event": "UserPromptSubmit",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" UserPromptSubmit"
+      }
+    ]
+  },
+  {
+    "event": "Stop",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/run.py\" Stop"
+      }
+    ]
+  },
+  {
+    "event": "Stop",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" Stop"
+      }
+    ]
+  },
+  {
+    "event": "PostCompact",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/run.py\" PostCompact"
+      }
+    ]
+  },
+  {
+    "event": "PostCompact",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostCompact"
+      }
+    ]
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Skill",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/run.py\" PostToolUse"
+      }
+    ]
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Skill",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostToolUse"
+      }
+    ]
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Edit|Write",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostToolUse"
+      }
+    ]
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Read",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostToolUse"
+      }
+    ]
+  }
+]
