@@ -1,49 +1,66 @@
-#!/usr/bin/env bash
-# install.sh — dream-studio Mac/Linux setup
-# Validates environment, then delegates to interfaces/cli/setup.py
+#!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CANONICAL="${SCRIPT_DIR}/interfaces/cli/setup.py"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# --- Repo-root validation ---------------------------------------------------
-if [[ ! -f "${CANONICAL}" ]]; then
-  echo "ERROR: install.sh must be run from the dream-studio repo root." >&2
-  echo "  Expected: ${CANONICAL}" >&2
-  exit 1
-fi
+echo "Dream Studio Installer"
+echo "======================"
 
-# --- Python presence ---------------------------------------------------------
-pick_python() {
-  for candidate in "py -3.12" "py -3.11" "py -3" python3 python; do
-    set -- $candidate
-    if command -v "$1" >/dev/null 2>&1; then
-      echo "$candidate"
-      return 0
+# Check Python version
+check_python() {
+    local cmd=$1
+    if command -v "$cmd" &>/dev/null; then
+        version=$("$cmd" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null)
+        major=$(echo "$version" | cut -d. -f1)
+        minor=$(echo "$version" | cut -d. -f2)
+        if [ "$major" -ge 3 ] && [ "$minor" -ge 12 ]; then
+            echo "$cmd"
+            return 0
+        fi
     fi
-  done
-  return 1
+    return 1
 }
 
-PYTHON="$(pick_python)" || {
-  echo "ERROR: Python not found. Install Python 3.11+ from https://python.org/downloads/" >&2
-  exit 1
-}
+PYTHON=""
+for cmd in python3.12 python3 python; do
+    if PYTHON=$(check_python "$cmd"); then
+        break
+    fi
+done
 
-# --- Python version >= 3.11 --------------------------------------------------
-# shellcheck disable=SC2086  # word-split intentional for "py -3.12" style values
-VERSION=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1) || {
-  echo "ERROR: Failed to determine Python version. Ensure Python 3.11+ is installed." >&2
-  exit 1
-}
-
-MAJOR="${VERSION%%.*}"
-MINOR="${VERSION#*.}"
-if [[ "${MAJOR}" -lt 3 ]] || { [[ "${MAJOR}" -eq 3 ]] && [[ "${MINOR}" -lt 11 ]]; }; then
-  echo "ERROR: Python >= 3.11 required (found ${VERSION}). Update from https://python.org/downloads/" >&2
-  exit 1
+if [ -z "$PYTHON" ]; then
+    echo "Python 3.12+ not found. Attempting install..."
+    if command -v brew &>/dev/null; then
+        brew install python@3.12
+        PYTHON="python3.12"
+    elif command -v apt-get &>/dev/null; then
+        sudo apt-get update && sudo apt-get install -y python3.12
+        PYTHON="python3.12"
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y python3.12
+        PYTHON="python3.12"
+    else
+        echo "ERROR: Could not install Python automatically."
+        echo "Please install Python 3.12+ from https://python.org"
+        echo "Then run this script again."
+        exit 1
+    fi
 fi
 
-# --- Delegate to canonical setup ---------------------------------------------
-# shellcheck disable=SC2086  # word-split intentional for "py -3.12" style values
-exec $PYTHON "${CANONICAL}" "$@"
+echo "Using Python: $PYTHON ($($PYTHON --version))"
+
+# Run Dream Studio installer
+echo ""
+echo "Installing Dream Studio..."
+cd "$REPO_DIR"
+"$PYTHON" -m interfaces.cli.ds integrate install claude_code --execute
+
+# Report
+echo ""
+echo "Running health check..."
+"$PYTHON" -m interfaces.cli.ds doctor
+
+echo ""
+echo "Dream Studio installed successfully."
+echo "Restart your terminal or run: source ~/.bashrc"
+echo "Then type: ds doctor"

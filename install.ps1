@@ -1,49 +1,54 @@
-# install.ps1 — dream-studio Windows setup
-# Validates environment, then delegates to interfaces/cli/setup.py
-
 $ErrorActionPreference = "Stop"
+$RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# --- Repo-root validation ---------------------------------------------------
-$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Canonical = Join-Path $RepoRoot "interfaces" "cli" "setup.py"
-if (-not (Test-Path $Canonical)) {
-    Write-Error "install.ps1 must be run from the dream-studio repo root. Expected: $Canonical"
-    exit 1
-}
+Write-Host "Dream Studio Installer" -ForegroundColor Cyan
+Write-Host "======================"
 
-# --- Python presence ---------------------------------------------------------
-$PythonCmd = $null
-foreach ($candidate in @("py", "python3", "python")) {
-    if (Get-Command $candidate -ErrorAction SilentlyContinue) {
-        $PythonCmd = $candidate
-        break
+# Check Python version
+function Get-PythonCmd {
+    foreach ($cmd in @("py", "python3", "python")) {
+        try {
+            $version = & $cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+            if ($version) {
+                $parts = $version.Split(".")
+                if ([int]$parts[0] -ge 3 -and [int]$parts[1] -ge 12) {
+                    return $cmd
+                }
+            }
+        } catch {}
     }
-}
-if (-not $PythonCmd) {
-    Write-Error "Python not found. Install Python 3.11+ from https://python.org/downloads/"
-    exit 1
+    return $null
 }
 
-# --- Python version >= 3.11 --------------------------------------------------
-$VersionArgs = if ($PythonCmd -eq "py") { @("-3", "-c") } else { @("-c") }
-try {
-    $VersionOutput = & $PythonCmd @VersionArgs "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>&1
-    $Parts = $VersionOutput.Trim().Split(".")
-    $Major = [int]$Parts[0]
-    $Minor = [int]$Parts[1]
-    if ($Major -lt 3 -or ($Major -eq 3 -and $Minor -lt 11)) {
-        Write-Error "Python >= 3.11 required (found $Major.$Minor). Update from https://python.org/downloads/"
+$Python = Get-PythonCmd
+
+if (-not $Python) {
+    Write-Host "Python 3.12+ not found. Attempting install via winget..."
+    try {
+        winget install Python.Python.3.12 --silent
+        $Python = "py"
+    } catch {
+        Write-Host "ERROR: Could not install Python automatically." -ForegroundColor Red
+        Write-Host "Please install Python 3.12+ from https://python.org"
+        Write-Host "Then run this script again."
         exit 1
     }
-} catch {
-    Write-Error "Failed to determine Python version. Ensure Python 3.11+ is installed and on PATH."
-    exit 1
 }
 
-# --- Delegate to canonical setup ---------------------------------------------
-if ($PythonCmd -eq "py") {
-    py -3 $Canonical @args
-} else {
-    & $PythonCmd $Canonical @args
-}
-exit $LASTEXITCODE
+Write-Host "Using Python: $Python"
+
+# Run Dream Studio installer
+Write-Host ""
+Write-Host "Installing Dream Studio..."
+Set-Location $RepoDir
+& $Python -m interfaces.cli.ds integrate install claude_code --execute
+
+# Report
+Write-Host ""
+Write-Host "Running health check..."
+& $Python -m interfaces.cli.ds doctor
+
+Write-Host ""
+Write-Host "Dream Studio installed." -ForegroundColor Green
+Write-Host "Restart PowerShell or run: . `$PROFILE"
+Write-Host "Then type: ds doctor"

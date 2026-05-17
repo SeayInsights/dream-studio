@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  clean-install:
+    build: .
+    container_name: ds-clean-install-test
+    environment:
+      - PYTHONPATH=/home/developer/builds/dream-studio-clean
+    volumes:
+      - ./docker-test-results:/home/developer/results
+
+  update-test:
+    build: .
+    container_name: ds-update-test
+    environment:
+      - PYTHONPATH=/home/developer/builds/dream-studio-clean
+    command: >
+      bash -c "
+        echo '=== INITIAL INSTALL ===' &&
+        python3 -m interfaces.cli.ds integrate install claude_code --execute &&
+        python3 -m interfaces.cli.ds doctor &&
+        echo '=== SIMULATE UPDATE ===' &&
+        echo '2026-05-16' > /home/developer/builds/dream-studio-clean/VERSION &&
+        python3 -m interfaces.cli.ds update --dry-run &&
+        echo '2026-05-17' > /home/developer/builds/dream-studio-clean/VERSION &&
+        python3 -m interfaces.cli.ds update &&
+        echo '=== DOCTOR AFTER UPDATE ===' &&
+        python3 -m interfaces.cli.ds doctor &&
+        echo '=== VERIFY VERSION ===' &&
+        cat /home/developer/.dream-studio/state/installed-version &&
+        echo '=== DONE ==='
+      "

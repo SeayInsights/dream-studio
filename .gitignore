@@ -79,6 +79,10 @@ projections/frontend/dashboard_new.html
 projections/frontend/hooks_improved.html
 projections/frontend/dashboard_temp_*.html
 
+# Docker test output (volume mount target — never commit results)
+docker-test-results/*
+!docker-test-results/.gitkeep
+
 # Runtime logs
 dashboard*.log
 *.log
