@@ -13,8 +13,9 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.config.database import transaction, get_connection
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 from core.ontology.lifecycles import (
     LIFECYCLE_CATALOG,
     DocumentLifecycle,
@@ -139,9 +140,10 @@ class DocumentStore:
             )
             doc_id = cursor.lastrowid
 
-            # Emit event BEFORE commit (STABILITY: fail if event fails)
-            event_success = emit_event(
-                event_type=EventType.DOCUMENT_CREATED,
+            # Emit event BEFORE commit (STABILITY: fail if event fails) — via spool (Slice 3)
+            _envelope = CanonicalEventEnvelope(
+                event_type=CanonicalEventType.DOCUMENT_CREATED.value,
+                session_id=None,
                 payload={
                     "doc_id": doc_id,
                     "doc_type": doc_type,
@@ -150,11 +152,14 @@ class DocumentStore:
                     "project_id": project_id,
                     "skill_id": skill_id,
                 },
-                severity="info",
-                source_type="document_store",
+                confidence="unavailable",
+                project_id=None,
             )
-
-            if not event_success:
+            try:
+                write_envelopes([_envelope])
+            except Exception:
+                # spool write failure means the event will not reach SQLite;
+                # the calling operation must abort to preserve audit/consistency invariants.
                 raise RuntimeError(
                     f"Event emission failed for DOCUMENT_CREATED (doc_id={doc_id}). "
                     f"Aborting document creation to prevent audit gap."
@@ -313,19 +318,23 @@ class DocumentStore:
             )
             success = cursor.rowcount > 0
 
-            # Emit event BEFORE commit (STABILITY: fail if event fails)
+            # Emit event BEFORE commit (STABILITY: fail if event fails) — via spool (Slice 3)
             if success:
-                event_success = emit_event(
-                    event_type=EventType.DOCUMENT_UPDATED,
+                _envelope = CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.DOCUMENT_UPDATED.value,
+                    session_id=None,
                     payload={
                         "doc_id": doc_id,
                         "fields_updated": list(fields.keys()),
                     },
-                    severity="info",
-                    source_type="document_store",
+                    confidence="unavailable",
+                    project_id=None,
                 )
-
-                if not event_success:
+                try:
+                    write_envelopes([_envelope])
+                except Exception:
+                    # spool write failure means the event will not reach SQLite;
+                    # the calling operation must abort to preserve audit/consistency invariants.
                     raise RuntimeError(
                         f"Event emission failed for DOCUMENT_UPDATED (doc_id={doc_id}). "
                         f"Aborting update to prevent audit gap."
@@ -347,16 +356,20 @@ class DocumentStore:
         success = DocumentStore.update(doc_id, status=_ARCHIVED)
 
         # Emit event AFTER update (which already emits DOCUMENT_UPDATED)
-        # STABILITY: fail if event fails
+        # STABILITY: fail if event fails — via spool (Slice 3)
         if success:
-            event_success = emit_event(
-                event_type=EventType.DOCUMENT_ARCHIVED,
+            _envelope = CanonicalEventEnvelope(
+                event_type=CanonicalEventType.DOCUMENT_ARCHIVED.value,
+                session_id=None,
                 payload={"doc_id": doc_id},
-                severity="info",
-                source_type="document_store",
+                confidence="unavailable",
+                project_id=None,
             )
-
-            if not event_success:
+            try:
+                write_envelopes([_envelope])
+            except Exception:
+                # spool write failure means the event will not reach SQLite;
+                # the calling operation must abort to preserve audit/consistency invariants.
                 raise RuntimeError(
                     f"Event emission failed for DOCUMENT_ARCHIVED (doc_id={doc_id}). "
                     f"Document was updated but archive event failed."

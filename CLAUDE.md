@@ -14,7 +14,7 @@ authority, and adapter-specific instructions must stay thin projections.
 Projection source:
 - `sqlite:adapter_authority_profiles`
 - `sqlite:shared_context_packets`
-- `repo:skills/`, `repo:workflows/`, `repo:hooks/`
+- `repo:canonical/skills/`, `repo:canonical/workflows/`, `repo:hooks/`
 - file-backed evidence under the operator-local Dream Studio meta store
 
 ## Skill Routing
@@ -35,18 +35,47 @@ Each pack is one skill with modes. Invoke via `Skill(skill="ds-<pack>", args="<m
 | Pack | Skill | Mode keywords |
 |------|-------|---------------|
 | Build lifecycle | `ds-core` | **think:** spec:, research:, shape ux: · **plan:** plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does, walk me through, what is this doing, why does |
-| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish ui:, critique design:, redesign: · **harden:** /harden, harden audit · **secure:** secure:, security review: · **structure-audit:** /structure-audit · **learn:** learn:, capture lesson: · **coach:** /coach, workflow coaching: |
+| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish ui:, redesign: · **harden:** /harden, harden audit · **pr-security-scan:** secure:, security review: · **structure-audit:** /structure-audit · **learn:** learn:, capture lesson: · **coach:** /coach, workflow coaching: · **audit:** audit:, health check:, consolidation audit: |
 | Career pipeline | `ds-career` | **ops:** career:, job search · **scan:** scan jobs:, find jobs: · **evaluate:** evaluate offer:, evaluate gig: · **apply:** apply:, cover letter:, tailor resume: · **track:** track:, pipeline: · **pdf:** resume:, generate pdf: |
 | Security analysis | `ds-security` | **scan:** scan:, scan org:, run security scan: · **dast:** dast:, web scan: · **binary-scan:** binary-scan:, analyze exe: · **mitigate:** mitigate:, fix findings: · **comply:** comply:, SOC 2:, NIST: · **netcompat:** netcompat:, Zscaler: · **dashboard:** security dashboard:, export dataset: |
-| Analysis engine | `ds-analyze` | **multi:** analyze:, evaluate idea:, /analyze · **domain-re:** domain-re:, real estate: · **repo:** analyze repo:, repo patterns:, compare repos:, repo analysis: |
-| Domain builders | `ds-domains` | **game-dev:** game:, game build: · **saas-build:** build feature:, build api:, build page: · **mcp-build:** build mcp:, new mcp:, extend mcp: · **dashboard-dev:** dashboard:, feed contract: · **client-work:** intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: · **design:** design art:, design poster:, canvas:, brand: · **website:** website:, build website:, landing page:, prototype app:, pitch deck:, animate:, build site: · **fullstack:** fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, full-stack: |
-| Domain builders | `ds-domains` | **game-dev:** game:, game build: · **saas-build:** build feature:, build api:, build page: · **mcp-build:** build mcp:, new mcp:, extend mcp: · **dashboard-dev:** dashboard:, feed contract: · **client-work:** intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: · **design:** design art:, design poster:, canvas:, brand: · **website:** website:, build website:, landing page:, prototype app:, pitch deck:, animate:, build site: |
+| Analysis engine | `ds-analyze` | **multi:** analyze:, evaluate idea:, /analyze · **domain-re:** domain-re:, real estate: · **repo:** analyze repo:, repo patterns:, compare repos:, repo analysis: · **intelligence:** project intelligence:, analyze project: |
+| Domain builders | `ds-domains` | **game-dev:** game:, game build: · **saas-build:** build saas:, build page: · **mcp-build:** build mcp:, new mcp:, extend mcp: · **dashboard-dev:** dashboard:, feed contract: · **client-work:** intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: · **design:** design art:, design poster:, canvas:, brand: |
+| Website builder | `ds-website` | **discover:** website discover:, discovery: · **page:** build website:, landing page:, build site: · **prototype:** prototype app: · **animate:** animate:, motion: · **brand:** brand: · **direction:** website direction: · **critique:** critique design:, design critique: · **deck:** pitch deck: · **cip:** cip: |
+| Fullstack builder | `ds-fullstack` | **frontend:** fullstack frontend:, build frontend: · **backend:** fullstack backend:, build api:, build feature:, full-stack: · **integrate:** fullstack integrate: · **secure:** fullstack secure: |
+| Setup | `ds-setup` | **wizard:** setup:, first run:, install dream studio: · **status:** setup status:, check setup: · **jit:** just in time:, jit setup: |
+| Project lifecycle | `ds-project` | **scope:** scope project:, ds project scope:, create prd: |
 | Workflow orchestration | `ds-workflow` | workflow: |
 <!-- END AUTO-ROUTING -->
 
 ### Routing Fallback
 
 If the user's intent does not match any keyword above, route to `ds-quality` with arg `coach`. Coach will classify the intent, map it to the nearest pack and mode, and explain confidence + alternatives.
+
+## Dream Studio CLI
+
+When work order management or project operations are needed, use the CLI directly:
+
+```
+# Project operations
+py -m interfaces.cli.ds project list
+py -m interfaces.cli.ds project set-active <project_id>
+py -m interfaces.cli.ds project next <project_id>
+py -m interfaces.cli.ds project status <project_id>
+
+# Work order operations
+py -m interfaces.cli.ds work-order start <work_order_id>
+py -m interfaces.cli.ds work-order close <work_order_id>
+py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>
+py -m interfaces.cli.ds work-order list --project <project_id>
+
+# Milestone operations
+py -m interfaces.cli.ds milestone list <project_id>
+py -m interfaces.cli.ds milestone close <milestone_id>
+
+# Design brief operations
+py -m interfaces.cli.ds design-brief show <project_id>
+py -m interfaces.cli.ds design-brief lock <brief_id>
+```
 
 ## GitHub Workflow
 - **Never push directly to `main`** — always create a feature branch first.
@@ -68,7 +97,7 @@ If the user's intent does not match any keyword above, route to `ds-quality` wit
 6. Verify PR is green, then merge
 
 ## Debug Workflow
-When `ds-quality debug` finds a root cause: create GitHub issue with debug log, then follow Issue → PR workflow. Bugs need tracking even if the fix is trivial.
+When `ds-quality debug` finds a root cause: create GitHub issue with debug log, then follow Issue → PR workflow. Bugs found during Dream Command builds get tracked even if the fix is trivial.
 
 ## Ship Gate
 Use `ds-core ship` (full quality gate) when user says "ship it", before major releases, client demos, or after risky refactors. Regular PRs do NOT need the ship gate — CI auto-deploys after merge.

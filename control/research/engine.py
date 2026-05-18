@@ -14,9 +14,10 @@ from typing import Optional
 
 from core.event_store.studio_db import _connect
 
-# Phase 1 Wave 1: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from canonical.events.redactor import redact_prompt
+from emitters.shared.spool_writer import write_envelopes
 
 # Decision transparency layer
 from core.decisions import emit_decision
@@ -204,9 +205,10 @@ def _check_cache(query_hash: str, min_trust: float) -> Optional[dict]:
             if not row:
                 return None
 
-            # Phase 1 Wave 1: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.RESEARCH_COMPLETED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
+                session_id=None,
                 payload={
                     "research_id": row["research_id"],
                     "query_hash": query_hash,
@@ -214,9 +216,9 @@ def _check_cache(query_hash: str, min_trust: float) -> Optional[dict]:
                     "trust_score": row["trust_score"],
                     "times_referenced": (row["times_referenced"] or 0) + 1,
                 },
-                severity="info",
-                source_type="research_cache",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
             # Keep existing DB write (dual-write) — using transaction pattern
             with transaction() as conn:
@@ -376,11 +378,12 @@ def _store_research(
 
         findings_json = json.dumps(findings)
 
-        # Phase 1 Wave 1: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.RESEARCH_COMPLETED,
+        # Slice 3: Emit event via spool pipeline (redact raw query per ODP-9)
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
+            session_id=None,
             payload={
-                "query": query,
+                "query": redact_prompt(query),
                 "query_hash": query_hash,
                 "source_type": source_type,
                 "source_url": source_url,
@@ -389,9 +392,9 @@ def _store_research(
                 "validation_status": "pending",
                 "ttl_days": ttl_days,
             },
-            severity="info",
-            source_type="research_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         # Keep existing DB write (dual-write)
         # Use policy-defined trust score for fresh research

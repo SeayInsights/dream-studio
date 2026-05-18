@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from control.execution.workflow.validate import parse_workflow, validate  # noqa: E402
 
-HOTFIX_YAML = Path(__file__).resolve().parents[2] / "workflows" / "hotfix.yaml"
+HOTFIX_YAML = Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "hotfix.yaml"
 PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 
 

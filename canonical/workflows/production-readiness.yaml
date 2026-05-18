@@ -1,0 +1,80 @@
+name: production-readiness
+description: >
+  Secure production readiness workflow: classify impact, select targeted
+  controls, run full applicable reviews at gated lifecycle events, persist
+  SQLite authority records, and route remediation Work Orders.
+version: 1
+on_failure: hold
+
+authority_boundary:
+  execution_authorized_by_default: false
+  sqlite_writes_require_workflow_invocation: true
+  secrets_inspection_allowed: false
+  external_project_mutation_allowed: false
+  docker_allowed: false
+
+run_policy:
+  lightweight_impact_classification: always
+  targeted_checks: normal_development
+  full_review_events:
+    - project_intake
+    - release_merge
+    - publication
+    - deployment
+    - live_cutover
+    - dependency_change
+    - runtime_change
+    - database_change
+    - security_change
+    - docker_change
+    - major_architecture_change
+    - external_project_onboarding
+    - scheduled_dogfood_gate
+
+nodes:
+  - id: classify-impact
+    skill: verify
+    input: |
+      Build lightweight impact classification for the goal, milestone, Work
+      Order, changed files, or lifecycle event. Do not execute controls.
+      Source: core.production_readiness.controls.classify_production_readiness_impact.
+    timeout_seconds: 60
+
+  - id: build-gate
+    depends_on: [classify-impact]
+    skill: verify
+    input: |
+      Build secure_production_readiness_gate using the reusable control catalog
+      and the 47 enterprise security control lifecycle gate. Targeted controls
+      are selected for normal changes; full applicable reviews are selected for
+      release/intake/deployment/runtime/security/database/Docker/architecture
+      gates.
+    timeout_seconds: 120
+
+  - id: persist-authority-records
+    depends_on: [build-gate]
+    skill: verify
+    input: |
+      Persist assessment, control applicability, findings, remediation Work
+      Order candidates, scorecards, release readiness, compliance flags, and
+      skill/control mappings to SQLite through the injected Dream Studio
+      connection. Do not mutate live SQLite outside an approved runtime scope.
+    timeout_seconds: 120
+
+  - id: project-dashboard-hydration
+    depends_on: [persist-authority-records]
+    skill: verify
+    input: |
+      Expose the latest SQLite-backed readiness summary through project detail,
+      shared-intelligence readiness routes, dashboard attention, security
+      summaries, release readiness, and Contract Atlas maturity inputs.
+    timeout_seconds: 120
+
+  - id: remediation-routing
+    depends_on: [project-dashboard-hydration]
+    skill: verify
+    input: |
+      For blocking, failed, unknown, or manual-review controls, create proposed
+      remediation Work Order records linked to controls and findings. Execution
+      remains gated by separate Work Order approval.
+    timeout_seconds: 120

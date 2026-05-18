@@ -15,8 +15,9 @@ from typing import Any, Optional
 import logging
 
 from core.config.database import transaction, get_connection
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 from core.execution.workflow_integration import WorkflowGraphIntegration
 
 logger = logging.getLogger(__name__)
@@ -98,21 +99,21 @@ class WaveExecutorEnhanced:
         # Update wave status to 'running'
         started_at = datetime.now(timezone.utc).isoformat()
 
-        # Emit event and link to wave node
-        event_id = emit_event(
-            event_type=EventType.WAVE_STARTED,
+        # Emit event and link to wave node — via spool pipeline (Slice 3)
+        _wave_start_env = CanonicalEventEnvelope(
+            event_type=CanonicalEventType.WAVE_STARTED.value,
+            session_id=None,
             payload={
                 "wave_id": self.wave_id,
                 "wave_node_id": self.wave_node_id,
                 "started_at": started_at,
             },
-            severity="info",
-            source_type="wave_executor_enhanced",
+            confidence="unavailable",
+            project_id=None,
         )
-
-        # Link event to wave node
-        if event_id:
-            self.integration.link_event_to_node(event_id, self.wave_node_id)
+        write_envelopes([_wave_start_env])
+        # link_event_to_node is unconditional: write_envelopes raises on failure
+        self.integration.link_event_to_node(_wave_start_env.event_id, self.wave_node_id)
 
         # Update wave status in database
         with transaction() as conn:
@@ -232,9 +233,10 @@ class WaveExecutorEnhanced:
             # Determine final wave status
             final_status = "completed" if tasks_failed == 0 else "failed"
 
-            # Emit completion event and link to wave node
-            event_id = emit_event(
-                event_type=EventType.WAVE_COMPLETED,
+            # Emit completion event and link to wave node — via spool pipeline (Slice 3)
+            _wave_complete_env = CanonicalEventEnvelope(
+                event_type=CanonicalEventType.WAVE_COMPLETED.value,
+                session_id=None,
                 payload={
                     "wave_id": self.wave_id,
                     "wave_node_id": self.wave_node_id,
@@ -244,12 +246,12 @@ class WaveExecutorEnhanced:
                     "tasks_failed": tasks_failed,
                     "success_rate": success_rate,
                 },
-                severity="info",
-                source_type="wave_executor_enhanced",
+                confidence="unavailable",
+                project_id=None,
             )
-
-            if event_id:
-                self.integration.link_event_to_node(event_id, self.wave_node_id)
+            write_envelopes([_wave_complete_env])
+            # link_event_to_node is unconditional: write_envelopes raises on failure
+            self.integration.link_event_to_node(_wave_complete_env.event_id, self.wave_node_id)
 
             # Update wave with final status in database
             with transaction() as conn:

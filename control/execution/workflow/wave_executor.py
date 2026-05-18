@@ -6,9 +6,9 @@ from typing import Any
 
 from core.config.database import transaction, get_connection
 
-# Phase 1 Wave 1.5: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 
 
 class WaveExecutor:
@@ -56,16 +56,17 @@ class WaveExecutor:
         # Update wave status to 'running'
         started_at = datetime.now(timezone.utc).isoformat()
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.WAVE_STARTED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.WAVE_STARTED.value,
+            session_id=None,
             payload={
                 "wave_id": self.wave_id,
                 "started_at": started_at,
             },
-            severity="info",
-            source_type="wave_executor",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -116,9 +117,10 @@ class WaveExecutor:
             # Determine final wave status
             final_status = "completed" if tasks_failed == 0 else "failed"
 
-            # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.WAVE_COMPLETED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.WAVE_COMPLETED.value,
+                session_id=None,
                 payload={
                     "wave_id": self.wave_id,
                     "completed_at": completed_at,
@@ -127,9 +129,9 @@ class WaveExecutor:
                     "tasks_failed": tasks_failed,
                     "success_rate": success_rate,
                 },
-                severity="info",
-                source_type="wave_executor",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
             # Update wave with final status
             with transaction() as conn:
@@ -168,9 +170,10 @@ class WaveExecutor:
                 datetime.fromisoformat(completed_at) - datetime.fromisoformat(started_at)
             ).total_seconds()
 
-            # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.WAVE_FAILED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.WAVE_FAILED.value,
+                session_id=None,
                 payload={
                     "wave_id": self.wave_id,
                     "completed_at": completed_at,
@@ -180,8 +183,9 @@ class WaveExecutor:
                     "error_message": str(e),
                 },
                 severity="error",
-                source_type="wave_executor",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
             with transaction() as conn:
                 conn.execute(
@@ -317,9 +321,10 @@ class WaveExecutor:
         params.append(wave_task_id)
         query = f"UPDATE pi_wave_tasks SET {', '.join(fields)} WHERE wave_task_id = ?"
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.WAVE_TASK_UPDATED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.WAVE_TASK_UPDATED.value,
+            session_id=None,
             payload={
                 "wave_task_id": wave_task_id,
                 "status": status,
@@ -327,9 +332,9 @@ class WaveExecutor:
                 "completed_at": completed_at,
                 "updated_fields": fields,
             },
-            severity="info",
-            source_type="wave_executor",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(query, params)

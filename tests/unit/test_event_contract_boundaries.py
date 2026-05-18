@@ -159,7 +159,7 @@ def test_projection_api_surfaces_do_not_write_or_emit_canonical_events():
 
 def test_adapter_interfaces_do_not_own_event_store_persistence():
     adapter_paths = sorted((REPO_ROOT / "interfaces" / "adapters").rglob("*.py"))
-    assert adapter_paths
+    assert not adapter_paths, "adapters/ was retired in Slice 4 — this directory must remain absent"
 
     forbidden = [
         "EventStore(",

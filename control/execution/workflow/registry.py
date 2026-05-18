@@ -20,7 +20,7 @@ try:
 except ImportError:
     _estimate_cost = None  # type: ignore[assignment]
 
-_DEFAULT_DIR = Path(__file__).resolve().parents[2] / "workflows"
+_DEFAULT_DIR = Path(__file__).resolve().parents[3] / "canonical" / "workflows"
 
 
 def list_workflows(workflows_dir: Path | None = None) -> list[dict]:

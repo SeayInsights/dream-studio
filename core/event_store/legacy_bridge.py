@@ -1,3 +1,6 @@
+# DEPRECATED: Superseded by the spool pipeline (spool/ + emitters/).
+# Retained for backward compatibility during Slice 1-2 transition.
+# Scheduled for deletion in Slice 2 after test suite green.
 """
 Legacy bridge for dual-write migration.
 

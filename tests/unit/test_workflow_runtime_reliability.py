@@ -28,7 +28,7 @@ import pytest
 pytestmark = pytest.mark.runtime_reliability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOWS_DIR = REPO_ROOT / "workflows"
+WORKFLOWS_DIR = REPO_ROOT / "canonical" / "workflows"
 ENGINE_DIR = REPO_ROOT / "control" / "execution" / "workflow"
 
 if str(REPO_ROOT) not in sys.path:

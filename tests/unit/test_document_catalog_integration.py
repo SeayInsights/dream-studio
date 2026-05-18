@@ -67,7 +67,7 @@ def doc_store(tmp_path, monkeypatch):
 
     monkeypatch.setattr("core.storage.document_store.get_connection", _make_gc(db_path))
     monkeypatch.setattr("core.storage.document_store.transaction", _make_tx(db_path))
-    monkeypatch.setattr("core.storage.document_store.emit_event", lambda **kwargs: True)
+    monkeypatch.setattr("core.storage.document_store.write_envelopes", lambda envelopes, **kwargs: None)
 
     from core.storage.document_store import DocumentStore
 

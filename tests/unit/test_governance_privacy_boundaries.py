@@ -279,8 +279,9 @@ def test_guardrail_evaluator_writes_only_decision_governance_surfaces():
         ("guardrails/evaluator.py", "INSERT INTO", "guardrail_decisions"),
     ]
     assert "emit_decision(" in source
-    assert "emit_event(" in source
-    assert "EventType.GUARDRAIL_DECISION" in source
+    # Slice 3: guardrail emitter migrated to spool pipeline
+    assert "write_envelopes(" in source
+    assert "GUARDRAIL_DECISION" in source
 
     canonical_offenders = [
         f"{rel_path}: {operation} {table}"

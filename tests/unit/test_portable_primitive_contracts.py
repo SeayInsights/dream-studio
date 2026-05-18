@@ -37,8 +37,9 @@ def _rel(path: Path) -> str:
 def _active_instruction_files() -> list[Path]:
     roots = [
         REPO_ROOT / "skills",
-        REPO_ROOT / "workflows",
-        REPO_ROOT / "agents",
+        REPO_ROOT / "canonical" / "skills",
+        REPO_ROOT / "canonical" / "workflows",
+        REPO_ROOT / "canonical" / "agents",
     ]
     suffixes = {".md", ".yml", ".yaml", ".py"}
     files: list[Path] = [REPO_ROOT / "CLAUDE.md", REPO_ROOT / "README.md"]

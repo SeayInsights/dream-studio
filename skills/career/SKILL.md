@@ -1,3 +1,8 @@
+# EXTERNAL DEPENDENCY NOTICE
+# This skill pack has an external dependency on career_studio_path which is not
+# present in this repository. It is excluded from the canonical/ migration until
+# that dependency is resolved. Do not move this directory to canonical/.
+
 # Career — Career Pipeline Management
 
 ## Mode dispatch

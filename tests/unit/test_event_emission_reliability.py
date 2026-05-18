@@ -1,12 +1,12 @@
 """Phase 5.3A — Event emission reliability tests.
 
 Proves:
-1. emit_event() with default severity ("info") succeeds
-2. emit_event() with all explicit valid severity values succeeds
-3. Invalid severity still rejected
+1. CanonicalEventEnvelope default severity is "info"
+2. Explicit severity values are accepted
+3. Invalid severity still rejected by EventValidator schema
 4. EventValidator allowed severity includes "info"
 5. Security emitter no longer imports nonexistent EventPayloadValidator
-6. Security emitter routes through canonical emit_event()
+6. Security emitter routes through canonical spool write_envelopes() (Slice 3)
 7. Security emitter does not directly INSERT into canonical_events
 8. Advisory EventType validation remains advisory only
 """
@@ -95,37 +95,32 @@ class TestSeverityEnumFix:
 
 
 class TestEmitEventDefaultSeverity:
-    """Verify emit_event() with default severity succeeds."""
+    """Verify spool write_envelopes uses 'info' severity by default (Slice 3)."""
 
     def test_default_severity_succeeds(self):
-        from core.events.emitter import emit_event
+        from canonical.events.envelope import CanonicalEventEnvelope
 
-        with patch("core.events.emitter._get_event_store") as mock_store:
-            mock_store.return_value.write_event.return_value = True
-            with patch("core.events.emitter.validate_event_type_advisory") as mock_adv:
-                mock_adv.return_value = AdvisoryResult(
-                    is_registered=True, event_type="test.event.fired"
-                )
-                result = emit_event("test.event.fired", {"key": "value"})
-
-        assert result is not None
-        call_args = mock_store.return_value.write_event.call_args[0][0]
-        assert call_args["severity"] == "info"
+        env = CanonicalEventEnvelope(
+            event_type="test.event.fired",
+            session_id=None,
+            payload={"key": "value"},
+            confidence="unavailable",
+            project_id=None,
+        )
+        assert env.severity == "info"
 
     def test_explicit_low_severity_succeeds(self):
-        from core.events.emitter import emit_event
+        from canonical.events.envelope import CanonicalEventEnvelope
 
-        with patch("core.events.emitter._get_event_store") as mock_store:
-            mock_store.return_value.write_event.return_value = True
-            with patch("core.events.emitter.validate_event_type_advisory") as mock_adv:
-                mock_adv.return_value = AdvisoryResult(
-                    is_registered=True, event_type="test.event.fired"
-                )
-                result = emit_event("test.event.fired", {"key": "value"}, severity="low")
-
-        assert result is not None
-        call_args = mock_store.return_value.write_event.call_args[0][0]
-        assert call_args["severity"] == "low"
+        env = CanonicalEventEnvelope(
+            event_type="test.event.fired",
+            session_id=None,
+            payload={"key": "value"},
+            severity="low",
+            confidence="unavailable",
+            project_id=None,
+        )
+        assert env.severity == "low"
 
 
 # ── EV-2/EV-3: Security emitter fix ─────────────────────────────────────────
@@ -145,9 +140,10 @@ class TestSecurityEmitterNoDirectSQL:
         assert "db_conn.execute" not in source
         assert "conn.execute" not in source
 
-    def test_imports_canonical_emit_event(self):
+    def test_imports_canonical_spool_writer(self):
         source = Path("core/security/event_emitter.py").read_text()
-        assert "from core.events.emitter import emit_event" in source
+        # Slice 3: security emitter now uses spool pipeline
+        assert "from emitters.shared.spool_writer import write_envelopes" in source
 
     def test_no_transaction_import(self):
         source = Path("core/security/event_emitter.py").read_text()
@@ -158,11 +154,10 @@ class TestSecurityEmitterNoDirectSQL:
 
 
 class TestSecurityEmitterRoutesCanonical:
-    """Verify emit_security_event delegates to emit_event."""
+    """Verify emit_security_event delegates to spool pipeline (Slice 3)."""
 
-    def test_emit_security_event_calls_emit_event(self):
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "test-uuid"
+    def test_emit_security_event_calls_write_envelopes(self):
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_security_event
 
             result = emit_security_event(
@@ -171,76 +166,72 @@ class TestSecurityEmitterRoutesCanonical:
                 severity="info",
             )
 
-        mock_emit.assert_called_once()
-        call_kwargs = mock_emit.call_args
-        assert call_kwargs[1]["event_type"] == "security.scan.started"
-        assert call_kwargs[1]["severity"] == "info"
-        assert call_kwargs[1]["payload"]["scan_id"] == "s1"
-        assert result == "test-uuid"
+        mock_write.assert_called_once()
+        envelopes = mock_write.call_args[0][0]
+        assert len(envelopes) == 1
+        assert envelopes[0].event_type == "security.scan.started"
+        assert envelopes[0].severity == "info"
+        assert envelopes[0].payload["scan_id"] == "s1"
+        assert result == envelopes[0].event_id
 
     def test_emit_security_event_prefixes_type(self):
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_security_event
 
             emit_security_event("finding.detected", {"data": 1})
 
-        assert mock_emit.call_args[1]["event_type"] == "security.finding.detected"
+        envelopes = mock_write.call_args[0][0]
+        assert envelopes[0].event_type == "security.finding.detected"
 
     def test_emit_scan_started_convenience(self):
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_scan_started
 
             emit_scan_started("scan-1", "prd-1", "/project")
 
-        call_kwargs = mock_emit.call_args[1]
-        assert call_kwargs["event_type"] == "security.scan.started"
-        assert call_kwargs["payload"]["scan_id"] == "scan-1"
-        assert call_kwargs["payload"]["prd_id"] == "prd-1"
+        envelopes = mock_write.call_args[0][0]
+        assert envelopes[0].event_type == "security.scan.started"
+        assert envelopes[0].payload["scan_id"] == "scan-1"
+        assert envelopes[0].payload["prd_id"] == "prd-1"
 
     def test_emit_scan_completed_convenience(self):
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_scan_completed
 
             emit_scan_completed("scan-1", 5)
 
-        call_kwargs = mock_emit.call_args[1]
-        assert call_kwargs["event_type"] == "security.scan.completed"
-        assert call_kwargs["payload"]["findings_count"] == 5
+        envelopes = mock_write.call_args[0][0]
+        assert envelopes[0].event_type == "security.scan.completed"
+        assert envelopes[0].payload["findings_count"] == 5
 
     def test_emit_scan_failed_uses_high_severity(self):
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_scan_failed
 
             emit_scan_failed("scan-1", "timeout error")
 
-        call_kwargs = mock_emit.call_args[1]
-        assert call_kwargs["event_type"] == "security.scan.failed"
-        assert call_kwargs["severity"] == "high"
-        assert call_kwargs["payload"]["error"] == "timeout error"
+        envelopes = mock_write.call_args[0][0]
+        assert envelopes[0].event_type == "security.scan.failed"
+        assert envelopes[0].severity == "high"
+        assert envelopes[0].payload["error"] == "timeout error"
 
     def test_conn_param_accepted_but_ignored(self):
         """conn parameter is accepted for backward compatibility."""
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_security_event
 
             emit_security_event("scan.started", {"data": 1}, conn=MagicMock())
 
-        mock_emit.assert_called_once()
+        mock_write.assert_called_once()
 
     def test_validate_param_accepted_but_ignored(self):
         """validate parameter is accepted for backward compatibility."""
-        with patch("core.security.event_emitter.emit_event") as mock_emit:
-            mock_emit.return_value = "id"
+        with patch("core.security.event_emitter.write_envelopes") as mock_write:
             from core.security.event_emitter import emit_security_event
 
             emit_security_event("scan.started", {"data": 1}, validate=False)
 
-        mock_emit.assert_called_once()
+        mock_write.assert_called_once()
 
 
 # ── Taxonomy additions ───────────────────────────────────────────────────────

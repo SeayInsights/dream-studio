@@ -13,11 +13,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from interfaces.adapters.claude_adapter import ClaudeAdapter
-from interfaces.adapters.default_adapter import DefaultAdapter
-from interfaces.adapters.gpt_adapter import GPTAdapter
-from interfaces.adapters.models import TraceContext
-from interfaces.adapters.normalizer import EventNormalizer
+from core.adapters.normalizers import ClaudeAdapter, DefaultAdapter, GPTAdapter, EventNormalizer
+from core.events.trace import TraceContext
 
 
 def mock_claude_response() -> dict[str, Any]:

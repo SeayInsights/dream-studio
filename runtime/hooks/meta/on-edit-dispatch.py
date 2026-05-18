@@ -14,6 +14,7 @@ Handlers (in order):
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -34,9 +35,31 @@ HANDLERS = [
 
 STATE_DIR = Path.home() / ".dream-studio" / "state"
 
+PROTECTED_PATHS = [
+    "settings.json",
+    "settings.local.json",
+    "CLAUDE.md",
+]
+
 
 def main() -> None:
     raw_payload = sys.stdin.read()
+
+    try:
+        data = json.loads(raw_payload) if raw_payload.strip() else {}
+    except Exception:
+        data = {}
+
+    tool_input = data.get("tool_input") or {}
+    file_path = (
+        tool_input.get("file_path")
+        or tool_input.get("path")
+        or ""
+    ).replace("\\", "/")
+
+    if any(p in file_path for p in PROTECTED_PATHS):
+        sys.exit(0)
+
     run_handlers(HANDLERS, raw_payload, "PostToolUse_Edit_Write", STATE_DIR)
 
 

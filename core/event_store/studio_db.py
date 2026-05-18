@@ -22,8 +22,9 @@ from core.config.sqlite_bootstrap import (
 
 # Import adapters for skill execution normalization (TC-007)
 try:
-    from interfaces.adapters import EventNormalizer, ClaudeAdapter
-    from interfaces.adapters.models import TraceContext, CanonicalEvent
+    from core.adapters.normalizers import EventNormalizer, ClaudeAdapter
+    from core.adapters.models import CanonicalEvent
+    from core.events.trace import TraceContext
 
     _event_normalizer = EventNormalizer()
     _event_normalizer.register_adapter("claude", ClaudeAdapter())
@@ -430,7 +431,7 @@ def archive_workflow(
         with _db_transaction(db_path) as c:
             # 1. Normalize workflow_run event via EventNormalizer (TC-008)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "workflow_run",
@@ -546,7 +547,7 @@ def archive_workflow(
 
                 # Normalize workflow_node event via EventNormalizer (TC-008)
                 if _NORMALIZER_AVAILABLE:
-                    from interfaces.adapters.models import TraceContext
+                    from core.events.trace import TraceContext
 
                     node_raw_output = {
                         "event_type": "workflow_node",
@@ -895,7 +896,7 @@ def insert_approach(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "approach_captured",
@@ -1291,7 +1292,7 @@ def update_project_stats(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "project_stats_updated",
@@ -1350,7 +1351,7 @@ def insert_session(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "session_started",
@@ -1459,7 +1460,7 @@ def end_session(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "session_ended",
@@ -1655,7 +1656,7 @@ def insert_handoff(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "handoff_created",
@@ -2265,7 +2266,7 @@ def update_task_status(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "task_status_updated",
@@ -2356,7 +2357,7 @@ def insert_lesson(
         with _db_transaction(db_path) as c:
             # 1. Normalize lesson event via EventNormalizer (TC-008)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "lesson_captured",
@@ -2534,7 +2535,7 @@ def insert_research(
         with _db_transaction(db_path) as c:
             # 1. Normalize research event via EventNormalizer (TC-008)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "research_completed",
@@ -2661,7 +2662,7 @@ def cache_research(
         with _db_transaction(db_path) as c:
             # 1. Normalize research_cached event via EventNormalizer (TC-008)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "research_cached",
@@ -2907,7 +2908,7 @@ def insert_hook_execution(
         with _db_transaction(db_path) as c:
             # 1. Normalize hook_execution event via EventNormalizer (TC-008)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "hook_execution",
@@ -3093,7 +3094,7 @@ def insert_hook_finding(
 
             # Event emission (additive side-effect)
             if _NORMALIZER_AVAILABLE:
-                from interfaces.adapters.models import TraceContext
+                from core.events.trace import TraceContext
 
                 raw_output = {
                     "event_type": "hook_finding_created",
