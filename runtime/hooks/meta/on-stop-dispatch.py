@@ -8,7 +8,25 @@ import sys
 import time
 from pathlib import Path
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+def _get_plugin_root() -> Path:
+    sidecar = Path(__file__).resolve()
+    for _ in range(6):
+        candidate = sidecar / ".plugin-root"
+        if candidate.is_file():
+            try:
+                return Path(candidate.read_text(encoding="utf-8").strip()).resolve()
+            except Exception:
+                pass
+        sidecar = sidecar.parent
+    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env:
+        return Path(env).resolve()
+    return Path(__file__).resolve().parents[3]
+
+
+PLUGIN_ROOT = _get_plugin_root()
+if str(PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_ROOT))
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 
 _sc_path = str(PLUGIN_ROOT / "runtime")
