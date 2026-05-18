@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Dispatcher: Stop — single process for all stop-fired hooks."""
 
+import io
+import json
+import os
 import sys
-import io, sys, time
+import time
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
+
+_sc_path = str(PLUGIN_ROOT / "runtime")
+if _sc_path not in sys.path:
+    sys.path.insert(0, _sc_path)
+
+try:
+    from session_config import spawn_new_session as _spawn_new_session
+except ImportError:
+    _spawn_new_session = None
 
 from control.execution.dispatch_helpers import load_module, write_timing  # noqa: E402
 
@@ -28,6 +40,56 @@ HANDLERS: list[tuple[str, Path]] = [
 STATE_DIR = Path.home() / ".dream-studio" / "state"
 
 
+def _dispatch_handoff_continuation() -> None:
+    """
+    If Claude produced a handoff document (handoff-latest.json) during this
+    stop cycle, spawn a new session seeded with the handoff content, then
+    clean up the state files.
+    """
+    if _spawn_new_session is None:
+        return
+
+    handoff_file = STATE_DIR / "handoff-latest.json"
+    pending_file = STATE_DIR / "pending-handoff.json"
+
+    if not handoff_file.is_file():
+        return
+
+    try:
+        hd = json.loads(handoff_file.read_text(encoding="utf-8"))
+        age = time.time() - hd.get("written_at", 0)
+
+        if age >= 120:
+            return
+
+        content = hd.get("content", "")
+        if not content:
+            return
+
+        pending: dict = {}
+        if pending_file.is_file():
+            try:
+                pending = json.loads(pending_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        flags = pending.get("invocation_flags", [])
+        cwd = pending.get("cwd") or os.getcwd()
+
+        safe = content.replace('"', '\\"')
+        prompt = f"Continue from handoff: {safe}"
+        flags_str = " ".join(flags)
+        claude_cmd = f'claude {flags_str} "{prompt}"'.strip()
+
+        _spawn_new_session(claude_cmd, cwd)
+
+        handoff_file.unlink(missing_ok=True)
+        pending_file.unlink(missing_ok=True)
+
+    except Exception:
+        pass
+
+
 def main() -> None:
     raw_payload = sys.stdin.read()
     for name, path in HANDLERS:
@@ -45,6 +107,8 @@ def main() -> None:
             pass
         finally:
             sys.stdin = sys.__stdin__
+
+    _dispatch_handoff_continuation()
 
 
 if __name__ == "__main__":
