@@ -1059,14 +1059,17 @@ def _doctor_status(
     critical_fail = (
         not dispatcher_ok
         or skills_info["missing"]
-        or failed_info["count"] > 0
+        or failed_info["count"] >= 6
         or not version_info["current"]
     )
+    has_warnings = 0 < failed_info["count"] < 6
 
     if critical_fail:
         overall = "fail"
     elif not core_pass:
         overall = "attention_required"
+    elif has_warnings:
+        overall = "warn"
     else:
         overall = "pass"
 
@@ -1125,7 +1128,7 @@ def _doctor_status(
             "sqlite_exists": validation["sqlite_exists"],
             "schema_version_known": validation["schema_version"] is not None,
             "module_profiles_valid": not validation["module_profile_errors"],
-            "live_db_write_authorized": False,
+            "doctor_runs_read_only": True,
             "dispatcher_hooks_installed": dispatcher_ok,
             "skills_installed": skills_info,
             "agents_installed": agents_info,
@@ -1240,7 +1243,7 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
         "latest_migration_version": latest_migration_version(),
         "module_profile_errors": profile_errors,
         "ready": db_exists and not profile_errors,
-        "live_db_write_authorized": False,
+        "doctor_runs_read_only": True,
     }
 
 
