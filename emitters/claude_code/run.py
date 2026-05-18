@@ -36,7 +36,10 @@ def _enforcement_check() -> str | None:
     if not project_id:
         return None
 
-    return None  # Work order check requires DB access; emitter layer is DB-free.
+    # TODO Slice 10: wire enforcement via runtime
+    # intelligence layer once Chain 7 is complete.
+    # For now fails open — no blocking enforcement.
+    return None
 
 
 def _get_plugin_root() -> Path:
