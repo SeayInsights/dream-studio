@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 import platform
-import sqlite3
 import stat
 import sys
 from pathlib import Path
@@ -31,9 +30,11 @@ from integrations.manifest import (
     write_manifest,
 )
 from integrations.targets.claude_code.settings_merge import (
+    dedup_hooks_by_normalized_command,
     load_settings,
     merge_settings,
     purge_legacy_hooks,
+    purge_read_posttooluse_matcher,
     settings_to_json,
 )
 
@@ -66,12 +67,18 @@ def _compute_file_hash_chunked(path: Path) -> str:
     return h.hexdigest()
 
 
+def _interpolate_statusline_cmd(hooks_dir: Path) -> str:
+    """Return the resolved statusLine command string with {hooks_dir} and {python_cmd} substituted."""
+    template = '{python_cmd} "{hooks_dir}/statusline.py"'
+    return template.replace("{hooks_dir}", str(hooks_dir)).replace("{python_cmd}", _python_cmd())
+
+
 def _interpolate_hooks_dir(
     hooks: list[dict[str, Any]], hooks_dir: Path
 ) -> list[dict[str, Any]]:
     """Replace {hooks_dir} and {python_cmd} placeholders in hook command strings."""
     import copy as _copy
-    hooks_dir_str = str(hooks_dir)
+    hooks_dir_str = str(hooks_dir).replace("\\", "/")
     python_cmd = _python_cmd()
     result = []
     for entry in hooks:
@@ -113,6 +120,8 @@ def _collect_hook_file_ops(
         (source_root / "control" / "__init__.py", hooks_dir / "control" / "__init__.py"),
         (source_root / "control" / "execution" / "__init__.py", hooks_dir / "control" / "execution" / "__init__.py"),
         (source_root / "runtime" / "hooks" / "meta" / "__init__.py", hooks_dir / "runtime" / "hooks" / "meta" / "__init__.py"),
+        # session_config.py — shared utility for session continuation
+        (source_root / "runtime" / "session_config.py", hooks_dir / "runtime" / "session_config.py"),
     ]
 
     for src, tgt in hook_files:
@@ -171,6 +180,23 @@ def _collect_hook_file_ops(
         safety_notes="Overwritten on every install — update when repo is moved by re-running install.",
     ))
 
+    # statusline.py — cross-platform status line (replaces statusline-command.sh bash wrapper)
+    statusline_src = repo_root / "canonical" / "adapters" / "claude" / "statusline.py"
+    if statusline_src.is_file():
+        statusline_tgt = hooks_dir / "statusline.py"
+        file_hash = _compute_file_hash_chunked(statusline_src)
+        statusline_content = statusline_src.read_text(encoding="utf-8")
+        ops.append(FileOp(
+            target=statusline_tgt,
+            op="create",
+            backup_required=statusline_tgt.exists(),
+            source_hash=file_hash,
+            source_content=statusline_content,
+            reason="Install cross-platform Python status line script",
+            safety_notes="Replaces statusline-command.sh bash wrapper. Existing ~/.claude/statusline-command.sh is left in place.",
+            backup_path=backup_base if statusline_tgt.exists() else None,
+        ))
+
     return ops
 
 
@@ -215,8 +241,8 @@ def _write_path_to_profile(bin_dir: Path) -> dict[str, Any]:
 
     if system == "Windows":
         try:
-            import subprocess as _subprocess
-            raw = _subprocess.run(
+            _sp = __import__("subprocess")
+            raw = _sp.run(
                 ["powershell", "-Command", "$PROFILE"],
                 capture_output=True, text=True, timeout=10,
             ).stdout.strip()
@@ -307,13 +333,14 @@ def _first_run_guide(*, ds_home: Path) -> str | None:
     if not sqlite_path.exists():
         return _FIRST_RUN_GUIDE_TEXT
     try:
-        with sqlite3.connect(str(sqlite_path)) as conn:
+        _sq3 = __import__("sqlite3")
+        with _sq3.connect(str(sqlite_path)) as conn:
             rows = conn.execute(
                 "SELECT 1 FROM ds_projects WHERE status = 'active' LIMIT 1"
             ).fetchall()
         if rows:
             return None
-    except sqlite3.Error:
+    except Exception:
         pass
     return _FIRST_RUN_GUIDE_TEXT
 
@@ -321,6 +348,20 @@ def _first_run_guide(*, ds_home: Path) -> str | None:
 _FIRST_RUN_GUIDE_TEXT = """
 Dream Studio is installed.
 No active project detected.
+
+Step 0 — Personalize your environment
+Fill in your identity in config.json:
+  ~/.dream-studio/config.json
+Set: director_name, domain, primary_use
+Example:
+  {
+    "director_name": "Your Name",
+    "domain": "software development",
+    "primary_use": "client projects and internal tools"
+  }
+These fields personalize all project intelligence
+outputs, coaching, and daily standup briefings.
+Without them all responses are generic.
 
 Get started in 4 steps:
   1. Register your project:
@@ -442,6 +483,10 @@ class ClaudeCodeInstaller(InstallerBase):
         existing_settings = load_settings(settings_target)
         merged, skip_reasons = merge_settings(existing_settings, interpolated_hooks)
         merged, _purged = purge_legacy_hooks(merged)
+        merged = dedup_hooks_by_normalized_command(merged)
+        merged = purge_read_posttooluse_matcher(merged)
+        # Always write the Python statusLine command to migrate from old bash wrapper
+        merged["statusLine"] = {"command": _interpolate_statusline_cmd(hooks_dir)}
         merged_content = settings_to_json(merged)
         ops.append(FileOp(
             target=settings_target,

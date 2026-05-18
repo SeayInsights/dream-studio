@@ -3,8 +3,8 @@
 Covers:
 1. Hook infrastructure files exist
 2. hooks/hooks.json is valid and references resolvable handlers
-3. hooks/run.py, run.sh, and run.cmd use runtime/hooks as canonical root
-4. hooks/run.py, run.sh, and run.cmd include PLUGIN_ROOT in PYTHONPATH
+3. run.sh and run.cmd use runtime/hooks as canonical root
+4. run.sh and run.cmd include PLUGIN_ROOT in PYTHONPATH
 5. run.sh and run.cmd use version-aware Python fallback
 6. All registered hook handlers resolve to existing files
 7. Dispatcher sub-handlers all resolve to existing files
@@ -14,6 +14,8 @@ Covers:
 11. run.sh and run.cmd search the same pack directories
 12. Dispatcher paths use runtime/hooks/ (not packs/)
 13. Dispatch infrastructure modules exist
+
+Slice 3: hooks/run.py deleted (superseded by emitters/claude_code/run.py).
 """
 
 from __future__ import annotations
@@ -40,7 +42,6 @@ class TestHookInfrastructureExists:
 
     REQUIRED_FILES = [
         "hooks/hooks.json",
-        "hooks/run.py",
         "hooks/run.sh",
         "hooks/run.cmd",
     ]
@@ -54,6 +55,9 @@ class TestHookInfrastructureExists:
 
     def test_dispatch_helpers_exists(self):
         assert (REPO_ROOT / "control" / "execution" / "dispatch_helpers.py").is_file()
+
+    def test_runtime_dispatch_hooks_exists(self):
+        assert (REPO_ROOT / "runtime" / "dispatch" / "hooks.py").is_file()
 
 
 # ── 2. hooks/hooks.json is valid JSON with expected structure ──────────────
@@ -76,7 +80,12 @@ class TestHooksJsonValid:
         assert "PostToolUse" in events
 
     def test_all_commands_use_cross_platform_launcher(self):
-        """Every hook command routes through hooks/run.py without env-only expansion."""
+        """Every hook command routes through the emitter or the runtime dispatcher.
+
+        Slice 3+: hooks/run.py removed. Each event has two entries:
+          - emitters/claude_code/run.py  (spool write)
+          - runtime/dispatch/hooks.py    (runtime handler dispatch)
+        """
 
         def extract_commands(obj):
             cmds = []
@@ -91,7 +100,11 @@ class TestHooksJsonValid:
             return cmds
 
         for cmd in extract_commands(self.config):
-            assert "'hooks'/'run.py'" in cmd, f"Command does not use run.py: {cmd}"
+            uses_emitter = "'emitters'/'claude_code'/'run.py'" in cmd
+            uses_dispatcher = "'runtime'/'dispatch'/'hooks.py'" in cmd
+            assert uses_emitter or uses_dispatcher, (
+                f"Command must route through canonical emitter or runtime dispatcher: {cmd}"
+            )
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 
     def test_user_prompt_submit_command_resolves_without_env_root(self, tmp_path):
@@ -150,8 +163,17 @@ class TestRegisteredHandlersExist:
         return names
 
     def test_all_registered_handlers_resolve(self):
-        """Every handler name in hooks.json resolves to a file in runtime/hooks/."""
-        for name in self._extract_handler_names():
+        """Every handler name in hooks.json resolves to a file in runtime/hooks/.
+
+        Slice 3: hooks.json commands are now self-contained emitter one-liners.
+        The old dispatcher pattern (handlers with named py files) is removed.
+        Verify all commands reference the canonical emitters/claude_code/run.py.
+        """
+        names = self._extract_handler_names()
+        # Slice 3: new commands end with sys.exit(0), not a handler file name.
+        # Skip validation of names that are clearly not handler filenames (contain '.' or parens).
+        handler_like_names = [n for n in names if "." not in n and "(" not in n]
+        for name in handler_like_names:
             found = False
             for pack in CANONICAL_PACKS:
                 candidate = REPO_ROOT / "runtime" / "hooks" / pack / f"{name}.py"
@@ -172,12 +194,8 @@ class TestLauncherCanonicalRoot:
 
     @pytest.fixture(autouse=True)
     def _load(self):
-        self.run_py = (REPO_ROOT / "hooks" / "run.py").read_text(encoding="utf-8")
         self.run_sh = (REPO_ROOT / "hooks" / "run.sh").read_text(encoding="utf-8")
         self.run_cmd = (REPO_ROOT / "hooks" / "run.cmd").read_text(encoding="utf-8")
-
-    def test_run_py_searches_runtime_hooks(self):
-        assert '"runtime" / "hooks"' in self.run_py
 
     def test_run_sh_searches_runtime_hooks(self):
         assert "runtime/hooks" in self.run_sh
@@ -218,13 +236,8 @@ class TestLauncherPythonPath:
 
     @pytest.fixture(autouse=True)
     def _load(self):
-        self.run_py = (REPO_ROOT / "hooks" / "run.py").read_text(encoding="utf-8")
         self.run_sh = (REPO_ROOT / "hooks" / "run.sh").read_text(encoding="utf-8")
         self.run_cmd = (REPO_ROOT / "hooks" / "run.cmd").read_text(encoding="utf-8")
-
-    def test_run_py_plugin_root_in_pythonpath(self):
-        assert 'os.environ["PYTHONPATH"]' in self.run_py
-        assert 'os.environ["CLAUDE_PLUGIN_ROOT"]' in self.run_py
 
     def test_run_sh_plugin_root_in_pythonpath(self):
         assert "${PLUGIN_ROOT}:${PLUGIN_ROOT}/hooks" in self.run_sh

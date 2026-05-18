@@ -1,3 +1,6 @@
+# DEPRECATED: Superseded by integrations/health.py and integrations/detector.py.
+# Retained for backward compatibility during Slice 1-2 transition.
+# Scheduled for deletion in Slice 2 after test suite green.
 """Detect stale adapter config projections without repairing them."""
 
 from __future__ import annotations

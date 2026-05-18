@@ -29,16 +29,17 @@ from control.analysis.stacks import (
 from control.analysis.stacks.detector import detect_stack
 from core.config.database import transaction
 
-# Phase 1 Wave 1.5: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from canonical.events.redactor import redact_file_path
+from emitters.shared.spool_writer import write_envelopes
 
 from core.config.paths import project_planning_dir, project_sessions_dir
 
 # Import EventNormalizer for legacy activity-log enrichment (PHASE 1 Step 2)
 try:
-    from interfaces.adapters.models import TraceContext
-    from interfaces.adapters.normalizer import EventNormalizer
+    from core.events.trace import TraceContext
+    from core.adapters.normalizers import EventNormalizer
 
     _event_normalizer = EventNormalizer()
     _NORMALIZER_AVAILABLE = True
@@ -101,20 +102,21 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         planning_path = str(project_planning_dir(project_name))
         sessions_path = str(project_sessions_dir(project_name))
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.PROJECT_REGISTERED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.PROJECT_REGISTERED.value,
+            session_id=None,
             payload={
                 "project_id": project_id,
-                "project_path": str(path),
+                "project_path": redact_file_path(str(path)),
                 "project_name": project_name,
                 "project_source": "local",
-                "planning_path": planning_path,
-                "sessions_path": sessions_path,
+                "planning_path": redact_file_path(planning_path),
+                "sessions_path": redact_file_path(sessions_path),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         # Keep existing DB write (dual-write)
         with transaction() as conn:
@@ -137,18 +139,19 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     }
 
     try:
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_STARTED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_STARTED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "run_type": run_type,
-                "project_path": str(path),
+                "project_path": redact_file_path(str(path)),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         # Create analysis run record
         with transaction() as conn:
@@ -200,18 +203,19 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["project_name"] = project_data.get("project_name", "unknown")
         result["project_data"] = project_data
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_DISCOVERY_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_DISCOVERY_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "files_discovered": len(project_data.get("file_inventory", {})),
                 "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -266,17 +270,18 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         research = research_stack(stack, project_data)
         result["research"] = research
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_RESEARCH_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_RESEARCH_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "stack_framework": stack.get("framework", "unknown"),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -336,18 +341,19 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             for improvement in audit.get("improvements", []):
                 _store_improvement(conn, project_id, improvement)
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_AUDIT_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_AUDIT_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "violations_count": violations_count,
                 "health_score": audit.get("health_score", 0),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -403,17 +409,18 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             for bug in bugs.get("bugs", []):
                 _store_bug(conn, project_id, bug)
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_BUG_ANALYSIS_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_BUG_ANALYSIS_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "bugs_count": bugs_count,
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -468,17 +475,18 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         )
         result["prd_path"] = prd_path
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_SYNTHESIS_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_SYNTHESIS_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
-                "prd_path": str(prd_path),
+                "prd_path": redact_file_path(str(prd_path)),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -529,9 +537,10 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["duration_seconds"] = duration
         result["status"] = "completed"
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_COMPLETED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_COMPLETED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
@@ -539,11 +548,11 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 "violations_count": violations_count,
                 "bugs_count": bugs_count,
                 "health_score": audit.get("health_score", 0),
-                "prd_path": str(prd_path),
+                "prd_path": redact_file_path(str(prd_path)),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -605,17 +614,19 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["status"] = "failed"
         result["error"] = str(e)
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.ANALYSIS_FAILED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.ANALYSIS_FAILED.value,
+            session_id=None,
             payload={
                 "run_id": run_id,
                 "project_id": project_id,
                 "error_message": str(e),
             },
             severity="error",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             conn.execute(
@@ -761,9 +772,10 @@ def _update_project_metadata(
         exists = cursor.fetchone()
 
     if exists:
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.PROJECT_UPDATED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.PROJECT_UPDATED.value,
+            session_id=None,
             payload={
                 "project_id": project_id,
                 "stack_detected": stack.get("framework", "unknown"),
@@ -771,9 +783,9 @@ def _update_project_metadata(
                 "total_files": len(project_data.get("file_inventory", {})),
                 "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         # Update existing
         with transaction() as conn:
@@ -799,9 +811,10 @@ def _update_project_metadata(
                 ),
             )
     else:
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.PROJECT_REGISTERED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.PROJECT_REGISTERED.value,
+            session_id=None,
             payload={
                 "project_id": project_id,
                 "project_name": project_data.get("project_name", path.name),
@@ -810,9 +823,9 @@ def _update_project_metadata(
                 "total_files": len(project_data.get("file_inventory", {})),
                 "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
             },
-            severity="info",
-            source_type="analysis_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         # Insert new
         with transaction() as conn:

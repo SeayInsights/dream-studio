@@ -72,6 +72,10 @@ The script checks for Python 3.12+, installs it if missing, runs the Dream Studi
 ### Prerequisites
 - Python 3.12 — use the `py` launcher on Windows
 - Claude Code or another supported AI tool
+- jq (optional, used by some shell operations):
+    Windows: `winget install jqlang.jq`
+    Mac:     `brew install jq`
+    Linux:   `apt-get install jq`
 
 ### 1. Clone the repository
 ```powershell

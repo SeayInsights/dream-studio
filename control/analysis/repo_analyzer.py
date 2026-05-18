@@ -24,9 +24,10 @@ from pathlib import Path
 from .document_store import DocumentStore
 from core.config.database import transaction
 
-# Phase 1 Wave 1: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from canonical.events.redactor import redact_file_path
+from emitters.shared.spool_writer import write_envelopes
 
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
 
@@ -433,21 +434,23 @@ def store_extractions(repo_id: int, extractions: list[dict], extraction_type: st
             extraction_id = _generate_extraction_id(repo_id, extraction)
             extraction_ids.append(extraction_id)
 
-            # Phase 1 Wave 1: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.REPO_EXTRACTION_STORED,
+            # Slice 3: Emit event via spool pipeline
+            _env = CanonicalEventEnvelope(
+                event_type=CanonicalEventType.REPO_EXTRACTION_STORED.value,
+                session_id=None,
                 payload={
                     "extraction_id": extraction_id,
                     "repo_id": repo_id,
                     "extraction_type": extraction_type,
                     "title": extraction.get("pattern_type")
                     or extraction.get("component_type", "unknown"),
-                    "file_path": extraction.get("file_path"),
+                    "file_path": redact_file_path(extraction.get("file_path") or ""),
                     "description": extraction.get("description"),
                 },
-                severity="info",
-                source_type="repo_analyzer",
+                confidence="unavailable",
+                project_id=None,
             )
+            write_envelopes([_env])
 
             # Keep existing DB write for validation (dual-write)
             c.execute(
@@ -566,9 +569,10 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
             if existing:
                 repo_id = existing[0]
 
-                # Phase 1 Wave 1: Emit event (repo re-analyzed)
-                emit_event(
-                    event_type=EventType.REPO_ANALYZED,
+                # Slice 3: Emit event via spool pipeline
+                _env = CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.REPO_ANALYZED.value,
+                    session_id=None,
                     payload={
                         "repo_id": repo_id,
                         "repo_url": repo_url,
@@ -578,9 +582,10 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
                         "building_blocks_count": len(building_blocks),
                         "is_reanalysis": True,
                     },
-                    severity="info",
-                    source_type="repo_analyzer",
+                    confidence="unavailable",
+                    project_id=None,
                 )
+                write_envelopes([_env])
 
                 # Keep existing DB write (dual-write)
                 c.execute(
@@ -594,9 +599,10 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
                     (_NOW(), stack, len(patterns), len(building_blocks), repo_id),
                 )
             else:
-                # Phase 1 Wave 1: Emit event (new repo analyzed)
-                emit_event(
-                    event_type=EventType.REPO_ANALYZED,
+                # Slice 3: Emit event via spool pipeline
+                _env = CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.REPO_ANALYZED.value,
+                    session_id=None,
                     payload={
                         "repo_url": repo_url,
                         "repo_name": repo_name,
@@ -605,9 +611,10 @@ def analyze_repo(repo_url: str, shallow: bool = True) -> dict:
                         "building_blocks_count": len(building_blocks),
                         "is_reanalysis": False,
                     },
-                    severity="info",
-                    source_type="repo_analyzer",
+                    confidence="unavailable",
+                    project_id=None,
                 )
+                write_envelopes([_env])
 
                 # Keep existing DB write (dual-write)
                 cursor = c.execute(

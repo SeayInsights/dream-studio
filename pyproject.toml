@@ -12,6 +12,11 @@ per-file-ignores = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "analytics/tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
 markers = [
     "runtime_reliability: Phase 5 runtime reliability gate — core contracts that must always pass",
 ]

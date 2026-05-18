@@ -396,10 +396,20 @@ def _check_hooks(config: PreflightConfig) -> dict[str, Any]:
 
     missing: list[str] = []
     handlers: list[str] = []
+    emitter_commands: int = 0
     for command in _extract_hook_commands(data):
+        # Slice 3: commands are self-contained emitter one-liners routing through
+        # emitters/claude_code/run.py — no separate handler file to resolve.
+        if "emitters" in command and "claude_code" in command and "run.py" in command:
+            emitter_commands += 1
+            handlers.append("<emitter>")
+            continue
         handler = _handler_name(command)
         if not handler:
             missing.append(command)
+            continue
+        # Skip names that are clearly not filenames (contain '.' or '(')
+        if "." in handler or "(" in handler:
             continue
         handlers.append(handler)
         if not any(
@@ -414,6 +424,7 @@ def _check_hooks(config: PreflightConfig) -> dict[str, Any]:
         "error" if missing else "info",
         manifest=str(manifest),
         handler_count=len(handlers),
+        emitter_command_count=emitter_commands,
         missing_handlers=missing,
         hooks_lib_exists=(config.repo_root / "hooks" / "lib").exists(),
     )

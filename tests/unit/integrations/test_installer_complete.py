@@ -18,7 +18,10 @@ from integrations.installer.claude_code import (
     _write_global_launcher,
     _write_path_to_profile,
 )
-from integrations.targets.claude_code.settings_merge import purge_legacy_hooks
+from integrations.targets.claude_code.settings_merge import (
+    dedup_hooks_by_normalized_command,
+    purge_legacy_hooks,
+)
 
 
 def _cmd_has_dispatcher(cmd: str) -> bool:
@@ -88,6 +91,11 @@ def canonical_root(tmp_path):
     src = tmp_path
     (src / "emitters" / "claude_code").mkdir(parents=True, exist_ok=True)
     (src / "emitters" / "claude_code" / "run.py").write_text("# run.py stub\n", encoding="utf-8")
+    # statusline.py — canonical/adapters/claude/statusline.py relative to source root
+    (src / "canonical" / "adapters" / "claude").mkdir(parents=True, exist_ok=True)
+    (src / "canonical" / "adapters" / "claude" / "statusline.py").write_text(
+        "# statusline.py stub\ndef _get_plugin_root(): return ''\n", encoding="utf-8"
+    )
     (src / "runtime" / "dispatch").mkdir(parents=True, exist_ok=True)
     (src / "runtime" / "dispatch" / "__init__.py").write_text("", encoding="utf-8")
     (src / "runtime" / "dispatch" / "hooks.py").write_text("# hooks.py stub\n", encoding="utf-8")
@@ -583,6 +591,7 @@ def test_execute_installs_posttooluse_matcher_entries(config_root, canonical_roo
     matchers = {entry.get("matcher") for entry in post_tool_entries if "matcher" in entry}
     assert "Skill" in matchers, "PostToolUse must have a 'Skill' matcher entry"
     assert "Edit|Write" in matchers, "PostToolUse must have an 'Edit|Write' matcher entry"
+    assert "Read" not in matchers, "PostToolUse must NOT have a 'Read' matcher (overhead with no consumer)"
 
 
 def test_hook_commands_use_hooks_dir_path(config_root, canonical_root, ds_home):
@@ -592,7 +601,7 @@ def test_hook_commands_use_hooks_dir_path(config_root, canonical_root, ds_home):
     )
     installer.install("execute")
     settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
-    hooks_dir = str(config_root / "hooks")
+    hooks_dir_posix = (config_root / "hooks").as_posix()
     all_cmds = [
         h.get("command", "")
         for entries in settings.get("hooks", {}).values()
@@ -600,9 +609,9 @@ def test_hook_commands_use_hooks_dir_path(config_root, canonical_root, ds_home):
         for h in entry.get("hooks", [])
         if isinstance(h, dict)
     ]
-    # At least one command must reference the installed hooks_dir
-    assert any(hooks_dir in cmd for cmd in all_cmds), (
-        f"No command references hooks_dir={hooks_dir!r}. Commands: {all_cmds}"
+    # At least one command must reference the installed hooks_dir (forward-slash normalized)
+    assert any(hooks_dir_posix in cmd for cmd in all_cmds), (
+        f"No command references hooks_dir={hooks_dir_posix!r}. Commands: {all_cmds}"
     )
 
 
@@ -805,3 +814,192 @@ def test_path_line_not_duplicated_on_second_install(tmp_path):
     profile = tmp_path / ".bashrc"
     content = profile.read_text(encoding="utf-8")
     assert content.count(_DS_PATH_MARKER) == 1
+
+
+# ── Hook dedup by normalized command ─────────────────────────────────────────
+
+
+def test_dedup_backslash_and_forward_slash_collapse_to_one():
+    """Backslash and forward-slash variants of the same command dedup to one entry."""
+    settings = {
+        "hooks": {
+            "UserPromptSubmit": [
+                {"hooks": [{"type": "command", "command": 'py "C:\\claude\\hooks/run.py" UserPromptSubmit'}]},
+                {"hooks": [{"type": "command", "command": 'py "C:\\claude\\hooks\\run.py" UserPromptSubmit'}]},
+            ]
+        }
+    }
+    result = dedup_hooks_by_normalized_command(settings)
+    entries = result["hooks"]["UserPromptSubmit"]
+    assert len(entries) == 1, f"Expected 1 entry after dedup, got {len(entries)}"
+
+
+def test_dedup_different_matchers_not_removed():
+    """Entries with different matchers are never collapsed, even with identical commands."""
+    cmd = 'py "C:\\claude\\hooks\\dispatch\\hooks.py" PostToolUse'
+    settings = {
+        "hooks": {
+            "PostToolUse": [
+                {"matcher": "Skill", "hooks": [{"type": "command", "command": cmd}]},
+                {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": cmd}]},
+                {"matcher": "Read", "hooks": [{"type": "command", "command": cmd}]},
+            ]
+        }
+    }
+    result = dedup_hooks_by_normalized_command(settings)
+    entries = result["hooks"]["PostToolUse"]
+    assert len(entries) == 3, f"Expected 3 distinct matcher entries, got {len(entries)}"
+
+
+def test_dedup_same_matcher_same_command_different_slash_style():
+    """Same matcher + slash-variant command collapses to one entry."""
+    settings = {
+        "hooks": {
+            "PostToolUse": [
+                {"matcher": "Skill", "hooks": [{"type": "command", "command": 'py "C:\\hooks/run.py"'}]},
+                {"matcher": "Skill", "hooks": [{"type": "command", "command": 'py "C:\\hooks\\run.py"'}]},
+            ]
+        }
+    }
+    result = dedup_hooks_by_normalized_command(settings)
+    entries = result["hooks"]["PostToolUse"]
+    assert len(entries) == 1, f"Expected 1 entry after dedup, got {len(entries)}"
+
+
+def test_second_install_after_dedup_fix_produces_correct_hook_counts(
+    config_root, canonical_root, ds_home
+):
+    """Reinstall on top of backslash-path settings produces 2/2/2/4 hook entries."""
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+
+    # Mutate all installed hook commands to use backslashes, simulating a prior
+    # install that wrote all-backslash paths (different from the mixed/forward-slash
+    # paths the template now generates).
+    settings_path = config_root / "settings.json"
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    for entries in settings.get("hooks", {}).values():
+        for entry in entries:
+            for h in entry.get("hooks", []):
+                if isinstance(h, dict) and "command" in h:
+                    h["command"] = h["command"].replace("/", "\\")
+    settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
+    # Second install — dedup must collapse the backslash+forward-slash duplicates.
+    installer.install("execute")
+    settings2 = json.loads(settings_path.read_text(encoding="utf-8"))
+    hooks = settings2.get("hooks", {})
+
+    ups = len(hooks.get("UserPromptSubmit", []))
+    stop = len(hooks.get("Stop", []))
+    pc = len(hooks.get("PostCompact", []))
+    ptu = len(hooks.get("PostToolUse", []))
+
+    assert ups == 2, f"UserPromptSubmit: expected 2, got {ups}"
+    assert stop == 2, f"Stop: expected 2, got {stop}"
+    assert pc == 2, f"PostCompact: expected 2, got {pc}"
+    assert ptu == 3, f"PostToolUse: expected 3 (Read matcher removed), got {ptu}"
+
+
+# ── Fix verifications ─────────────────────────────────────────────────────────
+
+
+def test_packs_yaml_has_ds_website_skill_id():
+    """packs.yaml must declare skill: ds-website for the website pack."""
+    import yaml
+    packs_path = Path(__file__).resolve().parents[3] / "packs.yaml"
+    data = yaml.safe_load(packs_path.read_text(encoding="utf-8"))
+    website = data["packs"]["website"]
+    assert website["skill"] == "ds-website", (
+        f"website pack skill should be ds-website, got {website['skill']!r}"
+    )
+
+
+def test_packs_yaml_has_ds_fullstack_skill_id():
+    """packs.yaml must declare skill: ds-fullstack for the fullstack pack."""
+    import yaml
+    packs_path = Path(__file__).resolve().parents[3] / "packs.yaml"
+    data = yaml.safe_load(packs_path.read_text(encoding="utf-8"))
+    fullstack = data["packs"]["fullstack"]
+    assert fullstack["skill"] == "ds-fullstack", (
+        f"fullstack pack skill should be ds-fullstack, got {fullstack['skill']!r}"
+    )
+
+
+def test_compiled_claude_md_contains_ds_website_row(canonical_root):
+    """Compiled CLAUDE.md routing table must contain a ds-website row."""
+    from integrations.compiler.claude_code import compile_pack
+    pack = compile_pack(canonical_root)
+    claude_md = pack["files"]["CLAUDE.md"]
+    assert "ds-website" in claude_md, "Compiled CLAUDE.md does not contain ds-website routing row"
+
+
+def test_compiled_claude_md_contains_ds_fullstack_row(canonical_root):
+    """Compiled CLAUDE.md routing table must contain a ds-fullstack row."""
+    from integrations.compiler.claude_code import compile_pack
+    pack = compile_pack(canonical_root)
+    claude_md = pack["files"]["CLAUDE.md"]
+    assert "ds-fullstack" in claude_md, "Compiled CLAUDE.md does not contain ds-fullstack routing row"
+
+
+def test_execute_installs_statusline_py(config_root, canonical_root, ds_home):
+    """statusline.py must be copied to hooks/ directory during install."""
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    assert (config_root / "hooks" / "statusline.py").is_file(), (
+        "statusline.py was not installed to hooks/"
+    )
+
+
+def test_execute_settings_contains_statusline_command(config_root, canonical_root, ds_home):
+    """settings.json must contain a statusLine.command entry after install."""
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
+    assert "statusLine" in settings, "settings.json missing statusLine key"
+    assert settings["statusLine"].get("command"), "statusLine.command is empty or missing"
+
+
+def test_execute_statusline_command_has_no_placeholders(config_root, canonical_root, ds_home):
+    """statusLine.command must have {hooks_dir} and {python_cmd} resolved after install."""
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
+    cmd = settings.get("statusLine", {}).get("command", "")
+    assert "{hooks_dir}" not in cmd, "statusLine.command still contains {hooks_dir} placeholder"
+    assert "{python_cmd}" not in cmd, "statusLine.command still contains {python_cmd} placeholder"
+
+
+def test_statusline_py_contains_get_plugin_root():
+    """canonical/adapters/claude/statusline.py must contain _get_plugin_root function."""
+    statusline_path = Path(__file__).resolve().parents[3] / "canonical" / "adapters" / "claude" / "statusline.py"
+    assert statusline_path.is_file(), "canonical/adapters/claude/statusline.py not found"
+    content = statusline_path.read_text(encoding="utf-8")
+    assert "_get_plugin_root" in content, "statusline.py missing _get_plugin_root function"
+
+
+def test_readme_contains_jq_instructions():
+    """README.md must contain jq installation instructions."""
+    readme_path = Path(__file__).resolve().parents[3] / "README.md"
+    content = readme_path.read_text(encoding="utf-8")
+    assert "jq" in content, "README.md does not mention jq"
+    assert "winget install jqlang.jq" in content, "README.md missing Windows jq install command"
+
+
+def test_first_run_guide_contains_config_json_step():
+    """_FIRST_RUN_GUIDE_TEXT must contain the config.json personalization step."""
+    from integrations.installer.claude_code import _FIRST_RUN_GUIDE_TEXT
+    assert "config.json" in _FIRST_RUN_GUIDE_TEXT, (
+        "_FIRST_RUN_GUIDE_TEXT missing config.json step 0"
+    )
+    assert "director_name" in _FIRST_RUN_GUIDE_TEXT, (
+        "_FIRST_RUN_GUIDE_TEXT missing director_name field reference"
+    )

@@ -113,7 +113,12 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                     continue
                 if "no such module" in msg:
                     continue
-                if "no such table" in msg and ("fts_gotchas" in msg or "memory_entries" in msg):
+                if "no such table" in msg and (
+                    "fts_gotchas" in msg
+                    or "memory_entries" in msg
+                    or "ds_documents" in msg
+                    or "canonical_events" in msg
+                ):
                     continue
                 raise
 

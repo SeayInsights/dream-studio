@@ -28,6 +28,11 @@ def main() -> None:
         except Exception:
             tool_input = {}
 
+    _PROTECTED_PATHS = ["settings.json", "settings.local.json", "CLAUDE.md"]
+    _file_path = (tool_input.get("file_path") or tool_input.get("path") or "").replace("\\", "/")
+    if any(p in _file_path for p in _PROTECTED_PATHS):
+        return
+
     tool_tracking.maybe_harden_nudge(tool_name, tool_input)
     tool_tracking.maybe_security_suggest(tool_name, tool_input)
     tool_tracking.update_activity_feed(tool_name, tool_input)

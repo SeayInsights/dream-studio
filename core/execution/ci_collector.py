@@ -13,8 +13,10 @@ from typing import Optional, List, Dict
 from datetime import datetime, timezone
 
 from core.decisions import emit_decision
-from core.events import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from canonical.events.redactor import redact_file_path, redact_bash_command
+from emitters.shared.spool_writer import write_envelopes
 
 
 @dataclass
@@ -149,12 +151,13 @@ class CICollector:
             source_subsystem="execution.ci_collector",
         )
 
-        # Event: For analytics consumption
-        emit_event(
-            event_type=EventType.TESTS_EXECUTED,
+        # Event: For analytics consumption — via spool pipeline (Slice 3)
+        _env = CanonicalEventEnvelope(
+            event_type=CanonicalEventType.TESTS_EXECUTED.value,
+            session_id=None,
             payload={
-                "repo_path": str(self.repo_path),
-                "test_command": test_command,
+                "repo_path": redact_file_path(str(self.repo_path)),
+                "test_command": redact_bash_command(test_command),
                 "status": result.status,
                 "test_count": result.test_count,
                 "passed": result.passed_count,
@@ -162,7 +165,10 @@ class CICollector:
                 "duration": result.duration,
                 "tests_run": result.tests_run,
             },
+            confidence="unavailable",
+            project_id=None,
         )
+        write_envelopes([_env])
 
         return result
 

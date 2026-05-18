@@ -7,9 +7,7 @@ Demonstrates how to:
 3. Handle unknown model types with fallback
 """
 
-from interfaces.adapters.default_adapter import DefaultAdapter
-from interfaces.adapters.gpt_adapter import GPTAdapter
-from interfaces.adapters.normalizer import EventNormalizer
+from core.adapters.normalizers import DefaultAdapter, GPTAdapter, EventNormalizer
 
 
 def main():

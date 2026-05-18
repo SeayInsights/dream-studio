@@ -19,9 +19,9 @@ if str(hooks_dir) not in sys.path:
 
 from core.config.database import transaction, get_connection
 
-# Phase 1 Wave 1.5: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 
 
 def _emit_metric(event: str, data: dict) -> None:
@@ -565,15 +565,14 @@ def save_to_cache(
 
     with transaction() as c:
         if emit_events:
-            # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.RESEARCH_CACHE_CLEARED,
-                payload={
-                    "topic": topic_key,
-                },
-                severity="info",
-                source_type="research_web",
-            )
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
+                session_id=None,
+                payload={"topic": topic_key},
+                confidence="unavailable",
+                project_id=None,
+            )])
 
         # Delete existing entry if present, then insert new one
         c.execute("DELETE FROM research_cache WHERE topic = ?", (topic_key,))
@@ -584,9 +583,10 @@ def save_to_cache(
         cache_id = hashlib.sha256(topic_key.encode()).hexdigest()[:16]
 
         if emit_events:
-            # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.RESEARCH_CACHE_STORED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.RESEARCH_CACHE_STORED.value,
+                session_id=None,
                 payload={
                     "cache_id": cache_id,
                     "topic": topic_key,
@@ -595,9 +595,9 @@ def save_to_cache(
                     "triangulation_score": report.triangulation,
                     "ttl_days": ttl_days,
                 },
-                severity="info",
-                source_type="research_web",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
         c.execute(
             """
@@ -739,15 +739,14 @@ def invalidate_cache(topic: str, *, emit_events: bool = True) -> None:
     topic_key = topic.strip().lower()
 
     if emit_events:
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.RESEARCH_CACHE_CLEARED,
-            payload={
-                "topic": topic_key,
-            },
-            severity="info",
-            source_type="research_web",
-        )
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
+            session_id=None,
+            payload={"topic": topic_key},
+            confidence="unavailable",
+            project_id=None,
+        )])
 
     with transaction() as c:
         rows_deleted = c.execute(

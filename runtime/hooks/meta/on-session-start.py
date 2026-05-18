@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from core.event_store.studio_db import (
@@ -12,6 +13,12 @@ from core.event_store.studio_db import (
     set_sentinel,
     upsert_project,
 )  # noqa: E402
+
+# --- resolve session_config via installed layout ---
+_meta_dir = Path(__file__).parent
+_runtime_dir = _meta_dir.parent.parent  # ~/.claude/hooks/runtime/
+if str(_runtime_dir) not in sys.path:
+    sys.path.insert(0, str(_runtime_dir))
 
 
 def main() -> None:
@@ -27,8 +34,9 @@ def main() -> None:
     if has_sentinel(sentinel_key):
         return
     project_id = Path.cwd().name
+    cwd = str(Path.cwd())
     try:
-        upsert_project(project_id, str(Path.cwd()))
+        upsert_project(project_id, cwd)
     except Exception:
         pass
     try:
@@ -37,6 +45,20 @@ def main() -> None:
         pass
     try:
         set_sentinel(sentinel_key, "session")
+    except Exception:
+        pass
+
+    # --- write session config for continuation spawner ---
+    try:
+        from session_config import detect_invocation_flags, write_session_config
+        flags = detect_invocation_flags()
+        write_session_config(session_id, {
+            "session_id": session_id,
+            "invocation_flags": flags,
+            "cwd": cwd,
+            "timestamp": int(time.time()),
+            "continuation_count": 0,
+        })
     except Exception:
         pass
 

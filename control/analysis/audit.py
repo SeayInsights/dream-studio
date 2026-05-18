@@ -14,9 +14,9 @@ def analyze_complexity(file_path: Path) -> dict:
     return {"god_functions": []}
 
 
-# Phase 1 Wave 1.5: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 
 
 def audit_architecture(
@@ -250,16 +250,17 @@ def _store_violations(violations: List[Dict]) -> None:
             "missing_error_handling": "style",
         }
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.AUDIT_VIOLATIONS_CLEARED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.AUDIT_VIOLATIONS_CLEARED.value,
+            session_id=None,
             payload={
                 "project_id": "dream-studio",
                 "violation_count": len(violations),
             },
-            severity="info",
-            source_type="audit_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             # Clear existing violations for this project to avoid duplicates
@@ -273,9 +274,10 @@ def _store_violations(violations: List[Dict]) -> None:
                 description = f"[{specific_type}] {v.get('description', '')}"
                 violation_id = f"viol-{abs(hash(str(v)))}"
 
-                # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-                emit_event(
-                    event_type=EventType.AUDIT_VIOLATION_FOUND,
+                # Slice 3: Emit event via spool pipeline
+                write_envelopes([CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.AUDIT_VIOLATION_FOUND.value,
+                    session_id=None,
                     payload={
                         "violation_id": violation_id,
                         "project_id": "dream-studio",
@@ -287,8 +289,9 @@ def _store_violations(violations: List[Dict]) -> None:
                         "impact": v.get("impact"),
                     },
                     severity=v.get("severity", "low"),
-                    source_type="audit_engine",
-                )
+                    confidence="unavailable",
+                    project_id=None,
+                )])
 
                 conn.execute(
                     """
@@ -341,16 +344,17 @@ def _store_improvements(improvements: List[Dict]) -> None:
             "add_tests": "test_coverage",
         }
 
-        # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-        emit_event(
-            event_type=EventType.AUDIT_IMPROVEMENTS_CLEARED,
+        # Slice 3: Emit event via spool pipeline
+        write_envelopes([CanonicalEventEnvelope(
+            event_type=CanonicalEventType.AUDIT_IMPROVEMENTS_CLEARED.value,
+            session_id=None,
             payload={
                 "project_id": "dream-studio",
                 "improvement_count": len(improvements),
             },
-            severity="info",
-            source_type="audit_engine",
-        )
+            confidence="unavailable",
+            project_id=None,
+        )])
 
         with transaction() as conn:
             # Clear existing improvements for this project to avoid duplicates
@@ -364,9 +368,10 @@ def _store_improvements(improvements: List[Dict]) -> None:
                 recommendation = f"[{specific_type}] {imp.get('recommendation', '')}"
                 improvement_id = f"imp-{abs(hash(str(imp)))}"
 
-                # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-                emit_event(
-                    event_type=EventType.AUDIT_IMPROVEMENT_FOUND,
+                # Slice 3: Emit event via spool pipeline
+                write_envelopes([CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.AUDIT_IMPROVEMENT_FOUND.value,
+                    session_id=None,
                     payload={
                         "improvement_id": improvement_id,
                         "project_id": "dream-studio",
@@ -377,9 +382,9 @@ def _store_improvements(improvements: List[Dict]) -> None:
                         "recommendation": recommendation,
                         "benefit": imp.get("benefit"),
                     },
-                    severity="info",
-                    source_type="audit_engine",
-                )
+                    confidence="unavailable",
+                    project_id=None,
+                )])
 
                 conn.execute(
                     """
