@@ -148,11 +148,14 @@ def write_handoff(
         print(f"[on-context-threshold] handoff write failed: {e}", file=sys.stderr, flush=True)
         return None
 
-    print(
-        f"\n  -> HANDOFF written: {handoff_path}\n"
-        f"  -> Open a new session and resume from this file.\n",
-        flush=True,
-    )
+    # Only surface the "open a new session" message for context-overflow handoffs,
+    # not routine session-end saves (kb=0 sentinel from write_session_handoff).
+    if kb > 0:
+        print(
+            f"\n  -> HANDOFF written: {handoff_path}\n"
+            f"  -> Open a new session and resume from this file.\n",
+            flush=True,
+        )
     return handoff_path
 
 
