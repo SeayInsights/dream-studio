@@ -3,9 +3,9 @@
 import sys
 from pathlib import Path
 
-# Phase 1 Wave 1.5: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 
 # Ensure project root is in path for event store imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -102,9 +102,10 @@ def validate_session_research(session_id: str) -> None:
                     else max(current_trust - 0.2, 0.0)
                 )
 
-                # Phase 1 Wave 1.5: Emit event BEFORE database write (dual-write pattern)
-                emit_event(
-                    event_type=EventType.RESEARCH_VALIDATED,
+                # Phase 1 Wave 1.5 → Slice 3: Emit event via spool pipeline
+                _env = CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.RESEARCH_VALIDATED.value,
+                    session_id=session_id,
                     payload={
                         "research_id": research_id,
                         "validation_status": new_status,
@@ -113,8 +114,10 @@ def validate_session_research(session_id: str) -> None:
                         "session_id": session_id,
                     },
                     severity="info",
-                    source_type="session_manager",
+                    confidence="exact",
+                    project_id=None,
                 )
+                write_envelopes([_env])
 
                 cursor.execute(
                     "UPDATE raw_research SET validation_status = ?, trust_score = ?, validated_by = ?, validated_at = datetime('now') WHERE research_id = ?",

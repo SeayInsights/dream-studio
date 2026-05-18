@@ -6,10 +6,12 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_PLUGIN_ROOT = Path(__file__).resolve().parents[3]
+if str(_PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT))
 
 from control.context import pack as pack_context  # noqa: E402
-from domain_lib import game_validate_orchestrator  # noqa: E402
+from runtime.lib.domains import game_validate_orchestrator  # noqa: E402
 
 
 def main() -> None:

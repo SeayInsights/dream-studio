@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 
 from core.config.database import transaction, get_connection
 
-# Phase 1 Wave 1: EventStore Migration
-from core.events.emitter import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes
 
 
 def _generate_workflow_id(workflow_chain: list[str]) -> str:
@@ -66,9 +66,10 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
                 success_count += 1
             total_count += 1
 
-            # Phase 1 Wave 1: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.WORKFLOW_LEARNED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
+                session_id=None,
                 payload={
                     "workflow_id": workflow_id,
                     "workflow_chain": workflow_chain,
@@ -78,9 +79,9 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
                     "success_rate": success_count / total_count if total_count > 0 else 0.0,
                     "is_new_workflow": False,
                 },
-                severity="info",
-                source_type="workflow_learning",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
             # Keep existing DB write (dual-write)
             conn.execute(
@@ -102,9 +103,10 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
                     pack = first_skill.split(":")[1].split()[0]
                     category = pack
 
-            # Phase 1 Wave 1: Emit event BEFORE database write (dual-write pattern)
-            emit_event(
-                event_type=EventType.WORKFLOW_LEARNED,
+            # Slice 3: Emit event via spool pipeline
+            write_envelopes([CanonicalEventEnvelope(
+                event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
+                session_id=None,
                 payload={
                     "workflow_id": workflow_id,
                     "workflow_chain": workflow_chain,
@@ -115,9 +117,9 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
                     "category": category,
                     "is_new_workflow": True,
                 },
-                severity="info",
-                source_type="workflow_learning",
-            )
+                confidence="unavailable",
+                project_id=None,
+            )])
 
             # Keep existing DB write (dual-write)
             conn.execute(

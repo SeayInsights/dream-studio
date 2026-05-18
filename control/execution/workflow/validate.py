@@ -119,19 +119,19 @@ def _parse_scalar(val: str):
 
 
 def _resolve_skill(skill: str, plugin_root: Path) -> Path | None:
-    """Find SKILL.md for a skill name, checking both flat and pack/mode layouts."""
-    flat = plugin_root / "skills" / skill / "SKILL.md"
-    if flat.is_file():
-        return flat
-    skills_dir = plugin_root / "skills"
-    if not skills_dir.is_dir():
-        return None
-    for pack_dir in skills_dir.iterdir():
-        if not pack_dir.is_dir():
+    """Find SKILL.md for a skill name, checking canonical/skills/ and skills/."""
+    for skills_base in (plugin_root / "canonical" / "skills", plugin_root / "skills"):
+        flat = skills_base / skill / "SKILL.md"
+        if flat.is_file():
+            return flat
+        if not skills_base.is_dir():
             continue
-        mode_path = pack_dir / "modes" / skill / "SKILL.md"
-        if mode_path.is_file():
-            return mode_path
+        for pack_dir in skills_base.iterdir():
+            if not pack_dir.is_dir():
+                continue
+            mode_path = pack_dir / "modes" / skill / "SKILL.md"
+            if mode_path.is_file():
+                return mode_path
     return None
 
 

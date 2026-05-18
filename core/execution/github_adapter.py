@@ -12,8 +12,10 @@ from typing import Optional, Dict, List
 from datetime import datetime, timezone
 
 from core.decisions import emit_decision
-from core.events import emit_event
-from core.events.types import EventType
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as CanonicalEventType
+from canonical.events.redactor import redact_url
+from emitters.shared.spool_writer import write_envelopes
 
 
 @dataclass
@@ -441,18 +443,22 @@ class GitHubAdapter:
             source_subsystem="execution.github_adapter",
         )
 
-        # Event: For analytics consumption
-        emit_event(
-            event_type=EventType.EXECUTION_COMPLETE,
+        # Event: For analytics consumption — via spool pipeline (Slice 3)
+        _env = CanonicalEventEnvelope(
+            event_type=CanonicalEventType.EXECUTION_COMPLETE.value,
+            session_id=None,
             payload={
                 "action_id": action_id,
                 "branch_name": branch_name,
                 "pr_number": pr_number,
-                "pr_url": pr_url,
+                "pr_url": redact_url(pr_url),
                 "commit_sha": commit_sha,
                 "files_changed": diff_stats.files_changed if diff_stats else 0,
                 "status": "success",
             },
+            confidence="unavailable",
+            project_id=None,
         )
+        write_envelopes([_env])
 
         return result

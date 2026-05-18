@@ -82,15 +82,5 @@
         "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostToolUse"
       }
     ]
-  },
-  {
-    "event": "PostToolUse",
-    "matcher": "Read",
-    "hooks": [
-      {
-        "type": "command",
-        "command": "{python_cmd} \"{hooks_dir}/dispatch/hooks.py\" PostToolUse"
-      }
-    ]
   }
 ]

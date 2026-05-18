@@ -190,9 +190,9 @@ def _resolve_skill_md(skill_specifier: str) -> Path | None:
     """Resolve a skill specifier to its SKILL.md path.
 
     Accepts:
-      "ds-quality debug"  → skills/quality/modes/debug/SKILL.md
-      "ds-core think"     → skills/core/modes/think/SKILL.md
-      "quality debug"               → skills/quality/modes/debug/SKILL.md
+      "ds-quality debug"  → canonical/skills/quality/modes/debug/SKILL.md
+      "ds-core think"     → canonical/skills/core/modes/think/SKILL.md
+      "quality debug"               → canonical/skills/quality/modes/debug/SKILL.md
       "debug"                       → searches all packs for modes/debug/SKILL.md
     """
     try:
@@ -207,13 +207,27 @@ def _resolve_skill_md(skill_specifier: str) -> Path | None:
     parts = spec.split(None, 1)
     if len(parts) == 2:
         pack, mode = parts[0], parts[1]
-        candidate = root / "skills" / pack / "modes" / mode / "SKILL.md"
+        candidate = root / "canonical" / "skills" / pack / "modes" / mode / "SKILL.md"
         if candidate.is_file():
             return candidate
+        # Check skill_path override for non-standard pack layouts (website, fullstack)
+        packs_yaml_path = root / "packs.yaml"
+        if packs_yaml_path.is_file() and _yaml is not None:
+            try:
+                _pd = _yaml.safe_load(packs_yaml_path.read_text(encoding="utf-8")) or {}
+                _pack_info = _pd.get("packs", {}).get(pack)
+                if _pack_info:
+                    _sp = _pack_info.get("skill_path")
+                    if _sp:
+                        candidate = root / _sp / "modes" / mode / "SKILL.md"
+                        if candidate.is_file():
+                            return candidate
+            except Exception:
+                pass
 
     # Single token — try as mode name across all packs
     mode_name = parts[-1] if parts else spec
-    skills_dir = root / "skills"
+    skills_dir = root / "canonical" / "skills"
     if skills_dir.is_dir():
         for pack_dir in skills_dir.iterdir():
             if not pack_dir.is_dir():
@@ -233,8 +247,8 @@ def _plugin_root_cached() -> Path:
 
             _plugin_root_cached._val = paths.plugin_root()
         except Exception:
-            candidate = Path(__file__).resolve().parents[2]
-            if (candidate / "skills").is_dir():
+            candidate = Path(__file__).resolve().parents[3]
+            if (candidate / "canonical" / "skills").is_dir() or (candidate / "skills").is_dir():
                 _plugin_root_cached._val = candidate
             else:
                 raise

@@ -34,7 +34,7 @@ This slice is source-only. The canonical contract definitions live in:
 `core/shared_intelligence/workflow_skill_contracts.py`
 
 That module does not import SQLite, inspect runtime state, run migrations, or
-write to `C:\Users\Dannis Seay\.dream-studio`. Runtime persistence can be added
+write to `~/.dream-studio`. Runtime persistence can be added
 later through an explicitly approved additive migration, but this first slice
 keeps contract authority in repo source so tests can enforce the shape before
 any database writes exist.

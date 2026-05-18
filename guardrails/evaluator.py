@@ -25,9 +25,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from core.event_store.studio_db import get_connection  # noqa: E402
-from core.events.emitter import emit_event  # noqa: E402
-from core.events.types import EventType  # noqa: E402
 from core.decisions import emit_decision  # noqa: E402
+from canonical.events.envelope import CanonicalEventEnvelope  # noqa: E402
+from canonical.events.types import EventType as CanonicalEventType  # noqa: E402
+from emitters.shared.spool_writer import write_envelopes  # noqa: E402
 
 from .loader import load_rules  # noqa: E402
 from .models import EvaluationError, GuardrailAction, GuardrailDecision  # noqa: E402
@@ -297,8 +298,9 @@ def log_decision(decision: GuardrailDecision, conn) -> None:
         conn: Database connection
     """
     # Emit event for compliance audit trail BEFORE DB write (STABILITY: fail if event fails)
-    event_success = emit_event(
-        event_type=EventType.GUARDRAIL_DECISION,
+    envelope = CanonicalEventEnvelope(
+        event_type=CanonicalEventType.GUARDRAIL_DECISION.value,
+        session_id=None,
         payload={
             "decision_id": decision.decision_id,
             "rule_id": decision.rule_id,
@@ -307,14 +309,19 @@ def log_decision(decision: GuardrailDecision, conn) -> None:
             "message": decision.message,
         },
         severity=decision.metadata.get("severity", "info") if decision.metadata else "info",
-        source_type="guardrails",
+        confidence="unavailable",
+        project_id=None,
     )
-
-    if not event_success:
+    try:
+        write_envelopes([envelope])
+    except Exception:
+        # spool write failure means the event will not reach SQLite;
+        # the calling operation must abort to preserve audit/consistency invariants.
         raise RuntimeError(
             f"Event emission failed for GUARDRAIL_DECISION (decision_id={decision.decision_id}). "
             f"Aborting guardrail logging to prevent compliance audit gap."
         )
+    event_id = envelope.event_id
 
     conn.execute(
         """

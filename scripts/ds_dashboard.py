@@ -1,3 +1,5 @@
+# DUPLICATE: Canonical location is interfaces/cli/ds_dashboard.py.
+# This scripts/ copy is a compatibility shim. Do not add logic here.
 """Compatibility shim — delegates to interfaces/cli/ds_dashboard.py.
 
 External docs and CLAUDE.md reference ``scripts/ds_dashboard.py``.

@@ -1,3 +1,6 @@
+# DEPRECATED: Superseded by integrations/integration_alignment.py.
+# Retained for backward compatibility during Slice 1-2 transition.
+# Scheduled for deletion in Slice 2 after test suite green.
 """Adapter authority alignment helpers.
 
 Adapters are projections over Dream Studio authority. This module registers and

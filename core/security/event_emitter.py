@@ -1,14 +1,18 @@
 """Security event emission for canonical_events.
 
-Routes all security events through the canonical emit_event() path,
+Routes all security events through the canonical spool pipeline (Slice 3),
 ensuring consistent validation, persistence, and criticality handling.
+
+Note: emission flows through the spool pipeline, not direct to SQLite.
 """
 
 from uuid import uuid4
 import logging
 from typing import Dict, Any, Optional
 
-from core.events.emitter import emit_event
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.redactor import redact_file_path
+from emitters.shared.spool_writer import write_envelopes
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,7 @@ def emit_security_event(
     conn=None,
     validate: bool = True,
 ) -> Optional[str]:
-    """Emit security event through canonical event path.
+    """Emit security event through canonical spool pipeline.
 
     Args:
         event_type: Event type suffix (will be prefixed with 'security.')
@@ -31,19 +35,24 @@ def emit_security_event(
     """
     full_event_type = f"security.{event_type}"
 
-    return emit_event(
+    envelope = CanonicalEventEnvelope(
         event_type=full_event_type,
+        session_id=None,
         payload=payload,
         severity=severity,
+        confidence="unavailable",
+        project_id=None,
         trace={"source": "security_scanner"},
     )
+    write_envelopes([envelope])
+    return envelope.event_id
 
 
 def emit_scan_started(scan_id: str, prd_id: str, project_path: str, conn=None):
     """Emit scan started event."""
     emit_security_event(
         "scan.started",
-        {"scan_id": scan_id, "prd_id": prd_id, "project_path": project_path},
+        {"scan_id": scan_id, "prd_id": prd_id, "project_path": redact_file_path(project_path)},
         conn=conn,
     )
 
@@ -105,12 +114,12 @@ def emit_finding_detected(finding: "SecurityFinding", scan_context: dict, conn=N
         "confidence": finding.confidence,
         "title": finding.title,
         "description": finding.description,
-        "file_path": finding.file_path,
+        "file_path": redact_file_path(finding.file_path),
         "line_start": finding.line_start,
         "line_end": finding.line_end,
         "column_start": getattr(finding, "column_start", None),
         "column_end": getattr(finding, "column_end", None),
-        "code_snippet": finding.code_snippet,
+        "code_retained": False,  # code_snippet dropped for ODP-9 compliance
         "rule_id": finding.rule_id,
         "rule_name": getattr(finding, "rule_name", finding.rule_id),
         "cwe_id": finding.cwe_id,

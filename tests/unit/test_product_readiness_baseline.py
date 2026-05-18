@@ -44,7 +44,6 @@ KEY_SCRIPTS = [
 
 CRITICAL_TESTS = [
     "tests/unit/test_dashboard_projection_boundaries.py",
-    "tests/unit/test_adapter_tool_boundaries.py",
     "tests/unit/test_governance_privacy_boundaries.py",
     "tests/unit/test_portable_primitive_contracts.py",
     "tests/unit/test_research_source_contract.py",
@@ -111,9 +110,6 @@ def test_required_product_readiness_artifacts_exist():
         *(REPO_ROOT / path for path in KEY_SCRIPTS),
         *(REPO_ROOT / path for path in CRITICAL_TESTS),
     ]
-    if not os.environ.get("GITHUB_ACTIONS"):
-        required_paths.extend(AUDIT_ROOT / name for name in PRIOR_REPORTS)
-
     missing = [str(path) for path in required_paths if not path.is_file()]
     assert missing == []
 

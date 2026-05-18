@@ -15,7 +15,6 @@ import json
 import logging
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -219,72 +218,37 @@ class TestDerivesFromCanonicalTaxonomy:
 
 
 # ── Emitter integration ───────────────────────────────────────────────────────
+# Note: core.events.emitter (emit_event) deleted in Slice 3.
+# Advisory validation is now used directly by spool-based emitters.
+# The advisory module itself is still tested above.
 
 
 class TestEmitterIntegration:
-    def test_emitter_imports_advisory(self):
-        """The emitter module imports advisory validation without error."""
-        import core.events.emitter  # noqa: F401
+    """Verify advisory validation works standalone (without the old emitter)."""
 
-    def test_known_type_no_advisory_warning(self, taxonomy_file, caplog):
-        """Known event types do not produce advisory warnings in emit_event."""
+    def test_advisory_module_imports_cleanly(self):
+        """Advisory module can be imported without core.events.emitter."""
+        from core.events.event_type_advisory import validate_event_type_advisory  # noqa: F401
+
+    def test_known_type_no_advisory_result(self, taxonomy_file):
+        """Known event types return is_registered=True."""
         reset_cache()
-        get_registered_event_types(taxonomy_file)
+        result = validate_event_type_advisory("analysis.started", taxonomy_file)
+        assert result.is_registered is True
+        assert result.message is None
 
-        with caplog.at_level(logging.WARNING, logger="core.events.emitter"):
-            with patch("core.events.emitter._get_event_store") as mock_store:
-                mock_store.return_value.write_event.return_value = True
-                with patch(
-                    "core.events.emitter.validate_event_type_advisory",
-                    wraps=validate_event_type_advisory,
-                ) as mock_advisory:
-                    mock_advisory.return_value = AdvisoryResult(
-                        is_registered=True, event_type="analysis.started"
-                    )
-                    from core.events.emitter import emit_event
+    def test_unknown_type_advisory_result(self, taxonomy_file):
+        """Unknown types return is_registered=False with a message."""
+        reset_cache()
+        result = validate_event_type_advisory("fake.unknown.type", taxonomy_file)
+        assert result.is_registered is False
+        assert result.message is not None
 
-                    emit_event("analysis.started", {"test": True})
-
-        assert "Advisory:" not in caplog.text
-
-    def test_unknown_type_logs_advisory_warning(self, taxonomy_file, caplog):
-        """Unknown event types produce advisory warning but emission continues."""
-        from core.events.emitter import emit_event
-
-        with caplog.at_level(logging.WARNING, logger="core.events.emitter"):
-            with patch("core.events.emitter._get_event_store") as mock_store:
-                mock_store.return_value.write_event.return_value = True
-                with patch(
-                    "core.events.emitter.validate_event_type_advisory",
-                ) as mock_advisory:
-                    mock_advisory.return_value = AdvisoryResult(
-                        is_registered=False,
-                        event_type="fake.unknown.type",
-                        message="Event type 'fake.unknown.type' is not registered",
-                    )
-                    result = emit_event("fake.unknown.type", {"test": True})
-
-        assert "Advisory:" in caplog.text
-        assert result is not None
-
-    def test_unknown_type_still_emits(self, taxonomy_file):
-        """Advisory validation does not block event emission."""
-        from core.events.emitter import emit_event
-
-        with patch("core.events.emitter._get_event_store") as mock_store:
-            mock_store.return_value.write_event.return_value = True
-            with patch(
-                "core.events.emitter.validate_event_type_advisory",
-            ) as mock_advisory:
-                mock_advisory.return_value = AdvisoryResult(
-                    is_registered=False,
-                    event_type="fake.type",
-                    message="Not registered",
-                )
-                result = emit_event("fake.type", {"data": 1})
-
-        mock_store.return_value.write_event.assert_called_once()
-        assert result is not None
+    def test_advisory_does_not_raise_on_unknown(self, taxonomy_file):
+        """Advisory validation never raises — it always returns an AdvisoryResult."""
+        reset_cache()
+        result = validate_event_type_advisory("totally.unknown.type", taxonomy_file)
+        assert isinstance(result, AdvisoryResult)
 
 
 # ── Existing behavior preservation ────────────────────────────────────────────
@@ -352,8 +316,9 @@ class TestNoImportCycles:
     def test_advisory_imports_cleanly(self):
         import core.events.event_type_advisory  # noqa: F401
 
-    def test_emitter_imports_cleanly(self):
-        import core.events.emitter  # noqa: F401
+    def test_spool_writer_imports_cleanly(self):
+        """Slice 3: core.events.emitter deleted; spool writer is the new canonical path."""
+        import emitters.shared.spool_writer  # noqa: F401
 
     def test_advisory_does_not_import_runtime_modules(self):
         """Advisory helper must not import heavy runtime modules."""

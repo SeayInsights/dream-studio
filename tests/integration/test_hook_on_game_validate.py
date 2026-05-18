@@ -7,12 +7,11 @@ from pathlib import Path
 
 import pytest
 
-# Import validation functions from domain_lib instead of hook module
-_DOMAIN_LIB = Path(__file__).resolve().parents[2] / "packs" / "domains" / "domain_lib"
-if str(_DOMAIN_LIB) not in sys.path:
-    sys.path.insert(0, str(_DOMAIN_LIB))
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from game_validate import (  # noqa: E402
+from runtime.lib.domains.game_validate import (  # noqa: E402
     ProjectContext,
     check_version_staleness,
     classify_path,
