@@ -276,8 +276,16 @@ Project scoped. Run `ds project next <project_id>` to start the first work order
 
 ## Resume Mode — Project Navigator
 
+> **CRITICAL: This mode is READ-ONLY until the user explicitly confirms an action.**
+> It must never invoke `ds work-order start`, `ds project next`, or any command that
+> mutates project state as part of its orientation flow. It reads and reports only.
+> All state-mutating actions require an explicit instruction from the user after
+> this briefing is delivered. "Yes", "ok", "sure", "continue", and "let's go" are
+> NOT explicit confirmation — the user must say "start" or give an unambiguous
+> instruction naming the action to take.
+
 **Trigger keywords:** resume:, pick up:, get back to:, what's next:, what's active:,
-start project:, start building:, continue:, where was I:, what am I working on:,
+start building:, continue:, where was I:, what am I working on:,
 what should I do:
 
 This mode is a **conversational navigator**. It never exposes raw JSON, UUIDs, exit
@@ -291,6 +299,7 @@ presents results in plain English.
 - Always use the full UUID internally in all CLI commands
 - If a command fails, explain what happened in plain English and suggest the fix
 - One question at a time — never ask two things in the same message
+- **Never run `ds work-order start` automatically.** Always stop and wait after the briefing.
 
 ### Flow
 
@@ -306,25 +315,45 @@ Run: `ds project list`
 
 Run: `ds project next <project_id>`
 
-Surface the result as plain English:
-> "You're working on [Project Name]. Next up: [Work Order Title] — a [work_order_type] for milestone [Milestone Name]."
+Surface the result as a plain English briefing:
+> "You're working on **[Project Name]**.
+>
+> **Milestone:** [Milestone Name]
+> **Next work order:** [Work Order Title] ([work_order_type])
+> **Status:** [open / in_progress]"
 
 If no open work orders:
 > "You're working on [Project Name] and all work orders are complete. Run `ds milestone list <project_id>` to see milestone status."
 
-**Step 3 — Confirm and start:**
+**Step 3 — Present gate and stop:**
 
-Ask: "Ready to start? I'll load the context and task list."
+After the briefing, end with this exact gate — no variations:
 
-If yes: Run `ds project start <project_id>`
+> "Type **start** to begin this work order, or ask me anything about it first.
+> No changes will be made until you confirm."
 
-**Step 4 — Confirm loaded:**
+**STOP. Do not run any further commands.** Wait for the user's response.
 
-Tell the user in plain English:
-> "Started. Your tasks are loaded. Work within [module_boundary from context.md]. When you're done, run `ds work-order close <id>`."
+**Step 4 — Start only on explicit confirmation:**
 
-Use the `work_order_id` from the `ds project start` output — but present it as a
-close command the user can copy, not as a raw UUID.
+Only proceed if the user typed "start" or gave an unambiguous instruction that
+names the action (e.g., "begin this work order", "run the start command").
+
+Do NOT treat the following as confirmation: "yes", "ok", "sure", "continue",
+"let's go", "sounds good", "go ahead". These are ambiguous and must prompt:
+> "Just to confirm — type **start** to run `ds work-order start` on [Work Order Title]."
+
+When confirmed, run:
+```
+ds work-order start <work_order_id>
+```
+
+Then tell the user:
+> "Work order started. Work within [module_boundary from context.md].
+> When you're done, run:
+> `py -m interfaces.cli.ds work-order close <work_order_id>`"
+
+Present the close command as a copyable line, not as a UUID reference.
 
 ### active project query step
 
