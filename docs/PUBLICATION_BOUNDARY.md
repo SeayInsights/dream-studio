@@ -138,3 +138,5 @@ evidence refs, and Work Order details are private unless explicitly exported
 through a sanitized profile. Public examples must be synthetic or redacted and
 must not expose private operator history, local paths, external-project details,
 career data, or unsanitized security/readiness findings.
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->

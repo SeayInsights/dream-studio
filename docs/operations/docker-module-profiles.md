@@ -83,3 +83,5 @@ The static validation suite checks that every Docker profile is optional,
 declares fallback behavior, does not mount host state by default, does not
 create an authority database, uses an explicit SQLite authority path, and
 forbids host writes by default.
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->

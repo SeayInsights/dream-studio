@@ -63,3 +63,5 @@ exports.
 Final installed-platform closeout should remain private dogfood evidence until
 the operator explicitly chooses public release. The public repo can state that
 the closeout route exists and requires operator approval before publication.
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->

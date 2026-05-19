@@ -230,3 +230,5 @@ PRD lifecycle source or route changes are release-gate relevant when they add
 schema, dashboard routes, context-packet fields, or Contract Atlas sections.
 They must keep Black and lint-baseline checks clean, refresh the PRD lifecycle
 docs, and prove docs drift without weakening unrelated release-gate checks.
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->

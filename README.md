@@ -332,3 +332,5 @@ Dream Studio extracts error patterns, skill usage, architecture documents, and t
 Licensed under **Apache-2.0**. See `LICENSE` for the full text.
 
 Dream Studio maintains a Contract Atlas — a registry of integration boundaries, adapter surface contracts, and stability guarantees for each compiler/installer pair. Adapters that implement the Contract Atlas interface are covered by the Publication Boundary: canonical skill definitions, the packs.yaml schema, the SQLite schema, and the CLI public command surface are stable across minor versions. Private runtime state in `~/.dream-studio/` is not covered.
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->

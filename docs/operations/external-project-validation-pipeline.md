@@ -76,3 +76,5 @@ Static validation checks that:
 - private target artifacts are excluded from target Git tracking
 - Work Order evidence includes a target repo mutation evaluation
 - dashboard cards are derived and non-authoritative
+
+<!-- Last reviewed 2026-05-19 — CI step `Validate plugin manifest` removed; plugin deployment surfaces were retired in aa24ba8 and no policy change is required here. -->
