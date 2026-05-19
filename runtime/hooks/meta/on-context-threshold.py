@@ -111,8 +111,11 @@ def _write_pending_handoff(session_id: str, session_config: dict) -> None:
 
 
 def main() -> None:
-    raw = sys.stdin.read() or "{}"
-    data = json.loads(raw)
+    raw = sys.stdin.read().lstrip("﻿") or "{}"
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = {}
 
     session_id = (
         data.get("session_id")
@@ -165,4 +168,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        pass
