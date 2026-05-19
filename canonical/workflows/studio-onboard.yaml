@@ -846,9 +846,103 @@ nodes:
     context: fresh
     timeout_seconds: 300
 
-  # ── PHASE 7: SCHEDULE SELF-AUDIT ─────────────────────────────────────
-  - id: schedule-self-audit
+  # ── PHASE 7: END-TO-END SMOKE TEST ──────────────────────────────────
+  - id: smoke-test
+    name: End-to-End Smoke Test
+    type: command
     depends_on: [final-report]
+    output_key: smoke_test_results
+    command: |
+      Run the following checks in order.
+      Record pass/fail for each.
+      Never abort early — run all checks even if some fail.
+
+      CHECK 1 — Doctor passes
+      Run: py -m interfaces.cli.ds doctor
+      Pass: status is "pass"
+      Fail: status is "fail"
+
+      CHECK 2 — Stop hooks all exit 0
+      For each handler in the Stop dispatcher:
+      on-session-end, on-skill-telemetry, on-token-log, on-meta-review,
+      on-session-start, on-prompt-validate, on-context-threshold,
+      on-edit-dispatch, on-tool-activity
+
+      Run each with empty JSON input:
+        echo '{}' | py <handler-path>
+      Pass: exit code 0 for all
+      Fail: any exit code non-zero — note which
+
+      CHECK 3 — UserPromptSubmit hook exits 0
+        echo '{}' | py ~/.claude/hooks/run.py
+      Pass: exit code 0
+      Fail: exit code non-zero
+
+      CHECK 4 — statusLine produces output
+        echo '{"context_window": {"used_percentage": 50}, "model": {"display_name": "Test"}}' |
+        py ~/.claude/hooks/statusline.py
+      Pass: output contains "Test" and "%"
+      Fail: empty output or error
+
+      CHECK 5 — project next respects milestone order
+      Only run if an active project exists in SQLite.
+      Query: SELECT id FROM ds_projects WHERE status='active' LIMIT 1
+      If no active project: SKIP (not fail)
+      If active project exists:
+        Run: ds project next <project-id>
+        Pass: returns a work order
+        Fail: returns error or empty
+
+      CHECK 6 — Hook counts correct
+      Read ~/.claude/settings.json
+      Pass: UserPromptSubmit has 2 hooks, Stop has 2, PostCompact has 2, PostToolUse has 3
+      Fail: any count is wrong
+
+      After all checks produce a summary:
+
+      SMOKE TEST RESULTS
+      ==================
+      CHECK 1 Doctor:          PASS/FAIL
+      CHECK 2 Stop hooks:      PASS/FAIL
+      CHECK 3 Prompt hook:     PASS/FAIL
+      CHECK 4 StatusLine:      PASS/FAIL
+      CHECK 5 Project next:    PASS/FAIL/SKIP
+      CHECK 6 Hook counts:     PASS/FAIL
+
+      Score: N/6 checks passed
+
+      If score is 6/6 (or 5/6 with check 5 skipped): SMOKE_PASS — proceed to schedule-self-audit
+
+      If score is below 5/6: SMOKE_FAIL — surface specific remediation for each failed check
+      before proceeding:
+
+      CHECK 2 failures: Run
+        py -m interfaces.cli.ds integrate install claude_code --execute
+        Then re-run failed handlers manually to confirm exit 0.
+
+      CHECK 3 failure: Check
+        ~/.claude/hooks/run.py exists and .plugin-root sidecar is present.
+
+      CHECK 4 failure: Check
+        ~/.claude/hooks/statusline.py exists and settings.json has statusLine
+        entry with type: command.
+
+      CHECK 6 failure: Run the dedup script then reinstall.
+
+      After remediation, re-run smoke-test node.
+
+      End with: VERDICT: SMOKE_PASS or SMOKE_FAIL — <N/6 checks passed>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> smoke-test completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 8: SCHEDULE SELF-AUDIT ─────────────────────────────────────
+  - id: schedule-self-audit
+    depends_on: [smoke-test]
     trigger_rule: all_done
     command: |
       MISSION: Seed the weekly self-audit schedule so dream-studio evolves automatically.
