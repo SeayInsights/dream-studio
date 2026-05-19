@@ -1,8 +1,34 @@
 #!/usr/bin/env python3
 """Hook: on-token-log — append session token usage to the token log."""
 
-import json, sys
+import json
+import os
+import sys
 from pathlib import Path
+
+
+def _get_plugin_root() -> Path:
+    sidecar = Path(__file__).resolve()
+    for _ in range(8):
+        candidate = sidecar / ".plugin-root"
+        if candidate.is_file():
+            try:
+                return Path(candidate.read_text(encoding="utf-8").strip()).resolve()
+            except Exception:
+                pass
+        sidecar = sidecar.parent
+    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env:
+        return Path(env).resolve()
+    return Path(__file__).resolve().parents[4]
+
+
+_PLUGIN_ROOT = _get_plugin_root()
+if str(_PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT))
+if str(_PLUGIN_ROOT / "hooks") not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
+
 from core.config import paths
 from core.utils.time import utcnow
 from core.telemetry.token_logger import extract_usage_from_transcript, write_token_log
@@ -51,8 +77,8 @@ def main(payload: dict) -> None:
 
 if __name__ == "__main__":
     try:
-        data = json.loads(raw) if (raw := sys.stdin.read()).strip() else {}
+        raw = sys.stdin.read().lstrip("﻿")
+        data = json.loads(raw) if raw.strip() else {}
         main(data)
-    except Exception as e:
-        print(json.dumps({"status": "error", "message": str(e)}))
-        sys.exit(1)
+    except Exception:
+        pass
