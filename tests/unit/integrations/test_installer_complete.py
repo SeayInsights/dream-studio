@@ -964,6 +964,9 @@ def test_execute_settings_contains_statusline_command(config_root, canonical_roo
     settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
     assert "statusLine" in settings, "settings.json missing statusLine key"
     assert settings["statusLine"].get("command"), "statusLine.command is empty or missing"
+    assert settings["statusLine"].get("type") == "command", (
+        "statusLine.type must be 'command' (required by Claude Code settings schema)"
+    )
 
 
 def test_execute_statusline_command_has_no_placeholders(config_root, canonical_root, ds_home):
