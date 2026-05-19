@@ -18,7 +18,8 @@ from core.validation import structure as structure_rules  # noqa: E402
 
 def main() -> None:
     try:
-        payload = json.loads(sys.stdin.read())
+        raw = sys.stdin.read().lstrip("﻿")
+        payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         return
 
