@@ -1445,14 +1445,32 @@ def _project_next(
         raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
 
     with _connect(paths.sqlite_path) as conn:
+        # Resume any in_progress WO in the lowest-order incomplete milestone first.
         row = conn.execute(
             "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
             " FROM ds_work_orders wo"
             " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-            " WHERE wo.project_id = ? AND wo.status = 'open'"
-            " ORDER BY wo.created_at ASC LIMIT 1",
+            " WHERE wo.project_id = ? AND wo.status = 'in_progress'"
+            " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
             (project_id,),
         ).fetchone()
+
+        if row is None:
+            # No in_progress WOs — find the first open WO in the lowest incomplete milestone.
+            row = conn.execute(
+                "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
+                " FROM ds_work_orders wo"
+                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+                " WHERE wo.project_id = ? AND wo.status = 'open'"
+                " AND m.order_index = ("
+                "   SELECT MIN(m2.order_index)"
+                "   FROM ds_work_orders wo2"
+                "   LEFT JOIN ds_milestones m2 ON wo2.milestone_id = m2.milestone_id"
+                "   WHERE wo2.project_id = ? AND wo2.status IN ('open', 'in_progress')"
+                " )"
+                " ORDER BY wo.created_at ASC LIMIT 1",
+                (project_id, project_id),
+            ).fetchone()
 
     if row is None:
         print(json.dumps({"ok": True, "work_order": None, "message": "No open work orders"}))
@@ -2090,6 +2108,31 @@ def _work_order_start(
             })
         except Exception:
             pass
+
+        # Guard: refuse to start a WO if any earlier milestone has incomplete work.
+        if milestone_id:
+            ms_order_row = conn.execute(
+                "SELECT order_index FROM ds_milestones WHERE milestone_id = ?",
+                (milestone_id,),
+            ).fetchone()
+            if ms_order_row is not None:
+                blocking_count = conn.execute(
+                    "SELECT COUNT(*) FROM ds_work_orders wo"
+                    " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+                    " WHERE wo.project_id = ? AND m.order_index < ?"
+                    " AND wo.status NOT IN ('complete', 'cancelled')",
+                    (project_id, ms_order_row[0]),
+                ).fetchone()[0]
+                if blocking_count > 0:
+                    print(json.dumps({
+                        "ok": False,
+                        "error": (
+                            f"Cannot start this work order — {blocking_count} work order(s) in "
+                            f"earlier milestones are incomplete. "
+                            f"Run 'ds project next {project_id}' to see what should be worked on first."
+                        ),
+                    }))
+                    return 1
 
         conn.execute(
             "UPDATE ds_work_orders SET status = 'in_progress', updated_at = ?"
