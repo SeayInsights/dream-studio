@@ -898,23 +898,86 @@ nodes:
       Pass: UserPromptSubmit has 2 hooks, Stop has 2, PostCompact has 2, PostToolUse has 3
       Fail: any count is wrong
 
+      CHECK 7 — Spool pipeline end to end
+      Emit a test event and verify it ingests to SQLite:
+
+        py -c "
+        import sys
+        sys.path.insert(0, str(__import__('pathlib').Path(
+            __import__('os').environ.get(
+                'DREAM_STUDIO_ROOT',
+                str(__import__('pathlib').Path.home() /
+                    'builds' / 'dream-studio-clean')
+            )
+        )))
+        from spool.emitter import emit
+        result = emit('smoke.test',
+            {'check': 7, 'source': 'studio-onboard'})
+        print('emitted' if result else 'failed')
+        "
+        py -m interfaces.cli.ds spool ingest
+        py -m interfaces.cli.ds spool status
+
+      Pass: spool status shows 0 pending, no errors
+      Fail: errors during emit or ingest
+
+      CHECK 8 — Skill invocation chain
+        py -m interfaces.cli.ds skill invoke ds-core:build
+
+      Pass: output is non-empty and contains the word 'build' or 'Build'
+      Fail: empty output, error, or exit non-zero
+
+      CHECK 9 — CLAUDE.md routing integrity
+      Read ~/.claude/CLAUDE.md
+      Pass: contains 'ds-website' AND 'ds-fullstack'
+            does NOT contain 'ds-domains-website'
+            does NOT contain 'ds-domains-fullstack'
+      Fail: dead-end IDs present or correct IDs absent
+
+      CHECK 10 — Critical skill directories exist
+      Check all paths exist:
+        ~/.claude/skills/ds-core/modes/build/SKILL.md
+        ~/.claude/skills/ds-quality/modes/debug/SKILL.md
+      Pass: all exist
+      Fail: any missing — note which
+
+      CHECK 11 — Install idempotency
+      Run install once more:
+        py -m interfaces.cli.ds integrate install claude_code --execute
+      Re-read hook counts from settings.json
+      Pass: UserPromptSubmit:2 Stop:2 PostCompact:2 PostToolUse:3
+            (identical to CHECK 6 counts)
+      Fail: any count increased after second install
+
+      CHECK 12 — Identity configured
+      Read ~/.dream-studio/config.json
+      Pass: director_name field is non-empty string
+      Fail: director_name is empty, null, or missing
+      If fail: remind user to complete Step 0 from FIRST_RUN.md before proceeding
+
       After all checks produce a summary:
 
       SMOKE TEST RESULTS
       ==================
-      CHECK 1 Doctor:          PASS/FAIL
-      CHECK 2 Stop hooks:      PASS/FAIL
-      CHECK 3 Prompt hook:     PASS/FAIL
-      CHECK 4 StatusLine:      PASS/FAIL
-      CHECK 5 Project next:    PASS/FAIL/SKIP
-      CHECK 6 Hook counts:     PASS/FAIL
+      CHECK  1 Doctor:               PASS/FAIL
+      CHECK  2 Stop hooks:           PASS/FAIL
+      CHECK  3 Prompt hook:          PASS/FAIL
+      CHECK  4 StatusLine:           PASS/FAIL
+      CHECK  5 Project next:         PASS/FAIL/SKIP
+      CHECK  6 Hook counts:          PASS/FAIL
+      CHECK  7 Spool pipeline:       PASS/FAIL
+      CHECK  8 Skill invocation:     PASS/FAIL
+      CHECK  9 CLAUDE.md routing:    PASS/FAIL
+      CHECK 10 Skill directories:    PASS/FAIL
+      CHECK 11 Install idempotency:  PASS/FAIL
+      CHECK 12 Identity configured:  PASS/FAIL
 
-      Score: N/6 checks passed
+      Score: N/12 checks passed (or N/11 if CHECK 5 skipped)
 
-      If score is 6/6 (or 5/6 with check 5 skipped): SMOKE_PASS — proceed to schedule-self-audit
+      If score is 12/12 (or 11/11 with CHECK 5 skipped): SMOKE_PASS — proceed to schedule-self-audit
 
-      If score is below 5/6: SMOKE_FAIL — surface specific remediation for each failed check
-      before proceeding:
+      If score is below threshold: SMOKE_FAIL — surface specific remediation for each failed
+      check before proceeding:
 
       CHECK 2 failures: Run
         py -m interfaces.cli.ds integrate install claude_code --execute
@@ -929,9 +992,24 @@ nodes:
 
       CHECK 6 failure: Run the dedup script then reinstall.
 
+      CHECK 7 failure: Run ds spool ingest manually,
+        check ~/.dream-studio/events/ for errors.
+
+      CHECK 8 failure: Run ds integrate install --execute to redeploy skills.
+
+      CHECK 9 failure: Fix packs.yaml routing IDs and reinstall.
+
+      CHECK 10 failure: Run ds integrate install --execute to deploy missing skill files.
+
+      CHECK 11 failure: dedup_hooks_by_normalized_command not wired —
+        check settings_merge.py.
+
+      CHECK 12 failure: Open ~/.dream-studio/config.json and fill
+        director_name, domain, primary_use.
+
       After remediation, re-run smoke-test node.
 
-      End with: VERDICT: SMOKE_PASS or SMOKE_FAIL — <N/6 checks passed>
+      End with: VERDICT: SMOKE_PASS or SMOKE_FAIL — <N/12 checks passed>
 
       After completing this step, update workflow state:
         py -m control.execution.workflow.state update <workflow-key> smoke-test completed --output '<one-line verdict>'
