@@ -19,7 +19,8 @@ def main() -> None:
         return
 
     try:
-        payload = json.loads(sys.stdin.read())
+        raw = sys.stdin.read().lstrip("﻿")
+        payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         payload = {}
 

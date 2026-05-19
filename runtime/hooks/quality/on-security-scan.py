@@ -17,7 +17,8 @@ from control.analysis import security_patterns  # noqa: E402
 
 def main() -> None:
     try:
-        payload = json.loads(sys.stdin.read())
+        raw = sys.stdin.read().lstrip("﻿")
+        payload = json.loads(raw) if raw.strip() else {}
     except Exception:
         return
 

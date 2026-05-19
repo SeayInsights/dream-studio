@@ -1,8 +1,32 @@
 #!/usr/bin/env python3
 """Hook: on-first-run — welcome new users and prompt Director profile setup."""
 
+import os
 import sys
 from pathlib import Path
+
+
+def _get_plugin_root() -> Path:
+    sidecar = Path(__file__).resolve()
+    for _ in range(8):
+        candidate = sidecar / ".plugin-root"
+        if candidate.is_file():
+            try:
+                return Path(candidate.read_text(encoding="utf-8").strip()).resolve()
+            except Exception:
+                pass
+        sidecar = sidecar.parent
+    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env:
+        return Path(env).resolve()
+    return Path(__file__).resolve().parents[4]
+
+
+_PLUGIN_ROOT = _get_plugin_root()
+if str(_PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT))
+if str(_PLUGIN_ROOT / "hooks") not in sys.path:
+    sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
 
 from core.config import state
 from core.utils.init_helpers import hydrate_registry_once
