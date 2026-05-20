@@ -1099,7 +1099,18 @@ def _doctor_status(
 def _update_command(
     *, source_root: Path, dream_studio_home: Path | None, dry_run: bool = False
 ) -> int:
-    """Implement ds update [--dry-run]."""
+    """Implement ``ds update [--dry-run]``.
+
+    A2.8: replaced the legacy ``subprocess.run(['ds', 'integrate', 'install',
+    'claude_code', '--execute'])`` self-shell-out with a direct in-process
+    call to ``ClaudeCodeInstaller.install('execute')`` — same pattern as
+    the ``ds integrate install`` command path uses today. The shell-out
+    spawned a fresh Python interpreter that re-imported the whole CLI
+    just to run code that lives in the same process; the direct call
+    skips the interpreter overhead, keeps tracebacks intact, and lets
+    callers patch the installer with ``unittest.mock``.
+    """
+
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
@@ -1133,35 +1144,43 @@ def _update_command(
         )
         return 0
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "interfaces.cli.ds",
-            "integrate",
-            "install",
-            "claude_code",
-            "--execute",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    install_output = result.stdout.strip() if result.stdout else ""
+    from integrations.detector import detect_claude_code
+    from integrations.installer.claude_code import ClaudeCodeInstaller
+    from integrations.manifest import get_ds_home
 
-    if result.returncode == 0:
+    canonical_root = source_root / "canonical"
+    ds_home = dream_studio_home or get_ds_home()
+
+    try:
+        detected = detect_claude_code()
+        installer = ClaudeCodeInstaller(
+            detected.config_root,
+            detected.scope,
+            canonical_root=canonical_root,
+            ds_home=ds_home,
+        )
+        install_result = installer.install("execute")
+        install_ok = bool(install_result.get("ok", True))
+    except Exception as exc:  # noqa: BLE001 — surface the install failure to operator
+        install_result = {"ok": False, "error": str(exc), "error_type": type(exc).__name__}
+        install_ok = False
+
+    install_output = json.dumps(install_result, indent=2, sort_keys=True)
+
+    if install_ok:
         installed_file.parent.mkdir(parents=True, exist_ok=True)
         installed_file.write_text(repo_version + "\n", encoding="utf-8")
 
     _print(
         {
-            "ok": result.returncode == 0,
-            "status": "updated" if result.returncode == 0 else "install_failed",
+            "ok": install_ok,
+            "status": "updated" if install_ok else "install_failed",
             "from": installed_version,
             "to": repo_version,
             "changes": install_output,
         }
     )
-    return result.returncode
+    return 0 if install_ok else 1
 
 
 def _repair_plan(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
