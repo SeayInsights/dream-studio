@@ -8,6 +8,7 @@ responsible for serialization.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -163,4 +164,39 @@ def delete_project(
             "work_orders": wo_count,
             "milestones": ms_count,
         },
+    }
+
+
+def register_project(
+    *,
+    name: str,
+    description: str = "",
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Insert a new project row with status 'active'.
+
+    Returns::
+
+        {"ok": True, "project_id": str, "name": str,
+         "status": "active", "created_at": str}
+    """
+
+    db_path = _require_db(source_root, dream_studio_home)
+    project_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO ds_projects"
+            " (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'active', ?, ?)",
+            (project_id, name, description, now, now),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "name": name,
+        "status": "active",
+        "created_at": now,
     }

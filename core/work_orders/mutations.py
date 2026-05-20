@@ -269,6 +269,113 @@ def add_tasks_from_file(
     }
 
 
+def create_work_order(
+    *,
+    project_id: str,
+    milestone_id: str | None = None,
+    title: str,
+    description: str = "",
+    work_order_type: str | None = None,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Insert a new work order row with status 'open'.
+
+    Returns::
+
+        {"ok": True, "work_order_id": str, "project_id": str,
+         "milestone_id": str | None, "title": str, "status": "open"}
+
+    or on missing project::
+
+        {"ok": False, "error": "Project not found: <id>"}
+    """
+
+    db_path = _require_db(source_root, dream_studio_home)
+    work_order_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Project not found: {project_id}"}
+        conn.execute(
+            "INSERT INTO ds_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            " work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)",
+            (
+                work_order_id,
+                project_id,
+                milestone_id,
+                title,
+                description,
+                work_order_type,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "project_id": project_id,
+        "milestone_id": milestone_id,
+        "title": title,
+        "status": "open",
+    }
+
+
+def create_task(
+    *,
+    work_order_id: str,
+    project_id: str,
+    title: str,
+    description: str = "",
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Insert a new task row with status 'pending'.
+
+    Returns::
+
+        {"ok": True, "task_id": str, "work_order_id": str,
+         "title": str, "status": "pending"}
+
+    or on missing work order::
+
+        {"ok": False, "error": "Work order not found: <id>"}
+    """
+
+    db_path = _require_db(source_root, dream_studio_home)
+    task_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        wo_row = conn.execute(
+            "SELECT work_order_id FROM ds_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if wo_row is None:
+            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+        conn.execute(
+            "INSERT INTO ds_tasks"
+            " (task_id, work_order_id, project_id, title, description, status,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (task_id, work_order_id, project_id, title, description, now, now),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "task_id": task_id,
+        "work_order_id": work_order_id,
+        "title": title,
+        "status": "pending",
+    }
+
+
 def _settings_path_for_todowrite(source_root: Path) -> Path:
     return source_root / ".claude" / "settings.json"
 
