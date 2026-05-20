@@ -26,7 +26,6 @@ spool events (one per failure), and still completes the milestone.
 from __future__ import annotations
 
 import re
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -177,23 +176,23 @@ def close_milestone(
                 try:
                     import spool.writer as _spool_writer
 
-                    _spool_writer.write_event(
-                        {
-                            "event_id": str(uuid.uuid4()),
-                            "event_type": "gate.bypassed",
-                            "timestamp": now,
-                            "trace": {
-                                "milestone_id": milestone_id,
-                                "project_id": project_id,
-                            },
-                            "severity": "warning",
-                            "payload": {
-                                "milestone_id": milestone_id,
-                                "reason": reason,
-                            },
-                            "source_type": "confirmed",
-                        }
+                    from canonical.events.envelope import CanonicalEventEnvelope
+
+                    envelope = CanonicalEventEnvelope(
+                        event_type="gate.bypassed",
+                        session_id=None,
+                        payload={
+                            "milestone_id": milestone_id,
+                            "reason": reason,
+                        },
+                        timestamp=now,
+                        severity="warning",
+                        trace={
+                            "milestone_id": milestone_id,
+                            "project_id": project_id,
+                        },
                     )
+                    _spool_writer.write_event(envelope.to_dict())
                 except Exception:
                     pass
 
@@ -206,21 +205,21 @@ def close_milestone(
     try:
         import spool.writer as _spool_writer
 
-        _spool_writer.write_event(
-            {
-                "event_id": str(uuid.uuid4()),
-                "event_type": "milestone.completed",
-                "timestamp": now,
-                "trace": {"milestone_id": milestone_id, "project_id": project_id},
-                "severity": "info",
-                "payload": {
-                    "milestone_id": milestone_id,
-                    "title": ms_title,
-                    "forced": force,
-                },
-                "source_type": "confirmed",
-            }
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        envelope = CanonicalEventEnvelope(
+            event_type="milestone.completed",
+            session_id=None,
+            payload={
+                "milestone_id": milestone_id,
+                "title": ms_title,
+                "forced": force,
+            },
+            timestamp=now,
+            severity="info",
+            trace={"milestone_id": milestone_id, "project_id": project_id},
         )
+        _spool_writer.write_event(envelope.to_dict())
     except Exception:
         pass
 
