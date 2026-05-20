@@ -278,6 +278,16 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="Required to confirm deletion of a project with dependents",
     )
+    project_state_cmd = project_sub.add_parser(
+        "state",
+        help="Single-query project state: active project, next WO, gates, brief, tasks, gotchas",
+    )
+    project_state_cmd.add_argument(
+        "--planning-root",
+        default=None,
+        dest="planning_root",
+        help="Override .planning/ directory for gate file checks (default: <cwd>/.planning)",
+    )
 
     # integrate subcommand group
     integrate = subcommands.add_parser(
@@ -385,6 +395,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     wo_tasks = work_order_sub.add_parser("tasks", help="List tasks for a work order")
     wo_tasks.add_argument("work_order_id", help="Work order UUID")
+    wo_add_tasks = work_order_sub.add_parser(
+        "add-tasks", help="Parse a tasks.md file and insert tasks into ds_tasks"
+    )
+    wo_add_tasks.add_argument("work_order_id", help="Work order UUID")
+    wo_add_tasks.add_argument(
+        "--from-file",
+        required=True,
+        dest="tasks_file",
+        help="Path to a tasks.md file with a numbered list of tasks",
+    )
 
     # design-brief subcommand group (Slice 7a)
     design_brief_cmd = subcommands.add_parser("design-brief", help="Manage project design briefs")
@@ -1357,6 +1377,13 @@ def _project_dispatch(
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
         )
+    if args.project_command == "state":
+        planning_root = Path(args.planning_root).resolve() if args.planning_root else None
+        return _project_state(
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+            planning_root=planning_root,
+        )
     print(f"Unknown project command: {args.project_command}", file=sys.stderr)
     return 1
 
@@ -1781,6 +1808,197 @@ def _project_delete(
     return 0
 
 
+def _project_state(
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+    planning_root: Path | None = None,
+) -> int:
+    """Single-call project state: active project + next WO + gates + brief + tasks + gotchas."""
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if not paths.sqlite_path.exists():
+        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+
+    p_root = planning_root or Path.cwd() / ".planning"
+
+    with _connect(paths.sqlite_path) as conn:
+        projects_raw = conn.execute(
+            "SELECT project_id, name, status FROM ds_projects WHERE status = 'active'"
+            " ORDER BY updated_at DESC"
+        ).fetchall()
+
+        if not projects_raw:
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "projects": [],
+                        "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
+                    }
+                )
+            )
+            return 0
+
+        result_projects = []
+        for proj in projects_raw:
+            pid = proj["project_id"]
+
+            # Next open/in_progress WO in lowest-order milestone.
+            wo_row = conn.execute(
+                "SELECT wo.work_order_id, wo.title, wo.status, wo.work_order_type,"
+                " m.milestone_id, m.title AS milestone_title, m.order_index,"
+                " wot.label, wot.pre_build_gate, wot.build_executor, wot.post_build_gate,"
+                " wot.workflow_template, wot.precondition_skill, wot.task_generator,"
+                " (SELECT COUNT(*) FROM ds_tasks t"
+                "  WHERE t.work_order_id = wo.work_order_id AND t.status = 'pending') AS pending_tasks,"
+                " (SELECT COUNT(*) FROM ds_tasks t"
+                "  WHERE t.work_order_id = wo.work_order_id) AS total_tasks"
+                " FROM ds_work_orders wo"
+                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+                " LEFT JOIN ds_work_order_types wot ON wot.type_id = wo.work_order_type"
+                " WHERE wo.project_id = ? AND wo.status IN ('open', 'in_progress')"
+                " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
+                (pid,),
+            ).fetchone()
+
+            # Design brief (most recent for this project).
+            brief_row = None
+            try:
+                brief_row = conn.execute(
+                    "SELECT brief_id, status, purpose, audience, tone, design_system,"
+                    " font_pairing, brand_tokens FROM ds_design_briefs"
+                    " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+                    (pid,),
+                ).fetchone()
+            except Exception:
+                pass
+
+            brief_info: dict[str, Any] | None = None
+            if brief_row:
+                fields = [
+                    "purpose",
+                    "audience",
+                    "tone",
+                    "design_system",
+                    "font_pairing",
+                    "brand_tokens",
+                ]
+                filled = sum(1 for f in fields if brief_row[f])
+                brief_info = {
+                    "brief_id": brief_row["brief_id"],
+                    "status": brief_row["status"],
+                    "fields_filled": filled,
+                    "fields_total": len(fields),
+                }
+
+            wo_info: dict[str, Any] | None = None
+            next_action = "No open work orders. All milestones may be complete."
+
+            if wo_row:
+                wo_type = wo_row["work_order_type"]
+                build_exec = wo_row["build_executor"]
+                pre_gate = wo_row["pre_build_gate"]
+                precondition_skill = wo_row["precondition_skill"]
+                workflow_template = wo_row["workflow_template"]
+                task_generator = wo_row["task_generator"] or "ds-core:plan"
+
+                # Gate check using the same logic as work-order close.
+                gate_satisfied = True
+                if pre_gate:
+                    gate_passed, _ = _run_gate_check(
+                        pre_gate,
+                        planning_root=p_root,
+                        work_order_id=wo_row["work_order_id"],
+                        project_id=pid,
+                        conn=conn,
+                    )
+                    gate_satisfied = gate_passed
+
+                # Gotchas relevant to this WO type / executor.
+                gotcha_rows: list[Any] = []
+                try:
+                    gotcha_rows = conn.execute(
+                        "SELECT severity, title, fix FROM reg_gotchas"
+                        " WHERE skill_id = ? OR skill_id LIKE ?"
+                        " ORDER BY times_hit DESC, discovered DESC LIMIT 3",
+                        (build_exec or "", f"{wo_type}%" if wo_type else ""),
+                    ).fetchall()
+                except Exception:
+                    pass
+
+                gotchas = [
+                    {"severity": g["severity"], "title": g["title"], "fix": g["fix"]}
+                    for g in gotcha_rows
+                ]
+
+                # Compute next_action.
+                if not gate_satisfied and pre_gate:
+                    skill_hint = precondition_skill or "ds-project:brief"
+                    next_action = (
+                        f"Gate `{pre_gate}` is not satisfied. "
+                        f"Invoke `{skill_hint}` to resolve it."
+                    )
+                elif wo_row["total_tasks"] == 0:
+                    next_action = (
+                        f"No tasks defined for this work order. "
+                        f"Invoke `{task_generator}` to decompose tasks, "
+                        f"then `ds work-order start {wo_row['work_order_id']}`."
+                    )
+                elif wo_row["status"] == "open":
+                    next_action = f"Run: ds work-order start {wo_row['work_order_id']}"
+                    if workflow_template:
+                        next_action += (
+                            f"\nWorkflow: `{workflow_template}`. "
+                            f"First node: `think`. Invoke `ds-core:think` to begin."
+                        )
+                else:
+                    next_action = (
+                        f"Work order in progress. Complete remaining tasks, "
+                        f"then: ds work-order close {wo_row['work_order_id']}"
+                    )
+
+                wo_info = {
+                    "work_order_id": wo_row["work_order_id"],
+                    "title": wo_row["title"],
+                    "status": wo_row["status"],
+                    "type": wo_type,
+                    "type_label": wo_row["label"],
+                    "workflow_template": workflow_template,
+                    "pending_tasks": wo_row["pending_tasks"],
+                    "total_tasks": wo_row["total_tasks"],
+                    "gates": {
+                        "pre_build": pre_gate,
+                        "pre_build_satisfied": gate_satisfied,
+                        "precondition_skill": precondition_skill,
+                        "build_executor": build_exec,
+                        "post_build": wo_row["post_build_gate"],
+                    },
+                    "design_brief": brief_info,
+                    "milestone": {
+                        "milestone_id": wo_row["milestone_id"],
+                        "title": wo_row["milestone_title"],
+                        "order_index": wo_row["order_index"],
+                    },
+                    "gotchas": gotchas,
+                }
+
+            result_projects.append(
+                {
+                    "project_id": pid,
+                    "name": proj["name"],
+                    "status": proj["status"],
+                    "next_work_order": wo_info,
+                    "next_action": next_action,
+                }
+            )
+
+        print(json.dumps({"ok": True, "projects": result_projects}, indent=2))
+    return 0
+
+
 def _integrate_dispatch(
     args: argparse.Namespace,
     *,
@@ -1967,6 +2185,13 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "add-tasks":
+        return _work_order_add_tasks(
+            work_order_id=args.work_order_id,
+            tasks_file=Path(args.tasks_file),
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
 
@@ -2005,7 +2230,8 @@ def _work_order_start(
             return 1
 
         type_row = conn.execute(
-            "SELECT type_id, label, pre_build_gate, build_executor, post_build_gate"
+            "SELECT type_id, label, pre_build_gate, build_executor, post_build_gate,"
+            " workflow_template, precondition_skill"
             " FROM ds_work_order_types WHERE type_id = ?",
             (wo_type,),
         ).fetchone()
@@ -2013,7 +2239,9 @@ def _work_order_start(
             print(json.dumps({"ok": False, "error": f"Unrecognized work order type: {wo_type}"}))
             return 1
 
-        type_id, label, pre_gate, build_exec, post_gate = type_row
+        type_id, label, pre_gate, build_exec, post_gate, workflow_template, precondition_skill = (
+            type_row
+        )
 
         milestone_title = None
         if milestone_id:
@@ -2105,6 +2333,12 @@ def _work_order_start(
             f"- **Pre-build gate:** {pre_gate or '—'}",
             f"- **Build executor:** {build_exec or '—'}",
             f"- **Post-build gate:** {post_gate or '—'}",
+        ]
+        if workflow_template:
+            lines += [
+                f"- **Workflow:** {workflow_template} — invoke `ds-core:think` to begin",
+            ]
+        lines += [
             "",
             "## Open Tasks",
             "",
@@ -2172,6 +2406,23 @@ def _work_order_start(
             "Dream Studio exists to make your work verifiable.",
         ]
 
+        # Inject relevant gotchas from past sessions.
+        try:
+            gotcha_rows = conn.execute(
+                "SELECT severity, title, fix FROM reg_gotchas"
+                " WHERE skill_id = ? OR skill_id LIKE ?"
+                " ORDER BY times_hit DESC, discovered DESC LIMIT 3",
+                (build_exec or "", f"{type_id}%" if type_id else ""),
+            ).fetchall()
+            if gotcha_rows:
+                lines += ["", "## Known Issues (from past sessions)", ""]
+                for g_sev, g_title, g_fix in gotcha_rows:
+                    lines.append(f"- **[{g_sev}]** {g_title}")
+                    if g_fix:
+                        lines.append(f"  Fix: {g_fix}")
+        except Exception:
+            pass
+
         lines += ["", f"_Generated: {now}_", ""]
         context_path.write_text("\n".join(lines), encoding="utf-8")
 
@@ -2233,19 +2484,25 @@ def _work_order_start(
         )
         conn.commit()
 
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "work_order_id": work_order_id,
-                "title": title,
-                "type": type_id,
-                "project_id": project_id,
-                "context_path": str(context_path),
-            },
-            indent=2,
+    start_result: dict[str, Any] = {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "title": title,
+        "type": type_id,
+        "project_id": project_id,
+        "context_path": str(context_path),
+    }
+    if workflow_template:
+        start_result["workflow"] = {
+            "template": workflow_template,
+            "first_node": "think",
+            "invoke": f"workflow: {workflow_template}",
+        }
+        start_result["next_step"] = (
+            f"This work order uses the `{workflow_template}` workflow. "
+            f"First node: `think`. Invoke `ds-core:think` to begin."
         )
-    )
+    print(json.dumps(start_result, indent=2))
     return 0
 
 
@@ -2726,7 +2983,7 @@ def _work_order_close(
 
     with _connect(paths.sqlite_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type, project_id"
+            "SELECT work_order_id, title, status, work_order_type, project_id, milestone_id"
             " FROM ds_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
@@ -2734,7 +2991,7 @@ def _work_order_close(
             print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
             return 1
 
-        wo_id, title, wo_status, wo_type, project_id = wo_row
+        wo_id, title, wo_status, wo_type, project_id, wo_milestone_id = wo_row
 
         type_row = None
         if wo_type:
@@ -2824,19 +3081,48 @@ def _work_order_close(
         )
         conn.commit()
 
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "work_order_id": work_order_id,
-                "title": title,
-                "status": "complete",
-                "forced": force,
-                "bypassed_gates": gate_failures if force else [],
-            },
-            indent=2,
-        )
-    )
+        # Look up next open WO in same milestone, or check if milestone is complete.
+        next_wo: dict[str, Any] | None = None
+        milestone_complete = False
+        if wo_milestone_id:
+            next_row = conn.execute(
+                "SELECT work_order_id, title, work_order_type FROM ds_work_orders"
+                " WHERE milestone_id = ? AND status = 'open' ORDER BY created_at ASC LIMIT 1",
+                (wo_milestone_id,),
+            ).fetchone()
+            if next_row:
+                next_wo = {
+                    "work_order_id": next_row[0],
+                    "title": next_row[1],
+                    "type": next_row[2],
+                    "next_command": f"ds work-order start {next_row[0]}",
+                }
+            else:
+                remaining = conn.execute(
+                    "SELECT COUNT(*) FROM ds_work_orders"
+                    " WHERE milestone_id = ? AND status NOT IN ('complete', 'cancelled')",
+                    (wo_milestone_id,),
+                ).fetchone()[0]
+                if remaining == 0:
+                    milestone_complete = True
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "title": title,
+        "status": "complete",
+        "forced": force,
+        "bypassed_gates": gate_failures if force else [],
+    }
+    if next_wo:
+        result["next_work_order"] = next_wo
+        result["next_command"] = next_wo["next_command"]
+    elif milestone_complete and wo_milestone_id:
+        result["milestone_complete"] = True
+        result["milestone_id"] = wo_milestone_id
+        result["next_command"] = f"ds milestone close {wo_milestone_id}"
+
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -3062,23 +3348,20 @@ def _work_order_task_done(
         todo_id = f"wo-{work_order_id[:8]}-{task_index}"
         print(json.dumps({"todowrite_update": {"id": todo_id, "status": "completed"}}, indent=2))
 
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "task_id": task_id,
-                "work_order_id": work_order_id,
-                "title": t_title,
-                "status": "complete",
-                "tasks_remaining": remaining,
-            },
-            indent=2,
-        )
-    )
-
+    result: dict[str, Any] = {
+        "ok": True,
+        "task_id": task_id,
+        "work_order_id": work_order_id,
+        "title": t_title,
+        "status": "complete",
+        "tasks_remaining": remaining,
+    }
     if remaining == 0:
-        print(f"All tasks complete. Run: ds work-order close {work_order_id}")
-
+        result["all_tasks_complete"] = True
+        result["suggested_action"] = (
+            f"All tasks complete. Close work order: ds work-order close {work_order_id}"
+        )
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -3129,6 +3412,82 @@ def _work_order_tasks(
         )
 
     print(json.dumps({"ok": True, "work_order_id": work_order_id, "tasks": tasks}, indent=2))
+    return 0
+
+
+def _work_order_add_tasks(
+    *,
+    work_order_id: str,
+    tasks_file: Path,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Parse a numbered-list tasks.md file and insert tasks into ds_tasks."""
+    import re
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    if not tasks_file.is_file():
+        print(json.dumps({"ok": False, "error": f"File not found: {tasks_file}"}))
+        return 1
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    if not paths.sqlite_path.exists():
+        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+
+    with _connect(paths.sqlite_path) as conn:
+        wo_row = conn.execute(
+            "SELECT work_order_id, project_id FROM ds_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if wo_row is None:
+            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
+            return 1
+        project_id = wo_row[1]
+
+        text = tasks_file.read_text(encoding="utf-8").replace("\r\n", "\n")
+        # Parse numbered list: "1. Title\n   Description" or just "1. Title"
+        items = re.findall(
+            r"^\s*\d+\.\s+(.+?)(?=\n\s*\d+\.|\Z)",
+            text,
+            re.MULTILINE | re.DOTALL,
+        )
+        if not items:
+            print(json.dumps({"ok": False, "error": "No numbered list items found in file"}))
+            return 1
+
+        now = datetime.now(timezone.utc).isoformat()
+        inserted = []
+        for raw in items:
+            lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
+            if not lines:
+                continue
+            t_title = lines[0]
+            t_desc = " ".join(lines[1:]) if len(lines) > 1 else ""
+            t_id = str(_uuid.uuid4())
+            conn.execute(
+                "INSERT INTO ds_tasks"
+                " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                (t_id, work_order_id, project_id, t_title, t_desc, now, now),
+            )
+            inserted.append({"task_id": t_id, "title": t_title})
+        conn.commit()
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "tasks_inserted": len(inserted),
+                "tasks": inserted,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
