@@ -30,32 +30,30 @@ _ENFORCEMENT_BLOCK = """\
 # traceability and defeats the purpose of Dream Studio.
 
 ## Active project tracking:
-Dream Studio tracks the active project in its database.
-To see registered projects, run:
-  py -m interfaces.cli.ds project list
-To set the active project, run:
-  py -m interfaces.cli.ds project set-active <project_id>
+Dream Studio tracks the active project in its SQLite authority.
+To see registered projects, call get_project_list(source_root=...).
+To set the active project, call set_active_project(project_id=..., source_root=...).
 
 ## Before starting ANY work:
-Run: py -m interfaces.cli.ds work-order start <id>
-This loads your module boundary, task list, design
-brief, and gate requirements. Working without it
-means working blind.
+Invoke ds-project:resume — it calls get_project_state() and surfaces
+the next work order. When ready, call start_work_order(work_order_id=..., source_root=...).
+This loads your module boundary, task list, design brief, and gate requirements.
+Working without it means working blind.
 
 ## During work:
 - Stay within the module_boundary in context.md
 - Do not create files outside that boundary
-- Complete tasks in order using:
-  py -m interfaces.cli.ds work-order task-done <wo_id> <task_id>
+- Complete tasks in order by calling:
+  mark_task_done(work_order_id=..., task_id=..., source_root=...)
 
 ## Before finishing:
-Run: py -m interfaces.cli.ds work-order close <id>
+Call close_work_order(work_order_id=..., source_root=...).
 Gates must pass. If a gate fails, address it.
-Do not use --force without operator approval.
+Do not pass force=True without operator approval.
 
 ## If you do not have an active work order:
-Run: py -m interfaces.cli.ds project next <project_id>
-Then: py -m interfaces.cli.ds work-order start <id>
+Call get_next_work_order(project_id=..., source_root=...) or
+invoke ds-project:resume to orient and start the next work order.
 """
 
 # Human-readable display names for packs
