@@ -280,3 +280,100 @@ def test_update_dry_run_shows_what_would_change(tmp_path, capsys):
     assert output["dry_run"] is True
     assert output["from"] == "2026-01-01"
     assert output["to"] == "2026-05-17"
+
+
+# ── A2.8: in-process ClaudeCodeInstaller call (no subprocess.run) ────────────
+
+
+def test_update_execute_calls_installer_in_process_without_subprocess(tmp_path, capsys):
+    """A2.8: ``ds update`` (execute path) calls ``ClaudeCodeInstaller.install('execute')``
+    directly instead of shelling out via ``subprocess.run``."""
+    _update_command = _get_update_command()
+
+    (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
+    ds_home = tmp_path / ".dream-studio"
+    (ds_home / "state").mkdir(parents=True, exist_ok=True)
+    (ds_home / "state" / "installed-version").write_text("2026-01-01\n", encoding="utf-8")
+
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths:
+        from unittest.mock import MagicMock
+
+        mock_rt = MagicMock()
+        mock_rt.dream_studio_home = ds_home
+        mock_paths.return_value = mock_rt
+
+        mock_installer_cls = MagicMock()
+        mock_installer = MagicMock()
+        mock_installer.install.return_value = {"ok": True, "applied": ["claude-code"]}
+        mock_installer_cls.return_value = mock_installer
+
+        with (
+            patch("subprocess.run") as mock_sub,
+            patch(
+                "integrations.installer.claude_code.ClaudeCodeInstaller",
+                mock_installer_cls,
+            ),
+            patch("integrations.detector.detect_claude_code") as mock_detect,
+        ):
+            mock_detect.return_value = MagicMock(
+                config_root=tmp_path / "claude-config",
+                scope="user",
+            )
+            result = _update_command(source_root=tmp_path, dream_studio_home=ds_home)
+
+    # The subprocess shell-out is gone.
+    mock_sub.assert_not_called()
+    # The in-process installer was driven with mode='execute'.
+    mock_installer.install.assert_called_once_with("execute")
+    # Operator output reflects the in-process install result.
+    captured = capsys.readouterr()
+    output = json.loads(captured.out.strip())
+    assert output["ok"] is True
+    assert output["status"] == "updated"
+    assert output["from"] == "2026-01-01"
+    assert output["to"] == "2026-05-17"
+    assert result == 0
+    # And the installed-version marker is bumped.
+    assert (ds_home / "state" / "installed-version").read_text(encoding="utf-8").strip() == (
+        "2026-05-17"
+    )
+
+
+def test_update_execute_install_failure_returns_1_without_bumping_version(tmp_path, capsys):
+    """If the installer fails, exit 1 and leave the installed-version marker alone."""
+    _update_command = _get_update_command()
+
+    (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
+    ds_home = tmp_path / ".dream-studio"
+    (ds_home / "state").mkdir(parents=True, exist_ok=True)
+    (ds_home / "state" / "installed-version").write_text("2026-01-01\n", encoding="utf-8")
+
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths:
+        from unittest.mock import MagicMock
+
+        mock_rt = MagicMock()
+        mock_rt.dream_studio_home = ds_home
+        mock_paths.return_value = mock_rt
+
+        with (
+            patch("integrations.installer.claude_code.ClaudeCodeInstaller") as mock_installer_cls,
+            patch("integrations.detector.detect_claude_code") as mock_detect,
+        ):
+            mock_installer = MagicMock()
+            mock_installer.install.return_value = {"ok": False, "error": "permission denied"}
+            mock_installer_cls.return_value = mock_installer
+            mock_detect.return_value = MagicMock(
+                config_root=tmp_path / "claude-config",
+                scope="user",
+            )
+            result = _update_command(source_root=tmp_path, dream_studio_home=ds_home)
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out.strip())
+    assert output["ok"] is False
+    assert output["status"] == "install_failed"
+    assert result == 1
+    # Installed-version marker still on the old value.
+    assert (ds_home / "state" / "installed-version").read_text(encoding="utf-8").strip() == (
+        "2026-01-01"
+    )
