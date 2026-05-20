@@ -28,10 +28,8 @@ shelling out to the CLI:
     website:discover with a project_id, ensure a design brief row exists
     so the wizard can `update` into it.
 
-The `website:discover` branch still calls `_design_brief_create` via a
-lazy import from `interfaces.cli.ds`. A2.5 lifts the design-brief
-handlers out of ds.py; this import will be flipped to a direct
-`core.design_briefs.*` reference at that point.
+The `website:discover` branch calls `create_design_brief` directly
+from `core.design_briefs.mutations` (lifted in A2.5).
 """
 
 from __future__ import annotations
@@ -327,12 +325,9 @@ def seed_gate_artifact_files(
                         (project_id,),
                     ).fetchone()
                 if existing is None:
-                    # A2.5 lifts `_design_brief_create` out of ds.py; this
-                    # lazy import will be flipped to `core.design_briefs.*`
-                    # at that point.
-                    from interfaces.cli.ds import _design_brief_create
+                    from core.design_briefs.mutations import create_design_brief
 
-                    _design_brief_create(
+                    create_design_brief(
                         project_id=project_id,
                         source_root=source_root,
                         dream_studio_home=dream_studio_home,

@@ -1,7 +1,8 @@
-"""Design-brief mutations: field updates and design-system selection."""
+"""Design-brief mutations: create, field updates, design-system selection."""
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,41 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     return paths.sqlite_path
+
+
+def create_design_brief(
+    *,
+    project_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Insert a fresh draft design brief for ``project_id``.
+
+    Returns::
+
+        {"ok": True, "brief_id": str, "project_id": str,
+         "status": "draft", "created_at": str,
+         "next_step": "Invoke website:discover with --work-order <wo_id> ..."}
+    """
+
+    db_path = _require_db(source_root, dream_studio_home)
+    brief_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO ds_design_briefs (brief_id, project_id, status, created_at, updated_at)"
+            " VALUES (?, ?, 'draft', ?, ?)",
+            (brief_id, project_id, now, now),
+        )
+        conn.commit()
+    return {
+        "ok": True,
+        "brief_id": brief_id,
+        "project_id": project_id,
+        "status": "draft",
+        "created_at": now,
+        "next_step": ("Invoke website:discover with --work-order <wo_id> to populate the brief"),
+    }
 
 
 def update_design_brief_field(
