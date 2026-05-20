@@ -80,6 +80,40 @@ def create_design_brief(
     }
 
 
+def lock_design_brief(
+    *,
+    brief_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Mark a design brief as ``locked`` so downstream gates can pass.
+
+    Returns::
+
+        {"ok": True, "brief_id": str, "status": "locked", "locked_at": str}
+
+    or on missing brief::
+
+        {"ok": False, "error": "Brief not found: <id>"}
+    """
+
+    db_path = _require_db(source_root, dream_studio_home)
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT brief_id FROM ds_design_briefs WHERE brief_id = ?",
+            (brief_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Brief not found: {brief_id}"}
+        conn.execute(
+            "UPDATE ds_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
+            (now, brief_id),
+        )
+        conn.commit()
+    return {"ok": True, "brief_id": brief_id, "status": "locked", "locked_at": now}
+
+
 def update_design_brief_field(
     *,
     brief_id: str,
