@@ -102,6 +102,61 @@ def test_design_brief_create_inserts_draft_row(db_home, capsys):
     assert row[0] == "draft"
 
 
+# ── 2b. A2.5: direct-call create_design_brief returns a structured dict ──────
+
+
+def test_create_design_brief_returns_dict_with_draft_status(db_home):
+    """A2.5 extraction: ``create_design_brief`` is now directly callable
+    and returns a result dict; the CLI wrapper only formats output."""
+    from core.design_briefs.mutations import create_design_brief
+
+    result = create_design_brief(
+        project_id=PROJECT_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=db_home,
+    )
+    assert result["ok"] is True
+    assert result["project_id"] == PROJECT_ID
+    assert result["status"] == "draft"
+    assert result["brief_id"]
+    assert "created_at" in result
+    assert "next_step" in result
+    assert "website:discover" in result["next_step"]
+
+
+def test_create_design_brief_inserts_row_in_db(db_home):
+    from core.design_briefs.mutations import create_design_brief
+
+    result = create_design_brief(
+        project_id=PROJECT_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=db_home,
+    )
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        row = conn.execute(
+            "SELECT brief_id, status FROM ds_design_briefs WHERE project_id = ?",
+            (PROJECT_ID,),
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row is not None
+    assert row[0] == result["brief_id"]
+    assert row[1] == "draft"
+
+
+def test_create_design_brief_each_call_produces_distinct_brief_id(db_home):
+    from core.design_briefs.mutations import create_design_brief
+
+    r1 = create_design_brief(
+        project_id=PROJECT_ID, source_root=REPO_ROOT, dream_studio_home=db_home
+    )
+    r2 = create_design_brief(
+        project_id=PROJECT_ID, source_root=REPO_ROOT, dream_studio_home=db_home
+    )
+    assert r1["brief_id"] != r2["brief_id"]
+
+
 # ── 3. ds design-brief show prints brief fields ───────────────────────────────
 
 
