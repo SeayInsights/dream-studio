@@ -84,20 +84,24 @@ def test_version_check_returns_none_when_versions_match(tmp_path):
     assert result is None
 
 
-def test_version_check_returns_update_notice_when_versions_differ(tmp_path):
+def test_version_check_returns_update_notice_when_versions_differ(tmp_path, monkeypatch):
     """When repo version != installed version, returns update notice string."""
     _version_check = _get_version_check()
 
-    (tmp_path / "state").mkdir(parents=True, exist_ok=True)
+    # `_version_check` reads the installed-version file from
+    # `Path(USERPROFILE or HOME) / ".dream-studio" / "state" / "installed-version"`,
+    # not from `_get_plugin_root()`. Point both home env vars at tmp_path
+    # so the test fixture controls what the function sees.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
     (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
-    (tmp_path / "state" / "installed-version").write_text("2026-01-01\n", encoding="utf-8")
+    installed_dir = tmp_path / ".dream-studio" / "state"
+    installed_dir.mkdir(parents=True, exist_ok=True)
+    (installed_dir / "installed-version").write_text("2026-01-01\n", encoding="utf-8")
 
     with patch("emitters.claude_code.run._get_plugin_root", return_value=tmp_path):
-        with patch(
-            "emitters.claude_code.project._get_db_path",
-            return_value=tmp_path / "state" / "studio.db",
-        ):
-            result = _version_check()
+        result = _version_check()
 
     assert result is not None
     assert "UPDATE AVAILABLE" in result
@@ -106,20 +110,20 @@ def test_version_check_returns_update_notice_when_versions_differ(tmp_path):
     assert "ds update" in result
 
 
-def test_version_check_returns_install_notice_when_installed_file_absent(tmp_path):
+def test_version_check_returns_install_notice_when_installed_file_absent(tmp_path, monkeypatch):
     """When installed-version file doesn't exist, returns install notice."""
     _version_check = _get_version_check()
 
-    (tmp_path / "state").mkdir(parents=True, exist_ok=True)
+    # Point the env vars the function uses at a directory that has no
+    # `.dream-studio/state/installed-version` file.
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+
     (tmp_path / "VERSION").write_text("2026-05-17\n", encoding="utf-8")
-    # Do NOT create installed-version
+    # Do NOT create the installed-version file under .dream-studio/state/.
 
     with patch("emitters.claude_code.run._get_plugin_root", return_value=tmp_path):
-        with patch(
-            "emitters.claude_code.project._get_db_path",
-            return_value=tmp_path / "state" / "studio.db",
-        ):
-            result = _version_check()
+        result = _version_check()
 
     assert result is not None
     assert "Install not verified" in result

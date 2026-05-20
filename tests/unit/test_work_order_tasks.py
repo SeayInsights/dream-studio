@@ -147,8 +147,20 @@ def test_task_done_prints_all_complete_message_when_last_task(
 
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_C)
     assert rc == 0
-    out = capsys.readouterr().out
-    assert f"All tasks complete. Run: ds work-order close {WO_ID}" in out
+    # Post-A1: handler returns structured JSON with a `suggested_action`
+    # field; the wording was tightened from "Run: ds ..." to
+    # "Close work order: ds ..." for the operator-facing prompt. Parse
+    # the last JSON object printed (the result block — earlier blocks
+    # are todowrite_update emissions in some environments).
+    # Multiple JSON blocks may be emitted (todowrite_update + result);
+    # parse the last one — that's the result.
+    json_blocks = ("\n" + capsys.readouterr().out.strip()).split("\n{")[1:]
+    data = json.loads("{" + json_blocks[-1])
+    assert data.get("all_tasks_complete") is True
+    assert (
+        data["suggested_action"]
+        == f"All tasks complete. Close work order: ds work-order close {WO_ID}"
+    )
 
 
 # ── task-done: error cases ────────────────────────────────────────────────────
