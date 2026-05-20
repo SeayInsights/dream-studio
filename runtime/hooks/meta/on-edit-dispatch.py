@@ -71,11 +71,7 @@ def main() -> None:
         data = {}
 
     tool_input = data.get("tool_input") or {}
-    file_path = (
-        tool_input.get("file_path")
-        or tool_input.get("path")
-        or ""
-    ).replace("\\", "/")
+    file_path = (tool_input.get("file_path") or tool_input.get("path") or "").replace("\\", "/")
 
     if any(p in file_path for p in PROTECTED_PATHS):
         sys.exit(0)

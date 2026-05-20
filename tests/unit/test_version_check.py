@@ -18,11 +18,13 @@ if str(REPO_ROOT) not in sys.path:
 def _get_version_check():
     """Import _version_check with module-level reload to pick up any patches."""
     import emitters.claude_code.run as _run
+
     return _run._version_check
 
 
 def _get_get_plugin_root():
     import emitters.claude_code.run as _run
+
     return _run._get_plugin_root
 
 
@@ -44,11 +46,12 @@ def test_version_file_is_nonempty():
 def test_version_file_format():
     """VERSION must be a YYYY-MM-DD date string."""
     import re
+
     version_file = REPO_ROOT / "VERSION"
     content = version_file.read_text(encoding="utf-8").strip()
-    assert re.match(r"^\d{4}-\d{2}-\d{2}$", content), (
-        f"VERSION must be YYYY-MM-DD format, got: {content!r}"
-    )
+    assert re.match(
+        r"^\d{4}-\d{2}-\d{2}$", content
+    ), f"VERSION must be YYYY-MM-DD format, got: {content!r}"
 
 
 # ── _version_check logic ──────────────────────────────────────────────────────
@@ -216,6 +219,7 @@ def test_no_output_when_both_checks_pass():
 
 def _get_update_command():
     from interfaces.cli import ds as _ds
+
     return _ds._update_command
 
 
@@ -234,6 +238,7 @@ def test_update_returns_already_current_when_version_matches(tmp_path, capsys):
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths:
         from unittest.mock import MagicMock
+
         mock_rt = MagicMock()
         mock_rt.dream_studio_home = ds_home
         mock_paths.return_value = mock_rt
@@ -259,6 +264,7 @@ def test_update_dry_run_shows_what_would_change(tmp_path, capsys):
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths:
         from unittest.mock import MagicMock
+
         mock_rt = MagicMock()
         mock_rt.dream_studio_home = ds_home
         mock_paths.return_value = mock_rt

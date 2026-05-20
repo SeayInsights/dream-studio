@@ -12,9 +12,11 @@ from core.config.sqlite_bootstrap import bootstrap_database
 from interfaces.cli.ds import main
 
 PROJECT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-WO_UI = "cccccccc-cccc-cccc-cccc-cccccccccccc"    # ui_component: pre=design_brief_locked, post=design_critique
-WO_API = "dddddddd-dddd-dddd-dddd-dddddddddddd"   # api_endpoint: pre=api_contract_exists, post=security_scan
-WO_GAME = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"  # game_mechanic: pre=spec_approved, post=game_validate
+WO_UI = "cccccccc-cccc-cccc-cccc-cccccccccccc"  # ui_component: pre=design_brief_locked, post=design_critique
+WO_API = "dddddddd-dddd-dddd-dddd-dddddddddddd"  # api_endpoint: pre=api_contract_exists, post=security_scan
+WO_GAME = (
+    "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"  # game_mechanic: pre=spec_approved, post=game_validate
+)
 WO_DOCS = "ffffffff-ffff-ffff-ffff-ffffffffffff"  # documentation: pre=NULL, post=NULL
 NOW = "2026-05-16T00:00:00+00:00"
 
@@ -52,9 +54,13 @@ def db_home(tmp_path):
 def _close(db_home, tmp_path, monkeypatch, work_order_id, extra=None):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     argv = [
-        "--home", str(db_home),
-        "work-order", "close", work_order_id,
-        "--planning-root", str(tmp_path / ".planning"),
+        "--home",
+        str(db_home),
+        "work-order",
+        "close",
+        work_order_id,
+        "--planning-root",
+        str(tmp_path / ".planning"),
     ]
     if extra:
         argv.extend(extra)
@@ -63,11 +69,17 @@ def _close(db_home, tmp_path, monkeypatch, work_order_id, extra=None):
 
 def _block(db_home, tmp_path, monkeypatch, work_order_id, reason):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    return main([
-        "--home", str(db_home),
-        "work-order", "block", work_order_id,
-        "--reason", reason,
-    ])
+    return main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "block",
+            work_order_id,
+            "--reason",
+            reason,
+        ]
+    )
 
 
 def _unblock(db_home, tmp_path, monkeypatch, work_order_id):
@@ -91,6 +103,7 @@ def _add_design_brief(db_home):
 
 
 # ── close: error / gate failure paths ────────────────────────────────────────
+
 
 def test_close_exits_1_when_work_order_not_found(db_home, tmp_path, monkeypatch):
     rc = _close(db_home, tmp_path, monkeypatch, "00000000-0000-0000-0000-000000000000")
@@ -117,6 +130,7 @@ def test_close_exits_1_when_post_gate_fails(db_home, tmp_path, monkeypatch, caps
 
 
 # ── close: success paths ──────────────────────────────────────────────────────
+
 
 def test_close_succeeds_when_all_gates_pass(db_home, tmp_path, monkeypatch, capsys):
     _add_design_brief(db_home)
@@ -157,13 +171,13 @@ def test_close_emits_work_order_closed_event(db_home, tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     _close(db_home, tmp_path, monkeypatch, WO_DOCS)
     events = [
-        json.loads(p.read_text(encoding="utf-8"))
-        for p in (spool_root / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
     ]
     assert any(e["event_type"] == "work_order.closed" for e in events)
 
 
 # ── close: --force paths ──────────────────────────────────────────────────────
+
 
 def test_close_force_bypasses_failed_gates(db_home, tmp_path, monkeypatch, capsys):
     rc = _close(db_home, tmp_path, monkeypatch, WO_UI, extra=["--force"])
@@ -177,15 +191,20 @@ def test_close_force_bypasses_failed_gates(db_home, tmp_path, monkeypatch, capsy
 def test_close_force_emits_gate_bypassed_events(db_home, tmp_path, monkeypatch):
     spool_root = tmp_path / "spool-root"
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
-    main([
-        "--home", str(db_home),
-        "work-order", "close", WO_UI,
-        "--planning-root", str(tmp_path / ".planning"),
-        "--force",
-    ])
+    main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "close",
+            WO_UI,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+            "--force",
+        ]
+    )
     events = [
-        json.loads(p.read_text(encoding="utf-8"))
-        for p in (spool_root / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
     ]
     bypassed = [e for e in events if e["event_type"] == "gate.bypassed"]
     assert len(bypassed) >= 1
@@ -198,6 +217,7 @@ def test_close_force_prints_bypass_warning(db_home, tmp_path, monkeypatch, capsy
 
 
 # ── block ─────────────────────────────────────────────────────────────────────
+
 
 def test_block_sets_status_and_reason(db_home, tmp_path, monkeypatch):
     rc = _block(db_home, tmp_path, monkeypatch, WO_UI, "waiting on design review")
@@ -218,8 +238,7 @@ def test_block_emits_work_order_blocked_event(db_home, tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     _block(db_home, tmp_path, monkeypatch, WO_UI, "needs security review")
     events = [
-        json.loads(p.read_text(encoding="utf-8"))
-        for p in (spool_root / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
     ]
     assert any(e["event_type"] == "work_order.blocked" for e in events)
 
@@ -230,6 +249,7 @@ def test_block_exits_1_when_not_found(db_home, tmp_path, monkeypatch):
 
 
 # ── unblock ───────────────────────────────────────────────────────────────────
+
 
 def test_unblock_restores_to_in_progress_and_clears_reason(db_home, tmp_path, monkeypatch):
     _block(db_home, tmp_path, monkeypatch, WO_UI, "temp block")

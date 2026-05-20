@@ -34,6 +34,7 @@ def _spool_events(tmp_path):
 
 # ── format and pack/mode validation ──────────────────────────────────────────
 
+
 def test_valid_specifier_core_build_resolves_correctly(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     rc = main(["skill", "invoke", "core:build"])
@@ -81,6 +82,7 @@ def test_unknown_mode_for_valid_pack_exits_1(tmp_path, monkeypatch, capsys):
 
 # ── invocation_mode ───────────────────────────────────────────────────────────
 
+
 def test_work_order_flag_sets_pipeline_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     main(["skill", "invoke", "core:build", "--work-order", WO_ID])
@@ -98,6 +100,7 @@ def test_no_work_order_flag_sets_direct_mode(tmp_path, monkeypatch):
 
 
 # ── project_id resolution ─────────────────────────────────────────────────────
+
 
 def test_project_id_from_marker_file(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
@@ -120,6 +123,7 @@ def test_project_id_null_when_no_marker_and_no_project(tmp_path, monkeypatch):
 
 
 # ── spool event content ───────────────────────────────────────────────────────
+
 
 def test_spool_event_emitted_and_skill_content_printed(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
@@ -146,6 +150,7 @@ def test_spool_event_contains_correct_invocation_mode(tmp_path, monkeypatch):
 
 # ── skill list ────────────────────────────────────────────────────────────────
 
+
 def test_skill_list_shows_all_packs_and_modes(capsys):
     rc = main(["skill", "list"])
     assert rc == 0
@@ -169,6 +174,7 @@ def test_skill_list_filter_by_pack(capsys):
 
 
 # ── migration 052 ─────────────────────────────────────────────────────────────
+
 
 def test_migration_052_runs_cleanly():
     """Migration 052 adds invocation_mode to a pre-existing canonical_events table."""
@@ -202,10 +208,13 @@ def test_migration_052_runs_cleanly():
             conn.close()
         # Now re-run migration 052: ALTER TABLE should add the column
         from core.config.sqlite_bootstrap import run_migrations
+
         conn2 = sqlite3.connect(str(db_path))
         try:
             run_migrations(conn2)
-            cols = [row[1] for row in conn2.execute("PRAGMA table_info(canonical_events)").fetchall()]
+            cols = [
+                row[1] for row in conn2.execute("PRAGMA table_info(canonical_events)").fetchall()
+            ]
             assert "invocation_mode" in cols
             conn2.execute(
                 "INSERT OR IGNORE INTO canonical_events"
@@ -224,6 +233,7 @@ def test_migration_052_runs_cleanly():
 
 
 # ── ingestor skill_id normalization ──────────────────────────────────────────
+
 
 def _make_skill_event(skill_id: str, event_id: str = "evt-skill-1") -> dict:
     return {

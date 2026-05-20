@@ -4,7 +4,6 @@ import json
 
 from integrations.targets.claude_code.settings_merge import merge_settings, settings_to_json
 
-
 _DS_HOOK_CMD = (
     'python -c "import os,pathlib,runpy,sys; '
     "root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); "
@@ -36,19 +35,13 @@ def test_merge_preserves_existing_user_hooks():
     }
     merged, _ = merge_settings(existing, _TEMPLATE_ENTRIES)
     event_hooks = merged["hooks"]["UserPromptSubmit"]
-    commands = [
-        h.get("command", "")
-        for entry in event_hooks
-        for h in entry.get("hooks", [])
-    ]
+    commands = [h.get("command", "") for entry in event_hooks for h in entry.get("hooks", [])]
     assert any("existing-user-hook" in c for c in commands)
 
 
 def test_merge_skips_already_installed_ds_hook():
     existing = {
-        "hooks": {
-            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": _DS_HOOK_CMD}]}]
-        }
+        "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": _DS_HOOK_CMD}]}]}
     }
     merged, skip_reasons = merge_settings(existing, _TEMPLATE_ENTRIES)
     assert any("already installed" in r for r in skip_reasons)

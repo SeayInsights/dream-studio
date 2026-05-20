@@ -1,4 +1,5 @@
 """Workstream 5b gate: project spine wiring — marker file, emitter, CLI list/status/next."""
+
 from __future__ import annotations
 
 import json
@@ -230,7 +231,9 @@ def test_project_next_returns_first_open_work_order(tmp_path, capsys):
     db_path = _make_db(tmp_path)
     pid = "33333333-3333-3333-3333-333333333333"
     _seed_project(db_path, project_id=pid, name="Next Project")
-    _seed_work_order(db_path, work_order_id="wo-next", project_id=pid, title="First WO", status="open")
+    _seed_work_order(
+        db_path, work_order_id="wo-next", project_id=pid, title="First WO", status="open"
+    )
 
     from interfaces.cli.ds import _project_next
     from unittest.mock import MagicMock

@@ -55,7 +55,11 @@ class TestEmitterDispatch:
         assert exit_code == 0
 
     def test_post_tool_use_writes_to_spool(self, spool_root):
-        payload = {"tool_name": "Read", "tool_input": {"file_path": "/tmp/test.py"}, "tool_result": "ok"}
+        payload = {
+            "tool_name": "Read",
+            "tool_input": {"file_path": "/tmp/test.py"},
+            "tool_result": "ok",
+        }
         sys.stdin = io.StringIO(json.dumps(payload))
         sys.argv = [str(EMITTER_RUN), "PostToolUse"]
         mod = _load_emitter_run()

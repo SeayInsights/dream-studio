@@ -8,6 +8,7 @@ import pytest
 
 def test_atomic_write_success(spool_root):
     from spool.writer import write_event
+
     envelope = {
         "event_id": "test-uuid-001",
         "event_type": "prompt.lifecycle.submitted",
@@ -23,6 +24,7 @@ def test_atomic_write_success(spool_root):
 
 def test_no_temp_file_left_on_success(spool_root):
     from spool.writer import write_event
+
     envelope = {
         "event_id": "test-uuid-002",
         "event_type": "prompt.lifecycle.submitted",
@@ -38,6 +40,7 @@ def test_no_temp_file_left_on_success(spool_root):
 
 def test_write_event_auto_adds_schema_version(spool_root):
     from spool.writer import write_event
+
     envelope = {
         "event_id": "test-auto-schema-001",
         "event_type": "work_order.started",
@@ -51,6 +54,7 @@ def test_write_event_auto_adds_schema_version(spool_root):
 
 def test_write_event_preserves_schema_version_when_present(spool_root):
     from spool.writer import write_event
+
     envelope = {
         "event_id": "test-schema-preserve-001",
         "event_type": "work_order.started",
@@ -66,6 +70,7 @@ def test_write_event_preserves_schema_version_when_present(spool_root):
 def test_write_event_auto_adds_event_id(spool_root):
     from spool.writer import write_event
     import uuid as _uuid
+
     envelope = {
         "event_type": "work_order.started",
         "timestamp": "2026-05-17T00:00:00+00:00",
@@ -79,6 +84,7 @@ def test_write_event_auto_adds_event_id(spool_root):
 
 def test_write_event_preserves_event_id_when_present(spool_root):
     from spool.writer import write_event
+
     envelope = {
         "event_id": "my-custom-id-preserve-001",
         "event_type": "work_order.started",
@@ -96,6 +102,7 @@ def test_directory_auto_creation(tmp_path, monkeypatch):
     from spool.writer import write_event
     from spool import config
     import importlib
+
     importlib.reload(config)
     envelope = {
         "event_id": "test-uuid-003",

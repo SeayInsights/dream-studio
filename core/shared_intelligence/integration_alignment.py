@@ -49,6 +49,7 @@ def validate_integration_alignment(
     # Verify envelope schema is still valid (check canonical/events/envelope.py parseable)
     try:
         from canonical.events.envelope import SCHEMA_VERSION, REQUIRED_FIELDS
+
         if SCHEMA_VERSION < 1:
             violations.append("envelope schema_version < 1")
         if not REQUIRED_FIELDS:

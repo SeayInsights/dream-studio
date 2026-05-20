@@ -27,6 +27,7 @@ def _skill_md(pack: str, mode: str) -> Path:
 
 # ── PREREQ A: website and fullstack path resolution ───────────────────────────
 
+
 def test_website_discover_resolves_to_correct_skill_md():
     expected = REPO_ROOT / "canonical/skills/domains/modes/website/modes/discover/SKILL.md"
     assert _skill_md("website", "discover") == expected
@@ -59,9 +60,11 @@ def test_fullstack_integrate_resolves_to_correct_skill_md():
 
 # ── PREREQ A: ds skill invoke and list ───────────────────────────────────────
 
+
 def test_skill_invoke_website_discover_exits_0(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     from interfaces.cli.ds import main
+
     rc = main(["skill", "invoke", "website:discover"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -72,6 +75,7 @@ def test_skill_invoke_website_discover_exits_0(tmp_path, monkeypatch, capsys):
 def test_skill_invoke_fullstack_backend_exits_0(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     from interfaces.cli.ds import main
+
     rc = main(["skill", "invoke", "fullstack:backend"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -81,6 +85,7 @@ def test_skill_invoke_fullstack_backend_exits_0(tmp_path, monkeypatch, capsys):
 
 def test_skill_list_shows_website_modes(capsys):
     from interfaces.cli.ds import main
+
     rc = main(["skill", "list"])
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
@@ -92,6 +97,7 @@ def test_skill_list_shows_website_modes(capsys):
 
 def test_skill_list_shows_fullstack_modes(capsys):
     from interfaces.cli.ds import main
+
     rc = main(["skill", "list"])
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
@@ -102,6 +108,7 @@ def test_skill_list_shows_fullstack_modes(capsys):
 
 
 # ── PREREQ B: setup pack registration ────────────────────────────────────────
+
 
 def test_setup_wizard_resolves_to_correct_skill_md():
     expected = REPO_ROOT / "canonical/skills/setup/modes/wizard/SKILL.md"
@@ -123,6 +130,7 @@ def test_setup_jit_resolves_to_correct_skill_md():
 
 # ── PREREQ C: quality:secure rename + fullstack:integrate depth ───────────────
 
+
 def test_quality_pr_security_scan_resolves_correctly():
     expected = REPO_ROOT / "canonical/skills/quality/modes/pr-security-scan/SKILL.md"
     assert _skill_md("quality", "pr-security-scan") == expected
@@ -131,7 +139,9 @@ def test_quality_pr_security_scan_resolves_correctly():
 
 def test_quality_secure_directory_removed():
     removed = REPO_ROOT / "canonical/skills/quality/modes/secure"
-    assert not removed.exists(), "quality/modes/secure/ must not exist after rename to pr-security-scan"
+    assert (
+        not removed.exists()
+    ), "quality/modes/secure/ must not exist after rename to pr-security-scan"
 
 
 def test_fullstack_integrate_skill_md_at_least_120_lines():
@@ -143,7 +153,9 @@ def test_fullstack_integrate_skill_md_at_least_120_lines():
 def test_fullstack_integrate_contains_partial_failure_section():
     path = REPO_ROOT / "canonical/skills/domains/modes/fullstack/modes/integrate/SKILL.md"
     content = path.read_text(encoding="utf-8")
-    assert "Partial Integration Failure" in content or "partial integration failure" in content.lower()
+    assert (
+        "Partial Integration Failure" in content or "partial integration failure" in content.lower()
+    )
 
 
 def test_fullstack_integrate_contains_schema_migration_section():

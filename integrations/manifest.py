@@ -39,9 +39,7 @@ def read_manifest(tool_id: str, ds_home: Path | None = None) -> dict[str, Any] |
         return None
 
 
-def write_manifest(
-    tool_id: str, manifest: dict[str, Any], ds_home: Path | None = None
-) -> None:
+def write_manifest(tool_id: str, manifest: dict[str, Any], ds_home: Path | None = None) -> None:
     path = get_manifest_path(tool_id, ds_home)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

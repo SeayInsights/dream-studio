@@ -40,7 +40,12 @@ def normalize_stop(
     confidence = "exact" if session_id is not None else "unavailable"
     usage = payload.get("usage", {})
     token_payload: dict[str, Any] = {}
-    for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+    ):
         val = usage.get(key) if usage else payload.get(key)
         if val is not None:
             token_payload[key] = val

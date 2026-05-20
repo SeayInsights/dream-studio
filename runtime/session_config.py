@@ -4,12 +4,12 @@ Written by on-session-start, read by on-context-threshold.
 Stores invocation flags and session context so continuation
 sessions can inherit the same runtime configuration.
 """
+
 import json
 import os
 import sys
 import tempfile
 from pathlib import Path
-
 
 SESSION_CONFIG_PREFIX = "claude-session-config-"
 
@@ -40,14 +40,17 @@ def spawn_new_session(claude_cmd: str, cwd: str) -> None:
     import subprocess
     import tempfile
     import time
+
     try:
         if sys.platform == "win32":
             subprocess.Popen(
                 [
-                    "powershell", "-NoExit", "-Command",
+                    "powershell",
+                    "-NoExit",
+                    "-Command",
                     f'Set-Location "{cwd}"; '
                     f'Write-Host "Dream Studio: continuing session" '
-                    f'-ForegroundColor Cyan; {claude_cmd}',
+                    f"-ForegroundColor Cyan; {claude_cmd}",
                 ],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
                 cwd=cwd,
@@ -61,10 +64,14 @@ def spawn_new_session(claude_cmd: str, cwd: str) -> None:
             subprocess.Popen(["osascript", "-e", apple_script])
         else:
             terminals = [
-                ["gnome-terminal", "--", "bash", "-c",
-                 f'echo "Dream Studio: continuing session"; {claude_cmd}; exec bash'],
-                ["xterm", "-e",
-                 f'echo "Dream Studio: continuing session"; {claude_cmd}; bash'],
+                [
+                    "gnome-terminal",
+                    "--",
+                    "bash",
+                    "-c",
+                    f'echo "Dream Studio: continuing session"; {claude_cmd}; exec bash',
+                ],
+                ["xterm", "-e", f'echo "Dream Studio: continuing session"; {claude_cmd}; bash'],
                 ["konsole", "--noclose", "-e", claude_cmd],
             ]
             for term in terminals:
@@ -100,6 +107,7 @@ def detect_invocation_flags() -> list[str]:
     flags = []
     try:
         import psutil
+
         proc = psutil.Process(os.getpid())
         for _ in range(5):
             parent = proc.parent()
@@ -117,8 +125,12 @@ def detect_invocation_flags() -> list[str]:
                         flags.append(arg)
                     elif arg == "--debug":
                         flags.append(arg)
-                    elif arg in ("--model", "--profile", "--output-format",
-                                 "--max-tokens") and i + 1 < len(cmdline):
+                    elif arg in (
+                        "--model",
+                        "--profile",
+                        "--output-format",
+                        "--max-tokens",
+                    ) and i + 1 < len(cmdline):
                         flags.append(arg)
                         flags.append(cmdline[i + 1])
                         i += 1

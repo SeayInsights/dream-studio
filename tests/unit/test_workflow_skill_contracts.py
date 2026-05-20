@@ -152,8 +152,9 @@ def test_skill_with_secret_access_requires_explicit_approval_boundary() -> None:
 
     assert result.valid is False
     assert result.required_operator_decision is True
-    assert "skill allowing secrets/sensitive access requires explicit forbidden action boundary" in (
-        result.errors
+    assert (
+        "skill allowing secrets/sensitive access requires explicit forbidden action boundary"
+        in (result.errors)
     )
     assert "skill allowing secrets/sensitive access requires explicit approval boundary" in (
         result.errors

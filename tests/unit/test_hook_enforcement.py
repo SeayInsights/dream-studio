@@ -5,6 +5,7 @@ No live config writes; DB interactions use in-process sqlite3.
 Fail-open contract: any error must return None, never block execution.
 Active project resolved from DB (not marker file) after WS 8b-1.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,9 +60,8 @@ def active_project_db(minimal_db: Path) -> Path:
 
 # ── no active project → no enforcement ───────────────────────────────────────
 
-def test_no_active_project_returns_none(
-    minimal_db: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_no_active_project_returns_none(minimal_db: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """No active project in DB → no project context → no enforcement."""
     monkeypatch.setattr(project_module, "_get_db_path", lambda: minimal_db)
     result = _enforcement_check()
@@ -69,6 +69,7 @@ def test_no_active_project_returns_none(
 
 
 # ── in_progress work order → authorized ──────────────────────────────────────
+
 
 def test_in_progress_work_order_returns_none(
     active_project_db: Path, monkeypatch: pytest.MonkeyPatch
@@ -88,6 +89,7 @@ def test_in_progress_work_order_returns_none(
 
 
 # ── no in_progress + next open exists → blocking message ─────────────────────
+
 
 def test_no_in_progress_next_open_returns_message(
     active_project_db: Path, monkeypatch: pytest.MonkeyPatch
@@ -113,6 +115,7 @@ def test_no_in_progress_next_open_returns_message(
 
 # ── no work orders at all → scoping message ──────────────────────────────────
 
+
 def test_no_work_orders_returns_scoping_message(
     active_project_db: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -128,18 +131,15 @@ def test_no_work_orders_returns_scoping_message(
 
 # ── DB failure → fail open ────────────────────────────────────────────────────
 
-def test_db_missing_returns_none(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+
+def test_db_missing_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """DB file not found → fail open → return None."""
     monkeypatch.setattr(project_module, "_get_db_path", lambda: tmp_path / "no.db")
     result = _enforcement_check()
     assert result is None
 
 
-def test_db_corrupt_returns_none(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_db_corrupt_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """DB exists but is not valid SQLite → fail open → return None."""
     bad_db = tmp_path / "bad.db"
     bad_db.write_text("not a database")
@@ -150,8 +150,10 @@ def test_db_corrupt_returns_none(
 
 # ── hook return format ────────────────────────────────────────────────────────
 
+
 def test_blocking_message_is_valid_json_envelope(
-    active_project_db: Path, monkeypatch: pytest.MonkeyPatch,
+    active_project_db: Path,
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture,
 ) -> None:
     """When enforcement triggers, main() prints JSON with type and content keys."""

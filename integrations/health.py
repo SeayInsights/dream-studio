@@ -40,6 +40,7 @@ def _check_spool(spool_root: Path | None, tool_id: str) -> str | None:
     if spool_root is None:
         try:
             from spool.config import get_spool_root
+
             spool_root = get_spool_root()
         except Exception:
             return None
@@ -154,12 +155,11 @@ def doctor(
         return result
 
 
-def _maybe_emit_transition(
-    tool_id: str, ds_home: Path | None, new_state: str
-) -> None:
+def _maybe_emit_transition(tool_id: str, ds_home: Path | None, new_state: str) -> None:
     """Emit health.changed event only when state differs from manifest's last_state."""
     try:
         from integrations.manifest import read_manifest
+
         manifest = read_manifest(tool_id, ds_home)
         last_state = (manifest or {}).get("last_health_state")
         if last_state is not None and last_state != new_state:

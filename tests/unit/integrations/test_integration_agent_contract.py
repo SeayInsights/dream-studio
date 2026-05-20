@@ -63,14 +63,12 @@ def test_installer_scope_is_bounded_to_known_values(config_root, canonical_root,
 
 
 def test_integration_states_are_provider_neutral_closed_set():
-    vendor_names = {
-        "claude", "openai", "codex", "gemini", "copilot", "cursor", "anthropic"
-    }
+    vendor_names = {"claude", "openai", "codex", "gemini", "copilot", "cursor", "anthropic"}
     for state in IntegrationState:
         for vendor in vendor_names:
-            assert vendor not in state.value, (
-                f"State {state.value!r} contains vendor name {vendor!r}"
-            )
+            assert (
+                vendor not in state.value
+            ), f"State {state.value!r} contains vendor name {vendor!r}"
     assert len(list(IntegrationState)) == 9
 
 
@@ -81,9 +79,7 @@ def test_installer_plan_separates_intent_from_execution(config_root, canonical_r
     plan = installer.plan()
     assert plan.ops, "Plan must have at least one operation"
     for op in plan.ops:
-        assert not op.target.exists(), (
-            f"plan() must not create files — {op.target} already exists"
-        )
+        assert not op.target.exists(), f"plan() must not create files — {op.target} already exists"
 
 
 def test_installer_does_not_write_outside_config_root(config_root, canonical_root, ds_home):
@@ -105,9 +101,9 @@ def test_installer_does_not_write_outside_config_root(config_root, canonical_roo
             in_ds_home = True
         except ValueError:
             pass
-        assert in_config or in_ds_home, (
-            f"File written outside config_root and ds_home: {written_path}"
-        )
+        assert (
+            in_config or in_ds_home
+        ), f"File written outside config_root and ds_home: {written_path}"
 
 
 def test_installer_tool_id_is_provider_neutral(config_root, canonical_root, ds_home):

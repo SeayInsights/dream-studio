@@ -206,19 +206,23 @@ def _check_cache(query_hash: str, min_trust: float) -> Optional[dict]:
                 return None
 
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
-                session_id=None,
-                payload={
-                    "research_id": row["research_id"],
-                    "query_hash": query_hash,
-                    "source": "cache",
-                    "trust_score": row["trust_score"],
-                    "times_referenced": (row["times_referenced"] or 0) + 1,
-                },
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
+                        session_id=None,
+                        payload={
+                            "research_id": row["research_id"],
+                            "query_hash": query_hash,
+                            "source": "cache",
+                            "trust_score": row["trust_score"],
+                            "times_referenced": (row["times_referenced"] or 0) + 1,
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
             # Keep existing DB write (dual-write) — using transaction pattern
             with transaction() as conn:
@@ -379,22 +383,26 @@ def _store_research(
         findings_json = json.dumps(findings)
 
         # Slice 3: Emit event via spool pipeline (redact raw query per ODP-9)
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
-            session_id=None,
-            payload={
-                "query": redact_prompt(query),
-                "query_hash": query_hash,
-                "source_type": source_type,
-                "source_url": source_url,
-                "confidence_score": 0.5,
-                "trust_score": 0.5,
-                "validation_status": "pending",
-                "ttl_days": ttl_days,
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "query": redact_prompt(query),
+                        "query_hash": query_hash,
+                        "source_type": source_type,
+                        "source_url": source_url,
+                        "confidence_score": 0.5,
+                        "trust_score": 0.5,
+                        "validation_status": "pending",
+                        "ttl_days": ttl_days,
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         # Keep existing DB write (dual-write)
         # Use policy-defined trust score for fresh research

@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _run_ds(*args: str, cwd: Path | None = None) -> tuple[int, str, str]:
     """Run ds CLI and return (exit_code, stdout, stderr)."""
     result = subprocess.run(
@@ -101,22 +102,32 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
 
 # ── work-order list: exit code ────────────────────────────────────────────────
 
+
 def test_work_order_list_exits_0(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "work-order", "list", "--project", project_id,
+        "--home",
+        str(tmp_path),
+        "work-order",
+        "list",
+        "--project",
+        project_id,
     )
     assert rc == 0, f"Expected exit 0, got {rc}. stderr: {stderr}"
 
 
 # ── work-order list: full UUIDs ───────────────────────────────────────────────
 
+
 def test_work_order_list_returns_full_uuids(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "work-order", "list", "--project", project_id,
+        "--home",
+        str(tmp_path),
+        "work-order",
+        "list",
+        "--project",
+        project_id,
     )
     assert rc == 0, f"stderr: {stderr}"
     data = json.loads(stdout)
@@ -124,20 +135,24 @@ def test_work_order_list_returns_full_uuids(tmp_path):
     assert len(wo_list) >= 1, "Expected at least one work order in list"
     for wo in wo_list:
         wo_id = wo["id"]
-        assert len(wo_id) == 36, (
-            f"Expected full UUID (36 chars), got '{wo_id}' ({len(wo_id)} chars)"
-        )
+        assert (
+            len(wo_id) == 36
+        ), f"Expected full UUID (36 chars), got '{wo_id}' ({len(wo_id)} chars)"
         # Must be a valid UUID format
         assert wo_id.count("-") == 4, f"Not a valid UUID format: {wo_id}"
 
 
 # ── project next: next_command field ─────────────────────────────────────────
 
+
 def test_project_next_returns_next_command_field(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "next", project_id,
+        "--home",
+        str(tmp_path),
+        "project",
+        "next",
+        project_id,
     )
     assert rc == 0, f"stderr: {stderr}"
     data = json.loads(stdout)
@@ -149,14 +164,19 @@ def test_project_next_returns_next_command_field(tmp_path):
 def test_project_next_command_contains_full_uuid(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "next", project_id,
+        "--home",
+        str(tmp_path),
+        "project",
+        "next",
+        project_id,
     )
     assert rc == 0
     data = json.loads(stdout)
     wo = data.get("work_order", {})
     next_cmd = wo.get("next_command", "")
-    assert "ds work-order start" in next_cmd, f"next_command should be 'ds work-order start <uuid>', got: {next_cmd}"
+    assert (
+        "ds work-order start" in next_cmd
+    ), f"next_command should be 'ds work-order start <uuid>', got: {next_cmd}"
     # The UUID in next_command should be full (36 chars)
     parts = next_cmd.split()
     assert len(parts) == 4, f"Expected 'ds work-order start <uuid>', got: {next_cmd}"
@@ -166,11 +186,15 @@ def test_project_next_command_contains_full_uuid(tmp_path):
 
 # ── project next: milestone field ────────────────────────────────────────────
 
+
 def test_project_next_returns_milestone_field(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "next", project_id,
+        "--home",
+        str(tmp_path),
+        "project",
+        "next",
+        project_id,
     )
     assert rc == 0
     data = json.loads(stdout)
@@ -181,13 +205,18 @@ def test_project_next_returns_milestone_field(tmp_path):
 
 # ── project start: activates and starts WO ────────────────────────────────────
 
+
 def test_project_start_exits_0(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     planning_root = tmp_path / ".planning"
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "start", project_id,
-        "--planning-root", str(planning_root),
+        "--home",
+        str(tmp_path),
+        "project",
+        "start",
+        project_id,
+        "--planning-root",
+        str(planning_root),
     )
     assert rc == 0, f"Expected exit 0, got {rc}. stderr: {stderr}\nstdout: {stdout}"
 
@@ -196,9 +225,13 @@ def test_project_start_prints_project_name(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     planning_root = tmp_path / ".planning"
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "start", project_id,
-        "--planning-root", str(planning_root),
+        "--home",
+        str(tmp_path),
+        "project",
+        "start",
+        project_id,
+        "--planning-root",
+        str(planning_root),
     )
     assert rc == 0, f"stderr: {stderr}"
     combined = stdout + stderr
@@ -209,24 +242,32 @@ def test_project_start_prints_work_order_title(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     planning_root = tmp_path / ".planning"
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "start", project_id,
-        "--planning-root", str(planning_root),
+        "--home",
+        str(tmp_path),
+        "project",
+        "start",
+        project_id,
+        "--planning-root",
+        str(planning_root),
     )
     assert rc == 0
     combined = stdout + stderr
-    assert "Wire Tauri shell" in combined or "Starting:" in combined, (
-        f"Expected work order title in output. Got: {combined[:500]}"
-    )
+    assert (
+        "Wire Tauri shell" in combined or "Starting:" in combined
+    ), f"Expected work order title in output. Got: {combined[:500]}"
 
 
 def test_project_start_creates_context_md(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     planning_root = tmp_path / ".planning"
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "start", project_id,
-        "--planning-root", str(planning_root),
+        "--home",
+        str(tmp_path),
+        "project",
+        "start",
+        project_id,
+        "--planning-root",
+        str(planning_root),
     )
     assert rc == 0
     # context.md should have been written somewhere under planning_root
@@ -235,6 +276,7 @@ def test_project_start_creates_context_md(tmp_path):
 
 
 # ── project start: no open WOs ────────────────────────────────────────────────
+
 
 def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
     state_dir = tmp_path / "state"
@@ -283,17 +325,21 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
         conn.commit()
 
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "project", "start", project_id,
+        "--home",
+        str(tmp_path),
+        "project",
+        "start",
+        project_id,
     )
     assert rc == 0, f"Expected exit 0 with no work orders, got {rc}. stderr: {stderr}"
     combined = stdout + stderr
-    assert "No open work orders" in combined or "no open" in combined.lower(), (
-        f"Expected helpful 'no open work orders' message. Got: {combined[:500]}"
-    )
+    assert (
+        "No open work orders" in combined or "no open" in combined.lower()
+    ), f"Expected helpful 'no open work orders' message. Got: {combined[:500]}"
 
 
 # ── adapters: exit code ───────────────────────────────────────────────────────
+
 
 def test_adapters_exits_0():
     rc, stdout, stderr = _run_ds("adapters")
@@ -301,6 +347,7 @@ def test_adapters_exits_0():
 
 
 # ── project list: exit code ───────────────────────────────────────────────────
+
 
 def test_project_list_exits_0(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
@@ -310,19 +357,27 @@ def test_project_list_exits_0(tmp_path):
 
 # ── work-order tasks: exit code ──────────────────────────────────────────────
 
+
 def test_work_order_tasks_exits_0_or_1_not_255(tmp_path):
     db_path, project_id = _make_db_with_project(tmp_path)
     # Get a real work order ID
     rc, stdout, stderr = _run_ds(
-        "--home", str(tmp_path),
-        "work-order", "list", "--project", project_id,
+        "--home",
+        str(tmp_path),
+        "work-order",
+        "list",
+        "--project",
+        project_id,
     )
     data = json.loads(stdout)
     wo_id = data["work_orders"][0]["id"]
 
     rc2, stdout2, stderr2 = _run_ds(
-        "--home", str(tmp_path),
-        "work-order", "tasks", wo_id,
+        "--home",
+        str(tmp_path),
+        "work-order",
+        "tasks",
+        wo_id,
     )
     # Should exit 0 or 1 (task lookup may vary), never 255
     assert rc2 != 255, f"work-order tasks exited 255 (success should be 0): {stderr2}"

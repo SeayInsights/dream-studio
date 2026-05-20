@@ -20,11 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-
 # ── Sanitization ──────────────────────────────────────────────────────────────
 
-_PATH_RE = re.compile(r"[A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*[^\\/:*?\"<>|\r\n]*|"
-                      r"/(?:[^\s/]+/)*[^\s/]+")
+_PATH_RE = re.compile(
+    r"[A-Za-z]:\\(?:[^\\/:*?\"<>|\r\n]+\\)*[^\\/:*?\"<>|\r\n]*|" r"/(?:[^\s/]+/)*[^\s/]+"
+)
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 _TOKEN_URL_RE = re.compile(r"https?://[^\s]*[?&](token|key|secret|auth)=[^\s&]+", re.IGNORECASE)
 _UUID_RE = re.compile(
@@ -43,10 +43,12 @@ def _sanitize(text: str) -> str:
 
 # ── Architecture document patterns ────────────────────────────────────────────
 
-_ARCH_SUFFIXES = frozenset([
-    "CONSTITUTION.md",
-    "GOTCHAS.md",
-])
+_ARCH_SUFFIXES = frozenset(
+    [
+        "CONSTITUTION.md",
+        "GOTCHAS.md",
+    ]
+)
 _ARCH_PREFIXES = frozenset(["ADR-", "ARCHITECTURE"])
 _ARCH_CONTAINS = frozenset(["ARCHITECTURE"])
 
@@ -62,6 +64,7 @@ def _is_architecture_doc(path_str: str) -> bool:
 
 
 # ── JSONL parsing ─────────────────────────────────────────────────────────────
+
 
 def _iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
     """Yield parsed JSON objects from a JSONL file, skipping bad lines."""
@@ -81,6 +84,7 @@ def _iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
 
 # ── Result dataclasses ────────────────────────────────────────────────────────
 
+
 @dataclass
 class HarvestResult:
     gotchas_new: int = 0
@@ -94,6 +98,7 @@ class HarvestResult:
 
 
 # ── Main harvester ────────────────────────────────────────────────────────────
+
 
 class SessionHarvester:
     """
@@ -357,14 +362,20 @@ class SessionHarvester:
                         "INSERT OR IGNORE INTO ds_documents"
                         " (doc_id, doc_type, title, content, source_path, created_at)"
                         " VALUES (?, ?, ?, NULL, ?, ?)",
-                        (doc_id, "architecture_decision", title, abs_path,
-                         datetime.now(timezone.utc).isoformat()),
+                        (
+                            doc_id,
+                            "architecture_decision",
+                            title,
+                            abs_path,
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
                     )
             except sqlite3.Error:
                 pass
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _extract_session_id(records: list[dict], path: Path) -> str:
     for r in records:

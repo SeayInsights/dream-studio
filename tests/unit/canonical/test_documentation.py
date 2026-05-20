@@ -58,13 +58,22 @@ def test_readme_does_not_contain_skills_path_without_canonical():
     content = README.read_text(encoding="utf-8")
     lines = content.splitlines()
     bad_lines = [
-        l for l in lines
-        if "skills/" in l and "canonical/skills/" not in l and "ds-bootstrap/SKILL" not in l
+        l
+        for l in lines
+        if "skills/" in l
+        and "canonical/skills/" not in l
+        and "ds-bootstrap/SKILL" not in l
         and not l.strip().startswith("#")
     ]
     # Allow references that clearly are user-facing (like ~/.claude/skills/)
-    truly_bad = [l for l in bad_lines if "skills/" in l and "canonical/" not in l
-                 and ".claude" not in l and "canonical/skills" not in l]
+    truly_bad = [
+        l
+        for l in bad_lines
+        if "skills/" in l
+        and "canonical/" not in l
+        and ".claude" not in l
+        and "canonical/skills" not in l
+    ]
     assert truly_bad == [], f"README.md has bare skills/ references: {truly_bad}"
 
 
@@ -88,6 +97,7 @@ def test_readme_size_greater_than_5000_bytes():
 
 # ── docs/schema/README.md ─────────────────────────────────────────────────────
 
+
 def test_schema_doc_exists():
     assert SCHEMA_DOC.is_file(), f"docs/schema/README.md not found at {SCHEMA_DOC}"
 
@@ -109,6 +119,7 @@ def test_schema_doc_mentions_ds_design_briefs():
 
 # ── docs/authoring/skills.md ──────────────────────────────────────────────────
 
+
 def test_skills_guide_exists():
     assert SKILLS_GUIDE.is_file(), f"docs/authoring/skills.md not found at {SKILLS_GUIDE}"
 
@@ -119,6 +130,7 @@ def test_skills_guide_contains_gate_artifact_section():
 
 
 # ── None of the three docs contain quality:secure ────────────────────────────
+
 
 def test_readme_does_not_contain_quality_secure():
     content = README.read_text(encoding="utf-8")

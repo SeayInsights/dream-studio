@@ -57,16 +57,20 @@ class WaveExecutor:
         started_at = datetime.now(timezone.utc).isoformat()
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.WAVE_STARTED.value,
-            session_id=None,
-            payload={
-                "wave_id": self.wave_id,
-                "started_at": started_at,
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.WAVE_STARTED.value,
+                    session_id=None,
+                    payload={
+                        "wave_id": self.wave_id,
+                        "started_at": started_at,
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -118,20 +122,24 @@ class WaveExecutor:
             final_status = "completed" if tasks_failed == 0 else "failed"
 
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.WAVE_COMPLETED.value,
-                session_id=None,
-                payload={
-                    "wave_id": self.wave_id,
-                    "completed_at": completed_at,
-                    "duration_seconds": duration_seconds,
-                    "tasks_completed": tasks_completed,
-                    "tasks_failed": tasks_failed,
-                    "success_rate": success_rate,
-                },
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.WAVE_COMPLETED.value,
+                        session_id=None,
+                        payload={
+                            "wave_id": self.wave_id,
+                            "completed_at": completed_at,
+                            "duration_seconds": duration_seconds,
+                            "tasks_completed": tasks_completed,
+                            "tasks_failed": tasks_failed,
+                            "success_rate": success_rate,
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
             # Update wave with final status
             with transaction() as conn:
@@ -171,21 +179,25 @@ class WaveExecutor:
             ).total_seconds()
 
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.WAVE_FAILED.value,
-                session_id=None,
-                payload={
-                    "wave_id": self.wave_id,
-                    "completed_at": completed_at,
-                    "duration_seconds": duration_seconds,
-                    "tasks_completed": tasks_completed,
-                    "tasks_failed": tasks_failed,
-                    "error_message": str(e),
-                },
-                severity="error",
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.WAVE_FAILED.value,
+                        session_id=None,
+                        payload={
+                            "wave_id": self.wave_id,
+                            "completed_at": completed_at,
+                            "duration_seconds": duration_seconds,
+                            "tasks_completed": tasks_completed,
+                            "tasks_failed": tasks_failed,
+                            "error_message": str(e),
+                        },
+                        severity="error",
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
             with transaction() as conn:
                 conn.execute(
@@ -322,19 +334,23 @@ class WaveExecutor:
         query = f"UPDATE pi_wave_tasks SET {', '.join(fields)} WHERE wave_task_id = ?"
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.WAVE_TASK_UPDATED.value,
-            session_id=None,
-            payload={
-                "wave_task_id": wave_task_id,
-                "status": status,
-                "started_at": started_at,
-                "completed_at": completed_at,
-                "updated_fields": fields,
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.WAVE_TASK_UPDATED.value,
+                    session_id=None,
+                    payload={
+                        "wave_task_id": wave_task_id,
+                        "status": status,
+                        "started_at": started_at,
+                        "completed_at": completed_at,
+                        "updated_fields": fields,
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(query, params)

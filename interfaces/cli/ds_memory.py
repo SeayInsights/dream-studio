@@ -1,4 +1,5 @@
 """ds memory subcommands (Slice 5d) — session history and planning ingest."""
+
 from __future__ import annotations
 
 import json
@@ -26,7 +27,16 @@ _SKILL_KEYWORDS: dict[str, list[str]] = {
     "ds-domains": ["canvas", "editor", "iframe", "breakpoint", "animation", "renderer", "viewport"],
     "ds-quality": ["test", "pytest", "coverage", "lint", "mock", "assertion", "fixture"],
     "ds-security": ["security", "auth", "injection", "xss", "csrf", "token", "password", "secret"],
-    "ds-core": ["migration", "database", "sqlite", "schema", "handoff", "session", "plan", "deploy"],
+    "ds-core": [
+        "migration",
+        "database",
+        "sqlite",
+        "schema",
+        "handoff",
+        "session",
+        "plan",
+        "deploy",
+    ],
 }
 
 _SEVERITY_CRITICAL_RE = re.compile(
@@ -135,7 +145,7 @@ def _find_gotcha_blocks(content: str, filename: str) -> list[dict]:
                 title = f"{keyword}: {inline}"
             else:
                 # First non-empty line after the trigger
-                rest_lines = [l.strip() for l in section[m.end():].splitlines() if l.strip()]
+                rest_lines = [l.strip() for l in section[m.end() :].splitlines() if l.strip()]
                 next_line = rest_lines[0] if rest_lines else ""
                 title = f"{keyword}: {next_line}" if next_line else keyword
             blocks.append(
@@ -220,7 +230,11 @@ def _pass1_gotchas(
     files = _collect_handoff_recap_files(sessions_dir, project)
     # Also pick up GOTCHAS.md from planning_dir tree
     if planning_dir.exists():
-        gotcha_files = (planning_dir / project).glob("**/GOTCHAS.md") if project else planning_dir.glob("**/GOTCHAS.md")
+        gotcha_files = (
+            (planning_dir / project).glob("**/GOTCHAS.md")
+            if project
+            else planning_dir.glob("**/GOTCHAS.md")
+        )
         for f in gotcha_files:
             if f not in files:
                 files.append(f)
@@ -258,8 +272,15 @@ def _pass1_gotchas(
                         "INSERT INTO reg_gotchas"
                         " (gotcha_id, skill_id, severity, title, context, fix, discovered, times_hit)"
                         " VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
-                        (gotcha_id, skill_id, severity, block["title"],
-                         block["context"], block["fix"], discovered),
+                        (
+                            gotcha_id,
+                            skill_id,
+                            severity,
+                            block["title"],
+                            block["context"],
+                            block["fix"],
+                            discovered,
+                        ),
                     )
                 except sqlite3.IntegrityError:
                     skipped_count += 1
@@ -454,6 +475,7 @@ def cmd_memory_ingest(args) -> int:
 
     try:
         from core.installed_runtime import resolve_installed_runtime_paths
+
         paths = resolve_installed_runtime_paths(source_root=REPO_ROOT, dream_studio_home=None)
         db_path = paths.sqlite_path
     except Exception:
@@ -523,6 +545,7 @@ def cmd_memory_ingest_sessions(args) -> int:
 
     try:
         from core.installed_runtime import resolve_installed_runtime_paths
+
         paths = resolve_installed_runtime_paths(source_root=REPO_ROOT, dream_studio_home=None)
         db_path = paths.sqlite_path
     except Exception:
@@ -530,6 +553,7 @@ def cmd_memory_ingest_sessions(args) -> int:
 
     try:
         from spool.session_harvester import SessionHarvester
+
         harvester = SessionHarvester()
         result = harvester.harvest(
             claude_projects_dir=claude_projects_dir,
@@ -544,7 +568,9 @@ def cmd_memory_ingest_sessions(args) -> int:
     label = "[dry-run] " if dry_run else ""
     print(f"\n{label}Session harvest complete:")
     print(f"  Gotchas extracted:    {result.gotchas_new} new, {result.gotchas_skipped} skipped")
-    print(f"  Skill approaches:     {result.approaches_new} new, {result.approaches_skipped} skipped")
+    print(
+        f"  Skill approaches:     {result.approaches_new} new, {result.approaches_skipped} skipped"
+    )
     print(f"  Architecture docs:    {result.arch_docs_found} found")
     print(f"  Technology signals:   {result.tech_signals_recorded} file types recorded")
     print(f"  Sessions processed:   {result.sessions_processed}")
@@ -561,12 +587,24 @@ def add_memory_subcommand(subparsers) -> None:
         "ingest", help="Ingest session history and planning files into SQLite"
     )
     ingest.add_argument("--project", default=None, help="Scope to a single project name")
-    ingest.add_argument("--sessions-dir", default=None, dest="sessions_dir",
-                        help="Override default ~/.sessions/ location")
-    ingest.add_argument("--planning-dir", default=None, dest="planning_dir",
-                        help="Override default ~/.planning/ location")
-    ingest.add_argument("--dry-run", action="store_true", default=False,
-                        help="Report what would be ingested without writing")
+    ingest.add_argument(
+        "--sessions-dir",
+        default=None,
+        dest="sessions_dir",
+        help="Override default ~/.sessions/ location",
+    )
+    ingest.add_argument(
+        "--planning-dir",
+        default=None,
+        dest="planning_dir",
+        help="Override default ~/.planning/ location",
+    )
+    ingest.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Report what would be ingested without writing",
+    )
     ingest.set_defaults(func=cmd_memory_ingest)
 
     ingest_sessions = memory_sub.add_parser(
@@ -574,15 +612,22 @@ def add_memory_subcommand(subparsers) -> None:
         help="Harvest intelligence from Claude Code session history in ~/.claude/projects/",
     )
     ingest_sessions.add_argument(
-        "--claude-projects-dir", default=None, dest="claude_projects_dir",
+        "--claude-projects-dir",
+        default=None,
+        dest="claude_projects_dir",
         help="Override default ~/.claude/projects/ location",
     )
     ingest_sessions.add_argument(
-        "--dry-run", action="store_true", default=False,
+        "--dry-run",
+        action="store_true",
+        default=False,
         help="Report counts without writing to DB",
     )
     ingest_sessions.add_argument(
-        "--no-consent-prompt", action="store_true", default=False, dest="no_consent_prompt",
+        "--no-consent-prompt",
+        action="store_true",
+        default=False,
+        dest="no_consent_prompt",
         help="Skip consent prompt (for automated testing only)",
     )
     ingest_sessions.set_defaults(func=cmd_memory_ingest_sessions)

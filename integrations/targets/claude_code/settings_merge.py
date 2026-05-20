@@ -18,17 +18,17 @@ from pathlib import Path
 from typing import Any
 
 _DS_EMITTER_MARKERS = (
-    "hooks\\run.py",                       # installed path (Windows)
-    "hooks/run.py",                        # installed path (Unix)
-    "emitters/claude_code/run.py",         # legacy: direct repo path reference
+    "hooks\\run.py",  # installed path (Windows)
+    "hooks/run.py",  # installed path (Unix)
+    "emitters/claude_code/run.py",  # legacy: direct repo path reference
     "/'emitters'/'claude_code'/'run.py'",  # legacy: pathlib expression form
 )
 
 _DS_DISPATCHER_MARKERS = (
-    "hooks\\dispatch\\hooks.py",           # installed path (Windows)
-    "hooks/dispatch/hooks.py",             # installed path (Unix)
-    "runtime/dispatch/hooks.py",           # legacy: direct repo path reference
-    "'dispatch'/'hooks.py'",               # legacy: pathlib expression form
+    "hooks\\dispatch\\hooks.py",  # installed path (Windows)
+    "hooks/dispatch/hooks.py",  # installed path (Unix)
+    "runtime/dispatch/hooks.py",  # legacy: direct repo path reference
+    "'dispatch'/'hooks.py'",  # legacy: pathlib expression form
 )
 
 
@@ -94,6 +94,7 @@ def purge_legacy_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], list[s
     Returns (cleaned_settings, list_of_removed_commands).
     """
     import copy as _copy
+
     result = _copy.deepcopy(settings)
     hooks_section = result.get("hooks", {})
     if not isinstance(hooks_section, dict):
@@ -219,16 +220,14 @@ def purge_read_posttooluse_matcher(settings: dict[str, Any]) -> dict[str, Any]:
     with no active consumer. Remove it so it never accumulates across reinstalls.
     """
     import copy as _copy
+
     result = _copy.deepcopy(settings)
     hooks_section = result.get("hooks", {})
     if not isinstance(hooks_section, dict):
         return result
     ptu = hooks_section.get("PostToolUse")
     if isinstance(ptu, list):
-        hooks_section["PostToolUse"] = [
-            entry for entry in ptu
-            if entry.get("matcher") != "Read"
-        ]
+        hooks_section["PostToolUse"] = [entry for entry in ptu if entry.get("matcher") != "Read"]
     return result
 
 
