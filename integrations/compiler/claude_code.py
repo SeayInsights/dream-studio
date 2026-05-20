@@ -69,6 +69,7 @@ _PACK_DISPLAY_NAMES: dict[str, str] = {
     "security": "Security analysis",
     "ds-project": "Project lifecycle",
     "ds-workorder": "Work order lifecycle",
+    "ds-milestone": "Milestone lifecycle",
     "website": "Website builder",
     "fullstack": "Fullstack builder",
     "setup": "Setup",
