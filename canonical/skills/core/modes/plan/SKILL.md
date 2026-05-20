@@ -47,12 +47,10 @@ Use these templates to structure your plan:
 7. **Assess traceability need** — See Traceability section below.
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
 9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
-9b. **Persist tasks to DB** — After writing tasks.md, run:
-    ```
-    ds work-order add-tasks <work_order_id> --from-file .planning/specs/<topic>/tasks.md
-    ```
+9b. **Persist tasks to DB** — After writing tasks.md, call:
+    `add_tasks_from_file(work_order_id=..., tasks_file=Path(".planning/specs/<topic>/tasks.md"), source_root=..., dream_studio_home=...)`
     This reads the numbered list from tasks.md and inserts each item as a `ds_tasks` row.
-    If `work_order_id` is unknown or the command fails, keep the file artifact and note DB persistence was skipped.
+    If `work_order_id` is unknown or the call returns `{"ok": False}`, keep the file artifact and note DB persistence was skipped.
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
     - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in tasks.md

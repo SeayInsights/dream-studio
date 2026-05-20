@@ -196,7 +196,7 @@ There are exactly 10 valid types. Use the exact string — no abbreviations, no 
 
 **Present tasks as a numbered list.** Ask: "Are these tasks specific enough to hand to an AI agent without further clarification? (1) Yes, proceed to write output. (2) Task [N] needs more detail — [describe]. (3) Missing task — [describe]."
 
-**Task decomposition applies only to work order 1 of milestone 1.** Remaining work orders get tasks when they are started (via `ds work-order start <id>` in Slice 6).
+**Task decomposition applies only to work order 1 of milestone 1.** Remaining work orders get tasks when they are started (by calling `start_work_order()` in Slice 6).
 
 ---
 
@@ -207,31 +207,22 @@ There are exactly 10 valid types. Use the exact string — no abbreviations, no 
 **Execute in this exact order:**
 
 **Step 1 — Register the project:**
-```
-ds project register --name "<project name>"
-```
-Capture the `project_id` from the JSON output. Every subsequent insert references this ID.
+Call `register_project(name="<project name>", source_root=..., dream_studio_home=...)`.
+Capture the `project_id` from the returned dict. Every subsequent call references this ID.
 
-**Step 2 — Insert milestones** (in dependency order, parents before children):
-```sql
-INSERT INTO ds_milestones (milestone_id, project_id, title, description, status, created_at, updated_at)
-VALUES ('<uuid>', '<project_id>', '<title>', '<one-sentence deliverable>', 'pending', '<now>', '<now>');
-```
+**Step 2 — Create milestones** (in dependency order, parents before children):
+For each milestone, call `create_milestone(project_id=..., title="<title>", description="<one-sentence deliverable>", order_index=<N>, source_root=..., dream_studio_home=...)`.
+Capture each `milestone_id` from the returned dict.
 
-**Step 3 — Insert work orders for milestone 1** (in dependency order):
-```sql
-INSERT INTO ds_work_orders (work_order_id, project_id, milestone_id, title, description, status, work_order_type, created_at, updated_at)
-VALUES ('<uuid>', '<project_id>', '<milestone_1_id>', '<title>', '<module boundary and acceptance criteria>', 'open', '<type>', '<now>', '<now>');
-```
+**Step 3 — Create work orders for milestone 1** (in dependency order):
+For each work order, call `create_work_order(project_id=..., milestone_id=..., title="<title>", description="<module boundary and acceptance criteria>", work_order_type="<type>", source_root=..., dream_studio_home=...)`.
+Capture each `work_order_id` from the returned dict.
 
-**Step 4 — Insert work order sketches for milestones 2–N:**
-Same INSERT shape, `status = 'open'`, descriptions contain the sketch content. These will be expanded during their milestone.
+**Step 4 — Create work order sketches for milestones 2–N:**
+Same `create_work_order(...)` call with sketch content as `description`. These will be expanded during their milestone.
 
-**Step 5 — Insert tasks for work order 1 of milestone 1:**
-```sql
-INSERT INTO ds_tasks (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)
-VALUES ('<uuid>', '<work_order_1_id>', '<project_id>', '<imperative title>', '<full acceptance criteria>', 'pending', '<now>', '<now>');
-```
+**Step 5 — Create tasks for work order 1 of milestone 1:**
+For each task, call `create_task(work_order_id=..., project_id=..., title="<imperative title>", description="<full acceptance criteria>", source_root=..., dream_studio_home=...)`.
 
 **Step 6 — Write `.planning/PROJECT.md`:**
 
@@ -265,12 +256,12 @@ Work orders: <sketch list>
 <hard constraints from Phase 1 Q4>
 
 ## Next step
-Run: `ds project next <project_id>`
+Invoke `ds-project:resume` to see the next action.
 ```
 
 **Step 7 — Confirm:**
 ```
-Project scoped. Run `ds project next <project_id>` to start the first work order.
+Project scoped. Invoke `ds-project:resume` to see the next action.
 ```
 
 ---
@@ -304,7 +295,7 @@ presents results in plain English.
 
 **Step 1 — Get full project state (one call):**
 
-Run: `ds project state`
+Call `get_project_state(source_root=..., dream_studio_home=...)` and present the returned dict.
 
 This returns everything in one call: active project, current milestone, next work
 order, gate status, design brief status, task count, and the recommended
@@ -346,16 +337,13 @@ Do NOT treat the following as confirmation: "yes", "ok", "sure", "continue",
 When confirmed, follow the `next_action` from the state response:
 - If gate is blocked → invoke the `precondition_skill` listed in the gates object
 - If `total_tasks == 0` → invoke `ds-core:plan` to decompose tasks first
-- Otherwise → run:
-  ```
-  ds work-order start <work_order_id>
-  ```
+- Otherwise → call `start_work_order(work_order_id=..., source_root=..., dream_studio_home=...)`.
   If `workflow_template` is set, tell the user:
   > "Workflow: `[workflow_template]`. First node: `think`. Invoke `ds-core:think` to begin."
 
 Tell the user:
 > "Work order started. Work within the scope of this work order.
-> When you're done: `py -m interfaces.cli.ds work-order close <work_order_id>`"
+> When you're done: `ds work-order close <work_order_id>`"
 
 ---
 
@@ -364,11 +352,11 @@ Tell the user:
 **If the database is missing:**
 > "Dream Studio SQLite authority isn't set up yet. Run `ds rehearsal-install --rehearsal-home <path>` to create a local authority database, then come back."
 
-**If `ds project register` returns an error:**
+**If `register_project()` returns `{"ok": False}`:**
 > Capture the error message and report it verbatim. Do not silently swallow errors. Ask the developer to resolve the issue and then continue from Step 1.
 
-**If a milestone INSERT fails because the UUID collides:**
-> Generate a new UUID and retry once. If it fails again, report the error and stop.
+**If `create_milestone()` returns `{"ok": False}` on a conflict:**
+> Retry with a new call (a fresh UUID is generated each call). If it fails again, report the error and stop.
 
 **If the developer wants to abort after Phase 3:**
 > Ask: "Do you want to save the milestone sketches without work orders, or discard everything?" Respect the answer.
