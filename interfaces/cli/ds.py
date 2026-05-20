@@ -2153,25 +2153,20 @@ def _design_brief_show(
 def _design_brief_create(
     *, project_id: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    """CLI wrapper around ``core.design_briefs.mutations.create_design_brief``."""
 
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    from core.design_briefs.mutations import create_design_brief
+
+    result = create_design_brief(
+        project_id=project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    brief_id = str(_uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        conn.execute(
-            "INSERT INTO ds_design_briefs (brief_id, project_id, status, created_at, updated_at)"
-            " VALUES (?, ?, 'draft', ?, ?)",
-            (brief_id, project_id, now, now),
-        )
-        conn.commit()
-    print(f"Draft brief created: {brief_id}")
-    print(f"Next: invoke website:discover with --work-order <wo_id> to populate the brief")
+    if not result.get("ok"):
+        print(json.dumps(result))
+        return 1
+    print(f"Draft brief created: {result['brief_id']}")
+    print(f"Next: {result['next_step']}")
     return 0
 
 
