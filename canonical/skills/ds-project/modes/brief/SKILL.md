@@ -18,11 +18,11 @@ Resolves the `design_brief_locked` gate without requiring manual `design-brief u
 
 ## Before you start
 
-Run: `ds design-brief show <project_id>`
+Call `get_design_brief(project_id=..., source_root=..., dream_studio_home=...)`.
 
-If no brief exists yet, run: `ds design-brief create <project_id>`
+If no brief exists yet, call `create_design_brief(project_id=..., source_root=..., dream_studio_home=...)`.
 
-Capture the `brief_id` from the output — all updates use it.
+Capture the `brief_id` from the returned dict — all updates use it.
 
 ## Rules
 
@@ -36,17 +36,17 @@ Capture the `brief_id` from the output — all updates use it.
 ### 1 — Purpose
 Ask: "What is this project for? Describe it in 1–2 sentences."
 
-Run: `ds design-brief update <brief_id> --field purpose --value "<answer>"`
+Call `update_design_brief_field(brief_id=..., field="purpose", value="<answer>", source_root=..., dream_studio_home=...)`
 
 ### 2 — Audience
 Ask: "Who will use this? (e.g., internal team, external customers, executives)"
 
-Run: `ds design-brief update <brief_id> --field audience --value "<answer>"`
+Call `update_design_brief_field(brief_id=..., field="audience", value="<answer>", source_root=..., dream_studio_home=...)`
 
 ### 3 — Tone
 Ask: "What tone should the UI have? (e.g., professional, playful, technical, minimal)"
 
-Run: `ds design-brief update <brief_id> --field tone --value "<answer>"`
+Call `update_design_brief_field(brief_id=..., field="tone", value="<answer>", source_root=..., dream_studio_home=...)`
 
 ### 4 — Design System
 Ask: "Pick a design system:
@@ -56,25 +56,25 @@ Ask: "Pick a design system:
 4. playful-rounded — friendly, colorful, consumer-facing
 5. tech-minimal — dark mode, monospace accents, developer tooling feel"
 
-Run: `ds design-brief set-system <brief_id> <system_name>`
+Call `set_design_system(brief_id=..., system_name="<system_name>", source_root=..., dream_studio_home=...)`.
 
-where `<system_name>` is exactly one of: `brutalist-bold`, `editorial-modern`,
+`<system_name>` must be exactly one of: `brutalist-bold`, `editorial-modern`,
 `executive-clean`, `playful-rounded`, `tech-minimal`.
 
 ### 5 — Font Pairing
 Ask: "What font pairing? Give a primary and secondary font, or say 'use system defaults'."
 
-Run: `ds design-brief update <brief_id> --field font_pairing --value "<answer>"`
+Call `update_design_brief_field(brief_id=..., field="font_pairing", value="<answer>", source_root=..., dream_studio_home=...)`
 
 ### 6 — Brand Tokens
 Ask: "Any key colors, spacing scale, or brand tokens to enforce?
 (e.g., 'primary #1A1A2E, accent #E94560, 8px base unit' — or 'none, use the design system defaults')"
 
-Run: `ds design-brief update <brief_id> --field brand_tokens --value "<answer>"`
+Call `update_design_brief_field(brief_id=..., field="brand_tokens", value="<answer>", source_root=..., dream_studio_home=...)`
 
 ## Confirmation and lock
 
-After all 6 fields are filled, run `ds design-brief show <project_id>` to verify,
+After all 6 fields are filled, call `get_design_brief(project_id=..., source_root=..., dream_studio_home=...)` to verify,
 then present a summary:
 
 > "Here's your design brief:
@@ -87,7 +87,7 @@ then present a summary:
 >
 > Lock this brief? (1) Yes, lock it. (2) Change [field]."
 
-When confirmed: `ds design-brief lock <brief_id>`
+When confirmed: call `lock_design_brief(brief_id=..., source_root=..., dream_studio_home=...)`.
 
 Then: "Brief locked. The `design_brief_locked` gate is now satisfied.
-Run `ds work-order start <work_order_id>` to begin the work order."
+Invoke `ds-project:resume` and type **start** to begin the work order."
