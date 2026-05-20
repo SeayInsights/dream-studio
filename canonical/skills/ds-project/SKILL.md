@@ -11,12 +11,14 @@
 0. **Progressive disclosure check:** Apply the portable skill contract before dispatching.
 
 1. Parse the mode from the argument (first word).
-2. Only one mode exists: `scope`. If no mode is specified, default to `scope`.
-3. Follow the scope mode instructions in this file exactly — one phase at a time, one question at a time, no skipping.
+2. If no mode given, default to `scope`.
+3. Read the mode's instructions (in this file or the corresponding modes/ SKILL.md) and follow them exactly.
 
-| Mode  | Keywords |
-|-------|----------|
-| scope | ds project scope, scope project:, project scope: |
+| Mode   | File | Keywords |
+|--------|------|----------|
+| scope  | This file — Phase 1–5 below | scope project:, ds project scope:, create prd: |
+| resume | This file — Resume Mode section | resume:, continue:, what's next:, where was I:, start building: |
+| brief  | modes/brief/SKILL.md | design brief:, fill brief:, brief:, lock brief: |
 
 ---
 
@@ -284,10 +286,6 @@ Project scoped. Run `ds project next <project_id>` to start the first work order
 > NOT explicit confirmation — the user must say "start" or give an unambiguous
 > instruction naming the action to take.
 
-**Trigger keywords:** resume:, pick up:, get back to:, what's next:, what's active:,
-start building:, continue:, where was I:, what am I working on:,
-what should I do:
-
 This mode is a **conversational navigator**. It never exposes raw JSON, UUIDs, exit
 codes, or internal state to the user. It uses CLI commands as backend tools and
 presents results in plain English.
@@ -303,63 +301,60 @@ presents results in plain English.
 
 ### Flow
 
-**Step 1 — Query active project:**
+**Step 1 — Get full project state (one call):**
 
-Run: `ds project list`
+Run: `ds project state`
 
-- If one active project found: proceed with it
-- If no active project: ask "Which project do you want to work on?" and show the list by name
-- If multiple active: ask the user to pick one by name
+This returns everything in one call: active project, current milestone, next work
+order, gate status, design brief status, task count, and the recommended
+`next_action`.
 
-**Step 2 — Query next work order:**
+**Step 2 — Present briefing:**
 
-Run: `ds project next <project_id>`
+Parse the first project in `projects[]`. Compose a plain English briefing:
 
-Surface the result as a plain English briefing:
-> "You're working on **[Project Name]**.
+> "You're working on **[name]**.
 >
-> **Milestone:** [Milestone Name]
-> **Next work order:** [Work Order Title] ([work_order_type])
-> **Status:** [open / in_progress]"
+> **Milestone:** [milestone.title]
+> **Next:** [next_work_order.title] ([type_label])
+> **Status:** [status]
+> [If gotchas exist]: **Watch out for:** [gotchas[0].title]
+> [If gate blocked]: **Blocker:** [next_action from response]"
 
-If no open work orders:
-> "You're working on [Project Name] and all work orders are complete. Run `ds milestone list <project_id>` to see milestone status."
+Then end with this exact gate — no variations:
 
-**Step 3 — Present gate and stop:**
-
-After the briefing, end with this exact gate — no variations:
-
-> "Type **start** to begin this work order, or ask me anything about it first.
+> "Type **start** to begin, or ask me anything first.
 > No changes will be made until you confirm."
 
 **STOP. Do not run any further commands.** Wait for the user's response.
 
-**Step 4 — Start only on explicit confirmation:**
+**Edge cases:**
+- If `projects` is empty: "No active projects. Start one with `ds-project scope`."
+- If `next_work_order` is null: "All work orders complete. Check milestone status with `ds milestone list <project_id>`."
+- If `next_action` mentions a gate blocker: surface it before offering "start".
 
-Only proceed if the user typed "start" or gave an unambiguous instruction that
-names the action (e.g., "begin this work order", "run the start command").
+**Step 3 — Start only on explicit confirmation:**
+
+Only proceed if the user typed "start" or gave an unambiguous instruction naming
+the action (e.g., "begin this work order", "run the start command").
 
 Do NOT treat the following as confirmation: "yes", "ok", "sure", "continue",
-"let's go", "sounds good", "go ahead". These are ambiguous and must prompt:
-> "Just to confirm — type **start** to run `ds work-order start` on [Work Order Title]."
+"let's go", "sounds good", "go ahead". Respond with:
+> "Just to confirm — type **start** to run `ds work-order start` on [title]."
 
-When confirmed, run:
-```
-ds work-order start <work_order_id>
-```
+When confirmed, follow the `next_action` from the state response:
+- If gate is blocked → invoke the `precondition_skill` listed in the gates object
+- If `total_tasks == 0` → invoke `ds-core:plan` to decompose tasks first
+- Otherwise → run:
+  ```
+  ds work-order start <work_order_id>
+  ```
+  If `workflow_template` is set, tell the user:
+  > "Workflow: `[workflow_template]`. First node: `think`. Invoke `ds-core:think` to begin."
 
-Then tell the user:
-> "Work order started. Work within [module_boundary from context.md].
-> When you're done, run:
-> `py -m interfaces.cli.ds work-order close <work_order_id>`"
-
-Present the close command as a copyable line, not as a UUID reference.
-
-### active project query step
-
-The first action in every resume conversation is to determine the active project.
-Use `ds project list` to identify it. Never assume a project is active without
-checking the database.
+Tell the user:
+> "Work order started. Work within the scope of this work order.
+> When you're done: `py -m interfaces.cli.ds work-order close <work_order_id>`"
 
 ---
 
