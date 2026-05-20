@@ -147,6 +147,27 @@ def test_write_work_order_context_renders_brief_warning_for_ui_no_brief(
     assert "website:discover" in content
 
 
+def test_write_work_order_context_enforcement_block_contains_no_cli_commands(
+    patched_paths, tmp_path: Path
+) -> None:
+    import re
+
+    from core.work_orders.start import read_work_order_brief, write_work_order_context
+
+    brief = read_work_order_brief(
+        work_order_id=WO_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    context_path = write_work_order_context(brief, planning_root=tmp_path / ".planning", now=NOW)
+    content = context_path.read_text(encoding="utf-8")
+    assert not re.search(r"py -m interfaces\.cli\.ds", content), (
+        "context.md enforcement block must not contain CLI commands"
+    )
+    assert "ds-workorder:execute" in content
+    assert "ds-workorder:close" in content
+
+
 def test_write_work_order_context_rejects_failed_brief(tmp_path: Path) -> None:
     from core.work_orders.start import write_work_order_context
 
