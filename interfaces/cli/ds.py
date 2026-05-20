@@ -1392,84 +1392,56 @@ def _project_start(
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
 ) -> int:
-    """Activate project and auto-start its next open work order."""
-    from datetime import datetime, timezone
+    """CLI wrapper around `core.projects.start.start_project`.
 
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root,
-        dream_studio_home=dream_studio_home,
-    )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+    Converts the composer's compound result dict into the legacy
+    operator-facing output: the inner `work_order_start` JSON on stdout
+    (so tests that parse it still work), then a human-readable summary
+    with the project name, work-order title, type/milestone, context.md
+    path, task count, and close hint.
+    """
 
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        proj_row = conn.execute(
-            "SELECT name FROM ds_projects WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        if proj_row is None:
-            print(json.dumps({"ok": False, "error": f"Project not found: {project_id}"}))
-            return 1
-        project_name = proj_row[0]
+    from core.projects.start import start_project
 
-        # Set project active
-        conn.execute(
-            "UPDATE ds_projects SET status = 'paused', updated_at = ? WHERE status = 'active'",
-            (now,),
-        )
-        conn.execute(
-            "UPDATE ds_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
-            (now, project_id),
-        )
-        conn.commit()
-
-        # Find next open work order
-        wo_row = conn.execute(
-            "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
-            " FROM ds_work_orders wo"
-            " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-            " WHERE wo.project_id = ? AND wo.status = 'open'"
-            " ORDER BY wo.created_at ASC LIMIT 1",
-            (project_id,),
-        ).fetchone()
-
-        if wo_row is None:
-            print(
-                f"Project activated: {project_name}\n"
-                "No open work orders found.\n"
-                f"Run `ds project next {project_id}` to check status."
-            )
-            return 0
-
-        wo_id, wo_title, wo_type, milestone_title = wo_row
-
-    # Start the work order
-    rc = _work_order_start(
-        work_order_id=wo_id,
+    result = start_project(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
         planning_root=planning_root,
     )
 
-    if rc != 0:
-        return rc
+    if not result.get("ok"):
+        print(json.dumps(result))
+        return 1
 
-    # Count tasks
-    p_root = planning_root or Path.cwd() / ".planning"
-    context_path = p_root / "work-orders" / wo_id / "context.md"
-    task_count = 0
-    if context_path.exists():
-        content = context_path.read_text(encoding="utf-8")
-        task_count = content.count("- [ ]")
+    project_name = result.get("project_name", project_id)
 
-    milestone_str = milestone_title or "—"
-    type_str = wo_type or "—"
+    if result.get("no_open_work_orders"):
+        print(
+            f"Project activated: {project_name}\n"
+            "No open work orders found.\n"
+            f"Run `ds project next {project_id}` to check status."
+        )
+        return 0
+
+    next_wo = result.get("next_work_order") or {}
+    wo_id = next_wo.get("work_order_id", "")
+    wo_title = next_wo.get("title", "")
+    wo_type = next_wo.get("work_order_type") or "—"
+    milestone_str = next_wo.get("milestone") or "—"
+    context_path = result.get("context_path") or ""
+    task_count = result.get("tasks_count", 0)
     tasks_str = f"{task_count} tasks queued" if task_count else "tasks queued"
+
+    # Preserve the legacy operator surface: the inner work-order start JSON
+    # was previously printed by _work_order_start before the summary.
+    wo_start = result.get("work_order_start") or {}
+    print(json.dumps(wo_start, indent=2))
 
     print(
         f"\nProject activated: {project_name}\n"
         f"Starting: {wo_title}\n"
-        f"Type: {type_str} | Milestone: {milestone_str}\n"
+        f"Type: {wo_type} | Milestone: {milestone_str}\n"
         f"\nContext loaded: {context_path}\n"
         f"Tasks ready: {tasks_str}\n"
         f"\nRun `ds work-order close {wo_id}` when done."
