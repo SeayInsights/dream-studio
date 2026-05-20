@@ -25,7 +25,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.config.sqlite_bootstrap import latest_migration_version  # noqa: E402
 from core.event_store.studio_db import _connect  # noqa: E402
 from core.analytics_ingestion import (  # noqa: E402
     ingest_analytics_payload,
@@ -50,7 +49,7 @@ from core.installed_productization import (  # noqa: E402
     uninstall_runtime_check,
     update_runtime_check,
 )
-from core.module_profiles import module_profiles, validate_module_profiles  # noqa: E402
+from core.module_profiles import module_profiles  # noqa: E402
 from core.shared_intelligence.contract_atlas import build_contract_atlas  # noqa: E402
 from core.shared_intelligence.contract_atlas_lifecycle import (  # noqa: E402
     refresh_contract_atlas_exports,
@@ -444,7 +443,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         if args.command == "status":
-            return _print(installed_runtime_model(source_root=source_root, dream_studio_home=home))
+            from core.health.status import get_runtime_status
+
+            return _print(get_runtime_status(source_root=source_root, dream_studio_home=home))
         if args.command == "version":
             return _print(_version_status(source_root=source_root, dream_studio_home=home))
         if args.command == "doctor":
@@ -984,20 +985,9 @@ def _dashboard_http_status(url: str, *, timeout_seconds: float) -> dict[str, Any
 
 
 def _version_status(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root,
-        dream_studio_home=dream_studio_home,
-    )
-    return {
-        "model_name": "dream_studio_version_status",
-        "derived_view": True,
-        "primary_authority": False,
-        "source_root": str(paths.source_root),
-        "dream_studio_home": str(paths.dream_studio_home),
-        "latest_migration_version": latest_migration_version(),
-        "global_command": "ds",
-        "version_source": "repo_migrations_and_installed_runtime_model",
-    }
+    from core.health.version import get_version
+
+    return get_version(source_root=source_root, dream_studio_home=dream_studio_home)
 
 
 def _check_dispatcher_hooks(claude_dir: Path) -> bool:
@@ -1097,111 +1087,13 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
 def _doctor_status(
     *, source_root: Path, dream_studio_home: Path | None, fix: bool = False
 ) -> dict[str, Any]:
-    validation = _validate_status(source_root=source_root, dream_studio_home=dream_studio_home)
-    paths = resolve_installed_runtime_paths(
+    from core.health.doctor import run_doctor_checks
+
+    return run_doctor_checks(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
+        fix=fix,
     )
-    claude_dir = Path.home() / ".claude"
-
-    dispatcher_ok = _check_dispatcher_hooks(claude_dir)
-    skills_info = _check_skills_installed(claude_dir, source_root=source_root)
-    agents_info = _check_agents_installed(claude_dir, source_root)
-    failed_info = _check_failed_events(paths.dream_studio_home)
-    version_info = _check_version_current(source_root, paths.dream_studio_home)
-
-    core_pass = validation["ready"]
-    critical_fail = (
-        not dispatcher_ok
-        or skills_info["missing"]
-        or failed_info["count"] >= 6
-        or not version_info["current"]
-    )
-    has_warnings = 0 < failed_info["count"] < 6
-
-    if critical_fail:
-        overall = "fail"
-    elif not core_pass:
-        overall = "attention_required"
-    elif has_warnings:
-        overall = "warn"
-    else:
-        overall = "pass"
-
-    fix_actions: list[str] = []
-    if fix:
-        if not dispatcher_ok or skills_info["missing"] or agents_info["missing"]:
-            try:
-                subprocess.run(
-                    [
-                        sys.executable,
-                        "-m",
-                        "interfaces.cli.ds",
-                        "integrate",
-                        "install",
-                        "claude_code",
-                        "--execute",
-                    ],
-                    check=False,
-                )
-                fix_actions.append("install: ran integrate install claude_code --execute")
-            except Exception as exc:
-                fix_actions.append(f"install: failed — {exc}")
-        if failed_info["count"] > 0:
-            try:
-                spool_events_root = paths.dream_studio_home / "events"
-                failed_dir = spool_events_root / "failed"
-                spool_dir = spool_events_root / "spool"
-                spool_dir.mkdir(parents=True, exist_ok=True)
-                requeued = 0
-                for event_file in list(failed_dir.glob("*.json")):
-                    try:
-                        os.replace(str(event_file), str(spool_dir / event_file.name))
-                        requeued += 1
-                    except OSError:
-                        pass
-                fix_actions.append(f"requeue: moved {requeued} failed event(s) back to spool/")
-            except Exception as exc:
-                fix_actions.append(f"requeue: failed — {exc}")
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "spool", "ingest"],
-                    check=False,
-                )
-                fix_actions.append("spool ingest: ran spool ingest to process requeued events")
-            except Exception as exc:
-                fix_actions.append(f"spool ingest: failed — {exc}")
-        if not version_info["current"]:
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds", "update"],
-                    check=False,
-                )
-                fix_actions.append("update: ran ds update")
-            except Exception as exc:
-                fix_actions.append(f"update: failed — {exc}")
-
-    result: dict[str, Any] = {
-        "model_name": "dream_studio_doctor_status",
-        "derived_view": True,
-        "primary_authority": False,
-        "status": overall,
-        "checks": {
-            "sqlite_exists": validation["sqlite_exists"],
-            "schema_version_known": validation["schema_version"] is not None,
-            "module_profiles_valid": not validation["module_profile_errors"],
-            "doctor_runs_read_only": True,
-            "dispatcher_hooks_installed": dispatcher_ok,
-            "skills_installed": skills_info,
-            "agents_installed": agents_info,
-            "failed_events": failed_info,
-            "version_current": version_info,
-        },
-        "validation": validation,
-    }
-    if fix:
-        result["fix_actions"] = fix_actions
-    return result
 
 
 def _update_command(
@@ -1293,30 +1185,9 @@ def _repair_plan(*, source_root: Path, dream_studio_home: Path | None) -> dict[s
 
 
 def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> dict[str, Any]:
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root,
-        dream_studio_home=dream_studio_home,
-    )
-    profile_errors = validate_module_profiles()
-    db_exists = paths.sqlite_path.exists()
-    schema_version = None
-    if db_exists:
-        with _connect(paths.sqlite_path) as conn:
-            schema_version = conn.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0]
-    return {
-        "model_name": "dream_studio_installed_runtime_validation",
-        "derived_view": True,
-        "primary_authority": False,
-        "source_root": str(paths.source_root),
-        "dream_studio_home": str(paths.dream_studio_home),
-        "sqlite_path": str(paths.sqlite_path),
-        "sqlite_exists": db_exists,
-        "schema_version": schema_version,
-        "latest_migration_version": latest_migration_version(),
-        "module_profile_errors": profile_errors,
-        "ready": db_exists and not profile_errors,
-        "doctor_runs_read_only": True,
-    }
+    from core.health.validate import run_validation
+
+    return run_validation(source_root=source_root, dream_studio_home=dream_studio_home)
 
 
 def _project_dispatch(
@@ -1435,32 +1306,15 @@ def _project_list(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    from core.projects.queries import get_project_list
+
+    result = get_project_list(
+        status_filter=status_filter,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        rows = conn.execute(
-            "SELECT project_id, name, description, status, created_at FROM ds_projects"
-            " WHERE status = ? ORDER BY created_at DESC",
-            (status_filter,),
-        ).fetchall()
-
-    projects = [
-        {
-            "project_id": r[0],
-            "name": r[1],
-            "description": r[2],
-            "status": r[3],
-            "created_at": r[4],
-        }
-        for r in rows
-    ]
-    print(json.dumps({"ok": True, "projects": projects}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _project_status(
@@ -1469,43 +1323,15 @@ def _project_status(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    from core.projects.queries import get_project_status
+
+    result = get_project_status(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        proj = conn.execute(
-            "SELECT project_id, name, status FROM ds_projects WHERE project_id = ?",
-            (project_id,),
-        ).fetchone()
-        if proj is None:
-            print(json.dumps({"ok": False, "error": f"Project not found: {project_id}"}))
-            return 1
-        milestone_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_milestones WHERE project_id = ?", (project_id,)
-        ).fetchone()[0]
-        work_order_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?", (project_id,)
-        ).fetchone()[0]
-        open_work_order_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ? AND status = 'open'",
-            (project_id,),
-        ).fetchone()[0]
-
-    result = {
-        "ok": True,
-        "project_id": proj[0],
-        "name": proj[1],
-        "status": proj[2],
-        "milestone_count": milestone_count,
-        "work_order_count": work_order_count,
-        "open_work_order_count": open_work_order_count,
-    }
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("ok") else 1
 
 
 def _project_next(
@@ -1514,58 +1340,15 @@ def _project_next(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    from core.projects.queries import get_next_work_order
+
+    result = get_next_work_order(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        # Resume any in_progress WO in the lowest-order incomplete milestone first.
-        row = conn.execute(
-            "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
-            " FROM ds_work_orders wo"
-            " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-            " WHERE wo.project_id = ? AND wo.status = 'in_progress'"
-            " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
-            (project_id,),
-        ).fetchone()
-
-        if row is None:
-            # No in_progress WOs — find the first open WO in the lowest incomplete milestone.
-            row = conn.execute(
-                "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
-                " FROM ds_work_orders wo"
-                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-                " WHERE wo.project_id = ? AND wo.status = 'open'"
-                " AND m.order_index = ("
-                "   SELECT MIN(m2.order_index)"
-                "   FROM ds_work_orders wo2"
-                "   LEFT JOIN ds_milestones m2 ON wo2.milestone_id = m2.milestone_id"
-                "   WHERE wo2.project_id = ? AND wo2.status IN ('open', 'in_progress')"
-                " )"
-                " ORDER BY wo.created_at ASC LIMIT 1",
-                (project_id, project_id),
-            ).fetchone()
-
-    if row is None:
-        print(json.dumps({"ok": True, "work_order": None, "message": "No open work orders"}))
-        return 0
-
-    wo_id = row[0]
-    result = {
-        "ok": True,
-        "work_order": {
-            "work_order_id": wo_id,
-            "title": row[1],
-            "work_order_type": row[2],
-            "milestone": row[3] or "",
-            "next_command": f"ds work-order start {wo_id}",
-        },
-    }
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("ok") else 1
 
 
 def _project_set_active(
@@ -1574,35 +1357,15 @@ def _project_set_active(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    from datetime import datetime, timezone
+    from core.projects.mutations import set_active_project
 
-    paths = resolve_installed_runtime_paths(
+    result = set_active_project(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Project not found: {project_id}"}))
-            return 1
-        conn.execute(
-            "UPDATE ds_projects SET status = 'paused', updated_at = ? WHERE status = 'active'",
-            (now,),
-        )
-        conn.execute(
-            "UPDATE ds_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
-            (now, project_id),
-        )
-        conn.commit()
-
-    print(json.dumps({"ok": True, "project_id": project_id, "status": "active"}))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _project_deactivate(
@@ -1611,31 +1374,15 @@ def _project_deactivate(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    from datetime import datetime, timezone
+    from core.projects.mutations import deactivate_project
 
-    paths = resolve_installed_runtime_paths(
+    result = deactivate_project(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Project not found: {project_id}"}))
-            return 1
-        conn.execute(
-            "UPDATE ds_projects SET status = 'paused', updated_at = ? WHERE project_id = ?",
-            (now, project_id),
-        )
-        conn.commit()
-
-    print(json.dumps({"ok": True, "project_id": project_id, "status": "paused"}))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _project_start(
@@ -1815,188 +1562,15 @@ def _project_state(
     planning_root: Path | None = None,
 ) -> int:
     """Single-call project state: active project + next WO + gates + brief + tasks + gotchas."""
-    paths = resolve_installed_runtime_paths(
+    from core.projects.queries import get_project_state
+
+    result = get_project_state(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    p_root = planning_root or Path.cwd() / ".planning"
-
-    with _connect(paths.sqlite_path) as conn:
-        projects_raw = conn.execute(
-            "SELECT project_id, name, status FROM ds_projects WHERE status = 'active'"
-            " ORDER BY updated_at DESC"
-        ).fetchall()
-
-        if not projects_raw:
-            print(
-                json.dumps(
-                    {
-                        "ok": True,
-                        "projects": [],
-                        "next_action": "No active projects. Run `ds-project scope` to scope a new one.",
-                    }
-                )
-            )
-            return 0
-
-        result_projects = []
-        for proj in projects_raw:
-            pid = proj["project_id"]
-
-            # Next open/in_progress WO in lowest-order milestone.
-            wo_row = conn.execute(
-                "SELECT wo.work_order_id, wo.title, wo.status, wo.work_order_type,"
-                " m.milestone_id, m.title AS milestone_title, m.order_index,"
-                " wot.label, wot.pre_build_gate, wot.build_executor, wot.post_build_gate,"
-                " wot.workflow_template, wot.precondition_skill, wot.task_generator,"
-                " (SELECT COUNT(*) FROM ds_tasks t"
-                "  WHERE t.work_order_id = wo.work_order_id AND t.status = 'pending') AS pending_tasks,"
-                " (SELECT COUNT(*) FROM ds_tasks t"
-                "  WHERE t.work_order_id = wo.work_order_id) AS total_tasks"
-                " FROM ds_work_orders wo"
-                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-                " LEFT JOIN ds_work_order_types wot ON wot.type_id = wo.work_order_type"
-                " WHERE wo.project_id = ? AND wo.status IN ('open', 'in_progress')"
-                " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
-                (pid,),
-            ).fetchone()
-
-            # Design brief (most recent for this project).
-            brief_row = None
-            try:
-                brief_row = conn.execute(
-                    "SELECT brief_id, status, purpose, audience, tone, design_system,"
-                    " font_pairing, brand_tokens FROM ds_design_briefs"
-                    " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
-                    (pid,),
-                ).fetchone()
-            except Exception:
-                pass
-
-            brief_info: dict[str, Any] | None = None
-            if brief_row:
-                fields = [
-                    "purpose",
-                    "audience",
-                    "tone",
-                    "design_system",
-                    "font_pairing",
-                    "brand_tokens",
-                ]
-                filled = sum(1 for f in fields if brief_row[f])
-                brief_info = {
-                    "brief_id": brief_row["brief_id"],
-                    "status": brief_row["status"],
-                    "fields_filled": filled,
-                    "fields_total": len(fields),
-                }
-
-            wo_info: dict[str, Any] | None = None
-            next_action = "No open work orders. All milestones may be complete."
-
-            if wo_row:
-                wo_type = wo_row["work_order_type"]
-                build_exec = wo_row["build_executor"]
-                pre_gate = wo_row["pre_build_gate"]
-                precondition_skill = wo_row["precondition_skill"]
-                workflow_template = wo_row["workflow_template"]
-                task_generator = wo_row["task_generator"] or "ds-core:plan"
-
-                # Gate check using the same logic as work-order close.
-                gate_satisfied = True
-                if pre_gate:
-                    gate_passed, _ = _run_gate_check(
-                        pre_gate,
-                        planning_root=p_root,
-                        work_order_id=wo_row["work_order_id"],
-                        project_id=pid,
-                        conn=conn,
-                    )
-                    gate_satisfied = gate_passed
-
-                # Gotchas relevant to this WO type / executor.
-                gotcha_rows: list[Any] = []
-                try:
-                    gotcha_rows = conn.execute(
-                        "SELECT severity, title, fix FROM reg_gotchas"
-                        " WHERE skill_id = ? OR skill_id LIKE ?"
-                        " ORDER BY times_hit DESC, discovered DESC LIMIT 3",
-                        (build_exec or "", f"{wo_type}%" if wo_type else ""),
-                    ).fetchall()
-                except Exception:
-                    pass
-
-                gotchas = [
-                    {"severity": g["severity"], "title": g["title"], "fix": g["fix"]}
-                    for g in gotcha_rows
-                ]
-
-                # Compute next_action.
-                if not gate_satisfied and pre_gate:
-                    skill_hint = precondition_skill or "ds-project:brief"
-                    next_action = (
-                        f"Gate `{pre_gate}` is not satisfied. "
-                        f"Invoke `{skill_hint}` to resolve it."
-                    )
-                elif wo_row["total_tasks"] == 0:
-                    next_action = (
-                        f"No tasks defined for this work order. "
-                        f"Invoke `{task_generator}` to decompose tasks, "
-                        f"then `ds work-order start {wo_row['work_order_id']}`."
-                    )
-                elif wo_row["status"] == "open":
-                    next_action = f"Run: ds work-order start {wo_row['work_order_id']}"
-                    if workflow_template:
-                        next_action += (
-                            f"\nWorkflow: `{workflow_template}`. "
-                            f"First node: `think`. Invoke `ds-core:think` to begin."
-                        )
-                else:
-                    next_action = (
-                        f"Work order in progress. Complete remaining tasks, "
-                        f"then: ds work-order close {wo_row['work_order_id']}"
-                    )
-
-                wo_info = {
-                    "work_order_id": wo_row["work_order_id"],
-                    "title": wo_row["title"],
-                    "status": wo_row["status"],
-                    "type": wo_type,
-                    "type_label": wo_row["label"],
-                    "workflow_template": workflow_template,
-                    "pending_tasks": wo_row["pending_tasks"],
-                    "total_tasks": wo_row["total_tasks"],
-                    "gates": {
-                        "pre_build": pre_gate,
-                        "pre_build_satisfied": gate_satisfied,
-                        "precondition_skill": precondition_skill,
-                        "build_executor": build_exec,
-                        "post_build": wo_row["post_build_gate"],
-                    },
-                    "design_brief": brief_info,
-                    "milestone": {
-                        "milestone_id": wo_row["milestone_id"],
-                        "title": wo_row["milestone_title"],
-                        "order_index": wo_row["order_index"],
-                    },
-                    "gotchas": gotchas,
-                }
-
-            result_projects.append(
-                {
-                    "project_id": pid,
-                    "name": proj["name"],
-                    "status": proj["status"],
-                    "next_work_order": wo_info,
-                    "next_action": next_action,
-                }
-            )
-
-        print(json.dumps({"ok": True, "projects": result_projects}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _integrate_dispatch(
@@ -2513,47 +2087,16 @@ def _work_order_list(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    from core.work_orders.queries import list_work_orders
+
+    result = list_work_orders(
+        project_id=project_id,
+        status_filter=status_filter,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    conditions: list[str] = []
-    params: list[Any] = []
-    if project_id:
-        conditions.append("wo.project_id = ?")
-        params.append(project_id)
-    if status_filter:
-        conditions.append("wo.status = ?")
-        params.append(status_filter)
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
-
-    query = (
-        "SELECT wo.work_order_id, wo.title, wo.work_order_type, wo.status,"
-        " m.title AS milestone_title"
-        " FROM ds_work_orders wo"
-        " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-        f" {where}"
-        " ORDER BY wo.created_at ASC"
-    )
-
-    with _connect(paths.sqlite_path) as conn:
-        rows = conn.execute(query, params).fetchall()
-
-    work_orders = [
-        {
-            "id": r[0],
-            "title": r[1],
-            "type": r[2] or "",
-            "status": r[3],
-            "milestone": r[4] or "",
-        }
-        for r in rows
-    ]
-    print(json.dumps({"ok": True, "work_orders": work_orders}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 _SKILL_SPECIFIER_RE = __import__("re").compile(r"^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$")
@@ -2791,67 +2334,15 @@ def _skill_list(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    packs_data = _load_packs(source_root)
-    packs = packs_data.get("packs", {})
+    from core.skills.queries import list_skills
 
-    skills: list[dict[str, Any]] = []
-    for pack_name, pack_info in packs.items():
-        if pack_filter and pack_name != pack_filter:
-            continue
-        for mode_name in pack_info.get("modes", []):
-            _skill_path_key = pack_info.get("skill_path")
-            if _skill_path_key:
-                skill_md = source_root / _skill_path_key / "modes" / mode_name / "SKILL.md"
-            else:
-                skill_md = (
-                    source_root
-                    / "canonical"
-                    / "skills"
-                    / pack_name
-                    / "modes"
-                    / mode_name
-                    / "SKILL.md"
-                )
-            config_yml = skill_md.parent / "config.yml"
-
-            model_preference = None
-            estimated_duration = None
-
-            if config_yml.is_file():
-                try:
-                    import yaml as _yaml
-
-                    config_data = _yaml.safe_load(config_yml.read_text(encoding="utf-8"))
-                    if isinstance(config_data, dict):
-                        model_preference = config_data.get("model_tier")
-                except Exception:
-                    pass
-
-            if skill_md.is_file():
-                try:
-                    import yaml as _yaml
-
-                    text = skill_md.read_text(encoding="utf-8-sig")
-                    fm_match = _SKILL_FM_RE.match(text)
-                    if fm_match:
-                        fm_data = _yaml.safe_load(fm_match.group(1))
-                        if isinstance(fm_data, dict):
-                            ds_section = fm_data.get("dream_studio", {})
-                            if isinstance(ds_section, dict):
-                                estimated_duration = ds_section.get("estimated_duration")
-                except Exception:
-                    pass
-
-            skills.append(
-                {
-                    "specifier": f"{pack_name}:{mode_name}",
-                    "model_preference": model_preference or "sonnet",
-                    "estimated_duration": estimated_duration,
-                }
-            )
-
-    print(json.dumps({"ok": True, "skills": skills}, indent=2))
-    return 0
+    result = list_skills(
+        pack_filter=pack_filter,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _run_gate_check(
@@ -3133,69 +2624,16 @@ def _work_order_block(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    from core.work_orders.mutations import block_work_order
 
-    paths = resolve_installed_runtime_paths(
+    result = block_work_order(
+        work_order_id=work_order_id,
+        reason=reason,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, title, project_id FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-
-        wo_id, title, project_id = wo_row
-        now = datetime.now(timezone.utc).isoformat()
-
-        try:
-            import spool.writer as _spool_writer
-
-            _spool_writer.write_event(
-                {
-                    "event_id": str(_uuid.uuid4()),
-                    "event_type": "work_order.blocked",
-                    "timestamp": now,
-                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                    "severity": "warning",
-                    "payload": {
-                        "work_order_id": work_order_id,
-                        "title": title,
-                        "project_id": project_id,
-                        "reason": reason,
-                    },
-                    "source_type": "confirmed",
-                }
-            )
-        except Exception:
-            pass
-
-        conn.execute(
-            "UPDATE ds_work_orders SET status = 'blocked', block_reason = ?, updated_at = ?"
-            " WHERE work_order_id = ?",
-            (reason, now, work_order_id),
-        )
-        conn.commit()
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "work_order_id": work_order_id,
-                "status": "blocked",
-                "block_reason": reason,
-            },
-            indent=2,
-        )
-    )
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_unblock(
@@ -3204,52 +2642,15 @@ def _work_order_unblock(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    from datetime import datetime, timezone
+    from core.work_orders.mutations import unblock_work_order
 
-    paths = resolve_installed_runtime_paths(
+    result = unblock_work_order(
+        work_order_id=work_order_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, title, status FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-
-        wo_id, title, wo_status = wo_row
-        if wo_status != "blocked":
-            print(
-                json.dumps(
-                    {"ok": False, "error": f"Work order is not blocked (status: {wo_status})"}
-                )
-            )
-            return 1
-
-        now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "UPDATE ds_work_orders SET status = 'in_progress', block_reason = NULL, updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, work_order_id),
-        )
-        conn.commit()
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "work_order_id": work_order_id,
-                "status": "in_progress",
-            },
-            indent=2,
-        )
-    )
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_task_done(
@@ -3260,109 +2661,21 @@ def _work_order_task_done(
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    from core.work_orders.mutations import mark_task_done, todowrite_should_emit
 
-    paths = resolve_installed_runtime_paths(
+    result = mark_task_done(
+        work_order_id=work_order_id,
+        task_id=task_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        task_row = conn.execute(
-            "SELECT task_id, work_order_id, title, status FROM ds_tasks WHERE task_id = ?",
-            (task_id,),
-        ).fetchone()
-        if task_row is None:
-            print(json.dumps({"ok": False, "error": f"Task not found: {task_id}"}))
-            return 1
-
-        t_id, t_wo_id, t_title, t_status = task_row
-        if t_wo_id != work_order_id:
-            print(
-                json.dumps(
-                    {
-                        "ok": False,
-                        "error": f"Task {task_id} does not belong to work order {work_order_id}",
-                    }
-                )
-            )
-            return 1
-
-        now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "UPDATE ds_tasks SET status = 'complete', updated_at = ? WHERE task_id = ?",
-            (now, task_id),
-        )
-        conn.commit()
-
-        remaining = conn.execute(
-            "SELECT COUNT(*) FROM ds_tasks"
-            " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')",
-            (work_order_id,),
-        ).fetchone()[0]
-
-        task_index = (
-            conn.execute(
-                "SELECT COUNT(*) FROM ds_tasks"
-                " WHERE work_order_id = ? AND created_at <= ("
-                "   SELECT created_at FROM ds_tasks WHERE task_id = ?"
-                ")",
-                (work_order_id, task_id),
-            ).fetchone()[0]
-            - 1
-        )
-
-    p_root = planning_root or Path.cwd() / ".planning"
-    context_path = p_root / "work-orders" / work_order_id / "context.md"
-    if context_path.is_file():
-        text = context_path.read_text(encoding="utf-8")
-        text = text.replace(f"- [ ] {t_title}", f"- [x] {t_title}", 1)
-        context_path.write_text(text, encoding="utf-8")
-
-    try:
-        import spool.writer as _spool_writer
-
-        _spool_writer.write_event(
-            {
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "task.completed",
-                "timestamp": now,
-                "trace": {"work_order_id": work_order_id, "task_id": task_id},
-                "severity": "info",
-                "payload": {
-                    "task_id": task_id,
-                    "work_order_id": work_order_id,
-                    "tasks_remaining": remaining,
-                },
-                "source_type": "confirmed",
-            }
-        )
-    except Exception:
-        pass
-
-    settings_path = source_root / ".claude" / "settings.json"
-    if os.environ.get("CLAUDE_CODE") or settings_path.is_file():
+    if result.get("ok") and todowrite_should_emit(source_root):
+        task_index = result.get("task_index", 0)
         todo_id = f"wo-{work_order_id[:8]}-{task_index}"
         print(json.dumps({"todowrite_update": {"id": todo_id, "status": "completed"}}, indent=2))
-
-    result: dict[str, Any] = {
-        "ok": True,
-        "task_id": task_id,
-        "work_order_id": work_order_id,
-        "title": t_title,
-        "status": "complete",
-        "tasks_remaining": remaining,
-    }
-    if remaining == 0:
-        result["all_tasks_complete"] = True
-        result["suggested_action"] = (
-            f"All tasks complete. Close work order: ds work-order close {work_order_id}"
-        )
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_tasks(
@@ -3371,48 +2684,15 @@ def _work_order_tasks(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    from core.work_orders.queries import list_tasks
+
+    result = list_tasks(
+        work_order_id=work_order_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, title FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-
-        rows = conn.execute(
-            "SELECT task_id, title, status FROM ds_tasks"
-            " WHERE work_order_id = ? ORDER BY created_at ASC",
-            (work_order_id,),
-        ).fetchall()
-
-    tasks = []
-    for row in rows:
-        t_id, t_title, t_status = row
-        if t_status == "complete":
-            indicator = "[x]"
-        elif t_status == "in_progress":
-            indicator = "[~]"
-        else:
-            indicator = "[ ]"
-        tasks.append(
-            {
-                "task_id": t_id,
-                "title": t_title,
-                "status": t_status,
-                "indicator": indicator,
-            }
-        )
-
-    print(json.dumps({"ok": True, "work_order_id": work_order_id, "tasks": tasks}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_add_tasks(
@@ -3423,72 +2703,16 @@ def _work_order_add_tasks(
     dream_studio_home: Path | None,
 ) -> int:
     """Parse a numbered-list tasks.md file and insert tasks into ds_tasks."""
-    import re
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    from core.work_orders.mutations import add_tasks_from_file
 
-    if not tasks_file.is_file():
-        print(json.dumps({"ok": False, "error": f"File not found: {tasks_file}"}))
-        return 1
-
-    paths = resolve_installed_runtime_paths(
+    result = add_tasks_from_file(
+        work_order_id=work_order_id,
+        tasks_file=tasks_file,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, project_id FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-        project_id = wo_row[1]
-
-        text = tasks_file.read_text(encoding="utf-8").replace("\r\n", "\n")
-        # Parse numbered list: "1. Title\n   Description" or just "1. Title"
-        items = re.findall(
-            r"^\s*\d+\.\s+(.+?)(?=\n\s*\d+\.|\Z)",
-            text,
-            re.MULTILINE | re.DOTALL,
-        )
-        if not items:
-            print(json.dumps({"ok": False, "error": "No numbered list items found in file"}))
-            return 1
-
-        now = datetime.now(timezone.utc).isoformat()
-        inserted = []
-        for raw in items:
-            lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
-            if not lines:
-                continue
-            t_title = lines[0]
-            t_desc = " ".join(lines[1:]) if len(lines) > 1 else ""
-            t_id = str(_uuid.uuid4())
-            conn.execute(
-                "INSERT INTO ds_tasks"
-                " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-                (t_id, work_order_id, project_id, t_title, t_desc, now, now),
-            )
-            inserted.append({"task_id": t_id, "title": t_title})
-        conn.commit()
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "work_order_id": work_order_id,
-                "tasks_inserted": len(inserted),
-                "tasks": inserted,
-            },
-            indent=2,
-        )
-    )
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 _VALID_DESIGN_SYSTEMS: frozenset[str] = frozenset(
@@ -3560,55 +2784,20 @@ def _design_brief_dispatch(
 def _design_brief_show(
     *, project_id: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    from core.design_briefs.queries import get_design_brief
+
+    result = get_design_brief(
+        project_id=project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT brief_id, status, purpose, audience, tone, design_system,"
-            " font_pairing, brand_tokens, raw_output, created_at, updated_at"
-            " FROM ds_design_briefs WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
-            (project_id,),
-        ).fetchone()
-    if row is None:
-        print(f"No design brief. Run ds design-brief create {project_id}")
+    # `get_design_brief` returns `{"ok": True, "brief": None, "message": ...}` when
+    # no brief exists, vs a brief-shaped dict (with `brief_id`) when one exists.
+    if result.get("ok") and result.get("brief_id") is None:
+        print(result.get("message", "No design brief found."))
         return 0
-    (
-        brief_id,
-        status,
-        purpose,
-        audience,
-        tone,
-        design_system,
-        font_pairing,
-        brand_tokens,
-        raw_output,
-        created_at,
-        updated_at,
-    ) = row
-    status_label = "LOCKED" if status == "locked" else "DRAFT — not yet locked"
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "brief_id": brief_id,
-                "project_id": project_id,
-                "status": f"Status: {status_label}",
-                "purpose": purpose,
-                "audience": audience,
-                "tone": tone,
-                "design_system": design_system,
-                "font_pairing": font_pairing,
-                "brand_tokens": brand_tokens,
-                "created_at": created_at,
-                "updated_at": updated_at,
-            },
-            indent=2,
-        )
-    )
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _design_brief_create(
@@ -3664,81 +2853,32 @@ def _design_brief_lock(*, brief_id: str, source_root: Path, dream_studio_home: P
 def _design_brief_update(
     *, brief_id: str, field: str, value: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
-    from datetime import datetime, timezone
+    from core.design_briefs.mutations import update_design_brief_field
 
-    if field not in _BRIEF_UPDATABLE_FIELDS:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": f"Unknown field: {field}. Valid fields: {sorted(_BRIEF_UPDATABLE_FIELDS)}",
-                }
-            )
-        )
-        return 1
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    result = update_design_brief_field(
+        brief_id=brief_id,
+        field=field,
+        value=value,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?", (brief_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Brief not found: {brief_id}"}))
-            return 1
-        if row[0] == "locked":
-            print(json.dumps({"ok": False, "error": "Brief is locked and cannot be updated"}))
-            return 1
-        conn.execute(
-            f"UPDATE ds_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",
-            (value, now, brief_id),
-        )
-        conn.commit()
-    print(json.dumps({"ok": True, "brief_id": brief_id, "field": field, "value": value}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _design_brief_set_system(
     *, brief_id: str, system_name: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
-    from datetime import datetime, timezone
+    from core.design_briefs.mutations import set_design_system
 
-    if system_name not in _VALID_DESIGN_SYSTEMS:
-        print(
-            json.dumps(
-                {
-                    "ok": False,
-                    "error": f"Invalid design system: {system_name}. Valid values: {sorted(_VALID_DESIGN_SYSTEMS)}",
-                }
-            )
-        )
-        return 1
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    result = set_design_system(
+        brief_id=brief_id,
+        system_name=system_name,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?", (brief_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Brief not found: {brief_id}"}))
-            return 1
-        if row[0] == "locked":
-            print(json.dumps({"ok": False, "error": "Brief is locked and cannot be updated"}))
-            return 1
-        conn.execute(
-            "UPDATE ds_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
-            (system_name, now, brief_id),
-        )
-        conn.commit()
-    print(json.dumps({"ok": True, "brief_id": brief_id, "design_system": system_name}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _milestone_dispatch(
@@ -3946,34 +3086,15 @@ def _milestone_list(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    from core.milestones.queries import list_milestones
+
+    result = list_milestones(
+        project_id=project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    with _connect(paths.sqlite_path) as conn:
-        ms_rows = conn.execute(
-            "SELECT milestone_id, title, status FROM ds_milestones"
-            " WHERE project_id = ? ORDER BY created_at ASC",
-            (project_id,),
-        ).fetchall()
-        milestones = []
-        for ms_id, title, status in ms_rows:
-            wo_count = conn.execute(
-                "SELECT COUNT(*) FROM ds_work_orders WHERE milestone_id = ?", (ms_id,)
-            ).fetchone()[0]
-            milestones.append(
-                {
-                    "milestone_id": ms_id[:8],
-                    "milestone_id_full": ms_id,
-                    "title": title,
-                    "status": status,
-                    "work_order_count": wo_count,
-                    "depends_on": None,
-                }
-            )
-    print(json.dumps({"ok": True, "milestones": milestones}, indent=2))
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _milestone_status(
@@ -3983,66 +3104,16 @@ def _milestone_status(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    from core.milestones.queries import get_milestone_status
+
+    result = get_milestone_status(
+        milestone_id=milestone_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-
-    p_root = planning_root or Path.cwd() / ".planning"
-    ms_dir = p_root / "milestones" / milestone_id
-
-    with _connect(paths.sqlite_path) as conn:
-        ms_row = conn.execute(
-            "SELECT milestone_id, project_id, title, status, due_date FROM ds_milestones"
-            " WHERE milestone_id = ?",
-            (milestone_id,),
-        ).fetchone()
-        if ms_row is None:
-            print(json.dumps({"ok": False, "error": f"Milestone not found: {milestone_id}"}))
-            return 1
-
-        ms_id, project_id, title, status, due_date = ms_row
-
-        wo_rows = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type FROM ds_work_orders"
-            " WHERE milestone_id = ? ORDER BY created_at ASC",
-            (milestone_id,),
-        ).fetchall()
-
-    ui_types = frozenset(["ui_component", "ui_page"])
-    has_ui = any(r[3] in ui_types for r in wo_rows)
-
-    open_checks = []
-    for filename, label in [
-        ("design-audit.md", "design_audit"),
-        ("security-audit.md", "security_audit"),
-        ("harden-results.md", "harden_results"),
-    ]:
-        if not (ms_dir / filename).is_file():
-            open_checks.append(label)
-    if has_ui and not (ms_dir / "cwv-results.md").is_file():
-        open_checks.append("cwv_results")
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "milestone_id": ms_id,
-                "project_id": project_id,
-                "title": title,
-                "status": status,
-                "due_date": due_date,
-                "work_orders": [
-                    {"work_order_id": r[0], "title": r[1], "status": r[2], "type": r[3]}
-                    for r in wo_rows
-                ],
-                "open_gate_checks": open_checks,
-            },
-            indent=2,
-        )
-    )
-    return 0
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _print(payload: dict[str, Any]) -> int:
