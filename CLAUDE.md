@@ -34,45 +34,72 @@ Each pack is one skill with modes. Invoke via `Skill(skill="ds-<pack>", args="<m
 
 | Pack | Skill | Mode keywords |
 |------|-------|---------------|
-| Build lifecycle | `ds-core` | **think:** spec:, research:, shape ux: · **plan:** plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does, walk me through, what is this doing, why does |
-| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish ui:, redesign: · **harden:** /harden, harden audit · **pr-security-scan:** secure:, security review: · **structure-audit:** /structure-audit · **learn:** learn:, capture lesson: · **coach:** /coach, workflow coaching: · **audit:** audit:, health check:, consolidation audit: |
-| Career pipeline | `ds-career` | **ops:** career:, job search · **scan:** scan jobs:, find jobs: · **evaluate:** evaluate offer:, evaluate gig: · **apply:** apply:, cover letter:, tailor resume: · **track:** track:, pipeline: · **pdf:** resume:, generate pdf: |
-| Security analysis | `ds-security` | **scan:** scan:, scan org:, run security scan: · **dast:** dast:, web scan: · **binary-scan:** binary-scan:, analyze exe: · **mitigate:** mitigate:, fix findings: · **comply:** comply:, SOC 2:, NIST: · **netcompat:** netcompat:, Zscaler: · **dashboard:** security dashboard:, export dataset: |
-| Analysis engine | `ds-analyze` | **multi:** analyze:, evaluate idea:, /analyze · **domain-re:** domain-re:, real estate: · **repo:** analyze repo:, repo patterns:, compare repos:, repo analysis: · **intelligence:** project intelligence:, analyze project: |
-| Domain builders | `ds-domains` | **game-dev:** game:, game build: · **saas-build:** build saas:, build page: · **mcp-build:** build mcp:, new mcp:, extend mcp: · **dashboard-dev:** dashboard:, feed contract: · **client-work:** intake:, sow:, build powerbi:, optimize dax:, build flow:, build app: · **design:** design art:, design poster:, canvas:, brand: |
-| Website builder | `ds-website` | **discover:** website discover:, discovery: · **page:** build website:, landing page:, build site: · **prototype:** prototype app: · **animate:** animate:, motion: · **brand:** brand: · **direction:** website direction: · **critique:** critique design:, design critique: · **deck:** pitch deck: · **cip:** cip: |
-| Fullstack builder | `ds-fullstack` | **frontend:** fullstack frontend:, build frontend: · **backend:** fullstack backend:, build api:, build feature:, full-stack: · **integrate:** fullstack integrate: · **secure:** fullstack secure: |
-| Setup | `ds-setup` | **wizard:** setup:, first run:, install dream studio: · **status:** setup status:, check setup: · **jit:** just in time:, jit setup: |
-| Project lifecycle | `ds-project` | **scope:** scope project:, ds project scope:, create prd: |
-| Workflow orchestration | `ds-workflow` | workflow: |
+| Build lifecycle | `ds-core` | **think:** think:, spec:, shape ux:, design brief:, research: · **plan:** plan:, /plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does:, walk me through:, what is this doing:, why does: |
+| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish: · **harden:** harden: · **pr-security-scan:** pr-security-scan: · **structure-audit:** structure-audit: · **learn:** learn: · **coach:** coach: · **audit:** audit: |
+| Career pipeline | `ds-career` | **ops:** ops: · **scan:** scan: · **evaluate:** evaluate: · **apply:** apply: · **track:** track: · **pdf:** pdf: |
+| Analysis engine | `ds-analyze` | **multi:** multi: · **domain-re:** domain-re: · **repo:** repo: · **intelligence:** analyze project:, project intelligence:, scan codebase: |
+| Domain builders | `ds-domains` | **game-dev:** game-dev: · **saas-build:** saas-build: · **mcp-build:** mcp-build: · **dashboard-dev:** dashboard-dev: · **client-work:** intake:, sow:, proposal:, build report:, review powerbi:, optimize dax:, build flow:, build app:, client handoff:, document: · **design:** design: · **fullstack:** fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, fullstack integrate:, fullstack secure:, full-stack:, full stack: · **website:** website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: |
+| Workflow orchestration | `ds-workflow` | workflow:, run workflow:, idea-to-pr:, studio-onboard:, feature-research:, start workflow: |
+| Security analysis | `ds-security` | **scan:** scan: · **dast:** dast: · **binary-scan:** binary-scan: · **mitigate:** mitigate: · **comply:** comply: · **netcompat:** netcompat: · **dashboard:** dashboard: · **review:** review: |
+| Project lifecycle | `ds-project` | **scope:** scope project:, ds project scope:, create prd: · **resume:** resume:, pick up:, get back to:, what's next:, what's active:, start project:, start building:, continue:, where was I:, what am I working on:, what should I do: · **brief:** design brief:, fill brief:, brief:, lock brief: |
+| Website builder | `ds-website` | **discover:** discover: · **direction:** direction: · **page:** page: · **prototype:** prototype: · **animate:** animate: · **brand:** brand: · **cip:** cip: · **critique:** critique: · **deck:** deck: |
+| Fullstack builder | `ds-fullstack` | **frontend:** frontend: · **backend:** backend: · **integrate:** integrate: · **secure:** secure: |
+| Setup | `ds-setup` | **wizard:** wizard: · **status:** status: · **jit:** jit: |
 <!-- END AUTO-ROUTING -->
 
 ### Routing Fallback
 
 If the user's intent does not match any keyword above, route to `ds-quality` with arg `coach`. Coach will classify the intent, map it to the nearest pack and mode, and explain confidence + alternatives.
 
-## Dream Studio CLI
+## Dream Studio CLI — Decision Guide
 
-When work order management or project operations are needed, use the CLI directly:
+### Session Start
+The resume skill (`ds-project resume`) handles all session start logic.
+It calls `ds project state` (one command) and presents a plain-English briefing.
 
+**Do NOT manually call** `project list`, `project next`, or `work-order start` as
+part of an orientation flow — the resume skill does this correctly in one step.
+
+### During a Work Order
 ```
-# Project operations
-py -m interfaces.cli.ds project list
-py -m interfaces.cli.ds project set-active <project_id>
-py -m interfaces.cli.ds project next <project_id>
-py -m interfaces.cli.ds project status <project_id>
-
-# Work order operations
-py -m interfaces.cli.ds work-order start <work_order_id>
-py -m interfaces.cli.ds work-order close <work_order_id>
+# Mark a task complete (call after each task):
 py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>
-py -m interfaces.cli.ds work-order list --project <project_id>
 
-# Milestone operations
+# See remaining tasks:
+py -m interfaces.cli.ds work-order tasks <work_order_id>
+
+# If stuck on a bug — invoke ds-quality:debug
+# If scope change needed — invoke ds-core:think
+```
+
+### Closing a Work Order
+```
+py -m interfaces.cli.ds work-order close <work_order_id>
+```
+Gates are checked automatically. If a gate fails, the close output tells you
+which skill to invoke. Never `--force` close without explicit user approval.
+
+### Gate Failures
+- `design_brief_locked` → invoke `ds-website:discover` to fill the brief, then `ds design-brief lock <brief_id>`
+- `api_contract_exists` → create the API contract document first
+- `all_tests_pass` → fix failing tests
+
+### Getting Project State (one command, everything)
+```
+py -m interfaces.cli.ds project state
+```
+Returns: active project, next WO, gate status, brief status, task counts, gotchas, and next action.
+
+### Commands to NEVER call directly
+- `ds project list` — resume skill handles this
+- `ds project next` — resume skill handles this via `ds project state`
+- `ds project set-active` — only needed when switching projects manually
+- `ds design-brief update` — the design brief wizard skill handles this
+
+### Milestone and design brief operations (when explicitly needed)
+```
 py -m interfaces.cli.ds milestone list <project_id>
 py -m interfaces.cli.ds milestone close <milestone_id>
-
-# Design brief operations
 py -m interfaces.cli.ds design-brief show <project_id>
 py -m interfaces.cli.ds design-brief lock <brief_id>
 ```

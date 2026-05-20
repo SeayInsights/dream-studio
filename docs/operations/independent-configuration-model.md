@@ -146,3 +146,5 @@ competing PRD copy.
 The independent configuration model now includes platform-hardening configuration surfaces for policy decisions, connector definitions, opt-in local watchers, installer checks, sanitized rollups, and demo packets. Defaults are dry-run or disabled unless an operator-approved profile enables writes, scheduling, or export generation.
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
+
+<!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->
