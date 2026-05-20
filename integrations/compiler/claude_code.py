@@ -68,6 +68,7 @@ _PACK_DISPLAY_NAMES: dict[str, str] = {
     "meta": "Workflow orchestration",
     "security": "Security analysis",
     "ds-project": "Project lifecycle",
+    "ds-workorder": "Work order lifecycle",
     "website": "Website builder",
     "fullstack": "Fullstack builder",
     "setup": "Setup",
