@@ -1,14 +1,15 @@
 """WorkflowRunner — bridges workflow state management with skill invocation.
 
 Reads current workflow state, computes ready nodes per dependency wave,
-invokes each node's skill via subprocess, and updates state after each
-node completes. All skill invocations go through
-``py -m interfaces.cli.ds skill invoke`` — never direct Python imports.
+invokes each node's skill via direct imports of
+``core.skills.invocation`` (A3 — replaced the legacy
+``subprocess.run([sys.executable, '-m', 'interfaces.cli.ds', 'skill',
+'invoke', specifier])`` self-shell-out so each node skips an
+interpreter respawn).
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -346,11 +347,17 @@ class WorkflowRunner:
         return any_failed
 
     def _invoke_skill(self, specifier: str, node_id: str) -> tuple[bool, str]:
-        """Invoke a skill via subprocess.
+        """Invoke a skill via direct imports of ``core.skills.invocation``.
 
-        Returns ``(success, stdout_output)``.
-        dry_run always returns (True, "[dry_run]") without spawning any process.
+        Returns ``(success, output)`` where ``output`` is the same
+        operator-style text the legacy subprocess CLI handler produced
+        (SKILL.md content + footer with specifier/mode/target). Truncated
+        to 2000 chars to match the pre-A3 contract.
+
+        dry_run always returns (True, "[dry_run]") without loading the
+        skill or emitting any spool event.
         """
+
         if self.dry_run:
             print(
                 f"[runner] [dry_run] would invoke: {specifier} (node={node_id})",
@@ -358,31 +365,49 @@ class WorkflowRunner:
             )
             return True, "[dry_run]"
 
-        cmd = [
-            sys.executable,
-            "-m",
-            "interfaces.cli.ds",
-            "skill",
-            "invoke",
-            specifier,
-        ]
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=3600,
-            )
-            output = (result.stdout or "").strip()
-            if result.returncode != 0:
-                stderr = (result.stderr or "").strip()
-                combined = f"{output}\n{stderr}".strip()
-                return False, combined[:2000]
+            from core.skills.invocation import load_skill_content, record_skill_invocation
+
+            source_root = Path(__file__).resolve().parents[3]
+
+            load_result = load_skill_content(specifier=specifier, source_root=source_root)
+            if not load_result.get("ok"):
+                return False, str(load_result.get("error", "skill load failed"))[:2000]
+
+            # Best-effort spool emission of ``skill.invoked``. Failure
+            # inside record_skill_invocation is already swallowed there,
+            # but wrap defensively so any import-time exception (e.g.
+            # spool root unreachable) doesn't break the node.
+            try:
+                record_skill_invocation(
+                    specifier=specifier,
+                    target=None,
+                    work_order_id=None,
+                    project_id=None,
+                    source_root=source_root,
+                )
+            except Exception:
+                pass
+
+            # Reproduce the legacy CLI handler's stdout block so workflow
+            # state captures the same operator-facing text.
+            footer_lines = [
+                "---",
+                f"Skill: {specifier}",
+                "Mode: direct",
+                "Target: not specified",
+                "Work order: none",
+                "Invocation recorded.",
+                "",
+                (
+                    "The AI reading this output has the skill instructions above "
+                    "and should now execute them."
+                ),
+            ]
+            output = (
+                load_result["skill_content"].rstrip() + "\n" + "\n".join(footer_lines)
+            ).strip()
             return True, output[:2000]
-        except subprocess.TimeoutExpired:
-            return False, "timeout"
         except Exception as exc:
             return False, str(exc)[:500]
 
@@ -395,7 +420,6 @@ class WorkflowRunner:
     ) -> None:
         """Atomically update a node's status in workflows.json."""
         import json
-        from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc).isoformat()
         lock_path = paths.state_dir() / "workflows.json.lock"

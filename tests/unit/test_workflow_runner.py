@@ -155,57 +155,96 @@ def test_dry_run_respects_dependencies(tmp_path):
 # ── WorkflowRunner._invoke_skill ─────────────────────────────────────────────
 
 
-def test_invoke_skill_calls_ds_skill_invoke(tmp_path):
-    """_invoke_skill must call py -m interfaces.cli.ds skill invoke <specifier>."""
+def test_invoke_skill_calls_load_and_record_in_process(tmp_path):
+    """A3: _invoke_skill calls ``load_skill_content`` + ``record_skill_invocation``
+    directly via ``core.skills.invocation`` — no subprocess.run."""
     runner = WorkflowRunner("wf-test", dry_run=False)
 
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = "ok"
-    mock_result.stderr = ""
+    fake_load = MagicMock(return_value={"ok": True, "skill_content": "PLAN BODY"})
+    fake_record = MagicMock(return_value={"ok": True, "event_emitted": True})
 
-    with patch("subprocess.run", return_value=mock_result) as mock_sub:
+    with (
+        patch("core.skills.invocation.load_skill_content", fake_load),
+        patch("core.skills.invocation.record_skill_invocation", fake_record),
+        patch("subprocess.run") as mock_sub,
+    ):
         success, output = runner._invoke_skill("core:plan", "n1")
 
+    mock_sub.assert_not_called()
+    fake_load.assert_called_once()
+    assert fake_load.call_args.kwargs["specifier"] == "core:plan"
+    fake_record.assert_called_once()
+    assert fake_record.call_args.kwargs["specifier"] == "core:plan"
     assert success is True
-    assert output == "ok"
-    call_args = mock_sub.call_args[0][0]
-    assert call_args[-2] == "invoke"
-    assert call_args[-1] == "core:plan"
+    assert "PLAN BODY" in output
+    assert "Skill: core:plan" in output
+    assert "Invocation recorded." in output
 
 
-def test_invoke_skill_returns_false_on_nonzero_returncode(tmp_path):
+def test_invoke_skill_returns_false_when_load_fails(tmp_path):
+    """When ``load_skill_content`` reports ok=False, the node fails with the
+    error message in the output channel."""
     runner = WorkflowRunner("wf-test", dry_run=False)
 
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stdout = "stdout text"
-    mock_result.stderr = "error text"
+    fake_load = MagicMock(return_value={"ok": False, "error": "Unknown skill: bogus:mode"})
 
-    with patch("subprocess.run", return_value=mock_result):
-        success, output = runner._invoke_skill("ds-core:build", "n2")
+    with patch("core.skills.invocation.load_skill_content", fake_load):
+        success, output = runner._invoke_skill("bogus:mode", "n2")
 
     assert success is False
-    assert "stdout text" in output or "error text" in output
+    assert "Unknown skill: bogus:mode" in output
 
 
-def test_invoke_skill_dry_run_never_calls_subprocess():
+def test_invoke_skill_dry_run_never_loads_or_records():
+    """dry_run short-circuits before any direct-call path runs."""
     runner = WorkflowRunner("wf-test", dry_run=True)
-    with patch("subprocess.run") as mock_sub:
+
+    fake_load = MagicMock()
+    fake_record = MagicMock()
+
+    with (
+        patch("core.skills.invocation.load_skill_content", fake_load),
+        patch("core.skills.invocation.record_skill_invocation", fake_record),
+        patch("subprocess.run") as mock_sub,
+    ):
         success, output = runner._invoke_skill("ds-core:plan", "n1")
+
+    fake_load.assert_not_called()
+    fake_record.assert_not_called()
     mock_sub.assert_not_called()
     assert success is True
     assert "[dry_run]" in output
 
 
-def test_invoke_skill_handles_timeout():
-    import subprocess as _subprocess
-
+def test_invoke_skill_swallows_record_invocation_exceptions(tmp_path):
+    """Spool emission is best-effort — if record_skill_invocation raises,
+    the node still completes successfully with the SKILL.md body."""
     runner = WorkflowRunner("wf-test", dry_run=False)
-    with patch("subprocess.run", side_effect=_subprocess.TimeoutExpired(cmd="x", timeout=1)):
-        success, output = runner._invoke_skill("ds-core:plan", "n1")
+
+    fake_load = MagicMock(return_value={"ok": True, "skill_content": "BODY"})
+    fake_record = MagicMock(side_effect=RuntimeError("spool root unreachable"))
+
+    with (
+        patch("core.skills.invocation.load_skill_content", fake_load),
+        patch("core.skills.invocation.record_skill_invocation", fake_record),
+    ):
+        success, output = runner._invoke_skill("core:plan", "n1")
+
+    assert success is True
+    assert "BODY" in output
+
+
+def test_invoke_skill_handles_load_exception(tmp_path):
+    """An import-time or other unexpected exception in the direct-call path
+    fails the node with the exception message rather than propagating."""
+    runner = WorkflowRunner("wf-test", dry_run=False)
+
+    fake_load = MagicMock(side_effect=RuntimeError("boom"))
+    with patch("core.skills.invocation.load_skill_content", fake_load):
+        success, output = runner._invoke_skill("core:plan", "n1")
+
     assert success is False
-    assert "timeout" in output
+    assert "boom" in output
 
 
 # ── WorkflowRunner._update_node ──────────────────────────────────────────────
