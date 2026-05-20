@@ -78,7 +78,7 @@ packs:
   ds-project:
     description: Project scoping — guided SDLC intake conversation that produces a machine-executable PRD
     skill: ds-project
-    modes: [scope, resume]
+    modes: [scope, resume, brief]
 
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes

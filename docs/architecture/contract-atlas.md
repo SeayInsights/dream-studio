@@ -321,3 +321,5 @@ visual Contract Atlas dashboard can render the same registry, graph, scorecard,
 and boundary report without inventing new dependency data.
 
 <!-- Last reviewed 2026-05-20 — atlas sanitizer hardened against POSIX absolute paths and `.dream-studio/` substrings (core/shared_intelligence/contract_atlas.py); contract surface unchanged. -->
+
+<!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->

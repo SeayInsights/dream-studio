@@ -211,3 +211,5 @@ status, but container execution requires separate approval.
 Platform-hardening reinforces the shared-authority rule: adapters may produce evidence, usage, connector payloads, policy previews, demo packets, and validation outcomes, but those results must normalize into Dream Studio SQLite authority or sanitized derived exports. Adapter projections remain generated config surfaces and must not become competing source authority.
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
+
+<!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->
