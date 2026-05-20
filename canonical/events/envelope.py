@@ -22,6 +22,13 @@ class CanonicalEventEnvelope:
     project_id: str | None = None
     trace: dict[str, Any] = field(default_factory=dict)
 
+    # ``source_type`` is part of the canonical event JSON schema (constrained
+    # to ``confirmed | inferred | weak_inference``). Default ``confirmed``
+    # since CLI-emitted lifecycle events (work_order/milestone/gate/skill)
+    # are first-party rather than inferred — matches what hand-built dicts
+    # set before A0.
+    source_type: str = "confirmed"
+
     raw_prompt_retained: bool = False
     raw_tool_output_retained: bool = False
 
@@ -37,6 +44,7 @@ class CanonicalEventEnvelope:
             "confidence": self.confidence,
             "trace": self.trace,
             "payload": self.payload,
+            "source_type": self.source_type,
             "raw_prompt_retained": self.raw_prompt_retained,
             "raw_tool_output_retained": self.raw_tool_output_retained,
         }
