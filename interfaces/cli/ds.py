@@ -1475,74 +1475,30 @@ def _project_delete(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(
+    """CLI wrapper around ``core.projects.mutations.delete_project``.
+
+    The CLI ``--confirm`` flag maps to the function's ``confirm=True``
+    kwarg. The function returns a dict whose error path mentions
+    ``confirm=True`` (the kwarg name); the wrapper post-processes the
+    message to use ``--confirm`` (the operator-facing flag name) so the
+    CLI error text stays as it was before A6.3 lifted the function.
+    """
+
+    from core.projects.mutations import delete_project
+
+    result = delete_project(
+        project_id=project_id,
+        confirm=confirm,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Project not found: {project_id}"}))
-            return 1
-
-        wo_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?", (project_id,)
-        ).fetchone()[0]
-        ms_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_milestones WHERE project_id = ?", (project_id,)
-        ).fetchone()[0]
-        task_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_tasks WHERE project_id = ?", (project_id,)
-        ).fetchone()[0]
-
-        has_dependents = wo_count > 0 or ms_count > 0 or task_count > 0
-        if has_dependents and not confirm:
-            print(
-                json.dumps(
-                    {
-                        "ok": False,
-                        "error": (
-                            f"Project {project_id} has dependents "
-                            f"({task_count} tasks, {wo_count} work orders, {ms_count} milestones). "
-                            "Pass --confirm to cascade delete."
-                        ),
-                        "work_order_count": wo_count,
-                        "milestone_count": ms_count,
-                        "task_count": task_count,
-                    }
-                )
-            )
-            return 1
-
-        # Cascade: tasks → work_orders → milestones → design_briefs → projects
-        conn.execute("DELETE FROM ds_tasks WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM ds_work_orders WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM ds_milestones WHERE project_id = ?", (project_id,))
-        try:
-            conn.execute("DELETE FROM ds_design_briefs WHERE project_id = ?", (project_id,))
-        except Exception:
-            pass  # Table may not exist in all schema versions.
-        conn.execute("DELETE FROM ds_projects WHERE project_id = ?", (project_id,))
-        conn.commit()
-
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "project_id": project_id,
-                "deleted": {
-                    "tasks": task_count,
-                    "work_orders": wo_count,
-                    "milestones": ms_count,
-                },
-            }
-        )
-    )
+    if not result.get("ok"):
+        error = result.get("error", "")
+        if "Pass confirm=True" in error:
+            result = {**result, "error": error.replace("Pass confirm=True", "Pass --confirm")}
+        print(json.dumps(result))
+        return 1
+    print(json.dumps(result))
     return 0
 
 
