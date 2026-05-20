@@ -2171,26 +2171,18 @@ def _design_brief_create(
 
 
 def _design_brief_lock(*, brief_id: str, source_root: Path, dream_studio_home: Path | None) -> int:
-    from datetime import datetime, timezone
+    """CLI wrapper around ``core.design_briefs.mutations.lock_design_brief``."""
 
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    from core.design_briefs.mutations import lock_design_brief
+
+    result = lock_design_brief(
+        brief_id=brief_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
-    now = datetime.now(timezone.utc).isoformat()
-    with _connect(paths.sqlite_path) as conn:
-        row = conn.execute(
-            "SELECT brief_id FROM ds_design_briefs WHERE brief_id = ?", (brief_id,)
-        ).fetchone()
-        if row is None:
-            print(json.dumps({"ok": False, "error": f"Brief not found: {brief_id}"}))
-            return 1
-        conn.execute(
-            "UPDATE ds_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
-            (now, brief_id),
-        )
-        conn.commit()
+    if not result.get("ok"):
+        print(json.dumps(result))
+        return 1
     print(f"Brief {brief_id} locked.")
     return 0
 
