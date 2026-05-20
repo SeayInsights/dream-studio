@@ -80,6 +80,11 @@ packs:
     skill: ds-project
     modes: [scope, resume, brief]
 
+  ds-workorder:
+    description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status
+    skill: ds-workorder
+    modes: [start, execute, close, block, status]
+
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes
     skill: ds-website
