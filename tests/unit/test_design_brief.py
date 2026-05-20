@@ -191,6 +191,68 @@ def test_design_brief_lock_sets_status_locked(db_home, capsys):
     assert row[0] == "locked"
 
 
+# ── 4b. A2.6: direct-call lock_design_brief returns a structured dict ────────
+
+
+def test_lock_design_brief_returns_dict_on_success(db_home):
+    """A2.6 extraction: ``lock_design_brief`` is directly callable and
+    returns a result dict; the CLI wrapper only formats output."""
+    from core.design_briefs.mutations import lock_design_brief
+
+    _insert_brief(db_home, status="draft")
+    result = lock_design_brief(
+        brief_id=BRIEF_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=db_home,
+    )
+    assert result["ok"] is True
+    assert result["brief_id"] == BRIEF_ID
+    assert result["status"] == "locked"
+    assert "locked_at" in result
+
+
+def test_lock_design_brief_updates_db_status(db_home):
+    from core.design_briefs.mutations import lock_design_brief
+
+    _insert_brief(db_home, status="draft")
+    lock_design_brief(
+        brief_id=BRIEF_ID,
+        source_root=REPO_ROOT,
+        dream_studio_home=db_home,
+    )
+    conn = sqlite3.connect(str(_db_path(db_home)))
+    try:
+        row = conn.execute(
+            "SELECT status FROM ds_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
+        ).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "locked"
+
+
+def test_lock_design_brief_returns_error_for_unknown_brief(db_home):
+    from core.design_briefs.mutations import lock_design_brief
+
+    result = lock_design_brief(
+        brief_id="does-not-exist",
+        source_root=REPO_ROOT,
+        dream_studio_home=db_home,
+    )
+    assert result["ok"] is False
+    assert "not found" in result["error"]
+    assert "does-not-exist" in result["error"]
+
+
+def test_design_brief_lock_cli_returns_1_on_unknown_brief(db_home, capsys):
+    """CLI surface: missing brief → exit 1 + JSON error to stdout."""
+    rc = main(["--home", str(db_home), "design-brief", "lock", "missing-brief-id"])
+    assert rc == 1
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["ok"] is False
+    assert "not found" in data["error"]
+
+
 # ── 5. ds design-brief update changes field on draft ─────────────────────────
 
 
