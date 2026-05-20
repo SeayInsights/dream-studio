@@ -280,3 +280,5 @@ Installed adapters consume PRD lifecycle authority through context packets and
 shared-intelligence routes. The adapter runtime does not own PRD state; it
 passes current PRD version, milestone, Work Order, change-order, validation,
 and stop-gate context from SQLite authority to supported tools.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

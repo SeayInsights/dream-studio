@@ -238,3 +238,5 @@ continuation packet should include the current PRD version, milestone, active
 Work Order, assumptions, known unknowns, relevant change orders, validation
 expectations, and stop gates. If those are missing, formalize or review PRD
 authority before continuing implementation.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

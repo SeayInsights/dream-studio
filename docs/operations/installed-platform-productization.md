@@ -332,3 +332,5 @@ Project intake, current PRD version, milestones, Work Orders, change orders,
 and route reconciliation remain SQLite authority; productized installs surface
 them through Project Details and context packets without requiring users to open
 the source repo.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
