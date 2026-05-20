@@ -26,6 +26,7 @@ def redact_tool_output(tool_name: str, output: Any, *, is_error: bool = False) -
         }
     if isinstance(output, (dict, list)):
         import json
+
         return {
             "success": True,
             "byte_count": len(json.dumps(output).encode("utf-8")),

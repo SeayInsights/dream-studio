@@ -77,3 +77,5 @@ LONG_RUN_MULTISESSION_OPERATIONAL_VALIDATION_COMPLETE
 ## Platform Hardening Refresh
 
 Long-run validation should include the platform-hardening summary, policy previews, opt-in watcher definitions, connector dry-run behavior, sanitized export checks, and installer doctor/repair previews. These checks remain controlled validation cycles; they must not start uncontrolled background work, mutate external projects, publish private artifacts, or destructively mutate live SQLite.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

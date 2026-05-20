@@ -46,9 +46,7 @@ HANDLERS_META = PLUGIN_ROOT / "runtime" / "hooks" / "meta"
 
 def _load_dispatcher():
     """Load the dispatcher as a fresh module object (bypasses sys.modules cache)."""
-    spec = importlib.util.spec_from_file_location(
-        "runtime_dispatch_hooks_e2e", str(DISPATCHER)
-    )
+    spec = importlib.util.spec_from_file_location("runtime_dispatch_hooks_e2e", str(DISPATCHER))
     assert spec and spec.loader, "Cannot locate runtime/dispatch/hooks.py"
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

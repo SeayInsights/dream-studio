@@ -128,9 +128,7 @@ def _load_full_yaml_nodes(yaml_path: str) -> dict[str, Any]:
 
         raw = _yaml.safe_load(Path(yaml_path).read_text(encoding="utf-8"))
         return {
-            n["id"]: n
-            for n in (raw or {}).get("nodes", [])
-            if isinstance(n, dict) and "id" in n
+            n["id"]: n for n in (raw or {}).get("nodes", []) if isinstance(n, dict) and "id" in n
         }
     except Exception:
         return {}
@@ -170,9 +168,7 @@ class WorkflowRunner:
 
             yaml_path = wf.get("yaml_path", "")
             if not yaml_path or not Path(yaml_path).is_file():
-                print(
-                    f"[runner] ERROR: YAML not found at {yaml_path!r}", file=sys.stderr
-                )
+                print(f"[runner] ERROR: YAML not found at {yaml_path!r}", file=sys.stderr)
                 return "aborted"
 
             yaml_data = parse_workflow(yaml_path)
@@ -191,9 +187,7 @@ class WorkflowRunner:
                 state_nodes = wf.get("nodes", {})
 
             if not ready:
-                running = [
-                    nid for nid, n in state_nodes.items() if n.get("status") == "running"
-                ]
+                running = [nid for nid, n in state_nodes.items() if n.get("status") == "running"]
                 if running:
                     # Agents still in flight; caller should poll or wait
                     return "running"
@@ -240,9 +234,7 @@ class WorkflowRunner:
             return []
 
         yaml_data = parse_workflow(yaml_path)
-        yaml_nodes: dict[str, Any] = {
-            n["id"]: n for n in yaml_data.get("nodes", []) if "id" in n
-        }
+        yaml_nodes: dict[str, Any] = {n["id"]: n for n in yaml_data.get("nodes", []) if "id" in n}
         full_yaml_nodes: dict[str, Any] = _load_full_yaml_nodes(yaml_path)
         state_nodes: dict[str, Any] = wf.get("nodes", {})
 
@@ -263,6 +255,7 @@ class WorkflowRunner:
             return {"schema_version": SCHEMA_VERSION, "active_workflows": {}}
         try:
             import json
+
             return json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             return {"schema_version": SCHEMA_VERSION, "active_workflows": {}}
@@ -348,9 +341,7 @@ class WorkflowRunner:
 
             if not success:
                 any_failed = True
-                print(
-                    f"[runner] Node {node_id} FAILED (duration={duration}s)", flush=True
-                )
+                print(f"[runner] Node {node_id} FAILED (duration={duration}s)", flush=True)
 
         return any_failed
 

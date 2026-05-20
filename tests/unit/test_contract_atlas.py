@@ -8,8 +8,10 @@ from core.shared_intelligence.adapter_alignment import register_default_adapter_
 from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
 from core.shared_intelligence.contract_atlas import (
     build_contract_atlas,
+    sanitize_contract_atlas_for_public_export,
     validate_contract_atlas,
 )
+from core.shared_intelligence.contract_atlas_lifecycle import _PRIVATE_LEAK_PATTERNS
 
 
 def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
@@ -279,6 +281,58 @@ def test_contract_atlas_public_export_is_sanitized(tmp_path: Path, monkeypatch) 
     ]
     assert hook_surfaces
     assert all(surface.get("secret_contents_read") is False for surface in hook_surfaces)
+
+
+def test_sanitizer_scrubs_posix_and_dream_studio_paths() -> None:
+    """Regression: the public atlas sanitizer must catch every private-path
+    pattern enforced by `_PRIVATE_LEAK_PATTERNS`, including POSIX absolute paths
+    (CI Linux) and any string containing `.dream-studio/`. A prior version only
+    matched Windows drive letters, which let Linux paths leak through and tripped
+    the lifecycle gate."""
+
+    cases = {
+        "linux_runner": {
+            "installed_runtime_model": {
+                "user_local_state_location": "/home/runner/.dream-studio",
+                "canonical_sqlite_path": "/home/runner/.dream-studio/state/studio.db",
+                "adapter_runtime_path": "/home/runner/.dream-studio/adapters",
+                "context_packet_fallback": {
+                    "path": "/home/runner/.dream-studio/context-packets",
+                },
+            },
+        },
+        "macos_user_home": {
+            "installed_runtime_model": {
+                "canonical_sqlite_path": "/Users/jane/.dream-studio/state/studio.db",
+            },
+        },
+        "windows_user_with_space": {
+            "installed_runtime_model": {
+                "canonical_sqlite_path": "C:\\Users\\Dannis Seay\\.dream-studio\\state\\studio.db",
+                "source_build_location": "C:\\Users\\Dannis Seay\\builds\\dream-studio",
+            },
+        },
+        "appdata_path": {
+            "installed_runtime_model": {
+                "context_packet_fallback": {
+                    "path": "C:\\Users\\runner\\AppData\\Local\\dream",
+                },
+            },
+        },
+        "live_backup_root": {
+            "boundary_violation_report": {
+                "note": "scan excluded Dream Studio Live Backups",
+            },
+        },
+    }
+
+    for label, payload in cases.items():
+        sanitized = sanitize_contract_atlas_for_public_export(payload)
+        serialized = json.dumps(sanitized, sort_keys=True, ensure_ascii=False)
+        leaks = [
+            rule_id for rule_id, pattern in _PRIVATE_LEAK_PATTERNS if pattern.search(serialized)
+        ]
+        assert leaks == [], f"{label} leaked: {leaks} — payload={serialized}"
 
 
 def _db(tmp_path: Path) -> Path:

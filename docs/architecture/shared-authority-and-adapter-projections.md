@@ -209,3 +209,5 @@ status, but container execution requires separate approval.
 ## Platform Hardening Refresh
 
 Platform-hardening reinforces the shared-authority rule: adapters may produce evidence, usage, connector payloads, policy previews, demo packets, and validation outcomes, but those results must normalize into Dream Studio SQLite authority or sanitized derived exports. Adapter projections remain generated config surfaces and must not become competing source authority.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

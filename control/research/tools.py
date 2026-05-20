@@ -1016,6 +1016,7 @@ def semantic_retrieval_status() -> dict:
     base: dict = {"default_active": False, "default_provider": "tfidf"}
     try:
         import sentence_transformers  # noqa: F401
+
         return {**base, "status": "available", "available": True}
     except ImportError:
         return {

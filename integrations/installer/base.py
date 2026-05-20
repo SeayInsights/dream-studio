@@ -22,7 +22,9 @@ class FileOp:
     reason: str
     safety_notes: str = ""
     source_content: str | None = None
-    source_path: Path | None = None  # fallback for binary files; atomic_copy used when source_content is None
+    source_path: Path | None = (
+        None  # fallback for binary files; atomic_copy used when source_content is None
+    )
     backup_path: Path | None = None
 
 

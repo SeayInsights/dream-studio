@@ -106,9 +106,8 @@ def test_execute_writes_settings_json(config_root, canonical_root, ds_home):
 
 def test_execute_preserves_existing_settings_keys(config_root, canonical_root, ds_home):
     import json
-    (config_root / "settings.json").write_text(
-        '{"theme": "dark", "hooks": {}}', encoding="utf-8"
-    )
+
+    (config_root / "settings.json").write_text('{"theme": "dark", "hooks": {}}', encoding="utf-8")
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
@@ -119,6 +118,7 @@ def test_execute_preserves_existing_settings_keys(config_root, canonical_root, d
 
 def test_execute_writes_manifest(config_root, canonical_root, ds_home):
     from integrations.manifest import read_manifest, MANIFEST_SCHEMA_VERSION
+
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )

@@ -10,7 +10,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── ds_entry.py existence and structure ───────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,11 +33,14 @@ def test_ds_entry_adds_repo_root_to_sys_path():
 
 # ── Launcher writing ───────────────────────────────────────────────────────────
 
+
 def _get_write_global_launcher():
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from integrations.installer.claude_code import _write_global_launcher
+
     return _write_global_launcher
 
 
@@ -56,6 +58,7 @@ def test_installer_writes_ds_cmd_on_windows(tmp_path):
 
 def test_installer_writes_shell_script_on_non_windows(tmp_path):
     import sys as _sys
+
     ds_home = tmp_path / ".dream-studio"
     write_global_launcher = _get_write_global_launcher()
 
@@ -96,6 +99,7 @@ def test_install_output_contains_path_instruction(tmp_path):
 def test_install_output_contains_first_run_guide_when_no_active_project(tmp_path):
     ds_home = tmp_path / ".dream-studio"
     from integrations.installer.claude_code import _first_run_guide
+
     guide = _first_run_guide(ds_home=ds_home)
     assert guide is not None
     assert "Register your project" in guide or "register" in guide.lower()
@@ -109,14 +113,12 @@ def test_install_output_skips_first_run_guide_when_active_project_exists(tmp_pat
 
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.execute(
-            "CREATE TABLE ds_projects "
-            "(project_id TEXT PRIMARY KEY, name TEXT, status TEXT)"
+            "CREATE TABLE ds_projects " "(project_id TEXT PRIMARY KEY, name TEXT, status TEXT)"
         )
-        conn.execute(
-            "INSERT INTO ds_projects VALUES ('test-id', 'TestProject', 'active')"
-        )
+        conn.execute("INSERT INTO ds_projects VALUES ('test-id', 'TestProject', 'active')")
 
     from integrations.installer.claude_code import _first_run_guide
+
     guide = _first_run_guide(ds_home=ds_home)
     assert guide is None
 
@@ -135,11 +137,13 @@ def test_dream_studio_bin_dir_created_by_installer(tmp_path):
 def test_install_output_contains_ingest_sessions_pointer(tmp_path):
     """Install output should mention ds memory ingest-sessions."""
     from integrations.installer.claude_code import _write_global_launcher
+
     # The pointer text should be in the installer's execute path.
     # We verify it exists in the module source since the execute path
     # prints it directly.
     import inspect
     import integrations.installer.claude_code as mod
+
     source = inspect.getsource(mod)
     assert "ingest-sessions" in source
 
@@ -151,9 +155,11 @@ REPO_ROOT_9C = Path(__file__).resolve().parents[2]
 
 def _get_doctor_status():
     import sys
+
     if str(REPO_ROOT_9C) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT_9C))
     from interfaces.cli.ds import _doctor_status
+
     return _doctor_status
 
 
@@ -289,8 +295,10 @@ def test_doctor_status_is_fail_when_dispatcher_hooks_not_installed(tmp_path):
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
             with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=False):
-                with patch("interfaces.cli.ds._check_version_current",
-                           return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True}):
+                with patch(
+                    "interfaces.cli.ds._check_version_current",
+                    return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True},
+                ):
                     result = _doctor_status(source_root=REPO_ROOT_9C, dream_studio_home=tmp_path)
 
     assert result["status"] == "fail"
@@ -314,8 +322,10 @@ def test_doctor_status_is_fail_when_failed_events_nonzero(tmp_path):
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
             with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=True):
-                with patch("interfaces.cli.ds._check_version_current",
-                           return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True}):
+                with patch(
+                    "interfaces.cli.ds._check_version_current",
+                    return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True},
+                ):
                     result = _doctor_status(source_root=REPO_ROOT_9C, dream_studio_home=tmp_path)
 
     assert result["status"] == "fail"
@@ -337,9 +347,17 @@ def test_doctor_fix_calls_install_when_skills_missing(tmp_path):
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
             with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=True):
-                with patch("interfaces.cli.ds._check_skills_installed", return_value=missing_skills):
-                    with patch("interfaces.cli.ds._check_version_current",
-                               return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True}):
+                with patch(
+                    "interfaces.cli.ds._check_skills_installed", return_value=missing_skills
+                ):
+                    with patch(
+                        "interfaces.cli.ds._check_version_current",
+                        return_value={
+                            "repo": "2026-05-17",
+                            "installed": "2026-05-17",
+                            "current": True,
+                        },
+                    ):
                         with patch("subprocess.run") as mock_sub:
                             mock_sub.return_value = MagicMock(returncode=0)
                             result = _doctor_status(

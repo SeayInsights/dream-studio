@@ -11,6 +11,7 @@ toolName. Always exits 0.
 Tool-specific emitters normalize their native payload into this contract
 before calling this dispatcher. This module contains no tool-specific logic.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,9 +38,7 @@ def _h(plugin_root: Path, pack: str, name: str) -> tuple[str, Path]:
     return (name, plugin_root / "runtime" / "hooks" / pack / f"{name}.py")
 
 
-def _resolve_handlers(
-    event_name: str, tool_name: str, plugin_root: Path
-) -> list[tuple[str, Path]]:
+def _resolve_handlers(event_name: str, tool_name: str, plugin_root: Path) -> list[tuple[str, Path]]:
     """Return (name, path) list for the given event and tool_name."""
     if event_name == "UserPromptSubmit":
         return [_h(plugin_root, "meta", "on-prompt-dispatch")]

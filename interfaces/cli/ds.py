@@ -79,8 +79,12 @@ def main(argv: list[str] | None = None) -> int:
     _doctor_cmd.add_argument("--fix", action="store_true", help="Attempt to fix failing checks")
     subcommands.add_parser("repair", help="Plan repair actions without mutating state")
     _update_cmd = subcommands.add_parser("update", help="Update Dream Studio integration pack")
-    _update_cmd.add_argument("--dry-run", action="store_true", dest="dry_run",
-                             help="Show what would change without installing")
+    _update_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Show what would change without installing",
+    )
     dashboard = subcommands.add_parser(
         "dashboard", help="Show, serve, open, or check the local dashboard"
     )
@@ -217,14 +221,17 @@ def main(argv: list[str] | None = None) -> int:
 
     # spool subcommand group (Slice 3)
     from interfaces.cli.ds_spool import add_spool_subcommand
+
     add_spool_subcommand(subcommands)
 
     # workflow subcommand group (Slice 9b)
     from interfaces.cli.ds_workflow import add_workflow_subcommand
+
     add_workflow_subcommand(subcommands)
 
     # memory subcommand group (Slice 5d)
     from interfaces.cli.ds_memory import add_memory_subcommand
+
     add_memory_subcommand(subcommands)
 
     # project subcommand group (Slice 4 WS3 + Slice 5b)
@@ -234,12 +241,20 @@ def main(argv: list[str] | None = None) -> int:
     project_register.add_argument("--name", required=True, help="Project name")
     project_register.add_argument("--description", default="", help="Optional description")
     project_list = project_sub.add_parser("list", help="List registered projects")
-    project_list.add_argument("--status", default="active", help="Filter by status (default: active)")
-    project_status_cmd = project_sub.add_parser("status", help="Show milestone/work-order summary for a project")
+    project_list.add_argument(
+        "--status", default="active", help="Filter by status (default: active)"
+    )
+    project_status_cmd = project_sub.add_parser(
+        "status", help="Show milestone/work-order summary for a project"
+    )
     project_status_cmd.add_argument("project_id", help="Project UUID")
-    project_next_cmd = project_sub.add_parser("next", help="Return the first open work order for a project")
+    project_next_cmd = project_sub.add_parser(
+        "next", help="Return the first open work order for a project"
+    )
     project_next_cmd.add_argument("project_id", help="Project UUID")
-    project_set_active = project_sub.add_parser("set-active", help="Set the active project in the database")
+    project_set_active = project_sub.add_parser(
+        "set-active", help="Set the active project in the database"
+    )
     project_set_active.add_argument("project_id", help="Project UUID to activate")
     project_deactivate = project_sub.add_parser("deactivate", help="Deactivate a project")
     project_deactivate.add_argument("project_id", help="Project UUID to deactivate")
@@ -248,13 +263,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     project_start_cmd.add_argument("project_id", help="Project UUID")
     project_start_cmd.add_argument(
-        "--planning-root", default=None, dest="planning_root",
+        "--planning-root",
+        default=None,
+        dest="planning_root",
         help="Override .planning/ directory (default: <cwd>/.planning)",
     )
-    project_delete = project_sub.add_parser("delete", help="Delete a project and all its dependents")
+    project_delete = project_sub.add_parser(
+        "delete", help="Delete a project and all its dependents"
+    )
     project_delete.add_argument("project_id", help="Project UUID to delete")
     project_delete.add_argument(
-        "--confirm", action="store_true", default=False,
+        "--confirm",
+        action="store_true",
+        default=False,
         help="Required to confirm deletion of a project with dependents",
     )
 
@@ -295,18 +316,28 @@ def main(argv: list[str] | None = None) -> int:
     skill = subcommands.add_parser("skill", help="Invoke or list Dream Studio skills")
     skill_sub = skill.add_subparsers(dest="skill_command", required=True)
     skill_invoke = skill_sub.add_parser("invoke", help="Invoke a skill (pack:mode format)")
-    skill_invoke.add_argument("specifier", help="Skill specifier in pack:mode format (e.g., core:build)")
+    skill_invoke.add_argument(
+        "specifier", help="Skill specifier in pack:mode format (e.g., core:build)"
+    )
     skill_invoke.add_argument("--target", default=None, help="Target path or file")
     _invoke_ctx = skill_invoke.add_mutually_exclusive_group()
     _invoke_ctx.add_argument(
-        "--work-order", default=None, dest="work_order_id", help="Work order UUID (sets pipeline mode)"
+        "--work-order",
+        default=None,
+        dest="work_order_id",
+        help="Work order UUID (sets pipeline mode)",
     )
     _invoke_ctx.add_argument(
-        "--milestone", default=None, dest="milestone_id", help="Milestone UUID (writes to milestones dir)"
+        "--milestone",
+        default=None,
+        dest="milestone_id",
+        help="Milestone UUID (writes to milestones dir)",
     )
     skill_invoke.add_argument("--project", default=None, dest="project_id", help="Project UUID")
     skill_invoke.add_argument(
-        "--planning-root", default=None, dest="planning_root",
+        "--planning-root",
+        default=None,
+        dest="planning_root",
         help="Override .planning/ directory for gate artifact writes",
     )
     skill_list_cmd = skill_sub.add_parser("list", help="List available skills")
@@ -323,30 +354,34 @@ def main(argv: list[str] | None = None) -> int:
         help="Override .planning/ directory (default: <cwd>/.planning)",
     )
     wo_list = work_order_sub.add_parser("list", help="List work orders")
-    wo_list.add_argument(
-        "--project", default=None, dest="project_id", help="Filter by project_id"
-    )
-    wo_list.add_argument(
-        "--status", default=None, dest="status_filter", help="Filter by status"
-    )
+    wo_list.add_argument("--project", default=None, dest="project_id", help="Filter by project_id")
+    wo_list.add_argument("--status", default=None, dest="status_filter", help="Filter by status")
     wo_close = work_order_sub.add_parser("close", help="Close a work order (gate-checked)")
     wo_close.add_argument("work_order_id", help="Work order UUID")
     wo_close.add_argument(
         "--force", action="store_true", default=False, help="Bypass gate failures"
     )
     wo_close.add_argument(
-        "--planning-root", default=None, help="Override .planning/ directory (default: <cwd>/.planning)"
+        "--planning-root",
+        default=None,
+        help="Override .planning/ directory (default: <cwd>/.planning)",
     )
     wo_block = work_order_sub.add_parser("block", help="Block a work order with a reason")
     wo_block.add_argument("work_order_id", help="Work order UUID")
     wo_block.add_argument("--reason", required=True, help="Block reason")
-    wo_unblock = work_order_sub.add_parser("unblock", help="Unblock a work order (restore to in_progress)")
+    wo_unblock = work_order_sub.add_parser(
+        "unblock", help="Unblock a work order (restore to in_progress)"
+    )
     wo_unblock.add_argument("work_order_id", help="Work order UUID")
-    wo_task_done = work_order_sub.add_parser("task-done", help="Mark a task complete and update context.md")
+    wo_task_done = work_order_sub.add_parser(
+        "task-done", help="Mark a task complete and update context.md"
+    )
     wo_task_done.add_argument("work_order_id", help="Work order UUID")
     wo_task_done.add_argument("task_id", help="Task UUID")
     wo_task_done.add_argument(
-        "--planning-root", default=None, help="Override .planning/ directory (default: <cwd>/.planning)"
+        "--planning-root",
+        default=None,
+        help="Override .planning/ directory (default: <cwd>/.planning)",
     )
     wo_tasks = work_order_sub.add_parser("tasks", help="List tasks for a work order")
     wo_tasks.add_argument("work_order_id", help="Work order UUID")
@@ -373,17 +408,15 @@ def main(argv: list[str] | None = None) -> int:
     ms_sub = milestone_cmd.add_subparsers(dest="milestone_command", required=True)
     ms_close = ms_sub.add_parser("close", help="Close a milestone (runs verification sequence)")
     ms_close.add_argument("milestone_id", help="Milestone UUID")
-    ms_close.add_argument("--force", action="store_true", default=False, help="Bypass gate failures")
     ms_close.add_argument(
-        "--planning-root", default=None, help="Override .planning/ directory"
+        "--force", action="store_true", default=False, help="Bypass gate failures"
     )
+    ms_close.add_argument("--planning-root", default=None, help="Override .planning/ directory")
     ms_list = ms_sub.add_parser("list", help="List milestones for a project")
     ms_list.add_argument("project_id", help="Project UUID")
     ms_status = ms_sub.add_parser("status", help="Show milestone detail and open gate checks")
     ms_status.add_argument("milestone_id", help="Milestone UUID")
-    ms_status.add_argument(
-        "--planning-root", default=None, help="Override .planning/ directory"
-    )
+    ms_status.add_argument("--planning-root", default=None, help="Override .planning/ directory")
 
     args = parser.parse_args(argv)
     source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
@@ -395,11 +428,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "version":
             return _print(_version_status(source_root=source_root, dream_studio_home=home))
         if args.command == "doctor":
-            return _print(_doctor_status(
-                source_root=source_root,
-                dream_studio_home=home,
-                fix=getattr(args, "fix", False),
-            ))
+            return _print(
+                _doctor_status(
+                    source_root=source_root,
+                    dream_studio_home=home,
+                    fix=getattr(args, "fix", False),
+                )
+            )
         if args.command == "update":
             return _update_command(
                 source_root=source_root,
@@ -948,10 +983,10 @@ def _version_status(*, source_root: Path, dream_studio_home: Path | None) -> dic
 def _check_dispatcher_hooks(claude_dir: Path) -> bool:
     """Return True if the DS dispatcher hook is registered for UserPromptSubmit."""
     _DISPATCHER_MARKERS = (
-        "hooks\\dispatch\\hooks.py",   # installed path (Windows)
-        "hooks/dispatch/hooks.py",     # installed path (Unix)
-        "runtime/dispatch/hooks",      # legacy repo-relative path
-        "'dispatch'/'hooks.py'",       # legacy pathlib expression
+        "hooks\\dispatch\\hooks.py",  # installed path (Windows)
+        "hooks/dispatch/hooks.py",  # installed path (Unix)
+        "runtime/dispatch/hooks",  # legacy repo-relative path
+        "'dispatch'/'hooks.py'",  # legacy pathlib expression
     )
     try:
         settings_path = claude_dir / "settings.json"
@@ -999,10 +1034,11 @@ def _check_agents_installed(claude_dir: Path, source_root: Path) -> dict[str, An
     """Return agents install status — checks canonical/agents/ vs ~/.claude/agents/."""
     try:
         agents_src = source_root / "canonical" / "agents"
-        expected = [
-            p.stem for p in agents_src.glob("*.md")
-            if p.name != "README.md"
-        ] if agents_src.is_dir() else []
+        expected = (
+            [p.stem for p in agents_src.glob("*.md") if p.name != "README.md"]
+            if agents_src.is_dir()
+            else []
+        )
         agents_dir = claude_dir / "agents"
         installed = [name for name in expected if (agents_dir / f"{name}.md").is_file()]
         missing = [name for name in expected if name not in installed]
@@ -1030,8 +1066,7 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
         installed_file = dream_studio_home / "state" / "installed-version"
         repo_ver = repo_file.read_text(encoding="utf-8").strip() if repo_file.is_file() else None
         installed_ver = (
-            installed_file.read_text(encoding="utf-8").strip()
-            if installed_file.is_file() else None
+            installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
         )
         current = repo_ver is not None and repo_ver == installed_ver
         return {"repo": repo_ver, "installed": installed_ver, "current": current}
@@ -1078,8 +1113,15 @@ def _doctor_status(
         if not dispatcher_ok or skills_info["missing"] or agents_info["missing"]:
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "interfaces.cli.ds",
-                     "integrate", "install", "claude_code", "--execute"],
+                    [
+                        sys.executable,
+                        "-m",
+                        "interfaces.cli.ds",
+                        "integrate",
+                        "install",
+                        "claude_code",
+                        "--execute",
+                    ],
                     check=False,
                 )
                 fix_actions.append("install: ran integrate install claude_code --execute")
@@ -1159,8 +1201,7 @@ def _update_command(
         return 1
 
     installed_version = (
-        installed_file.read_text(encoding="utf-8").strip()
-        if installed_file.is_file() else None
+        installed_file.read_text(encoding="utf-8").strip() if installed_file.is_file() else None
     )
 
     if installed_version == repo_version:
@@ -1168,19 +1209,28 @@ def _update_command(
         return 0
 
     if dry_run:
-        _print({
-            "ok": True,
-            "status": "update_available",
-            "from": installed_version,
-            "to": repo_version,
-            "dry_run": True,
-            "would_run": "ds integrate install claude_code --execute",
-        })
+        _print(
+            {
+                "ok": True,
+                "status": "update_available",
+                "from": installed_version,
+                "to": repo_version,
+                "dry_run": True,
+                "would_run": "ds integrate install claude_code --execute",
+            }
+        )
         return 0
 
     result = subprocess.run(
-        [sys.executable, "-m", "interfaces.cli.ds",
-         "integrate", "install", "claude_code", "--execute"],
+        [
+            sys.executable,
+            "-m",
+            "interfaces.cli.ds",
+            "integrate",
+            "install",
+            "claude_code",
+            "--execute",
+        ],
         capture_output=True,
         text=True,
     )
@@ -1190,13 +1240,15 @@ def _update_command(
         installed_file.parent.mkdir(parents=True, exist_ok=True)
         installed_file.write_text(repo_version + "\n", encoding="utf-8")
 
-    _print({
-        "ok": result.returncode == 0,
-        "status": "updated" if result.returncode == 0 else "install_failed",
-        "from": installed_version,
-        "to": repo_version,
-        "changes": install_output,
-    })
+    _print(
+        {
+            "ok": result.returncode == 0,
+            "status": "updated" if result.returncode == 0 else "install_failed",
+            "from": installed_version,
+            "to": repo_version,
+            "changes": install_output,
+        }
+    )
     return result.returncode
 
 
@@ -1324,9 +1376,7 @@ def _project_register(
         dream_studio_home=dream_studio_home,
     )
     if not paths.sqlite_path.exists():
-        raise RuntimeError(
-            "Dream Studio SQLite authority is missing. Run rehearsal-install first."
-        )
+        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
 
     project_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -1687,17 +1737,21 @@ def _project_delete(
 
         has_dependents = wo_count > 0 or ms_count > 0 or task_count > 0
         if has_dependents and not confirm:
-            print(json.dumps({
-                "ok": False,
-                "error": (
-                    f"Project {project_id} has dependents "
-                    f"({task_count} tasks, {wo_count} work orders, {ms_count} milestones). "
-                    "Pass --confirm to cascade delete."
-                ),
-                "work_order_count": wo_count,
-                "milestone_count": ms_count,
-                "task_count": task_count,
-            }))
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": (
+                            f"Project {project_id} has dependents "
+                            f"({task_count} tasks, {wo_count} work orders, {ms_count} milestones). "
+                            "Pass --confirm to cascade delete."
+                        ),
+                        "work_order_count": wo_count,
+                        "milestone_count": ms_count,
+                        "task_count": task_count,
+                    }
+                )
+            )
             return 1
 
         # Cascade: tasks → work_orders → milestones → design_briefs → projects
@@ -1711,15 +1765,19 @@ def _project_delete(
         conn.execute("DELETE FROM ds_projects WHERE project_id = ?", (project_id,))
         conn.commit()
 
-    print(json.dumps({
-        "ok": True,
-        "project_id": project_id,
-        "deleted": {
-            "tasks": task_count,
-            "work_orders": wo_count,
-            "milestones": ms_count,
-        },
-    }))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "project_id": project_id,
+                "deleted": {
+                    "tasks": task_count,
+                    "work_orders": wo_count,
+                    "milestones": ms_count,
+                },
+            }
+        )
+    )
     return 0
 
 
@@ -1740,68 +1798,84 @@ def _integrate_dispatch(
 
     if args.integrate_command == "detect":
         tools = detect_all()
-        return _print({
-            "model_name": "dream_studio_integrate_detect",
-            "derived_view": True,
-            "primary_authority": False,
-            "tools": [
-                {"tool_id": t.tool_id, "scope": t.scope, "config_root": str(t.config_root)}
-                for t in tools
-            ],
-        })
+        return _print(
+            {
+                "model_name": "dream_studio_integrate_detect",
+                "derived_view": True,
+                "primary_authority": False,
+                "tools": [
+                    {"tool_id": t.tool_id, "scope": t.scope, "config_root": str(t.config_root)}
+                    for t in tools
+                ],
+            }
+        )
 
     if args.integrate_command == "status":
         tools = detect_all()
         statuses: list[dict[str, Any]] = []
         for t in tools:
             result = doctor(
-                t.tool_id, t.config_root,
-                ds_home=ds_home, canonical_root=canonical_root,
+                t.tool_id,
+                t.config_root,
+                ds_home=ds_home,
+                canonical_root=canonical_root,
             )
-            statuses.append({
-                "tool_id": t.tool_id,
-                "scope": t.scope,
-                "state": result["state"],
-            })
-        return _print({
-            "model_name": "dream_studio_integrate_status",
-            "derived_view": True,
-            "primary_authority": False,
-            "tools": statuses,
-        })
+            statuses.append(
+                {
+                    "tool_id": t.tool_id,
+                    "scope": t.scope,
+                    "state": result["state"],
+                }
+            )
+        return _print(
+            {
+                "model_name": "dream_studio_integrate_status",
+                "derived_view": True,
+                "primary_authority": False,
+                "tools": statuses,
+            }
+        )
 
     if args.integrate_command == "doctor":
         tool_id = getattr(args, "tool", "claude_code")
         scope = getattr(args, "scope", None)
         detected = detect_claude_code(scope_override=scope)
         result = doctor(
-            detected.tool_id, detected.config_root,
-            ds_home=ds_home, canonical_root=canonical_root,
+            detected.tool_id,
+            detected.config_root,
+            ds_home=ds_home,
+            canonical_root=canonical_root,
         )
-        return _print({
-            "model_name": "dream_studio_integrate_doctor",
-            "derived_view": True,
-            "primary_authority": False,
-            **result,
-        })
+        return _print(
+            {
+                "model_name": "dream_studio_integrate_doctor",
+                "derived_view": True,
+                "primary_authority": False,
+                **result,
+            }
+        )
 
     if args.integrate_command == "plan":
         scope = getattr(args, "scope", None)
         detected = detect_claude_code(scope_override=scope)
         installer = ClaudeCodeInstaller(
-            detected.config_root, detected.scope,
-            canonical_root=canonical_root, ds_home=ds_home,
+            detected.config_root,
+            detected.scope,
+            canonical_root=canonical_root,
+            ds_home=ds_home,
         )
         plan = installer.plan()
-        return _print({
-            "model_name": "dream_studio_integrate_plan",
-            "derived_view": True,
-            "primary_authority": False,
-            "tool": "claude_code",
-            "scope": detected.scope,
-            "config_root": str(detected.config_root),
-            "plan": plan.summary(),
-        })
+        return _print(
+            {
+                "model_name": "dream_studio_integrate_plan",
+                "derived_view": True,
+                "primary_authority": False,
+                "tool": "claude_code",
+                "scope": detected.scope,
+                "config_root": str(detected.config_root),
+                "plan": plan.summary(),
+            }
+        )
 
     if args.integrate_command == "install":
         scope = getattr(args, "scope", None)
@@ -1817,16 +1891,20 @@ def _integrate_dispatch(
         mode = "dry_run" if dry_run else "execute"
         detected = detect_claude_code(scope_override=scope)
         installer = ClaudeCodeInstaller(
-            detected.config_root, detected.scope,
-            canonical_root=canonical_root, ds_home=ds_home,
+            detected.config_root,
+            detected.scope,
+            canonical_root=canonical_root,
+            ds_home=ds_home,
         )
         result = installer.install(mode)
-        return _print({
-            "model_name": "dream_studio_integrate_install",
-            "derived_view": True,
-            "primary_authority": False,
-            **result,
-        })
+        return _print(
+            {
+                "model_name": "dream_studio_integrate_install",
+                "derived_view": True,
+                "primary_authority": False,
+                **result,
+            }
+        )
 
     raise RuntimeError(f"Unknown integrate subcommand: {args.integrate_command}")
 
@@ -1969,9 +2047,12 @@ def _work_order_start(
                 ).fetchone()
                 if b_row and b_row[7] == "locked":
                     brief_locked = {
-                        "brief_id": b_row[0], "purpose": b_row[1],
-                        "audience": b_row[2], "tone": b_row[3],
-                        "design_system": b_row[4], "font_pairing": b_row[5],
+                        "brief_id": b_row[0],
+                        "purpose": b_row[1],
+                        "audience": b_row[2],
+                        "tone": b_row[3],
+                        "design_system": b_row[4],
+                        "font_pairing": b_row[5],
                         "brand_tokens": b_row[6],
                     }
                 else:
@@ -1984,6 +2065,7 @@ def _work_order_start(
         marker_project_id = None
         try:
             from emitters.claude_code.project import read_project_id
+
             marker_project_id = read_project_id(source_root)
         except Exception:
             pass
@@ -2036,8 +2118,11 @@ def _work_order_start(
         if brief_locked:
             lines += ["", "## Design Brief", ""]
             for _lbl, _key in [
-                ("Purpose", "purpose"), ("Audience", "audience"), ("Tone", "tone"),
-                ("Font pairing", "font_pairing"), ("Brand tokens", "brand_tokens"),
+                ("Purpose", "purpose"),
+                ("Audience", "audience"),
+                ("Tone", "tone"),
+                ("Font pairing", "font_pairing"),
+                ("Brand tokens", "brand_tokens"),
             ]:
                 _val = brief_locked.get(_key)
                 if _val:
@@ -2092,20 +2177,23 @@ def _work_order_start(
 
         try:
             import spool.writer as _spool_writer
-            _spool_writer.write_event({
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "work_order.started",
-                "timestamp": now,
-                "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                "severity": "info",
-                "payload": {
-                    "work_order_id": work_order_id,
-                    "title": title,
-                    "type": type_id,
-                    "project_id": project_id,
-                },
-                "source_type": "confirmed",
-            })
+
+            _spool_writer.write_event(
+                {
+                    "event_id": str(_uuid.uuid4()),
+                    "event_type": "work_order.started",
+                    "timestamp": now,
+                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
+                    "severity": "info",
+                    "payload": {
+                        "work_order_id": work_order_id,
+                        "title": title,
+                        "type": type_id,
+                        "project_id": project_id,
+                    },
+                    "source_type": "confirmed",
+                }
+            )
         except Exception:
             pass
 
@@ -2124,14 +2212,18 @@ def _work_order_start(
                     (project_id, ms_order_row[0]),
                 ).fetchone()[0]
                 if blocking_count > 0:
-                    print(json.dumps({
-                        "ok": False,
-                        "error": (
-                            f"Cannot start this work order — {blocking_count} work order(s) in "
-                            f"earlier milestones are incomplete. "
-                            f"Run 'ds project next {project_id}' to see what should be worked on first."
-                        ),
-                    }))
+                    print(
+                        json.dumps(
+                            {
+                                "ok": False,
+                                "error": (
+                                    f"Cannot start this work order — {blocking_count} work order(s) in "
+                                    f"earlier milestones are incomplete. "
+                                    f"Run 'ds project next {project_id}' to see what should be worked on first."
+                                ),
+                            }
+                        )
+                    )
                     return 1
 
         conn.execute(
@@ -2141,14 +2233,19 @@ def _work_order_start(
         )
         conn.commit()
 
-    print(json.dumps({
-        "ok": True,
-        "work_order_id": work_order_id,
-        "title": title,
-        "type": type_id,
-        "project_id": project_id,
-        "context_path": str(context_path),
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "title": title,
+                "type": type_id,
+                "project_id": project_id,
+                "context_path": str(context_path),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -2212,6 +2309,7 @@ def _load_packs(source_root: Path) -> dict[str, Any]:
         return {}
     try:
         import yaml as _yaml
+
         return _yaml.safe_load(packs_path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -2308,6 +2406,7 @@ def _skill_invoke(
     if resolved_project_id is None:
         try:
             from emitters.claude_code.project import read_project_id
+
             resolved_project_id = read_project_id(None)
         except Exception:
             pass
@@ -2317,27 +2416,30 @@ def _skill_invoke(
 
     try:
         import spool.writer as _spool_writer
-        _spool_writer.write_event({
-            "event_id": str(_uuid.uuid4()),
-            "event_type": "skill.invoked",
-            "timestamp": now,
-            "skill_id": skill_id,
-            "mode": mode,
-            "invocation_mode": invocation_mode,
-            "project_id": resolved_project_id,
-            "trace": {
-                "skill_specifier": specifier,
+
+        _spool_writer.write_event(
+            {
+                "event_id": str(_uuid.uuid4()),
+                "event_type": "skill.invoked",
+                "timestamp": now,
+                "skill_id": skill_id,
+                "mode": mode,
+                "invocation_mode": invocation_mode,
                 "project_id": resolved_project_id,
-            },
-            "severity": "info",
-            "payload": {
-                "skill_specifier": specifier,
-                "target": target,
-                "work_order_id": work_order_id,
-            },
-            "source_type": "confirmed",
-            "schema_version": 1,
-        })
+                "trace": {
+                    "skill_specifier": specifier,
+                    "project_id": resolved_project_id,
+                },
+                "severity": "info",
+                "payload": {
+                    "skill_specifier": specifier,
+                    "target": target,
+                    "work_order_id": work_order_id,
+                },
+                "source_type": "confirmed",
+                "schema_version": 1,
+            }
+        )
     except Exception:
         pass
 
@@ -2350,10 +2452,13 @@ def _skill_invoke(
     print(f"Work order: {work_order_id or 'none'}")
     print("Invocation recorded.")
     print()
-    print("The AI reading this output has the skill instructions above and should now execute them.")
+    print(
+        "The AI reading this output has the skill instructions above and should now execute them."
+    )
 
     if work_order_id or milestone_id:
         from datetime import datetime, timezone as _tz
+
         _date_str = datetime.now(_tz.utc).isoformat()[:10]
         _p_root = planning_root or Path.cwd() / ".planning"
         if milestone_id:
@@ -2442,7 +2547,13 @@ def _skill_list(
                 skill_md = source_root / _skill_path_key / "modes" / mode_name / "SKILL.md"
             else:
                 skill_md = (
-                    source_root / "canonical" / "skills" / pack_name / "modes" / mode_name / "SKILL.md"
+                    source_root
+                    / "canonical"
+                    / "skills"
+                    / pack_name
+                    / "modes"
+                    / mode_name
+                    / "SKILL.md"
                 )
             config_yml = skill_md.parent / "config.yml"
 
@@ -2452,6 +2563,7 @@ def _skill_list(
             if config_yml.is_file():
                 try:
                     import yaml as _yaml
+
                     config_data = _yaml.safe_load(config_yml.read_text(encoding="utf-8"))
                     if isinstance(config_data, dict):
                         model_preference = config_data.get("model_tier")
@@ -2461,6 +2573,7 @@ def _skill_list(
             if skill_md.is_file():
                 try:
                     import yaml as _yaml
+
                     text = skill_md.read_text(encoding="utf-8-sig")
                     fm_match = _SKILL_FM_RE.match(text)
                     if fm_match:
@@ -2472,11 +2585,13 @@ def _skill_list(
                 except Exception:
                     pass
 
-            skills.append({
-                "specifier": f"{pack_name}:{mode_name}",
-                "model_preference": model_preference or "sonnet",
-                "estimated_duration": estimated_duration,
-            })
+            skills.append(
+                {
+                    "specifier": f"{pack_name}:{mode_name}",
+                    "model_preference": model_preference or "sonnet",
+                    "estimated_duration": estimated_duration,
+                }
+            )
 
     print(json.dumps({"ok": True, "skills": skills}, indent=2))
     return 0
@@ -2544,6 +2659,7 @@ def _run_gate_check(
 
     if gate_name == "design_critique":
         import re as _re
+
         critique_path = wo_dir / "design-critique.md"
         if not critique_path.is_file():
             return False, "design_critique: design-critique.md not found"
@@ -2648,7 +2764,9 @@ def _work_order_close(
                 gate_failures.append(reason)
 
         if gate_failures and not force:
-            print(json.dumps({"ok": False, "error": "Gate check failed", "failures": gate_failures}))
+            print(
+                json.dumps({"ok": False, "error": "Gate check failed", "failures": gate_failures})
+            )
             return 1
 
         now = datetime.now(timezone.utc).isoformat()
@@ -2658,38 +2776,44 @@ def _work_order_close(
                 print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
                 try:
                     import spool.writer as _spool_writer
-                    _spool_writer.write_event({
-                        "event_id": str(_uuid.uuid4()),
-                        "event_type": "gate.bypassed",
-                        "timestamp": now,
-                        "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                        "severity": "warning",
-                        "payload": {
-                            "work_order_id": work_order_id,
-                            "gate": reason.split(":")[0],
-                            "reason": reason,
-                        },
-                        "source_type": "confirmed",
-                    })
+
+                    _spool_writer.write_event(
+                        {
+                            "event_id": str(_uuid.uuid4()),
+                            "event_type": "gate.bypassed",
+                            "timestamp": now,
+                            "trace": {"work_order_id": work_order_id, "project_id": project_id},
+                            "severity": "warning",
+                            "payload": {
+                                "work_order_id": work_order_id,
+                                "gate": reason.split(":")[0],
+                                "reason": reason,
+                            },
+                            "source_type": "confirmed",
+                        }
+                    )
                 except Exception:
                     pass
 
         try:
             import spool.writer as _spool_writer
-            _spool_writer.write_event({
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "work_order.closed",
-                "timestamp": now,
-                "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                "severity": "info",
-                "payload": {
-                    "work_order_id": work_order_id,
-                    "title": title,
-                    "project_id": project_id,
-                    "forced": force,
-                },
-                "source_type": "confirmed",
-            })
+
+            _spool_writer.write_event(
+                {
+                    "event_id": str(_uuid.uuid4()),
+                    "event_type": "work_order.closed",
+                    "timestamp": now,
+                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
+                    "severity": "info",
+                    "payload": {
+                        "work_order_id": work_order_id,
+                        "title": title,
+                        "project_id": project_id,
+                        "forced": force,
+                    },
+                    "source_type": "confirmed",
+                }
+            )
         except Exception:
             pass
 
@@ -2700,14 +2824,19 @@ def _work_order_close(
         )
         conn.commit()
 
-    print(json.dumps({
-        "ok": True,
-        "work_order_id": work_order_id,
-        "title": title,
-        "status": "complete",
-        "forced": force,
-        "bypassed_gates": gate_failures if force else [],
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "title": title,
+                "status": "complete",
+                "forced": force,
+                "bypassed_gates": gate_failures if force else [],
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -2742,20 +2871,23 @@ def _work_order_block(
 
         try:
             import spool.writer as _spool_writer
-            _spool_writer.write_event({
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "work_order.blocked",
-                "timestamp": now,
-                "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                "severity": "warning",
-                "payload": {
-                    "work_order_id": work_order_id,
-                    "title": title,
-                    "project_id": project_id,
-                    "reason": reason,
-                },
-                "source_type": "confirmed",
-            })
+
+            _spool_writer.write_event(
+                {
+                    "event_id": str(_uuid.uuid4()),
+                    "event_type": "work_order.blocked",
+                    "timestamp": now,
+                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
+                    "severity": "warning",
+                    "payload": {
+                        "work_order_id": work_order_id,
+                        "title": title,
+                        "project_id": project_id,
+                        "reason": reason,
+                    },
+                    "source_type": "confirmed",
+                }
+            )
         except Exception:
             pass
 
@@ -2766,12 +2898,17 @@ def _work_order_block(
         )
         conn.commit()
 
-    print(json.dumps({
-        "ok": True,
-        "work_order_id": work_order_id,
-        "status": "blocked",
-        "block_reason": reason,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "status": "blocked",
+                "block_reason": reason,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -2801,7 +2938,11 @@ def _work_order_unblock(
 
         wo_id, title, wo_status = wo_row
         if wo_status != "blocked":
-            print(json.dumps({"ok": False, "error": f"Work order is not blocked (status: {wo_status})"}))
+            print(
+                json.dumps(
+                    {"ok": False, "error": f"Work order is not blocked (status: {wo_status})"}
+                )
+            )
             return 1
 
         now = datetime.now(timezone.utc).isoformat()
@@ -2812,11 +2953,16 @@ def _work_order_unblock(
         )
         conn.commit()
 
-    print(json.dumps({
-        "ok": True,
-        "work_order_id": work_order_id,
-        "status": "in_progress",
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "status": "in_progress",
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -2849,7 +2995,14 @@ def _work_order_task_done(
 
         t_id, t_wo_id, t_title, t_status = task_row
         if t_wo_id != work_order_id:
-            print(json.dumps({"ok": False, "error": f"Task {task_id} does not belong to work order {work_order_id}"}))
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": f"Task {task_id} does not belong to work order {work_order_id}",
+                    }
+                )
+            )
             return 1
 
         now = datetime.now(timezone.utc).isoformat()
@@ -2865,13 +3018,16 @@ def _work_order_task_done(
             (work_order_id,),
         ).fetchone()[0]
 
-        task_index = conn.execute(
-            "SELECT COUNT(*) FROM ds_tasks"
-            " WHERE work_order_id = ? AND created_at <= ("
-            "   SELECT created_at FROM ds_tasks WHERE task_id = ?"
-            ")",
-            (work_order_id, task_id),
-        ).fetchone()[0] - 1
+        task_index = (
+            conn.execute(
+                "SELECT COUNT(*) FROM ds_tasks"
+                " WHERE work_order_id = ? AND created_at <= ("
+                "   SELECT created_at FROM ds_tasks WHERE task_id = ?"
+                ")",
+                (work_order_id, task_id),
+            ).fetchone()[0]
+            - 1
+        )
 
     p_root = planning_root or Path.cwd() / ".planning"
     context_path = p_root / "work-orders" / work_order_id / "context.md"
@@ -2882,19 +3038,22 @@ def _work_order_task_done(
 
     try:
         import spool.writer as _spool_writer
-        _spool_writer.write_event({
-            "event_id": str(_uuid.uuid4()),
-            "event_type": "task.completed",
-            "timestamp": now,
-            "trace": {"work_order_id": work_order_id, "task_id": task_id},
-            "severity": "info",
-            "payload": {
-                "task_id": task_id,
-                "work_order_id": work_order_id,
-                "tasks_remaining": remaining,
-            },
-            "source_type": "confirmed",
-        })
+
+        _spool_writer.write_event(
+            {
+                "event_id": str(_uuid.uuid4()),
+                "event_type": "task.completed",
+                "timestamp": now,
+                "trace": {"work_order_id": work_order_id, "task_id": task_id},
+                "severity": "info",
+                "payload": {
+                    "task_id": task_id,
+                    "work_order_id": work_order_id,
+                    "tasks_remaining": remaining,
+                },
+                "source_type": "confirmed",
+            }
+        )
     except Exception:
         pass
 
@@ -2903,14 +3062,19 @@ def _work_order_task_done(
         todo_id = f"wo-{work_order_id[:8]}-{task_index}"
         print(json.dumps({"todowrite_update": {"id": todo_id, "status": "completed"}}, indent=2))
 
-    print(json.dumps({
-        "ok": True,
-        "task_id": task_id,
-        "work_order_id": work_order_id,
-        "title": t_title,
-        "status": "complete",
-        "tasks_remaining": remaining,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "task_id": task_id,
+                "work_order_id": work_order_id,
+                "title": t_title,
+                "status": "complete",
+                "tasks_remaining": remaining,
+            },
+            indent=2,
+        )
+    )
 
     if remaining == 0:
         print(f"All tasks complete. Run: ds work-order close {work_order_id}")
@@ -2955,29 +3119,40 @@ def _work_order_tasks(
             indicator = "[~]"
         else:
             indicator = "[ ]"
-        tasks.append({
-            "task_id": t_id,
-            "title": t_title,
-            "status": t_status,
-            "indicator": indicator,
-        })
+        tasks.append(
+            {
+                "task_id": t_id,
+                "title": t_title,
+                "status": t_status,
+                "indicator": indicator,
+            }
+        )
 
     print(json.dumps({"ok": True, "work_order_id": work_order_id, "tasks": tasks}, indent=2))
     return 0
 
 
-_VALID_DESIGN_SYSTEMS: frozenset[str] = frozenset([
-    "tech-minimal",
-    "editorial-modern",
-    "brutalist-bold",
-    "playful-rounded",
-    "executive-clean",
-])
+_VALID_DESIGN_SYSTEMS: frozenset[str] = frozenset(
+    [
+        "tech-minimal",
+        "editorial-modern",
+        "brutalist-bold",
+        "playful-rounded",
+        "executive-clean",
+    ]
+)
 
-_BRIEF_UPDATABLE_FIELDS: frozenset[str] = frozenset([
-    "purpose", "audience", "tone", "design_system",
-    "font_pairing", "brand_tokens", "raw_output",
-])
+_BRIEF_UPDATABLE_FIELDS: frozenset[str] = frozenset(
+    [
+        "purpose",
+        "audience",
+        "tone",
+        "design_system",
+        "font_pairing",
+        "brand_tokens",
+        "raw_output",
+    ]
+)
 
 
 def _design_brief_dispatch(
@@ -3023,8 +3198,12 @@ def _design_brief_dispatch(
     return 1
 
 
-def _design_brief_show(*, project_id: str, source_root: Path, dream_studio_home: Path | None) -> int:
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+def _design_brief_show(
+    *, project_id: str, source_root: Path, dream_studio_home: Path | None
+) -> int:
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     with _connect(paths.sqlite_path) as conn:
@@ -3037,29 +3216,51 @@ def _design_brief_show(*, project_id: str, source_root: Path, dream_studio_home:
     if row is None:
         print(f"No design brief. Run ds design-brief create {project_id}")
         return 0
-    brief_id, status, purpose, audience, tone, design_system, font_pairing, brand_tokens, raw_output, created_at, updated_at = row
+    (
+        brief_id,
+        status,
+        purpose,
+        audience,
+        tone,
+        design_system,
+        font_pairing,
+        brand_tokens,
+        raw_output,
+        created_at,
+        updated_at,
+    ) = row
     status_label = "LOCKED" if status == "locked" else "DRAFT — not yet locked"
-    print(json.dumps({
-        "ok": True,
-        "brief_id": brief_id,
-        "project_id": project_id,
-        "status": f"Status: {status_label}",
-        "purpose": purpose,
-        "audience": audience,
-        "tone": tone,
-        "design_system": design_system,
-        "font_pairing": font_pairing,
-        "brand_tokens": brand_tokens,
-        "created_at": created_at,
-        "updated_at": updated_at,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "brief_id": brief_id,
+                "project_id": project_id,
+                "status": f"Status: {status_label}",
+                "purpose": purpose,
+                "audience": audience,
+                "tone": tone,
+                "design_system": design_system,
+                "font_pairing": font_pairing,
+                "brand_tokens": brand_tokens,
+                "created_at": created_at,
+                "updated_at": updated_at,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
-def _design_brief_create(*, project_id: str, source_root: Path, dream_studio_home: Path | None) -> int:
+def _design_brief_create(
+    *, project_id: str, source_root: Path, dream_studio_home: Path | None
+) -> int:
     import uuid as _uuid
     from datetime import datetime, timezone
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     brief_id = str(_uuid.uuid4())
@@ -3078,7 +3279,10 @@ def _design_brief_create(*, project_id: str, source_root: Path, dream_studio_hom
 
 def _design_brief_lock(*, brief_id: str, source_root: Path, dream_studio_home: Path | None) -> int:
     from datetime import datetime, timezone
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     now = datetime.now(timezone.utc).isoformat()
@@ -3102,13 +3306,20 @@ def _design_brief_update(
     *, brief_id: str, field: str, value: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
     from datetime import datetime, timezone
+
     if field not in _BRIEF_UPDATABLE_FIELDS:
-        print(json.dumps({
-            "ok": False,
-            "error": f"Unknown field: {field}. Valid fields: {sorted(_BRIEF_UPDATABLE_FIELDS)}",
-        }))
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": f"Unknown field: {field}. Valid fields: {sorted(_BRIEF_UPDATABLE_FIELDS)}",
+                }
+            )
+        )
         return 1
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     now = datetime.now(timezone.utc).isoformat()
@@ -3135,13 +3346,20 @@ def _design_brief_set_system(
     *, brief_id: str, system_name: str, source_root: Path, dream_studio_home: Path | None
 ) -> int:
     from datetime import datetime, timezone
+
     if system_name not in _VALID_DESIGN_SYSTEMS:
-        print(json.dumps({
-            "ok": False,
-            "error": f"Invalid design system: {system_name}. Valid values: {sorted(_VALID_DESIGN_SYSTEMS)}",
-        }))
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": f"Invalid design system: {system_name}. Valid values: {sorted(_VALID_DESIGN_SYSTEMS)}",
+                }
+            )
+        )
         return 1
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     now = datetime.now(timezone.utc).isoformat()
@@ -3207,7 +3425,9 @@ def _milestone_close(
     import uuid as _uuid
     from datetime import datetime, timezone
 
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
 
@@ -3235,11 +3455,15 @@ def _milestone_close(
         open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "complete"]
         if open_wos:
             items = [{"work_order_id": r[0], "title": r[1], "status": r[2]} for r in open_wos]
-            print(json.dumps({
-                "ok": False,
-                "error": "Cannot close milestone: open work orders remain",
-                "open_work_orders": items,
-            }))
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "Cannot close milestone: open work orders remain",
+                        "open_work_orders": items,
+                    }
+                )
+            )
             return 1
 
         # b) Determine if this is a UI milestone
@@ -3300,7 +3524,11 @@ def _milestone_close(
         now = datetime.now(timezone.utc).isoformat()
 
         if failures and not force:
-            print(json.dumps({"ok": False, "error": "Milestone verification failed", "failures": failures}))
+            print(
+                json.dumps(
+                    {"ok": False, "error": "Milestone verification failed", "failures": failures}
+                )
+            )
             return 1
 
         if force and failures:
@@ -3308,15 +3536,18 @@ def _milestone_close(
                 print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
                 try:
                     import spool.writer as _spool_writer
-                    _spool_writer.write_event({
-                        "event_id": str(_uuid.uuid4()),
-                        "event_type": "gate.bypassed",
-                        "timestamp": now,
-                        "trace": {"milestone_id": milestone_id, "project_id": project_id},
-                        "severity": "warning",
-                        "payload": {"milestone_id": milestone_id, "reason": reason},
-                        "source_type": "confirmed",
-                    })
+
+                    _spool_writer.write_event(
+                        {
+                            "event_id": str(_uuid.uuid4()),
+                            "event_type": "gate.bypassed",
+                            "timestamp": now,
+                            "trace": {"milestone_id": milestone_id, "project_id": project_id},
+                            "severity": "warning",
+                            "payload": {"milestone_id": milestone_id, "reason": reason},
+                            "source_type": "confirmed",
+                        }
+                    )
                 except Exception:
                     pass
 
@@ -3328,15 +3559,18 @@ def _milestone_close(
 
     try:
         import spool.writer as _spool_writer
-        _spool_writer.write_event({
-            "event_id": str(_uuid.uuid4()),
-            "event_type": "milestone.completed",
-            "timestamp": now,
-            "trace": {"milestone_id": milestone_id, "project_id": project_id},
-            "severity": "info",
-            "payload": {"milestone_id": milestone_id, "title": ms_title, "forced": force},
-            "source_type": "confirmed",
-        })
+
+        _spool_writer.write_event(
+            {
+                "event_id": str(_uuid.uuid4()),
+                "event_type": "milestone.completed",
+                "timestamp": now,
+                "trace": {"milestone_id": milestone_id, "project_id": project_id},
+                "severity": "info",
+                "payload": {"milestone_id": milestone_id, "title": ms_title, "forced": force},
+                "source_type": "confirmed",
+            }
+        )
     except Exception:
         pass
 
@@ -3353,7 +3587,9 @@ def _milestone_list(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
     with _connect(paths.sqlite_path) as conn:
@@ -3367,14 +3603,16 @@ def _milestone_list(
             wo_count = conn.execute(
                 "SELECT COUNT(*) FROM ds_work_orders WHERE milestone_id = ?", (ms_id,)
             ).fetchone()[0]
-            milestones.append({
-                "milestone_id": ms_id[:8],
-                "milestone_id_full": ms_id,
-                "title": title,
-                "status": status,
-                "work_order_count": wo_count,
-                "depends_on": None,
-            })
+            milestones.append(
+                {
+                    "milestone_id": ms_id[:8],
+                    "milestone_id_full": ms_id,
+                    "title": title,
+                    "status": status,
+                    "work_order_count": wo_count,
+                    "depends_on": None,
+                }
+            )
     print(json.dumps({"ok": True, "milestones": milestones}, indent=2))
     return 0
 
@@ -3386,7 +3624,9 @@ def _milestone_status(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    paths = resolve_installed_runtime_paths(source_root=source_root, dream_studio_home=dream_studio_home)
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
     if not paths.sqlite_path.exists():
         raise RuntimeError("Dream Studio SQLite authority is missing.")
 
@@ -3425,19 +3665,24 @@ def _milestone_status(
     if has_ui and not (ms_dir / "cwv-results.md").is_file():
         open_checks.append("cwv_results")
 
-    print(json.dumps({
-        "ok": True,
-        "milestone_id": ms_id,
-        "project_id": project_id,
-        "title": title,
-        "status": status,
-        "due_date": due_date,
-        "work_orders": [
-            {"work_order_id": r[0], "title": r[1], "status": r[2], "type": r[3]}
-            for r in wo_rows
-        ],
-        "open_gate_checks": open_checks,
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "milestone_id": ms_id,
+                "project_id": project_id,
+                "title": title,
+                "status": status,
+                "due_date": due_date,
+                "work_orders": [
+                    {"work_order_id": r[0], "title": r[1], "status": r[2], "type": r[3]}
+                    for r in wo_rows
+                ],
+                "open_gate_checks": open_checks,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 

@@ -48,8 +48,12 @@ if used is not None and session_id:
     except Exception:
         pass
 
+
 # --- ansi ------------------------------------------------------------------
-def a(c): return f"\033[{c}m"
+def a(c):
+    return f"\033[{c}m"
+
+
 RESET = a("0")
 WHITE = a("97")
 GREEN = a("32")
@@ -65,9 +69,7 @@ def _get_plugin_root() -> str:
     sidecar = Path(__file__).parent / ".plugin-root"
     if sidecar.is_file():
         try:
-            return os.path.normcase(os.path.normpath(
-                sidecar.read_text(encoding="utf-8").strip()
-            ))
+            return os.path.normcase(os.path.normpath(sidecar.read_text(encoding="utf-8").strip()))
         except Exception:
             pass
     return ""
@@ -83,25 +85,39 @@ dirty = False
 repo = ""
 if cwd and os.path.isdir(cwd):
     try:
-        top = subprocess.run(["git", "-C", cwd, "rev-parse", "--show-toplevel"],
-                             capture_output=True, text=True, timeout=2)
+        top = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
         toplevel = top.stdout.strip() if top.returncode == 0 else ""
         is_studio_itself = (
-            toplevel
-            and STUDIO_HOME
-            and os.path.normcase(os.path.normpath(toplevel)) == STUDIO_HOME
+            toplevel and STUDIO_HOME and os.path.normcase(os.path.normpath(toplevel)) == STUDIO_HOME
         )
         if toplevel and not is_studio_itself:
-            b = subprocess.run(["git", "-C", cwd, "branch", "--show-current"],
-                               capture_output=True, text=True, timeout=2)
+            b = subprocess.run(
+                ["git", "-C", cwd, "branch", "--show-current"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
             if b.returncode == 0:
                 branch = b.stdout.strip()
-            s = subprocess.run(["git", "-C", cwd, "status", "--porcelain"],
-                               capture_output=True, text=True, timeout=2)
+            s = subprocess.run(
+                ["git", "-C", cwd, "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
             if s.returncode == 0 and s.stdout.strip():
                 dirty = True
-            r = subprocess.run(["git", "-C", cwd, "remote", "get-url", "origin"],
-                               capture_output=True, text=True, timeout=2)
+            r = subprocess.run(
+                ["git", "-C", cwd, "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
             if r.returncode == 0:
                 url = r.stdout.strip()
                 if url:

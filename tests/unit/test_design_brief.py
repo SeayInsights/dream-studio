@@ -21,6 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def db_home(tmp_path):
     db_path = tmp_path / "state" / "studio.db"
@@ -49,7 +50,9 @@ def _db_path(db_home: Path) -> Path:
     return db_home / "state" / "studio.db"
 
 
-def _insert_brief(db_home: Path, *, status: str = "draft", design_system: str | None = None) -> None:
+def _insert_brief(
+    db_home: Path, *, status: str = "draft", design_system: str | None = None
+) -> None:
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         conn.execute(
@@ -67,6 +70,7 @@ def _insert_brief(db_home: Path, *, status: str = "draft", design_system: str | 
 
 # ── 1. migration: ds_design_briefs table exists after bootstrap ───────────────
 
+
 def test_migration_053_creates_ds_design_briefs_table(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
@@ -79,6 +83,7 @@ def test_migration_053_creates_ds_design_briefs_table(db_home):
 
 
 # ── 2. ds design-brief create inserts a draft row ────────────────────────────
+
 
 def test_design_brief_create_inserts_draft_row(db_home, capsys):
     rc = main(["--home", str(db_home), "design-brief", "create", PROJECT_ID])
@@ -99,6 +104,7 @@ def test_design_brief_create_inserts_draft_row(db_home, capsys):
 
 # ── 3. ds design-brief show prints brief fields ───────────────────────────────
 
+
 def test_design_brief_show_prints_brief_fields(db_home, capsys):
     _insert_brief(db_home, status="draft")
     rc = main(["--home", str(db_home), "design-brief", "show", PROJECT_ID])
@@ -111,6 +117,7 @@ def test_design_brief_show_prints_brief_fields(db_home, capsys):
 
 
 # ── 4. ds design-brief lock sets status to locked ────────────────────────────
+
 
 def test_design_brief_lock_sets_status_locked(db_home, capsys):
     _insert_brief(db_home, status="draft")
@@ -131,14 +138,22 @@ def test_design_brief_lock_sets_status_locked(db_home, capsys):
 
 # ── 5. ds design-brief update changes field on draft ─────────────────────────
 
+
 def test_design_brief_update_changes_field_on_draft(db_home, capsys):
     _insert_brief(db_home, status="draft")
-    rc = main([
-        "--home", str(db_home),
-        "design-brief", "update", BRIEF_ID,
-        "--field", "tone",
-        "--value", "playful",
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "design-brief",
+            "update",
+            BRIEF_ID,
+            "--field",
+            "tone",
+            "--value",
+            "playful",
+        ]
+    )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is True
@@ -157,14 +172,22 @@ def test_design_brief_update_changes_field_on_draft(db_home, capsys):
 
 # ── 6. ds design-brief update exits 1 on locked brief ────────────────────────
 
+
 def test_design_brief_update_exits_1_on_locked_brief(db_home, capsys):
     _insert_brief(db_home, status="locked")
-    rc = main([
-        "--home", str(db_home),
-        "design-brief", "update", BRIEF_ID,
-        "--field", "tone",
-        "--value", "formal",
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "design-brief",
+            "update",
+            BRIEF_ID,
+            "--field",
+            "tone",
+            "--value",
+            "formal",
+        ]
+    )
     assert rc == 1
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is False
@@ -173,12 +196,19 @@ def test_design_brief_update_exits_1_on_locked_brief(db_home, capsys):
 
 # ── 7. ds design-brief set-system accepts valid system ───────────────────────
 
+
 def test_design_brief_set_system_accepts_valid_system(db_home, capsys):
     _insert_brief(db_home, status="draft")
-    rc = main([
-        "--home", str(db_home),
-        "design-brief", "set-system", BRIEF_ID, "tech-minimal",
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "design-brief",
+            "set-system",
+            BRIEF_ID,
+            "tech-minimal",
+        ]
+    )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is True
@@ -196,12 +226,19 @@ def test_design_brief_set_system_accepts_valid_system(db_home, capsys):
 
 # ── 8. ds design-brief set-system rejects invalid system ─────────────────────
 
+
 def test_design_brief_set_system_rejects_invalid_system(db_home, capsys):
     _insert_brief(db_home, status="draft")
-    rc = main([
-        "--home", str(db_home),
-        "design-brief", "set-system", BRIEF_ID, "nonexistent-system",
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "design-brief",
+            "set-system",
+            BRIEF_ID,
+            "nonexistent-system",
+        ]
+    )
     assert rc == 1
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is False
@@ -210,12 +247,19 @@ def test_design_brief_set_system_rejects_invalid_system(db_home, capsys):
 
 # ── 9. ds design-brief set-system exits 1 on locked brief ────────────────────
 
+
 def test_design_brief_set_system_exits_1_on_locked_brief(db_home, capsys):
     _insert_brief(db_home, status="locked")
-    rc = main([
-        "--home", str(db_home),
-        "design-brief", "set-system", BRIEF_ID, "editorial-modern",
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "design-brief",
+            "set-system",
+            BRIEF_ID,
+            "editorial-modern",
+        ]
+    )
     assert rc == 1
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is False
@@ -224,14 +268,21 @@ def test_design_brief_set_system_exits_1_on_locked_brief(db_home, capsys):
 
 # ── 10. gate check passes when locked brief exists ───────────────────────────
 
+
 def test_gate_check_design_brief_locked_passes_when_locked(db_home, tmp_path, monkeypatch, capsys):
     _insert_brief(db_home, status="locked")
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "close", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "close",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     out = json.loads(capsys.readouterr().out)
     # Gate passes — failure should not mention design_brief_locked
     failures = out.get("failures", [])
@@ -240,13 +291,20 @@ def test_gate_check_design_brief_locked_passes_when_locked(db_home, tmp_path, mo
 
 # ── 11. gate check fails when no brief ───────────────────────────────────────
 
+
 def test_gate_check_design_brief_locked_fails_when_no_brief(db_home, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "close", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "close",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 1
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is False
@@ -255,14 +313,21 @@ def test_gate_check_design_brief_locked_fails_when_no_brief(db_home, tmp_path, m
 
 # ── 12. gate check fails when brief is draft (not locked) ────────────────────
 
+
 def test_gate_check_design_brief_locked_fails_when_draft(db_home, tmp_path, monkeypatch, capsys):
     _insert_brief(db_home, status="draft")
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "close", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "close",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 1
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is False
@@ -271,14 +336,21 @@ def test_gate_check_design_brief_locked_fails_when_draft(db_home, tmp_path, monk
 
 # ── 13. work-order start includes design brief section when locked ────────────
 
+
 def test_work_order_start_includes_design_brief_section(db_home, tmp_path, monkeypatch):
     _insert_brief(db_home, status="locked")
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "start", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 0
     context_path = tmp_path / ".planning" / "work-orders" / WO_UI_ID / "context.md"
     assert context_path.exists()
@@ -289,14 +361,21 @@ def test_work_order_start_includes_design_brief_section(db_home, tmp_path, monke
 
 # ── 14. work-order start includes design system section when system is set ────
 
+
 def test_work_order_start_includes_design_system_section(db_home, tmp_path, monkeypatch):
     _insert_brief(db_home, status="locked", design_system="tech-minimal")
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "start", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 0
     context_path = tmp_path / ".planning" / "work-orders" / WO_UI_ID / "context.md"
     content = context_path.read_text(encoding="utf-8")
@@ -307,13 +386,20 @@ def test_work_order_start_includes_design_system_section(db_home, tmp_path, monk
 
 # ── 15. work-order start warns when no brief for UI type ─────────────────────
 
+
 def test_work_order_start_warns_when_no_brief_for_ui_type(db_home, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "start", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 0
     err = capsys.readouterr().err
     assert "WARNING" in err

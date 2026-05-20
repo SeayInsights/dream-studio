@@ -47,28 +47,27 @@ class TestHooksJsonDispatcherRegistration:
     def _has_dispatcher(self, event: str) -> bool:
         cmds = _all_commands(self._load(), event)
         return any(
-            "'runtime'/'dispatch'/'hooks.py'" in c
-            or "'runtime'\\\\/'dispatch'\\\\/'hooks.py'" in c
+            "'runtime'/'dispatch'/'hooks.py'" in c or "'runtime'\\\\/'dispatch'\\\\/'hooks.py'" in c
             for c in cmds
         )
 
     def test_user_prompt_submit_has_dispatcher(self):
-        assert self._has_dispatcher("UserPromptSubmit"), (
-            "UserPromptSubmit must register runtime/dispatch/hooks.py"
-        )
+        assert self._has_dispatcher(
+            "UserPromptSubmit"
+        ), "UserPromptSubmit must register runtime/dispatch/hooks.py"
 
     def test_stop_has_dispatcher(self):
         assert self._has_dispatcher("Stop"), "Stop must register runtime/dispatch/hooks.py"
 
     def test_post_compact_has_dispatcher(self):
-        assert self._has_dispatcher("PostCompact"), (
-            "PostCompact must register runtime/dispatch/hooks.py"
-        )
+        assert self._has_dispatcher(
+            "PostCompact"
+        ), "PostCompact must register runtime/dispatch/hooks.py"
 
     def test_post_tool_use_has_dispatcher(self):
-        assert self._has_dispatcher("PostToolUse"), (
-            "PostToolUse must register runtime/dispatch/hooks.py"
-        )
+        assert self._has_dispatcher(
+            "PostToolUse"
+        ), "PostToolUse must register runtime/dispatch/hooks.py"
 
     def test_dispatcher_file_exists(self):
         assert DISPATCHER.is_file(), "runtime/dispatch/hooks.py must exist"
@@ -87,7 +86,9 @@ class TestDispatcherRouting:
         def fake_run_handlers(handlers, raw_payload, event_tag, state_dir):
             invoked.extend(name for name, _ in handlers)
 
-        with patch("control.execution.dispatch_tracking.run_handlers", side_effect=fake_run_handlers):
+        with patch(
+            "control.execution.dispatch_tracking.run_handlers", side_effect=fake_run_handlers
+        ):
             mod = _load_dispatcher()
             exit_code = mod.main()
 

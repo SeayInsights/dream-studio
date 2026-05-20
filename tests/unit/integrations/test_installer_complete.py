@@ -28,7 +28,7 @@ def _cmd_has_dispatcher(cmd: str) -> bool:
     """Return True if cmd contains a DS dispatcher hook reference (any format)."""
     return (
         os.path.join("hooks", "dispatch", "hooks.py") in cmd
-        or "hooks/dispatch/hooks.py" in cmd   # forward-slash form (new template)
+        or "hooks/dispatch/hooks.py" in cmd  # forward-slash form (new template)
         or "runtime/dispatch/hooks" in cmd
         or "'dispatch'/'hooks.py'" in cmd
     )
@@ -38,7 +38,7 @@ def _cmd_has_emitter(cmd: str) -> bool:
     """Return True if cmd contains a DS emitter hook reference (any format)."""
     return (
         os.path.join("hooks", "run.py") in cmd
-        or "hooks/run.py" in cmd              # forward-slash form (new template)
+        or "hooks/run.py" in cmd  # forward-slash form (new template)
         or "emitters/claude_code/run.py" in cmd
         or "/'emitters'/'claude_code'/'run.py'" in cmd
     )
@@ -77,9 +77,20 @@ def canonical_root(tmp_path):
     # Workflows
     workflows_dir = root / "workflows"
     workflows_dir.mkdir()
-    for wf in ["idea-to-pr", "studio-onboard", "feature-research", "hotfix",
-               "fix-issue", "daily-standup", "daily-close", "hotfix",
-               "optimize", "prototype", "safe-refactor", "security-audit"]:
+    for wf in [
+        "idea-to-pr",
+        "studio-onboard",
+        "feature-research",
+        "hotfix",
+        "fix-issue",
+        "daily-standup",
+        "daily-close",
+        "hotfix",
+        "optimize",
+        "prototype",
+        "safe-refactor",
+        "security-audit",
+    ]:
         (workflows_dir / f"{wf}.yaml").write_text(f"name: {wf}\nsteps: []\n", encoding="utf-8")
     (workflows_dir / "README.md").write_text("# Workflows\n", encoding="utf-8")
     # Workflow contract (at source root, not inside canonical/)
@@ -102,11 +113,18 @@ def canonical_root(tmp_path):
     (src / "control" / "execution").mkdir(parents=True, exist_ok=True)
     (src / "control" / "__init__.py").write_text("", encoding="utf-8")
     (src / "control" / "execution" / "__init__.py").write_text("", encoding="utf-8")
-    (src / "control" / "execution" / "dispatch_tracking.py").write_text("# dispatch_tracking stub\n", encoding="utf-8")
+    (src / "control" / "execution" / "dispatch_tracking.py").write_text(
+        "# dispatch_tracking stub\n", encoding="utf-8"
+    )
     meta_dir = src / "runtime" / "hooks" / "meta"
     meta_dir.mkdir(parents=True, exist_ok=True)
     (meta_dir / "__init__.py").write_text("", encoding="utf-8")
-    for handler in ["on-prompt-dispatch", "on-stop-dispatch", "on-tool-activity", "on-skill-complete"]:
+    for handler in [
+        "on-prompt-dispatch",
+        "on-stop-dispatch",
+        "on-tool-activity",
+        "on-skill-complete",
+    ]:
         (meta_dir / f"{handler}.py").write_text(f"# {handler} stub\n", encoding="utf-8")
 
     return root
@@ -219,7 +237,8 @@ def test_plan_includes_installed_version_when_version_file_exists(
     config_root, source_root_with_version, ds_home
 ):
     installer = ClaudeCodeInstaller(
-        config_root, "user",
+        config_root,
+        "user",
         canonical_root=source_root_with_version / "canonical",
         ds_home=ds_home,
     )
@@ -230,9 +249,7 @@ def test_plan_includes_installed_version_when_version_file_exists(
     assert "2026-05-17" in version_ops[0].source_content
 
 
-def test_plan_no_installed_version_when_version_file_absent(
-    config_root, canonical_root, ds_home
-):
+def test_plan_no_installed_version_when_version_file_absent(config_root, canonical_root, ds_home):
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
@@ -352,7 +369,8 @@ def test_second_install_does_not_duplicate_hooks(config_root, canonical_root, ds
 
 def test_execute_writes_installed_version(config_root, source_root_with_version, ds_home):
     installer = ClaudeCodeInstaller(
-        config_root, "user",
+        config_root,
+        "user",
         canonical_root=source_root_with_version / "canonical",
         ds_home=ds_home,
     )
@@ -362,11 +380,10 @@ def test_execute_writes_installed_version(config_root, source_root_with_version,
     assert version_file.read_text(encoding="utf-8").strip() == "2026-05-17"
 
 
-def test_dry_run_does_not_write_installed_version(
-    config_root, source_root_with_version, ds_home
-):
+def test_dry_run_does_not_write_installed_version(config_root, source_root_with_version, ds_home):
     installer = ClaudeCodeInstaller(
-        config_root, "user",
+        config_root,
+        "user",
         canonical_root=source_root_with_version / "canonical",
         ds_home=ds_home,
     )
@@ -566,7 +583,9 @@ def test_execute_installs_meta_handlers(config_root, canonical_root, ds_home):
     )
     installer.install("execute")
     meta_dir = config_root / "hooks" / "runtime" / "hooks" / "meta"
-    handlers = [f for f in meta_dir.glob("*.py") if f.name != "__init__.py"] if meta_dir.is_dir() else []
+    handlers = (
+        [f for f in meta_dir.glob("*.py") if f.name != "__init__.py"] if meta_dir.is_dir() else []
+    )
     assert len(handlers) >= 1
 
 
@@ -591,7 +610,9 @@ def test_execute_installs_posttooluse_matcher_entries(config_root, canonical_roo
     matchers = {entry.get("matcher") for entry in post_tool_entries if "matcher" in entry}
     assert "Skill" in matchers, "PostToolUse must have a 'Skill' matcher entry"
     assert "Edit|Write" in matchers, "PostToolUse must have an 'Edit|Write' matcher entry"
-    assert "Read" not in matchers, "PostToolUse must NOT have a 'Read' matcher (overhead with no consumer)"
+    assert (
+        "Read" not in matchers
+    ), "PostToolUse must NOT have a 'Read' matcher (overhead with no consumer)"
 
 
 def test_hook_commands_use_hooks_dir_path(config_root, canonical_root, ds_home):
@@ -610,17 +631,17 @@ def test_hook_commands_use_hooks_dir_path(config_root, canonical_root, ds_home):
         if isinstance(h, dict)
     ]
     # At least one command must reference the installed hooks_dir (forward-slash normalized)
-    assert any(hooks_dir_posix in cmd for cmd in all_cmds), (
-        f"No command references hooks_dir={hooks_dir_posix!r}. Commands: {all_cmds}"
-    )
+    assert any(
+        hooks_dir_posix in cmd for cmd in all_cmds
+    ), f"No command references hooks_dir={hooks_dir_posix!r}. Commands: {all_cmds}"
 
 
 # ── Legacy hook purge ─────────────────────────────────────────────────────────
 
 _LEGACY_CMD = (
-    'python -c "import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get(\'CLAUDE_PLUGIN_ROOT\') or os.getcwd()).resolve(); '
-    'emitter=next((p/\'emitters\'/\'claude_code\'/\'run.py\' for p in (root,*root.parents) if (p/\'emitters\'/\'claude_code\'/\'run.py\').is_file()),None); '
-    'sys.argv=[str(emitter),\'UserPromptSubmit\']; (runpy.run_path(str(emitter),run_name=\'__main__\') if emitter else None); sys.exit(0)"'
+    "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); "
+    "emitter=next((p/'emitters'/'claude_code'/'run.py' for p in (root,*root.parents) if (p/'emitters'/'claude_code'/'run.py').is_file()),None); "
+    "sys.argv=[str(emitter),'UserPromptSubmit']; (runpy.run_path(str(emitter),run_name='__main__') if emitter else None); sys.exit(0)\""
 )
 
 
@@ -630,7 +651,11 @@ def _settings_with_legacy_and_stable(hooks_dir: str) -> dict:
         "hooks": {
             "UserPromptSubmit": [
                 {"hooks": [{"type": "command", "command": _LEGACY_CMD}]},
-                {"hooks": [{"type": "command", "command": f'py "{hooks_dir}\\run.py" UserPromptSubmit'}]},
+                {
+                    "hooks": [
+                        {"type": "command", "command": f'py "{hooks_dir}\\run.py" UserPromptSubmit'}
+                    ]
+                },
             ]
         }
     }
@@ -651,24 +676,29 @@ def test_purge_legacy_hooks_removes_one_liner_when_stable_present(tmp_path):
 
 def test_purge_legacy_hooks_leaves_legacy_when_no_stable_present():
     settings = {
-        "hooks": {
-            "UserPromptSubmit": [
-                {"hooks": [{"type": "command", "command": _LEGACY_CMD}]}
-            ]
-        }
+        "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": _LEGACY_CMD}]}]}
     }
     cleaned, removed = purge_legacy_hooks(settings)
     assert len(removed) == 0, "Should not remove when no stable replacement present"
     assert len(cleaned["hooks"]["UserPromptSubmit"]) == 1
 
 
-def test_execute_install_removes_legacy_hooks_when_stable_present(config_root, canonical_root, ds_home):
+def test_execute_install_removes_legacy_hooks_when_stable_present(
+    config_root, canonical_root, ds_home
+):
     """Second install (stable entries now present) must remove any pre-existing legacy one-liners."""
     # Seed settings.json with a legacy entry before first install
     settings_path = config_root / "settings.json"
-    settings_path.write_text(json.dumps({"hooks": {"UserPromptSubmit": [
-        {"hooks": [{"type": "command", "command": _LEGACY_CMD}]}
-    ]}}), encoding="utf-8")
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": _LEGACY_CMD}]}]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
@@ -680,9 +710,9 @@ def test_execute_install_removes_legacy_hooks_when_stable_present(config_root, c
         for entry in settings.get("hooks", {}).get("UserPromptSubmit", [])
         for h in entry.get("hooks", [])
     ]
-    assert not any("runpy.run_path" in c for c in cmds), (
-        "Legacy hook survived install despite stable replacement being present"
-    )
+    assert not any(
+        "runpy.run_path" in c for c in cmds
+    ), "Legacy hook survived install despite stable replacement being present"
 
 
 # ── Platform compatibility (WS 9e-2) ─────────────────────────────────────────
@@ -713,9 +743,9 @@ def test_hook_commands_use_python_cmd_placeholder_resolved(config_root, canonica
         for h in entry.get("hooks", [])
         if isinstance(h, dict)
     ]
-    assert not any("{python_cmd}" in cmd for cmd in all_cmds), (
-        "{python_cmd} placeholder was not resolved in hook commands"
-    )
+    assert not any(
+        "{python_cmd}" in cmd for cmd in all_cmds
+    ), "{python_cmd} placeholder was not resolved in hook commands"
 
 
 def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_home):
@@ -724,7 +754,10 @@ def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_ho
         installer = ClaudeCodeInstaller(
             config_root, "user", canonical_root=canonical_root, ds_home=ds_home
         )
-        with patch("integrations.installer.claude_code._write_path_to_profile", return_value={"action": "skipped", "profile": ""}):
+        with patch(
+            "integrations.installer.claude_code._write_path_to_profile",
+            return_value={"action": "skipped", "profile": ""},
+        ):
             installer.install("execute")
     settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
     all_cmds = [
@@ -734,9 +767,9 @@ def test_hook_commands_use_py_on_windows_mock(config_root, canonical_root, ds_ho
         for h in entry.get("hooks", [])
         if isinstance(h, dict)
     ]
-    assert any(cmd.startswith("py ") for cmd in all_cmds), (
-        "No hook command starts with 'py' on Windows mock"
-    )
+    assert any(
+        cmd.startswith("py ") for cmd in all_cmds
+    ), "No hook command starts with 'py' on Windows mock"
 
 
 def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_root, ds_home):
@@ -745,7 +778,10 @@ def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_r
         installer = ClaudeCodeInstaller(
             config_root, "user", canonical_root=canonical_root, ds_home=ds_home
         )
-        with patch("integrations.installer.claude_code._write_path_to_profile", return_value={"action": "skipped", "profile": ""}):
+        with patch(
+            "integrations.installer.claude_code._write_path_to_profile",
+            return_value={"action": "skipped", "profile": ""},
+        ):
             installer.install("execute")
     settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
     all_cmds = [
@@ -755,15 +791,17 @@ def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_r
         for h in entry.get("hooks", [])
         if isinstance(h, dict)
     ]
-    assert any(sys.executable in cmd for cmd in all_cmds), (
-        f"sys.executable ({sys.executable!r}) not found in any hook command"
-    )
+    assert any(
+        sys.executable in cmd for cmd in all_cmds
+    ), f"sys.executable ({sys.executable!r}) not found in any hook command"
 
 
 def test_launcher_cmd_written_on_windows(ds_home):
     """Windows launcher must be ds.cmd."""
-    with patch("platform.system", return_value="Windows"), \
-         patch("integrations.installer.claude_code._write_path_to_profile", return_value={"action": "skipped", "profile": ""}):
+    with patch("platform.system", return_value="Windows"), patch(
+        "integrations.installer.claude_code._write_path_to_profile",
+        return_value={"action": "skipped", "profile": ""},
+    ):
         result = _write_global_launcher(ds_home=ds_home)
     assert result["is_windows"] is True
     assert Path(result["launcher_path"]).name == "ds.cmd"
@@ -771,8 +809,10 @@ def test_launcher_cmd_written_on_windows(ds_home):
 
 def test_launcher_shell_script_written_on_nonwindows(ds_home):
     """Non-Windows launcher must be 'ds' (no extension)."""
-    with patch("platform.system", return_value="Linux"), \
-         patch("integrations.installer.claude_code._write_path_to_profile", return_value={"action": "skipped", "profile": ""}):
+    with patch("platform.system", return_value="Linux"), patch(
+        "integrations.installer.claude_code._write_path_to_profile",
+        return_value={"action": "skipped", "profile": ""},
+    ):
         result = _write_global_launcher(ds_home=ds_home)
     assert result["is_windows"] is False
     assert Path(result["launcher_path"]).name == "ds"
@@ -782,8 +822,11 @@ def test_launcher_shell_script_written_on_nonwindows(ds_home):
 def test_launcher_shell_script_is_executable_on_nonwindows(ds_home):
     """Non-Windows launcher must have executable bit set."""
     import stat as _stat
-    with patch("platform.system", return_value="Linux"), \
-         patch("integrations.installer.claude_code._write_path_to_profile", return_value={"action": "skipped", "profile": ""}):
+
+    with patch("platform.system", return_value="Linux"), patch(
+        "integrations.installer.claude_code._write_path_to_profile",
+        return_value={"action": "skipped", "profile": ""},
+    ):
         result = _write_global_launcher(ds_home=ds_home)
     mode = Path(result["launcher_path"]).stat().st_mode
     assert mode & _stat.S_IEXEC, "Launcher shell script must have executable bit"
@@ -792,8 +835,9 @@ def test_launcher_shell_script_is_executable_on_nonwindows(ds_home):
 def test_path_line_added_to_profile_file(tmp_path):
     """_write_path_to_profile must append the DS PATH line to the profile."""
     bin_dir = tmp_path / "bin"
-    with patch("platform.system", return_value="Linux"), \
-         patch("pathlib.Path.home", return_value=tmp_path):
+    with patch("platform.system", return_value="Linux"), patch(
+        "pathlib.Path.home", return_value=tmp_path
+    ):
         result = _write_path_to_profile(bin_dir)
     assert result["action"] == "appended"
     profile = tmp_path / ".bashrc"
@@ -805,8 +849,9 @@ def test_path_line_added_to_profile_file(tmp_path):
 def test_path_line_not_duplicated_on_second_install(tmp_path):
     """_write_path_to_profile must be idempotent — second call must skip."""
     bin_dir = tmp_path / "bin"
-    with patch("platform.system", return_value="Linux"), \
-         patch("pathlib.Path.home", return_value=tmp_path):
+    with patch("platform.system", return_value="Linux"), patch(
+        "pathlib.Path.home", return_value=tmp_path
+    ):
         result1 = _write_path_to_profile(bin_dir)
         result2 = _write_path_to_profile(bin_dir)
     assert result1["action"] == "appended"
@@ -824,8 +869,22 @@ def test_dedup_backslash_and_forward_slash_collapse_to_one():
     settings = {
         "hooks": {
             "UserPromptSubmit": [
-                {"hooks": [{"type": "command", "command": 'py "C:\\claude\\hooks/run.py" UserPromptSubmit'}]},
-                {"hooks": [{"type": "command", "command": 'py "C:\\claude\\hooks\\run.py" UserPromptSubmit'}]},
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": 'py "C:\\claude\\hooks/run.py" UserPromptSubmit',
+                        }
+                    ]
+                },
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": 'py "C:\\claude\\hooks\\run.py" UserPromptSubmit',
+                        }
+                    ]
+                },
             ]
         }
     }
@@ -856,8 +915,14 @@ def test_dedup_same_matcher_same_command_different_slash_style():
     settings = {
         "hooks": {
             "PostToolUse": [
-                {"matcher": "Skill", "hooks": [{"type": "command", "command": 'py "C:\\hooks/run.py"'}]},
-                {"matcher": "Skill", "hooks": [{"type": "command", "command": 'py "C:\\hooks\\run.py"'}]},
+                {
+                    "matcher": "Skill",
+                    "hooks": [{"type": "command", "command": 'py "C:\\hooks/run.py"'}],
+                },
+                {
+                    "matcher": "Skill",
+                    "hooks": [{"type": "command", "command": 'py "C:\\hooks\\run.py"'}],
+                },
             ]
         }
     }
@@ -909,28 +974,31 @@ def test_second_install_after_dedup_fix_produces_correct_hook_counts(
 def test_packs_yaml_has_ds_website_skill_id():
     """packs.yaml must declare skill: ds-website for the website pack."""
     import yaml
+
     packs_path = Path(__file__).resolve().parents[3] / "packs.yaml"
     data = yaml.safe_load(packs_path.read_text(encoding="utf-8"))
     website = data["packs"]["website"]
-    assert website["skill"] == "ds-website", (
-        f"website pack skill should be ds-website, got {website['skill']!r}"
-    )
+    assert (
+        website["skill"] == "ds-website"
+    ), f"website pack skill should be ds-website, got {website['skill']!r}"
 
 
 def test_packs_yaml_has_ds_fullstack_skill_id():
     """packs.yaml must declare skill: ds-fullstack for the fullstack pack."""
     import yaml
+
     packs_path = Path(__file__).resolve().parents[3] / "packs.yaml"
     data = yaml.safe_load(packs_path.read_text(encoding="utf-8"))
     fullstack = data["packs"]["fullstack"]
-    assert fullstack["skill"] == "ds-fullstack", (
-        f"fullstack pack skill should be ds-fullstack, got {fullstack['skill']!r}"
-    )
+    assert (
+        fullstack["skill"] == "ds-fullstack"
+    ), f"fullstack pack skill should be ds-fullstack, got {fullstack['skill']!r}"
 
 
 def test_compiled_claude_md_contains_ds_website_row(canonical_root):
     """Compiled CLAUDE.md routing table must contain a ds-website row."""
     from integrations.compiler.claude_code import compile_pack
+
     pack = compile_pack(canonical_root)
     claude_md = pack["files"]["CLAUDE.md"]
     assert "ds-website" in claude_md, "Compiled CLAUDE.md does not contain ds-website routing row"
@@ -939,9 +1007,12 @@ def test_compiled_claude_md_contains_ds_website_row(canonical_root):
 def test_compiled_claude_md_contains_ds_fullstack_row(canonical_root):
     """Compiled CLAUDE.md routing table must contain a ds-fullstack row."""
     from integrations.compiler.claude_code import compile_pack
+
     pack = compile_pack(canonical_root)
     claude_md = pack["files"]["CLAUDE.md"]
-    assert "ds-fullstack" in claude_md, "Compiled CLAUDE.md does not contain ds-fullstack routing row"
+    assert (
+        "ds-fullstack" in claude_md
+    ), "Compiled CLAUDE.md does not contain ds-fullstack routing row"
 
 
 def test_execute_installs_statusline_py(config_root, canonical_root, ds_home):
@@ -950,9 +1021,9 @@ def test_execute_installs_statusline_py(config_root, canonical_root, ds_home):
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    assert (config_root / "hooks" / "statusline.py").is_file(), (
-        "statusline.py was not installed to hooks/"
-    )
+    assert (
+        config_root / "hooks" / "statusline.py"
+    ).is_file(), "statusline.py was not installed to hooks/"
 
 
 def test_execute_settings_contains_statusline_command(config_root, canonical_root, ds_home):
@@ -980,7 +1051,9 @@ def test_execute_statusline_command_has_no_placeholders(config_root, canonical_r
 
 def test_statusline_py_contains_get_plugin_root():
     """canonical/adapters/claude/statusline.py must contain _get_plugin_root function."""
-    statusline_path = Path(__file__).resolve().parents[3] / "canonical" / "adapters" / "claude" / "statusline.py"
+    statusline_path = (
+        Path(__file__).resolve().parents[3] / "canonical" / "adapters" / "claude" / "statusline.py"
+    )
     assert statusline_path.is_file(), "canonical/adapters/claude/statusline.py not found"
     content = statusline_path.read_text(encoding="utf-8")
     assert "_get_plugin_root" in content, "statusline.py missing _get_plugin_root function"
@@ -997,9 +1070,10 @@ def test_readme_contains_jq_instructions():
 def test_first_run_guide_contains_config_json_step():
     """_FIRST_RUN_GUIDE_TEXT must contain the config.json personalization step."""
     from integrations.installer.claude_code import _FIRST_RUN_GUIDE_TEXT
-    assert "config.json" in _FIRST_RUN_GUIDE_TEXT, (
-        "_FIRST_RUN_GUIDE_TEXT missing config.json step 0"
-    )
-    assert "director_name" in _FIRST_RUN_GUIDE_TEXT, (
-        "_FIRST_RUN_GUIDE_TEXT missing director_name field reference"
-    )
+
+    assert (
+        "config.json" in _FIRST_RUN_GUIDE_TEXT
+    ), "_FIRST_RUN_GUIDE_TEXT missing config.json step 0"
+    assert (
+        "director_name" in _FIRST_RUN_GUIDE_TEXT
+    ), "_FIRST_RUN_GUIDE_TEXT missing director_name field reference"

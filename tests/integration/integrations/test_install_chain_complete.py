@@ -24,9 +24,11 @@ def config_root(tmp_path):
 
 def _make_installer(config_root, ds_home):
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from integrations.installer.claude_code import ClaudeCodeInstaller
+
     return ClaudeCodeInstaller(
         config_root,
         "user",
@@ -108,7 +110,7 @@ def test_install_adds_dispatcher_hook_for_all_events(config_root, ds_home):
             (
                 "runtime/dispatch/hooks" in h.get("command", "")
                 or "'dispatch'/'hooks.py'" in h.get("command", "")
-                or "hooks/dispatch/hooks.py" in h.get("command", "")   # stable-path format
+                or "hooks/dispatch/hooks.py" in h.get("command", "")  # stable-path format
                 or "hooks\\dispatch\\hooks.py" in h.get("command", "")  # stable-path Windows
             )
             for entry in hooks.get(event, [])
@@ -128,8 +130,8 @@ def test_install_adds_emitter_hook_for_all_events(config_root, ds_home):
         found = any(
             (
                 "'emitters'/'claude_code'" in h.get("command", "")
-                or "hooks/run.py" in h.get("command", "")     # stable-path format
-                or "hooks\\run.py" in h.get("command", "")    # stable-path Windows
+                or "hooks/run.py" in h.get("command", "")  # stable-path format
+                or "hooks\\run.py" in h.get("command", "")  # stable-path Windows
             )
             for entry in hooks.get(event, [])
             for h in entry.get("hooks", [])
@@ -175,7 +177,10 @@ def test_install_writes_installed_version_matching_repo_version(config_root, ds_
 
     version_installed = ds_home / "state" / "installed-version"
     assert version_installed.is_file(), "installed-version file not written"
-    assert version_installed.read_text(encoding="utf-8").strip() == version_src.read_text(encoding="utf-8").strip()
+    assert (
+        version_installed.read_text(encoding="utf-8").strip()
+        == version_src.read_text(encoding="utf-8").strip()
+    )
 
 
 # ── Post-install validation ───────────────────────────────────────────────────
@@ -198,9 +203,14 @@ def test_install_result_validation_passes(config_root, ds_home):
 def test_doctor_checks_pass_after_install(config_root, ds_home, tmp_path):
     """After a full install, doctor dispatcher + skills + agents checks should pass."""
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
-    from interfaces.cli.ds import _check_dispatcher_hooks, _check_skills_installed, _check_agents_installed
+    from interfaces.cli.ds import (
+        _check_dispatcher_hooks,
+        _check_skills_installed,
+        _check_agents_installed,
+    )
 
     installer = _make_installer(config_root, ds_home)
     installer.install("execute")

@@ -1,4 +1,5 @@
 """Workstream 5d gate: ds memory ingest extraction and idempotency assertions."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -30,7 +31,9 @@ def _connect(db_path: Path) -> sqlite3.Connection:
 # ── Filesystem helpers ────────────────────────────────────────────────────────
 
 
-def _make_sessions_tree(tmp_path: Path, project: str, date: str, filename: str, content: str) -> Path:
+def _make_sessions_tree(
+    tmp_path: Path, project: str, date: str, filename: str, content: str
+) -> Path:
     """Create tmp_path/sessions/<project>/<date>/<filename> with content."""
     d = tmp_path / "sessions" / project / date
     d.mkdir(parents=True, exist_ok=True)
@@ -69,7 +72,10 @@ def _run(tmp_path: Path, db_path: Path, **overrides) -> dict:
 def test_gotcha_extraction_finds_what_broke(tmp_path):
     db_path = _make_db(tmp_path)
     _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-17", "handoff-001.md",
+        tmp_path,
+        "ProjectA",
+        "2026-04-17",
+        "handoff-001.md",
         "## Session Summary\n\n---\n\nWhat broke: Canvas scaling was off\n\n"
         "The zoom multiplier was computed before initialization.\n\nFix: Moved init above render.\n\n---",
     )
@@ -87,7 +93,10 @@ def test_gotcha_extraction_finds_what_broke(tmp_path):
 def test_gotcha_extraction_finds_gotcha_pattern(tmp_path):
     db_path = _make_db(tmp_path)
     _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-18", "recap-001.md",
+        tmp_path,
+        "ProjectA",
+        "2026-04-18",
+        "recap-001.md",
         "## Recap\n\nGotcha: Migration numbering conflict\n"
         "Two branches both added migration 035. Renumber the lower-priority one.\n\n"
         "Fix: Resequenced to 036.\n",
@@ -125,7 +134,10 @@ def test_skill_id_canvas_is_ds_domains(tmp_path):
 def test_gotcha_idempotent_second_run_skips(tmp_path):
     db_path = _make_db(tmp_path)
     _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-17", "handoff-001.md",
+        tmp_path,
+        "ProjectA",
+        "2026-04-17",
+        "handoff-001.md",
         "---\nGotcha: Duplicate run check\nThis should only appear once.\n---",
     )
     result1 = _run(tmp_path, db_path)
@@ -143,7 +155,8 @@ def test_gotcha_idempotent_second_run_skips(tmp_path):
 def test_architecture_doc_extracted_from_constitution(tmp_path):
     db_path = _make_db(tmp_path)
     _make_planning_file(
-        tmp_path, "CONSTITUTION.md",
+        tmp_path,
+        "CONSTITUTION.md",
         "# Project Constitution\n\nNever modify core/ without a review session.\n",
     )
     result = _run(tmp_path, db_path)
@@ -162,7 +175,8 @@ def test_architecture_doc_extracted_from_constitution(tmp_path):
 def test_architecture_doc_idempotent_second_run_skips(tmp_path):
     db_path = _make_db(tmp_path)
     _make_planning_file(
-        tmp_path, "ADR-001.md",
+        tmp_path,
+        "ADR-001.md",
         "# ADR 001 — Use SQLite as authority\n\nDecision: SQLite is the local authority.\n",
     )
     result1 = _run(tmp_path, db_path)
@@ -179,13 +193,9 @@ def test_architecture_doc_idempotent_second_run_skips(tmp_path):
 def test_session_handoff_picks_most_recent_by_date_dir(tmp_path):
     db_path = _make_db(tmp_path)
     # Older date dir
-    _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-17", "handoff-001.md", "Old handoff content"
-    )
+    _make_sessions_tree(tmp_path, "ProjectA", "2026-04-17", "handoff-001.md", "Old handoff content")
     # Newer date dir
-    _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-05-01", "handoff-001.md", "New handoff content"
-    )
+    _make_sessions_tree(tmp_path, "ProjectA", "2026-05-01", "handoff-001.md", "New handoff content")
     result = _run(tmp_path, db_path)
     assert result["session_handoffs"]["updated"] == 1
 
@@ -200,9 +210,7 @@ def test_session_handoff_picks_most_recent_by_date_dir(tmp_path):
 
 def test_session_handoff_picks_alphabetically_last_in_date_dir(tmp_path):
     db_path = _make_db(tmp_path)
-    _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-05-01", "handoff-001.md", "First file"
-    )
+    _make_sessions_tree(tmp_path, "ProjectA", "2026-05-01", "handoff-001.md", "First file")
     _make_sessions_tree(
         tmp_path, "ProjectA", "2026-05-01", "handoff-002.md", "Second file (alphabetically last)"
     )
@@ -219,16 +227,12 @@ def test_session_handoff_picks_alphabetically_last_in_date_dir(tmp_path):
 
 def test_session_handoff_upsert_replaces_on_second_run(tmp_path):
     db_path = _make_db(tmp_path)
-    _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-17", "handoff-001.md", "First handoff"
-    )
+    _make_sessions_tree(tmp_path, "ProjectA", "2026-04-17", "handoff-001.md", "First handoff")
     result1 = _run(tmp_path, db_path)
     assert result1["session_handoffs"]["updated"] == 1
 
     # Add a newer handoff
-    _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-05-10", "handoff-001.md", "Updated handoff"
-    )
+    _make_sessions_tree(tmp_path, "ProjectA", "2026-05-10", "handoff-001.md", "Updated handoff")
     result2 = _run(tmp_path, db_path)
     assert result2["session_handoffs"]["updated"] == 1
 
@@ -248,7 +252,10 @@ def test_session_handoff_upsert_replaces_on_second_run(tmp_path):
 def test_dry_run_reports_counts_without_writing(tmp_path):
     db_path = _make_db(tmp_path)
     _make_sessions_tree(
-        tmp_path, "ProjectA", "2026-04-17", "handoff-001.md",
+        tmp_path,
+        "ProjectA",
+        "2026-04-17",
+        "handoff-001.md",
         "---\nGotcha: Dry run test\nThis should not be written.\n---",
     )
     _make_planning_file(tmp_path, "CONSTITUTION.md", "# Constitution\nDry run doc.")
@@ -285,7 +292,10 @@ def test_unknown_project_dir_gives_null_project_id(tmp_path):
     """A project directory with no match in reg_projects → project_id null, no crash."""
     db_path = _make_db(tmp_path)
     _make_sessions_tree(
-        tmp_path, "UnknownProject", "2026-05-01", "handoff-001.md",
+        tmp_path,
+        "UnknownProject",
+        "2026-05-01",
+        "handoff-001.md",
         "Session for unknown project",
     )
     result = _run(tmp_path, db_path)

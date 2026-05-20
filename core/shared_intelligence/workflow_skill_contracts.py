@@ -44,13 +44,9 @@ APPROVED_MUTATION_RISK_CLASSES: tuple[str, ...] = (
 
 APPROVED_MUTATION_RISK_SET = frozenset(APPROVED_MUTATION_RISK_CLASSES)
 
-MUTATION_CAPABLE_RISKS = frozenset(
-    APPROVED_MUTATION_RISK_SET - {"none", "read_only"}
-)
+MUTATION_CAPABLE_RISKS = frozenset(APPROVED_MUTATION_RISK_SET - {"none", "read_only"})
 
-RUNTIME_OR_DB_MUTATION_RISKS = frozenset(
-    {"runtime_state_mutating", "sqlite_mutating", "migration"}
-)
+RUNTIME_OR_DB_MUTATION_RISKS = frozenset({"runtime_state_mutating", "sqlite_mutating", "migration"})
 
 SECRET_OR_SENSITIVE_TERMS = (
     "secret",
@@ -151,7 +147,9 @@ class SkillContract:
     notes: str = ""
 
 
-def validate_workflow_contract(contract: WorkflowContract | dict[str, Any]) -> ContractValidationResult:
+def validate_workflow_contract(
+    contract: WorkflowContract | dict[str, Any],
+) -> ContractValidationResult:
     """Validate a workflow contract without touching runtime state."""
 
     payload = _payload(contract)
@@ -321,7 +319,11 @@ def example_mutation_capable_workflow_contract() -> WorkflowContract:
         allowed_actions=("write_approved_source_files", "run_focused_tests"),
         forbidden_actions=("run_migrations", "mutate_runtime_state", "inspect_secrets"),
         evidence_requirements=("git diff", "focused pytest output", "diff check output"),
-        stop_gates=("file outside approved scope", "runtime mutation needed", "sqlite migration needed"),
+        stop_gates=(
+            "file outside approved scope",
+            "runtime mutation needed",
+            "sqlite migration needed",
+        ),
         approval_requirements=("current operator source_additive approval",),
         mutation_risk="source_additive",
         validation_requirements=("focused unit tests", "diff --check"),
@@ -408,7 +410,9 @@ def example_removal_candidate_skill_contract() -> SkillContract:
     )
 
 
-def validate_contract(contract: WorkflowContract | SkillContract | dict[str, Any]) -> ContractValidationResult:
+def validate_contract(
+    contract: WorkflowContract | SkillContract | dict[str, Any],
+) -> ContractValidationResult:
     """Dispatch validation based on contract shape."""
 
     payload = _payload(contract)

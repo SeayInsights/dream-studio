@@ -9,7 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from control.execution.workflow.validate import parse_workflow  # noqa: E402
 
-IDEA_TO_PR_YAML = Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "idea-to-pr.yaml"
+IDEA_TO_PR_YAML = (
+    Path(__file__).resolve().parents[2] / "canonical" / "workflows" / "idea-to-pr.yaml"
+)
 
 
 def test_idea_to_pr_yaml_parses():

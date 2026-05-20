@@ -83,3 +83,5 @@ The static validation suite checks that every Docker profile is optional,
 declares fallback behavior, does not mount host state by default, does not
 create an authority database, uses an explicit SQLite authority path, and
 forbids host writes by default.
+
+<!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->
