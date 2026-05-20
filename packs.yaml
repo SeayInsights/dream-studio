@@ -76,9 +76,9 @@ packs:
     modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
 
   ds-project:
-    description: Project scoping — guided SDLC intake conversation that produces a machine-executable PRD
+    description: Project lifecycle — scope, brief, resume, and portfolio-level management (list/switch/archive/delete)
     skill: ds-project
-    modes: [scope, resume, brief]
+    modes: [scope, resume, brief, manage]
 
   ds-workorder:
     description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status

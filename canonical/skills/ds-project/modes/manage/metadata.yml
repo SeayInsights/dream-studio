@@ -1,0 +1,7 @@
+triggers:
+  - "list projects:"
+  - "switch project:"
+  - "archive project:"
+  - "delete project:"
+
+estimated_tokens: 800
