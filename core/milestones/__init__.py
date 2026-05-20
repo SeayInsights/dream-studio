@@ -1,5 +1,5 @@
-"""Milestone queries.
+"""Milestone queries and mutations.
 
-Skills should import from `core.milestones.queries` instead of shelling out
-to `ds milestone list` or `ds milestone status`.
+Skills should import from `core.milestones.queries` or
+`core.milestones.mutations` instead of shelling out to CLI commands.
 """
