@@ -29,7 +29,9 @@ def test_write_does_not_ingest(spool_root):
     # SQLite does NOT have the event yet
     if db.exists():
         conn = sqlite3.connect(str(db))
-        rows = conn.execute("SELECT * FROM canonical_events WHERE event_id = ?", (envelope.event_id,)).fetchall()
+        rows = conn.execute(
+            "SELECT * FROM canonical_events WHERE event_id = ?", (envelope.event_id,)
+        ).fetchall()
         conn.close()
         assert rows == []
 
@@ -55,8 +57,7 @@ def test_ingest_pending_lands_in_sqlite(spool_root):
     assert result.processed == 1
     conn = sqlite3.connect(str(db))
     rows = conn.execute(
-        "SELECT event_id, event_type FROM canonical_events WHERE event_id = ?",
-        (envelope.event_id,)
+        "SELECT event_id, event_type FROM canonical_events WHERE event_id = ?", (envelope.event_id,)
     ).fetchall()
     conn.close()
     assert len(rows) == 1

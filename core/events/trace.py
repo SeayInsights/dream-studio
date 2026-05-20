@@ -1,4 +1,5 @@
 """TraceContext for event correlation — migrated from interfaces/adapters/models.py (Slice 3)."""
+
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +11,7 @@ class TraceContext:
 
     Links events to their originating context (project, task, session).
     """
+
     project_id: str | None = None
     task_id: str | None = None
     prd_id: str | None = None

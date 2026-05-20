@@ -161,3 +161,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 3. Add dashboard preflight check to studio-analytics workflow
 4. Add structured logging for workflow state transitions
 5. Clean up stale workflow docs references
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

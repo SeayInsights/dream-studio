@@ -566,13 +566,17 @@ def save_to_cache(
     with transaction() as c:
         if emit_events:
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
-                session_id=None,
-                payload={"topic": topic_key},
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
+                        session_id=None,
+                        payload={"topic": topic_key},
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
         # Delete existing entry if present, then insert new one
         c.execute("DELETE FROM research_cache WHERE topic = ?", (topic_key,))
@@ -584,20 +588,24 @@ def save_to_cache(
 
         if emit_events:
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.RESEARCH_CACHE_STORED.value,
-                session_id=None,
-                payload={
-                    "cache_id": cache_id,
-                    "topic": topic_key,
-                    "source_count": len(report.sources),
-                    "confidence_score": report.confidence,
-                    "triangulation_score": report.triangulation,
-                    "ttl_days": ttl_days,
-                },
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.RESEARCH_CACHE_STORED.value,
+                        session_id=None,
+                        payload={
+                            "cache_id": cache_id,
+                            "topic": topic_key,
+                            "source_count": len(report.sources),
+                            "confidence_score": report.confidence,
+                            "triangulation_score": report.triangulation,
+                            "ttl_days": ttl_days,
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
         c.execute(
             """
@@ -740,13 +748,17 @@ def invalidate_cache(topic: str, *, emit_events: bool = True) -> None:
 
     if emit_events:
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
-            session_id=None,
-            payload={"topic": topic_key},
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.RESEARCH_CACHE_CLEARED.value,
+                    session_id=None,
+                    payload={"topic": topic_key},
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
     with transaction() as c:
         rows_deleted = c.execute(

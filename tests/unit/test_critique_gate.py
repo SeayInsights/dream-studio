@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def db_home(tmp_path):
     db_path = tmp_path / "state" / "studio.db"
@@ -73,16 +74,25 @@ def _write_lint(tmp_path: Path, content: str) -> None:
 
 def _close(db_home, tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    return main([
-        "--home", str(db_home),
-        "work-order", "close", WO_UI_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    return main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "close",
+            WO_UI_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
 
 
 # ── 1. anti_slop_passed gate passes when lint-results.md contains PASSED ─────
 
-def test_anti_slop_gate_passes_when_lint_results_contains_passed(db_home, tmp_path, monkeypatch, capsys):
+
+def test_anti_slop_gate_passes_when_lint_results_contains_passed(
+    db_home, tmp_path, monkeypatch, capsys
+):
     _write_critique(tmp_path, "3/4")
     _write_lint(tmp_path, "Anti-Slop Lint: 0 violations\nResult: PASSED\n")
     rc = _close(db_home, tmp_path, monkeypatch)
@@ -92,6 +102,7 @@ def test_anti_slop_gate_passes_when_lint_results_contains_passed(db_home, tmp_pa
 
 
 # ── 2. anti_slop_passed gate fails when file missing ─────────────────────────
+
 
 def test_anti_slop_gate_fails_when_file_missing(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "3/4")
@@ -106,6 +117,7 @@ def test_anti_slop_gate_fails_when_file_missing(db_home, tmp_path, monkeypatch, 
 
 # ── 3. anti_slop_passed gate fails when file contains BLOCKED ────────────────
 
+
 def test_anti_slop_gate_fails_when_file_contains_blocked(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "3/4")
     _write_lint(tmp_path, "BLOCKED: 2 critical violations found\n")
@@ -117,6 +129,7 @@ def test_anti_slop_gate_fails_when_file_contains_blocked(db_home, tmp_path, monk
 
 
 # ── 4. pipe-separated gates: both must pass to close ─────────────────────────
+
 
 def test_pipe_separated_gates_both_must_pass_to_close(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "4/4")
@@ -130,6 +143,7 @@ def test_pipe_separated_gates_both_must_pass_to_close(db_home, tmp_path, monkeyp
 
 # ── 5. pipe-separated gates: one fail blocks close ───────────────────────────
 
+
 def test_pipe_separated_gates_one_fail_blocks_close(db_home, tmp_path, monkeypatch, capsys):
     # critique passes (Score: 3/4) but lint missing
     _write_critique(tmp_path, "3/4")
@@ -142,6 +156,7 @@ def test_pipe_separated_gates_one_fail_blocks_close(db_home, tmp_path, monkeypat
 
 # ── 6. design_critique gate passes when Score: 3/4 ───────────────────────────
 
+
 def test_design_critique_gate_passes_when_score_3(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "3/4")
     _write_lint(tmp_path, "PASSED\n")
@@ -151,6 +166,7 @@ def test_design_critique_gate_passes_when_score_3(db_home, tmp_path, monkeypatch
 
 # ── 7. design_critique gate passes when Score: 4/4 ───────────────────────────
 
+
 def test_design_critique_gate_passes_when_score_4(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "4/4")
     _write_lint(tmp_path, "PASSED\n")
@@ -159,6 +175,7 @@ def test_design_critique_gate_passes_when_score_4(db_home, tmp_path, monkeypatch
 
 
 # ── 8. design_critique gate fails when Score: 2/4 ────────────────────────────
+
 
 def test_design_critique_gate_fails_when_score_2(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "2/4")
@@ -171,6 +188,7 @@ def test_design_critique_gate_fails_when_score_2(db_home, tmp_path, monkeypatch,
 
 # ── 9. design_critique gate fails when Score: 1/4 ────────────────────────────
 
+
 def test_design_critique_gate_fails_when_score_1(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "1/4")
     _write_lint(tmp_path, "PASSED\n")
@@ -181,6 +199,7 @@ def test_design_critique_gate_fails_when_score_1(db_home, tmp_path, monkeypatch,
 
 
 # ── 10. design_critique gate fails when Score: PENDING ───────────────────────
+
 
 def test_design_critique_gate_fails_when_score_pending(db_home, tmp_path, monkeypatch, capsys):
     _write_critique(tmp_path, "[PENDING]/4")
@@ -193,14 +212,21 @@ def test_design_critique_gate_fails_when_score_pending(db_home, tmp_path, monkey
 
 # ── 11. skill invoke website:critique --work-order writes artifact template ───
 
+
 def test_skill_invoke_critique_writes_artifact_template(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     planning_root = tmp_path / ".planning"
-    rc = main([
-        "skill", "invoke", "website:critique",
-        "--work-order", WO_UI_ID,
-        "--planning-root", str(planning_root),
-    ])
+    rc = main(
+        [
+            "skill",
+            "invoke",
+            "website:critique",
+            "--work-order",
+            WO_UI_ID,
+            "--planning-root",
+            str(planning_root),
+        ]
+    )
     assert rc == 0
     artifact = planning_root / "work-orders" / WO_UI_ID / "design-critique.md"
     assert artifact.is_file(), "design-critique.md not written"
@@ -213,14 +239,21 @@ def test_skill_invoke_critique_writes_artifact_template(tmp_path, monkeypatch):
 
 # ── 12. skill invoke security:scan --work-order writes artifact template ──────
 
+
 def test_skill_invoke_security_scan_writes_artifact_template(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     planning_root = tmp_path / ".planning"
-    rc = main([
-        "skill", "invoke", "security:scan",
-        "--work-order", WO_UI_ID,
-        "--planning-root", str(planning_root),
-    ])
+    rc = main(
+        [
+            "skill",
+            "invoke",
+            "security:scan",
+            "--work-order",
+            WO_UI_ID,
+            "--planning-root",
+            str(planning_root),
+        ]
+    )
     assert rc == 0
     artifact = planning_root / "work-orders" / WO_UI_ID / "security-scan.md"
     assert artifact.is_file(), "security-scan.md not written"
@@ -231,6 +264,7 @@ def test_skill_invoke_security_scan_writes_artifact_template(tmp_path, monkeypat
 
 
 # ── 13. migration 054 updates gate values correctly ──────────────────────────
+
 
 def test_migration_054_updates_gate_values(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
@@ -248,6 +282,7 @@ def test_migration_054_updates_gate_values(db_home):
 
 # ── 14. ui_component type has both gates in post_build_gate ──────────────────
 
+
 def test_ui_component_type_has_both_gates(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
@@ -263,6 +298,7 @@ def test_ui_component_type_has_both_gates(db_home):
 
 
 # ── 15. ui_page type has both gates in post_build_gate ───────────────────────
+
 
 def test_ui_page_type_has_both_gates(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))

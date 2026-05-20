@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ── Issue 3: settings.json missing on clean install ──────────────────────────
 
 
@@ -43,8 +42,10 @@ def test_install_creates_settings_json_when_missing(tmp_path, canonical_root_min
         config_root, "user", canonical_root=canonical_root_minimal, ds_home=ds_home
     )
     with pytest.MonkeyPatch().context() as mp:
-        mp.setattr("integrations.installer.claude_code._write_path_to_profile",
-                   lambda *a, **kw: {"action": "skipped", "profile": ""})
+        mp.setattr(
+            "integrations.installer.claude_code._write_path_to_profile",
+            lambda *a, **kw: {"action": "skipped", "profile": ""},
+        )
         installer.install("execute")
 
     assert (config_root / "settings.json").is_file()
@@ -67,6 +68,7 @@ def test_ingestor_creates_all_required_directories(tmp_path):
     assert result.failed == 0
     # All subdirs must now exist
     from spool.states import SpoolState
+
     for state in SpoolState:
         assert (spool_root / state.value).is_dir(), f"Missing: {state.value}/"
 

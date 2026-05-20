@@ -42,7 +42,9 @@ class CanonicalEventEnvelope:
         }
 
 
-REQUIRED_FIELDS: frozenset[str] = frozenset({"event_id", "event_type", "timestamp", "schema_version"})
+REQUIRED_FIELDS: frozenset[str] = frozenset(
+    {"event_id", "event_type", "timestamp", "schema_version"}
+)
 
 
 def validate_envelope(d: dict[str, Any]) -> list[str]:

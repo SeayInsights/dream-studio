@@ -26,7 +26,14 @@ def test_manifest_round_trip(ds_home):
         tool="claude_code",
         scope="user",
         ds_version="migration-47",
-        files=[{"path": "/tmp/test.md", "operation": "create", "content_hash": "abc", "backup_path": None}],
+        files=[
+            {
+                "path": "/tmp/test.md",
+                "operation": "create",
+                "content_hash": "abc",
+                "backup_path": None,
+            }
+        ],
     )
     write_manifest("claude_code", manifest, ds_home)
     loaded = read_manifest("claude_code", ds_home)
@@ -54,7 +61,11 @@ def test_read_manifest_returns_none_on_corrupt_json(ds_home):
 def test_installed_at_is_iso8601(ds_home):
     manifest = build_manifest(tool="t", scope="user", ds_version="v1", files=[])
     assert "T" in manifest["installed_at"]
-    assert manifest["installed_at"].endswith("+00:00") or manifest["installed_at"].endswith("Z") or "+" in manifest["installed_at"]
+    assert (
+        manifest["installed_at"].endswith("+00:00")
+        or manifest["installed_at"].endswith("Z")
+        or "+" in manifest["installed_at"]
+    )
 
 
 def test_compute_hash_is_sha256():
@@ -80,7 +91,13 @@ def test_verify_file_hashes_detects_drift(tmp_path, ds_home):
     f = tmp_path / "test.md"
     f.write_text("changed content", encoding="utf-8")
     manifest = {
-        "files": [{"path": str(f), "operation": "create", "content_hash": compute_hash("original content")}]
+        "files": [
+            {
+                "path": str(f),
+                "operation": "create",
+                "content_hash": compute_hash("original content"),
+            }
+        ]
     }
     drifted = verify_file_hashes(manifest)
     assert any("hash_mismatch" in d for d in drifted)
@@ -88,7 +105,9 @@ def test_verify_file_hashes_detects_drift(tmp_path, ds_home):
 
 def test_verify_file_hashes_missing_file(tmp_path, ds_home):
     manifest = {
-        "files": [{"path": str(tmp_path / "nonexistent.md"), "operation": "create", "content_hash": "abc"}]
+        "files": [
+            {"path": str(tmp_path / "nonexistent.md"), "operation": "create", "content_hash": "abc"}
+        ]
     }
     drifted = verify_file_hashes(manifest)
     assert any("missing" in d for d in drifted)

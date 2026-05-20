@@ -46,7 +46,13 @@ def test_installed_verified_when_hashes_match(tmp_path, ds_home):
         tool="claude_code",
         scope="user",
         ds_version="test",
-        files=[{"path": str(skill_md), "operation": "create", "content_hash": compute_hash(b"# ds-bootstrap")}],
+        files=[
+            {
+                "path": str(skill_md),
+                "operation": "create",
+                "content_hash": compute_hash(b"# ds-bootstrap"),
+            }
+        ],
     )
     write_manifest("claude_code", manifest, ds_home)
 
@@ -108,7 +114,13 @@ def test_ingest_verified_when_processed_events_exist(tmp_path, ds_home, monkeypa
         tool="claude_code",
         scope="user",
         ds_version="test",
-        files=[{"path": str(skill_md), "operation": "create", "content_hash": compute_hash(b"# ds-bootstrap")}],
+        files=[
+            {
+                "path": str(skill_md),
+                "operation": "create",
+                "content_hash": compute_hash(b"# ds-bootstrap"),
+            }
+        ],
     )
     write_manifest("claude_code", manifest, ds_home)
 

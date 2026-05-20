@@ -1,4 +1,5 @@
 """Integrity guard for packs.yaml — prevents drift between registry and runtime."""
+
 from __future__ import annotations
 from pathlib import Path
 
@@ -13,7 +14,9 @@ PACKS_DIR = REPO_ROOT / "packs"
 RUNTIME_HOOKS_DIR = REPO_ROOT / "runtime" / "hooks"
 
 
-def _find_pack_skills_dir(pack_name: str, skill_alias: str = "", skill_path: str = "") -> Path | None:
+def _find_pack_skills_dir(
+    pack_name: str, skill_alias: str = "", skill_path: str = ""
+) -> Path | None:
     """Return the skills directory for a pack, checking skill_path, canonical/ then skills/."""
     if skill_path:
         candidate = REPO_ROOT / skill_path
@@ -41,9 +44,9 @@ def test_packs_yaml_exists():
 def test_security_pack_exists():
     """Prevents Flag 3 recurrence — security pack must always be registered."""
     data = _load_packs()
-    assert "security" in data.get("packs", {}), (
-        "security pack missing from packs.yaml — Flag 3 recurrence"
-    )
+    assert "security" in data.get(
+        "packs", {}
+    ), "security pack missing from packs.yaml — Flag 3 recurrence"
 
 
 def test_mode_dirs_listed_in_packs_yaml():
@@ -112,7 +115,11 @@ def test_pack_dirs_exist():
     for pack_name, pack_config in packs.items():
         skill_alias = pack_config.get("skill", "")
         in_packs = (PACKS_DIR / pack_name).exists()
-        found = in_packs or _find_pack_skills_dir(pack_name, skill_alias, pack_config.get("skill_path", "")) is not None
+        found = (
+            in_packs
+            or _find_pack_skills_dir(pack_name, skill_alias, pack_config.get("skill_path", ""))
+            is not None
+        )
         if not found:
             errors.append(
                 f"pack '{pack_name}': no directory found in canonical/skills/, skills/, or packs/ "

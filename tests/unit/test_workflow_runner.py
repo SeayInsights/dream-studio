@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from control.execution.workflow.runner import WorkflowRunner, resolve_specifier
 
-
 # ── resolve_specifier ─────────────────────────────────────────────────────────
 
 
@@ -93,12 +92,8 @@ def _make_yaml(tmp_path: Path, nodes: list[dict]) -> Path:
     node_lines = []
     for n in nodes:
         deps = n.get("depends_on", [])
-        dep_str = (
-            f"\n    depends_on: [{', '.join(deps)}]" if deps else ""
-        )
-        node_lines.append(
-            f"  - id: {n['id']}\n    skill: {n.get('skill', 'plan')}{dep_str}"
-        )
+        dep_str = f"\n    depends_on: [{', '.join(deps)}]" if deps else ""
+        node_lines.append(f"  - id: {n['id']}\n    skill: {n.get('skill', 'plan')}{dep_str}")
     yaml_path.write_text(
         "name: test-wf\nnodes:\n" + "\n".join(node_lines),
         encoding="utf-8",

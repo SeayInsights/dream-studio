@@ -251,16 +251,20 @@ def _store_violations(violations: List[Dict]) -> None:
         }
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.AUDIT_VIOLATIONS_CLEARED.value,
-            session_id=None,
-            payload={
-                "project_id": "dream-studio",
-                "violation_count": len(violations),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.AUDIT_VIOLATIONS_CLEARED.value,
+                    session_id=None,
+                    payload={
+                        "project_id": "dream-studio",
+                        "violation_count": len(violations),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             # Clear existing violations for this project to avoid duplicates
@@ -275,23 +279,27 @@ def _store_violations(violations: List[Dict]) -> None:
                 violation_id = f"viol-{abs(hash(str(v)))}"
 
                 # Slice 3: Emit event via spool pipeline
-                write_envelopes([CanonicalEventEnvelope(
-                    event_type=CanonicalEventType.AUDIT_VIOLATION_FOUND.value,
-                    session_id=None,
-                    payload={
-                        "violation_id": violation_id,
-                        "project_id": "dream-studio",
-                        "violation_type": schema_type,
-                        "specific_type": specific_type,
-                        "severity": v.get("severity"),
-                        "files": v.get("files", []),
-                        "description": description,
-                        "impact": v.get("impact"),
-                    },
-                    severity=v.get("severity", "low"),
-                    confidence="unavailable",
-                    project_id=None,
-                )])
+                write_envelopes(
+                    [
+                        CanonicalEventEnvelope(
+                            event_type=CanonicalEventType.AUDIT_VIOLATION_FOUND.value,
+                            session_id=None,
+                            payload={
+                                "violation_id": violation_id,
+                                "project_id": "dream-studio",
+                                "violation_type": schema_type,
+                                "specific_type": specific_type,
+                                "severity": v.get("severity"),
+                                "files": v.get("files", []),
+                                "description": description,
+                                "impact": v.get("impact"),
+                            },
+                            severity=v.get("severity", "low"),
+                            confidence="unavailable",
+                            project_id=None,
+                        )
+                    ]
+                )
 
                 conn.execute(
                     """
@@ -345,16 +353,20 @@ def _store_improvements(improvements: List[Dict]) -> None:
         }
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.AUDIT_IMPROVEMENTS_CLEARED.value,
-            session_id=None,
-            payload={
-                "project_id": "dream-studio",
-                "improvement_count": len(improvements),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.AUDIT_IMPROVEMENTS_CLEARED.value,
+                    session_id=None,
+                    payload={
+                        "project_id": "dream-studio",
+                        "improvement_count": len(improvements),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             # Clear existing improvements for this project to avoid duplicates
@@ -369,22 +381,26 @@ def _store_improvements(improvements: List[Dict]) -> None:
                 improvement_id = f"imp-{abs(hash(str(imp)))}"
 
                 # Slice 3: Emit event via spool pipeline
-                write_envelopes([CanonicalEventEnvelope(
-                    event_type=CanonicalEventType.AUDIT_IMPROVEMENT_FOUND.value,
-                    session_id=None,
-                    payload={
-                        "improvement_id": improvement_id,
-                        "project_id": "dream-studio",
-                        "improvement_type": schema_type,
-                        "specific_type": specific_type,
-                        "priority_score": imp.get("priority_score"),
-                        "target_files": imp.get("target_files", []),
-                        "recommendation": recommendation,
-                        "benefit": imp.get("benefit"),
-                    },
-                    confidence="unavailable",
-                    project_id=None,
-                )])
+                write_envelopes(
+                    [
+                        CanonicalEventEnvelope(
+                            event_type=CanonicalEventType.AUDIT_IMPROVEMENT_FOUND.value,
+                            session_id=None,
+                            payload={
+                                "improvement_id": improvement_id,
+                                "project_id": "dream-studio",
+                                "improvement_type": schema_type,
+                                "specific_type": specific_type,
+                                "priority_score": imp.get("priority_score"),
+                                "target_files": imp.get("target_files", []),
+                                "recommendation": recommendation,
+                                "benefit": imp.get("benefit"),
+                            },
+                            confidence="unavailable",
+                            project_id=None,
+                        )
+                    ]
+                )
 
                 conn.execute(
                     """

@@ -40,6 +40,7 @@ def _collect_stale(pattern: str, exclude_pattern: str | None = None) -> list[tup
 
 # ── Test: no quality:secure skill reference ───────────────────────────────────
 
+
 def test_no_quality_secure_skill_reference():
     """quality:secure was renamed to quality:pr-security-scan in Slice 7."""
     hits = _collect_stale(r"quality:secure")
@@ -60,6 +61,7 @@ def test_no_secure_skill_specifier_in_workflows():
 
 # ── Test: no interfaces/adapters references ───────────────────────────────────
 
+
 def test_no_interfaces_adapters_import():
     """interfaces/adapters was retired in Slice 4."""
     hits = _collect_stale(r"interfaces[/\\]adapters")
@@ -68,6 +70,7 @@ def test_no_interfaces_adapters_import():
 
 # ── Test: no hooks/run.py references ─────────────────────────────────────────
 
+
 def test_no_hooks_run_py_reference():
     """hooks/run.py was deleted in Slice 3."""
     hits = _collect_stale(r"hooks/run\.py")
@@ -75,6 +78,7 @@ def test_no_hooks_run_py_reference():
 
 
 # ── Test: no wrong repo name ──────────────────────────────────────────────────
+
 
 def test_no_builds_dream_studio_without_clean():
     """builds/dream-studio without -clean suffix references the wrong repo."""
@@ -85,6 +89,7 @@ def test_no_builds_dream_studio_without_clean():
 
 # ── Test: no --set-active flag ────────────────────────────────────────────────
 
+
 def test_no_set_active_flag():
     """--set-active was removed in Slice 8b."""
     hits = _collect_stale(r"--set-active")
@@ -93,6 +98,7 @@ def test_no_set_active_flag():
 
 # ── Test: no repo:skills/ without canonical/ prefix ──────────────────────────
 
+
 def test_no_repo_skills_without_canonical_prefix():
     """Skills paths should use repo:canonical/skills/ not repo:skills/."""
     hits = _collect_stale(r"repo:skills/")
@@ -100,6 +106,7 @@ def test_no_repo_skills_without_canonical_prefix():
 
 
 # ── Test: audit function is callable and returns list ────────────────────────
+
 
 def test_audit_function_returns_list_of_findings():
     """The audit scan should return a list (zero findings means passing)."""
@@ -120,12 +127,15 @@ def test_audit_function_returns_list_of_findings():
 
 # ── Test: workflow skill specifiers are valid ─────────────────────────────────
 
+
 def _load_valid_skill_ids() -> set[str]:
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     try:
         import yaml as _yaml
+
         packs_yaml = REPO_ROOT / "packs.yaml"
         data = _yaml.safe_load(packs_yaml.read_text(encoding="utf-8"))
         packs = data.get("packs", {})
@@ -148,8 +158,22 @@ def test_workflow_skill_specifiers_are_valid():
     """Every skill: field in workflow YAMLs must match a mode or pack in packs.yaml."""
     valid = _load_valid_skill_ids()
     # Also allow workflow-specific orchestration directives
-    allowed_extra = {"plan", "verify", "dashboard", "pr-security-scan", "review", "build",
-                     "think", "ship", "handoff", "recap", "explain", "debug", "audit", "coach"}
+    allowed_extra = {
+        "plan",
+        "verify",
+        "dashboard",
+        "pr-security-scan",
+        "review",
+        "build",
+        "think",
+        "ship",
+        "handoff",
+        "recap",
+        "explain",
+        "debug",
+        "audit",
+        "coach",
+    }
     valid = valid | allowed_extra
 
     invalid: list[tuple[Path, str, str]] = []
@@ -162,7 +186,7 @@ def test_workflow_skill_specifiers_are_valid():
                 continue
             m = skill_re.match(line)
             if m:
-                specifier = m.group(1).strip('"\'')
+                specifier = m.group(1).strip("\"'")
                 if specifier not in valid:
                     invalid.append((path, specifier, line.strip()))
 

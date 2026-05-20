@@ -20,7 +20,9 @@ from spool.states import SpoolState, ensure_dirs, state_dir
 # best-effort. SQLite busy/locked errors are non-fatal: the event remains
 # in spool/ for retry on next run.
 
-REQUIRED_FIELDS: frozenset[str] = frozenset({"event_id", "event_type", "timestamp", "schema_version"})
+REQUIRED_FIELDS: frozenset[str] = frozenset(
+    {"event_id", "event_type", "timestamp", "schema_version"}
+)
 
 
 @dataclass

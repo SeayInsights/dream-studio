@@ -34,12 +34,14 @@ def integration_health_summary(
             ds_home=ds_home,
             canonical_root=canonical_root,
         )
-        tool_states.append({
-            "tool_id": tool.tool_id,
-            "scope": tool.scope,
-            "config_root": str(tool.config_root),
-            **state,
-        })
+        tool_states.append(
+            {
+                "tool_id": tool.tool_id,
+                "scope": tool.scope,
+                "config_root": str(tool.config_root),
+                **state,
+            }
+        )
 
     return {
         "model_name": "dream_studio_integration_health_summary",

@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 
-def _make_envelope(event_id: str = "evt-001", event_type: str = "prompt.lifecycle.submitted") -> dict:
+def _make_envelope(
+    event_id: str = "evt-001", event_type: str = "prompt.lifecycle.submitted"
+) -> dict:
     return {
         "event_id": event_id,
         "event_type": event_type,
@@ -158,6 +160,7 @@ def test_second_rejection_does_not_accumulate_suffixes(spool_root):
 
     # Simulate requeue: move back to spool
     import os as _os
+
     _os.replace(
         str(failed_dir / "repeated-fail.json"),
         str(spool_dir / "repeated-fail.json"),

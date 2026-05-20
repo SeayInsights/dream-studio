@@ -88,6 +88,7 @@ def _tasks(db_home, monkeypatch, work_order_id):
 
 # ── task-done: core behavior ──────────────────────────────────────────────────
 
+
 def test_task_done_marks_completed_in_db(db_home, tmp_path, monkeypatch):
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_A)
     assert rc == 0
@@ -131,7 +132,9 @@ def test_task_done_emits_task_completed_event(db_home, tmp_path, monkeypatch):
     assert "tasks_remaining" in ev["payload"]
 
 
-def test_task_done_prints_all_complete_message_when_last_task(db_home, tmp_path, monkeypatch, capsys):
+def test_task_done_prints_all_complete_message_when_last_task(
+    db_home, tmp_path, monkeypatch, capsys
+):
     # Mark A and B complete first (raw DB to avoid spool noise)
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
@@ -150,6 +153,7 @@ def test_task_done_prints_all_complete_message_when_last_task(db_home, tmp_path,
 
 # ── task-done: error cases ────────────────────────────────────────────────────
 
+
 def test_task_done_exits_1_on_unknown_task_id(db_home, tmp_path, monkeypatch):
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, "00000000-0000-0000-0000-000000000000")
     assert rc == 1
@@ -161,6 +165,7 @@ def test_task_done_exits_1_on_task_not_belonging_to_work_order(db_home, tmp_path
 
 
 # ── tasks: list ───────────────────────────────────────────────────────────────
+
 
 def test_tasks_shows_correct_status_indicators(db_home, monkeypatch, capsys):
     db_path = db_home / "state" / "studio.db"

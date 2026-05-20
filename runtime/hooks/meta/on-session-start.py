@@ -75,14 +75,18 @@ def main() -> None:
     # --- write session config for continuation spawner ---
     try:
         from session_config import detect_invocation_flags, write_session_config
+
         flags = detect_invocation_flags()
-        write_session_config(session_id, {
-            "session_id": session_id,
-            "invocation_flags": flags,
-            "cwd": cwd,
-            "timestamp": int(time.time()),
-            "continuation_count": 0,
-        })
+        write_session_config(
+            session_id,
+            {
+                "session_id": session_id,
+                "invocation_flags": flags,
+                "cwd": cwd,
+                "timestamp": int(time.time()),
+                "continuation_count": 0,
+            },
+        )
     except Exception:
         pass
 

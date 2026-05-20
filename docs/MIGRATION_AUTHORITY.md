@@ -132,3 +132,5 @@ tables carry current continuation authority. It does not authorize writing PRD
 files into external repositories, overwriting PRDs without version lineage,
 skipping change orders for material scope changes, or mutating live SQLite
 outside the normal approved migration boundary.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

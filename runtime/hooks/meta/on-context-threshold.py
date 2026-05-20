@@ -20,6 +20,7 @@ _runtime_dir = _meta_dir.parent.parent  # ~/.claude/hooks/runtime/
 if str(_runtime_dir) not in sys.path:
     sys.path.insert(0, str(_runtime_dir))
 
+
 # Fallback: resolve via .plugin-root sidecar for repo imports
 def _get_plugin_root() -> Path:
     env = os.environ.get("CLAUDE_PLUGIN_ROOT")
@@ -43,8 +44,10 @@ except ImportError:
     try:
         from runtime.session_config import read_session_config
     except ImportError:
+
         def read_session_config(session_id: str) -> dict:  # type: ignore[misc]
             return {}
+
 
 HARVEST_THRESHOLD = 75.0
 COMPACT_THRESHOLD = 83.0
@@ -86,13 +89,17 @@ def _emit_harvest(session_id: str, normalized_pct: float, raw_pct: float) -> Non
         if str(repo) not in sys.path:
             sys.path.insert(0, str(repo))
         from spool.emitter import emit
-        emit("ds_session_harvest", {
-            "session_id": session_id,
-            "trigger": "context_threshold",
-            "normalized_pct": round(normalized_pct, 1),
-            "raw_pct": round(raw_pct, 1),
-            "timestamp": int(time.time()),
-        })
+
+        emit(
+            "ds_session_harvest",
+            {
+                "session_id": session_id,
+                "trigger": "context_threshold",
+                "normalized_pct": round(normalized_pct, 1),
+                "raw_pct": round(raw_pct, 1),
+                "timestamp": int(time.time()),
+            },
+        )
     except Exception:
         pass
 
@@ -101,13 +108,18 @@ def _write_pending_handoff(session_id: str, session_config: dict) -> None:
     state_dir = Path.home() / ".dream-studio" / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     pending = state_dir / "pending-handoff.json"
-    pending.write_text(json.dumps({
-        "session_id": session_id,
-        "triggered_at": int(time.time()),
-        "cwd": session_config.get("cwd", ""),
-        "invocation_flags": session_config.get("invocation_flags", []),
-        "status": "pending",
-    }), encoding="utf-8")
+    pending.write_text(
+        json.dumps(
+            {
+                "session_id": session_id,
+                "triggered_at": int(time.time()),
+                "cwd": session_config.get("cwd", ""),
+                "invocation_flags": session_config.get("invocation_flags", []),
+                "status": "pending",
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def main() -> None:
@@ -117,11 +129,7 @@ def main() -> None:
     except Exception:
         data = {}
 
-    session_id = (
-        data.get("session_id")
-        or (data.get("session") or {}).get("id")
-        or ""
-    )
+    session_id = data.get("session_id") or (data.get("session") or {}).get("id") or ""
     used = (data.get("context_window") or {}).get("used_percentage")
 
     if not session_id:

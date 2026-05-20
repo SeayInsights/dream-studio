@@ -1,4 +1,5 @@
 """ds spool subcommands (Slice 3)."""
+
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 def cmd_ingest(args) -> int:
     """Process all pending spool events."""
     from spool.ingestor import ingest_pending
+
     result = ingest_pending()
     if result.processed == 0 and result.failed == 0:
         print("no events to ingest")

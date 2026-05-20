@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def db_home(tmp_path):
     db_path = tmp_path / "state" / "studio.db"
@@ -81,9 +82,13 @@ def _write_all_passing(tmp_path: Path) -> None:
 def _close(db_home, tmp_path, monkeypatch, extra=None):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     argv = [
-        "--home", str(db_home),
-        "milestone", "close", MILESTONE_ID,
-        "--planning-root", str(tmp_path / ".planning"),
+        "--home",
+        str(db_home),
+        "milestone",
+        "close",
+        MILESTONE_ID,
+        "--planning-root",
+        str(tmp_path / ".planning"),
     ]
     if extra:
         argv.extend(extra)
@@ -91,6 +96,7 @@ def _close(db_home, tmp_path, monkeypatch, extra=None):
 
 
 # ── 1. close fails when work orders are not all completed ─────────────────────
+
 
 def test_close_fails_when_work_orders_not_all_completed(db_home, tmp_path, monkeypatch, capsys):
     conn = sqlite3.connect(str(_db_path(db_home)))
@@ -112,6 +118,7 @@ def test_close_fails_when_work_orders_not_all_completed(db_home, tmp_path, monke
 
 # ── 2. close fails when design-audit.md is missing ───────────────────────────
 
+
 def test_close_fails_when_design_audit_missing(db_home, tmp_path, monkeypatch, capsys):
     d = _ms_dir(tmp_path)
     d.mkdir(parents=True, exist_ok=True)
@@ -126,6 +133,7 @@ def test_close_fails_when_design_audit_missing(db_home, tmp_path, monkeypatch, c
 
 
 # ── 3. close fails when security-audit.md has BLOCKED ────────────────────────
+
 
 def test_close_fails_when_security_audit_has_blocked(db_home, tmp_path, monkeypatch, capsys):
     d = _ms_dir(tmp_path)
@@ -142,6 +150,7 @@ def test_close_fails_when_security_audit_has_blocked(db_home, tmp_path, monkeypa
 
 # ── 4. close fails when harden-results.md missing ────────────────────────────
 
+
 def test_close_fails_when_harden_results_missing(db_home, tmp_path, monkeypatch, capsys):
     d = _ms_dir(tmp_path)
     d.mkdir(parents=True, exist_ok=True)
@@ -157,6 +166,7 @@ def test_close_fails_when_harden_results_missing(db_home, tmp_path, monkeypatch,
 
 # ── 5. close requires cwv-results.md for UI milestones ───────────────────────
 
+
 def test_close_requires_cwv_for_ui_milestone(db_home, tmp_path, monkeypatch, capsys):
     d = _ms_dir(tmp_path)
     d.mkdir(parents=True, exist_ok=True)
@@ -171,6 +181,7 @@ def test_close_requires_cwv_for_ui_milestone(db_home, tmp_path, monkeypatch, cap
 
 
 # ── 6. close does NOT require cwv for non-UI milestones ──────────────────────
+
 
 def test_close_does_not_require_cwv_for_non_ui_milestone(db_home, tmp_path, monkeypatch, capsys):
     # Remove the ui_component WO so milestone is non-UI
@@ -195,6 +206,7 @@ def test_close_does_not_require_cwv_for_non_ui_milestone(db_home, tmp_path, monk
 
 # ── 7. close passes when all artifact files present and passing ───────────────
 
+
 def test_close_passes_when_all_artifacts_pass(db_home, tmp_path, monkeypatch, capsys):
     _write_all_passing(tmp_path)
     rc = _close(db_home, tmp_path, monkeypatch)
@@ -204,6 +216,7 @@ def test_close_passes_when_all_artifacts_pass(db_home, tmp_path, monkeypatch, ca
 
 
 # ── 8. close --force bypasses and emits gate.bypassed ────────────────────────
+
 
 def test_close_force_bypasses_and_warns(db_home, tmp_path, monkeypatch, capsys):
     # Only design-audit is present — rest are missing → would normally fail
@@ -218,6 +231,7 @@ def test_close_force_bypasses_and_warns(db_home, tmp_path, monkeypatch, capsys):
 
 # ── 9. close emits milestone.completed spool event ───────────────────────────
 
+
 def test_close_emits_milestone_completed_event(db_home, tmp_path, monkeypatch):
     _write_all_passing(tmp_path)
     spool_root = tmp_path / "spool-root"
@@ -229,6 +243,7 @@ def test_close_emits_milestone_completed_event(db_home, tmp_path, monkeypatch):
 
 
 # ── 10. milestone list shows correct work order counts ───────────────────────
+
 
 def test_milestone_list_shows_correct_work_order_counts(db_home, capsys):
     rc = main(["--home", str(db_home), "milestone", "list", PROJECT_ID])
@@ -243,12 +258,19 @@ def test_milestone_list_shows_correct_work_order_counts(db_home, capsys):
 
 # ── 11. milestone status shows open gate checks ───────────────────────────────
 
+
 def test_milestone_status_shows_open_gate_checks(db_home, tmp_path, capsys):
-    rc = main([
-        "--home", str(db_home),
-        "milestone", "status", MILESTONE_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "milestone",
+            "status",
+            MILESTONE_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is True
@@ -262,14 +284,21 @@ def test_milestone_status_shows_open_gate_checks(db_home, tmp_path, capsys):
 
 # ── 12. skill invoke --milestone writes to milestones directory ───────────────
 
+
 def test_skill_invoke_milestone_writes_to_milestones_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     planning_root = tmp_path / ".planning"
-    rc = main([
-        "skill", "invoke", "website:critique",
-        "--milestone", MILESTONE_ID,
-        "--planning-root", str(planning_root),
-    ])
+    rc = main(
+        [
+            "skill",
+            "invoke",
+            "website:critique",
+            "--milestone",
+            MILESTONE_ID,
+            "--planning-root",
+            str(planning_root),
+        ]
+    )
     assert rc == 0
     artifact = planning_root / "milestones" / MILESTONE_ID / "design-critique.md"
     assert artifact.is_file(), "design-critique.md not written to milestones dir"
@@ -279,12 +308,19 @@ def test_skill_invoke_milestone_writes_to_milestones_dir(tmp_path, monkeypatch):
 
 # ── 13. --milestone and --work-order are mutually exclusive ───────────────────
 
+
 def test_milestone_and_work_order_are_mutually_exclusive(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     with pytest.raises(SystemExit) as exc_info:
-        main([
-            "skill", "invoke", "website:critique",
-            "--work-order", "cccccccc-cccc-cccc-cccc-cccccccccccc",
-            "--milestone", MILESTONE_ID,
-        ])
+        main(
+            [
+                "skill",
+                "invoke",
+                "website:critique",
+                "--work-order",
+                "cccccccc-cccc-cccc-cccc-cccccccccccc",
+                "--milestone",
+                MILESTONE_ID,
+            ]
+        )
     assert exc_info.value.code != 0

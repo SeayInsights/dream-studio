@@ -5,6 +5,7 @@ import pytest
 
 def test_ingest_pending_empty_spool(spool_root):
     from spool.ingestor import ingest_pending
+
     result = ingest_pending(root=spool_root)
     assert result.processed == 0
     assert result.failed == 0

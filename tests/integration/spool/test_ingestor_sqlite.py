@@ -49,6 +49,7 @@ def test_no_raw_prompt_in_sqlite(spool_root):
     # Write to spool and use ingest directly with explicit db_path
     from spool.writer import write_event
     from spool.ingestor import ingest
+
     for env in envelopes:
         write_event(env.to_dict(), root=spool_root)
     ingest(root=spool_root, db_path=db_path)

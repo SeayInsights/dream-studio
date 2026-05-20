@@ -101,7 +101,13 @@ def _load_unlock_conditions() -> Dict[str, Any]:
     """Load unlock-conditions.yml from setup skill."""
     try:
         config_path = (
-            paths.plugin_root() / "canonical" / "skills" / "setup" / "modes" / "wizard" / "unlock-conditions.yml"
+            paths.plugin_root()
+            / "canonical"
+            / "skills"
+            / "setup"
+            / "modes"
+            / "wizard"
+            / "unlock-conditions.yml"
         )
         if not config_path.is_file():
             return {"unlock_triggers": []}

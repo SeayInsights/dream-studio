@@ -1,4 +1,5 @@
 """Workstream 5e gate: 049_work_order_type.sql schema and data assertions."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -19,22 +20,25 @@ def _apply_safe(conn: sqlite3.Connection, sql_text: str) -> None:
                 continue
             raise
 
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_048 = REPO_ROOT / "core" / "event_store" / "migrations" / "048_project_spine.sql"
 MIGRATION_049 = REPO_ROOT / "core" / "event_store" / "migrations" / "049_work_order_type.sql"
 
-VALID_TYPE_IDS = frozenset([
-    "ui_component",
-    "ui_page",
-    "api_endpoint",
-    "authentication",
-    "saas_feature",
-    "data_pipeline",
-    "game_mechanic",
-    "deployment",
-    "infrastructure",
-    "documentation",
-])
+VALID_TYPE_IDS = frozenset(
+    [
+        "ui_component",
+        "ui_page",
+        "api_endpoint",
+        "authentication",
+        "saas_feature",
+        "data_pipeline",
+        "game_mechanic",
+        "deployment",
+        "infrastructure",
+        "documentation",
+    ]
+)
 
 _NOW = "2026-05-16T00:00:00+00:00"
 
@@ -78,9 +82,7 @@ def test_ds_work_order_types_has_exactly_10_rows():
 
 def test_work_order_type_column_accepts_valid_type():
     conn = _fresh_db()
-    conn.execute(
-        "INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW)
-    )
+    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW))
     conn.execute(
         "INSERT INTO ds_work_orders"
         " (work_order_id, project_id, title, status, work_order_type, created_at, updated_at)"
@@ -97,9 +99,7 @@ def test_work_order_type_column_accepts_valid_type():
 def test_work_order_type_column_accepts_null_for_backward_compat():
     """Existing rows with no type must remain valid (no NOT NULL constraint)."""
     conn = _fresh_db()
-    conn.execute(
-        "INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW)
-    )
+    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW))
     conn.execute(
         "INSERT INTO ds_work_orders"
         " (work_order_id, project_id, title, status, work_order_type, created_at, updated_at)"
@@ -141,9 +141,7 @@ def test_build_executor_non_null_for_non_documentation_types(type_id):
 def test_post_build_gate_null_only_for_documentation():
     """post_build_gate must be non-null for every type except documentation."""
     conn = _fresh_db()
-    rows = conn.execute(
-        "SELECT type_id, post_build_gate FROM ds_work_order_types"
-    ).fetchall()
+    rows = conn.execute("SELECT type_id, post_build_gate FROM ds_work_order_types").fetchall()
     conn.close()
     for type_id, gate in rows:
         if type_id == "documentation":

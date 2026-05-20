@@ -405,3 +405,5 @@ next_stage_gate: structured_authority_projection
 next_milestone: runtime_projection_update
 recommended_next_work_order: none
 ```
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
