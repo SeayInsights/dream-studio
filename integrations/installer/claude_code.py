@@ -523,7 +523,10 @@ class ClaudeCodeInstaller(InstallerBase):
         merged = dedup_hooks_by_normalized_command(merged)
         merged = purge_read_posttooluse_matcher(merged)
         # Always write the Python statusLine command to migrate from old bash wrapper
-        merged["statusLine"] = {"command": _interpolate_statusline_cmd(hooks_dir)}
+        merged["statusLine"] = {
+            "type": "command",
+            "command": _interpolate_statusline_cmd(hooks_dir),
+        }
         merged_content = settings_to_json(merged)
         ops.append(
             FileOp(

@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Chain suggestions restored** — `on-skill-complete.py` now reads `chain_suggests` from config.yml instead of stripped SKILL.md frontmatter (#85)
+- **Installer statusLine schema** — Claude Code installer now writes `statusLine.type: "command"` alongside `statusLine.command`, satisfying the Claude Code settings schema and clearing the `/doctor` validation error on fresh installs.
 
 ### Changed
 - **License** - updated current public licensing to Apache-2.0.
