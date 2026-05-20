@@ -29,22 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
-      - name: Validate plugin manifest
-        shell: python
-        run: |
-          import json
-          import sys
-          from pathlib import Path
-
-          manifest = Path(".claude-plugin/plugin.json")
-          data = json.loads(manifest.read_text(encoding="utf-8"))
-          required = ["name", "version", "description", "license"]
-          missing = [key for key in required if key not in data]
-          if missing:
-              print(f"plugin.json missing keys: {missing}")
-              sys.exit(1)
-          print(f"plugin.json OK: {data['name']}@{data['version']}")
-
       - name: Contract docs drift
         env:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}

@@ -319,3 +319,5 @@ evidence remains private until a sanitized adoption note is explicitly approved.
 The current milestone establishes the foundation and release gate. A later
 visual Contract Atlas dashboard can render the same registry, graph, scorecard,
 and boundary report without inventing new dependency data.
+
+<!-- Last reviewed 2026-05-20 — atlas sanitizer hardened against POSIX absolute paths and `.dream-studio/` substrings (core/shared_intelligence/contract_atlas.py); contract surface unchanged. -->

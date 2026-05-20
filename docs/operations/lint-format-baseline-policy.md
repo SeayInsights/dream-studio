@@ -230,3 +230,5 @@ PRD lifecycle source or route changes are release-gate relevant when they add
 schema, dashboard routes, context-packet fields, or Contract Atlas sections.
 They must keep Black and lint-baseline checks clean, refresh the PRD lifecycle
 docs, and prove docs drift without weakening unrelated release-gate checks.
+
+<!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->
