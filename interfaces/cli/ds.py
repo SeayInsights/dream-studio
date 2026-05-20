@@ -2091,113 +2091,6 @@ def _skill_list(
     return 0 if result.get("ok") else 1
 
 
-def _run_gate_check(
-    gate_name: str | None,
-    *,
-    planning_root: Path,
-    work_order_id: str,
-    project_id: str,
-    conn: Any,
-) -> tuple[bool, str]:
-    """Return (passed, failure_reason). failure_reason is empty string when passed=True."""
-    if not gate_name:
-        return True, ""
-
-    wo_dir = planning_root / "work-orders" / work_order_id
-
-    if gate_name == "design_brief_locked":
-        try:
-            row = conn.execute(
-                "SELECT 1 FROM ds_design_briefs"
-                " WHERE project_id = ? AND status = 'locked' LIMIT 1",
-                (project_id,),
-            ).fetchone()
-        except sqlite3.OperationalError:
-            try:
-                row = conn.execute(
-                    "SELECT 1 FROM ds_documents"
-                    " WHERE doc_type = 'design_brief' AND project_id = ? LIMIT 1",
-                    (project_id,),
-                ).fetchone()
-            except sqlite3.OperationalError:
-                row = None
-        if row is None:
-            return False, "design_brief_locked: no locked design brief found for this project"
-        return True, ""
-
-    if gate_name == "api_contract_exists":
-        if not (wo_dir / "api-contract.md").is_file():
-            return False, "api_contract_exists: api-contract.md not found"
-        return True, ""
-
-    if gate_name == "api_contract_and_security_review":
-        if not (wo_dir / "api-contract.md").is_file():
-            return False, "api_contract_and_security_review: api-contract.md not found"
-        if not (wo_dir / "security-scan.md").is_file():
-            return False, "api_contract_and_security_review: security-scan.md not found"
-        return True, ""
-
-    if gate_name == "spec_approved":
-        if not (wo_dir / "spec.md").is_file():
-            return False, "spec_approved: spec.md not found"
-        return True, ""
-
-    if gate_name == "all_tests_pass":
-        results_path = wo_dir / "test-results.md"
-        if not results_path.is_file():
-            return False, "all_tests_pass: test-results.md not found"
-        content = results_path.read_text(encoding="utf-8")
-        if "PASSED" not in content.upper():
-            return False, "all_tests_pass: test-results.md does not contain PASSED"
-        return True, ""
-
-    if gate_name == "design_critique":
-        import re as _re
-
-        critique_path = wo_dir / "design-critique.md"
-        if not critique_path.is_file():
-            return False, "design_critique: design-critique.md not found"
-        content = critique_path.read_text(encoding="utf-8")
-        match = _re.search(r"Score:\s*(\d+)/(\d+)", content)
-        if not match:
-            return False, "design_critique: no 'Score: N/M' found in design-critique.md"
-        score = int(match.group(1))
-        if score < 3:
-            return False, f"design_critique: score {score} is below minimum 3"
-        return True, ""
-
-    if gate_name == "security_scan":
-        scan_path = wo_dir / "security-scan.md"
-        if not scan_path.is_file():
-            return False, "security_scan: security-scan.md not found"
-        content = scan_path.read_text(encoding="utf-8")
-        if "BLOCKED" in content.upper():
-            return False, "security_scan: security-scan.md contains BLOCKED"
-        return True, ""
-
-    if gate_name == "game_validate":
-        if not (wo_dir / "game-validate.md").is_file():
-            return False, "game_validate: game-validate.md not found"
-        return True, ""
-
-    if gate_name == "anti_slop_passed":
-        lint_path = wo_dir / "lint-results.md"
-        if not lint_path.is_file():
-            return False, (
-                f"anti_slop_passed: lint-results.md not found. Run: python "
-                f"canonical/skills/domains/modes/website/scripts/lint-artifact.py "
-                f"<artifact_path> > .planning/work-orders/{work_order_id}/lint-results.md"
-            )
-        _lint_content = lint_path.read_text(encoding="utf-8")
-        if "BLOCKED" in _lint_content.upper():
-            return False, "anti_slop_passed: lint-results.md contains BLOCKED"
-        if "PASSED" not in _lint_content.upper():
-            return False, "anti_slop_passed: lint-results.md does not contain PASSED"
-        return True, ""
-
-    return True, ""
-
-
 def _work_order_close(
     *,
     work_order_id: str,
@@ -2206,161 +2099,29 @@ def _work_order_close(
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    """CLI wrapper around `core.work_orders.close.close_work_order`.
 
-    paths = resolve_installed_runtime_paths(
+    Preserves the legacy operator-terminal behaviour by re-emitting
+    `[gate.bypassed] WARNING: <reason>` to stderr from the returned
+    `bypassed_gates` list. Skills should call `close_work_order` directly.
+    """
+
+    from core.work_orders.close import close_work_order
+
+    result = close_work_order(
+        work_order_id=work_order_id,
+        force=force,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
 
-    p_root = planning_root or Path.cwd() / ".planning"
-
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type, project_id, milestone_id"
-            " FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-
-        wo_id, title, wo_status, wo_type, project_id, wo_milestone_id = wo_row
-
-        type_row = None
-        if wo_type:
-            type_row = conn.execute(
-                "SELECT pre_build_gate, build_executor, post_build_gate"
-                " FROM ds_work_order_types WHERE type_id = ?",
-                (wo_type,),
-            ).fetchone()
-
-        pre_gate = type_row[0] if type_row else None
-        post_gate = type_row[2] if type_row else None
-
-        gate_failures: list[str] = []
-        _gates_to_check: list[str] = []
-        for _raw_gate in (pre_gate, post_gate):
-            if _raw_gate:
-                _gates_to_check.extend(_raw_gate.split("|"))
-        for gate_name in _gates_to_check:
-            passed, reason = _run_gate_check(
-                gate_name,
-                planning_root=p_root,
-                work_order_id=work_order_id,
-                project_id=project_id,
-                conn=conn,
-            )
-            if not passed:
-                gate_failures.append(reason)
-
-        if gate_failures and not force:
-            print(
-                json.dumps({"ok": False, "error": "Gate check failed", "failures": gate_failures})
-            )
-            return 1
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        if force and gate_failures:
-            for reason in gate_failures:
-                print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
-                try:
-                    import spool.writer as _spool_writer
-
-                    _spool_writer.write_event(
-                        {
-                            "event_id": str(_uuid.uuid4()),
-                            "event_type": "gate.bypassed",
-                            "timestamp": now,
-                            "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                            "severity": "warning",
-                            "payload": {
-                                "work_order_id": work_order_id,
-                                "gate": reason.split(":")[0],
-                                "reason": reason,
-                            },
-                            "source_type": "confirmed",
-                        }
-                    )
-                except Exception:
-                    pass
-
-        try:
-            import spool.writer as _spool_writer
-
-            _spool_writer.write_event(
-                {
-                    "event_id": str(_uuid.uuid4()),
-                    "event_type": "work_order.closed",
-                    "timestamp": now,
-                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                    "severity": "info",
-                    "payload": {
-                        "work_order_id": work_order_id,
-                        "title": title,
-                        "project_id": project_id,
-                        "forced": force,
-                    },
-                    "source_type": "confirmed",
-                }
-            )
-        except Exception:
-            pass
-
-        conn.execute(
-            "UPDATE ds_work_orders SET status = 'complete', updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, work_order_id),
-        )
-        conn.commit()
-
-        # Look up next open WO in same milestone, or check if milestone is complete.
-        next_wo: dict[str, Any] | None = None
-        milestone_complete = False
-        if wo_milestone_id:
-            next_row = conn.execute(
-                "SELECT work_order_id, title, work_order_type FROM ds_work_orders"
-                " WHERE milestone_id = ? AND status = 'open' ORDER BY created_at ASC LIMIT 1",
-                (wo_milestone_id,),
-            ).fetchone()
-            if next_row:
-                next_wo = {
-                    "work_order_id": next_row[0],
-                    "title": next_row[1],
-                    "type": next_row[2],
-                    "next_command": f"ds work-order start {next_row[0]}",
-                }
-            else:
-                remaining = conn.execute(
-                    "SELECT COUNT(*) FROM ds_work_orders"
-                    " WHERE milestone_id = ? AND status NOT IN ('complete', 'cancelled')",
-                    (wo_milestone_id,),
-                ).fetchone()[0]
-                if remaining == 0:
-                    milestone_complete = True
-
-    result: dict[str, Any] = {
-        "ok": True,
-        "work_order_id": work_order_id,
-        "title": title,
-        "status": "complete",
-        "forced": force,
-        "bypassed_gates": gate_failures if force else [],
-    }
-    if next_wo:
-        result["next_work_order"] = next_wo
-        result["next_command"] = next_wo["next_command"]
-    elif milestone_complete and wo_milestone_id:
-        result["milestone_complete"] = True
-        result["milestone_id"] = wo_milestone_id
-        result["next_command"] = f"ds milestone close {wo_milestone_id}"
+    if result.get("ok") and result.get("forced") and result.get("bypassed_gates"):
+        for reason in result["bypassed_gates"]:
+            print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
 
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_block(

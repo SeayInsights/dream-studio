@@ -148,9 +148,7 @@ def get_project_state(
 ) -> dict[str, Any]:
     """Single-call project state — active project + next WO + gates + brief + tasks + gotchas."""
 
-    # `_run_gate_check` lives in ds.py for now; A2 will lift it. Importing
-    # lazily keeps the dependency direction one-way until then.
-    from interfaces.cli.ds import _run_gate_check
+    from core.work_orders.close import run_gate_check
 
     db_path = _require_db(source_root, dream_studio_home)
     p_root = planning_root or Path.cwd() / ".planning"
@@ -231,7 +229,7 @@ def get_project_state(
 
                 gate_satisfied = True
                 if pre_gate:
-                    gate_passed, _ = _run_gate_check(
+                    gate_passed, _ = run_gate_check(
                         pre_gate,
                         planning_root=p_root,
                         work_order_id=wo_row["work_order_id"],
