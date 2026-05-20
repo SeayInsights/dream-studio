@@ -1817,22 +1817,6 @@ def _work_order_list(
     return 0 if result.get("ok") else 1
 
 
-_SKILL_SPECIFIER_RE = __import__("re").compile(r"^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$")
-_SKILL_FM_RE = __import__("re").compile(r"^---\s*\n(.*?)\n---", __import__("re").DOTALL)
-
-
-def _load_packs(source_root: Path) -> dict[str, Any]:
-    packs_path = source_root / "packs.yaml"
-    if not packs_path.is_file():
-        return {}
-    try:
-        import yaml as _yaml
-
-        return _yaml.safe_load(packs_path.read_text(encoding="utf-8")) or {}
-    except Exception:
-        return {}
-
-
 def _skill_dispatch(
     args: argparse.Namespace,
     *,
@@ -1871,101 +1855,46 @@ def _skill_invoke(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    """CLI wrapper around `core.skills.invocation`.
 
-    _UNKNOWN = f"Unknown skill: {specifier}. Run `ds skill list` to see available skills."
+    Composes the three pure functions in dependency order:
+    1. ``load_skill_content`` — validates specifier and reads SKILL.md;
+       fail-fast prints to stderr and returns 1.
+    2. Prints the SKILL.md body + operator footer to stdout (the legacy
+       handler's user-facing output is preserved verbatim).
+    3. ``record_skill_invocation`` — best-effort project_id resolution +
+       `skill.invoked` spool event emission.
+    4. ``seed_gate_artifact_files`` — writes the pre-shaped artifacts
+       (design-critique.md / security-scan.md) and triggers the design
+       brief seeding for website:discover.
 
-    if not _SKILL_SPECIFIER_RE.match(specifier):
-        print(_UNKNOWN, file=sys.stderr)
+    Steps 3 and 4 are best-effort: failure does not change the exit code.
+    """
+
+    from core.skills.invocation import (
+        load_skill_content,
+        record_skill_invocation,
+        seed_gate_artifact_files,
+    )
+
+    load_result = load_skill_content(specifier=specifier, source_root=source_root)
+    if not load_result.get("ok"):
+        print(load_result["error"], file=sys.stderr)
         return 1
 
-    pack, mode = specifier.split(":", 1)
+    record_result = record_skill_invocation(
+        specifier=specifier,
+        target=target,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
 
-    packs_data = _load_packs(source_root)
-    packs = packs_data.get("packs", {})
-
-    if pack not in packs:
-        print(_UNKNOWN, file=sys.stderr)
-        return 1
-
-    if mode not in packs[pack].get("modes", []):
-        print(_UNKNOWN, file=sys.stderr)
-        return 1
-
-    _skill_path_key = packs[pack].get("skill_path")
-    if _skill_path_key:
-        skill_md = source_root / _skill_path_key / "modes" / mode / "SKILL.md"
-    else:
-        skill_md = source_root / "canonical" / "skills" / pack / "modes" / mode / "SKILL.md"
-    if not skill_md.is_file():
-        print(f"Skill content not found for {specifier} (expected {skill_md})", file=sys.stderr)
-        return 1
-
-    invocation_mode = "pipeline" if work_order_id else "direct"
-
-    resolved_project_id = project_id
-    if resolved_project_id is None and work_order_id is not None:
-        try:
-            paths = resolve_installed_runtime_paths(
-                source_root=source_root,
-                dream_studio_home=dream_studio_home,
-            )
-            if paths.sqlite_path.exists():
-                with _connect(paths.sqlite_path) as conn:
-                    row = conn.execute(
-                        "SELECT project_id FROM ds_work_orders WHERE work_order_id = ?",
-                        (work_order_id,),
-                    ).fetchone()
-                    if row:
-                        resolved_project_id = row[0]
-        except Exception:
-            pass
-    if resolved_project_id is None:
-        try:
-            from emitters.claude_code.project import read_project_id
-
-            resolved_project_id = read_project_id(None)
-        except Exception:
-            pass
-
-    now = datetime.now(timezone.utc).isoformat()
-    skill_id = f"ds-{pack}"
-
-    try:
-        import spool.writer as _spool_writer
-
-        _spool_writer.write_event(
-            {
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "skill.invoked",
-                "timestamp": now,
-                "skill_id": skill_id,
-                "mode": mode,
-                "invocation_mode": invocation_mode,
-                "project_id": resolved_project_id,
-                "trace": {
-                    "skill_specifier": specifier,
-                    "project_id": resolved_project_id,
-                },
-                "severity": "info",
-                "payload": {
-                    "skill_specifier": specifier,
-                    "target": target,
-                    "work_order_id": work_order_id,
-                },
-                "source_type": "confirmed",
-                "schema_version": 1,
-            }
-        )
-    except Exception:
-        pass
-
-    skill_content = skill_md.read_text(encoding="utf-8")
-    print(skill_content)
+    print(load_result["skill_content"])
     print("---")
     print(f"Skill: {specifier}")
-    print(f"Mode: {invocation_mode}")
+    print(f"Mode: {record_result['invocation_mode']}")
     print(f"Target: {target or 'not specified'}")
     print(f"Work order: {work_order_id or 'none'}")
     print("Invocation recorded.")
@@ -1974,74 +1903,16 @@ def _skill_invoke(
         "The AI reading this output has the skill instructions above and should now execute them."
     )
 
-    if work_order_id or milestone_id:
-        from datetime import datetime, timezone as _tz
-
-        _date_str = datetime.now(_tz.utc).isoformat()[:10]
-        _p_root = planning_root or Path.cwd() / ".planning"
-        if milestone_id:
-            _wo_dir = _p_root / "milestones" / milestone_id
-        else:
-            _wo_dir = _p_root / "work-orders" / work_order_id
-        _wo_dir.mkdir(parents=True, exist_ok=True)
-
-        if specifier == "website:critique":
-            (_wo_dir / "design-critique.md").write_text(
-                f"# Design Critique — Work Order {work_order_id}\n"
-                f"Date: {_date_str}\n"
-                f"Skill: website:critique\n"
-                f"Target: {target or 'not specified'}\n\n"
-                "## Scores\n"
-                "Score: [PENDING]/4\n\n"
-                "## Dimension Scores\n"
-                "- Visual Hierarchy: [score]/1\n"
-                "- Typography: [score]/1\n"
-                "- Spacing & Layout: [score]/1\n"
-                "- Color & Contrast: [score]/1\n"
-                "- Component Cohesion: [score]/1\n\n"
-                "## Findings\n"
-                "[AI to complete after critique]\n\n"
-                "## Verdict\n"
-                "[PASS/FAIL]\n",
-                encoding="utf-8",
-            )
-
-        elif specifier == "security:scan":
-            (_wo_dir / "security-scan.md").write_text(
-                f"# Security Scan — Work Order {work_order_id}\n"
-                f"Date: {_date_str}\n"
-                f"Skill: security:scan\n"
-                f"Target: {target or 'not specified'}\n\n"
-                "## Result\n"
-                "Status: [PENDING]\n\n"
-                "## Findings\n"
-                "[AI to complete]\n\n"
-                "## Verdict\n"
-                "[PASS/BLOCKED]\n",
-                encoding="utf-8",
-            )
-
-        elif specifier == "website:discover" and project_id:
-            try:
-                paths = resolve_installed_runtime_paths(
-                    source_root=source_root,
-                    dream_studio_home=dream_studio_home,
-                )
-                if paths.sqlite_path.exists():
-                    with _connect(paths.sqlite_path) as _conn:
-                        existing = _conn.execute(
-                            "SELECT brief_id FROM ds_design_briefs"
-                            " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
-                            (project_id,),
-                        ).fetchone()
-                    if existing is None:
-                        _design_brief_create(
-                            project_id=project_id,
-                            source_root=source_root,
-                            dream_studio_home=dream_studio_home,
-                        )
-            except Exception:
-                pass
+    seed_gate_artifact_files(
+        specifier=specifier,
+        target=target,
+        work_order_id=work_order_id,
+        milestone_id=milestone_id,
+        project_id=project_id,
+        planning_root=planning_root,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
 
     return 0
 
