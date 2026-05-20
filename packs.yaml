@@ -85,6 +85,11 @@ packs:
     skill: ds-workorder
     modes: [start, execute, close, block, status]
 
+  ds-milestone:
+    description: Milestone lifecycle — read-only status and close (with gate checks)
+    skill: ds-milestone
+    modes: [status, close]
+
   website:
     description: Website build pipeline — discovery through delivery, 9 sub-modes
     skill: ds-website
