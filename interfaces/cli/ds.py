@@ -2257,162 +2257,40 @@ def _milestone_close(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    import re as _re
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    """CLI wrapper around ``core.milestones.close.close_milestone``.
 
-    paths = resolve_installed_runtime_paths(
-        source_root=source_root, dream_studio_home=dream_studio_home
+    The pure function returns one canonical result dict; this wrapper
+    formats the legacy operator-facing output:
+    - failures (missing milestone / open WOs / gate failures) → JSON to
+      stdout + exit 1;
+    - forced bypass with failures → emit
+      ``[gate.bypassed] WARNING: <reason>`` to stderr per failure, then
+      the success line;
+    - success → plain-text ``Milestone <id> closed. Run ds project
+      status <project_id> to see updated progress.``
+    """
+
+    from core.milestones.close import close_milestone
+
+    result = close_milestone(
+        milestone_id=milestone_id,
+        force=force,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing.")
 
-    p_root = planning_root or Path.cwd() / ".planning"
-    ms_dir = p_root / "milestones" / milestone_id
+    if not result.get("ok"):
+        print(json.dumps(result))
+        return 1
 
-    with _connect(paths.sqlite_path) as conn:
-        ms_row = conn.execute(
-            "SELECT milestone_id, project_id, title, status FROM ds_milestones WHERE milestone_id = ?",
-            (milestone_id,),
-        ).fetchone()
-        if ms_row is None:
-            print(json.dumps({"ok": False, "error": f"Milestone not found: {milestone_id}"}))
-            return 1
-
-        ms_id, project_id, ms_title, ms_status = ms_row
-
-        wo_rows = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type"
-            " FROM ds_work_orders WHERE milestone_id = ? ORDER BY created_at ASC",
-            (milestone_id,),
-        ).fetchall()
-
-        # a) All work orders must be complete
-        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "complete"]
-        if open_wos:
-            items = [{"work_order_id": r[0], "title": r[1], "status": r[2]} for r in open_wos]
-            print(
-                json.dumps(
-                    {
-                        "ok": False,
-                        "error": "Cannot close milestone: open work orders remain",
-                        "open_work_orders": items,
-                    }
-                )
-            )
-            return 1
-
-        # b) Determine if this is a UI milestone
-        ui_types = frozenset(["ui_component", "ui_page"])
-        has_ui = any(r[3] in ui_types for r in wo_rows)
-
-        # b) Milestone verification checks
-        failures: list[str] = []
-
-        def _check_file_exists_no_pattern(filename: str, absent_msg: str) -> Path | None:
-            p = ms_dir / filename
-            if not p.is_file():
-                failures.append(absent_msg)
-                return None
-            return p
-
-        # CHECK 1 — design audit
-        audit_path = ms_dir / "design-audit.md"
-        if not audit_path.is_file():
-            failures.append(
-                "Design audit required. Invoke website:critique across all UI surfaces and"
-                f" write results to .planning/milestones/{milestone_id}/design-audit.md"
-            )
-        else:
-            content = audit_path.read_text(encoding="utf-8")
-            for m in _re.finditer(r"Score:\s*(\d+)/(\d+)", content):
-                if int(m.group(1)) < 3:
-                    failures.append(
-                        f"Design audit: score {m.group(1)}/{m.group(2)} is below minimum 3"
-                    )
-                    break
-
-        # CHECK 2 — security audit
-        sec_path = ms_dir / "security-audit.md"
-        if not sec_path.is_file():
-            failures.append("Security audit required.")
-        else:
-            if "BLOCKED" in sec_path.read_text(encoding="utf-8").upper():
-                failures.append("Security audit: security-audit.md contains BLOCKED")
-
-        # CHECK 3 — hardening
-        harden_path = ms_dir / "harden-results.md"
-        if not harden_path.is_file():
-            failures.append("Hardening check required. Invoke quality:harden and write results.")
-        else:
-            if "PASSED" not in harden_path.read_text(encoding="utf-8").upper():
-                failures.append("Hardening check: harden-results.md does not contain PASSED")
-
-        # CHECK 4 — Core Web Vitals (UI milestones only)
-        if has_ui:
-            cwv_path = ms_dir / "cwv-results.md"
-            if not cwv_path.is_file():
-                failures.append("Core Web Vitals check required.")
-            else:
-                if "PASSED" not in cwv_path.read_text(encoding="utf-8").upper():
-                    failures.append("Core Web Vitals: cwv-results.md does not contain PASSED")
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        if failures and not force:
-            print(
-                json.dumps(
-                    {"ok": False, "error": "Milestone verification failed", "failures": failures}
-                )
-            )
-            return 1
-
-        if force and failures:
-            for reason in failures:
-                print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
-                try:
-                    import spool.writer as _spool_writer
-
-                    _spool_writer.write_event(
-                        {
-                            "event_id": str(_uuid.uuid4()),
-                            "event_type": "gate.bypassed",
-                            "timestamp": now,
-                            "trace": {"milestone_id": milestone_id, "project_id": project_id},
-                            "severity": "warning",
-                            "payload": {"milestone_id": milestone_id, "reason": reason},
-                            "source_type": "confirmed",
-                        }
-                    )
-                except Exception:
-                    pass
-
-        conn.execute(
-            "UPDATE ds_milestones SET status = 'complete', updated_at = ? WHERE milestone_id = ?",
-            (now, milestone_id),
-        )
-        conn.commit()
-
-    try:
-        import spool.writer as _spool_writer
-
-        _spool_writer.write_event(
-            {
-                "event_id": str(_uuid.uuid4()),
-                "event_type": "milestone.completed",
-                "timestamp": now,
-                "trace": {"milestone_id": milestone_id, "project_id": project_id},
-                "severity": "info",
-                "payload": {"milestone_id": milestone_id, "title": ms_title, "forced": force},
-                "source_type": "confirmed",
-            }
-        )
-    except Exception:
-        pass
+    if result.get("forced") and result.get("bypassed_gates"):
+        for reason in result["bypassed_gates"]:
+            print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
 
     print(
         f"Milestone {milestone_id} closed."
-        f" Run ds project status {project_id} to see updated progress."
+        f" Run ds project status {result['project_id']} to see updated progress."
     )
     return 0
 
