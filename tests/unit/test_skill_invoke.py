@@ -261,7 +261,7 @@ def test_ingestor_rejects_skill_id_with_slash(tmp_path):
     assert result.failed == 1
     assert result.processed == 0
 
-    reason_files = list((tmp_path / "failed").glob("*.reason.json"))
+    reason_files = list((tmp_path / "failed" / "reasons").glob("*.reason.json"))
     assert len(reason_files) == 1
     reason_data = json.loads(reason_files[0].read_text(encoding="utf-8"))
     assert reason_data["reason"] == "malformed_skill_id"
@@ -281,7 +281,7 @@ def test_ingestor_rejects_skill_id_without_ds_prefix(tmp_path):
     assert result.failed == 1
     assert result.processed == 0
 
-    reason_files = list((tmp_path / "failed").glob("*.reason.json"))
+    reason_files = list((tmp_path / "failed" / "reasons").glob("*.reason.json"))
     assert len(reason_files) == 1
     reason_data = json.loads(reason_files[0].read_text(encoding="utf-8"))
     assert reason_data["reason"] == "malformed_skill_id"
