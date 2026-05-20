@@ -34,7 +34,6 @@ for backward compat with operator terminals.
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -450,25 +449,25 @@ def start_work_order(
     try:
         import spool.writer as _spool_writer
 
-        _spool_writer.write_event(
-            {
-                "event_id": str(uuid.uuid4()),
-                "event_type": "work_order.started",
-                "timestamp": now,
-                "trace": {
-                    "work_order_id": work_order_id,
-                    "project_id": brief_data["project_id"],
-                },
-                "severity": "info",
-                "payload": {
-                    "work_order_id": work_order_id,
-                    "title": brief_data["title"],
-                    "type": brief_data["type_id"],
-                    "project_id": brief_data["project_id"],
-                },
-                "source_type": "confirmed",
-            }
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        envelope = CanonicalEventEnvelope(
+            event_type="work_order.started",
+            session_id=None,
+            payload={
+                "work_order_id": work_order_id,
+                "title": brief_data["title"],
+                "type": brief_data["type_id"],
+                "project_id": brief_data["project_id"],
+            },
+            timestamp=now,
+            severity="info",
+            trace={
+                "work_order_id": work_order_id,
+                "project_id": brief_data["project_id"],
+            },
         )
+        _spool_writer.write_event(envelope.to_dict())
     except Exception:
         pass
 

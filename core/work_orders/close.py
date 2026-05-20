@@ -37,7 +37,6 @@ behavior stays identical.
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -355,46 +354,46 @@ def close_work_order(
                 try:
                     import spool.writer as _spool_writer
 
-                    _spool_writer.write_event(
-                        {
-                            "event_id": str(uuid.uuid4()),
-                            "event_type": "gate.bypassed",
-                            "timestamp": now,
-                            "trace": {
-                                "work_order_id": work_order_id,
-                                "project_id": project_id,
-                            },
-                            "severity": "warning",
-                            "payload": {
-                                "work_order_id": work_order_id,
-                                "gate": reason.split(":")[0],
-                                "reason": reason,
-                            },
-                            "source_type": "confirmed",
-                        }
+                    from canonical.events.envelope import CanonicalEventEnvelope
+
+                    envelope = CanonicalEventEnvelope(
+                        event_type="gate.bypassed",
+                        session_id=None,
+                        payload={
+                            "work_order_id": work_order_id,
+                            "gate": reason.split(":")[0],
+                            "reason": reason,
+                        },
+                        timestamp=now,
+                        severity="warning",
+                        trace={
+                            "work_order_id": work_order_id,
+                            "project_id": project_id,
+                        },
                     )
+                    _spool_writer.write_event(envelope.to_dict())
                 except Exception:
                     pass
 
         try:
             import spool.writer as _spool_writer
 
-            _spool_writer.write_event(
-                {
-                    "event_id": str(uuid.uuid4()),
-                    "event_type": "work_order.closed",
-                    "timestamp": now,
-                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                    "severity": "info",
-                    "payload": {
-                        "work_order_id": work_order_id,
-                        "title": title,
-                        "project_id": project_id,
-                        "forced": force,
-                    },
-                    "source_type": "confirmed",
-                }
+            from canonical.events.envelope import CanonicalEventEnvelope
+
+            envelope = CanonicalEventEnvelope(
+                event_type="work_order.closed",
+                session_id=None,
+                payload={
+                    "work_order_id": work_order_id,
+                    "title": title,
+                    "project_id": project_id,
+                    "forced": force,
+                },
+                timestamp=now,
+                severity="info",
+                trace={"work_order_id": work_order_id, "project_id": project_id},
             )
+            _spool_writer.write_event(envelope.to_dict())
         except Exception:
             pass
 
