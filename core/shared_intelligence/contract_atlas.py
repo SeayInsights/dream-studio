@@ -1497,9 +1497,61 @@ def _sanitize_value(value: Any) -> Any:
     return value
 
 
+# Private-path patterns the public atlas export must scrub. Kept in sync with
+# `_PRIVATE_LEAK_PATTERNS` in core/shared_intelligence/contract_atlas_lifecycle.py
+# — the lifecycle gate validates that no sanitized public atlas contains any of
+# them. Each entry is (detector_regex, replacement_regex). The detector decides
+# whether a string needs sanitization; the replacement_regex strips the
+# offending fragment back to a token boundary. Detector and replacement differ
+# because we want to detect even an unanchored hit (e.g. `.dream-studio/` mid-
+# token) but replace the entire surrounding path token, not just the match.
+# Token boundary for path sanitization. Must allow spaces — Windows user
+# paths legitimately contain them (e.g. "C:\Users\Dannis Seay\builds\..."), and
+# stopping at the first space would leave the tail (e.g. "Seay\builds\...")
+# in the JSON-encoded output where the UNC-style leak pattern picks it up.
+_SANITIZE_TOKEN_CHARS = r"[^\"'\n\r,}\]]"
+_PRIVATE_PATH_RULES: tuple[tuple[re.Pattern[str], re.Pattern[str]], ...] = (
+    (
+        re.compile(r"[A-Za-z]:[\\/]"),
+        re.compile(rf"[A-Za-z]:[\\/]{_SANITIZE_TOKEN_CHARS}*"),
+    ),
+    (
+        re.compile(r"\\\\[^\\/\s]+[\\/]"),
+        re.compile(rf"\\\\[^\\/\s]+[\\/]{_SANITIZE_TOKEN_CHARS}*"),
+    ),
+    (
+        re.compile(r"/(?:home|Users|root|tmp|opt|var|mnt|srv)/[^/\s]+", re.IGNORECASE),
+        re.compile(
+            rf"/(?:home|Users|root|tmp|opt|var|mnt|srv)/{_SANITIZE_TOKEN_CHARS}*",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        re.compile(r"\.dream-studio[\\/]", re.IGNORECASE),
+        re.compile(
+            rf"{_SANITIZE_TOKEN_CHARS}*\.dream-studio{_SANITIZE_TOKEN_CHARS}*", re.IGNORECASE
+        ),
+    ),
+    (
+        re.compile(r"Dream Studio Live Backups", re.IGNORECASE),
+        re.compile(
+            rf"{_SANITIZE_TOKEN_CHARS}*Dream Studio Live Backups{_SANITIZE_TOKEN_CHARS}*",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        re.compile(r"\bAppData[\\/]", re.IGNORECASE),
+        re.compile(rf"{_SANITIZE_TOKEN_CHARS}*\bAppData{_SANITIZE_TOKEN_CHARS}*", re.IGNORECASE),
+    ),
+)
+
+
 def _contains_absolute_path(value: str) -> bool:
-    return bool(re.search(r"[A-Za-z]:[\\/]", value))
+    return any(detector.search(value) for detector, _ in _PRIVATE_PATH_RULES)
 
 
 def _sanitize_absolute_paths(value: str) -> str:
-    return re.sub(r"[A-Za-z]:[\\/][^\"'\n\r,}\]]+", "<sanitized-local-path>", value)
+    sanitized = value
+    for _, replacement in _PRIVATE_PATH_RULES:
+        sanitized = replacement.sub("<sanitized-local-path>", sanitized)
+    return sanitized

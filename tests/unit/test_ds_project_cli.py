@@ -1,4 +1,5 @@
 """Workstream 3 gate: `ds project register` CLI command assertions."""
+
 from __future__ import annotations
 import json
 import sqlite3
@@ -32,7 +33,9 @@ def _make_full_db(tmp_path: Path) -> Path:
     return db_path
 
 
-def _seed_project(db_path: Path, *, project_id: str, name: str = "P", status: str = "active") -> None:
+def _seed_project(
+    db_path: Path, *, project_id: str, name: str = "P", status: str = "active"
+) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
         "INSERT INTO ds_projects VALUES (?,?,?,?,?,?)",
@@ -159,12 +162,14 @@ def test_project_register_output_contains_set_active_hint(tmp_path, capsys):
 
 # ── WS 8b-2: set-active / deactivate ─────────────────────────────────────────
 
+
 def test_set_active_makes_target_active(tmp_path, capsys):
     db_path = _make_db(tmp_path)
     pid = "11111111-1111-1111-1111-111111111111"
     _seed_project(db_path, project_id=pid, name="Target", status="paused")
 
     from interfaces.cli.ds import _project_set_active
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -176,9 +181,11 @@ def test_set_active_makes_target_active(tmp_path, capsys):
         )
 
     assert rc == 0
-    row = sqlite3.connect(str(db_path)).execute(
-        "SELECT status FROM ds_projects WHERE project_id = ?", (pid,)
-    ).fetchone()
+    row = (
+        sqlite3.connect(str(db_path))
+        .execute("SELECT status FROM ds_projects WHERE project_id = ?", (pid,))
+        .fetchone()
+    )
     assert row[0] == "active"
 
 
@@ -190,6 +197,7 @@ def test_set_active_deactivates_previously_active(tmp_path, capsys):
     _seed_project(db_path, project_id=pid_new, name="New", status="paused")
 
     from interfaces.cli.ds import _project_set_active
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -238,6 +246,7 @@ def test_deactivate_changes_status_to_inactive(tmp_path, capsys):
     _seed_project(db_path, project_id=pid, name="Deactivate Me", status="active")
 
     from interfaces.cli.ds import _project_deactivate
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -249,13 +258,16 @@ def test_deactivate_changes_status_to_inactive(tmp_path, capsys):
         )
 
     assert rc == 0
-    row = sqlite3.connect(str(db_path)).execute(
-        "SELECT status FROM ds_projects WHERE project_id = ?", (pid,)
-    ).fetchone()
+    row = (
+        sqlite3.connect(str(db_path))
+        .execute("SELECT status FROM ds_projects WHERE project_id = ?", (pid,))
+        .fetchone()
+    )
     assert row[0] == "paused"
 
 
 # ── WS 8b-3: delete ──────────────────────────────────────────────────────────
+
 
 def test_delete_removes_project_with_no_dependents(tmp_path, capsys):
     db_path = _make_full_db(tmp_path)
@@ -263,6 +275,7 @@ def test_delete_removes_project_with_no_dependents(tmp_path, capsys):
     _seed_project(db_path, project_id=pid, name="Empty Project")
 
     from interfaces.cli.ds import _project_delete
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -275,9 +288,11 @@ def test_delete_removes_project_with_no_dependents(tmp_path, capsys):
         )
 
     assert rc == 0
-    row = sqlite3.connect(str(db_path)).execute(
-        "SELECT project_id FROM ds_projects WHERE project_id = ?", (pid,)
-    ).fetchone()
+    row = (
+        sqlite3.connect(str(db_path))
+        .execute("SELECT project_id FROM ds_projects WHERE project_id = ?", (pid,))
+        .fetchone()
+    )
     assert row is None
 
 
@@ -296,6 +311,7 @@ def test_delete_requires_confirm_when_dependents_exist(tmp_path, capsys):
     conn.close()
 
     from interfaces.cli.ds import _project_delete
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -334,6 +350,7 @@ def test_delete_cascade_removes_all_dependents(tmp_path, capsys):
     conn.close()
 
     from interfaces.cli.ds import _project_delete
+
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
@@ -347,9 +364,20 @@ def test_delete_cascade_removes_all_dependents(tmp_path, capsys):
 
     assert rc == 0
     conn2 = sqlite3.connect(str(db_path))
-    assert conn2.execute("SELECT COUNT(*) FROM ds_projects WHERE project_id = ?", (pid,)).fetchone()[0] == 0
-    assert conn2.execute("SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?", (pid,)).fetchone()[0] == 0
-    assert conn2.execute("SELECT COUNT(*) FROM ds_tasks WHERE project_id = ?", (pid,)).fetchone()[0] == 0
+    assert (
+        conn2.execute("SELECT COUNT(*) FROM ds_projects WHERE project_id = ?", (pid,)).fetchone()[0]
+        == 0
+    )
+    assert (
+        conn2.execute(
+            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?", (pid,)
+        ).fetchone()[0]
+        == 0
+    )
+    assert (
+        conn2.execute("SELECT COUNT(*) FROM ds_tasks WHERE project_id = ?", (pid,)).fetchone()[0]
+        == 0
+    )
     conn2.close()
 
 

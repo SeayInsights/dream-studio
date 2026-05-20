@@ -78,6 +78,7 @@ def spool_root(tmp_path, monkeypatch):
     sessions = spool / ".sessions"
     if sessions.exists():
         import shutil
+
         shutil.rmtree(sessions, ignore_errors=True)
 
 

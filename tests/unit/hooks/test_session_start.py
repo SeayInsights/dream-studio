@@ -15,6 +15,7 @@ _SESSION_CONFIG = _REPO / "runtime" / "session_config.py"
 
 def _load_session_config():
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("session_config", _SESSION_CONFIG)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

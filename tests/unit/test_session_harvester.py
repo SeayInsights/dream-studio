@@ -11,11 +11,11 @@ import pytest
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
+
 def _make_db(tmp_path: Path) -> Path:
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
-    conn.executescript(
-        """
+    conn.executescript("""
         CREATE TABLE reg_gotchas (
             gotcha_id TEXT PRIMARY KEY,
             skill_id  TEXT,
@@ -48,8 +48,7 @@ def _make_db(tmp_path: Path) -> Path:
             count      INTEGER NOT NULL DEFAULT 0,
             last_seen  TEXT NOT NULL
         );
-        """
-    )
+        """)
     conn.commit()
     conn.close()
     return db
@@ -103,7 +102,7 @@ def _tool_use_skill(skill: str, args: str = "") -> dict:
                     "name": "Skill",
                     "input": {"skill": skill, "args": args},
                 }
-            ]
+            ],
         },
     }
 
@@ -117,8 +116,8 @@ from spool.session_harvester import (
     _is_architecture_doc,
 )
 
-
 # ── _sanitize tests ───────────────────────────────────────────────────────────
+
 
 def test_sanitize_removes_windows_path():
     text = "Error at C:\\Users\\Dannis\\myfile.py line 42"
@@ -157,6 +156,7 @@ def test_sanitize_removes_uuid():
 
 # ── _is_architecture_doc tests ────────────────────────────────────────────────
 
+
 def test_is_architecture_doc_constitution():
     assert _is_architecture_doc("/some/path/CONSTITUTION.md") is True
 
@@ -179,6 +179,7 @@ def test_is_architecture_doc_regular_md():
 
 # ── harvest — no claude projects dir ─────────────────────────────────────────
 
+
 def test_harvest_missing_dir_returns_empty_result(tmp_path):
     db = _make_db(tmp_path)
     harvester = SessionHarvester()
@@ -194,6 +195,7 @@ def test_harvest_missing_dir_returns_empty_result(tmp_path):
 
 
 # ── harvest — invalid JSON lines skipped ─────────────────────────────────────
+
 
 def test_harvest_skips_invalid_json_lines(tmp_path):
     db = _make_db(tmp_path)
@@ -218,6 +220,7 @@ def test_harvest_skips_invalid_json_lines(tmp_path):
 
 # ── harvest — empty JSONL skipped ─────────────────────────────────────────────
 
+
 def test_harvest_empty_jsonl_counted_as_skipped(tmp_path):
     db = _make_db(tmp_path)
     projects_dir = tmp_path / "projects"
@@ -236,6 +239,7 @@ def test_harvest_empty_jsonl_counted_as_skipped(tmp_path):
 
 
 # ── harvest — error+fix → gotcha written ──────────────────────────────────────
+
 
 def test_harvest_error_with_fix_writes_gotcha(tmp_path):
     db = _make_db(tmp_path)
@@ -263,6 +267,7 @@ def test_harvest_error_with_fix_writes_gotcha(tmp_path):
 
 # ── harvest — error without fix → not extracted ───────────────────────────────
 
+
 def test_harvest_error_without_fix_not_extracted(tmp_path):
     db = _make_db(tmp_path)
     projects_dir = tmp_path / "projects"
@@ -285,6 +290,7 @@ def test_harvest_error_without_fix_not_extracted(tmp_path):
 
 
 # ── harvest — skill invocation → raw_approach written ─────────────────────────
+
 
 def test_harvest_skill_invocation_writes_approach(tmp_path):
     db = _make_db(tmp_path)
@@ -310,6 +316,7 @@ def test_harvest_skill_invocation_writes_approach(tmp_path):
 
 
 # ── harvest — Write to CONSTITUTION.md → arch doc with NULL content ───────────
+
 
 def test_harvest_arch_doc_written_with_null_content(tmp_path):
     db = _make_db(tmp_path)
@@ -337,6 +344,7 @@ def test_harvest_arch_doc_written_with_null_content(tmp_path):
 
 
 # ── harvest — file paths → extension counted ─────────────────────────────────
+
 
 def test_harvest_file_extensions_counted(tmp_path):
     db = _make_db(tmp_path)
@@ -366,6 +374,7 @@ def test_harvest_file_extensions_counted(tmp_path):
 
 
 # ── harvest — idempotency ─────────────────────────────────────────────────────
+
 
 def test_harvest_idempotent_second_run_skips_duplicates(tmp_path):
     db = _make_db(tmp_path)
@@ -397,6 +406,7 @@ def test_harvest_idempotent_second_run_skips_duplicates(tmp_path):
 
 # ── harvest — consent=False → no DB writes ────────────────────────────────────
 
+
 def test_harvest_no_consent_no_writes(tmp_path):
     db = _make_db(tmp_path)
     projects_dir = tmp_path / "projects"
@@ -426,6 +436,7 @@ def test_harvest_no_consent_no_writes(tmp_path):
 
 # ── harvest — dry_run → no DB writes ─────────────────────────────────────────
 
+
 def test_harvest_dry_run_no_writes(tmp_path):
     db = _make_db(tmp_path)
     projects_dir = tmp_path / "projects"
@@ -450,6 +461,7 @@ def test_harvest_dry_run_no_writes(tmp_path):
 
 
 # ── no raw content > 300 chars from a single JSONL value ─────────────────────
+
 
 def test_no_db_column_stores_raw_content_over_300_chars(tmp_path):
     db = _make_db(tmp_path)
@@ -480,12 +492,16 @@ def test_no_db_column_stores_raw_content_over_300_chars(tmp_path):
 
 # ── migration 055 applies cleanly ────────────────────────────────────────────
 
+
 def test_migration_055_applies_cleanly(tmp_path):
     """Migration SQL for 055 creates ds_technology_signals without error."""
     db = tmp_path / "test.db"
     migration_path = (
         Path(__file__).resolve().parents[2]
-        / "core" / "event_store" / "migrations" / "055_technology_signals.sql"
+        / "core"
+        / "event_store"
+        / "migrations"
+        / "055_technology_signals.sql"
     )
     assert migration_path.is_file(), f"Migration file not found: {migration_path}"
     sql = migration_path.read_text(encoding="utf-8")
@@ -494,9 +510,9 @@ def test_migration_055_applies_cleanly(tmp_path):
     conn.executescript(sql)
     conn.commit()
 
-    tables = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()}
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
     conn.close()
 
     assert "ds_technology_signals" in tables
@@ -504,12 +520,12 @@ def test_migration_055_applies_cleanly(tmp_path):
 
 # ── harvest creates ds_technology_signals if absent ──────────────────────────
 
+
 def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
     """Harvester auto-creates ds_technology_signals if the DB lacks it."""
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
-    conn.executescript(
-        """
+    conn.executescript("""
         CREATE TABLE reg_gotchas (
             gotcha_id TEXT PRIMARY KEY, skill_id TEXT, severity TEXT,
             title TEXT, context TEXT, fix TEXT, discovered TEXT, times_hit INTEGER DEFAULT 0
@@ -522,8 +538,7 @@ def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
             doc_id TEXT, doc_type TEXT, title TEXT, content TEXT,
             source_path TEXT UNIQUE, created_at TEXT
         );
-        """
-    )
+        """)
     conn.commit()
     conn.close()
 
@@ -539,8 +554,8 @@ def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
     )
 
     conn = sqlite3.connect(str(db))
-    tables = {r[0] for r in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    ).fetchall()}
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
     conn.close()
     assert "ds_technology_signals" in tables

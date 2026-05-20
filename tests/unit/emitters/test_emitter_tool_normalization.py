@@ -87,10 +87,7 @@ def _python_files(*roots: Path) -> list[Path]:
             files.append(root)
         else:
             files.extend(sorted(root.rglob("*.py")))
-    return [
-        path for path in files
-        if "__pycache__" not in path.parts and ".venv" not in path.parts
-    ]
+    return [path for path in files if "__pycache__" not in path.parts and ".venv" not in path.parts]
 
 
 def _imported_modules(source: str) -> set[str]:

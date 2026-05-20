@@ -12,21 +12,26 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _get_build_routing_table():
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from integrations.compiler.claude_code import _build_routing_table
+
     return _build_routing_table
 
 
 def _get_compile_pack():
     import sys
+
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from integrations.compiler.claude_code import compile_pack
+
     return compile_pack
 
 
 # ── Routing table generation ──────────────────────────────────────────────────
+
 
 def test_build_routing_table_reads_packs_yaml_and_produces_one_row_per_pack(tmp_path):
     packs_yaml = tmp_path / "packs.yaml"
@@ -40,7 +45,9 @@ def test_build_routing_table_reads_packs_yaml_and_produces_one_row_per_pack(tmp_
     assert "ds-core" in result
     assert "ds-quality" in result
     # One row per pack (count pipes)
-    rows = [l for l in result.splitlines() if l.startswith("|") and "Pack" not in l and "----" not in l]
+    rows = [
+        l for l in result.splitlines() if l.startswith("|") and "Pack" not in l and "----" not in l
+    ]
     assert len(rows) == 2
 
 
@@ -113,7 +120,11 @@ def test_ds_domains_does_not_handle_website_fullstack_as_modes(tmp_path):
     build_routing_table = _get_build_routing_table()
     result = build_routing_table(tmp_path, packs_yaml)
     # domains row should not contain website or fullstack mode keywords
-    domain_rows = [l for l in result.splitlines() if "ds-domains`" in l and "website" not in l.split("`ds-domains`")[0]]
+    domain_rows = [
+        l
+        for l in result.splitlines()
+        if "ds-domains`" in l and "website" not in l.split("`ds-domains`")[0]
+    ]
     for row in domain_rows:
         assert "website:" not in row
         assert "fullstack:" not in row
@@ -170,6 +181,7 @@ def test_renamed_pack_uses_new_name(tmp_path):
 
 # ── Compiler output structure ─────────────────────────────────────────────────
 
+
 def test_compiled_claude_md_contains_begin_auto_routing_marker():
     compile_pack = _get_compile_pack()
     pack = compile_pack()
@@ -190,7 +202,7 @@ def test_content_between_markers_is_generated_table():
     claude_md = pack["files"]["CLAUDE.md"]
     begin_idx = claude_md.find("<!-- BEGIN AUTO-ROUTING -->")
     end_idx = claude_md.find("<!-- END AUTO-ROUTING -->")
-    between = claude_md[begin_idx + len("<!-- BEGIN AUTO-ROUTING -->"):end_idx]
+    between = claude_md[begin_idx + len("<!-- BEGIN AUTO-ROUTING -->") : end_idx]
     # Should contain a table with | characters
     assert "|" in between
     # Should NOT be the placeholder
@@ -209,6 +221,7 @@ def test_adapter_projection_source_contains_placeholder_not_hardcoded_table():
 
 # ── metadata.yml triggers integration ────────────────────────────────────────
 
+
 def test_metadata_yml_triggers_override_mode_name(tmp_path):
     """If metadata.yml has triggers: list, those keywords replace the mode name."""
     packs_yaml = tmp_path / "packs.yaml"
@@ -220,12 +233,12 @@ def test_metadata_yml_triggers_override_mode_name(tmp_path):
     # Create metadata.yml with custom triggers
     meta_dir = tmp_path / "skills" / "ds-project" / "modes" / "resume"
     meta_dir.mkdir(parents=True)
-    (meta_dir / "metadata.yml").write_text(
-        "triggers:\n  - \"start building:\"\n  - \"what next:\"\n"
-    )
+    (meta_dir / "metadata.yml").write_text('triggers:\n  - "start building:"\n  - "what next:"\n')
     build_routing_table = _get_build_routing_table()
     result = build_routing_table(tmp_path, packs_yaml)
-    assert "start building" in result, f"Expected 'start building' from metadata.yml triggers, got: {result}"
+    assert (
+        "start building" in result
+    ), f"Expected 'start building' from metadata.yml triggers, got: {result}"
 
 
 def test_mode_with_no_metadata_uses_mode_name_as_keyword(tmp_path):
@@ -263,9 +276,9 @@ def test_ds_project_resume_triggers_from_metadata_yml():
     begin_idx = claude_md.find("<!-- BEGIN AUTO-ROUTING -->")
     end_idx = claude_md.find("<!-- END AUTO-ROUTING -->")
     between = claude_md[begin_idx:end_idx]
-    assert "start building" in between, (
-        "routing table should include 'start building' trigger from resume metadata.yml"
-    )
+    assert (
+        "start building" in between
+    ), "routing table should include 'start building' trigger from resume metadata.yml"
 
 
 def test_meta_pack_uses_workflow_keyword_not_meta(tmp_path):
@@ -301,6 +314,6 @@ def test_meta_pack_workflow_keyword_in_live_compile():
     begin_idx = claude_md.find("<!-- BEGIN AUTO-ROUTING -->")
     end_idx = claude_md.find("<!-- END AUTO-ROUTING -->")
     between = claude_md[begin_idx:end_idx]
-    assert "workflow:" in between, (
-        "routing table should include 'workflow:' trigger from workflow pack-level metadata.yml"
-    )
+    assert (
+        "workflow:" in between
+    ), "routing table should include 'workflow:' trigger from workflow pack-level metadata.yml"

@@ -30,16 +30,16 @@ def test_install_sh_contains_python_version_check():
 def test_install_sh_contains_auto_install_logic():
     content = _INSTALL_SH.read_text(encoding="utf-8")
     # Must try to install Python automatically via brew/apt-get/dnf
-    assert "brew" in content or "apt-get" in content or "dnf" in content, (
-        "install.sh must contain auto-install logic (brew/apt-get/dnf)"
-    )
+    assert (
+        "brew" in content or "apt-get" in content or "dnf" in content
+    ), "install.sh must contain auto-install logic (brew/apt-get/dnf)"
 
 
 def test_install_sh_calls_integrate_install():
     content = _INSTALL_SH.read_text(encoding="utf-8")
-    assert "integrate install claude_code" in content, (
-        "install.sh must call 'integrate install claude_code'"
-    )
+    assert (
+        "integrate install claude_code" in content
+    ), "install.sh must call 'integrate install claude_code'"
 
 
 def test_install_sh_calls_doctor():
@@ -67,9 +67,9 @@ def test_install_ps1_contains_auto_install_logic():
 
 def test_install_ps1_calls_integrate_install():
     content = _INSTALL_PS1.read_text(encoding="utf-8")
-    assert "integrate install claude_code" in content, (
-        "install.ps1 must call 'integrate install claude_code'"
-    )
+    assert (
+        "integrate install claude_code" in content
+    ), "install.ps1 must call 'integrate install claude_code'"
 
 
 def test_install_ps1_calls_doctor():
@@ -91,9 +91,9 @@ def test_ds_entry_preflight_rejects_python_311():
 def test_ds_entry_preflight_error_message_contains_fix():
     """Preflight error message must tell user how to fix the problem."""
     content = _DS_ENTRY.read_text(encoding="utf-8")
-    assert "install.sh" in content or "install.ps1" in content, (
-        "ds_entry.py preflight must reference install scripts in the fix message"
-    )
+    assert (
+        "install.sh" in content or "install.ps1" in content
+    ), "ds_entry.py preflight must reference install scripts in the fix message"
 
 
 def test_ds_entry_preflight_is_at_module_level():
@@ -104,6 +104,6 @@ def test_ds_entry_preflight_is_at_module_level():
     main_def_pos = content.find("def main()")
     assert version_check_pos != -1, "sys.version_info check not found in ds_entry.py"
     assert main_def_pos != -1, "def main() not found in ds_entry.py"
-    assert version_check_pos < main_def_pos, (
-        "Version check must appear before def main() (module-level, not inside main)"
-    )
+    assert (
+        version_check_pos < main_def_pos
+    ), "Version check must appear before def main() (module-level, not inside main)"

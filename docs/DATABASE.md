@@ -153,3 +153,5 @@ Telemetry read models aggregate structured state into dashboard-consumable views
 ## Publication Boundary
 
 Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutover evidence, cleanup manifests, or local audit trails. Use sanitized fixtures and synthetic examples for public tests and demos.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

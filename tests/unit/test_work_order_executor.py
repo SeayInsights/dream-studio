@@ -92,11 +92,17 @@ def db_home(tmp_path):
 
 def _start(db_home, tmp_path, monkeypatch, work_order_id=WORK_ORDER_ID):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    return main([
-        "--home", str(db_home),
-        "work-order", "start", work_order_id,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    return main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            work_order_id,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
 
 
 def _list(db_home, monkeypatch, extra=None):
@@ -108,13 +114,20 @@ def _list(db_home, monkeypatch, extra=None):
 
 # ── start: error paths ────────────────────────────────────────────────────────
 
+
 def test_start_exits_1_when_work_order_not_found(db_home, tmp_path, monkeypatch):
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "start", "00000000-0000-0000-0000-000000000000",
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            "00000000-0000-0000-0000-000000000000",
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 1
 
 
@@ -129,6 +142,7 @@ def test_start_exits_1_when_type_is_unrecognized(db_home, tmp_path, monkeypatch)
 
 
 # ── start: success path ───────────────────────────────────────────────────────
+
 
 def test_start_writes_context_md_to_planning_root(db_home, tmp_path, monkeypatch):
     rc = _start(db_home, tmp_path, monkeypatch)
@@ -179,11 +193,17 @@ def test_start_updates_status_to_in_progress(db_home, tmp_path, monkeypatch):
 def test_start_emits_spool_event_json(db_home, tmp_path, monkeypatch):
     spool_root = tmp_path / "spool-root"
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
-    main([
-        "--home", str(db_home),
-        "work-order", "start", WORK_ORDER_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            WORK_ORDER_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     events = list((spool_root / "spool").glob("*.json"))
     assert len(events) == 1
     event = json.loads(events[0].read_text(encoding="utf-8"))
@@ -199,15 +219,22 @@ def test_start_spool_failure_is_non_blocking(db_home, tmp_path, monkeypatch):
 
     monkeypatch.setattr(_spool, "write_event", _fail)
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
-    rc = main([
-        "--home", str(db_home),
-        "work-order", "start", WORK_ORDER_ID,
-        "--planning-root", str(tmp_path / ".planning"),
-    ])
+    rc = main(
+        [
+            "--home",
+            str(db_home),
+            "work-order",
+            "start",
+            WORK_ORDER_ID,
+            "--planning-root",
+            str(tmp_path / ".planning"),
+        ]
+    )
     assert rc == 0
 
 
 # ── list ──────────────────────────────────────────────────────────────────────
+
 
 def test_list_returns_all_work_orders(db_home, tmp_path, monkeypatch, capsys):
     rc = _list(db_home, monkeypatch)
@@ -223,10 +250,7 @@ def test_list_filters_by_project_id(db_home, tmp_path, monkeypatch, capsys):
     rc = _list(db_home, monkeypatch, extra=["--project", PROJECT_ID])
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
-    assert all(
-        wo["id"] != WORK_ORDER_ID_P2
-        for wo in out["work_orders"]
-    )
+    assert all(wo["id"] != WORK_ORDER_ID_P2 for wo in out["work_orders"])
     assert any(wo["id"] == WORK_ORDER_ID for wo in out["work_orders"])
 
 
@@ -243,6 +267,7 @@ def test_list_filters_by_status(db_home, tmp_path, monkeypatch, capsys):
 
 
 # ── WS 8a-3: enforcement block in context.md ─────────────────────────────────
+
 
 def test_context_md_contains_enforcement_section(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
@@ -269,11 +294,11 @@ def test_context_md_enforcement_contains_task_done_command(db_home, tmp_path, mo
     _start(db_home, tmp_path, monkeypatch)
     text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
     assert "work-order task-done" in text
-    assert WORK_ORDER_ID in text[text.index("work-order task-done"):]
+    assert WORK_ORDER_ID in text[text.index("work-order task-done") :]
 
 
 def test_context_md_enforcement_contains_work_order_close_command(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
     text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
     assert "work-order close" in text
-    assert WORK_ORDER_ID in text[text.index("work-order close"):]
+    assert WORK_ORDER_ID in text[text.index("work-order close") :]

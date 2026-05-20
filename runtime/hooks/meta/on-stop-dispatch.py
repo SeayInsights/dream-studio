@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+
 def _get_plugin_root() -> Path:
     sidecar = Path(__file__).resolve()
     for _ in range(6):

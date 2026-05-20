@@ -79,3 +79,5 @@ scope, milestones, Work Orders, change orders, and route reconciliation.
 Policy, privacy, connector, watcher, team-rollup, installer, and demo surfaces
 may summarize PRD lifecycle status, but they must not overwrite PRDs, create
 file sprawl, expose private project history, or authorize execution.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

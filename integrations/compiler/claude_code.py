@@ -102,7 +102,7 @@ def _build_routing_table(
 
     header = (
         "### Pack-Based Routing\n\n"
-        "Each pack is one skill with modes. Invoke via `Skill(skill=\"ds-<pack>\", args=\"<mode>\")`. "
+        'Each pack is one skill with modes. Invoke via `Skill(skill="ds-<pack>", args="<mode>")`. '
         "If the user's message matches a keyword, invoke the pack and let the router infer the mode.\n\n"
         "| Pack | Skill | Mode keywords |\n"
         "|------|-------|---------------|\n"
@@ -137,7 +137,9 @@ def _build_routing_table(
     return header + "\n".join(rows) + "\n"
 
 
-def _read_mode_triggers(mode: str, pack_key: str, skill_path_override: str | None, canonical_root: Path) -> list[str] | None:
+def _read_mode_triggers(
+    mode: str, pack_key: str, skill_path_override: str | None, canonical_root: Path
+) -> list[str] | None:
     """Return triggers list from metadata.yml for a mode, or None if not found."""
     # Determine base skill directory
     if skill_path_override:
@@ -151,6 +153,7 @@ def _read_mode_triggers(mode: str, pack_key: str, skill_path_override: str | Non
 
     try:
         import yaml as _yaml
+
         data = _yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
         raw = (data or {}).get("triggers", [])
         # triggers: list of "keyword:" strings — strip trailing colon
@@ -167,7 +170,9 @@ def _read_mode_triggers(mode: str, pack_key: str, skill_path_override: str | Non
         return None
 
 
-def _read_pack_triggers(pack_key: str, skill_path_override: str | None, canonical_root: Path) -> list[str] | None:
+def _read_pack_triggers(
+    pack_key: str, skill_path_override: str | None, canonical_root: Path
+) -> list[str] | None:
     """Return triggers list from pack-level metadata.yml, or None if not found."""
     if skill_path_override:
         skill_dir = canonical_root.parent / skill_path_override
@@ -180,6 +185,7 @@ def _read_pack_triggers(pack_key: str, skill_path_override: str | None, canonica
 
     try:
         import yaml as _yaml
+
         data = _yaml.safe_load(metadata_path.read_text(encoding="utf-8"))
         raw = (data or {}).get("triggers", [])
         triggers = []

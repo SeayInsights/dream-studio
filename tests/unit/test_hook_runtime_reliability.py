@@ -102,9 +102,9 @@ class TestHooksJsonValid:
         for cmd in extract_commands(self.config):
             uses_emitter = "'emitters'/'claude_code'/'run.py'" in cmd
             uses_dispatcher = "'runtime'/'dispatch'/'hooks.py'" in cmd
-            assert uses_emitter or uses_dispatcher, (
-                f"Command must route through canonical emitter or runtime dispatcher: {cmd}"
-            )
+            assert (
+                uses_emitter or uses_dispatcher
+            ), f"Command must route through canonical emitter or runtime dispatcher: {cmd}"
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 
     def test_user_prompt_submit_command_resolves_without_env_root(self, tmp_path):

@@ -114,13 +114,21 @@ def add_workflow_subcommand(subparsers) -> None:
     # advance
     p_adv = wf_sub.add_parser("advance", help="Execute the next wave of ready nodes")
     p_adv.add_argument("wf_key", help="Workflow key")
-    p_adv.add_argument("--dry-run", action="store_true", dest="dry_run",
-                       help="Print what would run without invoking any skill")
+    p_adv.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Print what would run without invoking any skill",
+    )
     p_adv.set_defaults(func=cmd_advance)
 
     # run
     p_run = wf_sub.add_parser("run", help="Run workflow to completion")
     p_run.add_argument("wf_key", help="Workflow key")
-    p_run.add_argument("--dry-run", action="store_true", dest="dry_run",
-                       help="Dry-run all waves without invoking any skill")
+    p_run.add_argument(
+        "--dry-run",
+        action="store_true",
+        dest="dry_run",
+        help="Dry-run all waves without invoking any skill",
+    )
     p_run.set_defaults(func=cmd_run)

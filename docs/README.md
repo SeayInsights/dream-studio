@@ -169,3 +169,5 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 ## Publication Rule
 
 When in doubt, keep generated operational history local. Public examples should be synthetic, sanitized, and reproducible without private operator state.
+
+<!-- Last reviewed 2026-05-20 — atlas sanitizer hardened against POSIX absolute paths and `.dream-studio/` substrings (core/shared_intelligence/contract_atlas.py); contract surface unchanged. -->

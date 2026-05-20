@@ -103,20 +103,24 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         sessions_path = str(project_sessions_dir(project_name))
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.PROJECT_REGISTERED.value,
-            session_id=None,
-            payload={
-                "project_id": project_id,
-                "project_path": redact_file_path(str(path)),
-                "project_name": project_name,
-                "project_source": "local",
-                "planning_path": redact_file_path(planning_path),
-                "sessions_path": redact_file_path(sessions_path),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.PROJECT_REGISTERED.value,
+                    session_id=None,
+                    payload={
+                        "project_id": project_id,
+                        "project_path": redact_file_path(str(path)),
+                        "project_name": project_name,
+                        "project_source": "local",
+                        "planning_path": redact_file_path(planning_path),
+                        "sessions_path": redact_file_path(sessions_path),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         # Keep existing DB write (dual-write)
         with transaction() as conn:
@@ -140,18 +144,22 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
 
     try:
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_STARTED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "run_type": run_type,
-                "project_path": redact_file_path(str(path)),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_STARTED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "run_type": run_type,
+                        "project_path": redact_file_path(str(path)),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         # Create analysis run record
         with transaction() as conn:
@@ -204,18 +212,22 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["project_data"] = project_data
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_DISCOVERY_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "files_discovered": len(project_data.get("file_inventory", {})),
-                "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_DISCOVERY_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "files_discovered": len(project_data.get("file_inventory", {})),
+                        "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -271,17 +283,21 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["research"] = research
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_RESEARCH_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "stack_framework": stack.get("framework", "unknown"),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_RESEARCH_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "stack_framework": stack.get("framework", "unknown"),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -342,18 +358,22 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 _store_improvement(conn, project_id, improvement)
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_AUDIT_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "violations_count": violations_count,
-                "health_score": audit.get("health_score", 0),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_AUDIT_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "violations_count": violations_count,
+                        "health_score": audit.get("health_score", 0),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -410,17 +430,21 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 _store_bug(conn, project_id, bug)
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_BUG_ANALYSIS_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "bugs_count": bugs_count,
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_BUG_ANALYSIS_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "bugs_count": bugs_count,
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -476,17 +500,21 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["prd_path"] = prd_path
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_SYNTHESIS_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "prd_path": redact_file_path(str(prd_path)),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_SYNTHESIS_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "prd_path": redact_file_path(str(prd_path)),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -538,21 +566,25 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["status"] = "completed"
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_COMPLETED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "duration_seconds": duration,
-                "violations_count": violations_count,
-                "bugs_count": bugs_count,
-                "health_score": audit.get("health_score", 0),
-                "prd_path": redact_file_path(str(prd_path)),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_COMPLETED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "duration_seconds": duration,
+                        "violations_count": violations_count,
+                        "bugs_count": bugs_count,
+                        "health_score": audit.get("health_score", 0),
+                        "prd_path": redact_file_path(str(prd_path)),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -615,18 +647,22 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
         result["error"] = str(e)
 
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.ANALYSIS_FAILED.value,
-            session_id=None,
-            payload={
-                "run_id": run_id,
-                "project_id": project_id,
-                "error_message": str(e),
-            },
-            severity="error",
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.ANALYSIS_FAILED.value,
+                    session_id=None,
+                    payload={
+                        "run_id": run_id,
+                        "project_id": project_id,
+                        "error_message": str(e),
+                    },
+                    severity="error",
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         with transaction() as conn:
             conn.execute(
@@ -773,19 +809,23 @@ def _update_project_metadata(
 
     if exists:
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.PROJECT_UPDATED.value,
-            session_id=None,
-            payload={
-                "project_id": project_id,
-                "stack_detected": stack.get("framework", "unknown"),
-                "health_score": min(1.0, audit.get("health_score", 0.0) / 10.0),
-                "total_files": len(project_data.get("file_inventory", {})),
-                "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.PROJECT_UPDATED.value,
+                    session_id=None,
+                    payload={
+                        "project_id": project_id,
+                        "stack_detected": stack.get("framework", "unknown"),
+                        "health_score": min(1.0, audit.get("health_score", 0.0) / 10.0),
+                        "total_files": len(project_data.get("file_inventory", {})),
+                        "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         # Update existing
         with transaction() as conn:
@@ -812,20 +852,24 @@ def _update_project_metadata(
             )
     else:
         # Slice 3: Emit event via spool pipeline
-        write_envelopes([CanonicalEventEnvelope(
-            event_type=CanonicalEventType.PROJECT_REGISTERED.value,
-            session_id=None,
-            payload={
-                "project_id": project_id,
-                "project_name": project_data.get("project_name", path.name),
-                "stack_detected": stack.get("framework", "unknown"),
-                "health_score": min(1.0, audit.get("health_score", 0.0) / 10.0),
-                "total_files": len(project_data.get("file_inventory", {})),
-                "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
-            },
-            confidence="unavailable",
-            project_id=None,
-        )])
+        write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=CanonicalEventType.PROJECT_REGISTERED.value,
+                    session_id=None,
+                    payload={
+                        "project_id": project_id,
+                        "project_name": project_data.get("project_name", path.name),
+                        "stack_detected": stack.get("framework", "unknown"),
+                        "health_score": min(1.0, audit.get("health_score", 0.0) / 10.0),
+                        "total_files": len(project_data.get("file_inventory", {})),
+                        "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
+                    },
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
 
         # Insert new
         with transaction() as conn:

@@ -138,3 +138,5 @@ evidence refs, and Work Order details are private unless explicitly exported
 through a sanitized profile. Public examples must be synthetic or redacted and
 must not expose private operator history, local paths, external-project details,
 career data, or unsanitized security/readiness findings.
+
+<!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->

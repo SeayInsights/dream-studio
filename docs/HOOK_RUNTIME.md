@@ -155,3 +155,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 5. Add structured logging to replace silent `except: pass` in dispatchers
 6. Evaluate timeout enforcement in `run_handlers()`
 7. ~~Remove `hooks/lib/` compat shims~~ (done in Phase 6C Wave 1)
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->

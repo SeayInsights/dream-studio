@@ -102,8 +102,9 @@ def test_session_config_flags_carried_over(handler, monkeypatch):
     monkeypatch.setattr(handler, "_emit_harvest", lambda *a: None)
     monkeypatch.setattr(handler, "_write_spawn_lock", lambda sid: None)
     monkeypatch.setattr(
-        handler, "read_session_config",
-        lambda sid: {"invocation_flags": ["--dangerously-skip-permissions"], "cwd": "/tmp"}
+        handler,
+        "read_session_config",
+        lambda sid: {"invocation_flags": ["--dangerously-skip-permissions"], "cwd": "/tmp"},
     )
 
     raw_pct = 80.0 * handler.COMPACT_THRESHOLD / 100.0
@@ -130,8 +131,9 @@ def test_session_config_model_flag(handler, monkeypatch):
     monkeypatch.setattr(handler, "_emit_harvest", lambda *a: None)
     monkeypatch.setattr(handler, "_write_spawn_lock", lambda sid: None)
     monkeypatch.setattr(
-        handler, "read_session_config",
-        lambda sid: {"invocation_flags": ["--model", "claude-sonnet-4-6"], "cwd": "/tmp"}
+        handler,
+        "read_session_config",
+        lambda sid: {"invocation_flags": ["--model", "claude-sonnet-4-6"], "cwd": "/tmp"},
     )
 
     raw_pct = 80.0 * handler.COMPACT_THRESHOLD / 100.0
@@ -173,6 +175,7 @@ def test_continuation_prompt_includes_project(handler, monkeypatch):
 
 def test_spawn_never_blocks(handler, monkeypatch):
     """Even if _spawn_continuation raises, main must exit 0."""
+
     def raise_on_spawn(cfg):
         raise RuntimeError("Terminal not found")
 

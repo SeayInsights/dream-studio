@@ -67,21 +67,25 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
             total_count += 1
 
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
-                session_id=None,
-                payload={
-                    "workflow_id": workflow_id,
-                    "workflow_chain": workflow_chain,
-                    "outcome": outcome,
-                    "success_count": success_count,
-                    "total_count": total_count,
-                    "success_rate": success_count / total_count if total_count > 0 else 0.0,
-                    "is_new_workflow": False,
-                },
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
+                        session_id=None,
+                        payload={
+                            "workflow_id": workflow_id,
+                            "workflow_chain": workflow_chain,
+                            "outcome": outcome,
+                            "success_count": success_count,
+                            "total_count": total_count,
+                            "success_rate": success_count / total_count if total_count > 0 else 0.0,
+                            "is_new_workflow": False,
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
             # Keep existing DB write (dual-write)
             conn.execute(
@@ -104,22 +108,26 @@ def track_workflow_success(workflow_chain: list[str], outcome: str) -> None:
                     category = pack
 
             # Slice 3: Emit event via spool pipeline
-            write_envelopes([CanonicalEventEnvelope(
-                event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
-                session_id=None,
-                payload={
-                    "workflow_id": workflow_id,
-                    "workflow_chain": workflow_chain,
-                    "outcome": outcome,
-                    "success_count": success_count,
-                    "total_count": total_count,
-                    "success_rate": success_count / total_count if total_count > 0 else 0.0,
-                    "category": category,
-                    "is_new_workflow": True,
-                },
-                confidence="unavailable",
-                project_id=None,
-            )])
+            write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=CanonicalEventType.WORKFLOW_LEARNED.value,
+                        session_id=None,
+                        payload={
+                            "workflow_id": workflow_id,
+                            "workflow_chain": workflow_chain,
+                            "outcome": outcome,
+                            "success_count": success_count,
+                            "total_count": total_count,
+                            "success_rate": success_count / total_count if total_count > 0 else 0.0,
+                            "category": category,
+                            "is_new_workflow": True,
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
 
             # Keep existing DB write (dual-write)
             conn.execute(

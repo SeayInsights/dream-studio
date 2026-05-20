@@ -8,6 +8,7 @@ Slice 8a: UserPromptSubmit injects enforcement message when no active work order
 
 Always exits 0 — spool emission is non-fatal and must not interrupt the hook chain.
 """
+
 from __future__ import annotations
 import json
 import os
@@ -29,6 +30,7 @@ def _enforcement_check() -> str | None:
     """
     try:
         from emitters.claude_code.project import read_project_id
+
         project_id = read_project_id(None)
     except Exception:
         return None
@@ -154,6 +156,7 @@ def main() -> int:
     if hook_event == "Stop":
         try:
             from spool.ingestor import ingest_pending
+
             ingest_pending()
         except Exception:
             pass

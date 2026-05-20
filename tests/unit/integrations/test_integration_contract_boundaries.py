@@ -71,10 +71,7 @@ def _python_files(*roots: Path) -> list[Path]:
             files.append(root)
         else:
             files.extend(sorted(root.rglob("*.py")))
-    return [
-        path for path in files
-        if ".venv" not in path.parts and "__pycache__" not in path.parts
-    ]
+    return [path for path in files if ".venv" not in path.parts and "__pycache__" not in path.parts]
 
 
 def _sql_write_tables(source: str) -> list[str]:

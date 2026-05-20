@@ -73,11 +73,10 @@ def _interpolate_statusline_cmd(hooks_dir: Path) -> str:
     return template.replace("{hooks_dir}", str(hooks_dir)).replace("{python_cmd}", _python_cmd())
 
 
-def _interpolate_hooks_dir(
-    hooks: list[dict[str, Any]], hooks_dir: Path
-) -> list[dict[str, Any]]:
+def _interpolate_hooks_dir(hooks: list[dict[str, Any]], hooks_dir: Path) -> list[dict[str, Any]]:
     """Replace {hooks_dir} and {python_cmd} placeholders in hook command strings."""
     import copy as _copy
+
     hooks_dir_str = str(hooks_dir).replace("\\", "/")
     python_cmd = _python_cmd()
     result = []
@@ -115,13 +114,28 @@ def _collect_hook_file_ops(
     hook_files: list[tuple[Path, Path]] = [
         (source_root / "emitters" / "claude_code" / "run.py", hooks_dir / "run.py"),
         (source_root / "runtime" / "dispatch" / "hooks.py", hooks_dir / "dispatch" / "hooks.py"),
-        (source_root / "runtime" / "dispatch" / "__init__.py", hooks_dir / "dispatch" / "__init__.py"),
-        (source_root / "control" / "execution" / "dispatch_tracking.py", hooks_dir / "control" / "execution" / "dispatch_tracking.py"),
+        (
+            source_root / "runtime" / "dispatch" / "__init__.py",
+            hooks_dir / "dispatch" / "__init__.py",
+        ),
+        (
+            source_root / "control" / "execution" / "dispatch_tracking.py",
+            hooks_dir / "control" / "execution" / "dispatch_tracking.py",
+        ),
         (source_root / "control" / "__init__.py", hooks_dir / "control" / "__init__.py"),
-        (source_root / "control" / "execution" / "__init__.py", hooks_dir / "control" / "execution" / "__init__.py"),
-        (source_root / "runtime" / "hooks" / "meta" / "__init__.py", hooks_dir / "runtime" / "hooks" / "meta" / "__init__.py"),
+        (
+            source_root / "control" / "execution" / "__init__.py",
+            hooks_dir / "control" / "execution" / "__init__.py",
+        ),
+        (
+            source_root / "runtime" / "hooks" / "meta" / "__init__.py",
+            hooks_dir / "runtime" / "hooks" / "meta" / "__init__.py",
+        ),
         # session_config.py — shared utility for session continuation
-        (source_root / "runtime" / "session_config.py", hooks_dir / "runtime" / "session_config.py"),
+        (
+            source_root / "runtime" / "session_config.py",
+            hooks_dir / "runtime" / "session_config.py",
+        ),
     ]
 
     for src, tgt in hook_files:
@@ -134,17 +148,19 @@ def _collect_hook_file_ops(
         except (UnicodeDecodeError, ValueError):
             content = None
             src_path = src
-        ops.append(FileOp(
-            target=tgt,
-            op="create",
-            backup_required=tgt.exists(),
-            source_hash=file_hash,
-            source_content=content,
-            source_path=src_path,
-            reason=f"Install hook script {src.name} to hooks/",
-            safety_notes="Additive hook install — part of sidecar resolution chain.",
-            backup_path=backup_base if tgt.exists() else None,
-        ))
+        ops.append(
+            FileOp(
+                target=tgt,
+                op="create",
+                backup_required=tgt.exists(),
+                source_hash=file_hash,
+                source_content=content,
+                source_path=src_path,
+                reason=f"Install hook script {src.name} to hooks/",
+                safety_notes="Additive hook install — part of sidecar resolution chain.",
+                backup_path=backup_base if tgt.exists() else None,
+            )
+        )
 
     # Meta handlers (all .py files except __init__.py)
     meta_src_dir = source_root / "runtime" / "hooks" / "meta"
@@ -156,29 +172,33 @@ def _collect_hook_file_ops(
             tgt = meta_tgt_dir / handler.name
             file_hash = _compute_file_hash_chunked(handler)
             handler_content = handler.read_text(encoding="utf-8")
-            ops.append(FileOp(
-                target=tgt,
-                op="create",
-                backup_required=tgt.exists(),
-                source_hash=file_hash,
-                source_content=handler_content,
-                reason=f"Install meta hook handler {handler.name}",
-                safety_notes="Handler for hook event dispatch.",
-                backup_path=backup_base if tgt.exists() else None,
-            ))
+            ops.append(
+                FileOp(
+                    target=tgt,
+                    op="create",
+                    backup_required=tgt.exists(),
+                    source_hash=file_hash,
+                    source_content=handler_content,
+                    reason=f"Install meta hook handler {handler.name}",
+                    safety_notes="Handler for hook event dispatch.",
+                    backup_path=backup_base if tgt.exists() else None,
+                )
+            )
 
     # Sidecar — written on every install so repo moves are self-healing
     sidecar_content = str(repo_root) + "\n"
     sidecar_tgt = hooks_dir / ".plugin-root"
-    ops.append(FileOp(
-        target=sidecar_tgt,
-        op="create",
-        backup_required=False,
-        source_hash=_compute_hash(sidecar_content),
-        source_content=sidecar_content,
-        reason="Write .plugin-root sidecar so installed hook scripts locate the DS repo",
-        safety_notes="Overwritten on every install — update when repo is moved by re-running install.",
-    ))
+    ops.append(
+        FileOp(
+            target=sidecar_tgt,
+            op="create",
+            backup_required=False,
+            source_hash=_compute_hash(sidecar_content),
+            source_content=sidecar_content,
+            reason="Write .plugin-root sidecar so installed hook scripts locate the DS repo",
+            safety_notes="Overwritten on every install — update when repo is moved by re-running install.",
+        )
+    )
 
     # statusline.py — cross-platform status line (replaces statusline-command.sh bash wrapper)
     statusline_src = repo_root / "canonical" / "adapters" / "claude" / "statusline.py"
@@ -186,16 +206,18 @@ def _collect_hook_file_ops(
         statusline_tgt = hooks_dir / "statusline.py"
         file_hash = _compute_file_hash_chunked(statusline_src)
         statusline_content = statusline_src.read_text(encoding="utf-8")
-        ops.append(FileOp(
-            target=statusline_tgt,
-            op="create",
-            backup_required=statusline_tgt.exists(),
-            source_hash=file_hash,
-            source_content=statusline_content,
-            reason="Install cross-platform Python status line script",
-            safety_notes="Replaces statusline-command.sh bash wrapper. Existing ~/.claude/statusline-command.sh is left in place.",
-            backup_path=backup_base if statusline_tgt.exists() else None,
-        ))
+        ops.append(
+            FileOp(
+                target=statusline_tgt,
+                op="create",
+                backup_required=statusline_tgt.exists(),
+                source_hash=file_hash,
+                source_content=statusline_content,
+                reason="Install cross-platform Python status line script",
+                safety_notes="Replaces statusline-command.sh bash wrapper. Existing ~/.claude/statusline-command.sh is left in place.",
+                backup_path=backup_base if statusline_tgt.exists() else None,
+            )
+        )
 
     return ops
 
@@ -220,17 +242,19 @@ def _collect_skill_dir_ops(
         except (UnicodeDecodeError, ValueError):
             source_content = None
             source_path = file_path
-        ops.append(FileOp(
-            target=target,
-            op="create",
-            backup_required=target.exists(),
-            source_hash=file_hash,
-            source_content=source_content,
-            source_path=source_path,
-            reason=f"Sync {skill_id}/{rel} to Claude Code skills",
-            safety_notes="Full skill directory sync — additive only.",
-            backup_path=backup_base if target.exists() else None,
-        ))
+        ops.append(
+            FileOp(
+                target=target,
+                op="create",
+                backup_required=target.exists(),
+                source_hash=file_hash,
+                source_content=source_content,
+                source_path=source_path,
+                reason=f"Sync {skill_id}/{rel} to Claude Code skills",
+                safety_notes="Full skill directory sync — additive only.",
+                backup_path=backup_base if target.exists() else None,
+            )
+        )
     return ops
 
 
@@ -244,7 +268,9 @@ def _write_path_to_profile(bin_dir: Path) -> dict[str, Any]:
             _sp = __import__("subprocess")
             raw = _sp.run(
                 ["powershell", "-Command", "$PROFILE"],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             ).stdout.strip()
             profile_path = Path(raw) if raw else None
         except Exception:
@@ -290,13 +316,15 @@ def _write_global_launcher(*, ds_home: Path) -> dict[str, Any]:
 
     if is_windows:
         launcher_path = bin_dir / "ds.cmd"
-        launcher_content = f"@echo off\npy \"{entry_path}\" %*\n"
+        launcher_content = f'@echo off\npy "{entry_path}" %*\n'
         launcher_path.write_text(launcher_content, encoding="utf-8")
     else:
         launcher_path = bin_dir / "ds"
         launcher_content = f'#!/bin/sh\n{sys.executable} "{entry_path}" "$@"\n'
         launcher_path.write_text(launcher_content, encoding="utf-8")
-        launcher_path.chmod(launcher_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        launcher_path.chmod(
+            launcher_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+        )
 
     path_result = _write_path_to_profile(bin_dir)
 
@@ -380,6 +408,7 @@ Run `ds doctor` at any time to check health."""
 def _get_ds_version() -> str:
     try:
         from core.config.sqlite_bootstrap import latest_migration_version
+
         return f"migration-{latest_migration_version()}"
     except Exception:
         return "unknown"
@@ -388,7 +417,11 @@ def _get_ds_version() -> str:
 def _post_install_validate(config_root: Path, settings_path: Path) -> dict[str, Any]:
     """Lightweight post-install validation — checks installed artifacts directly."""
     skills_dir = config_root / "skills"
-    skills_found = [d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").is_file()] if skills_dir.is_dir() else []
+    skills_found = (
+        [d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").is_file()]
+        if skills_dir.is_dir()
+        else []
+    )
     agents_dir = config_root / "agents"
     agents_found = [f.stem for f in agents_dir.glob("*.md")] if agents_dir.is_dir() else []
     dispatcher_ok = False
@@ -446,7 +479,9 @@ class ClaudeCodeInstaller(InstallerBase):
         ops: list[FileOp] = []
         ds_home = get_ds_home(self.ds_home)
         backup_base = ds_home / "backups" / "claude_code"
-        canonical_root = self.canonical_root if self.canonical_root is not None else (_REPO_ROOT / "canonical")
+        canonical_root = (
+            self.canonical_root if self.canonical_root is not None else (_REPO_ROOT / "canonical")
+        )
 
         # 1. Full skill directory sync — every file under canonical/skills/<pack>/
         skills_src_dir = canonical_root / "skills"
@@ -462,19 +497,21 @@ class ClaudeCodeInstaller(InstallerBase):
         claude_md_content = pack["files"].get("CLAUDE.md")
         if claude_md_content is not None:
             claude_target = self.config_root / "CLAUDE.md"
-            ops.append(FileOp(
-                target=claude_target,
-                op="create",
-                backup_required=claude_target.exists(),
-                source_hash=compute_hash(claude_md_content),
-                source_content=claude_md_content,
-                reason="Install Dream Studio enforcement block into CLAUDE.md projection",
-                safety_notes=(
-                    "Overwrites CLAUDE.md with enforcement block prepended to adapter projection. "
-                    "Existing file is backed up before write."
-                ),
-                backup_path=backup_base if claude_target.exists() else None,
-            ))
+            ops.append(
+                FileOp(
+                    target=claude_target,
+                    op="create",
+                    backup_required=claude_target.exists(),
+                    source_hash=compute_hash(claude_md_content),
+                    source_content=claude_md_content,
+                    reason="Install Dream Studio enforcement block into CLAUDE.md projection",
+                    safety_notes=(
+                        "Overwrites CLAUDE.md with enforcement block prepended to adapter projection. "
+                        "Existing file is backed up before write."
+                    ),
+                    backup_path=backup_base if claude_target.exists() else None,
+                )
+            )
 
         # 3. settings.json — merge_json (with {hooks_dir} interpolation + legacy purge)
         hooks_dir = self.config_root / "hooks"
@@ -488,30 +525,35 @@ class ClaudeCodeInstaller(InstallerBase):
         # Always write the Python statusLine command to migrate from old bash wrapper
         merged["statusLine"] = {"command": _interpolate_statusline_cmd(hooks_dir)}
         merged_content = settings_to_json(merged)
-        ops.append(FileOp(
-            target=settings_target,
-            op="merge_json",
-            backup_required=True,
-            source_hash=compute_hash(merged_content),
-            source_content=merged_content,
-            reason="Append DS spool emitter hooks (UserPromptSubmit, Stop, PostCompact, PostToolUse)",
-            safety_notes=(
-                "Additive only — never removes existing hooks. "
-                f"Skipped: {skip_reasons}" if skip_reasons else "Additive only."
-            ),
-            backup_path=backup_base,
-        ))
+        ops.append(
+            FileOp(
+                target=settings_target,
+                op="merge_json",
+                backup_required=True,
+                source_hash=compute_hash(merged_content),
+                source_content=merged_content,
+                reason="Append DS spool emitter hooks (UserPromptSubmit, Stop, PostCompact, PostToolUse)",
+                safety_notes=(
+                    "Additive only — never removes existing hooks. " f"Skipped: {skip_reasons}"
+                    if skip_reasons
+                    else "Additive only."
+                ),
+                backup_path=backup_base,
+            )
+        )
 
         # 4. settings.local.json — always skip
         local_target = self.config_root / "settings.local.json"
-        ops.append(FileOp(
-            target=local_target,
-            op="skip",
-            backup_required=False,
-            source_hash="",
-            reason="private/local config — never touched by DS installer",
-            safety_notes="settings.local.json is operator-local and excluded from all DS operations.",
-        ))
+        ops.append(
+            FileOp(
+                target=local_target,
+                op="skip",
+                backup_required=False,
+                source_hash="",
+                reason="private/local config — never touched by DS installer",
+                safety_notes="settings.local.json is operator-local and excluded from all DS operations.",
+            )
+        )
 
         # 5. Agent profiles — install canonical/agents/**/*.md to config_root/agents/
         agents_src_dir = canonical_root / "agents"
@@ -522,16 +564,18 @@ class ClaudeCodeInstaller(InstallerBase):
                 rel = agent_file.relative_to(agents_src_dir)
                 content = agent_file.read_text(encoding="utf-8")
                 target = self.config_root / "agents" / rel
-                ops.append(FileOp(
-                    target=target,
-                    op="create",
-                    backup_required=target.exists(),
-                    source_hash=compute_hash(content),
-                    source_content=content,
-                    reason=f"Install {agent_file.stem} agent profile for Claude Code",
-                    safety_notes="Creates parent directories as needed.",
-                    backup_path=backup_base if target.exists() else None,
-                ))
+                ops.append(
+                    FileOp(
+                        target=target,
+                        op="create",
+                        backup_required=target.exists(),
+                        source_hash=compute_hash(content),
+                        source_content=content,
+                        reason=f"Install {agent_file.stem} agent profile for Claude Code",
+                        safety_notes="Creates parent directories as needed.",
+                        backup_path=backup_base if target.exists() else None,
+                    )
+                )
 
         # 6a. Workflow YAMLs — install canonical/workflows/*.yaml to config_root/workflows/
         workflows_src_dir = canonical_root / "workflows"
@@ -539,16 +583,18 @@ class ClaudeCodeInstaller(InstallerBase):
             for wf_file in sorted(workflows_src_dir.glob("*.yaml")):
                 content = wf_file.read_text(encoding="utf-8")
                 target = self.config_root / "workflows" / wf_file.name
-                ops.append(FileOp(
-                    target=target,
-                    op="create",
-                    backup_required=target.exists(),
-                    source_hash=compute_hash(content),
-                    source_content=content,
-                    reason=f"Install {wf_file.name} workflow YAML",
-                    safety_notes="Additive only — never deletes existing workflows.",
-                    backup_path=backup_base if target.exists() else None,
-                ))
+                ops.append(
+                    FileOp(
+                        target=target,
+                        op="create",
+                        backup_required=target.exists(),
+                        source_hash=compute_hash(content),
+                        source_content=content,
+                        reason=f"Install {wf_file.name} workflow YAML",
+                        safety_notes="Additive only — never deletes existing workflows.",
+                        backup_path=backup_base if target.exists() else None,
+                    )
+                )
 
         # 6b. Workflow contract — copy docs/contracts/workflow-contract.md into ds-workflow skill
         source_root = self._get_source_root()
@@ -556,18 +602,25 @@ class ClaudeCodeInstaller(InstallerBase):
         if contract_src.is_file():
             content = contract_src.read_text(encoding="utf-8")
             contract_target = (
-                self.config_root / "skills" / "ds-workflow" / "docs" / "contracts" / "workflow-contract.md"
+                self.config_root
+                / "skills"
+                / "ds-workflow"
+                / "docs"
+                / "contracts"
+                / "workflow-contract.md"
             )
-            ops.append(FileOp(
-                target=contract_target,
-                op="create",
-                backup_required=contract_target.exists(),
-                source_hash=compute_hash(content),
-                source_content=content,
-                reason="Install workflow contract into ds-workflow skill for schema validation",
-                safety_notes="Referenced by ds-workflow SKILL.md for runner validation.",
-                backup_path=backup_base if contract_target.exists() else None,
-            ))
+            ops.append(
+                FileOp(
+                    target=contract_target,
+                    op="create",
+                    backup_required=contract_target.exists(),
+                    source_hash=compute_hash(content),
+                    source_content=content,
+                    reason="Install workflow contract into ds-workflow skill for schema validation",
+                    safety_notes="Referenced by ds-workflow SKILL.md for runner validation.",
+                    backup_path=backup_base if contract_target.exists() else None,
+                )
+            )
 
         # 7. Hook files — copy hook scripts, meta handlers, and .plugin-root sidecar
         source_root = self._get_source_root()
@@ -579,15 +632,17 @@ class ClaudeCodeInstaller(InstallerBase):
         if version_file.is_file():
             repo_version = version_file.read_text(encoding="utf-8").strip()
             version_target = ds_home / "state" / "installed-version"
-            ops.append(FileOp(
-                target=version_target,
-                op="create",
-                backup_required=False,
-                source_hash=compute_hash(repo_version + "\n"),
-                source_content=repo_version + "\n",
-                reason="Write installed-version marker after successful install",
-                safety_notes="Tracks which source version is currently installed in this home.",
-            ))
+            ops.append(
+                FileOp(
+                    target=version_target,
+                    op="create",
+                    backup_required=False,
+                    source_hash=compute_hash(repo_version + "\n"),
+                    source_content=repo_version + "\n",
+                    reason="Write installed-version marker after successful install",
+                    safety_notes="Tracks which source version is currently installed in this home.",
+                )
+            )
 
         return FileOpPlan(ops=ops, tool="claude_code", scope=self.scope)
 
@@ -644,7 +699,9 @@ class ClaudeCodeInstaller(InstallerBase):
                 continue
 
             target_str = str(op.target)
-            is_unchanged = bool(manifest_hash_map.get(target_str) == op.source_hash and op.source_hash)
+            is_unchanged = bool(
+                manifest_hash_map.get(target_str) == op.source_hash and op.source_hash
+            )
 
             # Categorize op
             parts = list(Path(op.target).parts)
@@ -678,12 +735,14 @@ class ClaudeCodeInstaller(InstallerBase):
                 hooks_installed.append("settings.json")
 
             if is_unchanged:
-                manifest_files.append({
-                    "path": target_str,
-                    "operation": "unchanged",
-                    "content_hash": op.source_hash,
-                    "backup_path": None,
-                })
+                manifest_files.append(
+                    {
+                        "path": target_str,
+                        "operation": "unchanged",
+                        "content_hash": op.source_hash,
+                        "backup_path": None,
+                    }
+                )
                 continue
 
             backup_path: Path | None = None
@@ -695,17 +754,21 @@ class ClaudeCodeInstaller(InstallerBase):
             elif op.source_path is not None:
                 atomic_copy(op.source_path, op.target)
 
-            files_written.append({
-                "path": target_str,
-                "op": op.op,
-                "backup_path": str(backup_path) if backup_path else None,
-            })
-            manifest_files.append({
-                "path": target_str,
-                "operation": op.op,
-                "content_hash": op.source_hash,
-                "backup_path": str(backup_path) if backup_path else None,
-            })
+            files_written.append(
+                {
+                    "path": target_str,
+                    "op": op.op,
+                    "backup_path": str(backup_path) if backup_path else None,
+                }
+            )
+            manifest_files.append(
+                {
+                    "path": target_str,
+                    "operation": op.op,
+                    "content_hash": op.source_hash,
+                    "backup_path": str(backup_path) if backup_path else None,
+                }
+            )
 
         manifest = build_manifest(
             tool="claude_code",
