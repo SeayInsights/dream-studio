@@ -23,20 +23,20 @@ def test_enforcement_block_contains_mandatory_heading() -> None:
     assert "MANDATORY OPERATING CONSTRAINTS" in _ENFORCEMENT_BLOCK
 
 
-def test_enforcement_block_contains_work_order_start_command() -> None:
-    assert "work-order start" in _ENFORCEMENT_BLOCK
+def test_enforcement_block_contains_start_work_order_function() -> None:
+    assert "start_work_order" in _ENFORCEMENT_BLOCK
 
 
-def test_enforcement_block_contains_work_order_close_command() -> None:
-    assert "work-order close" in _ENFORCEMENT_BLOCK
+def test_enforcement_block_contains_close_work_order_function() -> None:
+    assert "close_work_order" in _ENFORCEMENT_BLOCK
 
 
 def test_enforcement_block_contains_module_boundary_reference() -> None:
     assert "module_boundary" in _ENFORCEMENT_BLOCK
 
 
-def test_enforcement_block_contains_project_next_command() -> None:
-    assert "project next" in _ENFORCEMENT_BLOCK
+def test_enforcement_block_contains_get_next_work_order_function() -> None:
+    assert "get_next_work_order" in _ENFORCEMENT_BLOCK
 
 
 # ── _build_claude_md ──────────────────────────────────────────────────────────
@@ -100,14 +100,14 @@ def test_compiled_claude_md_mandatory_section_is_first() -> None:
     )
 
 
-def test_compiled_claude_md_contains_work_order_start() -> None:
+def test_compiled_claude_md_contains_start_work_order_function() -> None:
     pack = compile_pack()
-    assert "work-order start" in pack["files"]["CLAUDE.md"]
+    assert "start_work_order" in pack["files"]["CLAUDE.md"]
 
 
-def test_compiled_claude_md_contains_work_order_close() -> None:
+def test_compiled_claude_md_contains_close_work_order_function() -> None:
     pack = compile_pack()
-    assert "work-order close" in pack["files"]["CLAUDE.md"]
+    assert "close_work_order" in pack["files"]["CLAUDE.md"]
 
 
 def test_compiled_claude_md_contains_module_boundary_reference() -> None:
@@ -115,9 +115,9 @@ def test_compiled_claude_md_contains_module_boundary_reference() -> None:
     assert "module_boundary" in pack["files"]["CLAUDE.md"]
 
 
-def test_compiled_claude_md_contains_project_next() -> None:
+def test_compiled_claude_md_contains_get_next_work_order_function() -> None:
     pack = compile_pack()
-    assert "project next" in pack["files"]["CLAUDE.md"]
+    assert "get_next_work_order" in pack["files"]["CLAUDE.md"]
 
 
 # ── WS 8b-4: DB-based project tracking ───────────────────────────────────────
@@ -128,11 +128,11 @@ def test_compiled_claude_md_does_not_contain_marker_file_reference() -> None:
     assert ".dream-studio-project" not in pack["files"]["CLAUDE.md"]
 
 
-def test_compiled_claude_md_contains_ds_project_set_active() -> None:
+def test_compiled_claude_md_contains_set_active_project_function() -> None:
     pack = compile_pack()
-    assert "project set-active" in pack["files"]["CLAUDE.md"]
+    assert "set_active_project" in pack["files"]["CLAUDE.md"]
 
 
-def test_compiled_claude_md_contains_ds_project_list() -> None:
+def test_compiled_claude_md_contains_get_project_list_function() -> None:
     pack = compile_pack()
-    assert "project list" in pack["files"]["CLAUDE.md"]
+    assert "get_project_list" in pack["files"]["CLAUDE.md"]
