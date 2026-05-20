@@ -1776,308 +1776,54 @@ def _work_order_start(
     source_root: Path,
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
+    accept_no_brief: bool = False,
 ) -> int:
-    import uuid as _uuid
-    from datetime import datetime, timezone
+    """CLI wrapper around `core.work_orders.start.start_work_order`.
 
-    paths = resolve_installed_runtime_paths(
+    Preserves the legacy operator-terminal behavior: prints a stderr WARNING
+    when the work order is UI-typed but lacks a locked design brief; if the
+    operator is running interactively (TTY), prompts y/N; otherwise auto-
+    accepts (so test fixtures and non-interactive scripts keep working).
+
+    Skills should call `start_work_order(accept_no_brief=...)` directly and
+    never go through this CLI surface.
+    """
+
+    from core.work_orders.start import read_work_order_brief, start_work_order
+
+    brief_data = read_work_order_brief(
+        work_order_id=work_order_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
+    if not brief_data.get("ok"):
+        print(json.dumps(brief_data, indent=2))
+        return 1
 
-    with _connect(paths.sqlite_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type, milestone_id, project_id"
-            " FROM ds_work_orders WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            print(json.dumps({"ok": False, "error": f"Work order not found: {work_order_id}"}))
-            return 1
-
-        wo_id, title, wo_status, wo_type, milestone_id, project_id = wo_row
-
-        if not wo_type:
-            print(json.dumps({"ok": False, "error": "Work order has no type assigned"}))
-            return 1
-
-        type_row = conn.execute(
-            "SELECT type_id, label, pre_build_gate, build_executor, post_build_gate,"
-            " workflow_template, precondition_skill"
-            " FROM ds_work_order_types WHERE type_id = ?",
-            (wo_type,),
-        ).fetchone()
-        if type_row is None:
-            print(json.dumps({"ok": False, "error": f"Unrecognized work order type: {wo_type}"}))
-            return 1
-
-        type_id, label, pre_gate, build_exec, post_gate, workflow_template, precondition_skill = (
-            type_row
+    if brief_data.get("brief_warning") and not accept_no_brief:
+        print(
+            "WARNING: No locked design brief found. It is strongly recommended to run "
+            "website:discover before building UI. Continue anyway? [y/N]",
+            file=sys.stderr,
         )
+        if sys.stdin.isatty():
+            answer = sys.stdin.readline().strip().lower()
+            if answer not in ("y", "yes"):
+                return 0
+        # Non-interactive context (tests, scripts): auto-accept to preserve
+        # legacy behavior — the warning is still emitted to stderr.
+        accept_no_brief = True
 
-        milestone_title = None
-        if milestone_id:
-            ms_row = conn.execute(
-                "SELECT title FROM ds_milestones WHERE milestone_id = ?", (milestone_id,)
-            ).fetchone()
-            milestone_title = ms_row[0] if ms_row else None
-
-        proj_row = conn.execute(
-            "SELECT name FROM ds_projects WHERE project_id = ?", (project_id,)
-        ).fetchone()
-        project_name = proj_row[0] if proj_row else project_id
-
-        open_tasks = conn.execute(
-            "SELECT title FROM ds_tasks"
-            " WHERE work_order_id = ? AND status = 'pending' ORDER BY created_at ASC",
-            (work_order_id,),
-        ).fetchall()
-
-        _UI_WO_TYPES = frozenset(["ui_component", "ui_page"])
-        brief_locked = None
-        brief_warning = False
-        if type_id in _UI_WO_TYPES and project_id:
-            try:
-                b_row = conn.execute(
-                    "SELECT brief_id, purpose, audience, tone, design_system,"
-                    " font_pairing, brand_tokens, status"
-                    " FROM ds_design_briefs"
-                    " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
-                    (project_id,),
-                ).fetchone()
-                if b_row and b_row[7] == "locked":
-                    brief_locked = {
-                        "brief_id": b_row[0],
-                        "purpose": b_row[1],
-                        "audience": b_row[2],
-                        "tone": b_row[3],
-                        "design_system": b_row[4],
-                        "font_pairing": b_row[5],
-                        "brand_tokens": b_row[6],
-                    }
-                else:
-                    brief_warning = True
-            except sqlite3.OperationalError:
-                brief_warning = True
-
-        now = datetime.now(timezone.utc).isoformat()
-
-        marker_project_id = None
-        try:
-            from emitters.claude_code.project import read_project_id
-
-            marker_project_id = read_project_id(source_root)
-        except Exception:
-            pass
-
-        if brief_warning:
-            print(
-                "WARNING: No locked design brief found. It is strongly recommended to run "
-                "website:discover before building UI. Continue anyway? [y/N]",
-                file=sys.stderr,
-            )
-            if sys.stdin.isatty():
-                answer = sys.stdin.readline().strip().lower()
-                if answer not in ("y", "yes"):
-                    return 0
-
-        p_root = planning_root or Path.cwd() / ".planning"
-        context_dir = p_root / "work-orders" / work_order_id
-        context_dir.mkdir(parents=True, exist_ok=True)
-        context_path = context_dir / "context.md"
-
-        lines = [
-            f"# Work Order: {title}",
-            "",
-            f"**ID:** `{work_order_id}`",
-            f"**Type:** {label} (`{type_id}`)",
-            f"**Status:** {wo_status}",
-            f"**Project:** {project_name} (`{project_id}`)",
-        ]
-        if milestone_title:
-            lines.append(f"**Milestone:** {milestone_title}")
-        if marker_project_id:
-            lines.append(f"**Active project (marker):** `{marker_project_id}`")
-        lines += [
-            "",
-            "## Gates",
-            "",
-            f"- **Pre-build gate:** {pre_gate or '—'}",
-            f"- **Build executor:** {build_exec or '—'}",
-            f"- **Post-build gate:** {post_gate or '—'}",
-        ]
-        if workflow_template:
-            lines += [
-                f"- **Workflow:** {workflow_template} — invoke `ds-core:think` to begin",
-            ]
-        lines += [
-            "",
-            "## Open Tasks",
-            "",
-        ]
-        if open_tasks:
-            for (task_title,) in open_tasks:
-                lines.append(f"- [ ] {task_title}")
-        else:
-            lines.append("_No pending tasks._")
-
-        if brief_locked:
-            lines += ["", "## Design Brief", ""]
-            for _lbl, _key in [
-                ("Purpose", "purpose"),
-                ("Audience", "audience"),
-                ("Tone", "tone"),
-                ("Font pairing", "font_pairing"),
-                ("Brand tokens", "brand_tokens"),
-            ]:
-                _val = brief_locked.get(_key)
-                if _val:
-                    lines.append(f"- **{_lbl}:** {_val}")
-            if brief_locked.get("design_system"):
-                _ds = brief_locked["design_system"]
-                lines += [
-                    "",
-                    "## Design System",
-                    "",
-                    f"System: {_ds}",
-                    f"Reference: canonical/skills/domains/design-systems/{_ds}/",
-                    "",
-                    "Apply the principles from this design system to all UI output in this"
-                    " work order. Do not deviate from the system's token definitions.",
-                ]
-        elif brief_warning:
-            lines += [
-                "",
-                "> **WARNING:** No locked design brief found."
-                " Run `website:discover` before building UI for consistent results.",
-            ]
-
-        lines += [
-            "",
-            "## DREAM STUDIO ENFORCEMENT",
-            "",
-            "You are operating in Dream Studio managed mode.",
-            "This is a hard boundary, not a suggestion.",
-            "",
-            f"AUTHORIZED scope: {type_id}",
-            f"ACTIVE work order: {work_order_id}",
-            "AUTHORIZED tasks: listed above under ## Tasks",
-            "",
-            "RULES:",
-            "1. Do not create or modify files outside the authorized scope above.",
-            "2. Complete tasks in the order listed.",
-            "3. Mark each task done:",
-            f"   py -m interfaces.cli.ds work-order task-done {work_order_id} <task_id>",
-            "4. When all tasks are complete, run:",
-            f"   py -m interfaces.cli.ds work-order close {work_order_id}",
-            "5. Do not start work on any other work order until this one is closed.",
-            "6. If you encounter something outside your scope that needs to be addressed,",
-            "   emit a note and continue. Do not fix it inline.",
-            "",
-            "Violations of these rules break traceability.",
-            "Dream Studio exists to make your work verifiable.",
-        ]
-
-        # Inject relevant gotchas from past sessions.
-        try:
-            gotcha_rows = conn.execute(
-                "SELECT severity, title, fix FROM reg_gotchas"
-                " WHERE skill_id = ? OR skill_id LIKE ?"
-                " ORDER BY times_hit DESC, discovered DESC LIMIT 3",
-                (build_exec or "", f"{type_id}%" if type_id else ""),
-            ).fetchall()
-            if gotcha_rows:
-                lines += ["", "## Known Issues (from past sessions)", ""]
-                for g_sev, g_title, g_fix in gotcha_rows:
-                    lines.append(f"- **[{g_sev}]** {g_title}")
-                    if g_fix:
-                        lines.append(f"  Fix: {g_fix}")
-        except Exception:
-            pass
-
-        lines += ["", f"_Generated: {now}_", ""]
-        context_path.write_text("\n".join(lines), encoding="utf-8")
-
-        try:
-            import spool.writer as _spool_writer
-
-            _spool_writer.write_event(
-                {
-                    "event_id": str(_uuid.uuid4()),
-                    "event_type": "work_order.started",
-                    "timestamp": now,
-                    "trace": {"work_order_id": work_order_id, "project_id": project_id},
-                    "severity": "info",
-                    "payload": {
-                        "work_order_id": work_order_id,
-                        "title": title,
-                        "type": type_id,
-                        "project_id": project_id,
-                    },
-                    "source_type": "confirmed",
-                }
-            )
-        except Exception:
-            pass
-
-        # Guard: refuse to start a WO if any earlier milestone has incomplete work.
-        if milestone_id:
-            ms_order_row = conn.execute(
-                "SELECT order_index FROM ds_milestones WHERE milestone_id = ?",
-                (milestone_id,),
-            ).fetchone()
-            if ms_order_row is not None:
-                blocking_count = conn.execute(
-                    "SELECT COUNT(*) FROM ds_work_orders wo"
-                    " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-                    " WHERE wo.project_id = ? AND m.order_index < ?"
-                    " AND wo.status NOT IN ('complete', 'cancelled')",
-                    (project_id, ms_order_row[0]),
-                ).fetchone()[0]
-                if blocking_count > 0:
-                    print(
-                        json.dumps(
-                            {
-                                "ok": False,
-                                "error": (
-                                    f"Cannot start this work order — {blocking_count} work order(s) in "
-                                    f"earlier milestones are incomplete. "
-                                    f"Run 'ds project next {project_id}' to see what should be worked on first."
-                                ),
-                            }
-                        )
-                    )
-                    return 1
-
-        conn.execute(
-            "UPDATE ds_work_orders SET status = 'in_progress', updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, work_order_id),
-        )
-        conn.commit()
-
-    start_result: dict[str, Any] = {
-        "ok": True,
-        "work_order_id": work_order_id,
-        "title": title,
-        "type": type_id,
-        "project_id": project_id,
-        "context_path": str(context_path),
-    }
-    if workflow_template:
-        start_result["workflow"] = {
-            "template": workflow_template,
-            "first_node": "think",
-            "invoke": f"workflow: {workflow_template}",
-        }
-        start_result["next_step"] = (
-            f"This work order uses the `{workflow_template}` workflow. "
-            f"First node: `think`. Invoke `ds-core:think` to begin."
-        )
-    print(json.dumps(start_result, indent=2))
-    return 0
+    result = start_work_order(
+        work_order_id=work_order_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=planning_root,
+        accept_no_brief=accept_no_brief,
+        brief_data=brief_data,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
 
 
 def _work_order_list(
