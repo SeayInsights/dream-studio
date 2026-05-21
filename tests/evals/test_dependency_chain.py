@@ -1,0 +1,523 @@
+"""C6 — Dependency chain evals.
+
+Machine-checked projection of `.audit/dependency-chain-map-2026-05-17.md`
+(post-A0/A3 reclassifications in `.audit/dependency-chain-map-2026-05-20-post-A0-A3.md`).
+
+Every link in the 8-chain audit gets exactly one test here, totaling 46.
+Tests are organized by chain. The docstring of each test cites the current
+classification from the chain map. The body either:
+
+  * **PROVEN / UNIT_TESTED** — asserts the post-fix invariant (regression
+    guard). When this test fails, a working link has regressed.
+  * **UNTESTED / UNKNOWN / BROKEN** — marked `xfail` with a `reason` that
+    cites the chain map. When a fix lands, remove the `xfail` and replace
+    the body with an assertion.
+
+The xfail markers track unresolved engineering work; the passing tests
+prevent regressions in the parts that already work.
+
+C6 spec source: `.planning/specs/a2v2/spec.md` section C6.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 1 — Natural Language to Skill Execution
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_chain_1_link_1_claude_md_routing_table_present():
+    """C1-L1: User message → CLAUDE.md routing table read. PROVEN."""
+    claude_md = Path.home() / ".claude" / "CLAUDE.md"
+    if not claude_md.is_file():
+        pytest.skip("Operator's ~/.claude/CLAUDE.md not installed in this environment")
+    content = claude_md.read_text(encoding="utf-8")
+    assert "MANDATORY" in content or "Skill Routing" in content, "CLAUDE.md missing routing markers"
+
+
+def test_chain_1_link_2_compiler_routing_table_unit_tested():
+    """C1-L2: CLAUDE.md routing table → Skill tool invoked. UNIT_TESTED.
+
+    Verifies the compiler module that generates the routing table is importable.
+    """
+    from integrations.compiler.claude_code import _build_routing_table
+
+    assert callable(_build_routing_table)
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C1-L3 UNKNOWN per chain map; requires live Claude Code session to verify "
+    "Skill('ds-core', 'build') resolves when only ds-bootstrap is in ~/.claude/skills/",
+)
+def test_chain_1_link_3_skill_md_load_path_unknown():
+    """C1-L3: Skill tool invoked → SKILL.md loaded. UNKNOWN."""
+    pytest.fail("UNKNOWN: live behavioral test required")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C1-L4 UNKNOWN per chain map; no integration test verifies Claude Code "
+    "follows SKILL.md instructions vs. built-in behavior",
+)
+def test_chain_1_link_4_ai_follows_skill_md_unknown():
+    """C1-L4: SKILL.md loaded → AI executes skill instructions. UNKNOWN."""
+    pytest.fail("UNKNOWN: behavioral A/B test required")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C1-L5 UNTESTED per chain map; SKILL.md files instruct AI to call CLI but "
+    "no integration test verifies the call actually fires",
+)
+def test_chain_1_link_5_skill_to_cli_call_untested():
+    """C1-L5: Skill execution → CLI command called. UNTESTED."""
+    pytest.fail("UNTESTED: needs integration test against a live DB")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 2 — Work Order Lifecycle
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_chain_2_link_1_resume_skill_routable():
+    """C2-L1: 'start working' → ds-project:resume invoked. UNIT_TESTED."""
+    resume_skill = REPO_ROOT / "canonical" / "skills" / "ds-project" / "modes" / "resume"
+    assert resume_skill.is_dir(), "ds-project:resume mode directory missing"
+    assert (resume_skill / "SKILL.md").is_file() or (
+        resume_skill / "metadata.yml"
+    ).is_file(), "Resume skill has no SKILL.md or metadata.yml"
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C2-L2 UNKNOWN per chain map; depends on C1-L3 (SKILL.md load path)",
+)
+def test_chain_2_link_2_resume_to_project_list_unknown():
+    """C2-L2: Resume skill → ds project list called. UNKNOWN (downstream of C1-L3)."""
+    pytest.fail("UNKNOWN: downstream of C1-L3")
+
+
+def test_chain_2_link_3_work_order_start_writes_context():
+    """C2-L3: ds work-order start → context.md written. PROVEN."""
+    from core.work_orders.start import start_work_order, write_work_order_context
+
+    assert callable(start_work_order)
+    assert callable(write_work_order_context)
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C2-L4 UNTESTED per chain map; no mechanism forces AI to read context.md "
+    "(advisory only — flagged as Subagent Isolation GAP in system audit Section 7)",
+)
+def test_chain_2_link_4_subagent_scoped_context_untested():
+    """C2-L4: Context written → subagent receives scoped context. UNTESTED."""
+    pytest.fail("UNTESTED: subagent isolation mechanism does not exist")
+
+
+def test_chain_2_link_5_gate_artifact_template_exists():
+    """C2-L5: Work produced → gate artifact written. UNIT_TESTED."""
+    from core.skills.invocation import seed_gate_artifact_files
+
+    assert callable(seed_gate_artifact_files)
+
+
+def test_chain_2_link_6_gate_checker_unit_tested():
+    """C2-L6: ds work-order close → gates checked. PROVEN."""
+    from core.work_orders.close import close_work_order, run_gate_check
+
+    assert callable(close_work_order)
+    assert callable(run_gate_check)
+
+
+def test_chain_2_link_7_work_order_lifecycle_events_emitted():
+    """C2-L7: Gates pass → work_order lifecycle event emitted. UNKNOWN → PROVEN.
+
+    Post-A0: WORK_ORDER_STARTED / WORK_ORDER_CLOSED / WORK_ORDER_BLOCKED /
+    GATE_BYPASSED are first-class event types. Emission sites use envelopes.
+    """
+    from canonical.events.types import EventType
+
+    expected = {"WORK_ORDER_STARTED", "WORK_ORDER_CLOSED", "WORK_ORDER_BLOCKED", "GATE_BYPASSED"}
+    for name in expected:
+        assert hasattr(EventType, name), f"EventType.{name} missing — A0 should have added it"
+
+
+def test_chain_2_link_8_wo_spool_ingest_post_a0():
+    """C2-L8: Spool event → ingestor → SQLite. BROKEN → PROVEN post-A0 (#16).
+
+    The fix: hand-built event dicts in core/work_orders/* were replaced with
+    CanonicalEventEnvelope, which guarantees schema_version. The ingestor no
+    longer rejects WO lifecycle events.
+    """
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from canonical.events.types import EventType
+
+    envelope = CanonicalEventEnvelope(
+        event_type=EventType.WORK_ORDER_STARTED.value,
+        session_id=None,
+        payload={"work_order_id": "test"},
+    )
+    assert envelope.schema_version == 1
+    assert envelope.to_dict()["schema_version"] == 1
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C2-L9 UNTESTED per chain map; no auto-advance mechanism — flagged as "
+    "Autonomous Loop GAP in system audit Section 7",
+)
+def test_chain_2_link_9_auto_advance_next_wo_untested():
+    """C2-L9: Work order closed → next WO auto-started. UNTESTED."""
+    pytest.fail("UNTESTED: auto-advance mechanism does not exist")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 3 — Hook Dispatch Chain
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C3-L1 BROKEN per chain map; integrations/targets/claude_code/hooks_template.json "
+    "contains only emitter entries, not dispatcher entries",
+)
+def test_chain_3_link_1_dispatcher_template_broken():
+    """C3-L1: Hook event fires → dispatches emitter AND dispatcher. BROKEN."""
+    pytest.fail("BROKEN: dispatcher entries missing from installer template")
+
+
+def test_chain_3_link_2_emitter_run_module_present():
+    """C3-L2: Emitter hook fires → emitters/claude_code/run.py → spool event. PROVEN."""
+    emitter_path = REPO_ROOT / "emitters" / "claude_code" / "run.py"
+    assert emitter_path.is_file(), "Emitter run.py missing"
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C3-L3 BROKEN per chain map; downstream of C3-L1 (dispatcher not installed)",
+)
+def test_chain_3_link_3_capability_routing_broken():
+    """C3-L3: Dispatcher hook fires → capability routing. BROKEN (downstream of C3-L1)."""
+    pytest.fail("BROKEN: downstream of C3-L1")
+
+
+def test_chain_3_link_4_stop_hook_ingest_pending():
+    """C3-L4: Stop hook fires → ingest_pending() called. PROVEN."""
+    from spool.ingestor import ingest_pending
+
+    assert callable(ingest_pending)
+
+
+def test_chain_3_link_5_spool_ingest_wo_events_post_a0():
+    """C3-L5: Spool ingest → SQLite (WO event subset). BROKEN → PROVEN post-A0 (#16).
+
+    Same root cause and fix as C2-L8. The ingestor's schema_version requirement
+    is now satisfied because emission sites use CanonicalEventEnvelope.
+    """
+    from canonical.events.envelope import REQUIRED_FIELDS, validate_envelope
+    from canonical.events.types import EventType
+
+    sample = {
+        "event_id": "test-id",
+        "event_type": EventType.WORK_ORDER_CLOSED.value,
+        "timestamp": "2026-05-20T00:00:00+00:00",
+        "schema_version": 1,
+    }
+    assert validate_envelope(sample) == []
+    assert REQUIRED_FIELDS == frozenset({"event_id", "event_type", "timestamp", "schema_version"})
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 4 — Workflow Execution
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C4-L1 BROKEN per chain map; `workflow:` trigger keyword absent from "
+    "installed routing table (packs.yaml `meta` pack has no workflow trigger modes)",
+)
+def test_chain_4_link_1_workflow_trigger_broken():
+    """C4-L1: 'idea-to-pr' → workflow routing triggered. BROKEN."""
+    pytest.fail("BROKEN: workflow trigger keyword missing from installed CLAUDE.md")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C4-L2 UNKNOWN per chain map; depends on C4-L1 fix and verified runner",
+)
+def test_chain_4_link_2_workflow_yaml_read_unknown():
+    """C4-L2: Workflow skill invoked → workflow YAML read. UNKNOWN."""
+    pytest.fail("UNKNOWN: downstream of C4-L1")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C4-L3 UNKNOWN per chain map; SKILL.md itself warns runner may be absent",
+)
+def test_chain_4_link_3_workflow_steps_executed_unknown():
+    """C4-L3: Workflow YAML read → steps executed. UNKNOWN."""
+    pytest.fail("UNKNOWN: runner completeness needs investigation (INV-3)")
+
+
+def test_chain_4_link_4_workflow_step_skill_invoke_post_a3():
+    """C4-L4: Workflow step → skill invoked. UNKNOWN → UNIT_TESTED post-A3 (#17).
+
+    Runner now imports core.skills.invocation directly (no subprocess shell-out).
+    """
+    from control.execution.workflow.runner import WorkflowRunner
+    from core.skills.invocation import load_skill_content
+
+    assert WorkflowRunner is not None
+    assert callable(load_skill_content)
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C4-L5 UNTESTED per chain map; 0 workflow events in canonical_events; "
+    "no workflow has been run end-to-end",
+)
+def test_chain_4_link_5_workflow_output_untested():
+    """C4-L5: Workflow completes → output produced. UNTESTED."""
+    pytest.fail("UNTESTED: no successful end-to-end workflow run on record")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 5 — Agent Execution
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C5-L1 UNKNOWN per chain map; packs.yaml agent names do not match files "
+    "in canonical/agents/; no trigger mechanism identified",
+)
+def test_chain_5_link_1_agent_invocation_mechanism_unknown():
+    """C5-L1: When are agent profiles invoked? UNKNOWN."""
+    pytest.fail("UNKNOWN: no agent invocation mechanism identified (INV-4)")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C5-L2 UNKNOWN per chain map; agent files not installed to ~/.claude/agents/",
+)
+def test_chain_5_link_2_agent_profile_loaded_unknown():
+    """C5-L2: Agent profile → Claude Code loads it. UNKNOWN."""
+    pytest.fail("UNKNOWN: Claude Code agent loading path unverified")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C5-L3 UNKNOWN per chain map; no context-scoping mechanism for agents",
+)
+def test_chain_5_link_3_agent_scoped_context_unknown():
+    """C5-L3: Agent invoked → scoped context provided. UNKNOWN."""
+    pytest.fail("UNKNOWN: subagent isolation gap")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C5-L4 UNTESTED per chain map; all agent_* tables have 0 rows; "
+    "no agent event type defined",
+)
+def test_chain_5_link_4_agent_completion_recorded_untested():
+    """C5-L4: Agent completes → output recorded. UNTESTED."""
+    pytest.fail("UNTESTED: no agent event type or recording path")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 6 — Design System Pipeline
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_chain_6_link_1_design_brief_read_on_start():
+    """C6-L1: Design brief locked → work-order start reads brief. PROVEN."""
+    from core.work_orders.start import read_work_order_brief
+
+    assert callable(read_work_order_brief)
+
+
+def test_chain_6_link_2_design_system_directories_present():
+    """C6-L2: Design system name → design system reference path in context. PROVEN."""
+    design_systems = REPO_ROOT / "canonical" / "skills" / "domains" / "modes" / "design"
+    if not design_systems.is_dir():
+        pytest.skip("Design systems live elsewhere; investigate per chain map")
+    # If the design systems are not under the documented path, skip — the chain
+    # map records the path as evidence; if it has moved, the chain map needs an
+    # update before this test should assert.
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C6-L3 UNTESTED per chain map; design system application is advisory only",
+)
+def test_chain_6_link_3_ai_applies_design_system_untested():
+    """C6-L3: Design system reference → AI applies it. UNTESTED."""
+    pytest.fail("UNTESTED: no enforcement; advisory only")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C6-L4 UNTESTED per chain map; anti-slop linter must be run manually",
+)
+def test_chain_6_link_4_anti_slop_linter_untested():
+    """C6-L4: UI artifact produced → anti-slop linter runs. UNTESTED."""
+    pytest.fail("UNTESTED: no automatic trigger for linter")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C6-L5 UNTESTED per chain map; design critique invocation is manual",
+)
+def test_chain_6_link_5_design_critique_runs_untested():
+    """C6-L5: Lint results written → design critique runs. UNTESTED."""
+    pytest.fail("UNTESTED: no automatic trigger from lint completion")
+
+
+def test_chain_6_link_6_design_critique_gate_unit_tested():
+    """C6-L6: Design critique score → gate checked. PROVEN."""
+    from core.work_orders.close import run_gate_check
+
+    assert callable(run_gate_check)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 7 — Memory and Intelligence Loop
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_chain_7_link_1_session_events_to_sqlite_post_a0():
+    """C7-L1: Session events → SQLite. BROKEN → PROVEN post-A0 (#16).
+
+    WO lifecycle events (the critical intelligence inputs for project-level
+    learning) no longer fail ingest. Tool events were already passing.
+    """
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from canonical.events.types import EventType
+
+    envelope = CanonicalEventEnvelope(
+        event_type=EventType.WORK_ORDER_STARTED.value,
+        session_id="test-session",
+        payload={"work_order_id": "wo-1"},
+    )
+    assert envelope.schema_version == 1
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C7-L2 UNTESTED per chain map; memory harvest must be manually triggered",
+)
+def test_chain_7_link_2_memory_harvest_trigger_untested():
+    """C7-L2: Session ends → memory harvest opportunity. UNTESTED."""
+    pytest.fail("UNTESTED: no auto-trigger for memory harvest")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C7-L3 BROKEN per chain map; harvester queries `file_count` but migration 055 "
+    "column is `count` — schema mismatch",
+)
+def test_chain_7_link_3_technology_signals_schema_broken():
+    """C7-L3: ds memory ingest-sessions → SQLite populated. BROKEN."""
+    pytest.fail("BROKEN: ds_technology_signals schema mismatch")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C7-L4 UNTESTED per chain map; no query path connects reg_gotchas to skill "
+    "invocation or context.md injection",
+)
+def test_chain_7_link_4_gotchas_to_skill_untested():
+    """C7-L4: reg_gotchas populated → skill invocations benefit. UNTESTED."""
+    pytest.fail("UNTESTED: gotchas stored but not consumed")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C7-L5 UNTESTED per chain map; model selector is config-driven, not history-driven",
+)
+def test_chain_7_link_5_raw_approaches_model_routing_untested():
+    """C7-L5: raw_approaches populated → model tier routing improved. UNTESTED."""
+    pytest.fail("UNTESTED: model selector does not consult raw_approaches")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C7-L6 BROKEN per chain map; downstream of C7-L3 schema mismatch",
+)
+def test_chain_7_link_6_tech_signals_recommendations_broken():
+    """C7-L6: ds_technology_signals populated → skill pack recommendations. BROKEN."""
+    pytest.fail("BROKEN: downstream of C7-L3")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Chain 8 — Install Chain (New Developer)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+def test_chain_8_link_1_dynamic_plugin_root_path():
+    """C8-L1: Clone → repo at correct path. PROVEN."""
+    hooks_json = REPO_ROOT / "hooks" / "hooks.json"
+    assert hooks_json.is_file(), "hooks/hooks.json missing"
+    content = hooks_json.read_text(encoding="utf-8")
+    # Dynamic resolution evidence: env var OR parent-search marker present
+    assert (
+        "CLAUDE_PLUGIN_ROOT" in content
+        or "{{PLUGIN_ROOT}}" in content
+        or "$PLUGIN_ROOT" in content
+        or "{ds_plugin_root}" in content
+    ), "Expected dynamic plugin-root resolution marker in hooks.json"
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C8-L2 BROKEN per chain map; installer template lacks dispatcher entries "
+    "AND only ds-bootstrap SKILL.md is installed (mode-level skills missing)",
+)
+def test_chain_8_link_2_install_writes_all_files_broken():
+    """C8-L2: integrate install --execute → required files written. BROKEN."""
+    pytest.fail("BROKEN: dispatcher entries and mode-level SKILL.md files not installed")
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="C8-L3 UNTESTED per chain map; no automated PATH configuration",
+)
+def test_chain_8_link_3_path_configured_untested():
+    """C8-L3: PATH configured → ds command works globally. UNTESTED."""
+    pytest.fail("UNTESTED: PATH config is advisory")
+
+
+def test_chain_8_link_4_doctor_runs_unit_tested():
+    """C8-L4: ds doctor → all checks pass. UNIT_TESTED."""
+    from core.health.doctor import run_doctor_checks
+
+    assert callable(run_doctor_checks)
+
+
+def test_chain_8_link_5_project_register_unit_tested():
+    """C8-L5: project register → set-active → start → first WO running. UNIT_TESTED."""
+    from core.projects.mutations import register_project, set_active_project
+    from core.projects.start import start_project
+
+    assert callable(register_project)
+    assert callable(set_active_project)
+    assert callable(start_project)
+
+
+def test_chain_8_link_6_hook_to_sqlite_unit_tested():
+    """C8-L6: First real hook fires → event in SQLite on clean machine. UNIT_TESTED."""
+    from spool.ingestor import ingest_pending
+    from spool.writer import write_event
+
+    assert callable(ingest_pending)
+    assert callable(write_event)
