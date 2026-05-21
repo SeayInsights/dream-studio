@@ -290,15 +290,13 @@ def test_context_md_enforcement_contains_work_order_id(db_home, tmp_path, monkey
     assert WORK_ORDER_ID in section
 
 
-def test_context_md_enforcement_contains_task_done_command(db_home, tmp_path, monkeypatch):
+def test_context_md_enforcement_contains_task_done_skill(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
     text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
-    assert "work-order task-done" in text
-    assert WORK_ORDER_ID in text[text.index("work-order task-done") :]
+    assert "ds-workorder:execute" in text
 
 
-def test_context_md_enforcement_contains_work_order_close_command(db_home, tmp_path, monkeypatch):
+def test_context_md_enforcement_contains_work_order_close_skill(db_home, tmp_path, monkeypatch):
     _start(db_home, tmp_path, monkeypatch)
     text = (tmp_path / ".planning" / "work-orders" / WORK_ORDER_ID / "context.md").read_text()
-    assert "work-order close" in text
-    assert WORK_ORDER_ID in text[text.index("work-order close") :]
+    assert "ds-workorder:close" in text
