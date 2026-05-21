@@ -29,6 +29,7 @@ def normalize_user_prompt_submit(
             confidence=confidence,
             payload=redacted,
             project_id=get_active_project_id(_get_db_path()),
+            trace={"domain": "telemetry"},
         )
     ]
 
@@ -56,6 +57,7 @@ def normalize_stop(
             confidence=confidence,
             payload=token_payload,
             project_id=get_active_project_id(_get_db_path()),
+            trace={"domain": "telemetry"},
         )
     ]
 
@@ -82,6 +84,7 @@ def normalize_post_tool_use(
                 "output_summary": output_summary,
             },
             project_id=get_active_project_id(_get_db_path()),
+            trace={"domain": "telemetry"},
         )
     ]
 
@@ -104,6 +107,7 @@ def normalize_post_compact(
             confidence="inferred",
             payload=context_payload,
             project_id=get_active_project_id(_get_db_path()),
+            trace={"domain": "telemetry"},
         )
     ]
 

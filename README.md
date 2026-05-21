@@ -16,6 +16,9 @@ Dream Studio runs three layers in concert:
 
 When you invoke a Dream Studio skill, you are not calling a function. You are engaging a system that knows your project, your history, your quality standards, and your current work order — and routes execution accordingly.
 
+> **Architecture note (TA0b):** canonical_events is the single authoritative event store.
+> execution_events is a projection rebuilt from canonical events. See docs/architecture/event-store.md.
+
 ---
 
 ## Architecture Overview

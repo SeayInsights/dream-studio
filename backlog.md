@@ -1,5 +1,32 @@
 # Dream Studio — Backlog
 
+## TA-series: Token Attribution Remediation (In Progress)
+
+**Status:** TA0b complete — 8 workstreams remaining
+
+### 9-Workstream Plan
+
+| ID | Title | Status |
+|----|-------|--------|
+| TA0a | Audit findings baseline | Complete (pre-existing) |
+| TA0b | Dual event store reconciliation | **Complete — this PR** |
+| TA1 | Task lifecycle events | Pending |
+| TA2 | Skills carry task_id | Pending |
+| TA3 | Universal token capture (PostToolUse hook) | Pending |
+| TA4 | Remove hardcoded project_id | Pending |
+| TA5 | Dashboard truth-up (remove synthesizer) | Pending |
+| TA6 | End-to-end verification | Pending |
+
+### TA0b Summary
+- `canonical_events` is now the single authoritative event store
+- `execution_events` is now a projection rebuilt by the ingestor from canonical events
+- Domain field (`sdlc` | `telemetry` | `system`) added to all canonical event traces
+- Migration 058: domain field requirement documented
+- Migration 059: `_built_from_event_id` column added to execution_events for canonical linkage
+- Migration 060: backfill — domain added to existing events, execution_events populated from canonical
+
+---
+
 ## Phantom SIGINT during pytest on Windows (RESOLVED)
 
 Windows 11 + Python 3.12 + the ingest pipeline's rapid file moves and SQLite writes triggered phantom SIGINT delivery during pytest sessions. Investigation eliminated:

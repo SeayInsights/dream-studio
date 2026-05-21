@@ -196,6 +196,7 @@ def record_skill_invocation(
                 "invocation_mode": invocation_mode,
                 "project_id": resolved_project_id,
                 "trace": {
+                    "domain": "sdlc",
                     "skill_specifier": specifier,
                     "project_id": resolved_project_id,
                 },
