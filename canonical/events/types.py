@@ -74,6 +74,9 @@ class EventType(str, Enum):
     # Skill execution telemetry
     SKILL_BUDGET_EXCEEDED = "skill.budget_exceeded"
 
+    # Pre-push gate failure (B.4)
+    GATE_PRE_PUSH_FAILED = "gate.pre_push.failed"
+
 
 @dataclass(frozen=True)
 class EventTypeMeta:
@@ -456,6 +459,13 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.WORKFLOW_NODE_COMPLETED,
         "workflow",
         "A workflow DAG node completed execution",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.GATE_PRE_PUSH_FAILED,
+        "gate",
+        "A pre-push gate failed during `ds workflow run pre-push --non-interactive`",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
