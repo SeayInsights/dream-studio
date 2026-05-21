@@ -11,7 +11,12 @@ from core.event_store import studio_db
 
 
 def _default_db_path() -> Path:
-    return Path.home() / ".dream-studio" / "state" / "studio.db"
+    # Delegate to the canonical resolver in core.config.database so the
+    # DREAM_STUDIO_DB_PATH env-var override is honored uniformly. Local
+    # function preserved for backward-compat with existing callers below.
+    from core.config.database import _default_db_path as _canonical_default_db_path
+
+    return _canonical_default_db_path()
 
 
 class AlertEvaluator:

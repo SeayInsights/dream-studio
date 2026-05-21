@@ -40,7 +40,10 @@ def _db_path() -> Path:
 
         return paths.state_dir() / "studio.db"
     except Exception:
-        return Path.home() / ".dream-studio" / "state" / "studio.db"
+        # Fall back to the canonical resolver so DREAM_STUDIO_DB_PATH overrides apply.
+        from core.config.database import _default_db_path
+
+        return _default_db_path()
 
 
 def _connect(db_path: Path) -> sqlite3.Connection | None:
