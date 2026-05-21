@@ -189,7 +189,27 @@ def _write_to_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
                 envelope.get("invocation_mode"),
             ),
         )
+        _trace = envelope.get("trace", {})
+        if isinstance(_trace, str):
+            try:
+                _trace = json.loads(_trace)
+            except (json.JSONDecodeError, TypeError):
+                _trace = {}
+        if not _trace.get("domain"):
+            print(
+                f"[ds-ingestor] WARNING: event {envelope['event_id']!r} type={envelope['event_type']!r} missing trace.domain",
+                file=sys.stderr,
+            )
         conn.commit()
+        # Best-effort projection: execution events → execution_events table
+        try:
+            from projections.core.execution_events_projection import apply as _project_execution
+
+            projected = _project_execution(envelope, conn)
+            if projected:
+                conn.commit()
+        except Exception:
+            pass
     finally:
         conn.close()
 
