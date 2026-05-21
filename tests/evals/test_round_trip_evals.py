@@ -226,9 +226,7 @@ def test_eval_no_cli(patched_paths, tmp_path: Path) -> None:
     content = Path(result["context_path"]).read_text(encoding="utf-8")
 
     cli_pattern = re.compile(r"py -m interfaces\.cli\.ds")
-    assert not cli_pattern.search(content), (
-        "context.md must not contain CLI commands"
-    )
-    assert not cli_pattern.search(_ENFORCEMENT_BLOCK), (
-        "_ENFORCEMENT_BLOCK must not contain CLI commands"
-    )
+    assert not cli_pattern.search(content), "context.md must not contain CLI commands"
+    assert not cli_pattern.search(
+        _ENFORCEMENT_BLOCK
+    ), "_ENFORCEMENT_BLOCK must not contain CLI commands"
