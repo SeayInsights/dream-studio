@@ -6,7 +6,11 @@ This is intentionally deterministic and shell-driven, not model-driven — the
 model-based workflow engine in control/execution/workflow/ is unsuitable for
 a hook that must run in <60s with no LLM round-trip.
 
-B.4 attaches event emission to gate failures (CanonicalEventEnvelope).
+B.4: each gate failure emits a ``gate.pre_push.failed`` event using
+``CanonicalEventEnvelope`` (per the A0 pattern). The session harvester routes
+the event to ``reg_gotchas`` so the failing gate becomes a known pattern.
+Emission is best-effort — a write failure logs to stderr but never aborts the
+pre-push hook itself (the hook's exit code is governed by gate results alone).
 """
 
 from __future__ import annotations
@@ -128,17 +132,64 @@ def run_gate(
     )
 
 
+def emit_gate_failure_event(result: GateResult) -> None:
+    """Emit a ``gate.pre_push.failed`` event for a failed gate.
+
+    Constructed via ``CanonicalEventEnvelope`` (NOT a hand-built dict) so
+    ``schema_version`` is guaranteed — this is the A0 invariant; hand-built
+    dicts caused the original spool ingest failure that A0 fixed.
+
+    Best-effort: a spool-write failure is logged to stderr but never raised.
+    The pre-push hook's exit code is governed by gate results alone.
+    """
+    try:
+        from canonical.events.envelope import CanonicalEventEnvelope
+        from canonical.events.types import EventType
+        from emitters.shared.spool_writer import write_envelopes
+    except Exception as exc:  # pragma: no cover — defensive import-time guard
+        print(f"[pre-push] event emission unavailable: {exc}", file=sys.stderr)
+        return
+
+    envelope = CanonicalEventEnvelope(
+        event_type=EventType.GATE_PRE_PUSH_FAILED.value,
+        session_id=None,
+        payload={
+            "gate_id": result.gate_id,
+            "exit_code": result.exit_code,
+            "duration_seconds": round(result.duration_seconds, 2),
+            "fail_hint": result.fail_hint,
+            "stderr_tail": result.stderr_tail,
+            "stdout_tail": result.stdout_tail,
+        },
+        severity="warning",
+        trace={"gate_id": result.gate_id},
+    )
+    try:
+        write_envelopes([envelope])
+    except Exception as exc:
+        print(
+            f"[pre-push] spool write failed for gate.pre_push.failed "
+            f"(gate={result.gate_id}): {exc}",
+            file=sys.stderr,
+        )
+
+
 def run_pre_push_gates(
     *,
     manifest_path: Path | None = None,
     repo_root: Path | None = None,
     stop_on_first_failure: bool = True,
+    emit_events: bool = True,
 ) -> PrePushReport:
     """Execute the pre-push gates declared in the manifest.
 
     Default behavior matches ``on_failure: stop`` in the YAML — the first failed
     gate halts the run. Pass ``stop_on_first_failure=False`` to collect every
     gate's status (useful for diagnostic reports).
+
+    Each failed gate emits a ``gate.pre_push.failed`` event via
+    ``CanonicalEventEnvelope`` (B.4). Pass ``emit_events=False`` to suppress
+    emission in unit tests that should not write to the spool.
     """
     manifest = load_manifest(manifest_path)
     gates: list[dict[str, Any]] = list(manifest.get("gates") or [])
@@ -150,6 +201,8 @@ def run_pre_push_gates(
         report.gates.append(result)
         if not result.passed:
             report.overall_passed = False
+            if emit_events:
+                emit_gate_failure_event(result)
             if stop_on_first_failure:
                 break
     return report
