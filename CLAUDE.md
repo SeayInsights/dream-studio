@@ -152,3 +152,22 @@ If using dream-studio as a plugin in another project, add this to your global `~
 - When the user's intent matches a dream-studio skill trigger, invoke the skill via the Skill tool — never fall back to built-in Claude behavior. See the Skill Routing table in the dream-studio CLAUDE.md for the full mapping.
 - For GitHub workflow, follow the conventions in the dream-studio CLAUDE.md.
 ```
+
+## Running tests
+
+Pytest output on Windows + PowerShell can be UTF-16-encoded and report misleading exit codes. To run tests reliably:
+
+```powershell
+py -m pytest <args> > pytest-output.txt 2>&1
+Get-Content pytest-output.txt -Encoding UTF8
+```
+
+Ignore the exit code from the first command. The pytest summary line in the file (`=== N passed in X.XXs ===`) is authoritative.
+
+If output is truncated, run via cmd instead:
+
+```powershell
+cmd /c "py -m pytest <args>"
+```
+
+Windows SIGINT handling is already configured in `spool/ingestor.py` (module-level CTRL_C handler) and `tests/conftest.py` (pytest-level SIGINT handler). No env vars or workarounds needed.
