@@ -6,6 +6,7 @@ Covers:
   - Integration: spool → ingest → execution_events row
   - Direct-written rows have NULL _built_from_event_id
 """
+
 from __future__ import annotations
 
 import json
@@ -13,10 +14,10 @@ import sqlite3
 import uuid
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Test 1: domain validation warning in ingestor (unit)
 # ---------------------------------------------------------------------------
+
 
 def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
     """Ingestor prints a stderr warning when trace.domain is absent."""
@@ -33,12 +34,10 @@ def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
         "event_type": "tool.execution.completed",
         "timestamp": "2026-05-21T00:00:00+00:00",
         "schema_version": 1,
-        "trace": {},   # no domain
+        "trace": {},  # no domain
         "payload": {},
     }
-    (spool_dir / f"{event['event_id']}.json").write_text(
-        json.dumps(event), encoding="utf-8"
-    )
+    (spool_dir / f"{event['event_id']}.json").write_text(json.dumps(event), encoding="utf-8")
 
     db_path = tmp_path / "test.db"
     ingest(root=spool_root, db_path=db_path)
@@ -51,6 +50,7 @@ def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # Test 2: no warning when domain is present (unit)
 # ---------------------------------------------------------------------------
+
 
 def test_ingestor_no_warning_when_domain_present(tmp_path, capsys):
     """Ingestor does NOT print a domain warning when trace.domain is set."""
@@ -68,9 +68,7 @@ def test_ingestor_no_warning_when_domain_present(tmp_path, capsys):
         "trace": {"domain": "telemetry"},
         "payload": {},
     }
-    (spool_dir / f"{event['event_id']}.json").write_text(
-        json.dumps(event), encoding="utf-8"
-    )
+    (spool_dir / f"{event['event_id']}.json").write_text(json.dumps(event), encoding="utf-8")
 
     db_path = tmp_path / "test.db"
     ingest(root=spool_root, db_path=db_path)
@@ -82,6 +80,7 @@ def test_ingestor_no_warning_when_domain_present(tmp_path, capsys):
 # ---------------------------------------------------------------------------
 # Test 3: execution_events projection writes correct row (unit)
 # ---------------------------------------------------------------------------
+
 
 def test_projection_writes_execution_event(tmp_path):
     """Projection creates an execution_events row from a canonical event."""
@@ -117,7 +116,8 @@ def test_projection_writes_execution_event(tmp_path):
 
     row = conn.execute(
         "SELECT event_type, event_name, project_id, task_id, outcome_status, _built_from_event_id"
-        " FROM execution_events WHERE _built_from_event_id = ?", (event_id,)
+        " FROM execution_events WHERE _built_from_event_id = ?",
+        (event_id,),
     ).fetchone()
     assert row is not None
     assert row[0] == "execution.completed"
@@ -133,6 +133,7 @@ def test_projection_writes_execution_event(tmp_path):
 # ---------------------------------------------------------------------------
 # Test 4: projection is idempotent (unit)
 # ---------------------------------------------------------------------------
+
 
 def test_projection_is_idempotent(tmp_path):
     """Calling apply() twice with the same event produces exactly one row."""
@@ -179,6 +180,7 @@ def test_projection_is_idempotent(tmp_path):
 # Test 5: non-execution events are not projected (unit)
 # ---------------------------------------------------------------------------
 
+
 def test_projection_skips_non_execution_events(tmp_path):
     """apply() returns False and writes nothing for non-execution event types."""
     from projections.core.execution_events_projection import apply
@@ -220,6 +222,7 @@ def test_projection_skips_non_execution_events(tmp_path):
 # Test 6: integration — canonical pipeline produces execution_events row
 # ---------------------------------------------------------------------------
 
+
 def test_canonical_pipeline_produces_execution_events_row(tmp_path):
     """End-to-end: spool event → ingest → execution_events via projection."""
     from spool.ingestor import ingest
@@ -259,7 +262,7 @@ def test_canonical_pipeline_produces_execution_events_row(tmp_path):
     # Projection should have created an execution_events row
     proj_row = conn.execute(
         "SELECT _built_from_event_id FROM execution_events WHERE _built_from_event_id = ?",
-        (event_id,)
+        (event_id,),
     ).fetchone()
     assert proj_row is not None, "execution_events projection row not found"
 
@@ -269,6 +272,7 @@ def test_canonical_pipeline_produces_execution_events_row(tmp_path):
 # ---------------------------------------------------------------------------
 # Test 7: direct-written rows have NULL _built_from_event_id
 # ---------------------------------------------------------------------------
+
 
 def test_direct_written_rows_have_null_link(tmp_path):
     """Historical direct-written execution_events rows have _built_from_event_id = NULL."""
@@ -283,7 +287,7 @@ def test_direct_written_rows_have_null_link(tmp_path):
         """INSERT INTO execution_events
            (event_id, event_type, event_name, source_refs_json, evidence_refs_json, metadata_json)
            VALUES (?, 'execution.complete', 'legacy', '[]', '[]', '{}')""",
-        (str(uuid.uuid4()),)
+        (str(uuid.uuid4()),),
     )
     conn.commit()
 

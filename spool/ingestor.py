@@ -196,11 +196,15 @@ def _write_to_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
             except (json.JSONDecodeError, TypeError):
                 _trace = {}
         if not _trace.get("domain"):
-            print(f"[ds-ingestor] WARNING: event {envelope['event_id']!r} type={envelope['event_type']!r} missing trace.domain", file=sys.stderr)
+            print(
+                f"[ds-ingestor] WARNING: event {envelope['event_id']!r} type={envelope['event_type']!r} missing trace.domain",
+                file=sys.stderr,
+            )
         conn.commit()
         # Best-effort projection: execution events → execution_events table
         try:
             from projections.core.execution_events_projection import apply as _project_execution
+
             projected = _project_execution(envelope, conn)
             if projected:
                 conn.commit()

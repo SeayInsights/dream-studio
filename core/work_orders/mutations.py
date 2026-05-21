@@ -145,7 +145,11 @@ def block_work_order(
                     "event_id": str(uuid.uuid4()),
                     "event_type": "work_order.blocked",
                     "timestamp": now,
-                    "trace": {"domain": "sdlc", "work_order_id": work_order_id, "project_id": project_id},
+                    "trace": {
+                        "domain": "sdlc",
+                        "work_order_id": work_order_id,
+                        "project_id": project_id,
+                    },
                     "severity": "warning",
                     "payload": {
                         "work_order_id": work_order_id,

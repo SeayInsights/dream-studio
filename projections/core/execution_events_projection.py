@@ -4,15 +4,22 @@ import sqlite3
 import uuid
 from typing import Any
 
-PROJECTED_EVENT_TYPES: frozenset[str] = frozenset({
-    "execution.started",
-    "execution.completed",
-    "execution.failed",
-})
+PROJECTED_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "execution.started",
+        "execution.completed",
+        "execution.failed",
+    }
+)
 
-_PAYLOAD_META_EXCLUDE: frozenset[str] = frozenset({
-    "event_name", "source_refs", "evidence_refs", "outcome_status",
-})
+_PAYLOAD_META_EXCLUDE: frozenset[str] = frozenset(
+    {
+        "event_name",
+        "source_refs",
+        "evidence_refs",
+        "outcome_status",
+    }
+)
 
 
 def apply(event_data: dict[str, Any], conn: sqlite3.Connection) -> bool:
