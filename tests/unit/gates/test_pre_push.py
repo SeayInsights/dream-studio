@@ -108,7 +108,7 @@ def test_run_pre_push_gates_all_pass(tmp_path: Path) -> None:
             {"id": "g2", "command": [sys.executable, "-c", "pass"]},
         ],
     )
-    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path)
+    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path, emit_events=False)
     assert report.overall_passed is True
     assert len(report.gates) == 2
     assert all(g.passed for g in report.gates)
@@ -123,7 +123,7 @@ def test_run_pre_push_gates_stops_on_first_failure(tmp_path: Path) -> None:
             {"id": "g2-never-runs", "command": [sys.executable, "-c", "pass"]},
         ],
     )
-    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path)
+    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path, emit_events=False)
     assert report.overall_passed is False
     assert len(report.gates) == 1
     assert report.gates[0].gate_id == "g1-fail"
@@ -139,7 +139,10 @@ def test_run_pre_push_gates_continue_collects_all(tmp_path: Path) -> None:
         ],
     )
     report = run_pre_push_gates(
-        manifest_path=manifest, repo_root=tmp_path, stop_on_first_failure=False
+        manifest_path=manifest,
+        repo_root=tmp_path,
+        stop_on_first_failure=False,
+        emit_events=False,
     )
     assert report.overall_passed is False
     assert len(report.gates) == 2
