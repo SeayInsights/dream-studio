@@ -322,6 +322,35 @@ def create_work_order(
             ),
         )
         conn.commit()
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="work_order.created",
+                session_id=None,
+                payload={
+                    "title": title,
+                    "status": "open",
+                    "type": work_order_type or "",
+                },
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "milestone_id": milestone_id,
+                    "work_order_id": work_order_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "work_order_id": work_order_id,
