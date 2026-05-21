@@ -326,6 +326,7 @@ def bootstrap_rehearsal_runtime(
     ):
         path.mkdir(parents=True, exist_ok=True)
     from core.config.platform import ensure_platform_recorded
+
     ensure_platform_recorded()
     bootstrap_database(paths.sqlite_path)
     with _connect(paths.sqlite_path) as conn:

@@ -23,11 +23,11 @@ PLATFORM_PROFILE_ENV = "DS_PLATFORM_PROFILE_PATH"
 
 @dataclass(frozen=True)
 class PlatformProfile:
-    os_name: str           # "Windows", "Linux", "Darwin"
-    os_version: str        # e.g. "10.0.22631"
-    shell: str             # "powershell", "cmd", "bash", "zsh", "fish", "unknown"
-    python_version: str    # e.g. "3.12.8"
-    terminal: str          # "Windows Terminal", "iTerm2", "gnome-terminal", "unknown"
+    os_name: str  # "Windows", "Linux", "Darwin"
+    os_version: str  # e.g. "10.0.22631"
+    shell: str  # "powershell", "cmd", "bash", "zsh", "fish", "unknown"
+    python_version: str  # e.g. "3.12.8"
+    terminal: str  # "Windows Terminal", "iTerm2", "gnome-terminal", "unknown"
     is_windows: bool
     is_macos: bool
     is_linux: bool
