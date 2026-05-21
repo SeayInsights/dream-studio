@@ -367,6 +367,7 @@ def close_work_order(
                         timestamp=now,
                         severity="warning",
                         trace={
+                            "domain": "sdlc",
                             "work_order_id": work_order_id,
                             "project_id": project_id,
                         },
@@ -391,7 +392,7 @@ def close_work_order(
                 },
                 timestamp=now,
                 severity="info",
-                trace={"work_order_id": work_order_id, "project_id": project_id},
+                trace={"domain": "sdlc", "work_order_id": work_order_id, "project_id": project_id},
             )
             _spool_writer.write_event(envelope.to_dict())
         except Exception:
