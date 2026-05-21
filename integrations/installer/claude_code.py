@@ -462,11 +462,13 @@ class ClaudeCodeInstaller(InstallerBase):
         *,
         canonical_root: Path | None = None,
         ds_home: Path | None = None,
+        git_repo_root: Path | None = None,
     ):
         self.config_root = config_root
         self.scope = scope
         self.canonical_root = canonical_root
         self.ds_home = ds_home
+        self.git_repo_root = git_repo_root
 
     def _get_source_root(self) -> Path:
         """Resolve source root (repo root) for VERSION and canonical/ lookups."""
@@ -629,6 +631,32 @@ class ClaudeCodeInstaller(InstallerBase):
         source_root = self._get_source_root()
         ops.extend(_collect_hook_file_ops(source_root, hooks_dir, source_root, backup_base))
 
+        # 7b. Git pre-push hook — install to <git_repo_root>/.git/hooks/pre-push (B.3).
+        # Opt-in: only when git_repo_root is explicitly provided. The CLI sets this
+        # to cwd when running `ds integrate install`; tests leave it None so the
+        # operator's real .git/hooks/ is never touched.
+        git_hook_src = source_root / "hooks" / "git" / "pre-push"
+        git_hooks_dir = (self.git_repo_root / ".git" / "hooks") if self.git_repo_root else None
+        if git_hook_src.is_file() and git_hooks_dir is not None and git_hooks_dir.is_dir():
+            hook_content = git_hook_src.read_text(encoding="utf-8")
+            git_hook_target = git_hooks_dir / "pre-push"
+            ops.append(
+                FileOp(
+                    target=git_hook_target,
+                    op="create",
+                    backup_required=git_hook_target.exists(),
+                    source_hash=compute_hash(hook_content),
+                    source_content=hook_content,
+                    reason="Install Dream Studio pre-push gate (B.3)",
+                    safety_notes=(
+                        "Runs canonical/workflows/pre-push.yaml gates before every push. "
+                        "Bypass in emergencies with `git push --no-verify`. "
+                        "Existing pre-push hook is backed up before overwrite."
+                    ),
+                    backup_path=backup_base if git_hook_target.exists() else None,
+                )
+            )
+
         # 8. installed-version — write version marker (must be last)
         source_root = self._get_source_root()
         version_file = source_root / "VERSION"
@@ -780,6 +808,18 @@ class ClaudeCodeInstaller(InstallerBase):
             files=manifest_files,
         )
         write_manifest("claude_code", manifest, self.ds_home)
+
+        # B.3: ensure the git pre-push hook is executable on Unix-like systems.
+        # FileOp's atomic_write does not preserve the +x bit and Windows ignores it.
+        if self.git_repo_root is not None and platform.system() != "Windows":
+            git_hook_path = self.git_repo_root / ".git" / "hooks" / "pre-push"
+            if git_hook_path.is_file():
+                try:
+                    git_hook_path.chmod(
+                        git_hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+                    )
+                except OSError:
+                    pass
 
         # Post-install validation (inline lightweight check)
         validation = _post_install_validate(self.config_root, self.config_root / "settings.json")

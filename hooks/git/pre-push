@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Dream Studio pre-push gate.
+#
+# Blocks `git push` if any of the gates declared in
+# canonical/workflows/pre-push.yaml fail. Installed by
+# `ds integrate install` (see integrations/installer/claude_code.py).
+#
+# To bypass in an emergency, use `git push --no-verify`. Document why and
+# fix the underlying gate failure in the next PR.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# Prefer the `py` launcher on Windows; fall back to `python` elsewhere.
+if command -v py >/dev/null 2>&1; then
+    PY=py
+elif command -v python3 >/dev/null 2>&1; then
+    PY=python3
+else
+    PY=python
+fi
+
+"$PY" -m interfaces.cli.ds workflow run pre-push --non-interactive
+exit $?
