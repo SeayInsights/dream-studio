@@ -14,6 +14,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+try:
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from emitters.shared.spool_writer import write_envelopes as _write_envelopes
+except ImportError:
+    CanonicalEventEnvelope = None  # type: ignore[assignment,misc]
+    _write_envelopes = None  # type: ignore[assignment]
+
 DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
     {
         "module_id": "security_analytics",
@@ -234,46 +241,43 @@ def record_process_run(conn: sqlite3.Connection, **values: Any) -> None:
     )
 
 
-def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO execution_events (
-            event_id, event_type, event_name, project_id, milestone_id, task_id,
-            process_run_id, parent_event_id, actor_type, actor_id, agent_id,
-            skill_id, workflow_id, hook_id, tool_id, model_id, adapter_id,
-            source_refs_json, evidence_refs_json, metadata_json, outcome_status
-        ) VALUES (
-            :event_id, :event_type, :event_name, :project_id, :milestone_id, :task_id,
-            :process_run_id, :parent_event_id, :actor_type, :actor_id, :agent_id,
-            :skill_id, :workflow_id, :hook_id, :tool_id, :model_id, :adapter_id,
-            :source_refs_json, :evidence_refs_json, :metadata_json, :outcome_status
+def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:  # noqa: ARG001
+    # conn is accepted for backward compatibility but is no longer used here.
+    # Execution events are now emitted to the spool as canonical envelopes.
+    if CanonicalEventEnvelope is None or _write_envelopes is None:
+        return
+    try:
+        envelope = CanonicalEventEnvelope(
+            event_type=values["event_type"],
+            session_id=values.get("session_id"),
+            project_id=values.get("project_id"),
+            trace={
+                "domain": "telemetry",
+                "project_id": values.get("project_id"),
+                "milestone_id": values.get("milestone_id"),
+                "task_id": values.get("task_id"),
+                "process_run_id": values.get("process_run_id"),
+                "agent_id": values.get("agent_id"),
+                "skill_id": values.get("skill_id"),
+                "workflow_id": values.get("workflow_id"),
+                "hook_id": values.get("hook_id"),
+                "tool_id": values.get("tool_id"),
+                "model_id": values.get("model_id"),
+                "adapter_id": values.get("adapter_id"),
+            },
+            payload={
+                "event_name": values["event_name"],
+                "outcome_status": values.get("outcome_status"),
+                "source_refs": json.loads(values.get("source_refs_json", "[]")),
+                "evidence_refs": json.loads(values.get("evidence_refs_json", "[]")),
+                "metadata": json.loads(values.get("metadata_json", "{}")),
+            },
+            severity="info",
         )
-        """,
-        {
-            "event_id": values["event_id"],
-            "event_type": values["event_type"],
-            "event_name": values["event_name"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "parent_event_id": values.get("parent_event_id"),
-            "actor_type": values.get("actor_type"),
-            "actor_id": values.get("actor_id"),
-            "agent_id": values.get("agent_id"),
-            "skill_id": values.get("skill_id"),
-            "workflow_id": values.get("workflow_id"),
-            "hook_id": values.get("hook_id"),
-            "tool_id": values.get("tool_id"),
-            "model_id": values.get("model_id"),
-            "adapter_id": values.get("adapter_id"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-            "metadata_json": _json(values.get("metadata"), {}),
-            "outcome_status": values.get("outcome_status"),
-        },
-    )
+        _write_envelopes([envelope])
+    except Exception:  # noqa: BLE001
+        # Best-effort: if spool is unavailable, silently skip.
+        pass
 
 
 def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: Any) -> None:

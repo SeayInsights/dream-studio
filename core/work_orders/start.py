@@ -461,6 +461,7 @@ def start_work_order(
             timestamp=now,
             severity="info",
             trace={
+                "domain": "sdlc",
                 "work_order_id": work_order_id,
                 "project_id": brief_data["project_id"],
             },
