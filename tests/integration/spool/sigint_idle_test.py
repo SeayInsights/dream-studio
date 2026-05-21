@@ -1,4 +1,7 @@
-import signal, time, os, sys
+import os
+import signal
+import sys
+import time
 
 received = []
 
