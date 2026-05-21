@@ -1629,11 +1629,16 @@ def _integrate_dispatch(
 
         mode = "dry_run" if dry_run else "execute"
         detected = detect_claude_code(scope_override=scope)
+        # B.3: install the git pre-push hook into the cwd's repo (if any).
+        # Tests do NOT pass cwd, so the operator's real .git/hooks/ is untouched.
+        cwd = Path.cwd()
+        git_repo_root = cwd if (cwd / ".git").is_dir() else None
         installer = ClaudeCodeInstaller(
             detected.config_root,
             detected.scope,
             canonical_root=canonical_root,
             ds_home=ds_home,
+            git_repo_root=git_repo_root,
         )
         result = installer.install(mode)
         return _print(
