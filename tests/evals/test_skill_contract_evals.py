@@ -188,9 +188,9 @@ def test_eval_resume_contract(patched_paths, tmp_path: Path) -> None:
 
     project = result["projects"][0]
     required_keys = {"project_id", "name", "status", "next_work_order", "next_action"}
-    assert required_keys.issubset(project.keys()), (
-        f"Missing keys in project: {required_keys - set(project.keys())}"
-    )
+    assert required_keys.issubset(
+        project.keys()
+    ), f"Missing keys in project: {required_keys - set(project.keys())}"
     wo = project["next_work_order"]
     assert wo is not None
     assert "work_order_id" in wo
@@ -322,6 +322,8 @@ def test_eval_handoff_contract() -> None:
         assert key in result, f"Missing eval key: {key}"
         eval_result = result[key]
         assert "pass_fail" in eval_result, f"Eval {key} missing pass_fail"
-        assert eval_result["pass_fail"] in {"pass", "fail", "incomplete"}, (
-            f"Invalid pass_fail value for {key}: {eval_result['pass_fail']}"
-        )
+        assert eval_result["pass_fail"] in {
+            "pass",
+            "fail",
+            "incomplete",
+        }, f"Invalid pass_fail value for {key}: {eval_result['pass_fail']}"
