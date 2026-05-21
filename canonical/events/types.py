@@ -71,6 +71,9 @@ class EventType(str, Enum):
     MILESTONE_COMPLETED = "milestone.completed"
     SKILL_INVOKED = "skill.invoked"
 
+    # Skill execution telemetry
+    SKILL_BUDGET_EXCEEDED = "skill.budget_exceeded"
+
 
 @dataclass(frozen=True)
 class EventTypeMeta:
