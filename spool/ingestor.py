@@ -201,7 +201,9 @@ def _write_to_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
         # Best-effort projection: execution events → execution_events table
         try:
             from projections.core.execution_events_projection import apply as _project_execution
-            _project_execution(envelope, conn)
+            projected = _project_execution(envelope, conn)
+            if projected:
+                conn.commit()
         except Exception:
             pass
     finally:
