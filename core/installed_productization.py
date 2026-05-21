@@ -92,6 +92,9 @@ def first_run_setup(
     )
     fresh_state_created = not paths.dream_studio_home.exists()
     _create_runtime_dirs(paths.dream_studio_home)
+    from core.config.platform import ensure_platform_recorded
+
+    ensure_platform_recorded()
     schema_version = bootstrap_database(paths.sqlite_path)
     conn = _connect(paths.sqlite_path)
     try:

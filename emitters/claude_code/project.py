@@ -31,8 +31,15 @@ def read_project_id(root: Path | None) -> str | None:
 
 
 def _get_db_path() -> Path:
-    """Return the canonical path to the Dream Studio SQLite authority database."""
-    return Path.home() / ".dream-studio" / "state" / "studio.db"
+    """Return the canonical path to the Dream Studio SQLite authority database.
+
+    Delegates to ``core.config.database._default_db_path`` so the env-var
+    override ``DREAM_STUDIO_DB_PATH`` is honored uniformly. Tests set this
+    to redirect away from the operator's real ``~/.dream-studio/state/``.
+    """
+    from core.config.database import _default_db_path
+
+    return _default_db_path()
 
 
 def get_active_project_id(db_path: Path) -> str | None:

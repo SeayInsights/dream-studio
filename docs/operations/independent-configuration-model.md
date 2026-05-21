@@ -141,6 +141,14 @@ assumptions, current PRD version, milestone sequence, Work Order authority,
 change orders, and route reconciliation are stored in SQLite authority and may
 be projected into context packets. Adapter configs must not maintain a
 competing PRD copy.
+## Platform Profile Configuration
+
+| Area | Canonical Source | Projection Targets | Storage | Approval |
+| --- | --- | --- | --- | --- |
+| Platform profile | `core.config.platform` | `ds doctor` output, shell-correct error hints | `~/.dream-studio/state/platform.json` (flat JSON, private) | Not required — auto-detected and overwritten on each install/doctor run |
+
+Override path via `DS_PLATFORM_PROFILE_PATH` env var. Tests must set this to a tmp path to avoid writing to the operator's live `~/.dream-studio/state/`. The profile is not SQLite authority, not migration-backed, and not an adapter projection.
+
 ## Platform Hardening Refresh
 
 The independent configuration model now includes platform-hardening configuration surfaces for policy decisions, connector definitions, opt-in local watchers, installer checks, sanitized rollups, and demo packets. Defaults are dry-run or disabled unless an operator-approved profile enables writes, scheduling, or export generation.
