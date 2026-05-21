@@ -76,7 +76,28 @@ def cmd_advance(args) -> int:
 
 
 def cmd_run(args) -> int:
-    """Run a workflow to completion (all waves)."""
+    """Run a workflow to completion (all waves).
+
+    Special case: ``ds workflow run pre-push --non-interactive`` dispatches to
+    the deterministic gate runner in ``core.gates.pre_push`` instead of the
+    model-driven workflow engine. The git pre-push hook (B.3) uses this path
+    so the hook never blocks on an LLM round-trip.
+    """
+    non_interactive = bool(getattr(args, "non_interactive", False))
+    if non_interactive and args.wf_key == "pre-push":
+        from core.gates.pre_push import format_report, run_pre_push_gates
+
+        report = run_pre_push_gates()
+        print(format_report(report))
+        return 0 if report.overall_passed else 1
+
+    if non_interactive:
+        print(
+            "Error: --non-interactive is only supported for the `pre-push` workflow.",
+            file=sys.stderr,
+        )
+        return 2
+
     from control.execution.workflow.runner import WorkflowRunner
 
     dry_run = getattr(args, "dry_run", False)
@@ -124,11 +145,20 @@ def add_workflow_subcommand(subparsers) -> None:
 
     # run
     p_run = wf_sub.add_parser("run", help="Run workflow to completion")
-    p_run.add_argument("wf_key", help="Workflow key")
+    p_run.add_argument("wf_key", help="Workflow key, or `pre-push` with --non-interactive")
     p_run.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
         help="Dry-run all waves without invoking any skill",
+    )
+    p_run.add_argument(
+        "--non-interactive",
+        action="store_true",
+        dest="non_interactive",
+        help=(
+            "Run a deterministic gate workflow without invoking the LLM. "
+            "Currently only supported for `pre-push` — used by hooks/git/pre-push."
+        ),
     )
     p_run.set_defaults(func=cmd_run)

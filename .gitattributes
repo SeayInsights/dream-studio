@@ -6,6 +6,9 @@
 *.sh text eol=lf
 hooks/run.sh text eol=lf
 
+# Git hooks have no extension but are POSIX shell — must stay LF.
+hooks/git/* text eol=lf
+
 # Windows batch files stay CRLF.
 *.cmd text eol=crlf
 *.bat text eol=crlf
