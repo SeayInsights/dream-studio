@@ -2,6 +2,32 @@
 
 from __future__ import annotations
 
+# Windows-only: install SIGINT handler before pytest does, so pytest never
+# sees the phantom signals that occur on this platform during the ingest
+# pipeline's filesystem and SQLite operations. The handler in
+# spool/ingestor.py is the production fix; this conftest handler is the
+# test-suite-only fix that prevents pytest's own SIGINT machinery from
+# printing a KeyboardInterrupt banner after the test summary. CI on Linux
+# is unaffected.
+import sys as _sys
+
+if _sys.platform == "win32":
+    import signal as _signal
+    import time as _time
+
+    _last_sigint = [0.0]
+
+    def _conftest_sigint_handler(signum, frame):
+        now = _time.time()
+        if now - _last_sigint[0] < 1.0:
+            # Two within 1 second: real user Ctrl+C, raise normally.
+            raise KeyboardInterrupt()
+        _last_sigint[0] = now
+        # Otherwise absorb silently.
+
+    _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
+
+
 import importlib.util
 import sys
 import types
@@ -42,6 +68,17 @@ def load_handler(name: str) -> types.ModuleType:
     return module
 
 
+def pytest_configure(config):
+    """Reinstall our SIGINT handler after pytest installs its own.
+
+    Pytest registers its own SIGINT handler during configure. This hook runs
+    after that, letting us reclaim the handler slot so phantom signals during
+    test execution don't reach pytest's machinery. Windows-only.
+    """
+    if _sys.platform == "win32":
+        _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
+
+
 @pytest.fixture
 def handler() -> Any:
     return load_handler
@@ -75,11 +112,16 @@ def spool_root(tmp_path, monkeypatch):
     spool.mkdir()
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool))
     yield spool
+    # Cleanup uses per-file unlink instead of shutil.rmtree to avoid a
+    # Windows + Python 3.12 issue where rmtree's internal lstat call on
+    # a just-written .sessions directory delivers a spurious SIGINT.
     sessions = spool / ".sessions"
     if sessions.exists():
-        import shutil
-
-        shutil.rmtree(sessions, ignore_errors=True)
+        for session_file in sessions.glob("*.json"):
+            try:
+                session_file.unlink()
+            except OSError:
+                pass
 
 
 @pytest.fixture
@@ -100,6 +142,10 @@ def guard_real_homedir(tmp_path, monkeypatch):
     fixture sets a fallback so spool.config.get_spool_root() never reaches ~.
     If DS_DREAM_STUDIO_HOME is not already set, sets a fallback so integration
     manifest writes never reach real ~/.dream-studio/integrations/.
+    If DREAM_STUDIO_DB_PATH is not already set, sets a fallback so the
+    canonical DB-path resolver (`core.config.database._default_db_path`) and
+    every caller that delegates to it write to a hermetic tmp DB instead of
+    the operator's real ~/.dream-studio/state/studio.db.
     """
     if "DS_SPOOL_ROOT" not in _os.environ:
         guard = tmp_path / "guard_spool"
@@ -110,6 +156,11 @@ def guard_real_homedir(tmp_path, monkeypatch):
         guard_ds = tmp_path / "guard_ds_home"
         guard_ds.mkdir()
         monkeypatch.setenv("DS_DREAM_STUDIO_HOME", str(guard_ds))
+
+    if "DREAM_STUDIO_DB_PATH" not in _os.environ:
+        guard_db_dir = tmp_path / "guard_state"
+        guard_db_dir.mkdir()
+        monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(guard_db_dir / "studio.db"))
 
     real_events = Path.home() / ".dream-studio" / "events"
     before_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0

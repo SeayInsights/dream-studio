@@ -327,6 +327,12 @@ Dream Studio extracts error patterns, skill usage, architecture documents, and t
 
 ---
 
+## Local development on Windows
+
+On Windows, the spool ingestor installs a module-level console control handler that absorbs spurious SIGINT signals delivered during filesystem and SQLite operations. This is fully automatic and requires no setup. Real Ctrl+C is preserved (two signals within 1 second forward to the default handler). On Linux this code is inactive. CI on Linux is unaffected. See `backlog.md` for the investigation history.
+
+---
+
 ## License and Publication Boundary
 
 Licensed under **Apache-2.0**. See `LICENSE` for the full text.

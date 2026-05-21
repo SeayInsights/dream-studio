@@ -4,6 +4,7 @@ import os
 import re
 import signal
 import sqlite3
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,44 @@ from spool.states import SpoolState, ensure_dirs, state_dir
 # registration). The spool write is the success condition; ingest is
 # best-effort. SQLite busy/locked errors are non-fatal: the event remains
 # in spool/ for retry on next run.
+
+# Windows-only: intercept spurious console control events delivered during
+# filesystem and SQLite operations. During development we observed phantom
+# SIGINT delivery on Windows 11 + Python 3.12 during the ingest pipeline's
+# rapid file moves and SQLite writes. Investigation eliminated Defender,
+# OneDrive, peripheral software, all pytest plugins, WAL mode, symlink
+# privileges, and filesystem ACLs. The signal source could not be fully
+# isolated but is reproducible during ingest operations.
+#
+# We register a Windows console control handler via SetConsoleCtrlHandler.
+# This intercepts CTRL_C_EVENT at the OS level before Python's signal
+# machinery sees it. We absorb single phantom events while preserving real
+# user Ctrl+C: two within 1 second pass through to default Windows handling
+# (which raises KeyboardInterrupt as normal). On Linux this code is
+# inactive. End users on Windows get this automatically without setup.
+if sys.platform == "win32":
+    import ctypes
+    import time as _time
+
+    _last_ctrl_time = [0.0]
+
+    # CTRL_C_EVENT = 0, CTRL_BREAK_EVENT = 1
+    _HANDLER_ROUTINE = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_uint)
+
+    def _ds_console_handler(ctrl_type):
+        if ctrl_type == 0:  # CTRL_C_EVENT
+            now = _time.time()
+            if now - _last_ctrl_time[0] < 1.0:
+                # Two events within 1 second: real user Ctrl+C, let it through.
+                return 0  # FALSE: pass to next handler in chain
+            _last_ctrl_time[0] = now
+            return 1  # TRUE: handled, suppress
+        return 0  # other event types: pass through
+
+    # Store handler as module-level reference so ctypes callback isn't GC'd.
+    _handler_ref = _HANDLER_ROUTINE(_ds_console_handler)
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler_ref, True)
+
 
 REQUIRED_FIELDS: frozenset[str] = frozenset(
     {"event_id", "event_type", "timestamp", "schema_version"}
@@ -42,7 +81,12 @@ def ingest(root: Path | None = None, db_path: Path | None = None) -> IngestResul
     failed_dir = state_dir(SpoolState.FAILED, r)
 
     if db_path is None:
-        db_path = Path.home() / ".dream-studio" / "state" / "studio.db"
+        # Delegate to the canonical resolver so DREAM_STUDIO_DB_PATH overrides
+        # are honored uniformly. Tests rely on this to avoid touching the
+        # operator's real ~/.dream-studio/state/studio.db.
+        from core.config.database import _default_db_path
+
+        db_path = _default_db_path()
 
     result = IngestResult()
 
