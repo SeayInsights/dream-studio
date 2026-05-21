@@ -162,6 +162,11 @@ def guard_real_homedir(tmp_path, monkeypatch):
         guard_db_dir.mkdir()
         monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(guard_db_dir / "studio.db"))
 
+    if "DS_PLATFORM_PROFILE_PATH" not in _os.environ:
+        guard_platform_dir = tmp_path / "guard_platform"
+        guard_platform_dir.mkdir()
+        monkeypatch.setenv("DS_PLATFORM_PROFILE_PATH", str(guard_platform_dir / "platform.json"))
+
     real_events = Path.home() / ".dream-studio" / "events"
     before_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0
     real_integrations = Path.home() / ".dream-studio" / "integrations"

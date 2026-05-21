@@ -1087,8 +1087,10 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
 def _doctor_status(
     *, source_root: Path, dream_studio_home: Path | None, fix: bool = False
 ) -> dict[str, Any]:
+    from core.config.platform import ensure_platform_recorded
     from core.health.doctor import run_doctor_checks
 
+    ensure_platform_recorded()
     return run_doctor_checks(
         source_root=source_root,
         dream_studio_home=dream_studio_home,

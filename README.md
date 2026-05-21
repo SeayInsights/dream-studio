@@ -327,6 +327,12 @@ Dream Studio extracts error patterns, skill usage, architecture documents, and t
 
 ---
 
+## Platform detection
+
+Dream Studio detects the host OS, shell, Python version, and terminal at install time and persists the profile at `~/.dream-studio/state/platform.json`. This lets the product surface shell-correct commands in error messages and diagnostic output. To refresh the profile (e.g. after switching shells), run `ds doctor`.
+
+---
+
 ## Local development on Windows
 
 On Windows, the spool ingestor installs a module-level console control handler that absorbs spurious SIGINT signals delivered during filesystem and SQLite operations. This is fully automatic and requires no setup. Real Ctrl+C is preserved (two signals within 1 second forward to the default handler). On Linux this code is inactive. CI on Linux is unaffected. See `backlog.md` for the investigation history.

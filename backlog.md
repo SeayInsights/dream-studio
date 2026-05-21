@@ -28,3 +28,9 @@ Future investigation if needed:
 - Procmon trace during the actual SIGINT moment (not cleanup phase)
 - Test on a fresh Windows machine to confirm machine-specific vs universal
 - Try Python 3.11 or 3.13 to check for 3.12-specific regression
+
+## Platform-aware infrastructure (NEW IN PR #36)
+
+Dream Studio detects OS, shell, Python version, and terminal at install time. Profile persisted at `~/.dream-studio/state/platform.json`. Module: `core.config.platform`. Used to surface shell-correct command syntax in error messages and diagnostic output.
+
+Future extension: include platform context in canonical events so token attribution and SDLC analytics can break down by environment.
