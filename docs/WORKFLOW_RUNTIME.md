@@ -165,3 +165,4 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
 <!-- Last reviewed 2026-05-20 — A3: `control/execution/workflow/runner.py:_invoke_skill` no longer self-shells via `subprocess.run(['ds','skill','invoke', specifier])`; instead it calls `core.skills.invocation.load_skill_content` + `record_skill_invocation` directly in-process. ~40x faster per node, tracebacks intact, mockable. dry_run path unchanged. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — B.3: `ds workflow run pre-push --non-interactive` is a deterministic-gate dispatch that bypasses the model-driven workflow engine and invokes `core.gates.pre_push.run_pre_push_gates()` directly. Other workflow names with --non-interactive are rejected (exit 2). No runtime contract change here. -->
