@@ -802,7 +802,7 @@ def test_shim_writes_hook_failures_jsonl_on_import_error(tmp_path):
 
 
 def test_project_register_cli_writes_marker_to_path(db_home, tmp_path, monkeypatch):
-    monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_home / "state" / "studio.db"))
+    monkeypatch.setenv("DREAM_STUDIO_HOME", str(db_home))
     monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
     monkeypatch.setenv("DS_DIAGNOSTICS_DIR", str(tmp_path / "diag"))
 
@@ -854,7 +854,7 @@ def test_project_register_api_without_path_logs_warning(db_home, tmp_path, monke
         name="Programmatic Project",
         project_path=None,
         source_root=db_home,
-        dream_studio_home=None,
+        dream_studio_home=db_home,
     )
 
     assert result["ok"] is True
@@ -876,7 +876,7 @@ def test_project_register_api_with_path_writes_marker(db_home, tmp_path, monkeyp
         name="API Project",
         project_path=project_dir,
         source_root=db_home,
-        dream_studio_home=None,
+        dream_studio_home=db_home,
     )
 
     assert result["ok"] is True

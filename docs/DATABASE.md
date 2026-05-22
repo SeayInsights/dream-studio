@@ -186,3 +186,5 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 added ( 65_remove_test_fixture_contamination.sql). Data-only (no DDL): deletes 23 test fixture rows from ds_projects that were written to the production DB by pytest tests bypassing guard_real_homedir (names: 'My Project', 'Programmatic Project', 'API Project', 'TA0 Verification Test', 'TA0 E2E Verify'). Idempotent DELETE WHERE. No schema change. No authorization boundary change. -->
