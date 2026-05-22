@@ -203,6 +203,115 @@ def attribution_coverage(project_id: Optional[str] = None) -> dict:
     }
 
 
+def canonical_token_metrics(days: int) -> dict:
+    """Full token metrics aggregated from canonical_events.
+
+    Drop-in replacement for TokenCollector.collect() that reads exclusively
+    from canonical_events (token.consumed events). Returns empty state when
+    no events exist — never fabricated.
+    """
+    from datetime import timedelta
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    try:
+        all_rows = conn.execute(
+            """
+            SELECT payload, trace, timestamp
+            FROM canonical_events
+            WHERE event_type = 'token.consumed'
+              AND timestamp >= ?
+            """,
+            (cutoff,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    input_total = 0
+    output_total = 0
+    total_cost = 0.0
+    by_project: dict[str, dict] = {}
+    by_model: dict[str, dict] = {}
+    by_date: dict[str, dict] = {}
+
+    for row in all_rows:
+        payload = _payload_dict(row["payload"])
+        trace = _payload_dict(row["trace"])
+
+        inp = int(payload.get("input_tokens") or 0)
+        out = int(payload.get("output_tokens") or 0)
+        cc = int(payload.get("cache_creation_input_tokens") or 0)
+        cr = int(payload.get("cache_read_input_tokens") or 0)
+        model = payload.get("model") or ""
+        project_id = trace.get("project_id") or ""
+
+        cost = compute_cost(model, inp, out, cc, cr)
+        input_total += inp
+        output_total += out
+        total_cost += cost
+
+        if project_id:
+            bucket = by_project.setdefault(
+                project_id,
+                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+            )
+            bucket["input_tokens"] += inp
+            bucket["output_tokens"] += out
+            bucket["total_tokens"] += inp + out
+            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+        if model:
+            bucket = by_model.setdefault(
+                model,
+                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+            )
+            bucket["input_tokens"] += inp
+            bucket["output_tokens"] += out
+            bucket["total_tokens"] += inp + out
+            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+        ts = row["timestamp"] or ""
+        date_str = ts[:10] if ts else ""
+        if date_str:
+            bucket = by_date.setdefault(
+                date_str,
+                {
+                    "date": date_str,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "tokens": 0,
+                    "cost_usd": 0.0,
+                },
+            )
+            bucket["input_tokens"] += inp
+            bucket["output_tokens"] += out
+            bucket["tokens"] += inp + out
+            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+    total = input_total + output_total
+    timeline = sorted(by_date.values(), key=lambda x: x["date"])
+    daily_average = round(total / days, 1) if days else 0.0
+
+    return {
+        "total_tokens": total,
+        "input_tokens": input_total,
+        "output_tokens": output_total,
+        "total_input_tokens": input_total,
+        "total_output_tokens": output_total,
+        "cache_hits": 0,
+        "total_cost_usd": round(total_cost, 6) if total > 0 else None,
+        "cost_status": "reportable" if total > 0 else "unknown",
+        "cost_visibility": "reportable" if total > 0 else "unavailable",
+        "by_model": by_model,
+        "by_project": by_project,
+        "by_skill": {},
+        "daily_average": daily_average,
+        "timeline": timeline,
+        "data_status": "empty" if total == 0 else "ok",
+    }
+
+
 def exec_time_ranges_from_canonical(days: int) -> dict[str, dict[str, float]]:
     """Min/max execution time per skill, read from canonical_events.skill.executed.
 

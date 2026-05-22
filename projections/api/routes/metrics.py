@@ -29,6 +29,7 @@ from projections.core.collectors import (
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 from projections.api.queries.token_attribution import (
     attribution_coverage,
+    canonical_token_metrics,
     exec_time_ranges_from_canonical,
 )
 
@@ -312,13 +313,10 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
 async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
     """Get token usage metrics with dashboard-friendly format"""
     try:
-        db_path = get_db_path()
-        collector = TokenCollector(db_path)
-        data = collector.collect(days=days)
-        timeline = _build_token_timeline(db_path, days)
+        data = canonical_token_metrics(days)
+        timeline = data["timeline"]
 
         cache_hit_rate = data.get("cache_hits", 0) / max(data.get("total_tokens", 1), 1)
-
         cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd")} for t in timeline]
 
         by_project = {
