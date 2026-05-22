@@ -2,9 +2,9 @@
 
 ## TA-series: Token Attribution Remediation (In Progress)
 
-**Status:** TA0, TA0b, TA0c complete — TA1 in progress — 6 workstreams remaining
+**Status:** TA0–TA3 complete — 4 workstreams remaining
 
-### 9-Workstream Plan
+### 10-Workstream Plan
 
 | ID | Title | Status |
 |----|-------|--------|
@@ -13,8 +13,9 @@
 | TA0 | SDLC entity creation events + backfill | Complete — PR #38 |
 | TA0c | Retire activity_log, migrate to canonical events | Complete — PR #39 |
 | TA1 | Task lifecycle events | Complete — PR #40 |
-| **TA2** | **Active task context + skill SDLC trace** | **Complete — this PR** |
-| TA3 | Universal token capture (PostToolUse hook) | Pending |
+| TA2 | Active task context + skill SDLC trace | Complete — PR #41 |
+| **TA3** | **Universal token capture (PostToolUse hook)** | **Complete — this PR** |
+| TA3b | Execution context (parent_invocation_id + stale-state audit) | Pending |
 | TA4 | Remove hardcoded project_id | Pending |
 | TA5 | Dashboard truth-up (remove synthesizer) | Pending |
 | TA6 | End-to-end verification | Pending |
@@ -50,6 +51,23 @@
 - CLI commands: `ds task set-active <task_id>`, `ds task active`, `ds task clear-active`
 - DS_ACTIVE_TASK_PATH env var added to test guard fixture in tests/conftest.py
 - Existing 21 skill.invoked events remain orphans permanently (active task was never set when they fired)
+
+### TA3 Summary (this PR)
+- `core/telemetry/token_capture.py` introduced: `handle_post_tool_use()` processes PostToolUse hook payloads
+- Attribution chain: active_task → CWD `.dream-studio-project` marker → orphan
+- `core/sdlc/cwd_resolver.py`: walks up from cwd, parses JSON (TA3+ format) or plain UUID (legacy) markers
+- `core/telemetry/machine_id.py`: stable Dream Studio-managed UUID at `~/.dream-studio/state/machine_id`
+- `core/telemetry/diagnostics.py`: two-tier JSONL diagnostic stream (failure / anomaly / performance)
+- `runtime/hooks/core/on-post-tool-use.py`: thin shim; delegates to token_capture, exits 0 always
+- `token.consumed` event type registered (domain: telemetry, emitter_implemented: True)
+- `ds project register --path <dir>` now writes JSON `.dream-studio-project` marker at registration
+- `ds diagnostics list/clear` CLI commands for diagnostic stream visibility
+- Q3 decision: marker whose project_id is absent from ds_projects → attribution_status: "partial" + anomaly logged; auditor reconciles
+- DS_MACHINE_ID_PATH and DS_DIAGNOSTICS_DIR env guards added to tests/conftest.py
+- git context (commit, branch, remote) and platform context captured in execution_context payload
+- No absolute filesystem paths in emitted events (registered_from_path is informational only, never emitted)
+- Marker format authority: marker file for attribution resolution; ds_projects for project metadata; auditor reconciles drift
+- **Deferred to TA3b:** parent_invocation_id linking tool call → skill/workflow/agent invocation; stale active_task state detection and audit
 
 ---
 
