@@ -369,7 +369,9 @@ def close_work_order(
                         trace={
                             "domain": "sdlc",
                             "work_order_id": work_order_id,
+                            "milestone_id": wo_milestone_id,
                             "project_id": project_id,
+                            "attribution_status": "fully_attributed",
                         },
                     )
                     _spool_writer.write_event(envelope.to_dict())
@@ -392,7 +394,13 @@ def close_work_order(
                 },
                 timestamp=now,
                 severity="info",
-                trace={"domain": "sdlc", "work_order_id": work_order_id, "project_id": project_id},
+                trace={
+                    "domain": "sdlc",
+                    "work_order_id": work_order_id,
+                    "milestone_id": wo_milestone_id,
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
             )
             _spool_writer.write_event(envelope.to_dict())
         except Exception:

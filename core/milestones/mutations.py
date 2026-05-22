@@ -65,6 +65,30 @@ def create_milestone(
             (milestone_id, project_id, title, description, order_index, now, now),
         )
         conn.commit()
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="milestone.created",
+                session_id=None,
+                payload={"title": title, "status": "pending"},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "milestone_id": milestone_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "milestone_id": milestone_id,

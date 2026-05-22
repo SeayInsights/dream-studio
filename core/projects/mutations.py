@@ -156,6 +156,31 @@ def delete_project(
         conn.execute("DELETE FROM ds_projects WHERE project_id = ?", (project_id,))
         conn.commit()
 
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.deleted",
+                session_id=None,
+                payload={
+                    "cascade_milestones": ms_count,
+                    "cascade_work_orders": wo_count,
+                    "cascade_tasks": task_count,
+                },
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "project_id": project_id,
@@ -193,6 +218,29 @@ def register_project(
             (project_id, name, description, now, now),
         )
         conn.commit()
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.created",
+                session_id=None,
+                payload={"name": name, "description": description, "status": "active"},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "project_id": project_id,
