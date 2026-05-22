@@ -160,3 +160,5 @@ career data, or unsanitized security/readiness findings.
 <!-- Last reviewed 2026-05-21 — Platform profile publication boundary: `~/.dream-studio/state/platform.json` is private local state and must not be committed to git. It contains OS name, OS version, shell, Python version, and terminal — enough context to fingerprint a machine. Treat it the same as `studio.db`: ignored by git, never included in public docs, demos, or exports. The module source (`core/config/platform.py`) is public repo source. -->
 
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
+
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
