@@ -463,7 +463,9 @@ def start_work_order(
             trace={
                 "domain": "sdlc",
                 "work_order_id": work_order_id,
+                "milestone_id": brief_data.get("milestone_id"),
                 "project_id": brief_data["project_id"],
+                "attribution_status": "fully_attributed",
             },
         )
         _spool_writer.write_event(envelope.to_dict())

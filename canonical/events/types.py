@@ -82,6 +82,13 @@ class EventType(str, Enum):
     EXECUTION_COMPLETED = "execution.completed"
     EXECUTION_FAILED = "execution.failed"
 
+    # SDLC entity creation events (TA0)
+    PROJECT_CREATED = "project.created"
+    PROJECT_DELETED = "project.deleted"
+    MILESTONE_CREATED = "milestone.created"
+    MILESTONE_DELETED = "milestone.deleted"
+    WORK_ORDER_CREATED = "work_order.created"
+
 
 @dataclass(frozen=True)
 class EventTypeMeta:
@@ -493,6 +500,42 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.EXECUTION_FAILED,
         "telemetry",
         "Execution run failed",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # SDLC entity creation events (TA0)
+    EventTypeMeta(
+        EventType.PROJECT_CREATED,
+        "sdlc",
+        "A new project was registered in Dream Studio",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.PROJECT_DELETED,
+        "sdlc",
+        "A project was deleted (cascade to milestones, work orders, tasks)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.MILESTONE_CREATED,
+        "sdlc",
+        "A new milestone was created under a project",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.MILESTONE_DELETED,
+        "sdlc",
+        "A milestone was deleted",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.WORK_ORDER_CREATED,
+        "sdlc",
+        "A new work order was created under a milestone/project",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
