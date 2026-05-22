@@ -92,6 +92,83 @@ All SDLC-domain events (`domain = "sdlc"`) must include the following fields in 
 
 `attribution_status` is mandatory on SDLC-domain events. Telemetry-domain events do not carry it.
 
+## token.consumed Event (TA3)
+
+The `token.consumed` event captures per-tool-invocation token attribution.
+Emitted by `core/telemetry/token_capture.py` via the `PostToolUse` hook shim.
+
+### Event Schema
+
+```json
+{
+  "event_type": "token.consumed",
+  "trace": {
+    "domain": "telemetry",
+    "attribution_status": "fully_attributed | partial | orphan",
+    "task_id": "<from active_task or null>",
+    "work_order_id": "<from active_task or null>",
+    "milestone_id": "<from active_task or null>",
+    "project_id": "<from active_task or CWD marker or null>",
+    "tool_name": "<tool that was invoked>",
+    "tool_use_id": "<from PostToolUse payload>",
+    "session_id": "<from PostToolUse payload if available>",
+    "machine_id": "<Dream Studio machine UUID>"
+  },
+  "payload": {
+    "input_tokens": "<int>",
+    "output_tokens": "<int>",
+    "cache_creation_input_tokens": "<int>",
+    "cache_read_input_tokens": "<int>",
+    "model": "<claude model id if present in payload>",
+    "granularity": "tool_invocation",
+    "project_name": "<from JSON marker only; omitted for plain-UUID markers>",
+    "execution_context": {
+      "git_commit": "<commit SHA if available>",
+      "git_branch": "<branch name if available>",
+      "git_remote_url": "<remote origin URL if available>",
+      "cwd_relative_to_project": "<cwd path relative to project root; no absolute paths>",
+      "platform": {
+        "os": "<OS name>",
+        "os_version": "<OS version>",
+        "shell": "<shell name>"
+      }
+    }
+  }
+}
+```
+
+### Attribution Chain
+
+`token.consumed` events go through a three-step attribution chain:
+
+| Step | Condition | Result |
+|------|-----------|--------|
+| 1. Active task | `get_active_task()` returns a context | `attribution_status: "fully_attributed"`, full SDLC trace |
+| 2. CWD marker | CWD contains `.dream-studio-project` (walks up to root) | `attribution_status: "partial"`, only `project_id` populated |
+| 3. Fallback | Neither active task nor marker | `attribution_status: "orphan"`, all SDLC fields null |
+
+For `attribution_status` definitions see the SDLC Event Trace Requirements section above.
+
+> **Note:** `attribution_status: "partial"` is used for ALL CWD-resolved cases, including
+> when the marker's project_id is not present in ds_projects (Q3 anomaly — auditor reconciles).
+
+### Existing `token.consumption.recorded` events
+
+148 events with type `token.consumption.recorded` exist from before TA3.
+These remain as historical orphans with their original event type — no rename, no backfill.
+`token.consumed` is the canonical type going forward.
+
+### Marker File Authority
+
+The `.dream-studio-project` marker file (JSON or legacy plain-UUID) is the authoritative
+source for **project attribution by filesystem location**. `ds_projects` is authoritative
+for **project metadata** (name, status, descriptions). These two sources can drift; the
+auditor workstream handles reconciliation.
+
+The `metadata.registered_from_path` field in the marker is informational only and
+**never appears in emitted events** — absolute filesystem paths are not stored in
+canonical event traces or payloads.
+
 ## Active Task Context
 
 The active task context module (`core/sdlc/active_task.py`) provides a file-backed pointer to the operator's current task. It enables `skill.invoked` events to carry the full SDLC chain.

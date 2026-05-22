@@ -226,19 +226,64 @@ def delete_project(
     }
 
 
+def _write_project_marker(
+    project_path: Path,
+    project_id: str,
+    project_name: str,
+    created_at: str,
+) -> None:
+    """Write the JSON .dream-studio-project marker file to project_path."""
+    import json as _json
+    import subprocess
+
+    git_remote_url: str | None = None
+    try:
+        result = subprocess.run(
+            ["git", "config", "--get", "remote.origin.url"],
+            capture_output=True,
+            text=True,
+            cwd=str(project_path),
+            timeout=5,
+        )
+        if result.returncode == 0:
+            git_remote_url = result.stdout.strip() or None
+    except Exception:
+        pass
+
+    marker_content = {
+        "schema_version": 1,
+        "project_id": project_id,
+        "project_name": project_name,
+        "created_at": created_at,
+        "metadata": {
+            "git_remote_url": git_remote_url,
+            "registered_from_path": str(project_path.resolve()),
+        },
+    }
+    marker_path = project_path / ".dream-studio-project"
+    marker_path.write_text(_json.dumps(marker_content, indent=2), encoding="utf-8")
+
+
 def register_project(
     *,
     name: str,
     description: str = "",
+    project_path: Path | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     """Insert a new project row with status 'active'.
 
+    When ``project_path`` is provided, writes a .dream-studio-project JSON
+    marker to that directory so the CWD resolver can attribute token events
+    to this project. When omitted (programmatic/test callers), logs a warning
+    to the diagnostic stream.
+
     Returns::
 
         {"ok": True, "project_id": str, "name": str,
-         "status": "active", "created_at": str}
+         "status": "active", "created_at": str,
+         "marker_written": bool}
     """
 
     db_path = _require_db(source_root, dream_studio_home)
@@ -252,6 +297,46 @@ def register_project(
             (project_id, name, description, now, now),
         )
         conn.commit()
+
+    marker_written = False
+    if project_path is not None:
+        try:
+            _write_project_marker(
+                project_path=Path(project_path).resolve(),
+                project_id=project_id,
+                project_name=name,
+                created_at=now,
+            )
+            marker_written = True
+        except Exception as exc:
+            try:
+                from core.telemetry.diagnostics import log_diagnostic
+
+                log_diagnostic(
+                    category="failure",
+                    source="register_project._write_project_marker",
+                    context={"project_path": str(project_path), "project_id": project_id},
+                    details={"error_type": type(exc).__name__, "error_message": str(exc)},
+                )
+            except Exception:
+                pass
+    else:
+        try:
+            from core.telemetry.diagnostics import log_diagnostic
+
+            log_diagnostic(
+                category="anomaly",
+                source="register_project",
+                context={"project_id": project_id, "name": name},
+                details={
+                    "error_message": (
+                        "register_project called without project_path; "
+                        "marker not created; CWD attribution will not work for this project"
+                    )
+                },
+            )
+        except Exception:
+            pass
 
     try:
         import spool.writer as _spool_writer
@@ -281,4 +366,5 @@ def register_project(
         "name": name,
         "status": "active",
         "created_at": now,
+        "marker_written": marker_written,
     }
