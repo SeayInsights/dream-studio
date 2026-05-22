@@ -36,13 +36,17 @@ def mark_task_done(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         task_row = conn.execute(
-            "SELECT task_id, work_order_id, title, status FROM ds_tasks WHERE task_id = ?",
+            "SELECT t.task_id, t.work_order_id, t.title, t.status, t.project_id,"
+            " wo.milestone_id"
+            " FROM ds_tasks t"
+            " LEFT JOIN ds_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " WHERE t.task_id = ?",
             (task_id,),
         ).fetchone()
         if task_row is None:
             return {"ok": False, "error": f"Task not found: {task_id}"}
 
-        t_id, t_wo_id, t_title, t_status = task_row
+        t_id, t_wo_id, t_title, t_status, t_project_id, t_milestone_id = task_row
         if t_wo_id != work_order_id:
             return {
                 "ok": False,
@@ -83,20 +87,28 @@ def mark_task_done(
     try:
         import spool.writer as _spool_writer
 
+        from canonical.events.envelope import CanonicalEventEnvelope
+
         _spool_writer.write_event(
-            {
-                "event_id": str(uuid.uuid4()),
-                "event_type": "task.completed",
-                "timestamp": now,
-                "trace": {"domain": "sdlc", "work_order_id": work_order_id, "task_id": task_id},
-                "severity": "info",
-                "payload": {
+            CanonicalEventEnvelope(
+                event_type="task.completed",
+                session_id=None,
+                payload={
                     "task_id": task_id,
                     "work_order_id": work_order_id,
                     "tasks_remaining": remaining,
                 },
-                "source_type": "confirmed",
-            }
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": t_project_id,
+                    "milestone_id": t_milestone_id,
+                    "work_order_id": work_order_id,
+                    "task_id": task_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
         )
     except Exception:
         pass
@@ -230,12 +242,14 @@ def add_tasks_from_file(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, project_id FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, project_id, milestone_id FROM ds_work_orders"
+            " WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
         project_id = wo_row[1]
+        milestone_id = wo_row[2]
 
         text = tasks_file.read_text(encoding="utf-8").replace("\r\n", "\n")
         items = re.findall(
@@ -262,14 +276,45 @@ def add_tasks_from_file(
                 " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
                 (t_id, work_order_id, project_id, t_title, t_desc, now, now),
             )
-            inserted.append({"task_id": t_id, "title": t_title})
+            inserted.append({"task_id": t_id, "title": t_title, "description": t_desc})
         conn.commit()
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        emit_now = datetime.now(timezone.utc).isoformat()
+        for task in inserted:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="task.created",
+                    session_id=None,
+                    payload={
+                        "title": task["title"],
+                        "description": task["description"],
+                        "status": "created",
+                    },
+                    timestamp=emit_now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": project_id,
+                        "milestone_id": milestone_id,
+                        "work_order_id": work_order_id,
+                        "task_id": task["task_id"],
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+    except Exception:
+        pass
 
     return {
         "ok": True,
         "work_order_id": work_order_id,
         "tasks_inserted": len(inserted),
-        "tasks": inserted,
+        "tasks": [{"task_id": t["task_id"], "title": t["title"]} for t in inserted],
     }
 
 
@@ -385,13 +430,15 @@ def create_task(
     db_path = _require_db(source_root, dream_studio_home)
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    milestone_id: str | None = None
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, milestone_id FROM ds_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+        milestone_id = wo_row[1]
         conn.execute(
             "INSERT INTO ds_tasks"
             " (task_id, work_order_id, project_id, title, description, status,"
@@ -400,6 +447,32 @@ def create_task(
             (task_id, work_order_id, project_id, title, description, now, now),
         )
         conn.commit()
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="task.created",
+                session_id=None,
+                payload={"title": title, "description": description, "status": "created"},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "milestone_id": milestone_id,
+                    "work_order_id": work_order_id,
+                    "task_id": task_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "task_id": task_id,
