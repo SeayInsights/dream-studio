@@ -11,9 +11,7 @@ import sqlite3
 import tempfile
 import uuid
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -435,7 +433,7 @@ class TestForwardEmissionIntegration:
                 " VALUES ('wo-test','proj-test','ms-test','Test WO','open','feature','2026-01-01','2026-01-01')"
             )
             conn.commit()
-            result = start_work_order(
+            start_work_order(
                 work_order_id="wo-test",
                 source_root=tmp_path,
                 brief_data=brief,
