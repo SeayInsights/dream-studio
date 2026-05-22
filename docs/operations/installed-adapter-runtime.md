@@ -302,3 +302,5 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- Last reviewed 2026-05-21 — Platform profile added to runtime state: `~/.dream-studio/state/platform.json` is written at install time and refreshed by `ds doctor`. It records OS, shell, Python version, and terminal. Override via `DS_PLATFORM_PROFILE_PATH` env var for test isolation. This file is local state (ignored by git) and is not SQLite authority. The installed adapter runtime now includes platform.json alongside studio.db in the `state/` directory. -->
 
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
+
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->

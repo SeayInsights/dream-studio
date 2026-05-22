@@ -161,3 +161,5 @@ outside the normal approved migration boundary.
 
 <!-- Last reviewed 2026-05-22 — TA1 adds migration 064 (`064_backfill_task_creation_events.sql`). Data-only (no DDL). Inserts synthetic `task.created` events into canonical_events for all pre-TA1 ds_tasks rows; full SDLC trace resolved via ds_tasks JOIN ds_work_orders. Deterministic event IDs and INSERT OR IGNORE for idempotency. attribution_status = 'backfill'. No schema change. No authorization boundary change. -->
 
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
+

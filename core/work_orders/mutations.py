@@ -113,6 +113,16 @@ def mark_task_done(
     except Exception:
         pass
 
+    try:
+        from core.sdlc.active_task import clear_active_task as _clear_active_task
+        from core.sdlc.active_task import get_active_task as _get_active_task
+
+        _active = _get_active_task()
+        if _active is not None and _active.task_id == task_id:
+            _clear_active_task()
+    except Exception:
+        pass
+
     result: dict[str, Any] = {
         "ok": True,
         "task_id": task_id,

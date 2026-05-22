@@ -92,7 +92,39 @@ All SDLC-domain events (`domain = "sdlc"`) must include the following fields in 
 
 `attribution_status` is mandatory on SDLC-domain events. Telemetry-domain events do not carry it.
 
-## Migration History
+## Active Task Context
+
+The active task context module (`core/sdlc/active_task.py`) provides a file-backed pointer to the operator's current task. It enables `skill.invoked` events to carry the full SDLC chain.
+
+### Storage
+Active task is persisted at `~/.dream-studio/state/active_task.json` (env-overridable via `DS_ACTIVE_TASK_PATH`).
+
+```json
+{
+  "task_id": "<uuid>",
+  "work_order_id": "<uuid>",
+  "milestone_id": "<uuid or empty string>",
+  "project_id": "<uuid>",
+  "set_at": "<iso8601>"
+}
+```
+
+### Lifecycle
+- **Set:** `ds task set-active <task_id>` resolves the full SDLC chain from the DB and persists it
+- **Read:** `get_active_task()` is a cheap file read — no DB lookup at event emission time
+- **Auto-clear:** when `task.completed` fires and the completed task matches the active pointer, `active_task.json` is automatically removed
+- **Manual clear:** `ds task clear-active` removes the file
+
+### Effect on skill.invoked Events
+
+| Active task set? | `attribution_status` | SDLC fields |
+|-----------------|---------------------|-------------|
+| Yes | `"fully_attributed"` | task_id, work_order_id, milestone_id, project_id |
+| No | `"orphan"` | all null |
+
+Events emitted before TA2 (the existing 21 skill.invoked events) remain orphans permanently.
+
+## Migration History (updated)
 
 | Migration | Description |
 |-----------|-------------|
@@ -101,3 +133,4 @@ All SDLC-domain events (`domain = "sdlc"`) must include the following fields in 
 | 059 | `_built_from_event_id` column added to execution_events |
 | 060 | Backfill: domain added to existing events; execution_events populated from canonical |
 | 061 | Backfill: synthetic project.created, milestone.created, work_order.created events for pre-TA0 rows |
+| 064 | Backfill: synthetic task.created events for pre-TA1 task rows |
