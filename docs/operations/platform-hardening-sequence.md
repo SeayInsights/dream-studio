@@ -103,3 +103,5 @@ file sprawl, expose private project history, or authorize execution.
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
 
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
+
+<!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->

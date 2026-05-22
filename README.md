@@ -121,12 +121,46 @@ ds doctor
 ```
 
 ### 7. Register your first project
+
+The `--path` flag writes a `.dream-studio-project` marker for token attribution:
+
 ```powershell
-ds project register --name "My Project"
+ds project register --name "My Project" --path C:\path\to\your\project
 ds project set-active <project_id>
 ds project next <project_id>
 ds work-order start <work_order_id>
 ```
+
+### 8. Token attribution setup (optional but recommended)
+
+Token attribution tracks which Claude Code tool calls belong to which project, work order,
+and task. After registering a project, install the PostToolUse hook to start capturing data:
+
+Add to `~/.claude/settings.json`:
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py C:\\path\\to\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Then set the active task before working:
+```powershell
+ds task set-active <task_id>
+```
+
+See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full setup and troubleshooting.
 
 ---
 
@@ -135,7 +169,7 @@ ds work-order start <work_order_id>
 ### Project
 | Command | Description |
 |---------|-------------|
-| `ds project register --name "Name"` | Register a new project |
+| `ds project register --name "Name" --path <dir>` | Register a new project and write marker |
 | `ds project list` | List registered projects |
 | `ds project set-active <id>` | Set the active project |
 | `ds project status <id>` | Show milestone and work-order summary |

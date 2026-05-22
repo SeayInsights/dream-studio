@@ -78,3 +78,5 @@ Static validation checks that:
 - dashboard cards are derived and non-authoritative
 
 <!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->
+
+<!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
