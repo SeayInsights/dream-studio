@@ -33,35 +33,27 @@ from emitters.shared.spool_writer import write_envelopes  # noqa: E402
 from .loader import load_rules  # noqa: E402
 from .models import EvaluationError, GuardrailAction, GuardrailDecision  # noqa: E402
 
-ACTIVITY_LOG_TRIGGER_FIELDS = {
-    "activity_id",
-    "activity_type",
-    "stream_id",
-    "stream_type",
-    "event_timestamp",
-    "event_data",
-    "prd_id",
-    "task_id",
-    "session_id",
-    "workflow_run_key",
-    "skill_id",
-    "status",
-    "severity",
-    "duration_ms",
-    "is_anomaly",
-    "anomaly_score",
-}
-
-LEGACY_ACTIVITY_LOG_TRIGGER_FIELDS = {
+CANONICAL_EVENTS_FIELDS = {
     "event_id",
     "event_type",
-    "metadata",
-    "tool_name",
+    "timestamp",
+    "session_id",
+    "project_id",
+    "severity",
+    "confidence",
+    "trace",
+    "payload",
+    "schema_version",
+    "source_type",
 }
+
+# activity_log was removed in migration 062-063 (TA0c). Any custom_query
+# referencing it will fail with "no such table". Listed here for error messages.
+_REMOVED_TABLES = {"activity_log"}
 
 
 def _custom_query_matches(conn, query: str) -> bool:
-    """Run a constrained read-only custom query against activity_log."""
+    """Run a constrained read-only custom query against canonical_events."""
     normalized = query.strip()
     lowered = normalized.lower()
 
@@ -69,16 +61,19 @@ def _custom_query_matches(conn, query: str) -> bool:
         raise EvaluationError("Guardrail custom_query must be a read-only SELECT.")
     if ";" in normalized.rstrip(";"):
         raise EvaluationError("Guardrail custom_query must contain only one SELECT statement.")
-    if "activity_log" not in lowered:
-        raise EvaluationError("Guardrail custom_query must query activity_log explicitly.")
 
-    for field in sorted(LEGACY_ACTIVITY_LOG_TRIGGER_FIELDS):
-        if re.search(rf"\b{re.escape(field)}\b", lowered):
-            supported = ", ".join(sorted(ACTIVITY_LOG_TRIGGER_FIELDS))
+    for removed in _REMOVED_TABLES:
+        if re.search(rf"\b{re.escape(removed)}\b", lowered):
             raise EvaluationError(
-                f"Guardrail custom_query uses unsupported activity_log field {field!r}. "
-                f"Supported fields: {supported}."
+                f"Guardrail custom_query references removed table {removed!r}. "
+                f"Use canonical_events instead (columns: {', '.join(sorted(CANONICAL_EVENTS_FIELDS))})."
             )
+
+    if "canonical_events" not in lowered and "hook_invocations" not in lowered:
+        raise EvaluationError(
+            "Guardrail custom_query must query canonical_events or hook_invocations. "
+            f"Supported columns for canonical_events: {', '.join(sorted(CANONICAL_EVENTS_FIELDS))}."
+        )
 
     cursor = conn.execute(normalized)
     return cursor.fetchone() is not None

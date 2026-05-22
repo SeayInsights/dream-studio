@@ -195,12 +195,49 @@ def guard_real_homedir(tmp_path, monkeypatch):
     except Exception:
         pass
 
+    # Reset DatabaseRuntime singleton so it re-initializes from the (now-patched)
+    # DREAM_STUDIO_DB_PATH. Without this, a singleton initialized before the fixture
+    # activates caches the real DB path and bypasses the monkeypatch entirely.
+    try:
+        from core.config.database import DatabaseRuntime as _DBRuntime
+
+        _DBRuntime.reset_instance()
+    except Exception:
+        pass
+
     real_events = Path.home() / ".dream-studio" / "events"
     before_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0
     real_integrations = Path.home() / ".dream-studio" / "integrations"
     before_int = sum(1 for _ in real_integrations.rglob("*")) if real_integrations.exists() else 0
 
+    # Track real DB row counts for tables most likely to receive accidental writes.
+    real_db = Path.home() / ".dream-studio" / "state" / "studio.db"
+    _WATCHED_TABLES = ("ds_projects", "ds_work_orders", "ds_tasks", "ds_milestones")
+    _before_db: dict[str, int] = {}
+    if real_db.is_file():
+        try:
+            import sqlite3 as _sqlite3
+
+            _conn = _sqlite3.connect(str(real_db))
+            for _t in _WATCHED_TABLES:
+                try:
+                    _before_db[_t] = _conn.execute(f"SELECT COUNT(*) FROM {_t}").fetchone()[0]
+                except Exception:
+                    pass
+            _conn.close()
+        except Exception:
+            pass
+
     yield
+
+    # Teardown: reset singleton again so subsequent tests don't inherit a stale instance
+    # pointing at the (now-cleaned-up) tmp DB path.
+    try:
+        from core.config.database import DatabaseRuntime as _DBRuntime
+
+        _DBRuntime.reset_instance()
+    except Exception:
+        pass
 
     after_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0
     assert after_count == before_count, (
@@ -212,3 +249,32 @@ def guard_real_homedir(tmp_path, monkeypatch):
         f"Test created {after_int - before_int} file(s) in real "
         f"~/.dream-studio/integrations. Use the ds_home fixture."
     )
+    if _before_db and real_db.is_file():
+        try:
+            import sqlite3 as _sqlite3
+
+            _conn = _sqlite3.connect(str(real_db))
+            _violations: list[str] = []
+            for _t in _WATCHED_TABLES:
+                if _t not in _before_db:
+                    continue
+                try:
+                    _after = _conn.execute(f"SELECT COUNT(*) FROM {_t}").fetchone()[0]
+                    if _after > _before_db[_t]:
+                        _violations.append(
+                            f"{_t}: {_before_db[_t]} → {_after} (+{_after - _before_db[_t]})"
+                        )
+                except Exception:
+                    pass
+            _conn.close()
+            assert not _violations, (
+                "Test wrote rows to real ~/.dream-studio/state/studio.db.\n"
+                "Affected tables: " + ", ".join(_violations) + "\n"
+                "Ensure DREAM_STUDIO_DB_PATH is set to a tmp path before any DB connection. "
+                "The guard_real_homedir fixture sets this via monkeypatch.setenv, but a DB "
+                "connection initiated before the fixture activates will bypass it."
+            )
+        except AssertionError:
+            raise
+        except Exception:
+            pass
