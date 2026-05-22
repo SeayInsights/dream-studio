@@ -99,3 +99,5 @@ Long-run validation should include the platform-hardening summary, policy previe
 <!-- Last reviewed 2026-05-21 — Long-run validation should verify that `~/.dream-studio/state/platform.json` exists and is readable after `ds doctor` runs. The platform profile (`core.config.platform`) is local state, not SQLite authority; it does not affect the live SQLite hash guard. A missing platform.json is self-healing on the next `ds doctor` call and is not a release blocker. -->
 
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
+
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->

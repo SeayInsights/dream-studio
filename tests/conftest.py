@@ -146,6 +146,8 @@ def guard_real_homedir(tmp_path, monkeypatch):
     canonical DB-path resolver (`core.config.database._default_db_path`) and
     every caller that delegates to it write to a hermetic tmp DB instead of
     the operator's real ~/.dream-studio/state/studio.db.
+    If DS_ACTIVE_TASK_PATH is not already set, sets a fallback so active task
+    writes never reach the real ~/.dream-studio/state/active_task.json.
     """
     if "DS_SPOOL_ROOT" not in _os.environ:
         guard = tmp_path / "guard_spool"
@@ -166,6 +168,11 @@ def guard_real_homedir(tmp_path, monkeypatch):
         guard_platform_dir = tmp_path / "guard_platform"
         guard_platform_dir.mkdir()
         monkeypatch.setenv("DS_PLATFORM_PROFILE_PATH", str(guard_platform_dir / "platform.json"))
+
+    if "DS_ACTIVE_TASK_PATH" not in _os.environ:
+        guard_at_dir = tmp_path / "guard_active_task"
+        guard_at_dir.mkdir()
+        monkeypatch.setenv("DS_ACTIVE_TASK_PATH", str(guard_at_dir / "active_task.json"))
 
     real_events = Path.home() / ".dream-studio" / "events"
     before_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0

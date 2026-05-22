@@ -437,6 +437,14 @@ def main(argv: list[str] | None = None) -> int:
     ms_status.add_argument("milestone_id", help="Milestone UUID")
     ms_status.add_argument("--planning-root", default=None, help="Override .planning/ directory")
 
+    # task subcommand group (TA2)
+    task_cmd = subcommands.add_parser("task", help="Manage active task context")
+    task_sub = task_cmd.add_subparsers(dest="task_command", required=True)
+    t_set_active = task_sub.add_parser("set-active", help="Set the active task context")
+    t_set_active.add_argument("task_id", help="Task UUID")
+    task_sub.add_parser("active", help="Show the current active task context")
+    task_sub.add_parser("clear-active", help="Clear the active task context")
+
     args = parser.parse_args(argv)
     source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None
@@ -711,6 +719,8 @@ def main(argv: list[str] | None = None) -> int:
             return _design_brief_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "milestone":
             return _milestone_dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "task":
+            return _task_dispatch(args)
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 1
@@ -2293,6 +2303,52 @@ def _milestone_status(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _task_dispatch(args: argparse.Namespace) -> int:
+    if args.task_command == "set-active":
+        return _task_set_active(task_id=args.task_id)
+    if args.task_command == "active":
+        return _task_get_active()
+    if args.task_command == "clear-active":
+        return _task_clear_active()
+    print(f"Unknown task command: {args.task_command}", file=sys.stderr)
+    return 1
+
+
+def _task_set_active(*, task_id: str) -> int:
+    from core.sdlc.active_task import set_active_task
+
+    try:
+        ctx = set_active_task(task_id)
+        import dataclasses
+
+        print(json.dumps(dataclasses.asdict(ctx), indent=2))
+        return 0
+    except ValueError as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
+        return 1
+
+
+def _task_get_active() -> int:
+    from core.sdlc.active_task import get_active_task
+
+    ctx = get_active_task()
+    if ctx is None:
+        print(json.dumps({"active_task": None, "message": "no active task"}, indent=2))
+        return 0
+    import dataclasses
+
+    print(json.dumps({"active_task": dataclasses.asdict(ctx)}, indent=2))
+    return 0
+
+
+def _task_clear_active() -> int:
+    from core.sdlc.active_task import clear_active_task
+
+    removed = clear_active_task()
+    print(json.dumps({"ok": True, "cleared": removed}, indent=2))
+    return 0
 
 
 def _print(payload: dict[str, Any]) -> int:

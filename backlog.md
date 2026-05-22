@@ -12,8 +12,8 @@
 | TA0b | Dual event store reconciliation | Complete — PR #37 |
 | TA0 | SDLC entity creation events + backfill | Complete — PR #38 |
 | TA0c | Retire activity_log, migrate to canonical events | Complete — PR #39 |
-| **TA1** | **Task lifecycle events** | **In Progress — this PR** |
-| TA2 | Skills carry task_id | Pending |
+| TA1 | Task lifecycle events | Complete — PR #40 |
+| **TA2** | **Active task context + skill SDLC trace** | **Complete — this PR** |
 | TA3 | Universal token capture (PostToolUse hook) | Pending |
 | TA4 | Remove hardcoded project_id | Pending |
 | TA5 | Dashboard truth-up (remove synthesizer) | Pending |
@@ -41,6 +41,15 @@
 - `task.completed` trace enriched with `milestone_id` + `project_id` (resolved via JOIN with ds_work_orders)
 - Migration 064: backfill — synthetic `task.created` events for all pre-TA1 task rows (attribution_status: "backfill")
 - **Finding: `task.started` has no call site.** Tasks transition directly pending → complete; no in_progress state exists for tasks (only work orders). Type registered for TA2 active-task wiring but emitter_implemented=False.
+
+### TA2 Summary (this PR)
+- `core/sdlc/active_task.py` introduced: set/get/clear active task context at `~/.dream-studio/state/active_task.json` (env-overridable via DS_ACTIVE_TASK_PATH)
+- Active task resolves full SDLC chain (task_id → work_order_id → milestone_id → project_id) at set time
+- `skill.invoked` events now carry task_id, work_order_id, milestone_id, attribution_status ("fully_attributed" or "orphan")
+- `task.completed` emitter auto-clears active_task.json when the completed task matches the active pointer
+- CLI commands: `ds task set-active <task_id>`, `ds task active`, `ds task clear-active`
+- DS_ACTIVE_TASK_PATH env var added to test guard fixture in tests/conftest.py
+- Existing 21 skill.invoked events remain orphans permanently (active task was never set when they fired)
 
 ---
 

@@ -182,6 +182,12 @@ def record_skill_invocation(
     )
 
     now = datetime.now(timezone.utc).isoformat()
+    try:
+        from core.sdlc.active_task import get_active_task as _get_active_task
+
+        _active_ctx = _get_active_task()
+    except Exception:
+        _active_ctx = None
     event_emitted = False
     try:
         import spool.writer as _spool_writer
@@ -198,7 +204,15 @@ def record_skill_invocation(
                 "trace": {
                     "domain": "sdlc",
                     "skill_specifier": specifier,
-                    "project_id": resolved_project_id,
+                    "project_id": (
+                        _active_ctx.project_id if _active_ctx is not None else resolved_project_id
+                    ),
+                    "task_id": _active_ctx.task_id if _active_ctx is not None else None,
+                    "work_order_id": _active_ctx.work_order_id if _active_ctx is not None else None,
+                    "milestone_id": _active_ctx.milestone_id if _active_ctx is not None else None,
+                    "attribution_status": (
+                        "fully_attributed" if _active_ctx is not None else "orphan"
+                    ),
                 },
                 "severity": "info",
                 "payload": {
