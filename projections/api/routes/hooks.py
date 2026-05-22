@@ -5,7 +5,6 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Path
 
 from core.config.database import get_connection
-from projections.api.safety import activity_log_filter_clause
 from projections.api.routes.sqlite_schema import has_columns, object_exists
 
 router = APIRouter()
@@ -144,29 +143,8 @@ async def list_hook_executions(
                 },
             }
 
-        join_activity = object_exists(conn, "activity_log")
-        activity_select = (
-            """
-                al.event_timestamp,
-                al.severity,
-                al.is_anomaly,
-                al.anomaly_score
-        """
-            if join_activity
-            else """
-                he.started_at as event_timestamp,
-                'info' as severity,
-                0 as is_anomaly,
-                0 as anomaly_score
-        """
-        )
-        activity_join = (
-            "LEFT JOIN activity_log al ON he.activity_id = al.activity_id" if join_activity else ""
-        )
-        activity_filter = activity_log_filter_clause("al") if join_activity else ""
-
         # Build query with optional filters
-        query = f"""
+        query = """
             SELECT
                 he.hook_exec_id,
                 he.activity_id,
@@ -182,10 +160,12 @@ async def list_hook_executions(
                 he.error_message,
                 he.cpu_time_ms,
                 he.memory_mb,
-                {activity_select}
+                he.started_at AS event_timestamp,
+                'info' AS severity,
+                0 AS is_anomaly,
+                0 AS anomaly_score
             FROM hook_executions he
-            {activity_join}
-            WHERE 1=1 {activity_filter}
+            WHERE 1=1
         """
         params = []
 
@@ -257,7 +237,7 @@ async def get_hook_execution_details(
     try:
         # Get execution details
         row = conn.execute(
-            f"""
+            """
             SELECT
                 he.hook_exec_id,
                 he.activity_id,
@@ -273,13 +253,12 @@ async def get_hook_execution_details(
                 he.error_message,
                 he.cpu_time_ms,
                 he.memory_mb,
-                al.event_timestamp,
-                al.severity,
-                al.is_anomaly,
-                al.anomaly_score
+                he.started_at AS event_timestamp,
+                'info' AS severity,
+                0 AS is_anomaly,
+                0.0 AS anomaly_score
             FROM hook_executions he
-            LEFT JOIN activity_log al ON he.activity_id = al.activity_id
-            WHERE he.hook_exec_id = ? {activity_log_filter_clause("al")}
+            WHERE he.hook_exec_id = ?
         """,
             (exec_id,),
         ).fetchone()
@@ -574,58 +553,7 @@ async def get_hook_stats() -> Dict[str, Any]:
 @router.get("/hooks/anomalies")
 async def list_hook_anomalies() -> Dict[str, Any]:
     """
-    List hooks with anomalous behavior detected.
-
-    Returns hook executions marked as anomalies in the activity log.
+    Anomaly detection was retired when activity_log was dropped (migration 063).
+    Returns an empty result set.
     """
-    conn = get_connection()
-
-    try:
-        rows = conn.execute(f"""
-            SELECT
-                he.hook_exec_id,
-                he.activity_id,
-                he.hook_name,
-                he.hook_type,
-                he.started_at,
-                he.completed_at,
-                he.duration_ms,
-                he.status,
-                he.error_message,
-                al.event_timestamp,
-                al.severity,
-                al.anomaly_score,
-                al.is_anomaly
-            FROM hook_executions he
-            JOIN activity_log al ON he.activity_id = al.activity_id
-            WHERE al.activity_type = 'hook_execution'
-              AND al.is_anomaly = 1
-              {activity_log_filter_clause("al")}
-            ORDER BY al.anomaly_score DESC, he.started_at DESC
-        """).fetchall()
-
-        anomalies = []
-        for row in rows:
-            anomalies.append(
-                {
-                    "hook_exec_id": row["hook_exec_id"],
-                    "activity_id": row["activity_id"],
-                    "hook_name": row["hook_name"],
-                    "hook_type": row["hook_type"],
-                    "started_at": row["started_at"],
-                    "completed_at": row["completed_at"],
-                    "duration_ms": row["duration_ms"],
-                    "status": row["status"],
-                    "error_message": row["error_message"],
-                    "event_timestamp": row["event_timestamp"],
-                    "severity": row["severity"],
-                    "anomaly_score": row["anomaly_score"],
-                }
-            )
-
-        return {"anomalies": anomalies, "count": len(anomalies)}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    finally:
-        conn.close()
+    return {"anomalies": [], "count": 0}

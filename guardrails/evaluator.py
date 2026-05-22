@@ -128,11 +128,11 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
     params = []
 
     if trigger.event_type:
-        conditions.append("activity_type = ?")
+        conditions.append("event_type = ?")
         params.append(trigger.event_type)
 
     if trigger.finding_type:
-        conditions.append("json_extract(event_data, '$.finding_type') = ?")
+        conditions.append("json_extract(payload, '$.finding_type') = ?")
         params.append(trigger.finding_type)
 
     if trigger.severity:
@@ -144,7 +144,7 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
         params.extend([trigger.tool_name, f"{trigger.tool_name}:%", trigger.tool_name])
 
     if event_id:
-        conditions.append("activity_id = ?")
+        conditions.append("event_id = ?")
         params.append(event_id)
 
     if not conditions and not trigger.file_pattern:
@@ -154,14 +154,14 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
     where_clause = " AND ".join(conditions) if conditions else "1 = 1"
 
     if trigger.file_pattern:
-        query = f"SELECT event_data FROM activity_log WHERE {where_clause}"
+        query = f"SELECT payload FROM canonical_events WHERE {where_clause}"
         cursor = conn.execute(query, params)
         return any(
             _event_data_matches_file_pattern(row[0], trigger.file_pattern)
             for row in cursor.fetchall()
         )
 
-    query = f"SELECT COUNT(*) FROM activity_log WHERE {where_clause}"
+    query = f"SELECT COUNT(*) FROM canonical_events WHERE {where_clause}"
     cursor = conn.execute(query, params)
     count = cursor.fetchone()[0]
 

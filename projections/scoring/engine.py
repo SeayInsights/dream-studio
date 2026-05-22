@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from core.config.database import get_connection, transaction
 from core.event_store import studio_db
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as _CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes as _write_envelopes
 
 
 def _default_db_path() -> Path:
@@ -66,9 +69,9 @@ class RiskScoringEngine:
     def fetch_unscored_events(self, limit: int = 100) -> List[Dict]:
         """Fetch events that need risk scoring.
 
-        Queries activity_log for events that:
-        - Are security-related (activity_type starts with 'security.')
-        - Don't have a corresponding risk_score.computed event
+        Queries canonical_events for events that:
+        - Are security-related (event_type starts with 'security.')
+        - Don't have a corresponding risk.score.computed event
 
         Args:
             limit: Maximum number of events to fetch
@@ -80,28 +83,34 @@ class RiskScoringEngine:
         cursor = conn.cursor()
 
         query = """
-        SELECT
-            activity_id,
-            activity_type,
-            event_timestamp,
-            severity,
-            stream_type,
-            stream_id,
-            event_data
-        FROM activity_log
-        WHERE activity_type LIKE 'security.%'
-        AND activity_id NOT IN (
-            SELECT json_extract(event_data, '$.source_event_id')
-            FROM activity_log
-            WHERE activity_type = 'risk_score.computed'
-            AND json_extract(event_data, '$.source_event_id') IS NOT NULL
+        SELECT event_id, event_type, timestamp, payload, trace
+        FROM canonical_events
+        WHERE event_type LIKE 'security.%'
+        AND event_id NOT IN (
+            SELECT json_extract(payload, '$.source_event_id')
+            FROM canonical_events
+            WHERE event_type = 'risk.score.computed'
+            AND json_extract(payload, '$.source_event_id') IS NOT NULL
         )
-        ORDER BY event_timestamp DESC
+        ORDER BY timestamp DESC
         LIMIT ?
         """
 
         cursor.execute(query, (limit,))
-        events = [dict(row) for row in cursor.fetchall()]
+        events = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            events.append(
+                {
+                    "activity_id": d.get("event_id"),  # event_id now serves as the ID
+                    "activity_type": d.get("event_type"),
+                    "event_timestamp": d.get("timestamp"),
+                    "severity": "info",  # default; not stored in canonical_events separately
+                    "stream_type": None,
+                    "stream_id": None,
+                    "event_data": d.get("payload"),  # payload is the JSON blob
+                }
+            )
         conn.close()
 
         return events
@@ -159,66 +168,44 @@ class RiskScoringEngine:
         return round(total_risk, 2)
 
     def emit_enriched_event(self, event: Dict, risk_score: float) -> None:
-        """Emit enriched event back to activity_log.
+        """Emit enriched event to the canonical event spool.
 
-        Creates a new event with type 'risk_score.computed' that references
+        Creates a new RISK_SCORE_COMPUTED canonical event that references
         the original event and includes the computed risk score.
 
         Args:
             event: Original event dictionary
             risk_score: Computed risk score (0-100)
         """
-        enriched_data = {
-            "source_event_id": event["activity_id"],
-            "source_type": event["activity_type"],
-            "risk_score": risk_score,
-            "computed_at": datetime.now().isoformat(),
-            "components": {
-                "file_level": (
-                    "file_path in original event"
-                    if json.loads(event.get("event_data", "{}")).get("file_path")
-                    else None
-                ),
-                "project_level": "total open findings",
-                "temporal": "findings in last 24h",
-            },
-        }
-
-        # Determine severity based on risk score
-        if risk_score >= 70:
-            severity = "critical"
-        elif risk_score >= 50:
-            severity = "error"
-        elif risk_score >= 30:
-            severity = "warning"
-        else:
-            severity = "info"
-
-        with self._transaction() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO activity_log (
-                    activity_id,
-                    activity_type,
-                    event_timestamp,
-                    severity,
-                    stream_type,
-                    stream_id,
-                    event_data
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    f"risk-{event['activity_id'][:8]}-{int(time.time())}",
-                    "risk_score.computed",
-                    datetime.now().isoformat(),
-                    severity,
-                    "risk_engine",
-                    "analytics",
-                    json.dumps(enriched_data),
-                ),
+        try:
+            _write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=_CanonicalEventType.RISK_SCORE_COMPUTED.value,
+                        session_id=None,
+                        payload={
+                            "source_event_type": event.get("activity_type"),
+                            "risk_score": risk_score,
+                            "computed_at": datetime.now().isoformat(),
+                            "components": {
+                                "file_level": (
+                                    "file_path in original event"
+                                    if json.loads(
+                                        event.get("event_data") or event.get("payload") or "{}"
+                                    ).get("file_path")
+                                    else None
+                                ),
+                                "project_level": "total open findings",
+                                "temporal": "findings in last 24h",
+                            },
+                        },
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
             )
+        except Exception:
+            pass
 
     def run_forever(self, interval_sec: int = 300) -> None:
         """Main loop - run scoring every N seconds.
