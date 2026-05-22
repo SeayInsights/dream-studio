@@ -1,5 +1,35 @@
 # Dream Studio — Backlog
 
+## Post-Phase-TA Workstreams
+
+### brownfield-sdlc-import
+
+**Status:** Pending  
+**Discovered:** TA6 verification planning (2026-05-22)
+
+Dream Studio's only SDLC creation workflow is `ds-project scope`, a greenfield
+conversational PRD intake. No workflow exists for brownfield onboarding — an
+operator with an existing codebase cannot retroactively structure that work into
+milestones and work orders without going through the greenfield intake as if
+planning from scratch.
+
+`analyze:intelligence` produces codebase analysis (health score, violations, PRD
+doc) but does not propose or persist SDLC structure. The brownfield check in
+`ds-project scope` surfaces analysis findings as intake context, but this is
+composition, not an import workflow.
+
+**Scope of a future workstream:**
+- "Propose SDLC structure from existing work" analysis that generates milestone/WO
+  proposals from git history, open PRs, or operator description
+- Operator reviews proposals before any DB writes ("propose then commit" pattern)
+- Persists approved structure via existing `create_milestone`, `create_work_order`,
+  `create_task` mutations
+
+This is a workflow ergonomics concern, not an attribution correctness concern.
+Phase TA's token attribution goals are not blocked by this gap.
+
+---
+
 ## TA-series: Token Attribution Remediation (In Progress)
 
 **Status:** TA0–TA5 complete — 2 workstreams remaining (TA3b + TA6)
