@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 SCHEMA_VERSION = 1
 
@@ -33,7 +33,7 @@ class CanonicalEventEnvelope:
     raw_tool_output_retained: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d = {
             "event_id": self.event_id,
             "event_type": self.event_type,
             "timestamp": self.timestamp,
@@ -48,6 +48,47 @@ class CanonicalEventEnvelope:
             "raw_prompt_retained": self.raw_prompt_retained,
             "raw_tool_output_retained": self.raw_tool_output_retained,
         }
+        err = _validate_sdlc_event(d)
+        if err is not None:
+            try:
+                from core.telemetry.diagnostics import log_diagnostic
+
+                log_diagnostic(
+                    category="failure",
+                    source="canonical.events.envelope.validate",
+                    context={"event_type": self.event_type, "event_id": self.event_id},
+                    details={"error_message": err},
+                )
+            except Exception:
+                pass
+        return d
+
+
+_VALID_ATTRIBUTION_STATUSES: frozenset[str] = frozenset(
+    {"fully_attributed", "partial", "orphan", "backfill"}
+)
+
+
+def _validate_sdlc_event(envelope: dict[str, Any]) -> Optional[str]:
+    """Validate SDLC-domain events have required attribution fields.
+
+    Returns an error message if validation fails, None if OK.
+    Non-SDLC events always pass.
+    """
+    trace = envelope.get("trace", {})
+    if trace.get("domain") != "sdlc":
+        return None
+
+    if "attribution_status" not in trace:
+        return "SDLC event missing required trace.attribution_status"
+
+    if trace["attribution_status"] not in _VALID_ATTRIBUTION_STATUSES:
+        return (
+            f"Invalid attribution_status: {trace['attribution_status']!r}"
+            f" (must be one of {sorted(_VALID_ATTRIBUTION_STATUSES)})"
+        )
+
+    return None
 
 
 REQUIRED_FIELDS: frozenset[str] = frozenset(
