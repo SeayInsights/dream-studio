@@ -2,7 +2,7 @@
 
 ## TA-series: Token Attribution Remediation (In Progress)
 
-**Status:** TA0–TA3 complete — 4 workstreams remaining
+**Status:** TA0–TA4 complete — 3 workstreams remaining
 
 ### 10-Workstream Plan
 
@@ -14,9 +14,9 @@
 | TA0c | Retire activity_log, migrate to canonical events | Complete — PR #39 |
 | TA1 | Task lifecycle events | Complete — PR #40 |
 | TA2 | Active task context + skill SDLC trace | Complete — PR #41 |
-| **TA3** | **Universal token capture (PostToolUse hook)** | **Complete — this PR** |
+| TA3 | Universal token capture (PostToolUse hook) | Complete — PR #42 |
 | TA3b | Execution context (parent_invocation_id + stale-state audit) | Pending |
-| TA4 | Remove hardcoded project_id | Pending |
+| **TA4** | **Remove hardcoded project_id + enforce attribution_status** | **Complete — this PR** |
 | TA5 | Dashboard truth-up (remove synthesizer) | Pending |
 | TA6 | End-to-end verification | Pending |
 

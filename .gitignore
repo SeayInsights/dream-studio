@@ -134,3 +134,20 @@ docs/intelligence/
 docs/repo_actions/
 .claude/
 .claude-plugin/
+
+# Test output captures
+pytest-*.txt
+smoke-*.txt
+black-*.txt
+lint-*.txt
+drift-*.txt
+
+# Debug scripts (one-off investigations)
+tmp_*.py
+verify_*.py
+
+# PR body drafts
+pr-body-*.md
+
+# Per-operator project marker (each operator registers their own)
+.dream-studio-project
