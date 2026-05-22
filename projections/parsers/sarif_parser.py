@@ -1,7 +1,7 @@
 """SARIF file parser for security findings.
 
 Parses SARIF 2.1.0 format files from security scanning tools (Semgrep, Bandit, Trivy, etc.)
-and writes findings to the analytics database (activity_log + sec_sarif_findings).
+and writes findings to the analytics database (sec_sarif_findings) and emits canonical events.
 
 Usage:
     from projections.parsers.sarif_parser import parse_sarif_file
@@ -27,6 +27,9 @@ if str(_project_root) not in sys.path:
 
 from core.event_store import studio_db
 from core.config.database import transaction
+from canonical.events.envelope import CanonicalEventEnvelope
+from canonical.events.types import EventType as _CanonicalEventType
+from emitters.shared.spool_writer import write_envelopes as _write_envelopes
 
 logger = logging.getLogger(__name__)
 
@@ -174,8 +177,8 @@ def parse_sarif_file(file_path: str) -> int:
 
     For each finding:
     1. Check for duplicates (skip if exists)
-    2. Insert into activity_log (get activity_id)
-    3. Insert into sec_sarif_findings with the activity_id
+    2. Emit canonical SECURITY_FINDING_RECORDED event via spool
+    3. Insert into sec_sarif_findings
 
     Args:
         file_path: Path to SARIF JSON file
@@ -252,7 +255,6 @@ def parse_sarif_file(file_path: str) -> int:
                     # Extract severity
                     sarif_level = result.get("level", "warning")
                     finding_severity = _normalize_severity(sarif_level)
-                    activity_severity = FINDING_TO_ACTIVITY_SEVERITY[finding_severity]
 
                     # Extract optional fields
                     rule_name = result.get("ruleId")  # Some tools provide a separate name
@@ -267,36 +269,36 @@ def parse_sarif_file(file_path: str) -> int:
                         skipped_duplicates += 1
                         continue
 
-                    # Insert into activity_log first
+                    # Emit canonical event for security finding
                     timestamp = datetime.now(timezone.utc).isoformat()
-                    activity_status = SEVERITY_TO_STATUS[finding_severity]
-
-                    cur = conn.execute(
-                        """INSERT INTO activity_log
-                           (activity_type, stream_id, stream_type, event_timestamp,
-                            event_data, status, severity)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            "security_finding",
-                            f"{tool_name}:{rule_id}",
-                            "sarif_scan",
-                            timestamp,
-                            json.dumps({"file": file_path, "line": line_number}),
-                            activity_status,
-                            activity_severity,
-                        ),
-                    )
-                    activity_id = cur.lastrowid
+                    try:
+                        _write_envelopes([
+                            CanonicalEventEnvelope(
+                                event_type=_CanonicalEventType.SECURITY_FINDING_RECORDED.value,
+                                session_id=None,
+                                payload={
+                                    "rule_id": rule_id,
+                                    "severity": finding_severity,
+                                    "message": message,
+                                    "file_path": file_path,
+                                    "line_number": line_number,
+                                    "scan_tool": tool_name,
+                                },
+                                confidence="unavailable",
+                                project_id=None,
+                            )
+                        ])
+                    except Exception:
+                        pass
 
                     # Insert into sec_sarif_findings
                     conn.execute(
                         """INSERT INTO sec_sarif_findings
-                           (activity_id, scan_tool, rule_id, rule_name, severity,
+                           (scan_tool, rule_id, rule_name, severity,
                             file_path, line_number, message, cwe_ids, cvss_score,
                             status, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            activity_id,
                             tool_name,
                             rule_id,
                             rule_name,
