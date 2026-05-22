@@ -89,6 +89,11 @@ class EventType(str, Enum):
     MILESTONE_DELETED = "milestone.deleted"
     WORK_ORDER_CREATED = "work_order.created"
 
+    # Task lifecycle events (TA1)
+    TASK_CREATED = "task.created"
+    TASK_STARTED = "task.started"
+    TASK_DELETED = "task.deleted"
+
     # Activity-log retirement (TA0c) — operational telemetry migrated from legacy store
     WORKFLOW_COMPLETED = "workflow.completed"
     LESSON_CAPTURED = "system.lesson.captured"
@@ -551,6 +556,28 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.WORK_ORDER_CREATED,
         "sdlc",
         "A new work order was created under a milestone/project",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # Task lifecycle events (TA1)
+    EventTypeMeta(
+        EventType.TASK_CREATED,
+        "sdlc",
+        "A new task was added to a work order",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.TASK_STARTED,
+        "sdlc",
+        "Work began on a task (no call site yet — registered for TA2 active-task wiring)",
+        False,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.TASK_DELETED,
+        "sdlc",
+        "A task was deleted (cascade from project or work order deletion)",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),

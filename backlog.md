@@ -2,7 +2,7 @@
 
 ## TA-series: Token Attribution Remediation (In Progress)
 
-**Status:** TA0b complete, TA0 in progress — 7 workstreams remaining
+**Status:** TA0, TA0b, TA0c complete — TA1 in progress — 6 workstreams remaining
 
 ### 9-Workstream Plan
 
@@ -10,8 +10,9 @@
 |----|-------|--------|
 | TA0a | Audit findings baseline | Complete (pre-existing) |
 | TA0b | Dual event store reconciliation | Complete — PR #37 |
-| **TA0** | **SDLC entity creation events + backfill** | **In Progress — this PR** |
-| TA1 | Task lifecycle events | Pending |
+| TA0 | SDLC entity creation events + backfill | Complete — PR #38 |
+| TA0c | Retire activity_log, migrate to canonical events | Complete — PR #39 |
+| **TA1** | **Task lifecycle events** | **In Progress — this PR** |
 | TA2 | Skills carry task_id | Pending |
 | TA3 | Universal token capture (PostToolUse hook) | Pending |
 | TA4 | Remove hardcoded project_id | Pending |
@@ -26,12 +27,20 @@
 - Migration 059: `_built_from_event_id` column added to execution_events for canonical linkage
 - Migration 060: backfill — domain added to existing events, execution_events populated from canonical
 
-### TA0 Summary (this PR)
+### TA0 Summary
 - `project.created`, `project.deleted`, `milestone.created`, `milestone.deleted`, `work_order.created` added to registry
 - Forward emission from `register_project`, `delete_project`, `create_milestone`, `create_work_order`
 - `work_order.started` and `work_order.closed` traces extended with `milestone_id` + `attribution_status`
 - Migration 061: backfill — synthetic *.created events for 19 pre-TA0 rows (attribution_status: "backfill")
 - `task.created` and `task.started` deferred to TA1
+
+### TA1 Summary (this PR)
+- `task.created`, `task.started` (no emitter — no in_progress call site), `task.deleted` added to registry
+- Forward emission from `create_task()` and `add_tasks_from_file()` → `task.created`
+- Forward emission from `delete_project()` cascade → `task.deleted` per deleted task
+- `task.completed` trace enriched with `milestone_id` + `project_id` (resolved via JOIN with ds_work_orders)
+- Migration 064: backfill — synthetic `task.created` events for all pre-TA1 task rows (attribution_status: "backfill")
+- **Finding: `task.started` has no call site.** Tasks transition directly pending → complete; no in_progress state exists for tasks (only work orders). Type registered for TA2 active-task wiring but emitter_implemented=False.
 
 ---
 
