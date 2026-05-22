@@ -89,6 +89,21 @@ class EventType(str, Enum):
     MILESTONE_DELETED = "milestone.deleted"
     WORK_ORDER_CREATED = "work_order.created"
 
+    # Activity-log retirement (TA0c) — operational telemetry migrated from legacy store
+    WORKFLOW_COMPLETED = "workflow.completed"
+    LESSON_CAPTURED = "system.lesson.captured"
+    SKILL_EXECUTED = "skill.executed"
+    RISK_SCORE_COMPUTED = "risk.score.computed"
+    SECURITY_FINDING_RECORDED = "security.finding.recorded"
+    APPROACH_CAPTURED = "system.approach.captured"
+    PROJECT_STATS_UPDATED = "system.project_stats.updated"
+    SESSION_RECORDED = "system.session.recorded"
+    SESSION_CLOSED = "system.session.closed"
+    HANDOFF_CREATED = "system.handoff.created"
+    TASK_STATUS_UPDATED = "system.task_status.updated"
+    HOOK_EXECUTION_LOGGED = "system.hook.execution.logged"
+    HOOK_FINDING_CREATED = "system.hook.finding.created"
+
 
 @dataclass(frozen=True)
 class EventTypeMeta:
@@ -536,6 +551,98 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.WORK_ORDER_CREATED,
         "sdlc",
         "A new work order was created under a milestone/project",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # Activity-log retirement (TA0c) — operational telemetry migrated from legacy store
+    EventTypeMeta(
+        EventType.WORKFLOW_COMPLETED,
+        "telemetry",
+        "Workflow run completed (replaces activity_log workflow_run rows)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.LESSON_CAPTURED,
+        "telemetry",
+        "Operational lesson learned captured from analysis or execution",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.SKILL_EXECUTED,
+        "telemetry",
+        "Skill execution telemetry with status and duration",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.RISK_SCORE_COMPUTED,
+        "telemetry",
+        "Risk score computed for a security event",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.SECURITY_FINDING_RECORDED,
+        "telemetry",
+        "Security finding from SARIF scan recorded",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.APPROACH_CAPTURED,
+        "telemetry",
+        "Skill approach pattern captured for reuse",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.PROJECT_STATS_UPDATED,
+        "telemetry",
+        "Project session or token stats updated in registry",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.SESSION_RECORDED,
+        "telemetry",
+        "Session record inserted to database (DB-level, distinct from hook lifecycle)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.SESSION_CLOSED,
+        "telemetry",
+        "Session record closed in database with outcome and token counts",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.HANDOFF_CREATED,
+        "telemetry",
+        "Session handoff document created in database",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.TASK_STATUS_UPDATED,
+        "telemetry",
+        "PRD task status updated (blocked, in_progress, completed)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.HOOK_EXECUTION_LOGGED,
+        "telemetry",
+        "Hook execution logged with status, duration, and exit code",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.HOOK_FINDING_CREATED,
+        "telemetry",
+        "Hook analysis finding (anomaly, violation, etc.) created",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
