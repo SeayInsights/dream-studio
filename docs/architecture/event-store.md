@@ -201,6 +201,44 @@ Active task is persisted at `~/.dream-studio/state/active_task.json` (env-overri
 
 Events emitted before TA2 (the existing 21 skill.invoked events) remain orphans permanently.
 
+## attribution_status Enforcement (TA4)
+
+`attribution_status` is enforced at emission time via `CanonicalEventEnvelope.to_dict()`.
+
+### Validation rule
+
+`_validate_sdlc_event(envelope_dict)` runs inside `to_dict()` on every event:
+
+- Non-SDLC events (`domain != "sdlc"` or no domain) always pass — no attribution required.
+- SDLC events missing `attribution_status` fail validation.
+- SDLC events with an unrecognized `attribution_status` value fail validation.
+
+### Failure behavior: visibility over correctness
+
+On validation failure, `to_dict()`:
+1. Logs a diagnostic entry (`category=failure`, `source=canonical.events.envelope.validate`)
+2. **Continues** — the event dict is returned and written to canonical_events normally.
+
+Events are never blocked. The diagnostic stream shows what's broken so call sites can be
+fixed, rather than silently dropping events that would disappear from all analysis.
+
+### Hardcoded project_id inventory
+
+Scanned all production `.py` source (excluding `tests/` and `migrations/`) for literal
+UUID strings and known operator project UUIDs. **Result: 0 genuine hardcodes found.**
+
+One migration artifact was reviewed and intentionally preserved:
+- `core/event_store/migrations/056_milestone_order_index.sql:14` — backfill WHERE clause
+  for a specific historical project where milestones have identical `created_at` timestamps
+  and rowid is the only reliable ordering signal. Correct by design.
+
+### SDLC emitter fixed in TA4
+
+`block_work_order` (in `core/work_orders/mutations.py`) emitted `work_order.blocked` as a
+hand-built dict without `attribution_status`. Converted to `CanonicalEventEnvelope` with
+`attribution_status: "fully_attributed"` (project_id is always resolved from the DB at
+this call site).
+
 ## Migration History (updated)
 
 | Migration | Description |
