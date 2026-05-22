@@ -162,25 +162,27 @@ def block_work_order(
         try:
             import spool.writer as _spool_writer
 
+            from canonical.events.envelope import CanonicalEventEnvelope
+
             _spool_writer.write_event(
-                {
-                    "event_id": str(uuid.uuid4()),
-                    "event_type": "work_order.blocked",
-                    "timestamp": now,
-                    "trace": {
-                        "domain": "sdlc",
-                        "work_order_id": work_order_id,
-                        "project_id": project_id,
-                    },
-                    "severity": "warning",
-                    "payload": {
+                CanonicalEventEnvelope(
+                    event_type="work_order.blocked",
+                    session_id=None,
+                    payload={
                         "work_order_id": work_order_id,
                         "title": title,
                         "project_id": project_id,
                         "reason": reason,
                     },
-                    "source_type": "confirmed",
-                }
+                    timestamp=now,
+                    severity="warning",
+                    trace={
+                        "domain": "sdlc",
+                        "work_order_id": work_order_id,
+                        "project_id": project_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
             )
         except Exception:
             pass
