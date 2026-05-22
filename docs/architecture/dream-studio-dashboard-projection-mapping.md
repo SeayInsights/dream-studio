@@ -4,6 +4,10 @@ Lifecycle status: draft_generated
 
 Authority role: dashboard projection mapping
 
+<!-- TA5-followup review 2026-05-22: canonical_token_metrics now resolves project_name
+     from ds_projects (batch lookup). SessionCollector.collect() maps NULL outcome keys
+     to "unknown" before returning. Both changes affect dashboard_runtime domain. -->
+
 ## Purpose
 
 This document defines dashboard-ready projections for Dream Studio's structured
