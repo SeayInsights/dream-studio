@@ -2,7 +2,7 @@
 
 ## TA-series: Token Attribution Remediation (In Progress)
 
-**Status:** TA0–TA4 complete — 3 workstreams remaining
+**Status:** TA0–TA5 complete — 2 workstreams remaining (TA3b + TA6)
 
 ### 10-Workstream Plan
 
@@ -16,8 +16,8 @@
 | TA2 | Active task context + skill SDLC trace | Complete — PR #41 |
 | TA3 | Universal token capture (PostToolUse hook) | Complete — PR #42 |
 | TA3b | Execution context (parent_invocation_id + stale-state audit) | Pending |
-| **TA4** | **Remove hardcoded project_id + enforce attribution_status** | **Complete — this PR** |
-| TA5 | Dashboard truth-up (remove synthesizer) | Pending |
+| TA4 | Remove hardcoded project_id + enforce attribution_status | Complete — PR #43 |
+| **TA5** | **Dashboard truth-up (delete fabricators, real queries)** | **Complete — this PR** |
 | TA6 | End-to-end verification | Pending |
 
 ### TA0b Summary
@@ -68,6 +68,19 @@
 - No absolute filesystem paths in emitted events (registered_from_path is informational only, never emitted)
 - Marker format authority: marker file for attribution resolution; ds_projects for project metadata; auditor reconciles drift
 - **Deferred to TA3b:** parent_invocation_id linking tool call → skill/workflow/agent invocation; stale active_task state detection and audit
+
+### TA5 Summary (this PR)
+- `_build_skill_costs` fabricator deleted from `projections/api/routes/metrics.py` (hardcoded `total_tokens: 0`)
+- `_build_exec_time_ranges` fabricator deleted (read legacy `skill_invocations`, produced synthetic zeroes)
+- `core/pricing/claude_models.py` added: model pricing table (verified 2026-05-22) + `compute_cost()` function
+- `projections/api/queries/token_attribution.py` added: real queries against `canonical_events`
+  - `token_spend_by_project`, `token_spend_by_milestone`, `token_spend_by_work_order`, `token_spend_by_task`
+  - `attribution_coverage` — fully_attributed / partial / orphan breakdown as percentages
+  - `exec_time_ranges_from_canonical` — min/max skill execution time from `skill.executed` events
+- `/api/metrics/tokens` now includes `attribution_coverage` field in response
+- `/api/metrics/skills` now reads exec time ranges from canonical_events (not legacy skill_invocations)
+- `by_skill` returns `{}` (honest empty) when no skill cost data exists — no synthetic zeros
+- `data_status: "empty"` field signals zero-state to frontend without fabrication
 
 ---
 
