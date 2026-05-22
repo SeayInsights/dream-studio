@@ -182,3 +182,5 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 <!-- Last reviewed 2026-05-22 — TA1 task lifecycle events: migration 064 added. Migration 064 (`064_backfill_task_creation_events.sql`) is a data-only backfill: inserts synthetic `task.created` events into canonical_events for all pre-TA1 task rows by joining ds_tasks → ds_work_orders to resolve the full SDLC trace (project_id, milestone_id, work_order_id, task_id). Deterministic event IDs (`backfill-task-created-<task_id>`) and `INSERT OR IGNORE` guarantee idempotency. attribution_status = 'backfill' marks them as synthetic. Forward emission added to `create_task()` and `add_tasks_from_file()` (task.created) and to `delete_project()` cascade (task.deleted per task). `task.completed` trace enriched with milestone_id + project_id (resolved via JOIN). task.started has no call site — tasks have no in_progress state; type registered for TA2 wiring only. No DDL change (data-only migration). No policy change here. -->
 
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
+

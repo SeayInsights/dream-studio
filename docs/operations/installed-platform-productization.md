@@ -354,3 +354,5 @@ the source repo.
 <!-- Last reviewed 2026-05-21 — First-run setup now records a platform profile at `~/.dream-studio/state/platform.json` immediately after runtime directories are created, before SQLite bootstrap. This makes OS, shell, Python version, and terminal available to any subsequent install step that needs shell-correct output. `ds doctor` also refreshes the profile. Both paths use `core.config.platform.ensure_platform_recorded()`. The platform profile is local state, not SQLite authority, and does not require a migration. -->
 
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
+
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
