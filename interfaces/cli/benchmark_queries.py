@@ -51,8 +51,11 @@ def main():
 
     # Common queries to benchmark
     queries = [
-        ("activity_log_recent", "SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100"),
-        ("activity_log_count", "SELECT COUNT(*) FROM activity_log"),
+        (
+            "canonical_events_recent",
+            "SELECT * FROM canonical_events ORDER BY timestamp DESC LIMIT 100",
+        ),
+        ("canonical_events_count", "SELECT COUNT(*) FROM canonical_events"),
         (
             "guardrail_decisions",
             "SELECT * FROM guardrail_decisions ORDER BY created_at DESC LIMIT 50",
