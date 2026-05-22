@@ -6,8 +6,6 @@ from fastapi import APIRouter, HTTPException, Query, Path
 from pydantic import BaseModel
 
 from core.config.database import transaction, get_connection
-from projections.api.safety import activity_log_filter_clause
-
 router = APIRouter()
 
 
@@ -64,13 +62,12 @@ async def list_audit_runs(
                 ar.started_at,
                 ar.completed_at,
                 ar.duration_s,
-                al.event_timestamp,
-                al.severity,
-                al.is_anomaly,
-                al.anomaly_score
+                ar.started_at AS event_timestamp,
+                'info' AS severity,
+                0 AS is_anomaly,
+                0.0 AS anomaly_score
             FROM audit_runs ar
-            LEFT JOIN activity_log al ON ar.activity_id = al.activity_id
-            WHERE 1=1 {activity_log_filter_clause("al")}
+            WHERE 1=1
         """
         params = []
 
@@ -178,15 +175,14 @@ async def get_audit_run_details(
                 ar.started_at,
                 ar.completed_at,
                 ar.duration_s,
-                al.event_timestamp,
-                al.event_type,
-                al.severity,
-                al.is_anomaly,
-                al.anomaly_score,
-                al.error_message
+                ar.started_at AS event_timestamp,
+                ar.audit_type AS event_type,
+                'info' AS severity,
+                0 AS is_anomaly,
+                0.0 AS anomaly_score,
+                NULL AS error_message
             FROM audit_runs ar
-            LEFT JOIN activity_log al ON ar.activity_id = al.activity_id
-            WHERE ar.audit_id = ? {activity_log_filter_clause("al")}
+            WHERE ar.audit_id = ?
         """,
             (audit_id,),
         ).fetchone()
