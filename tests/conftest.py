@@ -174,6 +174,27 @@ def guard_real_homedir(tmp_path, monkeypatch):
         guard_at_dir.mkdir()
         monkeypatch.setenv("DS_ACTIVE_TASK_PATH", str(guard_at_dir / "active_task.json"))
 
+    if "DS_MACHINE_ID_PATH" not in _os.environ:
+        guard_mid_dir = tmp_path / "guard_machine_id"
+        guard_mid_dir.mkdir()
+        monkeypatch.setenv("DS_MACHINE_ID_PATH", str(guard_mid_dir / "machine_id"))
+
+    if "DS_CWD_RESOLVER_ROOT" not in _os.environ:
+        monkeypatch.setenv("DS_CWD_RESOLVER_ROOT", str(tmp_path))
+
+    if "DS_DIAGNOSTICS_DIR" not in _os.environ:
+        guard_diag_dir = tmp_path / "guard_diagnostics"
+        guard_diag_dir.mkdir()
+        monkeypatch.setenv("DS_DIAGNOSTICS_DIR", str(guard_diag_dir))
+
+    # Reset machine_id process-level cache so each test gets a fresh hermetic ID.
+    try:
+        import core.telemetry.machine_id as _mid_mod
+
+        _mid_mod._reset_cache()
+    except Exception:
+        pass
+
     real_events = Path.home() / ".dream-studio" / "events"
     before_count = sum(1 for _ in real_events.rglob("*")) if real_events.exists() else 0
     real_integrations = Path.home() / ".dream-studio" / "integrations"

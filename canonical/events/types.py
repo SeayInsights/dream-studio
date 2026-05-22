@@ -94,6 +94,9 @@ class EventType(str, Enum):
     TASK_STARTED = "task.started"
     TASK_DELETED = "task.deleted"
 
+    # Token attribution events (TA3)
+    TOKEN_CONSUMED = "token.consumed"
+
     # Activity-log retirement (TA0c) — operational telemetry migrated from legacy store
     WORKFLOW_COMPLETED = "workflow.completed"
     LESSON_CAPTURED = "system.lesson.captured"
@@ -672,6 +675,14 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         "Hook analysis finding (anomaly, violation, etc.) created",
         True,
         EventCategory.PRODUCTION_EMITTED,
+    ),
+    # TA3: Per-tool-invocation token consumption with full SDLC attribution
+    EventTypeMeta(
+        EventType.TOKEN_CONSUMED,
+        "telemetry",
+        "Token consumption attributed to a specific tool invocation, with SDLC trace from active task",
+        True,
+        EventCategory.HOOK_EMITTED,
     ),
 )
 

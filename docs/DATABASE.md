@@ -184,3 +184,5 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
+
+<!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->

@@ -69,6 +69,9 @@ current working directory.
 | PostToolUse (Edit\|Write) | `on-edit-dispatch` | meta (dispatcher) |
 | PostToolUse (Read) | `on-skill-load` | meta (direct) |
 | PostToolUse (default) | `on-tool-activity` | meta (direct) |
+| PostToolUse (*) — token attribution | `on-post-tool-use` | core (direct, settings.json) |
+
+The `on-post-tool-use` hook is registered via `~/.claude/settings.json` (matcher: `*`), not through `hooks/hooks.json`. It delegates to `core.telemetry.token_capture.handle_post_tool_use()` and emits a `token.consumed` canonical event per tool invocation. Always exits 0.
 
 Production readiness is not an implicit hook execution path. Hook telemetry may
 be evidence for readiness, and future approved hooks may emit readiness-related
@@ -160,3 +163,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 
 <!-- Last reviewed 2026-05-20 — A3: `control/execution/workflow/runner.py:_invoke_skill` no longer self-shells via `subprocess.run(['ds','skill','invoke', specifier])`; instead it calls `core.skills.invocation.load_skill_content` + `record_skill_invocation` directly in-process. ~40x faster per node, tracebacks intact, mockable. dry_run path unchanged. No policy or contract change here. -->
 <!-- Last reviewed 2026-05-20 — B.3: git pre-push hook + installer wiring landed. `ds workflow run pre-push --non-interactive` dispatches deterministic gates; `ClaudeCodeInstaller.git_repo_root` opt-in plants `<repo>/.git/hooks/pre-push`. No policy or contract change in this doc. -->
+<!-- Last reviewed 2026-05-22 — TA3: `runtime/hooks/core/on-post-tool-use.py` added. Registered via settings.json PostToolUse matcher:*; emits token.consumed canonical events. Added to Registered Hooks table above. -->
+
