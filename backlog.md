@@ -19,7 +19,7 @@
 | TA3b | Execution context (parent_invocation_id + stale-state audit) | Pending |
 | TA4 | Remove hardcoded project_id + enforce attribution_status | Complete — PR #43 |
 | **TA5** | **Dashboard truth-up (delete fabricators, real queries)** | **Complete — this PR** |
-| TA5-followup | Fix SessionMetrics Pydantic outcomes None key | Pending |
+| TA5-followup | Fix SessionMetrics Pydantic outcomes None key + project_name lookup | Complete — this PR |
 | TA6 | End-to-end verification | Pending |
 
 ### TA0b Summary

@@ -26,6 +26,18 @@ This bug predates TA5. The sessions endpoint was not working before this PR and 
 2. OR update the `SessionMetrics` model to accept `Optional[str]` keys via a validator
 3. Ensure the fix handles the `get_all_metrics()` endpoint as well (it also calls `SessionCollector`)
 
-## Scope of this PR (TA5)
+## Resolution (TA5-followup — 2026-05-22)
 
-No fix. Document only. Follow-on backlog entry: **TA5-followup: fix SessionMetrics Pydantic outcomes None key**.
+Fixed in `projections/core/collectors/session_collector.py` line 175:
+
+```python
+# Before:
+outcomes = {row["outcome"]: row["count"] for row in cursor.fetchall()}
+
+# After:
+outcomes = {(row["outcome"] or "unknown"): row["count"] for row in cursor.fetchall()}
+```
+
+`None` outcome keys (from NULL rows) are now mapped to `"unknown"` before the dict is constructed.
+Consistent with the rest of the codebase's null sentinel pattern. `/api/v1/metrics/sessions`
+now returns 200 with `outcomes: {"unknown": N}` instead of a Pydantic validation 500.

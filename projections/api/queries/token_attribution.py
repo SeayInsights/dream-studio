@@ -72,6 +72,23 @@ def _aggregate_token_rows(rows: list) -> dict:
     }
 
 
+def _resolve_project_names(
+    project_ids: list[str], conn: sqlite3.Connection
+) -> dict[str, str | None]:
+    """Batch-lookup project names from ds_projects using an existing connection."""
+    if not project_ids:
+        return {}
+    placeholders = ",".join("?" for _ in project_ids)
+    try:
+        rows = conn.execute(
+            f"SELECT project_id, name FROM ds_projects WHERE project_id IN ({placeholders})",
+            project_ids,
+        ).fetchall()
+        return {row["project_id"]: row["name"] for row in rows}
+    except Exception:
+        return {}
+
+
 def _fetch_token_events(trace_key: str, trace_value: str, since: Optional[datetime]) -> list:
     """Query canonical_events for token.consumed filtered by one trace field."""
     conn = get_connection()
@@ -225,69 +242,75 @@ def canonical_token_metrics(days: int) -> dict:
             """,
             (cutoff,),
         ).fetchall()
+
+        input_total = 0
+        output_total = 0
+        total_cost = 0.0
+        by_project: dict[str, dict] = {}
+        by_model: dict[str, dict] = {}
+        by_date: dict[str, dict] = {}
+
+        for row in all_rows:
+            payload = _payload_dict(row["payload"])
+            trace = _payload_dict(row["trace"])
+
+            inp = int(payload.get("input_tokens") or 0)
+            out = int(payload.get("output_tokens") or 0)
+            cc = int(payload.get("cache_creation_input_tokens") or 0)
+            cr = int(payload.get("cache_read_input_tokens") or 0)
+            model = payload.get("model") or ""
+            project_id = trace.get("project_id") or ""
+
+            cost = compute_cost(model, inp, out, cc, cr)
+            input_total += inp
+            output_total += out
+            total_cost += cost
+
+            if project_id:
+                bucket = by_project.setdefault(
+                    project_id,
+                    {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+                )
+                bucket["input_tokens"] += inp
+                bucket["output_tokens"] += out
+                bucket["total_tokens"] += inp + out
+                bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+            if model:
+                bucket = by_model.setdefault(
+                    model,
+                    {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
+                )
+                bucket["input_tokens"] += inp
+                bucket["output_tokens"] += out
+                bucket["total_tokens"] += inp + out
+                bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+            ts = row["timestamp"] or ""
+            date_str = ts[:10] if ts else ""
+            if date_str:
+                bucket = by_date.setdefault(
+                    date_str,
+                    {
+                        "date": date_str,
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "tokens": 0,
+                        "cost_usd": 0.0,
+                    },
+                )
+                bucket["input_tokens"] += inp
+                bucket["output_tokens"] += out
+                bucket["tokens"] += inp + out
+                bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
+
+        project_names = _resolve_project_names(list(by_project.keys()), conn)
+        for pid, bucket in by_project.items():
+            name = project_names.get(pid)
+            bucket["project_name"] = name if name is not None else f"Unmapped ({pid})"
+
     finally:
         conn.close()
-
-    input_total = 0
-    output_total = 0
-    total_cost = 0.0
-    by_project: dict[str, dict] = {}
-    by_model: dict[str, dict] = {}
-    by_date: dict[str, dict] = {}
-
-    for row in all_rows:
-        payload = _payload_dict(row["payload"])
-        trace = _payload_dict(row["trace"])
-
-        inp = int(payload.get("input_tokens") or 0)
-        out = int(payload.get("output_tokens") or 0)
-        cc = int(payload.get("cache_creation_input_tokens") or 0)
-        cr = int(payload.get("cache_read_input_tokens") or 0)
-        model = payload.get("model") or ""
-        project_id = trace.get("project_id") or ""
-
-        cost = compute_cost(model, inp, out, cc, cr)
-        input_total += inp
-        output_total += out
-        total_cost += cost
-
-        if project_id:
-            bucket = by_project.setdefault(
-                project_id,
-                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
-            )
-            bucket["input_tokens"] += inp
-            bucket["output_tokens"] += out
-            bucket["total_tokens"] += inp + out
-            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
-
-        if model:
-            bucket = by_model.setdefault(
-                model,
-                {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "cost_usd": 0.0},
-            )
-            bucket["input_tokens"] += inp
-            bucket["output_tokens"] += out
-            bucket["total_tokens"] += inp + out
-            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
-
-        ts = row["timestamp"] or ""
-        date_str = ts[:10] if ts else ""
-        if date_str:
-            bucket = by_date.setdefault(
-                date_str,
-                {
-                    "date": date_str,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "tokens": 0,
-                    "cost_usd": 0.0,
-                },
-            )
-            bucket["input_tokens"] += inp
-            bucket["output_tokens"] += out
-            bucket["tokens"] += inp + out
-            bucket["cost_usd"] = round(bucket["cost_usd"] + cost, 6)
 
     total = input_total + output_total
     timeline = sorted(by_date.values(), key=lambda x: x["date"])

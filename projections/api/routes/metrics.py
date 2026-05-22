@@ -320,8 +320,7 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
         cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd")} for t in timeline]
 
         by_project = {
-            k: {**v, "project_name": k, "cost": v.get("cost_usd")}
-            for k, v in data.get("by_project", {}).items()
+            k: {**v, "cost": v.get("cost_usd")} for k, v in data.get("by_project", {}).items()
         }
         raw_by_skill = data.get("by_skill", {})
         has_skill_costs = any(v.get("cost_usd") is not None for v in raw_by_skill.values())
@@ -355,7 +354,6 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
 async def get_model_metrics(days: int = Query(default=30, ge=1, le=365)):
     """Get model usage metrics with dashboard-friendly format"""
     try:
-        db_path = get_db_path()
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         conn = get_connection()
         conn.row_factory = sqlite3.Row

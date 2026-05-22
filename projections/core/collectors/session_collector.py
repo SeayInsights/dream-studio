@@ -172,7 +172,7 @@ class SessionCollector:
             """,
                 (cutoff_date,),
             )
-            outcomes = {row["outcome"]: row["count"] for row in cursor.fetchall()}
+            outcomes = {(row["outcome"] or "unknown"): row["count"] for row in cursor.fetchall()}
 
             # Average duration
             if ended_available:
