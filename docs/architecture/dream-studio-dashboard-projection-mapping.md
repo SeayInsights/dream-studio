@@ -434,3 +434,5 @@ recommended_next_work_order: none
 
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — TA5 dashboard truth-up: fabricators deleted from projections/api/routes/metrics.py. The /api/metrics/tokens endpoint now returns `attribution_coverage` (fully_attributed/partial/orphan breakdown from canonical_events). The /api/metrics/skills endpoint reads execution time ranges from canonical_events.skill.executed instead of legacy skill_invocations. `by_skill` returns honest `{}` when no real skill cost data exists. `data_status: "empty"` signals zero-state to the frontend. Model pricing reference table maintained in core/pricing/claude_models.py (verified 2026-05-22). No policy or primary-authority change. -->
