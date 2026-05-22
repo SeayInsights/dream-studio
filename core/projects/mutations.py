@@ -145,6 +145,15 @@ def delete_project(
                 "task_count": task_count,
             }
 
+        # Collect task data for post-delete events before removing rows.
+        task_rows = conn.execute(
+            "SELECT t.task_id, t.work_order_id, t.project_id, wo.milestone_id"
+            " FROM ds_tasks t"
+            " LEFT JOIN ds_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " WHERE t.project_id = ?",
+            (project_id,),
+        ).fetchall()
+
         # Cascade: tasks → work_orders → milestones → design_briefs → projects
         conn.execute("DELETE FROM ds_tasks WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM ds_work_orders WHERE project_id = ?", (project_id,))
@@ -161,6 +170,8 @@ def delete_project(
 
         from canonical.events.envelope import CanonicalEventEnvelope
 
+        now = datetime.now(timezone.utc).isoformat()
+
         _spool_writer.write_event(
             CanonicalEventEnvelope(
                 event_type="project.deleted",
@@ -170,6 +181,7 @@ def delete_project(
                     "cascade_work_orders": wo_count,
                     "cascade_tasks": task_count,
                 },
+                timestamp=now,
                 severity="info",
                 trace={
                     "domain": "sdlc",
@@ -178,6 +190,28 @@ def delete_project(
                 },
             ).to_dict()
         )
+
+        for t_task_id, t_work_order_id, t_project_id, t_milestone_id in task_rows:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="task.deleted",
+                    session_id=None,
+                    payload={
+                        "deletion_context": "cascaded_from_project_delete",
+                        "project_id": project_id,
+                    },
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": t_project_id,
+                        "milestone_id": t_milestone_id,
+                        "work_order_id": t_work_order_id,
+                        "task_id": t_task_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
     except Exception:
         pass
 
