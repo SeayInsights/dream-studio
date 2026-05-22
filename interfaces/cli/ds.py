@@ -1287,38 +1287,20 @@ def _project_register(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    import uuid
-    from datetime import datetime, timezone
+    from core.projects.mutations import register_project
 
-    paths = resolve_installed_runtime_paths(
+    result = register_project(
+        name=name,
+        description=description,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
-    if not paths.sqlite_path.exists():
-        raise RuntimeError("Dream Studio SQLite authority is missing. Run rehearsal-install first.")
-
-    project_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-
-    with _connect(paths.sqlite_path) as conn:
-        conn.execute(
-            "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'active', ?, ?)",
-            (project_id, name, description, now, now),
+    if result.get("ok"):
+        result["hint"] = (
+            f"To make this the active project, run: ds project set-active {result['project_id']}"
         )
-        conn.commit()
-
-    result = {
-        "ok": True,
-        "project_id": project_id,
-        "name": name,
-        "description": description,
-        "status": "active",
-        "created_at": now,
-        "hint": f"To make this the active project, run: ds project set-active {project_id}",
-    }
     print(json.dumps(result, indent=2))
-    return 0
+    return 0 if result.get("ok") else 1
 
 
 def _project_list(
