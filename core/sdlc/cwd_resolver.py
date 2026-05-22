@@ -129,63 +129,78 @@ def _check_project_in_db(project_id: str) -> bool:
         return True  # fail open
 
 
+def _get_home() -> Path:
+    return Path.home().resolve()
+
+
 def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
     """Walk up from cwd looking for .dream-studio-project marker.
 
-    Parsing strategy:
-    1. Try JSON parse (TA3+ format with schema_version, project_id, project_name, metadata)
-    2. On JSON failure, fall back to first line as plain UUID (legacy format)
-    3. If neither succeeds, log anomaly and return None
+    Bounded walk stops at the first of:
+    - A .dream-studio-project marker is found (returns context)
+    - A .git/ directory is found (repo root boundary)
+    - The user's home directory would be the next parent (exclusive upper bound)
+    - The filesystem root is reached (current.parent == current)
 
-    Reconciliation (Q3 decision):
-    If the resolved project_id is NOT in ds_projects, log anomaly but return
-    the context anyway — attribution proceeds with attribution_status=partial.
-    The auditor handles drift reconciliation.
+    DS_CWD_RESOLVER_ROOT env var caps the walk in tests to prevent ascending
+    past the test's tmp_path into real user directories.
+
+    Q3 reconciliation: if the resolved project_id is NOT in ds_projects, log
+    anomaly but return the context anyway (attribution_status=partial).
     """
     try:
         current = Path.cwd().resolve()
     except Exception:
         return None
 
-    # DS_CWD_RESOLVER_ROOT caps the walk — used in tests to prevent the walker
-    # from ascending past the test's tmp_path into real user directories.
+    home = _get_home()
+
     stop_at_env = os.environ.get("DS_CWD_RESOLVER_ROOT")
     stop_at = Path(stop_at_env).resolve() if stop_at_env else None
 
-    for candidate in [current, *current.parents]:
+    while True:
+        # Test isolation: DS_CWD_RESOLVER_ROOT caps the walk.
         if stop_at is not None:
             try:
-                candidate.relative_to(stop_at)
+                current.relative_to(stop_at)
             except ValueError:
-                break  # candidate is above stop_at; stop walking
-        marker_path = candidate / _MARKER
-        if not marker_path.is_file():
-            continue
+                return None  # above the test boundary
 
-        ctx = _parse_marker(marker_path)
-        if ctx is None:
-            return None  # anomaly already logged
+        marker_path = current / _MARKER
+        if marker_path.is_file():
+            ctx = _parse_marker(marker_path)
+            if ctx is None:
+                return None  # anomaly already logged
 
-        # Q3: check marker against ds_projects; log anomaly if not found but return anyway.
-        if not _check_project_in_db(ctx.project_id):
-            from core.telemetry.diagnostics import log_diagnostic
+            # Q3: check marker against ds_projects; log anomaly if not found but return anyway.
+            if not _check_project_in_db(ctx.project_id):
+                from core.telemetry.diagnostics import log_diagnostic
 
-            log_diagnostic(
-                category="anomaly",
-                source="cwd_resolver.resolve_project_from_cwd",
-                context={
-                    "marker_path": str(marker_path),
-                    "project_id": ctx.project_id,
-                },
-                details={
-                    "error_message": (
-                        "Marker file references project_id not found in ds_projects. "
-                        "Marker may be stale or project was deleted. "
-                        "Attribution proceeds with partial status."
-                    )
-                },
-            )
+                log_diagnostic(
+                    category="anomaly",
+                    source="cwd_resolver.resolve_project_from_cwd",
+                    context={
+                        "marker_path": str(marker_path),
+                        "project_id": ctx.project_id,
+                    },
+                    details={
+                        "error_message": (
+                            "Marker file references project_id not found in ds_projects. "
+                            "Marker may be stale or project was deleted. "
+                            "Attribution proceeds with partial status."
+                        )
+                    },
+                )
 
-        return ctx
+            return ctx
 
-    return None
+        # Boundary 1: hit .git/ — repo root, don't walk past it.
+        if (current / ".git").is_dir():
+            return None
+
+        # Boundary 2 & 3: stop before reaching home, or at filesystem root.
+        parent = current.parent
+        if current == home or parent == home or current == parent:
+            return None
+
+        current = parent

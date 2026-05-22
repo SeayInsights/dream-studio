@@ -580,6 +580,49 @@ def test_resolve_project_from_cwd_logs_anomaly_when_project_not_in_db(
     assert any(e.get("category") == "anomaly" for e in entries)
 
 
+def test_resolve_project_from_cwd_stops_at_git_boundary(tmp_path, monkeypatch):
+    """Walk stops at .git/ — marker above the git root is not found."""
+    # Marker at the outer level (above the git repo root).
+    (tmp_path / ".dream-studio-project").write_text(PROJECT_ID + "\n", encoding="utf-8")
+    # Git repo inside tmp_path.
+    gitrepo = tmp_path / "gitrepo"
+    (gitrepo / ".git").mkdir(parents=True)
+    # cwd is inside the git repo.
+    src = gitrepo / "src"
+    src.mkdir()
+    monkeypatch.chdir(src)
+
+    from core.sdlc.cwd_resolver import resolve_project_from_cwd
+
+    ctx = resolve_project_from_cwd()
+
+    # .git boundary at gitrepo/ stops the walk — marker above it is not found.
+    assert ctx is None
+
+
+def test_resolve_project_from_cwd_stops_before_home(tmp_path, monkeypatch):
+    """Marker at the home directory level is not found — home is exclusive upper bound."""
+    # Treat tmp_path as the fake home; place a marker there.
+    (tmp_path / ".dream-studio-project").write_text(PROJECT_ID + "\n", encoding="utf-8")
+    # cwd is a grandchild of "home".
+    child = tmp_path / "projects" / "myrepo"
+    child.mkdir(parents=True)
+    monkeypatch.chdir(child)
+    # Remove the test cap so only the home boundary governs this walk.
+    monkeypatch.delenv("DS_CWD_RESOLVER_ROOT", raising=False)
+    # Mock _get_home to return tmp_path as the home directory.
+    import core.sdlc.cwd_resolver as _resolver
+
+    monkeypatch.setattr(_resolver, "_get_home", lambda: tmp_path.resolve())
+
+    from core.sdlc.cwd_resolver import resolve_project_from_cwd
+
+    ctx = resolve_project_from_cwd()
+
+    # Home boundary fires when parent == home; marker at home level is not visited.
+    assert ctx is None
+
+
 # ── diagnostics unit tests ─────────────────────────────────────────────────────
 
 
