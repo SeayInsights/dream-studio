@@ -165,3 +165,5 @@ outside the normal approved migration boundary.
 
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.0 C3: migration 065 ( 65_remove_test_fixture_contamination.sql) added. Cleans 23 test fixture rows from ds_projects written directly to production studio.db by tests that bypassed the guard_real_homedir autouse fixture via the DatabaseRuntime singleton retaining a stale real-DB path. guard_real_homedir now calls DatabaseRuntime.reset_instance() before yield and after yield. Three tests in test_ta3_token_capture.py fixed to pass dream_studio_home=db_home / DREAM_STUDIO_HOME env var. -->

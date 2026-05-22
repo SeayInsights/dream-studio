@@ -10,12 +10,41 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Maximum age (seconds) before a pending-handoff.json is considered stale
+# and discarded. Prevents in_progress files from persisting across sessions.
+HANDOFF_STALE_TTL_S = 300
+
+# Window (seconds) during which a "pending" handoff can still be injected.
+HANDOFF_INJECTION_WINDOW_S = 60
+
 try:
     from guardrails.scanners.rebuff_validator import validate_user_input
 
     _VALIDATOR_AVAILABLE = True
 except ImportError:
     _VALIDATOR_AVAILABLE = False
+
+
+def _log_stale_handoff_discarded(state_dir: Path, age: float, reason: str) -> None:
+    """Write a diagnostic entry when a stale handoff file is discarded."""
+    try:
+        import os
+
+        diag_dir = Path(os.environ.get("DS_DIAGNOSTICS_DIR", str(state_dir.parent / "diagnostics")))
+        diag_dir.mkdir(parents=True, exist_ok=True)
+        diag_file = diag_dir / "stale-handoff.jsonl"
+        entry = json.dumps(
+            {
+                "event": "stale_handoff_discarded",
+                "reason": reason,
+                "age_seconds": round(age, 1),
+                "discarded_at": int(time.time()),
+            }
+        )
+        with diag_file.open("a", encoding="utf-8") as f:
+            f.write(entry + "\n")
+    except Exception:
+        pass
 
 
 def _check_pending_handoff(payload: dict) -> bool:
@@ -36,7 +65,24 @@ def _check_pending_handoff(payload: dict) -> bool:
     try:
         ph = json.loads(pending.read_text(encoding="utf-8"))
         age = time.time() - ph.get("triggered_at", 0)
-        if age >= 60 or ph.get("status") != "pending":
+
+        # Discard and delete stale files so they don't persist across sessions.
+        if age >= HANDOFF_STALE_TTL_S:
+            try:
+                pending.unlink(missing_ok=True)
+            except OSError:
+                pass
+            _log_stale_handoff_discarded(state_dir, age, "stale_ttl_expired")
+            return False
+
+        if age >= HANDOFF_INJECTION_WINDOW_S or ph.get("status") != "pending":
+            # Injection window passed or already consumed — clean up in_progress files.
+            if ph.get("status") == "in_progress" and age >= HANDOFF_INJECTION_WINDOW_S:
+                try:
+                    pending.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                _log_stale_handoff_discarded(state_dir, age, "injection_window_expired")
             return False
 
         ph["status"] = "in_progress"

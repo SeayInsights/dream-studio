@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — Phase 18.0 Emergency Cleanup (2026-05-22)
+- **C1 — spool/emitter.py created**: `on-context-threshold.py` imported `from spool.emitter import emit` but the module did not exist, silently failing every context threshold event. `spool/emitter.emit()` now wraps `CanonicalEventEnvelope` + `write_envelopes` with a non-raising interface (returns `True`/`False`).
+- **C2 — Handoff TTL guards**: `on-prompt-validate.py` can no longer leave `pending-handoff.json` alive indefinitely. Added `HANDOFF_STALE_TTL_S=300` and `HANDOFF_INJECTION_WINDOW_S=60` constants. Files older than 300s are deleted; `in_progress` files past 60s are cleaned up. Discards logged to `DS_DIAGNOSTICS_DIR/stale-handoff.jsonl`.
+- **C3 — DB contamination cleanup**: migration 065 deletes 23 test fixture rows from `ds_projects` that were written to production `studio.db` by tests bypassing isolation. `guard_real_homedir` now calls `DatabaseRuntime.reset_instance()` before/after yield. Three tests in `test_ta3_token_capture.py` fixed to pass `dream_studio_home=db_home`.
+- **C4 — Guardrails evaluator dependency**: `guardrails/evaluator.py` referenced removed `activity_log` table (dropped in migration 063). `_custom_query_matches()` now checks `canonical_events` / `hook_invocations`, rejects `activity_log` references with a descriptive error.
+
 ### Added
 - **Publication boundary** - added public/private publication guidance, docs index, and current product positioning for Dream Studio as a local-first AI orchestration and operational intelligence platform.
 - **Pattern Enhancement (35 tasks)** — 9 foundational patterns for optimized LLM consumption with 40% token savings target (#pattern-enhancement)
