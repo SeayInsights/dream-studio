@@ -37,16 +37,17 @@ PRIVATE_ACTIVITY_TYPES = frozenset(
 )
 
 
-def activity_log_filter_clause(alias: str = "al") -> str:
+def activity_log_filter_clause(alias: str = "al", col: str = "activity_type") -> str:
     """Return a SQL WHERE fragment that excludes private activity types.
 
     Args:
-        alias: table alias for activity_log (default "al")
+        alias: table alias (default "al" for activity_log, use "ce" for canonical_events)
+        col: event type column name (default "activity_type"; use "event_type" for canonical_events)
 
     Returns:
         SQL fragment like "AND al.activity_type NOT IN (...) AND ..."
     """
-    type_col = f"{alias}.activity_type"
+    type_col = f"{alias}.{col}"
     exclusions = ", ".join(f"'{t}'" for t in sorted(PRIVATE_ACTIVITY_TYPES))
     prefix_checks = " AND ".join(f"{type_col} NOT LIKE '{p}%'" for p in PRIVATE_ACTIVITY_PREFIXES)
     return f"AND {type_col} NOT IN ({exclusions}) AND {prefix_checks}"

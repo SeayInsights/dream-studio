@@ -260,11 +260,11 @@ def get_health_snapshot() -> Dict[str, Any]:
         perf_status = "slow" if avg_duration > 5000 else "ok"
 
         # 4. Activity Level (events in past 7 days, excluding private)
-        _afilter = activity_log_filter_clause("al")
+        _afilter = activity_log_filter_clause("ce", col="event_type")
         query = f"""
             SELECT COUNT(*) as event_count
-            FROM activity_log al
-            WHERE al.event_timestamp > datetime('now', '-7 days')
+            FROM canonical_events ce
+            WHERE ce.timestamp > datetime('now', '-7 days')
             {_afilter}
         """
         row = cursor.execute(query).fetchone()
@@ -377,11 +377,11 @@ def get_whats_working() -> List[Dict[str, Any]]:
                 )
 
         # Win 4: Active event tracking (excluding private)
-        _af = activity_log_filter_clause("al")
+        _af = activity_log_filter_clause("ce", col="event_type")
         query = f"""
             SELECT COUNT(*) as events
-            FROM activity_log al
-            WHERE al.event_timestamp > datetime('now', '-7 days')
+            FROM canonical_events ce
+            WHERE ce.timestamp > datetime('now', '-7 days')
             {_af}
         """
         row = cursor.execute(query).fetchone()

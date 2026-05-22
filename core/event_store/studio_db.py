@@ -47,7 +47,45 @@ except ImportError as e:
     _EVENT_STORE_AVAILABLE = False
     _IMPORT_ERROR = str(e)
 
+# Canonical event emission for activity_log retirement (TA0c)
+try:
+    from canonical.events.envelope import CanonicalEventEnvelope
+    from canonical.events.types import EventType as _CanonicalEventType
+    from emitters.shared.spool_writer import write_envelopes as _write_envelopes
+
+    _SPOOL_WRITER_AVAILABLE = True
+except ImportError:
+    _SPOOL_WRITER_AVAILABLE = False
+
 _NOW = lambda: datetime.now(timezone.utc).isoformat()
+
+
+def _try_emit_canonical(
+    event_type: "_CanonicalEventType",
+    payload: dict,
+    *,
+    session_id: "str | None" = None,
+    task_id: "str | None" = None,
+    prd_id: "str | None" = None,
+    skill_id: "str | None" = None,
+) -> None:
+    """Emit a canonical event to spool. No-op if spool writer is unavailable."""
+    if not _SPOOL_WRITER_AVAILABLE:
+        return
+    try:
+        _write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=event_type.value,
+                    session_id=session_id,
+                    payload={k: v for k, v in payload.items() if v is not None},
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
+    except Exception:
+        pass  # best-effort: never fail production writes due to telemetry
 
 
 def _db_path() -> Path:
@@ -68,7 +106,7 @@ def _get_event_store(
         override_conn: Optional connection (for testing with temp DB)
 
     Returns LegacyBridge instance or None if not available.
-    This is called from _insert_activity_log for dual-write.
+    This was previously called from _insert_activity_log for dual-write (retired in TA0c).
     """
     global _validator, _event_store, _legacy_bridge
 
@@ -260,133 +298,6 @@ def _broadcast_hook_execution(
     thread.start()
 
 
-# ── Activity Log Helper ────────────────────────────────────────────────────
-
-
-def _insert_activity_log(
-    activity_type: str,
-    stream_id: str,
-    stream_type: str,
-    *,
-    event_data: dict | None = None,
-    status: str = "completed",
-    severity: str = "info",
-    prd_id: str | None = None,
-    task_id: str | None = None,
-    session_id: str | None = None,
-    workflow_run_key: str | None = None,
-    skill_id: str | None = None,
-    duration_ms: int | None = None,
-    db_path: Path | None = None,
-    conn: sqlite3.Connection | None = None,
-) -> int | None:
-    """
-    Insert into activity_log and return activity_id for FK linking.
-
-    This is the central hub for all activities. ALL activity generators should
-    call this BEFORE writing to specialized tables (workflows, research, lessons).
-
-    Args:
-        activity_type: 'workflow_node', 'research_completed', 'lesson_captured', etc.
-        stream_id: The ID of the primary entity (task_id, prd_id, workflow_run_key, etc.)
-        stream_type: 'task', 'prd', 'workflow', 'skill', 'session'
-        event_data: JSON-serializable dict of event-specific data
-        status: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
-        severity: 'info', 'warning', 'error', 'critical'
-        prd_id: Optional PRD ID for cross-domain linkage
-        task_id: Optional task ID for cross-domain linkage
-        session_id: Optional session ID for cross-domain linkage
-        workflow_run_key: Optional workflow run key for cross-domain linkage
-        skill_id: Optional skill ID for cross-domain linkage
-        duration_ms: Optional duration in milliseconds
-        db_path: Optional database path (used only if conn is None)
-        conn: Optional existing connection to reuse (prevents nested connections)
-
-    Returns:
-        activity_id (int) on success, None on failure
-    """
-    try:
-        # DUAL-WRITE STEP 1: Write to legacy activity_log (backward compatibility)
-        activity_id = None
-        if conn is not None:
-            cur = conn.execute(
-                """INSERT INTO activity_log
-                   (activity_type, stream_id, stream_type, event_timestamp,
-                    event_data, prd_id, task_id, session_id, workflow_run_key,
-                    skill_id, status, severity, duration_ms)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    activity_type,
-                    stream_id,
-                    stream_type,
-                    _NOW(),
-                    json.dumps(event_data) if event_data else None,
-                    prd_id,
-                    task_id,
-                    session_id,
-                    workflow_run_key,
-                    skill_id,
-                    status,
-                    severity,
-                    duration_ms,
-                ),
-            )
-            activity_id = cur.lastrowid
-        else:
-            with _db_transaction(db_path) as c:
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, workflow_run_key,
-                        skill_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        activity_type,
-                        stream_id,
-                        stream_type,
-                        _NOW(),
-                        json.dumps(event_data) if event_data else None,
-                        prd_id,
-                        task_id,
-                        session_id,
-                        workflow_run_key,
-                        skill_id,
-                        status,
-                        severity,
-                        duration_ms,
-                    ),
-                )
-                activity_id = cur.lastrowid
-
-        # DUAL-WRITE STEP 2: Emit canonical event (future-proof)
-        # For testing: pass connection if available
-        bridge = _get_event_store(override_db_path=db_path, override_conn=conn)
-        if bridge is not None:
-            try:
-                bridge.emit_from_legacy(
-                    activity_type=activity_type,
-                    stream_id=stream_id,
-                    stream_type=stream_type,
-                    event_data=event_data,
-                    prd_id=prd_id,
-                    task_id=task_id,
-                    session_id=session_id,
-                    workflow_run_key=workflow_run_key,
-                    skill_id=skill_id,
-                    status=status,
-                    severity=severity,
-                )
-            except Exception:
-                # Canonical event emission failed - log but don't fail legacy write
-                # This ensures backward compatibility during migration
-                pass
-
-        return activity_id
-    except Exception as e:
-        _reraise_if_busy(e)
-        return None
-
-
 # ── Workflow functions ──────────────────────────────────────────────────────
 
 
@@ -429,87 +340,24 @@ def archive_workflow(
                 pass
 
         with _db_transaction(db_path) as c:
-            # 1. Normalize workflow_run event via EventNormalizer (TC-008)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "workflow_run",
-                    "workflow_name": wf["workflow"],
-                    "yaml_path": wf["yaml_path"],
+            # 1. Emit canonical event (TA0c: activity_log retired)
+            _try_emit_canonical(
+                _CanonicalEventType.WORKFLOW_COMPLETED,
+                {
+                    "workflow": wf["workflow"],
+                    "yaml_path": wf.get("yaml_path", ""),
                     "status": status,
-                    "started_at": started_at,
-                    "duration_ms": duration_ms,
                     "node_count": len(nodes),
                     "nodes_done": sum(
                         1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
                     ),
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = run_key
-
-                # Insert normalized event
-                # NOTE: workflow_run_key is set to NULL here because raw_workflow_runs doesn't exist yet
-                # The run_key is already captured in stream_id
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, workflow_run_key,
-                        skill_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "workflow_run",
-                        run_key,
-                        "workflow",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        prd_id,
-                        task_id,
-                        session_id,
-                        None,  # workflow_run_key=NULL (inserted later)
-                        None,
-                        # Map workflow statuses to activity_log statuses
-                        (
-                            "completed"
-                            if status == "success"
-                            else (
-                                "cancelled"
-                                if status == "aborted"
-                                else ("failed" if status == "completed_with_failures" else status)
-                            )
-                        ),
-                        canonical.severity,
-                        duration_ms,
-                    ),
-                )
-                activity_id = cur.lastrowid
-            else:
-                # Fallback: direct insert if normalizer unavailable
-                activity_id = _insert_activity_log(
-                    activity_type="workflow_run",
-                    stream_id=run_key,
-                    stream_type="workflow",
-                    event_data={
-                        "workflow": wf["workflow"],
-                        "yaml_path": wf["yaml_path"],
-                        "node_count": len(nodes),
-                        "nodes_done": sum(
-                            1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
-                        ),
-                    },
-                    status="completed" if status == "success" else status,
-                    severity="info",
-                    prd_id=prd_id,
-                    task_id=task_id,
-                    session_id=session_id,
-                    workflow_run_key=run_key,
-                    duration_ms=duration_ms,
-                    conn=c,
-                )
+                    "duration_ms": duration_ms,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
+            activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_workflow_runs with activity_id FK
             c.execute(
@@ -545,74 +393,21 @@ def archive_workflow(
                     except (ValueError, TypeError):
                         pass
 
-                # Normalize workflow_node event via EventNormalizer (TC-008)
-                if _NORMALIZER_AVAILABLE:
-                    from core.events.trace import TraceContext
-
-                    node_raw_output = {
-                        "event_type": "workflow_node",
+                # Emit canonical event for workflow node (TA0c: activity_log retired)
+                _try_emit_canonical(
+                    _CanonicalEventType.WORKFLOW_NODE_COMPLETED,
+                    {
                         "node_id": nid,
-                        "workflow_name": wf["workflow"],
+                        "workflow": wf["workflow"],
                         "status": node_status,
                         "output": nd.get("output", ""),
                         "duration_ms": node_duration_ms,
-                    }
-                    node_trace = TraceContext(
-                        project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                    )
-                    node_canonical = _event_normalizer.normalize(
-                        node_raw_output, model_type="default"
-                    )
-                    node_canonical.trace = node_trace
-                    node_canonical.entity_id = f"{run_key}:{nid}"
-
-                    # Insert normalized event
-                    # NOTE: workflow_run_key is set to NULL because raw_workflow_runs may not exist yet
-                    cur = c.execute(
-                        """INSERT INTO activity_log
-                           (activity_type, stream_id, stream_type, event_timestamp,
-                            event_data, prd_id, task_id, session_id, workflow_run_key,
-                            skill_id, status, severity, duration_ms)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            "workflow_node",
-                            f"{run_key}:{nid}",
-                            "workflow",
-                            node_canonical.timestamp.isoformat(),
-                            json.dumps(node_canonical.payload),
-                            prd_id,
-                            task_id,
-                            session_id,
-                            None,  # workflow_run_key=NULL
-                            None,
-                            "completed" if node_status in ("completed", "skipped") else node_status,
-                            node_canonical.severity,
-                            node_duration_ms,
-                        ),
-                    )
-                    node_activity_id = cur.lastrowid
-                else:
-                    # Fallback: direct insert if normalizer unavailable
-                    node_activity_id = _insert_activity_log(
-                        activity_type="workflow_node",
-                        stream_id=f"{run_key}:{nid}",
-                        stream_type="workflow",
-                        event_data={
-                            "node_id": nid,
-                            "workflow": wf["workflow"],
-                            "output": nd.get("output", ""),
-                        },
-                        status=(
-                            "completed" if node_status in ("completed", "skipped") else node_status
-                        ),
-                        severity="info",
-                        prd_id=prd_id,
-                        task_id=task_id,
-                        session_id=session_id,
-                        workflow_run_key=run_key,
-                        duration_ms=node_duration_ms,
-                        conn=c,
-                    )
+                    },
+                    session_id=session_id,
+                    task_id=task_id,
+                    prd_id=prd_id,
+                )
+                node_activity_id = None  # deprecated FK column
 
                 # Insert into raw_workflow_nodes with activity_id FK
                 c.execute(
@@ -894,49 +689,19 @@ def insert_approach(
                 ),
             )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "approach_captured",
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.APPROACH_CAPTURED,
+                {
                     "skill_id": skill_id,
                     "approach": approach,
                     "outcome": outcome,
-                    "context": context,
-                    "why_worked": why,
                     "model": model,
                     "duration_s": duration_s,
                     "tokens_used": tokens_used,
-                }
-                trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = skill_id
-
-                try:
-                    c.execute(
-                        """INSERT INTO activity_log
-                           (activity_type, stream_id, stream_type, event_timestamp,
-                            event_data, session_id, skill_id, status, severity, duration_ms)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            "approach_captured",
-                            skill_id,
-                            "skill",
-                            canonical.timestamp.isoformat(),
-                            json.dumps(canonical.payload),
-                            session_id,
-                            skill_id,
-                            "completed",
-                            canonical.severity,
-                            int(duration_s * 1000) if duration_s else None,
-                        ),
-                    )
-                except sqlite3.IntegrityError:
-                    pass
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1290,38 +1055,15 @@ def update_project_stats(
                 (sessions_delta, tokens_delta, _NOW(), project_id),
             )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "project_stats_updated",
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.PROJECT_STATS_UPDATED,
+                {
                     "project_id": project_id,
                     "sessions_delta": sessions_delta,
                     "tokens_delta": tokens_delta,
-                }
-                trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = project_id
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "project_stats_updated",
-                        project_id,
-                        "project",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
+                },
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1349,40 +1091,17 @@ def insert_session(
                 (session_id, project_id, topic, _NOW(), pipeline_phase),
             )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "session_started",
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.SESSION_RECORDED,
+                {
                     "session_id": session_id,
                     "project_id": project_id,
                     "topic": topic,
                     "pipeline_phase": pipeline_phase,
-                }
-                trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = session_id
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, session_id, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "session_started",
-                        session_id,
-                        "session",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        None,
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1458,43 +1177,19 @@ def end_session(
                 (now, duration, outcome, input_tokens, output_tokens, tasks_completed, session_id),
             )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "session_ended",
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.SESSION_CLOSED,
+                {
                     "session_id": session_id,
                     "outcome": outcome,
                     "duration_s": duration,
                     "input_tokens": input_tokens,
                     "output_tokens": output_tokens,
                     "tasks_completed": tasks_completed,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=None, prd_id=None, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = session_id
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, session_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "session_ended",
-                        session_id,
-                        "session",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        None,
-                        "completed",
-                        canonical.severity,
-                        int(duration * 1000) if duration else None,
-                    ),
-                )
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1654,50 +1349,19 @@ def insert_handoff(
                     db_path=db_path,
                 )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "handoff_created",
-                    "session_id": session_id,
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.HANDOFF_CREATED,
+                {
+                    "handoff_id": str(handoff_id),
                     "project_id": project_id,
+                    "session_id": session_id,
                     "topic": topic,
-                    "pipeline_phase": pipeline_phase,
-                    "current_task_id": current_task_id,
-                    "tasks_completed": tasks_completed,
-                    "tasks_total": tasks_total,
                     "branch": branch,
-                    "last_commit": last_commit,
-                }
-                trace = TraceContext(
-                    project_id=project_id,
-                    task_id=current_task_id,
-                    prd_id=prd_id,
-                    session_id=session_id,
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = str(handoff_id)
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "handoff_created",
-                        str(handoff_id),
-                        "handoff",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        None,
-                        None,
-                        None,
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
+                },
+                session_id=session_id,
+                prd_id=prd_id,
+            )
 
             return handoff_id
     except Exception as e:
@@ -2264,51 +1928,19 @@ def update_task_status(
                     (spec_id, spec_id),
                 )
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "task_status_updated",
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.TASK_STATUS_UPDATED,
+                {
                     "task_id": task_id,
                     "spec_id": spec_id,
                     "status": status,
                     "commit_sha": commit_sha,
-                    "actual_hours": actual_hours,
-                    "assigned_session": assigned_session,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=spec_id, session_id=assigned_session
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = f"{spec_id}:{task_id}"
-
-                # Map task status to activity_log status
-                activity_status = (
-                    "completed"
-                    if status == "completed"
-                    else ("failed" if status == "blocked" else "in_progress")
-                )
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "task_status_updated",
-                        f"{spec_id}:{task_id}",
-                        "task",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        None,
-                        None,
-                        None,
-                        activity_status,
-                        canonical.severity,
-                    ),
-                )
+                },
+                task_id=task_id,
+                prd_id=spec_id,
+                session_id=assigned_session,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -2355,65 +1987,21 @@ def insert_lesson(
     """
     try:
         with _db_transaction(db_path) as c:
-            # 1. Normalize lesson event via EventNormalizer (TC-008)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "lesson_captured",
+            # 1. Emit canonical event (TA0c: activity_log retired)
+            _try_emit_canonical(
+                _CanonicalEventType.LESSON_CAPTURED,
+                {
+                    "lesson_id": lesson_id,
                     "source": source,
                     "title": title,
-                    "what_happened": what_happened,
-                    "lesson": lesson,
-                    "evidence": evidence,
                     "confidence": confidence,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = lesson_id
-
-                # Insert normalized event
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, workflow_run_key,
-                        skill_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "lesson_captured",
-                        lesson_id,
-                        "lesson",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        prd_id,
-                        task_id,
-                        session_id,
-                        None,
-                        skill_id,
-                        "completed",
-                        canonical.severity,
-                        None,
-                    ),
-                )
-                activity_id = cur.lastrowid
-            else:
-                # Fallback: direct insert if normalizer unavailable
-                activity_id = _insert_activity_log(
-                    activity_type="lesson_captured",
-                    stream_id=lesson_id,
-                    stream_type="lesson",
-                    event_data={"source": source, "title": title, "confidence": confidence},
-                    status="completed",
-                    severity="info",
-                    prd_id=prd_id,
-                    task_id=task_id,
-                    session_id=session_id,
-                    skill_id=skill_id,
-                    db_path=db_path,
-                )
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+                skill_id=skill_id,
+            )
+            activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_lessons with activity_id FK
             c.execute(
@@ -2533,69 +2121,20 @@ def insert_research(
         query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
 
         with _db_transaction(db_path) as c:
-            # 1. Normalize research event via EventNormalizer (TC-008)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "research_completed",
-                    "query": query,
+            # 1. Emit canonical event (TA0c: activity_log retired)
+            _try_emit_canonical(
+                _CanonicalEventType.RESEARCH_COMPLETED,
+                {
+                    "query_hash": query_hash,
                     "source_type": source_type,
                     "source_url": source_url,
-                    "findings": findings,
                     "confidence_score": confidence_score,
-                    "trust_score": trust_score,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = query_hash
-
-                # Insert normalized event
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, workflow_run_key,
-                        skill_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "research_completed",
-                        query_hash,
-                        "research",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        prd_id,
-                        task_id,
-                        session_id,
-                        None,
-                        None,
-                        "completed",
-                        canonical.severity,
-                        None,
-                    ),
-                )
-                activity_id = cur.lastrowid
-            else:
-                # Fallback: direct insert if normalizer unavailable
-                activity_id = _insert_activity_log(
-                    activity_type="research_completed",
-                    stream_id=query_hash,
-                    stream_type="research",
-                    event_data={
-                        "query": query,
-                        "source_type": source_type,
-                        "source_url": source_url,
-                        "confidence_score": confidence_score,
-                    },
-                    status="completed",
-                    severity="info",
-                    prd_id=prd_id,
-                    task_id=task_id,
-                    session_id=session_id,
-                    db_path=db_path,
-                )
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
+            activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_research with activity_id FK
             c.execute(
@@ -2660,71 +2199,21 @@ def cache_research(
         expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
 
         with _db_transaction(db_path) as c:
-            # 1. Normalize research_cached event via EventNormalizer (TC-008)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "research_cached",
+            # 1. Emit canonical event (TA0c: activity_log retired)
+            _try_emit_canonical(
+                _CanonicalEventType.RESEARCH_CACHE_STORED,
+                {
+                    "cache_id": cache_id,
                     "topic": topic,
-                    "focus_areas": focus_areas,
-                    "sources": sources,
-                    "findings": findings,
+                    "source_count": len(sources),
                     "confidence_score": confidence_score,
                     "triangulation_score": triangulation_score,
-                    "source_count": len(sources),
-                    "ttl_days": ttl_days,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = cache_id
-
-                # Insert normalized event
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, workflow_run_key,
-                        skill_id, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "research_cached",
-                        cache_id,
-                        "research",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        prd_id,
-                        task_id,
-                        session_id,
-                        None,
-                        None,
-                        "completed",
-                        canonical.severity,
-                        None,
-                    ),
-                )
-                activity_id = cur.lastrowid
-            else:
-                # Fallback: direct insert if normalizer unavailable
-                activity_id = _insert_activity_log(
-                    activity_type="research_cached",
-                    stream_id=cache_id,
-                    stream_type="research",
-                    event_data={
-                        "topic": topic,
-                        "source_count": len(sources),
-                        "confidence_score": confidence_score,
-                        "triangulation_score": triangulation_score,
-                    },
-                    status="completed",
-                    severity="info",
-                    prd_id=prd_id,
-                    task_id=task_id,
-                    session_id=session_id,
-                    db_path=db_path,
-                )
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
+            activity_id = None  # deprecated FK column
 
             # 2. Insert into research_cache with activity_id FK
             c.execute(
@@ -2892,94 +2381,25 @@ def insert_hook_execution(
     Returns activity_id for linking hook_findings.
     Uses fire-and-forget pattern with DB lock fallback to text file.
     """
-    # Map hook_executions.status to activity_log.status
-    # hook_executions: 'pending', 'running', 'success', 'failed', 'timeout'
-    # activity_log: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
-    activity_status_map = {
-        "pending": "pending",
-        "running": "in_progress",
-        "success": "completed",
-        "failed": "failed",
-        "timeout": "failed",
-    }
-    activity_status = activity_status_map.get(status, "completed")
-
     try:
         with _db_transaction(db_path) as c:
-            # 1. Normalize hook_execution event via EventNormalizer (TC-008)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "hook_execution",
+            # 1. Emit canonical event (TA0c: activity_log retired)
+            _try_emit_canonical(
+                _CanonicalEventType.HOOK_EXECUTION_LOGGED,
+                {
                     "hook_name": hook_name,
                     "hook_type": hook_type,
-                    "trigger_context": trigger_context,
                     "started_at": started_at,
                     "completed_at": completed_at,
                     "duration_ms": duration_ms,
                     "exit_code": exit_code,
                     "status": status,
-                    "output": output,
-                    "error_message": error_message,
-                    "cpu_time_ms": cpu_time_ms,
-                    "memory_mb": memory_mb,
-                }
-                trace = TraceContext(
-                    project_id=None, task_id=task_id, prd_id=prd_id, session_id=session_id
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = hook_name
-
-                # Determine severity based on status
-                severity = "error" if status == "failed" else "info"
-
-                # Insert normalized event
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, status, severity,
-                        duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "hook_execution",
-                        hook_name,
-                        "hook",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        prd_id,
-                        task_id,
-                        session_id,
-                        activity_status,
-                        severity,
-                        duration_ms,
-                    ),
-                )
-                activity_id = cur.lastrowid
-            else:
-                # Fallback: direct insert if normalizer unavailable
-                cur = c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, prd_id, task_id, session_id, status, severity,
-                        duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "hook_execution",
-                        hook_name,
-                        "hook",
-                        started_at,
-                        json.dumps(trigger_context) if trigger_context else None,
-                        prd_id,
-                        task_id,
-                        session_id,
-                        activity_status,
-                        "error" if status == "failed" else "info",
-                        duration_ms,
-                    ),  # type: ignore[arg-type]
-                )
-                activity_id = cur.lastrowid
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
+            activity_id = None  # deprecated FK column
 
             # 2. Insert into hook_executions with activity_id
             c.execute(
@@ -3005,11 +2425,8 @@ def insert_hook_execution(
                 ),  # type: ignore[arg-type]
             )
 
-            # 3. Fetch is_anomaly from activity_log for broadcast
-            row = c.execute(
-                "SELECT is_anomaly FROM activity_log WHERE activity_id = ?", (activity_id,)
-            ).fetchone()
-            is_anomaly = bool(row[0]) if row else False
+            # 3. is_anomaly: activity_log retired (TA0c) — anomaly detection not migrated
+            is_anomaly = False
 
             # 4. Broadcast hook execution to WebSocket clients (fire-and-forget)
             _broadcast_hook_execution(
@@ -3092,13 +2509,11 @@ def insert_hook_finding(
             )
             finding_id = cur.lastrowid
 
-            # Event emission (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                from core.events.trace import TraceContext
-
-                raw_output = {
-                    "event_type": "hook_finding_created",
-                    "finding_id": finding_id,
+            # Event emission (additive side-effect) — TA0c: activity_log retired
+            _try_emit_canonical(
+                _CanonicalEventType.HOOK_FINDING_CREATED,
+                {
+                    "finding_id": str(finding_id),
                     "activity_id": activity_id,
                     "hook_exec_id": hook_exec_id,
                     "finding_type": finding_type,
@@ -3106,27 +2521,8 @@ def insert_hook_finding(
                     "message": message,
                     "recommendation": recommendation,
                     "status": status,
-                }
-                trace = TraceContext(project_id=None, task_id=None, prd_id=None, session_id=None)
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = str(finding_id)
-
-                c.execute(
-                    """INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "hook_finding_created",
-                        str(finding_id),
-                        "hook",
-                        canonical.timestamp.isoformat(),
-                        json.dumps(canonical.payload),
-                        "completed",
-                        severity,
-                    ),
-                )
+                },
+            )
 
             return finding_id
     except Exception as e:
@@ -3206,18 +2602,6 @@ def log_skill_execution(
             f"{skill_name}:{skill_args}:{session_id}:{_NOW()}".encode()
         ).hexdigest()[:16]
 
-        # Build event metadata for activity_log
-        event_data = {
-            "skill_name": skill_name,
-            "skill_args": skill_args,
-            "model": model,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "error_message": error_message,
-            "adapter": "default",  # EventNormalizer integration (TC-007)
-            "normalized": _NORMALIZER_AVAILABLE,
-        }
-
         # Map user-friendly status to DB-compatible status
         # DB schema only allows: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
         status_map = {
@@ -3231,26 +2615,29 @@ def log_skill_execution(
         }
         db_status = status_map.get(status, "completed")  # Default to "completed" for unknown
 
-        # Insert directly into activity_log
-        # Note: EventNormalizer will be fully integrated in TC-008 for all callsites
-        with _db_transaction(db_path) as c:
-            activity_id = _insert_activity_log(
-                activity_type="skill_execution",
-                stream_id=skill_exec_id,
-                stream_type="skill",
-                event_data=event_data,
-                status=db_status,
-                severity="error" if status == "failed" else "info",
-                prd_id=prd_id,
-                task_id=task_id,
-                session_id=session_id,
-                skill_id=skill_name,
-                duration_ms=duration_ms,
-                db_path=db_path,
-                conn=c,
-            )
+        # Emit canonical event (TA0c: activity_log retired)
+        _try_emit_canonical(
+            _CanonicalEventType.SKILL_EXECUTED,
+            {
+                "skill_exec_id": skill_exec_id,
+                "skill_name": skill_name,
+                "skill_args": skill_args,
+                "model": model,
+                "status": db_status,
+                "duration_ms": duration_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "error_message": error_message,
+                "session_id": session_id,
+                "project_id": project_id,
+            },
+            session_id=session_id,
+            task_id=task_id,
+            prd_id=prd_id,
+            skill_id=skill_name,
+        )
 
-        return activity_id is not None
+        return True
     except Exception as e:
         _reraise_if_busy(e)
         # Fallback: write to JSONL file if DB write fails

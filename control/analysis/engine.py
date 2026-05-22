@@ -38,7 +38,6 @@ from core.config.paths import project_planning_dir, project_sessions_dir
 
 # Import EventNormalizer for legacy activity-log enrichment (PHASE 1 Step 2)
 try:
-    from core.events.trace import TraceContext
     from core.adapters.normalizers import EventNormalizer
 
     _event_normalizer = EventNormalizer()
@@ -172,39 +171,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 (run_id, project_id, run_type, started_at),
             )
 
-            # Event emission: analysis.started (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.started",
-                    "run_id": run_id,
-                    "project_id": project_id,
-                    "run_type": run_type,
-                    "project_path": str(path),
-                }
-                trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = trace
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.started",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "in_progress",
-                        canonical.severity,
-                    ),
-                )
-
         # Phase 1: Discovery
         print(f"[{run_id}] Phase 1/5: Discovery...")
         project_data = discover_project(path)
@@ -238,38 +204,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             """,
                 (run_id,),
             )
-
-            # Event emission: analysis.phase.completed (discovery)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.phase.completed",
-                    "run_id": run_id,
-                    "phase": "discovery",
-                    "files_discovered": len(project_data.get("file_inventory", {})),
-                    "lines_of_code": project_data.get("lines_of_code", {}).get("total", 0),
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.phase.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
 
         # Detect stack
         detected = detect_stack(path)
@@ -308,37 +242,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             """,
                 (run_id,),
             )
-
-            # Event emission: analysis.phase.completed (research)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.phase.completed",
-                    "run_id": run_id,
-                    "phase": "research",
-                    "stack_framework": stack.get("framework", "unknown"),
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.phase.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
 
         # Phase 3: Architecture Audit
         print(f"[{run_id}] Phase 3/5: Architecture Audit...")
@@ -385,38 +288,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 (violations_count, run_id),
             )
 
-            # Event emission: analysis.phase.completed (audit)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.phase.completed",
-                    "run_id": run_id,
-                    "phase": "audit",
-                    "violations_count": violations_count,
-                    "health_score": audit.get("health_score", 0),
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.phase.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
-
         # Phase 4: Bug Analysis
         print(f"[{run_id}] Phase 4/5: Bug Analysis...")
         bugs = analyze_bugs(path, project_data, stack)
@@ -456,37 +327,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 (bugs_count, run_id),
             )
 
-            # Event emission: analysis.phase.completed (bug_analysis)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.phase.completed",
-                    "run_id": run_id,
-                    "phase": "bug_analysis",
-                    "bugs_count": bugs_count,
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.phase.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
-
         # Phase 5: Synthesis (PRD Generation)
         print(f"[{run_id}] Phase 5/5: PRD Generation...")
         prd_path = generate_prd(
@@ -525,37 +365,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             """,
                 (run_id,),
             )
-
-            # Event emission: analysis.phase.completed (synthesis)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.phase.completed",
-                    "run_id": run_id,
-                    "phase": "synthesis",
-                    "prd_path": str(prd_path),
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.phase.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                    ),
-                )
 
         # Update project metadata in reg_projects
         _update_project_metadata(project_id, path, project_data, stack, audit)
@@ -597,42 +406,6 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             """,
                 (datetime.now(timezone.utc).isoformat(), duration, run_id),
             )
-
-            # Event emission: analysis.completed (additive side-effect)
-            if _NORMALIZER_AVAILABLE:
-                raw_output = {
-                    "event_type": "analysis.completed",
-                    "run_id": run_id,
-                    "project_id": project_id,
-                    "duration_seconds": duration,
-                    "violations_count": violations_count,
-                    "bugs_count": bugs_count,
-                    "health_score": audit.get("health_score", 0),
-                    "prd_path": str(prd_path),
-                }
-                canonical = _event_normalizer.normalize(raw_output, model_type="default")
-                canonical.trace = TraceContext(
-                    project_id=project_id, task_id=None, prd_id=None, session_id=None
-                )
-                canonical.entity_id = run_id
-
-                conn.execute(
-                    """
-                    INSERT INTO activity_log
-                       (activity_type, stream_id, stream_type, event_timestamp,
-                        event_data, status, severity, duration_ms)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        "analysis.completed",
-                        run_id,
-                        "analysis",
-                        canonical.timestamp.isoformat(),
-                        str(canonical.payload),
-                        "completed",
-                        canonical.severity,
-                        int(duration * 1000),
-                    ),
-                )
 
         print(f"[{run_id}] Analysis complete!")
         print(f"  - Violations: {violations_count}")
