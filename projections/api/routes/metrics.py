@@ -27,6 +27,11 @@ from projections.core.collectors import (
     WorkflowCollector,
 )
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
+from projections.api.queries.token_attribution import (
+    attribution_coverage,
+    canonical_token_metrics,
+    exec_time_ranges_from_canonical,
+)
 
 router = APIRouter()
 
@@ -54,69 +59,6 @@ def _sum_optional(current: float | None, value: float | None) -> float | None:
 
 def _optional_float(value: Any) -> float | None:
     return None if value is None else float(value)
-
-
-def _build_skill_costs(db_path: str, days: int, total_cost: float | None) -> Dict[str, Any]:
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        source_sql = skill_usage_sql(conn)
-        if source_sql is None:
-            return {}
-        rows = conn.execute(
-            f"""
-            SELECT skill_name, COUNT(*) as cnt
-            FROM ({source_sql}) skill_usage
-            WHERE invoked_at >= ? AND skill_name IS NOT NULL
-            GROUP BY skill_name
-        """,
-            (cutoff,),
-        ).fetchall()
-        result = {}
-        for r in rows:
-            result[r["skill_name"]] = {
-                "skill_name": r["skill_name"],
-                "total_tokens": 0,
-                "invocations": r["cnt"],
-                "cost_usd": None,
-                "cost": None,
-                "cost_visibility": "unavailable",
-                "cost_status": "unknown",
-            }
-        return result
-    finally:
-        conn.close()
-
-
-def _build_exec_time_ranges(db_path: str, days: int) -> Dict[str, Dict[str, float]]:
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    try:
-        source_sql = skill_usage_sql(conn)
-        if source_sql is None:
-            return {}
-        rows = conn.execute(
-            f"""
-            SELECT skill_name,
-                   MIN(execution_time_s) as min_s,
-                   MAX(execution_time_s) as max_s
-            FROM ({source_sql}) skill_usage
-            WHERE invoked_at >= ? AND execution_time_s IS NOT NULL
-            GROUP BY skill_name
-        """,
-            (cutoff,),
-        ).fetchall()
-        return {
-            r["skill_name"]: {
-                "min_m": round((r["min_s"] or 0) / 60, 2),
-                "max_m": round((r["max_s"] or 0) / 60, 2),
-            }
-            for r in rows
-        }
-    finally:
-        conn.close()
 
 
 def _build_token_timeline(db_path: str, days: int) -> List[Dict[str, Any]]:
@@ -301,7 +243,7 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
         collector = SkillCollector(db_path)
         data = collector.collect(days=days)
 
-        exec_ranges = _build_exec_time_ranges(db_path, days)
+        exec_ranges = exec_time_ranges_from_canonical(days)
 
         leaderboard = []
         for skill_name, skill_data in data.get("by_skill", {}).items():
@@ -371,13 +313,10 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
 async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
     """Get token usage metrics with dashboard-friendly format"""
     try:
-        db_path = get_db_path()
-        collector = TokenCollector(db_path)
-        data = collector.collect(days=days)
-        timeline = _build_token_timeline(db_path, days)
+        data = canonical_token_metrics(days)
+        timeline = data["timeline"]
 
         cache_hit_rate = data.get("cache_hits", 0) / max(data.get("total_tokens", 1), 1)
-
         cost_timeline = [{"date": t["date"], "cost": t.get("cost_usd")} for t in timeline]
 
         by_project = {
@@ -393,7 +332,10 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
                 for k, v in raw_by_skill.items()
             }
         else:
-            by_skill = _build_skill_costs(db_path, days, data.get("total_cost_usd"))
+            # No skill attribution in canonical_events token data — honest empty.
+            by_skill = {}
+
+        coverage = attribution_coverage()
 
         return {
             **data,
@@ -403,6 +345,7 @@ async def get_token_metrics(days: int = Query(default=30, ge=1, le=365)):
             "cache_hit_rate": cache_hit_rate,
             "by_project": by_project,
             "by_skill": by_skill,
+            "attribution_coverage": coverage,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error collecting token metrics: {str(e)}")

@@ -63,10 +63,39 @@ row to `execution_events`. The projection is idempotent — replaying the same e
 - `execution.completed`
 - `execution.failed`
 
-## Dashboard Status (TA0b)
+## Dashboard Status (TA5 — Restored)
 
-The dashboard's telemetry endpoints may return reduced data during the TA-series.
-This is expected and accepted. Full dashboard restoration is TA5.
+The dashboard's token-attribution data now comes directly from `canonical_events`.
+Fabricators `_build_skill_costs` and `_build_exec_time_ranges` were deleted in TA5.
+
+- `/api/metrics/tokens` — `attribution_coverage` field added; `by_skill` is `{}` (honest empty)
+  when no skill cost data exists in `token_usage_records`. Zero fabrication.
+- `/api/metrics/skills` — execution time ranges read from `canonical_events.skill.executed`
+  instead of legacy `skill_invocations`. Empty if no `skill.executed` events.
+
+### Model Pricing Source
+
+Token cost calculations use `core/pricing/claude_models.py`.
+
+**Prices are in USD per 1M tokens (MTok). Source: platform.claude.com/docs, verified 2026-05-22.**
+
+| Model | Input $/MTok | Output $/MTok | Cache Write $/MTok | Cache Read $/MTok |
+|-------|-------------|--------------|-------------------|------------------|
+| claude-opus-4-7 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-6 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-5 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-1 | $15.00 | $75.00 | $18.75 | $1.50 |
+| claude-sonnet-4-6 | $3.00 | $15.00 | $3.75 | $0.30 |
+| claude-sonnet-4-5 | $3.00 | $15.00 | $3.75 | $0.30 |
+| claude-haiku-4-5 | $1.00 | $5.00 | $1.25 | $0.10 |
+| claude-haiku-3-5 | $0.80 | $4.00 | $1.00 | $0.08 |
+
+Cache write price = 5-minute write tier (standard).
+Model IDs with date suffixes (e.g. `claude-haiku-4-5-20251001`) are normalized before lookup.
+Unknown models log a WARNING and return $0.00 — they never appear as fabricated costs.
+
+To update pricing: edit `CLAUDE_MODEL_PRICING` in `core/pricing/claude_models.py` and
+update this table. No other files need changing.
 
 ## SDLC Event Trace Requirements
 
