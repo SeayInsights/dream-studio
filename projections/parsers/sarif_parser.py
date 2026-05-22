@@ -272,22 +272,24 @@ def parse_sarif_file(file_path: str) -> int:
                     # Emit canonical event for security finding
                     timestamp = datetime.now(timezone.utc).isoformat()
                     try:
-                        _write_envelopes([
-                            CanonicalEventEnvelope(
-                                event_type=_CanonicalEventType.SECURITY_FINDING_RECORDED.value,
-                                session_id=None,
-                                payload={
-                                    "rule_id": rule_id,
-                                    "severity": finding_severity,
-                                    "message": message,
-                                    "file_path": file_path,
-                                    "line_number": line_number,
-                                    "scan_tool": tool_name,
-                                },
-                                confidence="unavailable",
-                                project_id=None,
-                            )
-                        ])
+                        _write_envelopes(
+                            [
+                                CanonicalEventEnvelope(
+                                    event_type=_CanonicalEventType.SECURITY_FINDING_RECORDED.value,
+                                    session_id=None,
+                                    payload={
+                                        "rule_id": rule_id,
+                                        "severity": finding_severity,
+                                        "message": message,
+                                        "file_path": file_path,
+                                        "line_number": line_number,
+                                        "scan_tool": tool_name,
+                                    },
+                                    confidence="unavailable",
+                                    project_id=None,
+                                )
+                            ]
+                        )
                     except Exception:
                         pass
 

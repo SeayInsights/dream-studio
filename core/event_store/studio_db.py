@@ -52,6 +52,7 @@ try:
     from canonical.events.envelope import CanonicalEventEnvelope
     from canonical.events.types import EventType as _CanonicalEventType
     from emitters.shared.spool_writer import write_envelopes as _write_envelopes
+
     _SPOOL_WRITER_AVAILABLE = True
 except ImportError:
     _SPOOL_WRITER_AVAILABLE = False
@@ -72,15 +73,17 @@ def _try_emit_canonical(
     if not _SPOOL_WRITER_AVAILABLE:
         return
     try:
-        _write_envelopes([
-            CanonicalEventEnvelope(
-                event_type=event_type.value,
-                session_id=session_id,
-                payload={k: v for k, v in payload.items() if v is not None},
-                confidence="unavailable",
-                project_id=None,
-            )
-        ])
+        _write_envelopes(
+            [
+                CanonicalEventEnvelope(
+                    event_type=event_type.value,
+                    session_id=session_id,
+                    payload={k: v for k, v in payload.items() if v is not None},
+                    confidence="unavailable",
+                    project_id=None,
+                )
+            ]
+        )
     except Exception:
         pass  # best-effort: never fail production writes due to telemetry
 
@@ -338,14 +341,22 @@ def archive_workflow(
 
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(_CanonicalEventType.WORKFLOW_COMPLETED, {
-                "workflow": wf["workflow"],
-                "yaml_path": wf.get("yaml_path", ""),
-                "status": status,
-                "node_count": len(nodes),
-                "nodes_done": sum(1 for n in nodes.values() if n.get("status") in ("completed", "skipped")),
-                "duration_ms": duration_ms,
-            }, session_id=session_id, task_id=task_id, prd_id=prd_id)
+            _try_emit_canonical(
+                _CanonicalEventType.WORKFLOW_COMPLETED,
+                {
+                    "workflow": wf["workflow"],
+                    "yaml_path": wf.get("yaml_path", ""),
+                    "status": status,
+                    "node_count": len(nodes),
+                    "nodes_done": sum(
+                        1 for n in nodes.values() if n.get("status") in ("completed", "skipped")
+                    ),
+                    "duration_ms": duration_ms,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
             activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_workflow_runs with activity_id FK
@@ -383,13 +394,19 @@ def archive_workflow(
                         pass
 
                 # Emit canonical event for workflow node (TA0c: activity_log retired)
-                _try_emit_canonical(_CanonicalEventType.WORKFLOW_NODE_COMPLETED, {
-                    "node_id": nid,
-                    "workflow": wf["workflow"],
-                    "status": node_status,
-                    "output": nd.get("output", ""),
-                    "duration_ms": node_duration_ms,
-                }, session_id=session_id, task_id=task_id, prd_id=prd_id)
+                _try_emit_canonical(
+                    _CanonicalEventType.WORKFLOW_NODE_COMPLETED,
+                    {
+                        "node_id": nid,
+                        "workflow": wf["workflow"],
+                        "status": node_status,
+                        "output": nd.get("output", ""),
+                        "duration_ms": node_duration_ms,
+                    },
+                    session_id=session_id,
+                    task_id=task_id,
+                    prd_id=prd_id,
+                )
                 node_activity_id = None  # deprecated FK column
 
                 # Insert into raw_workflow_nodes with activity_id FK
@@ -673,14 +690,18 @@ def insert_approach(
             )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.APPROACH_CAPTURED, {
-                "skill_id": skill_id,
-                "approach": approach,
-                "outcome": outcome,
-                "model": model,
-                "duration_s": duration_s,
-                "tokens_used": tokens_used,
-            }, session_id=session_id)
+            _try_emit_canonical(
+                _CanonicalEventType.APPROACH_CAPTURED,
+                {
+                    "skill_id": skill_id,
+                    "approach": approach,
+                    "outcome": outcome,
+                    "model": model,
+                    "duration_s": duration_s,
+                    "tokens_used": tokens_used,
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1035,11 +1056,14 @@ def update_project_stats(
             )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.PROJECT_STATS_UPDATED, {
-                "project_id": project_id,
-                "sessions_delta": sessions_delta,
-                "tokens_delta": tokens_delta,
-            })
+            _try_emit_canonical(
+                _CanonicalEventType.PROJECT_STATS_UPDATED,
+                {
+                    "project_id": project_id,
+                    "sessions_delta": sessions_delta,
+                    "tokens_delta": tokens_delta,
+                },
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1068,12 +1092,16 @@ def insert_session(
             )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.SESSION_RECORDED, {
-                "session_id": session_id,
-                "project_id": project_id,
-                "topic": topic,
-                "pipeline_phase": pipeline_phase,
-            }, session_id=session_id)
+            _try_emit_canonical(
+                _CanonicalEventType.SESSION_RECORDED,
+                {
+                    "session_id": session_id,
+                    "project_id": project_id,
+                    "topic": topic,
+                    "pipeline_phase": pipeline_phase,
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1150,14 +1178,18 @@ def end_session(
             )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.SESSION_CLOSED, {
-                "session_id": session_id,
-                "outcome": outcome,
-                "duration_s": duration,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "tasks_completed": tasks_completed,
-            }, session_id=session_id)
+            _try_emit_canonical(
+                _CanonicalEventType.SESSION_CLOSED,
+                {
+                    "session_id": session_id,
+                    "outcome": outcome,
+                    "duration_s": duration,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "tasks_completed": tasks_completed,
+                },
+                session_id=session_id,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1318,13 +1350,18 @@ def insert_handoff(
                 )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.HANDOFF_CREATED, {
-                "handoff_id": str(handoff_id),
-                "project_id": project_id,
-                "session_id": session_id,
-                "topic": topic,
-                "branch": branch,
-            }, session_id=session_id, prd_id=prd_id)
+            _try_emit_canonical(
+                _CanonicalEventType.HANDOFF_CREATED,
+                {
+                    "handoff_id": str(handoff_id),
+                    "project_id": project_id,
+                    "session_id": session_id,
+                    "topic": topic,
+                    "branch": branch,
+                },
+                session_id=session_id,
+                prd_id=prd_id,
+            )
 
             return handoff_id
     except Exception as e:
@@ -1892,12 +1929,18 @@ def update_task_status(
                 )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.TASK_STATUS_UPDATED, {
-                "task_id": task_id,
-                "spec_id": spec_id,
-                "status": status,
-                "commit_sha": commit_sha,
-            }, task_id=task_id, prd_id=spec_id, session_id=assigned_session)
+            _try_emit_canonical(
+                _CanonicalEventType.TASK_STATUS_UPDATED,
+                {
+                    "task_id": task_id,
+                    "spec_id": spec_id,
+                    "status": status,
+                    "commit_sha": commit_sha,
+                },
+                task_id=task_id,
+                prd_id=spec_id,
+                session_id=assigned_session,
+            )
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1945,12 +1988,19 @@ def insert_lesson(
     try:
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(_CanonicalEventType.LESSON_CAPTURED, {
-                "lesson_id": lesson_id,
-                "source": source,
-                "title": title,
-                "confidence": confidence,
-            }, session_id=session_id, task_id=task_id, prd_id=prd_id, skill_id=skill_id)
+            _try_emit_canonical(
+                _CanonicalEventType.LESSON_CAPTURED,
+                {
+                    "lesson_id": lesson_id,
+                    "source": source,
+                    "title": title,
+                    "confidence": confidence,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+                skill_id=skill_id,
+            )
             activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_lessons with activity_id FK
@@ -2072,12 +2122,18 @@ def insert_research(
 
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(_CanonicalEventType.RESEARCH_COMPLETED, {
-                "query_hash": query_hash,
-                "source_type": source_type,
-                "source_url": source_url,
-                "confidence_score": confidence_score,
-            }, session_id=session_id, task_id=task_id, prd_id=prd_id)
+            _try_emit_canonical(
+                _CanonicalEventType.RESEARCH_COMPLETED,
+                {
+                    "query_hash": query_hash,
+                    "source_type": source_type,
+                    "source_url": source_url,
+                    "confidence_score": confidence_score,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
             activity_id = None  # deprecated FK column
 
             # 2. Insert into raw_research with activity_id FK
@@ -2144,13 +2200,19 @@ def cache_research(
 
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(_CanonicalEventType.RESEARCH_CACHE_STORED, {
-                "cache_id": cache_id,
-                "topic": topic,
-                "source_count": len(sources),
-                "confidence_score": confidence_score,
-                "triangulation_score": triangulation_score,
-            }, session_id=session_id, task_id=task_id, prd_id=prd_id)
+            _try_emit_canonical(
+                _CanonicalEventType.RESEARCH_CACHE_STORED,
+                {
+                    "cache_id": cache_id,
+                    "topic": topic,
+                    "source_count": len(sources),
+                    "confidence_score": confidence_score,
+                    "triangulation_score": triangulation_score,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
             activity_id = None  # deprecated FK column
 
             # 2. Insert into research_cache with activity_id FK
@@ -2334,15 +2396,21 @@ def insert_hook_execution(
     try:
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(_CanonicalEventType.HOOK_EXECUTION_LOGGED, {
-                "hook_name": hook_name,
-                "hook_type": hook_type,
-                "started_at": started_at,
-                "completed_at": completed_at,
-                "duration_ms": duration_ms,
-                "exit_code": exit_code,
-                "status": status,
-            }, session_id=session_id, task_id=task_id, prd_id=prd_id)
+            _try_emit_canonical(
+                _CanonicalEventType.HOOK_EXECUTION_LOGGED,
+                {
+                    "hook_name": hook_name,
+                    "hook_type": hook_type,
+                    "started_at": started_at,
+                    "completed_at": completed_at,
+                    "duration_ms": duration_ms,
+                    "exit_code": exit_code,
+                    "status": status,
+                },
+                session_id=session_id,
+                task_id=task_id,
+                prd_id=prd_id,
+            )
             activity_id = None  # deprecated FK column
 
             # 2. Insert into hook_executions with activity_id
@@ -2454,16 +2522,19 @@ def insert_hook_finding(
             finding_id = cur.lastrowid
 
             # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(_CanonicalEventType.HOOK_FINDING_CREATED, {
-                "finding_id": str(finding_id),
-                "activity_id": activity_id,
-                "hook_exec_id": hook_exec_id,
-                "finding_type": finding_type,
-                "severity": severity,
-                "message": message,
-                "recommendation": recommendation,
-                "status": status,
-            })
+            _try_emit_canonical(
+                _CanonicalEventType.HOOK_FINDING_CREATED,
+                {
+                    "finding_id": str(finding_id),
+                    "activity_id": activity_id,
+                    "hook_exec_id": hook_exec_id,
+                    "finding_type": finding_type,
+                    "severity": severity,
+                    "message": message,
+                    "recommendation": recommendation,
+                    "status": status,
+                },
+            )
 
             return finding_id
     except Exception as e:
@@ -2569,19 +2640,26 @@ def log_skill_execution(
         db_status = status_map.get(status, "completed")  # Default to "completed" for unknown
 
         # Emit canonical event (TA0c: activity_log retired)
-        _try_emit_canonical(_CanonicalEventType.SKILL_EXECUTED, {
-            "skill_exec_id": skill_exec_id,
-            "skill_name": skill_name,
-            "skill_args": skill_args,
-            "model": model,
-            "status": db_status,
-            "duration_ms": duration_ms,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "error_message": error_message,
-            "session_id": session_id,
-            "project_id": project_id,
-        }, session_id=session_id, task_id=task_id, prd_id=prd_id, skill_id=skill_name)
+        _try_emit_canonical(
+            _CanonicalEventType.SKILL_EXECUTED,
+            {
+                "skill_exec_id": skill_exec_id,
+                "skill_name": skill_name,
+                "skill_args": skill_args,
+                "model": model,
+                "status": db_status,
+                "duration_ms": duration_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "error_message": error_message,
+                "session_id": session_id,
+                "project_id": project_id,
+            },
+            session_id=session_id,
+            task_id=task_id,
+            prd_id=prd_id,
+            skill_id=skill_name,
+        )
 
         return True
     except Exception as e:

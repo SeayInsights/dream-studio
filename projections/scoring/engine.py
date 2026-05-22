@@ -100,15 +100,17 @@ class RiskScoringEngine:
         events = []
         for row in cursor.fetchall():
             d = dict(row)
-            events.append({
-                "activity_id": d.get("event_id"),      # event_id now serves as the ID
-                "activity_type": d.get("event_type"),
-                "event_timestamp": d.get("timestamp"),
-                "severity": "info",  # default; not stored in canonical_events separately
-                "stream_type": None,
-                "stream_id": None,
-                "event_data": d.get("payload"),        # payload is the JSON blob
-            })
+            events.append(
+                {
+                    "activity_id": d.get("event_id"),  # event_id now serves as the ID
+                    "activity_type": d.get("event_type"),
+                    "event_timestamp": d.get("timestamp"),
+                    "severity": "info",  # default; not stored in canonical_events separately
+                    "stream_type": None,
+                    "stream_id": None,
+                    "event_data": d.get("payload"),  # payload is the JSON blob
+                }
+            )
         conn.close()
 
         return events
@@ -176,24 +178,32 @@ class RiskScoringEngine:
             risk_score: Computed risk score (0-100)
         """
         try:
-            _write_envelopes([
-                CanonicalEventEnvelope(
-                    event_type=_CanonicalEventType.RISK_SCORE_COMPUTED.value,
-                    session_id=None,
-                    payload={
-                        "source_event_type": event.get("activity_type"),
-                        "risk_score": risk_score,
-                        "computed_at": datetime.now().isoformat(),
-                        "components": {
-                            "file_level": "file_path in original event" if json.loads(event.get("event_data") or event.get("payload") or "{}").get("file_path") else None,
-                            "project_level": "total open findings",
-                            "temporal": "findings in last 24h",
+            _write_envelopes(
+                [
+                    CanonicalEventEnvelope(
+                        event_type=_CanonicalEventType.RISK_SCORE_COMPUTED.value,
+                        session_id=None,
+                        payload={
+                            "source_event_type": event.get("activity_type"),
+                            "risk_score": risk_score,
+                            "computed_at": datetime.now().isoformat(),
+                            "components": {
+                                "file_level": (
+                                    "file_path in original event"
+                                    if json.loads(
+                                        event.get("event_data") or event.get("payload") or "{}"
+                                    ).get("file_path")
+                                    else None
+                                ),
+                                "project_level": "total open findings",
+                                "temporal": "findings in last 24h",
+                            },
                         },
-                    },
-                    confidence="unavailable",
-                    project_id=None,
-                )
-            ])
+                        confidence="unavailable",
+                        project_id=None,
+                    )
+                ]
+            )
         except Exception:
             pass
 
