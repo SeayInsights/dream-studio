@@ -2381,18 +2381,6 @@ def insert_hook_execution(
     Returns activity_id for linking hook_findings.
     Uses fire-and-forget pattern with DB lock fallback to text file.
     """
-    # Map hook_executions.status to activity_log.status
-    # hook_executions: 'pending', 'running', 'success', 'failed', 'timeout'
-    # activity_log: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'
-    activity_status_map = {
-        "pending": "pending",
-        "running": "in_progress",
-        "success": "completed",
-        "failed": "failed",
-        "timeout": "failed",
-    }
-    activity_status = activity_status_map.get(status, "completed")
-
     try:
         with _db_transaction(db_path) as c:
             # 1. Emit canonical event (TA0c: activity_log retired)
@@ -2613,18 +2601,6 @@ def log_skill_execution(
         skill_exec_id = hashlib.sha256(
             f"{skill_name}:{skill_args}:{session_id}:{_NOW()}".encode()
         ).hexdigest()[:16]
-
-        # Build event metadata for activity_log
-        event_data = {
-            "skill_name": skill_name,
-            "skill_args": skill_args,
-            "model": model,
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "error_message": error_message,
-            "adapter": "default",  # EventNormalizer integration (TC-007)
-            "normalized": _NORMALIZER_AVAILABLE,
-        }
 
         # Map user-friendly status to DB-compatible status
         # DB schema only allows: 'pending', 'in_progress', 'completed', 'failed', 'cancelled'

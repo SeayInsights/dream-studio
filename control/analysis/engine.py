@@ -38,7 +38,6 @@ from core.config.paths import project_planning_dir, project_sessions_dir
 
 # Import EventNormalizer for legacy activity-log enrichment (PHASE 1 Step 2)
 try:
-    from core.events.trace import TraceContext
     from core.adapters.normalizers import EventNormalizer
 
     _event_normalizer = EventNormalizer()

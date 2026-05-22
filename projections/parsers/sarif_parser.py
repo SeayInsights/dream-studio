@@ -25,11 +25,11 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from core.event_store import studio_db
-from core.config.database import transaction
-from canonical.events.envelope import CanonicalEventEnvelope
-from canonical.events.types import EventType as _CanonicalEventType
-from emitters.shared.spool_writer import write_envelopes as _write_envelopes
+from core.event_store import studio_db  # noqa: E402
+from core.config.database import transaction  # noqa: E402
+from canonical.events.envelope import CanonicalEventEnvelope  # noqa: E402
+from canonical.events.types import EventType as _CanonicalEventType  # noqa: E402
+from emitters.shared.spool_writer import write_envelopes as _write_envelopes  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
