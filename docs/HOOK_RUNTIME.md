@@ -167,3 +167,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 
 
 <!-- Last reviewed 2026-05-22 — Phase 18.0 C2: on-prompt-validate.py (meta hook) gained HANDOFF_STALE_TTL_S=300 and HANDOFF_INJECTION_WINDOW_S=60 constants and _log_stale_handoff_discarded() helper. _check_pending_handoff() now deletes files older than HANDOFF_STALE_TTL_S (any status) and in_progress files past the injection window. Discards are logged to DS_DIAGNOSTICS_DIR/stale-handoff.jsonl. Prevents pending-handoff.json from persisting indefinitely across sessions. -->
+
+<!-- Last reviewed 2026-05-23 — Phase 18.1.9: control/execution/workflow/runner.py _BARE_TO_PACK table and fallback updated (bare mode → ds-* pack prefix mapping). No hook registration, handler, or hook execution policy change. -->

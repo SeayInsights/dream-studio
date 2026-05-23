@@ -241,12 +241,69 @@ def record_process_run(conn: sqlite3.Connection, **values: Any) -> None:
     )
 
 
-def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:  # noqa: ARG001
-    # conn is accepted for backward compatibility but is no longer used here.
-    # Execution events are now emitted to the spool as canonical envelopes.
+def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
+    # Direct DB write: keeps execution_events populated so FK-constrained tables
+    # (agent_invocations, route_decision_records, etc.) remain valid with
+    # PRAGMA foreign_keys = ON.  Uses INSERT OR IGNORE to be idempotent.
+    def _as_list(v: Any) -> list:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return []
+        return list(v)
+
+    try:
+        source_refs = _as_list(values.get("source_refs") or values.get("source_refs_json"))
+        evidence_refs = _as_list(values.get("evidence_refs") or values.get("evidence_refs_json"))
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, actor_type, actor_id, agent_id, skill_id, workflow_id,
+                hook_id, tool_id, model_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                values["event_id"],
+                values["event_type"],
+                values["event_name"],
+                values.get("project_id"),
+                values.get("milestone_id"),
+                values.get("task_id"),
+                values.get("process_run_id"),
+                values.get("actor_type"),
+                values.get("actor_id"),
+                values.get("agent_id"),
+                values.get("skill_id"),
+                values.get("workflow_id"),
+                values.get("hook_id"),
+                values.get("tool_id"),
+                values.get("model_id"),
+                json.dumps(source_refs, sort_keys=True),
+                json.dumps(evidence_refs, sort_keys=True),
+                values.get("outcome_status"),
+            ),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Also spool as canonical envelope for the v2 event pipeline.
     if CanonicalEventEnvelope is None or _write_envelopes is None:
         return
     try:
+        source_refs_spool = _as_list(values.get("source_refs") or values.get("source_refs_json"))
+        evidence_refs_spool = _as_list(
+            values.get("evidence_refs") or values.get("evidence_refs_json")
+        )
+        metadata = values.get("metadata") or values.get("metadata_json") or {}
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except Exception:
+                metadata = {}
         envelope = CanonicalEventEnvelope(
             event_type=values["event_type"],
             session_id=values.get("session_id"),
@@ -268,9 +325,9 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:  # 
             payload={
                 "event_name": values["event_name"],
                 "outcome_status": values.get("outcome_status"),
-                "source_refs": json.loads(values.get("source_refs_json", "[]")),
-                "evidence_refs": json.loads(values.get("evidence_refs_json", "[]")),
-                "metadata": json.loads(values.get("metadata_json", "{}")),
+                "source_refs": source_refs_spool,
+                "evidence_refs": evidence_refs_spool,
+                "metadata": metadata,
             },
             severity="info",
         )

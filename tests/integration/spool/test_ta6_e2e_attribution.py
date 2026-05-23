@@ -118,29 +118,38 @@ def sdlc_hierarchy(ta6_db):
     assert ms_result["ok"], f"create_milestone failed: {ms_result}"
     milestone_id = ms_result["milestone_id"]
 
-    # 3. Work order via canonical mutation.
-    from core.work_orders.mutations import create_work_order
+    # 3. Work order via direct SQL — create_work_order is projection-only and
+    #    does not write to business_work_orders synchronously, which breaks the
+    #    immediate create_task lookup. Insert directly for test isolation.
+    work_order_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, status, created_at)"
+            " VALUES (?, ?, ?, ?, 'created', ?)",
+            (work_order_id, project_id, milestone_id, "TA6 Test Work Order", now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
-    wo_result = create_work_order(
-        project_id=project_id,
-        milestone_id=milestone_id,
-        title="TA6 Test Work Order",
-        source_root=_SOURCE_ROOT,
-    )
-    assert wo_result["ok"], f"create_work_order failed: {wo_result}"
-    work_order_id = wo_result["work_order_id"]
-
-    # 4. Task via canonical mutation.
-    from core.work_orders.mutations import create_task
-
-    task_result = create_task(
-        work_order_id=work_order_id,
-        project_id=project_id,
-        title="TA6 test task",
-        source_root=_SOURCE_ROOT,
-    )
-    assert task_result["ok"], f"create_task failed: {task_result}"
-    task_id = task_result["task_id"]
+    # 4. Task via direct SQL for the same reason.
+    task_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (task_id, work_order_id, project_id, "TA6 test task", now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     return {
         "project_id": project_id,

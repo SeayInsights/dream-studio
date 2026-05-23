@@ -39,56 +39,56 @@ from control.execution.workflow.state import (  # noqa: E402
 # Maps bare mode names to their owning pack. Fully-qualified names (containing
 # ':') bypass this table entirely. Entries reflect packs.yaml modes as of Slice 9.
 _BARE_TO_PACK: dict[str, str] = {
-    # core (packs.yaml key: core)
-    "think": "core",
-    "plan": "core",
-    "build": "core",
-    "review": "core",
-    "verify": "core",
-    "ship": "core",
-    "handoff": "core",
-    "recap": "core",
-    "explain": "core",
-    # quality (packs.yaml key: quality)
-    "debug": "quality",
-    "polish": "quality",
-    "harden": "quality",
-    "pr-security-scan": "quality",
-    "structure-audit": "quality",
-    "learn": "quality",
-    "coach": "quality",
-    "audit": "quality",
-    # security (packs.yaml key: security, non-ambiguous modes only)
-    "dast": "security",
-    "binary-scan": "security",
-    "mitigate": "security",
-    "comply": "security",
-    "netcompat": "security",
-    # analyze (packs.yaml key: analyze)
-    "multi": "analyze",
-    "domain-re": "analyze",
-    "repo": "analyze",
-    "intelligence": "analyze",
-    # domains (packs.yaml key: domains)
-    "game-dev": "domains",
-    "saas-build": "domains",
-    "mcp-build": "domains",
-    "dashboard-dev": "domains",
-    "client-work": "domains",
-    "design": "domains",
-    # career (packs.yaml key: career)
-    "evaluate": "career",
-    "apply": "career",
-    "track": "career",
-    "pdf": "career",
-    # ds-project (packs.yaml key: ds-project — kept as-is)
+    # ds-core
+    "think": "ds-core",
+    "plan": "ds-core",
+    "build": "ds-core",
+    "review": "ds-core",
+    "verify": "ds-core",
+    "ship": "ds-core",
+    "handoff": "ds-core",
+    "recap": "ds-core",
+    "explain": "ds-core",
+    # ds-quality
+    "debug": "ds-quality",
+    "polish": "ds-quality",
+    "harden": "ds-quality",
+    "pr-security-scan": "ds-quality",
+    "structure-audit": "ds-quality",
+    "learn": "ds-quality",
+    "coach": "ds-quality",
+    "audit": "ds-quality",
+    # ds-security
+    "dast": "ds-security",
+    "binary-scan": "ds-security",
+    "mitigate": "ds-security",
+    "comply": "ds-security",
+    "netcompat": "ds-security",
+    # ds-analyze
+    "multi": "ds-analyze",
+    "domain-re": "ds-analyze",
+    "repo": "ds-analyze",
+    "intelligence": "ds-analyze",
+    # ds-domains
+    "game-dev": "ds-domains",
+    "saas-build": "ds-domains",
+    "mcp-build": "ds-domains",
+    "dashboard-dev": "ds-domains",
+    "client-work": "ds-domains",
+    "design": "ds-domains",
+    # ds-career
+    "evaluate": "ds-career",
+    "apply": "ds-career",
+    "track": "ds-career",
+    "pdf": "ds-career",
+    # ds-project
     "scope": "ds-project",
     "resume": "ds-project",
-    # setup (packs.yaml key: setup)
-    "wizard": "setup",
-    "jit": "setup",
-    # meta/workflow (packs.yaml key: meta, skill: workflow)
-    "workflow": "meta",
+    # ds-setup
+    "wizard": "ds-setup",
+    "jit": "ds-setup",
+    # ds-workflow
+    "workflow": "ds-workflow",
 }
 
 # ── Command node routing ──────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ def resolve_specifier(skill_raw: str) -> str:
     """
     if ":" in skill_raw:
         return skill_raw
-    pack = _BARE_TO_PACK.get(skill_raw, "core")
+    pack = _BARE_TO_PACK.get(skill_raw, "ds-core")
     return f"{pack}:{skill_raw}"
 
 
