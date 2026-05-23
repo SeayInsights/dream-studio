@@ -10,7 +10,7 @@
 | 18.1.3 — Correlation ID infrastructure | Complete — PR pending (2026-05-22) |
 | 18.1.4 — Event type registry | Complete — embedded in 18.1.2 PR (2026-05-22) |
 | 18.1.5 — Projection framework | Pending |
-| 18.1.6 — Project entity family reconciliation | Pending |
+| 18.1.6 — Project entity family reconciliation | Complete — PR pending (2026-05-22) |
 | 18.2 — Writer migration | Pending (starts after 18.1) |
 | 18.3 — File-state migration | Pending (parallel after 18.1) |
 | 18.4 — Security, product readiness, onboarding | Pending (after 18.1) |
@@ -19,6 +19,18 @@
 | 18.7 — Documentation and cleanup | Pending (final) |
 
 See `.planning/phase-18-architectural-realignment.md` for full scope and exit criteria.
+
+### 18.1.6 Migration execution — phase assignments
+
+Phase 18.1.6 produced a decision (Approach A: ds_* canonical, project_* retires) and a migration plan sketch. The actual migration executes across later phases:
+
+- **Phase 18.4.6** — Build `business_change_orders` table (projection-populated, from `project_change_order_records` schema reference)
+- **Phase 18.4.8/.9** — Build `business_intake_records`, `business_intake_questions`, `business_assumption_records` tables; rewrite `prd_authority.py` to emit canonical events
+- **Phase 18.4.4** — Build `business_health_scorecards`, `business_readiness_scorecards` tables
+- **Phase 18.6 (new sub-workstream)** — Rename `ds_*` → `business_*` (schema migration + all code reference updates); schema enrichment of `business_milestones` and `business_work_orders` from `project_*` authority field patterns
+- **Phase 18.6.1** — Drop all 8 `project_*` tables (0 rows; no data migration needed)
+
+Reference: `docs/architecture/project-family-reconciliation.md`
 
 ---
 
