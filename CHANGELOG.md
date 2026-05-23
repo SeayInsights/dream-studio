@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 18.1.6 Project Entity Family Reconciliation (2026-05-22)
+
+- **`docs/architecture/project-family-reconciliation.md`** — complete investigation and decision document for the `ds_*` vs `project_*` table family reconciliation. Enumerates both families in full (schema, row counts, writers, readers), maps all 16 concepts to their v2 placement, records the Approach A decision (ds_* canonical, project_* retires), and provides a migration plan sketch for Phases 18.4 and 18.6.
+- **`.planning/data-model-v2.md` Amendment 4** — added "Project Entity Family — Reconciliation Decision" subsection confirming that `business_change_orders` is the target name, `project_*` tables drop in Phase 18.6, and `ds_*` tables rename to `business_*` with schema enrichment. Updated companion documents list to reflect the reconciliation document now exists.
+
+### Decided — Phase 18.1.6
+
+- **Project entity family: Approach A.** `ds_*` is the canonical operational layer. `project_*` family retires: the 8 tables (all at 0 rows) drop in Phase 18.6 after Phase 18.4 builds projection-populated `business_*` equivalents. No true concept duplicates exist — the families serve complementary purposes (operational tracking vs PRD authority specification). The prd_authority.py module (1,250+ lines, never invoked in production) is a design asset to be harvested by Phase 18.4, not lost.
+
 ### Added — Phase 18.1.3 Correlation ID Infrastructure (2026-05-22)
 
 - **`core/correlation/composer.py`** — canonical implementation of correlation ID composition rules. Functions: `compose(parts)` builds `sess-X:wf-Y:skill-Z:agent-A:hook-H:tool-T` from a dict; `decompose(cid)` parses back to components; `extend(base, entity_type, entity_id)` adds a context level; `validate(cid)` checks format; `normalize_legacy(cid)` normalizes pre-18.1.3 IDs. Uses lookahead regex splitting so skill IDs containing colons (e.g. `ds-security:scan`) are preserved as single segments.
