@@ -49,6 +49,8 @@ class ProjectionRunner:
 
     # How often to emit an aggregate health log even when no events arrived.
     _HEALTH_LOG_INTERVAL_SECONDS: float = 60.0
+    # How often to re-run the spool lifecycle check inside a running daemon.
+    _ARCHIVE_CHECK_INTERVAL_SECONDS: float = 86400.0  # 24 hours
 
     def __init__(self) -> None:
         self._engine = ProjectionEngine()
@@ -62,6 +64,7 @@ class ProjectionRunner:
         self._running: bool = False
         self._total_events: int = 0
         self._total_errors: int = 0
+        self._last_archive_check: float = 0.0
 
     # ── Registration ──────────────────────────────────────────────────────────
 
@@ -88,6 +91,10 @@ class ProjectionRunner:
             self._event_trigger,
         )
 
+        # Run spool archive check at startup so a daemon restart on Monday or
+        # January 1 does not miss the window if the daemon was down overnight.
+        self._run_archive_check()
+
         last_health_log = time.monotonic()
 
         try:
@@ -112,8 +119,9 @@ class ProjectionRunner:
                 except Exception:
                     logger.exception("ProjectionRunner: unexpected error in run_cycle()")
 
-                # Periodic health summary even during quiet periods.
                 now = time.monotonic()
+
+                # Periodic health summary even during quiet periods.
                 if now - last_health_log >= self._HEALTH_LOG_INTERVAL_SECONDS:
                     logger.info(
                         "ProjectionRunner health: %d total events processed, %d total errors",
@@ -122,6 +130,10 @@ class ProjectionRunner:
                     )
                     last_health_log = now
 
+                # Daily spool archive check (covers Monday/January-1 conditions).
+                if now - self._last_archive_check >= self._ARCHIVE_CHECK_INTERVAL_SECONDS:
+                    self._run_archive_check()
+
                 elapsed = time.monotonic() - cycle_start
                 sleep_for = max(0.0, self._poll_interval - elapsed)
                 if sleep_for > 0 and self._running:
@@ -129,6 +141,24 @@ class ProjectionRunner:
 
         finally:
             self._cleanup()
+
+    # ── Spool lifecycle integration ───────────────────────────────────────────
+
+    def _run_archive_check(self) -> None:
+        """Run the spool lifecycle check and update the last-check timestamp.
+
+        Delegates entirely to spool.lifecycle.check_and_archive() which is
+        conditional on the calendar (Monday for weekly, Jan 1 for yearly) and
+        idempotent (skips if archive already exists). Safe to call at any time.
+        """
+        try:
+            from spool.lifecycle import check_and_archive
+
+            check_and_archive()
+        except Exception:
+            logger.exception("ProjectionRunner: spool archive check failed")
+        finally:
+            self._last_archive_check = time.monotonic()
 
     # ── Pending-event count (for trigger logic) ───────────────────────────────
 
