@@ -18,12 +18,10 @@ MIGRATION_049 = REPO_ROOT / "core" / "event_store" / "migrations" / "049_work_or
 
 
 def _make_db(tmp_path: Path) -> Path:
+    from core.config.sqlite_bootstrap import bootstrap_database
+
     db_path = tmp_path / "studio.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.executescript(MIGRATION_048.read_text(encoding="utf-8"))
-    conn.executescript(MIGRATION_049.read_text(encoding="utf-8"))
-    conn.commit()
-    conn.close()
+    bootstrap_database(db_path)
     return db_path
 
 
@@ -31,7 +29,28 @@ def _seed_project(db_path: Path, *, project_id: str, name: str = "P") -> None:
     now = "2026-05-16T00:00:00+00:00"
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?,?,?,'active',?,?)", (project_id, name, "", now, now)
+        "INSERT INTO business_projects VALUES (?,?,?,'active',?,?)",
+        (project_id, name, "", now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _seed_milestone(
+    db_path: Path,
+    *,
+    milestone_id: str,
+    project_id: str,
+    title: str = "M1",
+    order_index: int = 0,
+) -> None:
+    now = "2026-05-16T00:00:00+00:00"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+        " VALUES (?,?,?,'pending',?,?,?)",
+        (milestone_id, project_id, title, order_index, now, now),
     )
     conn.commit()
     conn.close()
@@ -42,17 +61,18 @@ def _seed_work_order(
     *,
     work_order_id: str,
     project_id: str,
+    milestone_id: str | None = None,
     title: str = "WO",
-    status: str = "open",
+    status: str = "created",
     work_order_type: str | None = None,
 ) -> None:
     now = "2026-05-16T00:00:00+00:00"
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_work_orders"
-        " (work_order_id, project_id, title, status, work_order_type, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,?,?)",
-        (work_order_id, project_id, title, status, work_order_type, now, now),
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (work_order_id, project_id, milestone_id, title, status, work_order_type, now, now),
     )
     conn.commit()
     conn.close()
@@ -121,11 +141,11 @@ def test_get_active_project_id_returns_most_recent_when_multiple_active(tmp_path
     pid_new = "22222222-2222-2222-2222-222222222222"
     conn = _sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?,?,?,'active','2026-05-01T00:00:00+00:00','2026-05-01T00:00:00+00:00')",
+        "INSERT INTO business_projects VALUES (?,?,?,'active','2026-05-01T00:00:00+00:00','2026-05-01T00:00:00+00:00')",
         (pid_old, "Old", ""),
     )
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?,?,?,'active','2026-05-10T00:00:00+00:00','2026-05-10T00:00:00+00:00')",
+        "INSERT INTO business_projects VALUES (?,?,?,'active','2026-05-10T00:00:00+00:00','2026-05-10T00:00:00+00:00')",
         (pid_new, "New", ""),
     )
     conn.commit()
@@ -200,7 +220,7 @@ def test_project_status_shows_milestone_and_work_order_counts(tmp_path, capsys):
     db_path = _make_db(tmp_path)
     pid = "22222222-2222-2222-2222-222222222222"
     _seed_project(db_path, project_id=pid, name="Status Project")
-    _seed_work_order(db_path, work_order_id="wo-1", project_id=pid, title="WO1", status="open")
+    _seed_work_order(db_path, work_order_id="wo-1", project_id=pid, title="WO1", status="created")
     _seed_work_order(db_path, work_order_id="wo-2", project_id=pid, title="WO2", status="complete")
 
     from interfaces.cli.ds import _project_status
@@ -230,9 +250,16 @@ def test_project_status_shows_milestone_and_work_order_counts(tmp_path, capsys):
 def test_project_next_returns_first_open_work_order(tmp_path, capsys):
     db_path = _make_db(tmp_path)
     pid = "33333333-3333-3333-3333-333333333333"
+    mid = "33333333-3333-3333-3333-000000000001"
     _seed_project(db_path, project_id=pid, name="Next Project")
+    _seed_milestone(db_path, milestone_id=mid, project_id=pid, title="M1", order_index=0)
     _seed_work_order(
-        db_path, work_order_id="wo-next", project_id=pid, title="First WO", status="open"
+        db_path,
+        work_order_id="wo-next",
+        project_id=pid,
+        milestone_id=mid,
+        title="First WO",
+        status="created",
     )
 
     from interfaces.cli.ds import _project_next

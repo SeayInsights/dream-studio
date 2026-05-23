@@ -39,17 +39,17 @@ def set_active_project(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
         conn.execute(
-            "UPDATE ds_projects SET status = 'paused', updated_at = ? WHERE status = 'active'",
+            "UPDATE business_projects SET status = 'paused', updated_at = ? WHERE status = 'active'",
             (now,),
         )
         conn.execute(
-            "UPDATE ds_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
+            "UPDATE business_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
             (now, project_id),
         )
         conn.commit()
@@ -66,13 +66,13 @@ def deactivate_project(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
         conn.execute(
-            "UPDATE ds_projects SET status = 'paused', updated_at = ? WHERE project_id = ?",
+            "UPDATE business_projects SET status = 'paused', updated_at = ? WHERE project_id = ?",
             (now, project_id),
         )
         conn.commit()
@@ -111,22 +111,22 @@ def delete_project(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
 
         wo_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?",
+            "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?",
             (project_id,),
         ).fetchone()[0]
         ms_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_milestones WHERE project_id = ?",
+            "SELECT COUNT(*) FROM business_milestones WHERE project_id = ?",
             (project_id,),
         ).fetchone()[0]
         task_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_tasks WHERE project_id = ?",
+            "SELECT COUNT(*) FROM business_tasks WHERE project_id = ?",
             (project_id,),
         ).fetchone()[0]
 
@@ -148,21 +148,21 @@ def delete_project(
         # Collect task data for post-delete events before removing rows.
         task_rows = conn.execute(
             "SELECT t.task_id, t.work_order_id, t.project_id, wo.milestone_id"
-            " FROM ds_tasks t"
-            " LEFT JOIN ds_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " FROM business_tasks t"
+            " LEFT JOIN business_work_orders wo ON t.work_order_id = wo.work_order_id"
             " WHERE t.project_id = ?",
             (project_id,),
         ).fetchall()
 
         # Cascade: tasks → work_orders → milestones → design_briefs → projects
-        conn.execute("DELETE FROM ds_tasks WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM ds_work_orders WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM ds_milestones WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_tasks WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_work_orders WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_milestones WHERE project_id = ?", (project_id,))
         try:
-            conn.execute("DELETE FROM ds_design_briefs WHERE project_id = ?", (project_id,))
+            conn.execute("DELETE FROM business_design_briefs WHERE project_id = ?", (project_id,))
         except Exception:
             pass  # Table may not exist in all schema versions.
-        conn.execute("DELETE FROM ds_projects WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_projects WHERE project_id = ?", (project_id,))
         conn.commit()
 
     try:
@@ -291,7 +291,7 @@ def register_project(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO ds_projects"
+            "INSERT INTO business_projects"
             " (project_id, name, description, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'active', ?, ?)",
             (project_id, name, description, now, now),

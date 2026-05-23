@@ -29,10 +29,10 @@ At the end of a scope session the following artifacts exist:
 
 | Artifact | What it is |
 |----------|-----------|
-| `ds_projects` row | Name, description, status, project_id |
-| `ds_milestones` rows | 3–5 milestones with dependency ordering |
-| `ds_work_orders` rows | Typed work orders for all milestones; tasks only for milestone 1 |
-| `ds_tasks` rows | 3–7 atomic tasks for the first work order of milestone 1 |
+| `business_projects` row | Name, description, status, project_id |
+| `business_milestones` rows | 3–5 milestones with dependency ordering |
+| `business_work_orders` rows | Typed work orders for all milestones; tasks only for milestone 1 |
+| `business_tasks` rows | 3–7 atomic tasks for the first work order of milestone 1 |
 | `.planning/PROJECT.md` | Human-readable summary of the full scope |
 
 Work orders for milestone 2+ are recorded as sketches (title + scope boundary + depends_on). They are not fully decomposed until milestone 1 is closed.

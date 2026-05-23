@@ -13,23 +13,23 @@ All reads and writes go through `core/event_store/studio_db.py` using WAL mode f
 ### `canonical_events`
 The core event log. Every significant action in Dream Studio (skill invocations, work order transitions, gate evaluations) produces a canonical event. Primary key is `event_id` (UUID). Events are append-only and carry an envelope with `project_id`, `adapter_id`, and `invocation_mode`. Used for traceability and replay.
 
-### `ds_projects`
+### `business_projects`
 Project registry. One row per Dream Studio project. Primary key is `project_id` (UUID). Fields include `name`, `description`, `status` (active/inactive), and timestamps. The active project is resolved by querying `WHERE status = 'active' ORDER BY updated_at DESC`. Used by all SDLC operations to scope records.
 
-### `ds_milestones`
-Milestone definitions within a project. Each milestone groups related work orders under a deliverable boundary. Primary key is `milestone_id` (UUID). Foreign key to `ds_projects.project_id`. Fields include `title`, `description`, `status`, and `due_date`.
+### `business_milestones`
+Milestone definitions within a project. Each milestone groups related work orders under a deliverable boundary. Primary key is `milestone_id` (UUID). Foreign key to `business_projects.project_id`. Fields include `title`, `description`, `status`, and `due_date`.
 
-### `ds_work_orders`
-Work order records — the atomic unit of executable work. Each work order has a bounded module, task list, and gate requirements. Primary key is `work_order_id` (UUID). Foreign keys to `ds_milestones.milestone_id` and `ds_work_order_types.type_id`. Fields include `title`, `status` (open/in_progress/complete/blocked), `work_order_type`, and timestamps.
+### `business_work_orders`
+Work order records — the atomic unit of executable work. Each work order has a bounded module, task list, and gate requirements. Primary key is `work_order_id` (UUID). Foreign keys to `business_milestones.milestone_id` and `business_work_order_types.type_id`. Fields include `title`, `status` (open/in_progress/complete/blocked), `work_order_type`, and timestamps.
 
-### `ds_tasks`
-Individual tasks within a work order. Primary key is `task_id` (UUID). Foreign key to `ds_work_orders.work_order_id`. Fields include `title`, `status` (pending/complete), and `sequence` (ordering). Task completion is tracked via `ds work-order task-done`.
+### `business_tasks`
+Individual tasks within a work order. Primary key is `task_id` (UUID). Foreign key to `business_work_orders.work_order_id`. Fields include `title`, `status` (pending/complete), and `sequence` (ordering). Task completion is tracked via `ds work-order task-done`.
 
-### `ds_work_order_types`
+### `business_work_order_types`
 Lookup table defining work order type contracts. Each type specifies `post_build_gate` (pipe-separated gate names that must pass before close) and `module_boundary` defaults. Predefined types: `infrastructure`, `api_endpoint`, `ui_component`, `ui_page`, `data_pipeline`, `saas_feature`, `deployment`.
 
-### `ds_design_briefs`
-Design briefs for projects. A design brief captures visual language, design system, component requirements, and anti-slop criteria before implementation begins. Primary key is `brief_id` (UUID). Foreign key to `ds_projects.project_id`. Fields include `status` (draft/locked), `design_system`, and a JSON `content` blob. Briefs must be locked (human-approved) before UI work orders can start.
+### `business_design_briefs`
+Design briefs for projects. A design brief captures visual language, design system, component requirements, and anti-slop criteria before implementation begins. Primary key is `brief_id` (UUID). Foreign key to `business_projects.project_id`. Fields include `status` (draft/locked), `design_system`, and a JSON `content` blob. Briefs must be locked (human-approved) before UI work orders can start.
 
 ### `reg_projects`
 Registry for cross-project skill invocations. Tracks which projects have been registered with which skills for portfolio-level intelligence.
@@ -57,12 +57,12 @@ Security scan results stored by the `ds-security` pack. Each finding has a sever
 ## Project Spine ERD
 
 ```
-ds_projects (1)
-  ├── (N) ds_milestones
-  │         └── (N) ds_work_orders
-  │                   ├── (1) ds_work_order_types  [lookup]
-  │                   └── (N) ds_tasks
-  └── (N) ds_design_briefs
+business_projects (1)
+  ├── (N) business_milestones
+  │         └── (N) business_work_orders
+  │                   ├── (1) business_work_order_types  [lookup]
+  │                   └── (N) business_tasks
+  └── (N) business_design_briefs
 ```
 
 Cardinality:

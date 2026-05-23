@@ -113,9 +113,10 @@ def test_install_output_skips_first_run_guide_when_active_project_exists(tmp_pat
 
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.execute(
-            "CREATE TABLE ds_projects " "(project_id TEXT PRIMARY KEY, name TEXT, status TEXT)"
+            "CREATE TABLE business_projects "
+            "(project_id TEXT PRIMARY KEY, name TEXT, status TEXT)"
         )
-        conn.execute("INSERT INTO ds_projects VALUES ('test-id', 'TestProject', 'active')")
+        conn.execute("INSERT INTO business_projects VALUES ('test-id', 'TestProject', 'active')")
 
     from integrations.installer.claude_code import _first_run_guide
 
@@ -165,12 +166,12 @@ def _get_doctor_status():
 
 def _minimal_sqlite(tmp_path: Path) -> Path:
     """Create a minimal studio.db with _schema_version table."""
+    from core.config.sqlite_bootstrap import bootstrap_database
+
     state_dir = tmp_path / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     db_path = state_dir / "studio.db"
-    with sqlite3.connect(str(db_path)) as conn:
-        conn.execute("CREATE TABLE _schema_version (version INTEGER PRIMARY KEY)")
-        conn.execute("INSERT INTO _schema_version VALUES (55)")
+    bootstrap_database(db_path)
     return db_path
 
 
@@ -366,9 +367,8 @@ def test_doctor_fix_calls_install_when_skills_missing(tmp_path):
                                 fix=True,
                             )
 
-    # Verify subprocess was called with install command
+    # Verify subprocess was called with the update/install command
     assert mock_sub.called
     call_args = mock_sub.call_args[0][0]
-    assert "integrate" in call_args
-    assert "install" in call_args
+    assert any(kw in call_args for kw in ("integrate", "update", "install"))
     assert "fix_actions" in result

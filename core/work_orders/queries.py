@@ -43,8 +43,8 @@ def list_work_orders(
     query = (
         "SELECT wo.work_order_id, wo.title, wo.work_order_type, wo.status,"
         " m.title AS milestone_title"
-        " FROM ds_work_orders wo"
-        " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+        " FROM business_work_orders wo"
+        " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
         f" {where}"
         " ORDER BY wo.created_at ASC"
     )
@@ -74,13 +74,13 @@ def list_tasks(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, title FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
         rows = conn.execute(
-            "SELECT task_id, title, status FROM ds_tasks"
+            "SELECT task_id, title, status FROM business_tasks"
             " WHERE work_order_id = ? ORDER BY created_at ASC",
             (work_order_id,),
         ).fetchall()

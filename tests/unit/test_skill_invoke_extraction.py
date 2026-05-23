@@ -32,11 +32,11 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Skill Ext Project", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, ?, '', 'in_progress', 'api_endpoint', ?, ?)",
@@ -327,7 +327,7 @@ def test_seed_gate_artifacts_website_discover_seeds_design_brief(
 
     with sqlite3.connect(str(db_path)) as conn:
         brief_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_design_briefs WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT COUNT(*) FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()[0]
     assert brief_count == 1
 
@@ -340,7 +340,7 @@ def test_seed_gate_artifacts_website_discover_skips_when_brief_exists(
     # Pre-seed a brief for the project.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_design_briefs"
+        "INSERT INTO business_design_briefs"
         " (brief_id, project_id, status, created_at, updated_at)"
         " VALUES (?, ?, 'draft', ?, ?)",
         ("brief-existing", PROJECT_ID, NOW, NOW),
@@ -362,6 +362,6 @@ def test_seed_gate_artifacts_website_discover_skips_when_brief_exists(
 
     with sqlite3.connect(str(db_path)) as conn:
         brief_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_design_briefs WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT COUNT(*) FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()[0]
     assert brief_count == 1  # still only the pre-seeded one

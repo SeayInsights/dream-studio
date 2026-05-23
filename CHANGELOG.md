@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.7 — ds_* → business_* renames (2026-05-23)
+
+### Renamed
+- `ds_projects` → `business_projects` (2 rows preserved)
+- `ds_milestones` → `business_milestones` (5 rows preserved; +schema enrichment fields: stage_gate_json, validation_expectations_json, security_readiness_checks_json)
+- `ds_work_orders` → `business_work_orders` (14 rows merged; status mapping: open→created, complete→closed)
+- `ds_tasks` → `business_tasks` (9 rows preserved)
+- `ds_design_briefs` → `business_design_briefs` (1 row preserved)
+- `ds_work_order_types` → `business_work_order_types` (10 rows preserved)
+
+### Notes
+- `ds_documents` and `ds_technology_signals` NOT renamed (out of scope: not business domain entities)
+- `business_milestones` enrichment fields (stage_gate_json etc.) are NULL until Phase 18.4 populates them
+- Phase 18.1 is now 100% complete. Phase 18.2 (writer migration) and 18.3 (file-state migration) are now unblocked.
+
 ## Phase 18.1.5 — Projection Framework (2026-05-23)
 
 ### Added

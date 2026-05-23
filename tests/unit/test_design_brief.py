@@ -1,4 +1,4 @@
-"""Slice 7a: ds_design_briefs table, CLI commands, gate check, and work-order start integration."""
+"""Slice 7a: business_design_briefs table, CLI commands, gate check, and work-order start integration."""
 
 from __future__ import annotations
 
@@ -30,14 +30,14 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Build dashboard widget', NULL, 'open', 'ui_component', ?, ?)",
+            " VALUES (?, ?, NULL, 'Build dashboard widget', NULL, 'created', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
         conn.commit()
@@ -56,7 +56,7 @@ def _insert_brief(
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         conn.execute(
-            "INSERT INTO ds_design_briefs"
+            "INSERT INTO business_design_briefs"
             " (brief_id, project_id, status, purpose, audience, tone,"
             "  design_system, font_pairing, brand_tokens, raw_output, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Build a fast UI', 'engineers', 'professional',"
@@ -68,18 +68,18 @@ def _insert_brief(
         conn.close()
 
 
-# ── 1. migration: ds_design_briefs table exists after bootstrap ───────────────
+# ── 1. migration: business_design_briefs table exists after bootstrap ───────────
 
 
-def test_migration_053_creates_ds_design_briefs_table(db_home):
+def test_migration_053_creates_business_design_briefs_table(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='ds_design_briefs'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='business_design_briefs'"
         ).fetchone()
     finally:
         conn.close()
-    assert row is not None, "ds_design_briefs table not found after bootstrap"
+    assert row is not None, "business_design_briefs table not found after bootstrap"
 
 
 # ── 2. ds design-brief create inserts a draft row ────────────────────────────
@@ -94,7 +94,7 @@ def test_design_brief_create_inserts_draft_row(db_home, capsys):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT status FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
     finally:
         conn.close()
@@ -135,7 +135,7 @@ def test_create_design_brief_inserts_row_in_db(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT brief_id, status FROM ds_design_briefs WHERE project_id = ?",
+            "SELECT brief_id, status FROM business_design_briefs WHERE project_id = ?",
             (PROJECT_ID,),
         ).fetchone()
     finally:
@@ -184,7 +184,7 @@ def test_design_brief_lock_sets_status_locked(db_home, capsys):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
+            "SELECT status FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
         ).fetchone()
     finally:
         conn.close()
@@ -223,7 +223,7 @@ def test_lock_design_brief_updates_db_status(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
+            "SELECT status FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
         ).fetchone()
     finally:
         conn.close()
@@ -280,7 +280,7 @@ def test_design_brief_update_changes_field_on_draft(db_home, capsys):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT tone FROM ds_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
+            "SELECT tone FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
         ).fetchone()
     finally:
         conn.close()
@@ -334,7 +334,7 @@ def test_design_brief_set_system_accepts_valid_system(db_home, capsys):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT design_system FROM ds_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
+            "SELECT design_system FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
         ).fetchone()
     finally:
         conn.close()

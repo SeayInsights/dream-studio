@@ -30,14 +30,14 @@ def list_milestones(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         ms_rows = conn.execute(
-            "SELECT milestone_id, title, status FROM ds_milestones"
+            "SELECT milestone_id, title, status FROM business_milestones"
             " WHERE project_id = ? ORDER BY created_at ASC",
             (project_id,),
         ).fetchall()
         milestones: list[dict[str, Any]] = []
         for ms_id, title, status in ms_rows:
             wo_count = conn.execute(
-                "SELECT COUNT(*) FROM ds_work_orders WHERE milestone_id = ?",
+                "SELECT COUNT(*) FROM business_work_orders WHERE milestone_id = ?",
                 (ms_id,),
             ).fetchone()[0]
             milestones.append(
@@ -66,7 +66,7 @@ def get_milestone_status(
 
     with _connect(db_path) as conn:
         ms_row = conn.execute(
-            "SELECT milestone_id, project_id, title, status, due_date FROM ds_milestones"
+            "SELECT milestone_id, project_id, title, status, due_date FROM business_milestones"
             " WHERE milestone_id = ?",
             (milestone_id,),
         ).fetchone()
@@ -76,7 +76,7 @@ def get_milestone_status(
         ms_id, project_id, title, status, due_date = ms_row
 
         wo_rows = conn.execute(
-            "SELECT work_order_id, title, status, work_order_type FROM ds_work_orders"
+            "SELECT work_order_id, title, status, work_order_type FROM business_work_orders"
             " WHERE milestone_id = ? ORDER BY created_at ASC",
             (milestone_id,),
         ).fetchall()

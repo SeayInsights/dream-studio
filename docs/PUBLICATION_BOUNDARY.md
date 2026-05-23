@@ -166,3 +166,6 @@ career data, or unsanitized security/readiness findings.
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: docs/architecture/projection-framework.md added as a public architecture reference covering projection lifecycle, CLI commands, L3 table design, dead-letter/retry behavior, and how to write new projections. Content is public-safe product documentation with no private operational content, local paths, or operator-specific state. No publication boundary policy change required. -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

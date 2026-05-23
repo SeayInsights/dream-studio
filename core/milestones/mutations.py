@@ -53,13 +53,13 @@ def create_milestone(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)",
             (milestone_id, project_id, title, description, order_index, now, now),
