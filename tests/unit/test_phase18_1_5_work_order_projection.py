@@ -167,6 +167,7 @@ def tmp_db(tmp_path, monkeypatch):
 
     try:
         from core.config.database import DatabaseRuntime
+
         DatabaseRuntime.reset_instance()
     except Exception:
         pass
@@ -190,6 +191,7 @@ def tmp_db(tmp_path, monkeypatch):
 
     try:
         from core.config.database import DatabaseRuntime
+
         DatabaseRuntime.reset_instance()
     except Exception:
         pass
@@ -273,12 +275,14 @@ class TestWorkOrderHappyPath:
         proj = _setup_projection(tmp_db)
         wo_id = "wo-hp-2"
         created_event = _mk_wo_event(
-            "work_order.created", wo_id,
+            "work_order.created",
+            wo_id,
             event_timestamp="2026-05-22T10:00:00+00:00",
             title="Started WO",
         )
         started_event = _mk_wo_event(
-            "work_order.started", wo_id,
+            "work_order.started",
+            wo_id,
             event_timestamp="2026-05-22T11:00:00+00:00",
         )
 
@@ -296,9 +300,15 @@ class TestWorkOrderHappyPath:
         ts_started = "2026-05-22T11:00:00+00:00"
         ts_closed = "2026-05-22T12:00:00+00:00"
 
-        _call_handle(proj, _mk_wo_event("work_order.created", wo_id, event_timestamp=ts_base), tmp_db)
-        _call_handle(proj, _mk_wo_event("work_order.started", wo_id, event_timestamp=ts_started), tmp_db)
-        _call_handle(proj, _mk_wo_event("work_order.closed", wo_id, event_timestamp=ts_closed), tmp_db)
+        _call_handle(
+            proj, _mk_wo_event("work_order.created", wo_id, event_timestamp=ts_base), tmp_db
+        )
+        _call_handle(
+            proj, _mk_wo_event("work_order.started", wo_id, event_timestamp=ts_started), tmp_db
+        )
+        _call_handle(
+            proj, _mk_wo_event("work_order.closed", wo_id, event_timestamp=ts_closed), tmp_db
+        )
 
         row = _fetch_wo(tmp_db, wo_id)
         assert row["status"] == "closed"
@@ -415,7 +425,8 @@ class TestWorkOrderOutOfOrder:
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.created", wo_id,
+                "work_order.created",
+                wo_id,
                 event_timestamp="2026-05-22T10:00:00+00:00",
                 title="Backfilled Title",
             ),
@@ -424,7 +435,9 @@ class TestWorkOrderOutOfOrder:
 
         row = _fetch_wo(tmp_db, wo_id)
         assert row["title"] == "Backfilled Title", "title must be backfilled from created event"
-        assert row["status"] == "in_progress", "status must remain in_progress, not revert to created"
+        assert (
+            row["status"] == "in_progress"
+        ), "status must remain in_progress, not revert to created"
 
     def test_closed_before_created_creates_row_with_closed_status(self, tmp_db):
         proj = _setup_projection(tmp_db)
@@ -455,7 +468,8 @@ class TestWorkOrderOutOfOrder:
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.created", wo_id,
+                "work_order.created",
+                wo_id,
                 event_timestamp="2026-05-22T10:00:00+00:00",
                 title="Late Title",
             ),
@@ -485,7 +499,8 @@ class TestWorkOrderOutOfOrder:
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.created", wo_id,
+                "work_order.created",
+                wo_id,
                 event_timestamp="2026-05-22T10:00:00+00:00",
                 title="Multi OOO WO",
             ),
@@ -519,12 +534,21 @@ class TestWorkOrderBlockUnblock:
         proj = _setup_projection(tmp_db)
         wo_id = "wo-block-1"
 
-        _call_handle(proj, _mk_wo_event("work_order.created", wo_id, event_timestamp="2026-05-22T10:00:00+00:00"), tmp_db)
-        _call_handle(proj, _mk_wo_event("work_order.started", wo_id, event_timestamp="2026-05-22T11:00:00+00:00"), tmp_db)
+        _call_handle(
+            proj,
+            _mk_wo_event("work_order.created", wo_id, event_timestamp="2026-05-22T10:00:00+00:00"),
+            tmp_db,
+        )
+        _call_handle(
+            proj,
+            _mk_wo_event("work_order.started", wo_id, event_timestamp="2026-05-22T11:00:00+00:00"),
+            tmp_db,
+        )
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.blocked", wo_id,
+                "work_order.blocked",
+                wo_id,
                 event_timestamp="2026-05-22T12:00:00+00:00",
                 reason="Waiting for design approval",
             ),
@@ -539,12 +563,21 @@ class TestWorkOrderBlockUnblock:
         proj = _setup_projection(tmp_db)
         wo_id = "wo-block-2"
 
-        _call_handle(proj, _mk_wo_event("work_order.created", wo_id, event_timestamp="2026-05-22T10:00:00+00:00"), tmp_db)
-        _call_handle(proj, _mk_wo_event("work_order.started", wo_id, event_timestamp="2026-05-22T11:00:00+00:00"), tmp_db)
+        _call_handle(
+            proj,
+            _mk_wo_event("work_order.created", wo_id, event_timestamp="2026-05-22T10:00:00+00:00"),
+            tmp_db,
+        )
+        _call_handle(
+            proj,
+            _mk_wo_event("work_order.started", wo_id, event_timestamp="2026-05-22T11:00:00+00:00"),
+            tmp_db,
+        )
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.blocked", wo_id,
+                "work_order.blocked",
+                wo_id,
                 event_timestamp="2026-05-22T12:00:00+00:00",
                 reason="Waiting for dependencies",
             ),
@@ -552,7 +585,9 @@ class TestWorkOrderBlockUnblock:
         )
         _call_handle(
             proj,
-            _mk_wo_event("work_order.unblocked", wo_id, event_timestamp="2026-05-22T13:00:00+00:00"),
+            _mk_wo_event(
+                "work_order.unblocked", wo_id, event_timestamp="2026-05-22T13:00:00+00:00"
+            ),
             tmp_db,
         )
 
@@ -569,7 +604,8 @@ class TestWorkOrderBlockUnblock:
         _call_handle(
             proj,
             _mk_wo_event(
-                "work_order.blocked", wo_id,
+                "work_order.blocked",
+                wo_id,
                 block_reason="Alt key block",
             ),
             tmp_db,
@@ -701,19 +737,25 @@ class TestWorkOrderRebuildFromCanonical:
 
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.created", "2026-05-22T10:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
             {"work_order_id": wo_id, "title": "Rebuild WO"},
             work_order_id=wo_id,
         )
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.started", "2026-05-22T11:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.started",
+            "2026-05-22T11:00:00+00:00",
             {"work_order_id": wo_id},
             work_order_id=wo_id,
         )
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.closed", "2026-05-22T12:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.closed",
+            "2026-05-22T12:00:00+00:00",
             {"work_order_id": wo_id},
             work_order_id=wo_id,
         )
@@ -737,13 +779,17 @@ class TestWorkOrderRebuildFromCanonical:
 
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.created", "2026-05-22T10:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
             {"work_order_id": wo_id, "title": "Idempotent Rebuild"},
             work_order_id=wo_id,
         )
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.started", "2026-05-22T11:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.started",
+            "2026-05-22T11:00:00+00:00",
             {"work_order_id": wo_id},
             work_order_id=wo_id,
         )
@@ -800,7 +846,9 @@ class TestWorkOrderRebuildFromCanonical:
 
         _insert_canonical_event(
             tmp_db,
-            str(uuid.uuid4()), "work_order.created", "2026-05-22T10:00:00+00:00",
+            str(uuid.uuid4()),
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
             {"work_order_id": wo_id, "title": "Direct RFC Test"},
             work_order_id=wo_id,
         )
@@ -832,7 +880,9 @@ class TestWorkOrderRebuildFromCanonical:
         for et, ts, extra in sequence:
             _insert_canonical_event(
                 tmp_db,
-                str(uuid.uuid4()), et, ts,
+                str(uuid.uuid4()),
+                et,
+                ts,
                 {"work_order_id": wo_id, **extra},
                 work_order_id=wo_id,
             )

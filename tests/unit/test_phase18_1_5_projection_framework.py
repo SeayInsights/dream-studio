@@ -135,6 +135,7 @@ def tmp_db(tmp_path, monkeypatch):
     # Reset DatabaseRuntime singleton so it picks up the new env var.
     try:
         from core.config.database import DatabaseRuntime
+
         DatabaseRuntime.reset_instance()
     except Exception:
         pass
@@ -149,6 +150,7 @@ def tmp_db(tmp_path, monkeypatch):
     # Reset singleton on teardown.
     try:
         from core.config.database import DatabaseRuntime
+
         DatabaseRuntime.reset_instance()
     except Exception:
         pass
@@ -303,6 +305,7 @@ class TestProjectionRegistry:
     def _make_registry(self):
         # Reload to get a fresh instance not shared between tests.
         import core.projections.framework as fw_mod
+
         importlib.reload(fw_mod)
         return fw_mod.ProjectionRegistry()
 
@@ -315,6 +318,7 @@ class TestProjectionRegistry:
         proj.target_tables = []
 
         from core.projections.framework import RetryPolicy
+
         proj.retry_policy = RetryPolicy()
         return proj
 
@@ -417,9 +421,9 @@ class TestProjectionRegistry:
         assert reg.get("unknown_type_proj") is not None
         # A warning must have been emitted.
         warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert any("completely.unknown.event_type_xyz_phase18" in r.message for r in warnings), (
-            "Expected a warning for unregistered event type"
-        )
+        assert any(
+            "completely.unknown.event_type_xyz_phase18" in r.message for r in warnings
+        ), "Expected a warning for unregistered event type"
 
     def test_wildcard_event_type_skips_registry_validation(self, caplog):
         """Wildcard patterns must not trigger the 'not in registry' warning."""
@@ -526,8 +530,12 @@ class TestProjectionEngineRunCycle:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-1"}, work_order_id="wo-1",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-1"},
+            work_order_id="wo-1",
         )
         conn.close()
 
@@ -547,8 +555,12 @@ class TestProjectionEngineRunCycle:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-2"}, work_order_id="wo-2",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-2"},
+            work_order_id="wo-2",
         )
         conn.close()
 
@@ -559,9 +571,7 @@ class TestProjectionEngineRunCycle:
         engine.run_cycle()
         second_call_count = len(proj.calls)
 
-        assert first_call_count == second_call_count, (
-            "Events past cursor must not be re-dispatched"
-        )
+        assert first_call_count == second_call_count, "Events past cursor must not be re-dispatched"
 
     def test_handle_rows_written_accumulates_in_result(self, tmp_db):
         from core.projections.framework import ProjectionEngine
@@ -608,9 +618,9 @@ class TestProjectionEngineRunCycle:
         conn.close()
 
         engine.run_cycle()
-        assert not any(e["event_id"] == ai_eid for e in proj.calls), (
-            "AI events must not be dispatched to business-source projection"
-        )
+        assert not any(
+            e["event_id"] == ai_eid for e in proj.calls
+        ), "AI events must not be dispatched to business-source projection"
 
     def test_events_with_non_matching_type_not_dispatched(self, tmp_db):
         """Events with types not in consumed_event_types must not be dispatched."""
@@ -623,7 +633,10 @@ class TestProjectionEngineRunCycle:
         other_eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, other_eid, "project.created", "2026-05-22T10:00:00+00:00",
+            conn,
+            other_eid,
+            "project.created",
+            "2026-05-22T10:00:00+00:00",
             {"project_id": "proj-abc"},
         )
         conn.close()
@@ -655,8 +668,12 @@ class TestDeadLetterAndRetry:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-fail-1"}, work_order_id="wo-fail-1",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-fail-1"},
+            work_order_id="wo-fail-1",
         )
         conn.close()
 
@@ -683,8 +700,12 @@ class TestDeadLetterAndRetry:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-dead-1"}, work_order_id="wo-dead-1",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-dead-1"},
+            work_order_id="wo-dead-1",
         )
         conn.close()
 
@@ -751,8 +772,12 @@ class TestDeadLetterAndRetry:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-retry-ok"}, work_order_id="wo-retry-ok",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-retry-ok"},
+            work_order_id="wo-retry-ok",
         )
         conn.close()
 
@@ -792,8 +817,12 @@ class TestDeadLetterAndRetry:
         eid = str(uuid.uuid4())
         conn = sqlite3.connect(str(tmp_db))
         _insert_business_event(
-            conn, eid, "work_order.created", "2026-05-22T10:00:00+00:00",
-            {"work_order_id": "wo-future"}, work_order_id="wo-future",
+            conn,
+            eid,
+            "work_order.created",
+            "2026-05-22T10:00:00+00:00",
+            {"work_order_id": "wo-future"},
+            work_order_id="wo-future",
         )
         conn.close()
 
@@ -821,9 +850,9 @@ class TestDeadLetterAndRetry:
         handle_calls_after = len(proj.calls)
         # Since retry is still in the future, no new handle() calls.
         # (The initial dispatch already failed; calls only increase on retry fires.)
-        assert handle_calls_after == handle_calls_before, (
-            "Future retries must not be processed immediately"
-        )
+        assert (
+            handle_calls_after == handle_calls_before
+        ), "Future retries must not be processed immediately"
 
 
 # ---------------------------------------------------------------------------
@@ -880,9 +909,9 @@ class TestRebuild:
         result2 = engine.rebuild(proj.name)
 
         # Both rebuilds should have processed the same number of events.
-        assert result1.events_processed == result2.events_processed, (
-            "Rebuild must be deterministic (same event count both runs)"
-        )
+        assert (
+            result1.events_processed == result2.events_processed
+        ), "Rebuild must be deterministic (same event count both runs)"
 
     def test_rebuild_matches_incremental_from_scratch(self, tmp_db):
         """Rebuild result must equal what incremental processing produces."""
@@ -895,7 +924,9 @@ class TestRebuild:
             eid = str(uuid.uuid4())
             event_ids.append(eid)
             _insert_business_event(
-                conn, eid, "work_order.created",
+                conn,
+                eid,
+                "work_order.created",
                 f"2026-05-22T1{i}:00:00+00:00",
                 {"work_order_id": f"wo-cmp-{i}"},
                 work_order_id=f"wo-cmp-{i}",
@@ -915,9 +946,9 @@ class TestRebuild:
         rebuild_result = engine_b.rebuild(proj_b.name)
 
         # Both should have processed the same number of events.
-        assert incr_result.events_processed == rebuild_result.events_processed, (
-            "Incremental and rebuild must process the same number of events"
-        )
+        assert (
+            incr_result.events_processed == rebuild_result.events_processed
+        ), "Incremental and rebuild must process the same number of events"
 
     def test_rebuild_unknown_projection_raises(self, tmp_db):
         from core.projections.framework import ProjectionEngine
