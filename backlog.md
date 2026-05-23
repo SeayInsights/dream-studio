@@ -9,7 +9,7 @@
 | 18.1.2 — Dual canonical structure | Complete — PR pending (2026-05-22) |
 | 18.1.3 — Correlation ID infrastructure | Complete — PR pending (2026-05-22) |
 | 18.1.4 — Event type registry | Complete — embedded in 18.1.2 PR (2026-05-22) |
-| 18.1.5 — Projection framework | Pending |
+| 18.1.5 — Projection framework | Complete — PR pending (2026-05-23) |
 | 18.1.6 — Project entity family reconciliation | Complete — PR pending (2026-05-22) |
 | 18.2 — Writer migration | Pending (starts after 18.1) |
 | 18.3 — File-state migration | Pending (parallel after 18.1) |
