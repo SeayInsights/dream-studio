@@ -206,6 +206,8 @@ def _connect(db_path: Path | None = None) -> sqlite3.Connection:
         conn = get_connection()
     conn.execute("PRAGMA synchronous=NORMAL")
     _run_migrations(conn)
+    # Migrations may issue PRAGMA foreign_keys = OFF internally. Restore it.
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
