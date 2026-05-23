@@ -115,20 +115,22 @@ def test_log_event_write_failure_swallowed(tmp_path, monkeypatch):
     log_event("test_event", {})  # must not raise
 
 
-# ── telemetry: sentry_sdk actually callable (lines 17, 25) ────────────
+# ── telemetry: Sentry removed (Phase 18.1.12) — both functions are no-ops ─────
 
 
-def test_init_sentry_calls_sdk_when_dsn_set(monkeypatch):
+def test_init_sentry_noop_even_with_dsn_set(monkeypatch):
+    """init_sentry() must be a no-op regardless of SENTRY_DSN. Sentry removed 18.1.12."""
     from unittest.mock import MagicMock
 
     mock_sdk = MagicMock()
     monkeypatch.setenv("SENTRY_DSN", "https://fake@sentry.io/1")
     monkeypatch.setitem(sys.modules, "sentry_sdk", mock_sdk)
     init_sentry()
-    mock_sdk.init.assert_called_once_with(dsn="https://fake@sentry.io/1", traces_sample_rate=0.1)
+    mock_sdk.init.assert_not_called()
 
 
-def test_capture_exception_calls_sdk_when_dsn_set(monkeypatch):
+def test_capture_exception_noop_even_with_dsn_set(monkeypatch):
+    """capture_exception() must be a no-op regardless of SENTRY_DSN. Sentry removed 18.1.12."""
     from unittest.mock import MagicMock
 
     mock_sdk = MagicMock()
@@ -136,4 +138,4 @@ def test_capture_exception_calls_sdk_when_dsn_set(monkeypatch):
     monkeypatch.setenv("SENTRY_DSN", "https://fake@sentry.io/1")
     monkeypatch.setitem(sys.modules, "sentry_sdk", mock_sdk)
     capture_exception(exc)
-    mock_sdk.capture_exception.assert_called_once_with(exc)
+    mock_sdk.capture_exception.assert_not_called()
