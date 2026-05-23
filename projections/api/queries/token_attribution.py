@@ -75,13 +75,13 @@ def _aggregate_token_rows(rows: list) -> dict:
 def _resolve_project_names(
     project_ids: list[str], conn: sqlite3.Connection
 ) -> dict[str, str | None]:
-    """Batch-lookup project names from ds_projects using an existing connection."""
+    """Batch-lookup project names from business_projects using an existing connection."""
     if not project_ids:
         return {}
     placeholders = ",".join("?" for _ in project_ids)
     try:
         rows = conn.execute(
-            f"SELECT project_id, name FROM ds_projects WHERE project_id IN ({placeholders})",
+            f"SELECT project_id, name FROM business_projects WHERE project_id IN ({placeholders})",
             project_ids,
         ).fetchall()
         return {row["project_id"]: row["name"] for row in rows}

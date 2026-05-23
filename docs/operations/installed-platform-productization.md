@@ -360,3 +360,6 @@ the source repo.
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: `ds projection` command group added to the installed command surface (list, status <name>, rebuild <name>, dead-letter list/retry/resolve, daemon start/stop/status). These are read-only or controlled-mutation commands. No new install profile required; projection CLI is part of the existing full and core profiles via interfaces/cli/projection_cli.py registered in ds.py. -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

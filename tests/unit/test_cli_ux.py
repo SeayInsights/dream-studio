@@ -45,28 +45,30 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
 
     with sqlite3.connect(str(db_path)) as conn:
         conn.executescript(f"""
-            CREATE TABLE ds_projects (
+            CREATE TABLE business_projects (
                 project_id TEXT PRIMARY KEY, name TEXT, description TEXT,
                 status TEXT, created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_milestones (
+            CREATE TABLE business_milestones (
                 milestone_id TEXT PRIMARY KEY, project_id TEXT, title TEXT,
-                description TEXT, status TEXT, created_at TEXT, updated_at TEXT
+                description TEXT, due_date TEXT, status TEXT, created_at TEXT, updated_at TEXT,
+                order_index INTEGER DEFAULT 0
             );
-            CREATE TABLE ds_work_orders (
+            CREATE TABLE business_work_orders (
                 work_order_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT,
                 title TEXT, description TEXT, status TEXT, work_order_type TEXT,
                 created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_work_order_types (
+            CREATE TABLE business_work_order_types (
                 type_id TEXT PRIMARY KEY, label TEXT, pre_build_gate TEXT,
-                build_executor TEXT, post_build_gate TEXT
+                build_executor TEXT, post_build_gate TEXT, workflow_template TEXT,
+                precondition_skill TEXT, task_generator TEXT, resolution_instructions TEXT
             );
-            CREATE TABLE ds_tasks (
+            CREATE TABLE business_tasks (
                 task_id TEXT PRIMARY KEY, work_order_id TEXT, project_id TEXT,
                 title TEXT, description TEXT, status TEXT, created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_design_briefs (
+            CREATE TABLE business_design_briefs (
                 brief_id TEXT PRIMARY KEY, project_id TEXT, purpose TEXT,
                 audience TEXT, tone TEXT, design_system TEXT, font_pairing TEXT,
                 brand_tokens TEXT, status TEXT, created_at TEXT, updated_at TEXT
@@ -76,21 +78,21 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
                 trace TEXT, severity TEXT, payload TEXT, source_type TEXT
             );
 
-            INSERT INTO ds_projects VALUES (
+            INSERT INTO business_projects VALUES (
                 '{project_id}', 'Test Project', 'desc', 'active', '{now}', '{now}'
             );
-            INSERT INTO ds_milestones VALUES (
+            INSERT INTO business_milestones VALUES (
                 '{milestone_id}', '{project_id}', 'Foundation', 'First milestone',
-                'pending', '{now}', '{now}'
+                NULL, 'pending', '{now}', '{now}', 0
             );
-            INSERT INTO ds_work_order_types VALUES (
-                'infrastructure', 'Infrastructure', NULL, NULL, NULL
+            INSERT INTO business_work_order_types VALUES (
+                'infrastructure', 'Infrastructure', NULL, NULL, NULL, NULL, NULL, NULL, NULL
             );
-            INSERT INTO ds_work_orders VALUES (
+            INSERT INTO business_work_orders VALUES (
                 '{wo_id}', '{project_id}', '{milestone_id}',
-                'Wire Tauri shell', 'desc', 'open', 'infrastructure', '{now}', '{now}'
+                'Wire Tauri shell', 'desc', 'created', 'infrastructure', '{now}', '{now}'
             );
-            INSERT INTO ds_tasks VALUES (
+            INSERT INTO business_tasks VALUES (
                 '{task_id}', '{wo_id}', '{project_id}',
                 'Create Tauri config', 'desc', 'pending', '{now}', '{now}'
             );
@@ -287,28 +289,30 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
 
     with sqlite3.connect(str(db_path)) as conn:
         conn.executescript(f"""
-            CREATE TABLE ds_projects (
+            CREATE TABLE business_projects (
                 project_id TEXT PRIMARY KEY, name TEXT, description TEXT,
                 status TEXT, created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_milestones (
+            CREATE TABLE business_milestones (
                 milestone_id TEXT PRIMARY KEY, project_id TEXT, title TEXT,
-                description TEXT, status TEXT, created_at TEXT, updated_at TEXT
+                description TEXT, due_date TEXT, status TEXT, created_at TEXT, updated_at TEXT,
+                order_index INTEGER DEFAULT 0
             );
-            CREATE TABLE ds_work_orders (
+            CREATE TABLE business_work_orders (
                 work_order_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT,
                 title TEXT, description TEXT, status TEXT, work_order_type TEXT,
                 created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_work_order_types (
+            CREATE TABLE business_work_order_types (
                 type_id TEXT PRIMARY KEY, label TEXT, pre_build_gate TEXT,
-                build_executor TEXT, post_build_gate TEXT
+                build_executor TEXT, post_build_gate TEXT, workflow_template TEXT,
+                precondition_skill TEXT, task_generator TEXT, resolution_instructions TEXT
             );
-            CREATE TABLE ds_tasks (
+            CREATE TABLE business_tasks (
                 task_id TEXT PRIMARY KEY, work_order_id TEXT, project_id TEXT,
                 title TEXT, description TEXT, status TEXT, created_at TEXT, updated_at TEXT
             );
-            CREATE TABLE ds_design_briefs (
+            CREATE TABLE business_design_briefs (
                 brief_id TEXT PRIMARY KEY, project_id TEXT, purpose TEXT,
                 audience TEXT, tone TEXT, design_system TEXT, font_pairing TEXT,
                 brand_tokens TEXT, status TEXT, created_at TEXT, updated_at TEXT
@@ -318,7 +322,7 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
                 trace TEXT, severity TEXT, payload TEXT, source_type TEXT
             );
 
-            INSERT INTO ds_projects VALUES (
+            INSERT INTO business_projects VALUES (
                 '{project_id}', 'Empty Project', 'desc', 'active', '{now}', '{now}'
             );
         """)

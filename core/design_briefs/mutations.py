@@ -65,7 +65,7 @@ def create_design_brief(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO ds_design_briefs (brief_id, project_id, status, created_at, updated_at)"
+            "INSERT INTO business_design_briefs (brief_id, project_id, status, created_at, updated_at)"
             " VALUES (?, ?, 'draft', ?, ?)",
             (brief_id, project_id, now, now),
         )
@@ -101,13 +101,13 @@ def lock_design_brief(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT brief_id FROM ds_design_briefs WHERE brief_id = ?",
+            "SELECT brief_id FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Brief not found: {brief_id}"}
         conn.execute(
-            "UPDATE ds_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
+            "UPDATE business_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
             (now, brief_id),
         )
         conn.commit()
@@ -131,7 +131,7 @@ def update_design_brief_field(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?",
+            "SELECT status FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
@@ -139,7 +139,7 @@ def update_design_brief_field(
         if row[0] == "locked":
             return {"ok": False, "error": "Brief is locked and cannot be updated"}
         conn.execute(
-            f"UPDATE ds_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",
+            f"UPDATE business_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",
             (value, now, brief_id),
         )
         conn.commit()
@@ -165,7 +165,7 @@ def set_design_system(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT status FROM ds_design_briefs WHERE brief_id = ?",
+            "SELECT status FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
@@ -173,7 +173,7 @@ def set_design_system(
         if row[0] == "locked":
             return {"ok": False, "error": "Brief is locked and cannot be updated"}
         conn.execute(
-            "UPDATE ds_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
+            "UPDATE business_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
             (system_name, now, brief_id),
         )
         conn.commit()

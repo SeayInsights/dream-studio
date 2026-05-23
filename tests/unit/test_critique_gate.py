@@ -31,19 +31,19 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Build hero component', NULL, 'open', 'ui_component', ?, ?)",
+            " VALUES (?, ?, NULL, 'Build hero component', NULL, 'created', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
         # Locked design brief so the pre_build_gate (design_brief_locked) always passes
         conn.execute(
-            "INSERT INTO ds_design_briefs"
+            "INSERT INTO business_design_briefs"
             " (brief_id, project_id, status, created_at, updated_at)"
             " VALUES (?, ?, 'locked', ?, ?)",
             (BRIEF_ID, PROJECT_ID, NOW, NOW),
@@ -138,7 +138,7 @@ def test_pipe_separated_gates_both_must_pass_to_close(db_home, tmp_path, monkeyp
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is True
-    assert out["status"] == "complete"
+    assert out["status"] == "closed"
 
 
 # ── 5. pipe-separated gates: one fail blocks close ───────────────────────────
@@ -270,7 +270,7 @@ def test_migration_054_updates_gate_values(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         rows = conn.execute(
-            "SELECT type_id, post_build_gate FROM ds_work_order_types"
+            "SELECT type_id, post_build_gate FROM business_work_order_types"
             " WHERE type_id IN ('ui_component', 'ui_page') ORDER BY type_id",
         ).fetchall()
     finally:
@@ -287,7 +287,7 @@ def test_ui_component_type_has_both_gates(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT post_build_gate FROM ds_work_order_types WHERE type_id = 'ui_component'"
+            "SELECT post_build_gate FROM business_work_order_types WHERE type_id = 'ui_component'"
         ).fetchone()
     finally:
         conn.close()
@@ -304,7 +304,7 @@ def test_ui_page_type_has_both_gates(db_home):
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         row = conn.execute(
-            "SELECT post_build_gate FROM ds_work_order_types WHERE type_id = 'ui_page'"
+            "SELECT post_build_gate FROM business_work_order_types WHERE type_id = 'ui_page'"
         ).fetchone()
     finally:
         conn.close()

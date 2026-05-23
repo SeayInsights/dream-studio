@@ -105,3 +105,6 @@ Long-run validation should include the platform-hardening summary, policy previe
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: long-run validation should include projection framework stability evidence: projection_state cursors remain consistent across daemon restart cycles; dead-letter queue does not accumulate false positives; business_work_orders reflects business_canonical_events accurately after full rebuild. No new boundary check required; projection correctness is verified by 59-test unit suite (test_phase18_1_5_projection_framework.py, test_phase18_1_5_work_order_projection.py). -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

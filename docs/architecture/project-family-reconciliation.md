@@ -1,7 +1,7 @@
 # Project Entity Family Reconciliation
 
 **Phase:** 18.1.6  
-**Status:** Decision committed  
+**Status:** EXECUTED — Phase 18.1.7 (migration 070) renamed all ds_* tables to business_* naming  
 **Date:** 2026-05-22  
 **Author:** SeayInsights / Dannis Seay  
 **Architecture Reference:** `.planning/data-model-v2.md`  

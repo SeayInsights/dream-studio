@@ -308,3 +308,6 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: projection runner daemon (core/projections/runner.py) added as an optional background runtime component. Runner writes PID to ~/.dream-studio/state/projection_runner.pid and is controlled via `ds projection daemon start/stop/status`. It runs ProjectionEngine.run_cycle() on a configurable poll interval (default 5s, PROJECTION_POLL_INTERVAL env var) and does not start automatically — operator must invoke `ds projection daemon start`. Installed runtime model unchanged; runner is an opt-in background process alongside the existing ds command surface. -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

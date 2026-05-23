@@ -38,8 +38,8 @@ def mark_task_done(
         task_row = conn.execute(
             "SELECT t.task_id, t.work_order_id, t.title, t.status, t.project_id,"
             " wo.milestone_id"
-            " FROM ds_tasks t"
-            " LEFT JOIN ds_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " FROM business_tasks t"
+            " LEFT JOIN business_work_orders wo ON t.work_order_id = wo.work_order_id"
             " WHERE t.task_id = ?",
             (task_id,),
         ).fetchone()
@@ -55,22 +55,22 @@ def mark_task_done(
 
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
-            "UPDATE ds_tasks SET status = 'complete', updated_at = ? WHERE task_id = ?",
+            "UPDATE business_tasks SET status = 'complete', updated_at = ? WHERE task_id = ?",
             (now, task_id),
         )
         conn.commit()
 
         remaining = conn.execute(
-            "SELECT COUNT(*) FROM ds_tasks"
+            "SELECT COUNT(*) FROM business_tasks"
             " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')",
             (work_order_id,),
         ).fetchone()[0]
 
         task_index = (
             conn.execute(
-                "SELECT COUNT(*) FROM ds_tasks"
+                "SELECT COUNT(*) FROM business_tasks"
                 " WHERE work_order_id = ? AND created_at <= ("
-                "   SELECT created_at FROM ds_tasks WHERE task_id = ?"
+                "   SELECT created_at FROM business_tasks WHERE task_id = ?"
                 ")",
                 (work_order_id, task_id),
             ).fetchone()[0]
@@ -150,7 +150,7 @@ def block_work_order(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, project_id FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, title, project_id FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
@@ -188,7 +188,7 @@ def block_work_order(
             pass
 
         conn.execute(
-            "UPDATE ds_work_orders SET status = 'blocked', block_reason = ?, updated_at = ?"
+            "UPDATE business_work_orders SET status = 'blocked', block_reason = ?, updated_at = ?"
             " WHERE work_order_id = ?",
             (reason, now, work_order_id),
         )
@@ -211,7 +211,7 @@ def unblock_work_order(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, status FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, title, status FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
@@ -226,7 +226,7 @@ def unblock_work_order(
 
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
-            "UPDATE ds_work_orders SET status = 'in_progress', block_reason = NULL,"
+            "UPDATE business_work_orders SET status = 'in_progress', block_reason = NULL,"
             " updated_at = ? WHERE work_order_id = ?",
             (now, work_order_id),
         )
@@ -246,7 +246,7 @@ def add_tasks_from_file(
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Parse a numbered-list tasks.md file and insert tasks into ds_tasks."""
+    """Parse a numbered-list tasks.md file and insert tasks into business_tasks."""
 
     if not tasks_file.is_file():
         return {"ok": False, "error": f"File not found: {tasks_file}"}
@@ -254,7 +254,7 @@ def add_tasks_from_file(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, project_id, milestone_id FROM ds_work_orders"
+            "SELECT work_order_id, project_id, milestone_id FROM business_work_orders"
             " WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
@@ -282,7 +282,7 @@ def add_tasks_from_file(
             t_desc = " ".join(lines[1:]) if len(lines) > 1 else ""
             t_id = str(uuid.uuid4())
             conn.execute(
-                "INSERT INTO ds_tasks"
+                "INSERT INTO business_tasks"
                 " (task_id, work_order_id, project_id, title, description, status,"
                 " created_at, updated_at)"
                 " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
@@ -340,12 +340,12 @@ def create_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Insert a new work order row with status 'open'.
+    """Insert a new work order row with status 'created'.
 
     Returns::
 
         {"ok": True, "work_order_id": str, "project_id": str,
-         "milestone_id": str | None, "title": str, "status": "open"}
+         "milestone_id": str | None, "title": str, "status": "created"}
 
     or on missing project::
 
@@ -357,16 +357,16 @@ def create_work_order(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)",
+            " VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?)",
             (
                 work_order_id,
                 project_id,
@@ -391,7 +391,7 @@ def create_work_order(
                 session_id=None,
                 payload={
                     "title": title,
-                    "status": "open",
+                    "status": "created",
                     "type": work_order_type or "",
                 },
                 timestamp=now,
@@ -414,7 +414,7 @@ def create_work_order(
         "project_id": project_id,
         "milestone_id": milestone_id,
         "title": title,
-        "status": "open",
+        "status": "created",
     }
 
 
@@ -445,14 +445,14 @@ def create_task(
     milestone_id: str | None = None
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, milestone_id FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, milestone_id FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
         milestone_id = wo_row[1]
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description, status,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",

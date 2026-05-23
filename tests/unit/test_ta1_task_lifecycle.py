@@ -34,31 +34,31 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, 'M1', 'active', ?, ?)",
             (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, ?, 'WO1', NULL, 'in_progress', 'documentation', ?, ?)",
             (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description, status,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, 'Task A', 'desc A', 'pending', ?, ?)",
             (TASK_A, WO_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description, status,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, 'Task B', 'desc B', 'pending', ?, ?)",
@@ -200,6 +200,9 @@ def test_delete_project_also_emits_project_deleted(db_home, tmp_path, monkeypatc
 
 # ── backfill migration ────────────────────────────────────────────────────────
 
+# Migration 064 reads from ds_tasks/ds_work_orders, which are dropped by
+# migration 070.  These tests use a separate minimal "legacy" DB with the
+# pre-070 schema so migration 064 can be exercised correctly in isolation.
 
 _CANONICAL_EVENTS_DDL = """
     CREATE TABLE IF NOT EXISTS canonical_events (
@@ -215,6 +218,59 @@ _CANONICAL_EVENTS_DDL = """
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
 """
+
+
+@pytest.fixture
+def legacy_db_path(tmp_path):
+    """Minimal pre-070 DB for migration-064 backfill tests."""
+    db_path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(f"""
+            {_CANONICAL_EVENTS_DDL};
+            CREATE TABLE ds_work_orders (
+                work_order_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                milestone_id TEXT,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                work_order_type TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE ds_tasks (
+                task_id TEXT PRIMARY KEY,
+                work_order_id TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        """)
+        conn.execute(
+            "INSERT INTO ds_work_orders"
+            " (work_order_id, project_id, milestone_id, title, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'WO1', 'open', ?, ?)",
+            (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO ds_tasks"
+            " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Task A', 'desc A', 'pending', ?, ?)",
+            (TASK_A, WO_ID, PROJECT_ID, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO ds_tasks"
+            " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Task B', 'desc B', 'pending', ?, ?)",
+            (TASK_B, WO_ID, PROJECT_ID, NOW, NOW),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path
 
 
 def _run_migration_064(db_path: Path) -> None:
@@ -237,10 +293,9 @@ def _run_migration_064(db_path: Path) -> None:
         conn.close()
 
 
-def test_backfill_migration_produces_event_per_task(db_home):
-    db_path = db_home / "state" / "studio.db"
-    _run_migration_064(db_path)
-    conn = sqlite3.connect(str(db_path))
+def test_backfill_migration_produces_event_per_task(legacy_db_path):
+    _run_migration_064(legacy_db_path)
+    conn = sqlite3.connect(str(legacy_db_path))
     try:
         count = conn.execute(
             "SELECT COUNT(*) FROM canonical_events WHERE event_type = 'task.created'",
@@ -250,11 +305,10 @@ def test_backfill_migration_produces_event_per_task(db_home):
     assert count == 2
 
 
-def test_backfill_migration_is_idempotent(db_home):
-    db_path = db_home / "state" / "studio.db"
-    _run_migration_064(db_path)
-    _run_migration_064(db_path)
-    conn = sqlite3.connect(str(db_path))
+def test_backfill_migration_is_idempotent(legacy_db_path):
+    _run_migration_064(legacy_db_path)
+    _run_migration_064(legacy_db_path)
+    conn = sqlite3.connect(str(legacy_db_path))
     try:
         count = conn.execute(
             "SELECT COUNT(*) FROM canonical_events WHERE event_type = 'task.created'",
@@ -264,10 +318,9 @@ def test_backfill_migration_is_idempotent(db_home):
     assert count == 2
 
 
-def test_backfill_migration_sets_attribution_status_backfill(db_home):
-    db_path = db_home / "state" / "studio.db"
-    _run_migration_064(db_path)
-    conn = sqlite3.connect(str(db_path))
+def test_backfill_migration_sets_attribution_status_backfill(legacy_db_path):
+    _run_migration_064(legacy_db_path)
+    conn = sqlite3.connect(str(legacy_db_path))
     try:
         rows = conn.execute(
             "SELECT trace FROM canonical_events WHERE event_type = 'task.created'",
@@ -280,10 +333,9 @@ def test_backfill_migration_sets_attribution_status_backfill(db_home):
         assert trace["attribution_status"] == "backfill"
 
 
-def test_backfill_migration_resolves_full_sdlc_trace(db_home):
-    db_path = db_home / "state" / "studio.db"
-    _run_migration_064(db_path)
-    conn = sqlite3.connect(str(db_path))
+def test_backfill_migration_resolves_full_sdlc_trace(legacy_db_path):
+    _run_migration_064(legacy_db_path)
+    conn = sqlite3.connect(str(legacy_db_path))
     try:
         rows = conn.execute(
             "SELECT event_id, trace FROM canonical_events WHERE event_type = 'task.created'"
@@ -300,10 +352,9 @@ def test_backfill_migration_resolves_full_sdlc_trace(db_home):
         assert "task_id" in trace
 
 
-def test_backfill_event_ids_are_deterministic(db_home):
-    db_path = db_home / "state" / "studio.db"
-    _run_migration_064(db_path)
-    conn = sqlite3.connect(str(db_path))
+def test_backfill_event_ids_are_deterministic(legacy_db_path):
+    _run_migration_064(legacy_db_path)
+    conn = sqlite3.connect(str(legacy_db_path))
     try:
         event_ids = [
             row[0]
@@ -340,7 +391,7 @@ def test_create_task_integration_inserts_db_row(db_home, tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_path))
     try:
         row = conn.execute(
-            "SELECT title, work_order_id, project_id FROM ds_tasks WHERE task_id = ?",
+            "SELECT title, work_order_id, project_id FROM business_tasks WHERE task_id = ?",
             (task_id,),
         ).fetchone()
     finally:

@@ -237,3 +237,6 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: L3 hub-and-spoke projection tables (business_work_orders and future peers) are derived views from business_canonical_events and ai_canonical_events. They do not become primary authority; the dual canonical tables remain the canonical source. ProjectionEngine reads from canonical, writes to L3 via idempotent safe_upsert, and tracks cursor position in projection_state. Adapters consuming L3 projections should treat them as derived views with projection_state.last_run_at as the freshness signal. -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

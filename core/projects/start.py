@@ -46,7 +46,7 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
 def _lookup_project_name(db_path: Path, project_id: str) -> str | None:
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT name FROM ds_projects WHERE project_id = ?",
+            "SELECT name FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
     return row[0] if row else None

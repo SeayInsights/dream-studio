@@ -106,7 +106,7 @@ def _parse_marker(marker_path: Path) -> Optional[CWDProjectContext]:
 
 
 def _check_project_in_db(project_id: str) -> bool:
-    """Best-effort: check whether project_id exists in ds_projects.
+    """Best-effort: check whether project_id exists in business_projects.
 
     Returns True if found or if the DB is unavailable (fail open).
     """
@@ -119,7 +119,7 @@ def _check_project_in_db(project_id: str) -> bool:
         conn = sqlite3.connect(str(db_path), timeout=1.0)
         try:
             row = conn.execute(
-                "SELECT 1 FROM ds_projects WHERE project_id = ? LIMIT 1",
+                "SELECT 1 FROM business_projects WHERE project_id = ? LIMIT 1",
                 (project_id,),
             ).fetchone()
             return row is not None
@@ -145,7 +145,7 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
     DS_CWD_RESOLVER_ROOT env var caps the walk in tests to prevent ascending
     past the test's tmp_path into real user directories.
 
-    Q3 reconciliation: if the resolved project_id is NOT in ds_projects, log
+    Q3 reconciliation: if the resolved project_id is NOT in business_projects, log
     anomaly but return the context anyway (attribution_status=partial).
     """
     try:
@@ -172,7 +172,7 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
             if ctx is None:
                 return None  # anomaly already logged
 
-            # Q3: check marker against ds_projects; log anomaly if not found but return anyway.
+            # Q3: check marker against business_projects; log anomaly if not found but return anyway.
             if not _check_project_in_db(ctx.project_id):
                 from core.telemetry.diagnostics import log_diagnostic
 
@@ -185,7 +185,7 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
                     },
                     details={
                         "error_message": (
-                            "Marker file references project_id not found in ds_projects. "
+                            "Marker file references project_id not found in business_projects. "
                             "Marker may be stale or project was deleted. "
                             "Attribution proceeds with partial status."
                         )

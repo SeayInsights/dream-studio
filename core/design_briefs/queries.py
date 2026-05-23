@@ -34,7 +34,7 @@ def get_design_brief(
         row = conn.execute(
             "SELECT brief_id, status, purpose, audience, tone, design_system,"
             " font_pairing, brand_tokens, raw_output, created_at, updated_at"
-            " FROM ds_design_briefs WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+            " FROM business_design_briefs WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
             (project_id,),
         ).fetchone()
     if row is None:

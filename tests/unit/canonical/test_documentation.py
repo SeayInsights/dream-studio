@@ -104,17 +104,17 @@ def test_schema_doc_exists():
 
 def test_schema_doc_mentions_ds_projects():
     content = SCHEMA_DOC.read_text(encoding="utf-8")
-    assert "ds_projects" in content
+    assert "business_projects" in content
 
 
 def test_schema_doc_mentions_ds_work_orders():
     content = SCHEMA_DOC.read_text(encoding="utf-8")
-    assert "ds_work_orders" in content
+    assert "business_work_orders" in content
 
 
 def test_schema_doc_mentions_ds_design_briefs():
     content = SCHEMA_DOC.read_text(encoding="utf-8")
-    assert "ds_design_briefs" in content
+    assert "business_design_briefs" in content
 
 
 # ── docs/authoring/skills.md ──────────────────────────────────────────────────

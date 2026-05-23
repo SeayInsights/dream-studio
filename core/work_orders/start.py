@@ -97,7 +97,7 @@ def read_work_order_brief(
     with _connect(db_path) as conn:
         wo_row = conn.execute(
             "SELECT work_order_id, title, status, work_order_type, milestone_id, project_id"
-            " FROM ds_work_orders WHERE work_order_id = ?",
+            " FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
@@ -111,7 +111,7 @@ def read_work_order_brief(
         type_row = conn.execute(
             "SELECT type_id, label, pre_build_gate, build_executor, post_build_gate,"
             " workflow_template, precondition_skill"
-            " FROM ds_work_order_types WHERE type_id = ?",
+            " FROM business_work_order_types WHERE type_id = ?",
             (wo_type,),
         ).fetchone()
         if type_row is None:
@@ -130,19 +130,19 @@ def read_work_order_brief(
         milestone_title = None
         if milestone_id:
             ms_row = conn.execute(
-                "SELECT title FROM ds_milestones WHERE milestone_id = ?",
+                "SELECT title FROM business_milestones WHERE milestone_id = ?",
                 (milestone_id,),
             ).fetchone()
             milestone_title = ms_row[0] if ms_row else None
 
         proj_row = conn.execute(
-            "SELECT name FROM ds_projects WHERE project_id = ?",
+            "SELECT name FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         project_name = proj_row[0] if proj_row else project_id
 
         open_tasks = conn.execute(
-            "SELECT title FROM ds_tasks"
+            "SELECT title FROM business_tasks"
             " WHERE work_order_id = ? AND status = 'pending' ORDER BY created_at ASC",
             (work_order_id,),
         ).fetchall()
@@ -155,7 +155,7 @@ def read_work_order_brief(
                 b_row = conn.execute(
                     "SELECT brief_id, purpose, audience, tone, design_system,"
                     " font_pairing, brand_tokens, status"
-                    " FROM ds_design_briefs"
+                    " FROM business_design_briefs"
                     " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
                     (project_id,),
                 ).fetchone()
@@ -197,15 +197,15 @@ def read_work_order_brief(
         blocking_milestone_count = 0
         if milestone_id:
             ms_order_row = conn.execute(
-                "SELECT order_index FROM ds_milestones WHERE milestone_id = ?",
+                "SELECT order_index FROM business_milestones WHERE milestone_id = ?",
                 (milestone_id,),
             ).fetchone()
             if ms_order_row is not None:
                 blocking_milestone_count = conn.execute(
-                    "SELECT COUNT(*) FROM ds_work_orders wo"
-                    " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+                    "SELECT COUNT(*) FROM business_work_orders wo"
+                    " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
                     " WHERE wo.project_id = ? AND m.order_index < ?"
-                    " AND wo.status NOT IN ('complete', 'cancelled')",
+                    " AND wo.status NOT IN ('closed', 'cancelled')",
                     (project_id, ms_order_row[0]),
                 ).fetchone()[0]
 
@@ -438,7 +438,7 @@ def start_work_order(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         conn.execute(
-            "UPDATE ds_work_orders SET status = 'in_progress', updated_at = ?"
+            "UPDATE business_work_orders SET status = 'in_progress', updated_at = ?"
             " WHERE work_order_id = ?",
             (now, work_order_id),
         )

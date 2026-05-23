@@ -29,7 +29,7 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         for wo_id, wo_type in [
@@ -39,7 +39,7 @@ def db_home(tmp_path):
             (WO_DOCS, "documentation"),
         ]:
             conn.execute(
-                "INSERT INTO ds_work_orders"
+                "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, description, status,"
                 " work_order_type, created_at, updated_at)"
                 " VALUES (?, ?, NULL, 'Test WO', NULL, 'in_progress', ?, ?, ?)",
@@ -92,7 +92,7 @@ def _add_design_brief(db_home):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_design_briefs"
+            "INSERT INTO business_design_briefs"
             " (brief_id, project_id, status, created_at, updated_at)"
             " VALUES ('brief-gate-test-001', ?, 'locked', ?, ?)",
             (PROJECT_ID, NOW, NOW),
@@ -142,7 +142,7 @@ def test_close_succeeds_when_all_gates_pass(db_home, tmp_path, monkeypatch, caps
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out["ok"] is True
-    assert out["status"] == "complete"
+    assert out["status"] == "closed"
 
 
 def test_close_updates_status_to_complete(db_home, tmp_path, monkeypatch):
@@ -152,11 +152,11 @@ def test_close_updates_status_to_complete(db_home, tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
     try:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_DOCS,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
         ).fetchone()[0]
     finally:
         conn.close()
-    assert status == "complete"
+    assert status == "closed"
 
 
 def test_close_succeeds_when_gates_are_null(db_home, tmp_path, monkeypatch, capsys):
@@ -225,7 +225,8 @@ def test_block_sets_status_and_reason(db_home, tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
     try:
         row = conn.execute(
-            "SELECT status, block_reason FROM ds_work_orders WHERE work_order_id = ?", (WO_UI,)
+            "SELECT status, block_reason FROM business_work_orders WHERE work_order_id = ?",
+            (WO_UI,),
         ).fetchone()
     finally:
         conn.close()
@@ -258,7 +259,8 @@ def test_unblock_restores_to_in_progress_and_clears_reason(db_home, tmp_path, mo
     conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
     try:
         row = conn.execute(
-            "SELECT status, block_reason FROM ds_work_orders WHERE work_order_id = ?", (WO_UI,)
+            "SELECT status, block_reason FROM business_work_orders WHERE work_order_id = ?",
+            (WO_UI,),
         ).fetchone()
     finally:
         conn.close()

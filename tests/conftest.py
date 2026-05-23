@@ -212,7 +212,12 @@ def guard_real_homedir(tmp_path, monkeypatch):
 
     # Track real DB row counts for tables most likely to receive accidental writes.
     real_db = Path.home() / ".dream-studio" / "state" / "studio.db"
-    _WATCHED_TABLES = ("ds_projects", "ds_work_orders", "ds_tasks", "ds_milestones")
+    _WATCHED_TABLES = (
+        "business_projects",
+        "business_work_orders",
+        "business_tasks",
+        "business_milestones",
+    )
     _before_db: dict[str, int] = {}
     if real_db.is_file():
         try:

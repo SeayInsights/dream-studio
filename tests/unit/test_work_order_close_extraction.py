@@ -34,11 +34,11 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Close Extraction Project", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, '', 'pending', 0, ?, ?)",
@@ -46,7 +46,7 @@ def db_path(tmp_path: Path) -> Path:
         )
         # No-gates WO so close happens cleanly without seeding artifacts.
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, '', 'in_progress', 'documentation', ?, ?)",
@@ -54,14 +54,14 @@ def db_path(tmp_path: Path) -> Path:
         )
         # Gated WOs so failure/force paths are exercised.
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, ?, '', 'in_progress', 'ui_component', ?, ?)",
             (WO_UI, PROJECT_ID, "UI WO", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, ?, '', 'in_progress', 'api_endpoint', ?, ?)",
@@ -94,7 +94,7 @@ def _insert_locked_brief(db_path: Path, project_id: str = PROJECT_ID) -> None:
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_design_briefs"
+            "INSERT INTO business_design_briefs"
             " (brief_id, project_id, status, created_at, updated_at)"
             " VALUES (?, ?, 'locked', ?, ?)",
             (f"brief-{project_id}", project_id, NOW, NOW),
@@ -276,7 +276,7 @@ def test_check_close_gates_does_not_mutate_status(
     )
     with sqlite3.connect(str(db_path)) as conn:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_DOCS,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
         ).fetchone()[0]
     assert status == "in_progress"
 
@@ -327,15 +327,15 @@ def test_close_work_order_succeeds_when_no_gates_configured(
         planning_root=tmp_path / ".planning",
     )
     assert result["ok"] is True
-    assert result["status"] == "complete"
+    assert result["status"] == "closed"
     assert result["forced"] is False
     assert result["bypassed_gates"] == []
 
     with sqlite3.connect(str(db_path)) as conn:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_DOCS,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
         ).fetchone()[0]
-    assert status == "complete"
+    assert status == "closed"
 
 
 def test_close_work_order_emits_work_order_closed_event(
@@ -367,14 +367,14 @@ def test_close_work_order_force_overrides_gate_failures(
     )
     assert result["ok"] is True
     assert result["forced"] is True
-    assert result["status"] == "complete"
+    assert result["status"] == "closed"
     assert len(result["bypassed_gates"]) >= 1
 
     with sqlite3.connect(str(db_path)) as conn:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_UI,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_UI,)
         ).fetchone()[0]
-    assert status == "complete"
+    assert status == "closed"
 
 
 def test_close_work_order_force_emits_gate_bypassed_events(
@@ -402,10 +402,10 @@ def test_close_work_order_surfaces_next_wo_in_milestone(
     # Seed a second open WO in the same milestone — it should surface as next.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, status,"
         " work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, '', 'open', 'documentation', ?, ?)",
+        " VALUES (?, ?, ?, ?, '', 'created', 'documentation', ?, ?)",
         ("wo-next-in-ms", PROJECT_ID, MILESTONE_ID, "Next WO", NOW, NOW),
     )
     conn.commit()
