@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.11 — Substrate policy lock: read-after-write + schema evolution (2026-05-23)
+
+### Fixed
+- `close_milestone` open-WO check now uses a canonical-events fallback: when `business_work_orders` shows a WO as `in_progress` due to projection lag, `business_canonical_events` is checked for a `work_order.closed` event; if found, the WO is treated as closed (fixes H4-2 — the standard `close_work_order → close_milestone` operator workflow was failing with "Cannot close milestone: open work orders remain")
+
+### Added
+- `ProjectionRegistry.projected_tables()` returns the set of all target tables across registered projections; single source of truth for projection-backed table enumeration (R3)
+- `RegistryEntry.payload_required_keys: frozenset[str]` field on every registry entry; populated for the 5 SDLC WO event types consumed by `WorkOrderProjection`
+- Runtime payload validation in `spool.writer.write_event()`: raises `ValueError` on emit if a required key is absent (R10 Layer 1)
+- Integration test: `tests/integration/substrate/test_read_after_write_under_projection_lag.py` — 3 tests covering stale projection, canonical-events fallback, and mixed genuinely-open + stale cases (R2)
+- Unit test: `tests/unit/config/test_event_schema_evolution_policy.py` — 17 tests covering registry integrity, versioned naming convention, fixture-payload coverage, `write_event` raises on missing key, and `write_event` succeeds with complete payload (R10 Layer 2)
+- Architecture docs: `docs/architecture/substrate-policy.md` (parent), `docs/architecture/read-after-write-convergence.md`, `docs/architecture/event-schema-evolution.md`
+
+### Policy decisions
+- H4: Pattern C — optimistic return + named exclusion (within-function) + canonical-events fallback (cross-function); `work_order.closed` is terminal, presence of a canonical event is sufficient regardless of projection cursor
+- H6: Additive-only schema evolution; breaking changes require a new `event_type` using `<base>.v<N>` naming convention; type-change detection is a documented known gap deferred to a future phase
+
 ## Phase 18.1.10 — Repo hygiene cleanup (2026-05-23)
 
 ### Changed
