@@ -45,19 +45,22 @@ from core.event_store.studio_db import set_sentinel, has_sentinel  # noqa: E402
 
 
 def main() -> None:
-    session_id, cwd = context_handoff.parse_stop_payload(sys.stdin.read(), paths.project_root())
+    try:
+        session_id, cwd = context_handoff.parse_stop_payload(sys.stdin.read(), paths.project_root())
 
-    if not context_handoff.has_session_activity(cwd):
-        return
+        if not context_handoff.has_session_activity(cwd):
+            return
 
-    key = f"handoff-done-{session_id or 'unknown'}"
-    if has_sentinel(key):
-        return
+        key = f"handoff-done-{session_id or 'unknown'}"
+        if has_sentinel(key):
+            return
 
-    handoff_path = context_handoff.write_session_handoff(cwd, session_id)
-    context_handoff.record_session_to_db(cwd, session_id, handoff_path)
+        handoff_path = context_handoff.write_session_handoff(cwd, session_id)
+        context_handoff.record_session_to_db(cwd, session_id, handoff_path)
 
-    set_sentinel(key, "handoff-done")
+        set_sentinel(key, "handoff-done")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

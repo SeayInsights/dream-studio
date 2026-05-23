@@ -45,7 +45,6 @@ def main() -> None:
     except Exception as e:
         hook_status = "failed"
         error_msg = str(e)
-        raise
     finally:
         duration_ms = int((time.time() - start_time) * 1000)
         completed_at = utcnow().isoformat()
