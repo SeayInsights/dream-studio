@@ -37,18 +37,18 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Contract Project', '', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Contract Project', '', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'open', 'documentation', ?, ?)",
+            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
             (WO_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
@@ -103,7 +103,7 @@ def test_eval_scope_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     conn = sqlite3.connect(str(db_path))
     try:
         row = conn.execute(
-            "SELECT name FROM ds_projects WHERE project_id = ?", (proj_result["project_id"],)
+            "SELECT name FROM business_projects WHERE project_id = ?", (proj_result["project_id"],)
         ).fetchone()
     finally:
         conn.close()
@@ -163,7 +163,7 @@ def test_eval_build_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     conn = sqlite3.connect(str(db_path))
     try:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_ID,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_ID,)
         ).fetchone()[0]
     finally:
         conn.close()
@@ -240,7 +240,7 @@ def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     conn = sqlite3.connect(str(db_path))
     try:
         row = conn.execute(
-            "SELECT status, purpose FROM ds_design_briefs WHERE brief_id = ?", (brief_id,)
+            "SELECT status, purpose FROM business_design_briefs WHERE brief_id = ?", (brief_id,)
         ).fetchone()
     finally:
         conn.close()

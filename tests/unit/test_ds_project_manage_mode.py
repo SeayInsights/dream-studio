@@ -98,25 +98,25 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Manage Ext Project", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, '', 'pending', 0, ?, ?)",
             ("ms-manage-1", PROJECT_ID, "First", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'open', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'created', 'api_endpoint', ?, ?)",
             ("wo-manage-1", PROJECT_ID, "ms-manage-1", "WO", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, project_id, work_order_id, title, description, status,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, ?, '', 'pending', ?, ?)",
@@ -125,7 +125,7 @@ def db_path(tmp_path: Path) -> Path:
         # A second project with no dependents — used to test the no-confirm
         # cascade path (deletes cleanly because there's nothing to cascade).
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (OTHER_PROJECT_ID, "Other", "", "paused", NOW, NOW),
         )
         conn.commit()
@@ -176,7 +176,7 @@ def test_delete_project_refuses_when_dependents_and_no_confirm(
     # And the row is still there.
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute(
-            "SELECT project_id FROM ds_projects WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT project_id FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
     assert row is not None
 
@@ -197,16 +197,16 @@ def test_delete_project_cascades_with_confirm(patched_paths, db_path: Path, tmp_
 
     with sqlite3.connect(str(db_path)) as conn:
         proj = conn.execute(
-            "SELECT 1 FROM ds_projects WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT 1 FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
         ms = conn.execute(
-            "SELECT 1 FROM ds_milestones WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT 1 FROM business_milestones WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
         wo = conn.execute(
-            "SELECT 1 FROM ds_work_orders WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT 1 FROM business_work_orders WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
         tasks = conn.execute(
-            "SELECT 1 FROM ds_tasks WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT 1 FROM business_tasks WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()
     assert proj is None
     assert ms is None

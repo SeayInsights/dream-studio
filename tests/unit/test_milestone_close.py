@@ -31,29 +31,29 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, due_date, status, created_at, updated_at)"
             " VALUES (?, ?, 'Alpha Release', NULL, NULL, 'active', ?, ?)",
             (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         # UI work order (ui_component)
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Build hero', NULL, 'complete', 'ui_component', ?, ?)",
+            " VALUES (?, ?, ?, 'Build hero', NULL, 'closed', 'ui_component', ?, ?)",
             (WO_UI, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         # API work order (api_endpoint)
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Auth endpoint', NULL, 'complete', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, ?, 'Auth endpoint', NULL, 'closed', 'api_endpoint', ?, ?)",
             (WO_API, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         conn.commit()
@@ -102,7 +102,7 @@ def test_close_fails_when_work_orders_not_all_completed(db_home, tmp_path, monke
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         conn.execute(
-            "UPDATE ds_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
+            "UPDATE business_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
             (WO_UI,),
         )
         conn.commit()
@@ -188,7 +188,7 @@ def test_close_does_not_require_cwv_for_non_ui_milestone(db_home, tmp_path, monk
     conn = sqlite3.connect(str(_db_path(db_home)))
     try:
         conn.execute(
-            "UPDATE ds_work_orders SET work_order_type = 'api_endpoint' WHERE work_order_id = ?",
+            "UPDATE business_work_orders SET work_order_type = 'api_endpoint' WHERE work_order_id = ?",
             (WO_UI,),
         )
         conn.commit()

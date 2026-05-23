@@ -39,25 +39,25 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Eval Project', '', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Eval Project', '', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'open', 'documentation', ?, ?)",
+            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
             (WO_DOCS_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Write the doc', 'pending', ?, ?)",
             (TASK_ID, WO_DOCS_ID, PROJECT_ID, NOW, NOW),
@@ -146,7 +146,7 @@ def test_eval_task_done(patched_paths, db_path: Path, tmp_path: Path) -> None:
     conn = sqlite3.connect(str(db_path))
     try:
         status = conn.execute(
-            "SELECT status FROM ds_tasks WHERE task_id = ?", (TASK_ID,)
+            "SELECT status FROM business_tasks WHERE task_id = ?", (TASK_ID,)
         ).fetchone()[0]
     finally:
         conn.close()
@@ -176,16 +176,16 @@ def test_eval_close_wo(patched_paths, db_path: Path, tmp_path: Path) -> None:
     )
 
     assert result["ok"] is True, f"close_work_order failed: {result}"
-    assert result["status"] == "complete"
+    assert result["status"] == "closed"
 
     conn = sqlite3.connect(str(db_path))
     try:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_DOCS_ID,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS_ID,)
         ).fetchone()[0]
     finally:
         conn.close()
-    assert status == "complete"
+    assert status == "closed"
 
 
 # ── eval_gate_failure ─────────────────────────────────────────────────────────

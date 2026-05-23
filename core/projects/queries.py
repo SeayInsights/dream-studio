@@ -40,7 +40,7 @@ def get_project_list(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         rows = conn.execute(
-            "SELECT project_id, name, description, status, created_at FROM ds_projects"
+            "SELECT project_id, name, description, status, created_at FROM business_projects"
             " WHERE status = ? ORDER BY created_at DESC",
             (status_filter,),
         ).fetchall()
@@ -66,21 +66,21 @@ def get_project_status(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         proj = conn.execute(
-            "SELECT project_id, name, status FROM ds_projects WHERE project_id = ?",
+            "SELECT project_id, name, status FROM business_projects WHERE project_id = ?",
             (project_id,),
         ).fetchone()
         if proj is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
         milestone_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_milestones WHERE project_id = ?",
+            "SELECT COUNT(*) FROM business_milestones WHERE project_id = ?",
             (project_id,),
         ).fetchone()[0]
         work_order_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?",
+            "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?",
             (project_id,),
         ).fetchone()[0]
         open_work_order_count = conn.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ? AND status = 'open'",
+            "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ? AND status = 'created'",
             (project_id,),
         ).fetchone()[0]
     return {
@@ -104,8 +104,8 @@ def get_next_work_order(
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
-            " FROM ds_work_orders wo"
-            " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
+            " FROM business_work_orders wo"
+            " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
             " WHERE wo.project_id = ? AND wo.status = 'in_progress'"
             " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
             (project_id,),
@@ -113,14 +113,14 @@ def get_next_work_order(
         if row is None:
             row = conn.execute(
                 "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
-                " FROM ds_work_orders wo"
-                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-                " WHERE wo.project_id = ? AND wo.status = 'open'"
+                " FROM business_work_orders wo"
+                " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                " WHERE wo.project_id = ? AND wo.status = 'created'"
                 " AND m.order_index = ("
                 "   SELECT MIN(m2.order_index)"
-                "   FROM ds_work_orders wo2"
-                "   LEFT JOIN ds_milestones m2 ON wo2.milestone_id = m2.milestone_id"
-                "   WHERE wo2.project_id = ? AND wo2.status IN ('open', 'in_progress')"
+                "   FROM business_work_orders wo2"
+                "   LEFT JOIN business_milestones m2 ON wo2.milestone_id = m2.milestone_id"
+                "   WHERE wo2.project_id = ? AND wo2.status IN ('created', 'in_progress')"
                 " )"
                 " ORDER BY wo.created_at ASC LIMIT 1",
                 (project_id, project_id),
@@ -155,7 +155,7 @@ def get_project_state(
 
     with _connect(db_path) as conn:
         projects_raw = conn.execute(
-            "SELECT project_id, name, status FROM ds_projects WHERE status = 'active'"
+            "SELECT project_id, name, status FROM business_projects WHERE status = 'active'"
             " ORDER BY updated_at DESC"
         ).fetchall()
 
@@ -175,14 +175,14 @@ def get_project_state(
                 " m.milestone_id, m.title AS milestone_title, m.order_index,"
                 " wot.label, wot.pre_build_gate, wot.build_executor, wot.post_build_gate,"
                 " wot.workflow_template, wot.precondition_skill, wot.task_generator,"
-                " (SELECT COUNT(*) FROM ds_tasks t"
+                " (SELECT COUNT(*) FROM business_tasks t"
                 "  WHERE t.work_order_id = wo.work_order_id AND t.status = 'pending') AS pending_tasks,"
-                " (SELECT COUNT(*) FROM ds_tasks t"
+                " (SELECT COUNT(*) FROM business_tasks t"
                 "  WHERE t.work_order_id = wo.work_order_id) AS total_tasks"
-                " FROM ds_work_orders wo"
-                " LEFT JOIN ds_milestones m ON wo.milestone_id = m.milestone_id"
-                " LEFT JOIN ds_work_order_types wot ON wot.type_id = wo.work_order_type"
-                " WHERE wo.project_id = ? AND wo.status IN ('open', 'in_progress')"
+                " FROM business_work_orders wo"
+                " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                " LEFT JOIN business_work_order_types wot ON wot.type_id = wo.work_order_type"
+                " WHERE wo.project_id = ? AND wo.status IN ('created', 'in_progress')"
                 " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
                 (pid,),
             ).fetchone()
@@ -191,7 +191,7 @@ def get_project_state(
             try:
                 brief_row = conn.execute(
                     "SELECT brief_id, status, purpose, audience, tone, design_system,"
-                    " font_pairing, brand_tokens FROM ds_design_briefs"
+                    " font_pairing, brand_tokens FROM business_design_briefs"
                     " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
                     (pid,),
                 ).fetchone()
@@ -266,7 +266,7 @@ def get_project_state(
                         f"Invoke `{task_generator}` to decompose tasks, "
                         f"then `ds work-order start {wo_row['work_order_id']}`."
                     )
-                elif wo_row["status"] == "open":
+                elif wo_row["status"] == "created":
                     next_action = f"Run: ds work-order start {wo_row['work_order_id']}"
                     if workflow_template:
                         next_action += (

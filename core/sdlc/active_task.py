@@ -32,7 +32,7 @@ def _active_task_path() -> Path:
 def set_active_task(task_id: str) -> ActiveTaskContext:
     """Resolves the full SDLC chain from task_id and persists to disk.
 
-    Raises ValueError if task_id doesn't exist in ds_tasks or if its
+    Raises ValueError if task_id doesn't exist in business_tasks or if its
     parent work_order/milestone/project can't be resolved.
     """
     from core.config.database import _default_db_path
@@ -42,8 +42,8 @@ def set_active_task(task_id: str) -> ActiveTaskContext:
     with _connect(db_path) as conn:
         row = conn.execute(
             "SELECT t.task_id, t.work_order_id, t.project_id, wo.milestone_id"
-            " FROM ds_tasks t"
-            " LEFT JOIN ds_work_orders wo ON t.work_order_id = wo.work_order_id"
+            " FROM business_tasks t"
+            " LEFT JOIN business_work_orders wo ON t.work_order_id = wo.work_order_id"
             " WHERE t.task_id = ?",
             (task_id,),
         ).fetchone()

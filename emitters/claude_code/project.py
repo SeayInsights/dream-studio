@@ -56,7 +56,7 @@ def get_active_project_id(db_path: Path) -> str | None:
         conn = sqlite3.connect(str(db_path), timeout=1.0)
         try:
             row = conn.execute(
-                "SELECT project_id FROM ds_projects"
+                "SELECT project_id FROM business_projects"
                 " WHERE status = 'active'"
                 " ORDER BY updated_at DESC LIMIT 1"
             ).fetchone()

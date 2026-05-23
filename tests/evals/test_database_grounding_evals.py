@@ -81,14 +81,14 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'C7 Project', '', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'C7 Project', '', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'open', 'documentation', ?, ?)",
+            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
             (WO_DOCS_ID, PROJECT_ID, NOW, NOW),
         )
         conn.commit()

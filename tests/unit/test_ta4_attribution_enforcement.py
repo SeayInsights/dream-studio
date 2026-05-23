@@ -207,11 +207,11 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, 'WO1', '', 'in_progress', 'documentation', ?, ?)",

@@ -30,28 +30,28 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "MS Ext Project", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, '', 'active', 0, ?, ?)",
             (MILESTONE_ID, PROJECT_ID, "Alpha Release", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'complete', 'ui_component', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'closed', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, MILESTONE_ID, "Build hero", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'complete', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'closed', 'api_endpoint', ?, ?)",
             (WO_API_ID, PROJECT_ID, MILESTONE_ID, "Auth endpoint", NOW, NOW),
         )
         conn.commit()
@@ -120,7 +120,7 @@ def test_close_milestone_returns_open_wo_list_when_wos_incomplete(
 
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
         (WO_UI_ID,),
     )
     conn.commit()
@@ -183,7 +183,7 @@ def test_close_milestone_succeeds_when_artifacts_pass(
 
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute(
-            "SELECT status FROM ds_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
+            "SELECT status FROM business_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
         ).fetchone()
     assert row[0] == "complete"
 
@@ -196,7 +196,7 @@ def test_close_milestone_skips_cwv_for_non_ui_milestone(
     # Demote the only UI WO so the milestone has no UI surface.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET work_order_type = 'api_endpoint' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET work_order_type = 'api_endpoint' WHERE work_order_id = ?",
         (WO_UI_ID,),
     )
     conn.commit()
@@ -256,7 +256,7 @@ def test_close_milestone_force_bypasses_failures(
 
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute(
-            "SELECT status FROM ds_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
+            "SELECT status FROM business_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
         ).fetchone()
     assert row[0] == "complete"
 

@@ -31,40 +31,40 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, 'Test WO', NULL, 'in_progress', 'documentation', ?, ?)",
             (WO_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, NULL, 'Other WO', NULL, 'in_progress', 'documentation', ?, ?)",
             (OTHER_WO, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+            "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Write tests', 'pending', ?, ?)",
             (TASK_A, WO_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+            "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Review PR', 'in_progress', ?, ?)",
             (TASK_B, WO_ID, PROJECT_ID, NOW2, NOW2),
         )
         conn.execute(
-            "INSERT INTO ds_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+            "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Deploy', 'pending', ?, ?)",
             (TASK_C, WO_ID, PROJECT_ID, NOW3, NOW3),
         )
         conn.execute(
-            "INSERT INTO ds_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+            "INSERT INTO business_tasks (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, ?, 'Other task', 'pending', ?, ?)",
             (OTHER_TASK, OTHER_WO, PROJECT_ID, NOW, NOW),
         )
@@ -95,7 +95,9 @@ def test_task_done_marks_completed_in_db(db_home, tmp_path, monkeypatch):
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
     try:
-        row = conn.execute("SELECT status FROM ds_tasks WHERE task_id = ?", (TASK_A,)).fetchone()
+        row = conn.execute(
+            "SELECT status FROM business_tasks WHERE task_id = ?", (TASK_A,)
+        ).fetchone()
         assert row[0] == "complete"
     finally:
         conn.close()
@@ -139,8 +141,8 @@ def test_task_done_prints_all_complete_message_when_last_task(
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute("UPDATE ds_tasks SET status = 'complete' WHERE task_id = ?", (TASK_A,))
-        conn.execute("UPDATE ds_tasks SET status = 'complete' WHERE task_id = ?", (TASK_B,))
+        conn.execute("UPDATE business_tasks SET status = 'complete' WHERE task_id = ?", (TASK_A,))
+        conn.execute("UPDATE business_tasks SET status = 'complete' WHERE task_id = ?", (TASK_B,))
         conn.commit()
     finally:
         conn.close()
@@ -183,7 +185,7 @@ def test_tasks_shows_correct_status_indicators(db_home, monkeypatch, capsys):
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute("UPDATE ds_tasks SET status = 'complete' WHERE task_id = ?", (TASK_A,))
+        conn.execute("UPDATE business_tasks SET status = 'complete' WHERE task_id = ?", (TASK_A,))
         conn.commit()
     finally:
         conn.close()

@@ -406,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     wo_tasks = work_order_sub.add_parser("tasks", help="List tasks for a work order")
     wo_tasks.add_argument("work_order_id", help="Work order UUID")
     wo_add_tasks = work_order_sub.add_parser(
-        "add-tasks", help="Parse a tasks.md file and insert tasks into ds_tasks"
+        "add-tasks", help="Parse a tasks.md file and insert tasks into business_tasks"
     )
     wo_add_tasks.add_argument("work_order_id", help="Work order UUID")
     wo_add_tasks.add_argument(
@@ -2069,7 +2069,7 @@ def _work_order_add_tasks(
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
-    """Parse a numbered-list tasks.md file and insert tasks into ds_tasks."""
+    """Parse a numbered-list tasks.md file and insert tasks into business_tasks."""
     from core.work_orders.mutations import add_tasks_from_file
 
     result = add_tasks_from_file(

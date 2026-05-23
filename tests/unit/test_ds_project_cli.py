@@ -18,10 +18,7 @@ NOW = "2026-05-16T00:00:00+00:00"
 
 def _make_db(tmp_path: Path) -> Path:
     db_path = tmp_path / "studio.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.executescript(MIGRATION.read_text(encoding="utf-8"))
-    conn.commit()
-    conn.close()
+    bootstrap_database(db_path)
     return db_path
 
 
@@ -38,7 +35,7 @@ def _seed_project(
 ) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?,?,?,?,?,?)",
+        "INSERT INTO business_projects VALUES (?,?,?,?,?,?)",
         (project_id, name, "", status, NOW, NOW),
     )
     conn.commit()
@@ -72,6 +69,7 @@ def test_project_register_inserts_row(tmp_path):
         code = _project_register(
             name="My Project",
             description="A test project",
+            project_path=REPO_ROOT,
             source_root=REPO_ROOT,
             dream_studio_home=tmp_path,
         )
@@ -79,7 +77,7 @@ def test_project_register_inserts_row(tmp_path):
     assert code == 0
 
     conn = sqlite3.connect(str(db_path))
-    rows = conn.execute("SELECT name, status FROM ds_projects").fetchall()
+    rows = conn.execute("SELECT name, status FROM business_projects").fetchall()
     conn.close()
     assert len(rows) == 1
     assert rows[0][0] == "My Project"
@@ -99,6 +97,7 @@ def test_project_register_output_has_project_id(tmp_path, capsys):
         code = _project_register(
             name="Proj2",
             description="",
+            project_path=REPO_ROOT,
             source_root=REPO_ROOT,
             dream_studio_home=tmp_path,
         )
@@ -124,6 +123,7 @@ def test_project_register_missing_db_raises(tmp_path):
             _project_register(
                 name="Fail Project",
                 description="",
+                project_path=REPO_ROOT,
                 source_root=REPO_ROOT,
                 dream_studio_home=tmp_path,
             )
@@ -151,6 +151,7 @@ def test_project_register_output_contains_set_active_hint(tmp_path, capsys):
         _project_register(
             name="Hinted",
             description="",
+            project_path=REPO_ROOT,
             source_root=REPO_ROOT,
             dream_studio_home=tmp_path,
         )
@@ -183,7 +184,7 @@ def test_set_active_makes_target_active(tmp_path, capsys):
     assert rc == 0
     row = (
         sqlite3.connect(str(db_path))
-        .execute("SELECT status FROM ds_projects WHERE project_id = ?", (pid,))
+        .execute("SELECT status FROM business_projects WHERE project_id = ?", (pid,))
         .fetchone()
     )
     assert row[0] == "active"
@@ -211,10 +212,10 @@ def test_set_active_deactivates_previously_active(tmp_path, capsys):
     assert rc == 0
     conn = sqlite3.connect(str(db_path))
     old_status = conn.execute(
-        "SELECT status FROM ds_projects WHERE project_id = ?", (pid_old,)
+        "SELECT status FROM business_projects WHERE project_id = ?", (pid_old,)
     ).fetchone()[0]
     new_status = conn.execute(
-        "SELECT status FROM ds_projects WHERE project_id = ?", (pid_new,)
+        "SELECT status FROM business_projects WHERE project_id = ?", (pid_new,)
     ).fetchone()[0]
     conn.close()
     assert old_status == "paused"
@@ -260,7 +261,7 @@ def test_deactivate_changes_status_to_inactive(tmp_path, capsys):
     assert rc == 0
     row = (
         sqlite3.connect(str(db_path))
-        .execute("SELECT status FROM ds_projects WHERE project_id = ?", (pid,))
+        .execute("SELECT status FROM business_projects WHERE project_id = ?", (pid,))
         .fetchone()
     )
     assert row[0] == "paused"
@@ -290,7 +291,7 @@ def test_delete_removes_project_with_no_dependents(tmp_path, capsys):
     assert rc == 0
     row = (
         sqlite3.connect(str(db_path))
-        .execute("SELECT project_id FROM ds_projects WHERE project_id = ?", (pid,))
+        .execute("SELECT project_id FROM business_projects WHERE project_id = ?", (pid,))
         .fetchone()
     )
     assert row is None
@@ -302,9 +303,9 @@ def test_delete_requires_confirm_when_dependents_exist(tmp_path, capsys):
     _seed_project(db_path, project_id=pid, name="Has Dependents")
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, title, status, created_at, updated_at)"
-        " VALUES ('wo-test', ?, 'WO', 'open', ?, ?)",
+        " VALUES ('wo-test', ?, 'WO', 'created', ?, ?)",
         (pid, NOW, NOW),
     )
     conn.commit()
@@ -335,13 +336,13 @@ def test_delete_cascade_removes_all_dependents(tmp_path, capsys):
     _seed_project(db_path, project_id=pid, name="Big Project")
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, title, status, created_at, updated_at)"
-        " VALUES ('wo-cascade', ?, 'WO', 'open', ?, ?)",
+        " VALUES ('wo-cascade', ?, 'WO', 'created', ?, ?)",
         (pid, NOW, NOW),
     )
     conn.execute(
-        "INSERT INTO ds_tasks"
+        "INSERT INTO business_tasks"
         " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
         " VALUES ('task-cascade', 'wo-cascade', ?, 'T', 'pending', ?, ?)",
         (pid, NOW, NOW),
@@ -365,17 +366,21 @@ def test_delete_cascade_removes_all_dependents(tmp_path, capsys):
     assert rc == 0
     conn2 = sqlite3.connect(str(db_path))
     assert (
-        conn2.execute("SELECT COUNT(*) FROM ds_projects WHERE project_id = ?", (pid,)).fetchone()[0]
-        == 0
-    )
-    assert (
         conn2.execute(
-            "SELECT COUNT(*) FROM ds_work_orders WHERE project_id = ?", (pid,)
+            "SELECT COUNT(*) FROM business_projects WHERE project_id = ?", (pid,)
         ).fetchone()[0]
         == 0
     )
     assert (
-        conn2.execute("SELECT COUNT(*) FROM ds_tasks WHERE project_id = ?", (pid,)).fetchone()[0]
+        conn2.execute(
+            "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?", (pid,)
+        ).fetchone()[0]
+        == 0
+    )
+    assert (
+        conn2.execute(
+            "SELECT COUNT(*) FROM business_tasks WHERE project_id = ?", (pid,)
+        ).fetchone()[0]
         == 0
     )
     conn2.close()

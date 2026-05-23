@@ -40,7 +40,7 @@ def _make_db() -> sqlite3.Connection:
         CREATE INDEX idx_ce_event_type ON canonical_events(event_type);
         CREATE INDEX idx_ce_timestamp ON canonical_events(timestamp);
 
-        CREATE TABLE ds_projects (
+        CREATE TABLE business_projects (
             project_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             description TEXT,
@@ -55,7 +55,7 @@ def _make_db() -> sqlite3.Connection:
 
 def _insert_project(conn: sqlite3.Connection, project_id: str, name: str) -> None:
     conn.execute(
-        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
         " VALUES (?, ?, '', 'active', ?, ?)",
         (project_id, name, NOW, NOW),
     )

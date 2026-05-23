@@ -33,24 +33,24 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, status, created_at, updated_at)"
             " VALUES (?, ?, 'M1', 'active', ?, ?)",
             (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
             " VALUES (?, ?, ?, 'WO1', NULL, 'in_progress', 'documentation', ?, ?)",
             (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, description, status,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, 'Task A', 'desc A', 'pending', ?, ?)",
@@ -225,7 +225,7 @@ def test_handle_post_tool_use_partial_when_marker_project_not_in_db(db_home, tmp
     # Anomaly should have been logged.
     entries = _diag_entries(diag_dir)
     anomalies = [e for e in entries if e.get("category") == "anomaly"]
-    assert any("not found in ds_projects" in str(e.get("details", {})) for e in anomalies)
+    assert any("not found in business_projects" in str(e.get("details", {})) for e in anomalies)
 
 
 def test_handle_post_tool_use_emits_orphan_when_nothing_resolves(tmp_path, monkeypatch):
