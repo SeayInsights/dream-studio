@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.10 — Repo hygiene cleanup (2026-05-23)
+
+### Changed
+- Internal working documents scrubbed from git history (planning roadmaps, writer inventories, phase audit findings, PR body scaffolding, and operational tracking docs)
+- `.gitignore` updated: added `venv/`, `env/`, `*.egg-info/`, `.env`, `.env.local`, `*.tmp`, `.pymon`, `docs/audits/`, `docs/publication/`, `backlog.md`, and patterns for `tools/_ta*.md`/`tools/_ta*.py` phase investigation files
+- Documentation taxonomy established: end-user and architecture canonical docs in `docs/`; internal planning in `.planning/` (gitignored); historical audits in `.audit/` (gitignored)
+- `tools/` cleaned: removed 9 phase investigation documents; retained `canonical_join.py`, `correlation_validate.py`, `raw_drilldown.py` as active development utilities
+
+## Phase 18.1.9 — Test infrastructure cleanup (2026-05-23)
+
+### Fixed
+- 8 pre-existing test failures fixed (F1-F8): architectural violations (emitter import, TA6 fixture sync gap), infrastructure gaps (FK pragma, retry telemetry), stale references (dead dual-write test, `_BARE_TO_PACK` pack names), and test isolation issues (gotcha scanner monkeypatch target)
+- `studio_db._connect` now restores `PRAGMA foreign_keys = ON` after `_run_migrations` (migration 062 left FK enforcement silently OFF on fresh DBs)
+- Migration 071: removes stale `FOREIGN KEY (activity_id) REFERENCES activity_log` from `raw_workflow_runs` and `raw_workflow_nodes` (activity_log was dropped in migration 063)
+- `emitters/claude_code/project.py` no longer imports from `core.config.database` (architectural boundary violation); DB path resolved from env vars inline
+- `core/telemetry/execution_spine.py` dual-write restored: direct `INSERT OR IGNORE INTO execution_events` before spool write (12+ FK-referencing tables were failing on fresh DBs)
+- `requirements.txt` comment corrected: removed self-contradictory "Python 3.14" claim; stubs in `guardrails/scanners/` are now correctly documented as the active implementation; Phase 18.4.3 is the integration scope
+
+### Changed
+- `_BARE_TO_PACK` in `control/execution/workflow/runner.py` updated to use `ds-*` prefixed pack names per packs.yaml as of Slice 9; fallback changed from `"core"` to `"ds-core"`
+- `tests/integration/spool/test_ta6_e2e_attribution.py` fixture uses direct SQL for work order and task setup (projection-only architecture)
+- `tests/integration/test_registry.py` gotcha scanner test patched at correct monkeypatch target (`core.learning.gotcha_scanner._try_db_search`)
+- `tests/core/test_dual_write.py` deleted (referenced removed `_insert_activity_log` function)
+- Contract docs drift gate satisfied for `sqlite_schema_authority` and `workflow_and_hooks` domains
+
 ## Phase 18.2.2 — Work-order writer migration (2026-05-23)
 
 ### Fixed

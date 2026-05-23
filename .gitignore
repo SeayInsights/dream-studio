@@ -42,6 +42,13 @@ Thumbs.db
 *.swp
 
 .venv/
+venv/
+env/
+*.egg-info/
+.env
+.env.local
+*.tmp
+.pymon
 *.db
 *.db-wal
 *.db-shm
@@ -132,6 +139,8 @@ docs/convergence/
 docs/phase8/
 docs/intelligence/
 docs/repo_actions/
+docs/audits/
+docs/publication/
 .claude/
 .claude-plugin/
 
@@ -145,9 +154,23 @@ drift-*.txt
 # Debug scripts (one-off investigations)
 tmp_*.py
 verify_*.py
+tools/_ta*.md
+tools/_ta*.py
 
 # PR body drafts
 pr-body-*.md
 
 # Per-operator project marker (each operator registers their own)
 .dream-studio-project
+
+# Internal tracking docs — prevent future commits
+backlog.md
+DREAM-STUDIO-ROADMAP.md
+docs/UAT-Phase6-Checklist.md
+docs/coverage-report-phase6.md
+docs/UPGRADE_PLAN.md
+docs/TRANSACTION_SAFETY_GUIDE.md
+docs/security-skills-redundancy-analysis.md
+docs/token-reduction-summary.md
+docs/design-skills-guide.md
+docs/demo-script.md
