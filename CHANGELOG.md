@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.2.2 — Work-order writer migration (2026-05-23)
+
+### Fixed
+- `unblock_work_order` now emits `work_order.unblocked` event (registry entry existed, projection handled it, emit call was missing)
+
+### Changed
+- `business_work_orders` is now populated exclusively by `WorkOrderProjection` — zero direct writes remain
+- Removed direct INSERT from `create_work_order` (W07); event emission retained
+- Removed direct UPDATE from `start_work_order` (W08); event emission retained
+- Removed direct UPDATE from `close_work_order` (W09); event emission retained; milestone-completion and next-WO queries updated to exclude the closing WO by ID so they remain correct without the synchronous write
+- Removed direct UPDATE from `block_work_order` (W10); event emission retained
+- Removed direct UPDATE from `unblock_work_order` (W11); event emission retained (newly added in this PR)
+- Tests updated to reflect projection-only architecture: synchronous `business_work_orders` DB assertions removed; event-emission assertions retained
+
 ## Phase 18.1.7 — ds_* → business_* renames (2026-05-23)
 
 ### Renamed

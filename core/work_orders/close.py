@@ -406,20 +406,14 @@ def close_work_order(
         except Exception:
             pass
 
-        conn.execute(
-            "UPDATE business_work_orders SET status = 'closed', updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, work_order_id),
-        )
-        conn.commit()
-
         next_wo: dict[str, Any] | None = None
         milestone_complete = False
         if wo_milestone_id:
             next_row = conn.execute(
                 "SELECT work_order_id, title, work_order_type FROM business_work_orders"
-                " WHERE milestone_id = ? AND status = 'created' ORDER BY created_at ASC LIMIT 1",
-                (wo_milestone_id,),
+                " WHERE milestone_id = ? AND work_order_id != ? AND status = 'created'"
+                " ORDER BY created_at ASC LIMIT 1",
+                (wo_milestone_id, work_order_id),
             ).fetchone()
             if next_row:
                 next_wo = {
@@ -431,8 +425,9 @@ def close_work_order(
             else:
                 remaining = conn.execute(
                     "SELECT COUNT(*) FROM business_work_orders"
-                    " WHERE milestone_id = ? AND status NOT IN ('closed', 'cancelled')",
-                    (wo_milestone_id,),
+                    " WHERE milestone_id = ? AND work_order_id != ?"
+                    " AND status NOT IN ('closed', 'cancelled')",
+                    (wo_milestone_id, work_order_id),
                 ).fetchone()[0]
                 if remaining == 0:
                     milestone_complete = True

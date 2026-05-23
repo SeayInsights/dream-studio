@@ -145,20 +145,6 @@ def test_close_succeeds_when_all_gates_pass(db_home, tmp_path, monkeypatch, caps
     assert out["status"] == "closed"
 
 
-def test_close_updates_status_to_complete(db_home, tmp_path, monkeypatch):
-    # WO_DOCS has NULL gates — closes without any artifacts
-    rc = _close(db_home, tmp_path, monkeypatch, WO_DOCS)
-    assert rc == 0
-    conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
-    try:
-        status = conn.execute(
-            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert status == "closed"
-
-
 def test_close_succeeds_when_gates_are_null(db_home, tmp_path, monkeypatch, capsys):
     rc = _close(db_home, tmp_path, monkeypatch, WO_DOCS)
     assert rc == 0
@@ -219,21 +205,6 @@ def test_close_force_prints_bypass_warning(db_home, tmp_path, monkeypatch, capsy
 # ── block ─────────────────────────────────────────────────────────────────────
 
 
-def test_block_sets_status_and_reason(db_home, tmp_path, monkeypatch):
-    rc = _block(db_home, tmp_path, monkeypatch, WO_UI, "waiting on design review")
-    assert rc == 0
-    conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
-    try:
-        row = conn.execute(
-            "SELECT status, block_reason FROM business_work_orders WHERE work_order_id = ?",
-            (WO_UI,),
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "blocked"
-    assert row[1] == "waiting on design review"
-
-
 def test_block_emits_work_order_blocked_event(db_home, tmp_path, monkeypatch):
     spool_root = tmp_path / "spool-root"
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
@@ -252,20 +223,30 @@ def test_block_exits_1_when_not_found(db_home, tmp_path, monkeypatch):
 # ── unblock ───────────────────────────────────────────────────────────────────
 
 
-def test_unblock_restores_to_in_progress_and_clears_reason(db_home, tmp_path, monkeypatch):
-    _block(db_home, tmp_path, monkeypatch, WO_UI, "temp block")
-    rc = _unblock(db_home, tmp_path, monkeypatch, WO_UI)
-    assert rc == 0
-    conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
+def test_unblock_emits_work_order_unblocked_event(db_home, tmp_path, monkeypatch):
+    # Pre-set blocked state directly — block_work_order no longer writes synchronously;
+    # the projection populates business_work_orders from the event stream.
+    db_path = db_home / "state" / "studio.db"
+    conn = sqlite3.connect(str(db_path))
     try:
-        row = conn.execute(
-            "SELECT status, block_reason FROM business_work_orders WHERE work_order_id = ?",
+        conn.execute(
+            "UPDATE business_work_orders SET status = 'blocked', block_reason = 'temp block'"
+            " WHERE work_order_id = ?",
             (WO_UI,),
-        ).fetchone()
+        )
+        conn.commit()
     finally:
         conn.close()
-    assert row[0] == "in_progress"
-    assert row[1] is None
+
+    spool_root = tmp_path / "spool-root"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
+    rc = _unblock(db_home, tmp_path, monkeypatch, WO_UI)
+    assert rc == 0
+
+    events = [
+        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
+    ]
+    assert any(e["event_type"] == "work_order.unblocked" for e in events)
 
 
 def test_unblock_exits_1_when_not_found(db_home, tmp_path, monkeypatch):
