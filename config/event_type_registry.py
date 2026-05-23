@@ -18,7 +18,7 @@ Event-presence rule (data-model-v2.md):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,10 @@ class RegistryEntry:
     routes_to: tuple[str, ...]  # subset of {"business", "ai"}; () = raw only
     granularity_level: str  # "meaningful-unit" | "mechanical-detail"
     description: str
+    # Keys that MUST be present in the payload dict for this event type.
+    # Enforces the additive-only schema evolution policy. Empty = no enforcement.
+    # Populated for event types consumed by at least one projection.
+    payload_required_keys: frozenset = field(default_factory=frozenset, compare=False, hash=False)
 
 
 _BUSINESS: tuple[str, ...] = ("business",)
@@ -71,27 +75,35 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         _BUSINESS,
         "meaningful-unit",
         "New work order created under a milestone or project",
+        payload_required_keys=frozenset({"title", "status", "type"}),
     ),
     RegistryEntry(
-        "work_order.started", _BUSINESS, "meaningful-unit", "Work order entered in_progress state"
+        "work_order.started",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order entered in_progress state",
+        payload_required_keys=frozenset({"work_order_id", "title", "type", "project_id"}),
     ),
     RegistryEntry(
         "work_order.blocked",
         _BUSINESS,
         "meaningful-unit",
         "Work order blocked with a stated reason",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id", "reason"}),
     ),
     RegistryEntry(
         "work_order.unblocked",
         _BUSINESS,
         "meaningful-unit",
         "Work order unblocked and returned to in_progress state",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id"}),
     ),
     RegistryEntry(
         "work_order.closed",
         _BUSINESS,
         "meaningful-unit",
         "Work order closed after gate checks passed",
+        payload_required_keys=frozenset({"work_order_id", "title", "project_id", "forced"}),
     ),
     RegistryEntry("task.created", _BUSINESS, "meaningful-unit", "New task added to a work order"),
     RegistryEntry("task.started", _BUSINESS, "meaningful-unit", "Work began on a task"),

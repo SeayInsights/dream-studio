@@ -380,6 +380,13 @@ class ProjectionRegistry:
         """Return all registered projections."""
         return list(self._projections.values())
 
+    def projected_tables(self) -> frozenset:
+        """Return the set of all target tables across registered projections."""
+        tables: set = set()
+        for proj in self._projections.values():
+            tables.update(proj.target_tables)
+        return frozenset(tables)
+
     def get(self, name: str) -> Optional[Projection]:
         """Return projection by name or None."""
         return self._projections.get(name)
