@@ -13,17 +13,12 @@ import sys as _sys
 
 if _sys.platform == "win32":
     import signal as _signal
-    import time as _time
-
-    _last_sigint = [0.0]
 
     def _conftest_sigint_handler(signum, frame):
-        now = _time.time()
-        if now - _last_sigint[0] < 1.0:
-            # Two within 1 second: real user Ctrl+C, raise normally.
-            raise KeyboardInterrupt()
-        _last_sigint[0] = now
-        # Otherwise absorb silently.
+        # Absorb all SIGINTs during tests. Phantom SIGINTs from Windows + Python 3.12
+        # fs/sqlite operations should never propagate to pytest. Real user Ctrl+C
+        # in pytest goes through pytest's own signal machinery, not this handler.
+        pass
 
     _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
 
