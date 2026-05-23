@@ -150,6 +150,17 @@ def _process_one(
             pass
         raise  # re-raise: outer handler in ingest() decides skip vs fail
 
+    # Phase 18.1.2: route to dual canonical (business + AI) per event type registry.
+    # Best-effort: dual canonical failure does not block legacy canonical write.
+    try:
+        _write_to_dual_canonical(data, db_path)
+    except Exception as exc:
+        print(
+            f"[ds-ingestor] WARNING: dual canonical write failed for"
+            f" {data.get('event_id')!r} ({data.get('event_type')!r}): {exc}",
+            file=sys.stderr,
+        )
+
     _write_to_sqlite(data, db_path)
 
     processed_path = processed_dir / event_file.name
@@ -235,6 +246,169 @@ def _extract_correlation_ids(envelope: dict[str, Any]) -> dict[str, Any]:
         "adapter_id": adapter_id,
         "correlation_id": correlation_id,
     }
+
+
+def _write_to_dual_canonical(envelope: dict[str, Any], db_path: Path) -> None:
+    """Route event to business_canonical_events and/or ai_canonical_events.
+
+    Reads the event type registry to determine routing. Writes to zero, one,
+    or both canonical tables. Logs a warning for unregistered event_types.
+    Idempotent: uses INSERT OR IGNORE on the event_id PK.
+    """
+    from config.event_type_registry import get_routes, is_registered
+
+    import datetime
+
+    event_type = envelope.get("event_type", "")
+    routes = get_routes(event_type)
+
+    if not is_registered(event_type):
+        print(
+            f"[ds-ingestor] WARNING: event_type {event_type!r} not in registry"
+            f" — defaulting to dual canonical write (event_id={envelope.get('event_id')!r})",
+            file=sys.stderr,
+        )
+
+    if not routes:
+        return  # raw-only event (Commitment 9: mechanical detail stays in raw)
+
+    ids = _extract_correlation_ids(envelope)
+    received_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    trace = envelope.get("trace", {})
+    if isinstance(trace, str):
+        try:
+            trace = json.loads(trace)
+        except (json.JSONDecodeError, TypeError):
+            trace = {}
+    if not isinstance(trace, dict):
+        trace = {}
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path), timeout=5.0)
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+
+        if "business" in routes:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS business_canonical_events (
+                    event_id TEXT PRIMARY KEY,
+                    received_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+                    event_type TEXT NOT NULL,
+                    event_timestamp TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    trace JSON NOT NULL DEFAULT '{}',
+                    payload JSON NOT NULL DEFAULT '{}',
+                    correlation_id TEXT,
+                    project_id TEXT,
+                    milestone_id TEXT,
+                    work_order_id TEXT,
+                    task_id TEXT,
+                    severity TEXT NOT NULL DEFAULT 'info',
+                    source TEXT NOT NULL DEFAULT 'ingestor'
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bce_correlation_id"
+                " ON business_canonical_events(correlation_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bce_event_type"
+                " ON business_canonical_events(event_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bce_project_id"
+                " ON business_canonical_events(project_id)"
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO business_canonical_events
+                (event_id, received_at, event_type, event_timestamp, schema_version,
+                 trace, payload, correlation_id, project_id, milestone_id,
+                 work_order_id, task_id, severity, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    envelope["event_id"],
+                    received_at,
+                    event_type,
+                    envelope["timestamp"],
+                    envelope.get("schema_version", 1),
+                    json.dumps(trace),
+                    json.dumps(envelope.get("payload", {})),
+                    ids["correlation_id"],
+                    ids.get("project_id") or trace.get("project_id"),
+                    trace.get("milestone_id"),
+                    trace.get("work_order_id"),
+                    trace.get("task_id"),
+                    envelope.get("severity", "info"),
+                    "ingestor",
+                ),
+            )
+
+        if "ai" in routes:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_canonical_events (
+                    event_id TEXT PRIMARY KEY,
+                    received_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+                    event_type TEXT NOT NULL,
+                    event_timestamp TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    trace JSON NOT NULL DEFAULT '{}',
+                    payload JSON NOT NULL DEFAULT '{}',
+                    correlation_id TEXT,
+                    session_id TEXT,
+                    skill_id TEXT,
+                    workflow_id TEXT,
+                    agent_id TEXT,
+                    hook_id TEXT,
+                    model_id TEXT,
+                    severity TEXT NOT NULL DEFAULT 'info',
+                    source TEXT NOT NULL DEFAULT 'ingestor'
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ace_correlation_id"
+                " ON ai_canonical_events(correlation_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ace_event_type"
+                " ON ai_canonical_events(event_type)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ace_session_id"
+                " ON ai_canonical_events(session_id)"
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO ai_canonical_events
+                (event_id, received_at, event_type, event_timestamp, schema_version,
+                 trace, payload, correlation_id, session_id, skill_id,
+                 workflow_id, agent_id, hook_id, model_id, severity, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    envelope["event_id"],
+                    received_at,
+                    event_type,
+                    envelope["timestamp"],
+                    envelope.get("schema_version", 1),
+                    json.dumps(trace),
+                    json.dumps(envelope.get("payload", {})),
+                    ids["correlation_id"],
+                    ids["session_id"],
+                    ids["skill_id"],
+                    ids["workflow_id"],
+                    ids["agent_id"],
+                    ids["hook_id"],
+                    ids["model_id"],
+                    envelope.get("severity", "info"),
+                    "ingestor",
+                ),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _write_to_raw_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
