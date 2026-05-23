@@ -250,7 +250,16 @@ def test_gotcha_scanner_search_uses_db(tmp_path, monkeypatch):
         db_path=db,
     )
 
-    monkeypatch.setattr("core.event_store.studio_db._db_path", lambda: db)
+    # Patch _try_db_search in gotcha_scanner to call search_gotchas_db with the
+    # test db_path explicitly — patching studio_db._db_path doesn't work because
+    # _connect(None) uses the pool singleton, not _db_path directly.
+    from core.event_store.studio_db import search_gotchas_db
+
+    def _db_search_with_test_db(keyword: str) -> list[dict] | None:
+        results = search_gotchas_db(keyword, db_path=db)
+        return results if results else None
+
+    monkeypatch.setattr("core.learning.gotcha_scanner._try_db_search", _db_search_with_test_db)
     from core.learning.gotcha_scanner import search_gotchas  # noqa: E402
 
     results = search_gotchas("migration")

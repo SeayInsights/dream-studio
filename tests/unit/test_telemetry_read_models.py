@@ -67,6 +67,37 @@ def _seed(db_path: Path) -> None:
             evidence_refs=["read_model_evidence.yaml"],
             outcome_status="passed",
         )
+        # record_execution_event now spools only; insert directly so FK-constrained
+        # tables (agent_invocations etc.) can reference this event_id.
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id,
+                process_run_id, actor_type, actor_id, agent_id, skill_id, workflow_id,
+                hook_id, tool_id, model_id, source_refs_json, evidence_refs_json, outcome_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "event-read-model-test",
+                "dashboard.read_model_validation",
+                "Read model validation",
+                scope["project_id"],
+                scope["milestone_id"],
+                scope["task_id"],
+                scope["process_run_id"],
+                "system",
+                "pytest",
+                "codex",
+                "ds-core",
+                "route-first",
+                "preflight",
+                "pytest",
+                "gpt",
+                '["core/telemetry/read_models.py"]',
+                '["read_model_evidence.yaml"]',
+                "passed",
+            ),
+        )
         for invocation_type, component_id in (
             ("agent", "codex"),
             ("skill", "ds-core"),
@@ -547,6 +578,25 @@ def test_research_blocker_resolution_routes_dashboard_approval_and_true_unknowns
             event_name="Research blocker route validation",
             actor_type="system",
             actor_id="pytest",
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO execution_events (
+                event_id, event_type, event_name, project_id, milestone_id, task_id, process_run_id,
+                actor_type, actor_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "event-blocker-route-test",
+                "research.blocker_resolution",
+                "Research blocker route validation",
+                scope["project_id"],
+                scope["milestone_id"],
+                scope["task_id"],
+                scope["process_run_id"],
+                "system",
+                "pytest",
+            ),
         )
         conn.execute(
             """
