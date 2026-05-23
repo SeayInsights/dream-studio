@@ -10,6 +10,7 @@ class SpoolState(Enum):
     PROCESSING = "processing"
     PROCESSED = "processed"
     FAILED = "failed"
+    ARCHIVES = "archives"
 
 
 def state_dir(state: SpoolState, root: Path | None = None) -> Path:

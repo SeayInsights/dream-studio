@@ -10,7 +10,8 @@ def test_spool_state_enum_completeness():
     assert "processing" in values
     assert "processed" in values
     assert "failed" in values
-    assert len(values) == 4
+    assert "archives" in values
+    assert len(values) == 5
 
 
 def test_state_dir_resolution(spool_root):
