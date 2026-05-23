@@ -331,12 +331,6 @@ def test_close_work_order_succeeds_when_no_gates_configured(
     assert result["forced"] is False
     assert result["bypassed_gates"] == []
 
-    with sqlite3.connect(str(db_path)) as conn:
-        status = conn.execute(
-            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_DOCS,)
-        ).fetchone()[0]
-    assert status == "closed"
-
 
 def test_close_work_order_emits_work_order_closed_event(
     patched_paths, tmp_path: Path, spool_root: Path
@@ -369,12 +363,6 @@ def test_close_work_order_force_overrides_gate_failures(
     assert result["forced"] is True
     assert result["status"] == "closed"
     assert len(result["bypassed_gates"]) >= 1
-
-    with sqlite3.connect(str(db_path)) as conn:
-        status = conn.execute(
-            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_UI,)
-        ).fetchone()[0]
-    assert status == "closed"
 
 
 def test_close_work_order_force_emits_gate_bypassed_events(

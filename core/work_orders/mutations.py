@@ -187,13 +187,6 @@ def block_work_order(
         except Exception:
             pass
 
-        conn.execute(
-            "UPDATE business_work_orders SET status = 'blocked', block_reason = ?, updated_at = ?"
-            " WHERE work_order_id = ?",
-            (reason, now, work_order_id),
-        )
-        conn.commit()
-
     return {
         "ok": True,
         "work_order_id": work_order_id,
@@ -211,13 +204,14 @@ def unblock_work_order(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         wo_row = conn.execute(
-            "SELECT work_order_id, title, status FROM business_work_orders WHERE work_order_id = ?",
+            "SELECT work_order_id, title, status, project_id FROM business_work_orders"
+            " WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
-        _, _, wo_status = wo_row
+        _, title, wo_status, project_id = wo_row
         if wo_status != "blocked":
             return {
                 "ok": False,
@@ -225,12 +219,33 @@ def unblock_work_order(
             }
 
         now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "UPDATE business_work_orders SET status = 'in_progress', block_reason = NULL,"
-            " updated_at = ? WHERE work_order_id = ?",
-            (now, work_order_id),
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="work_order.unblocked",
+                session_id=None,
+                payload={
+                    "work_order_id": work_order_id,
+                    "title": title,
+                    "project_id": project_id,
+                },
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "work_order_id": work_order_id,
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
         )
-        conn.commit()
+    except Exception:
+        pass
 
     return {
         "ok": True,
@@ -362,23 +377,6 @@ def create_work_order(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-        conn.execute(
-            "INSERT INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description, status,"
-            " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?)",
-            (
-                work_order_id,
-                project_id,
-                milestone_id,
-                title,
-                description,
-                work_order_type,
-                now,
-                now,
-            ),
-        )
-        conn.commit()
 
     try:
         import spool.writer as _spool_writer

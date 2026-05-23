@@ -435,15 +435,6 @@ def start_work_order(
     now = datetime.now(timezone.utc).isoformat()
     context_path = write_work_order_context(brief_data, planning_root=p_root, now=now)
 
-    db_path = _require_db(source_root, dream_studio_home)
-    with _connect(db_path) as conn:
-        conn.execute(
-            "UPDATE business_work_orders SET status = 'in_progress', updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, work_order_id),
-        )
-        conn.commit()
-
     try:
         import spool.writer as _spool_writer
 
