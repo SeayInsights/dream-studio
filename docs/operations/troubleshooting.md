@@ -264,3 +264,5 @@ authority before continuing implementation.
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.1.5: projection runner troubleshooting: if `ds projection daemon status` shows a stale PID (process no longer running), use `ds projection daemon stop` to clear it. If projection_dead_letter accumulates, use `ds projection dead-letter list` to inspect and `ds projection dead-letter retry <event_id>` to re-queue after the root cause is fixed. Dead-letter events do not block the daemon — the runner continues processing other events while dead-lettered events await manual review. Use `ds projection rebuild <name>` to replay all canonical events into an L3 table after a schema fix. -->

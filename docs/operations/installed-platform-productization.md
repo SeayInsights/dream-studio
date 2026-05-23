@@ -358,3 +358,5 @@ the source repo.
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.1.5: `ds projection` command group added to the installed command surface (list, status <name>, rebuild <name>, dead-letter list/retry/resolve, daemon start/stop/status). These are read-only or controlled-mutation commands. No new install profile required; projection CLI is part of the existing full and core profiles via interfaces/cli/projection_cli.py registered in ds.py. -->

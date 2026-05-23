@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.5 — Projection Framework (2026-05-23)
+
+### Added
+- `core/projections/framework.py` — v2 Projection ABC, ProjectionRegistry, ProjectionEngine (rewritten from pre-v2 to read from dual canonical tables)
+- `core/projections/runner.py` — ProjectionRunner daemon process (5s / 100-event trigger, graceful SIGTERM shutdown, PID file lifecycle)
+- `core/projections/work_order_projection.py` — First v2 projection: derives `business_work_orders` from `work_order.*` business canonical events
+- Migration 068 — `projection_state`, `projection_dead_letter`, `projection_retry_queue` tables
+- Migration 069 — `business_work_orders` table (L3 business entity, projection-populated)
+- `ds projection list/status/rebuild/dead-letter/daemon` CLI commands
+- `config/event_type_registry.py` — added `work_order.unblocked` entry
+- 59 tests in `tests/unit/test_phase18_1_5_*` (framework + work order projection)
+
+### Statistics
+- Business canonical events processed: 33
+- Work orders projected into business_work_orders: 14
+- Schema version: 69
+
 ### Added — Phase 18.1.6 Project Entity Family Reconciliation (2026-05-22)
 
 - **`docs/architecture/project-family-reconciliation.md`** — complete investigation and decision document for the `ds_*` vs `project_*` table family reconciliation. Enumerates both families in full (schema, row counts, writers, readers), maps all 16 concepts to their v2 placement, records the Approach A decision (ds_* canonical, project_* retires), and provides a migration plan sketch for Phases 18.4 and 18.6.

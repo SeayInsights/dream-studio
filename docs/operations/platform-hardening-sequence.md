@@ -105,3 +105,5 @@ file sprawl, expose private project history, or authorize execution.
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.1.5 reviewed; no changes required for this doc. Projection framework (core/projections/framework.py, runner.py) and ds projection CLI (interfaces/cli/projection_cli.py) are covered by the existing installer_distribution_hardening milestone (new ds projection subcommand) and sqlite_schema_authority domain (migrations 068-069). -->

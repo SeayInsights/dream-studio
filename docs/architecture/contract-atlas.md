@@ -345,3 +345,5 @@ and boundary report without inventing new dependency data.
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.1.5 reviewed; no changes required for this doc. The projection framework is covered by the existing sqlite_schema_authority and installed_adapter_runtime registry domains. business_work_orders is an L3 derived table whose drift impact is captured by those existing domains. No new Contract Atlas domain required. -->
