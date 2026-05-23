@@ -151,6 +151,21 @@ def close_milestone(
 
         open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "closed"]
         if open_wos:
+            # Canonical-events fallback: work_order.closed is terminal — any
+            # matching event means the WO is closed regardless of projection lag.
+            open_wo_ids = [r[0] for r in open_wos]
+            placeholders = ",".join("?" * len(open_wo_ids))
+            closed_in_canonical = {
+                row[0]
+                for row in conn.execute(
+                    f"SELECT work_order_id FROM business_canonical_events"
+                    f" WHERE event_type = 'work_order.closed'"
+                    f" AND work_order_id IN ({placeholders})",
+                    open_wo_ids,
+                ).fetchall()
+            }
+            open_wos = [r for r in open_wos if r[0] not in closed_in_canonical]
+        if open_wos:
             return {
                 "ok": False,
                 "error": "Cannot close milestone: open work orders remain",
