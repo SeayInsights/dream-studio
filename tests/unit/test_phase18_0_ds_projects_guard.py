@@ -95,13 +95,13 @@ def test_migration_065_is_idempotent(tmp_path):
 
 
 def test_real_db_has_only_real_projects():
-    """After migration 065, the production studio.db must have exactly 2 rows."""
+    """After migration 070, the production studio.db must have exactly 2 rows in business_projects."""
     real_db = Path.home() / ".dream-studio" / "state" / "studio.db"
     if not real_db.is_file():
         pytest.skip("Production DB not present")
 
     conn = sqlite3.connect(str(real_db))
-    rows = conn.execute("SELECT name FROM ds_projects ORDER BY name").fetchall()
+    rows = conn.execute("SELECT name FROM business_projects ORDER BY name").fetchall()
     conn.close()
 
     names = [r[0] for r in rows]

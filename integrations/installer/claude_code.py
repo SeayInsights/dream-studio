@@ -364,7 +364,7 @@ def _first_run_guide(*, ds_home: Path) -> str | None:
         _sq3 = __import__("sqlite3")
         with _sq3.connect(str(sqlite_path)) as conn:
             rows = conn.execute(
-                "SELECT 1 FROM ds_projects WHERE status = 'active' LIMIT 1"
+                "SELECT 1 FROM business_projects WHERE status = 'active' LIMIT 1"
             ).fetchall()
         if rows:
             return None

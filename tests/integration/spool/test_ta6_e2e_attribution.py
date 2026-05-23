@@ -43,7 +43,7 @@ def _bootstrap_db(db_path: Path) -> None:
 def _insert_project(conn: sqlite3.Connection, project_id: str, name: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
-        "INSERT INTO ds_projects (project_id, name, status, created_at, updated_at)"
+        "INSERT INTO business_projects (project_id, name, status, created_at, updated_at)"
         " VALUES (?, ?, 'active', ?, ?)",
         (project_id, name, now, now),
     )
@@ -323,51 +323,56 @@ def test_attribution_chain_resolves_task_to_project(spool_root, sdlc_hierarchy):
             assert ev_milestone_id == milestone_id
             assert ev_project_id == project_id
 
-            # 2. ds_tasks row exists and links to the correct work order.
+            # 2. business_tasks row exists and links to the correct work order.
             task_row = conn.execute(
-                "SELECT task_id, work_order_id, project_id" " FROM ds_tasks WHERE task_id = ?",
+                "SELECT task_id, work_order_id, project_id"
+                " FROM business_tasks WHERE task_id = ?",
                 (ev_task_id,),
             ).fetchone()
-            assert task_row is not None, f"ds_tasks has no row for task_id={ev_task_id}"
+            assert task_row is not None, f"business_tasks has no row for task_id={ev_task_id}"
             assert task_row["work_order_id"] == ev_work_order_id, (
-                f"ds_tasks.work_order_id mismatch: "
+                f"business_tasks.work_order_id mismatch: "
                 f"{task_row['work_order_id']} != {ev_work_order_id}"
             )
             assert task_row["project_id"] == ev_project_id
 
-            # 3. ds_work_orders row exists and links to the correct milestone.
+            # 3. business_work_orders row exists and links to the correct milestone.
             wo_row = conn.execute(
                 "SELECT work_order_id, milestone_id, project_id"
-                " FROM ds_work_orders WHERE work_order_id = ?",
+                " FROM business_work_orders WHERE work_order_id = ?",
                 (ev_work_order_id,),
             ).fetchone()
             assert (
                 wo_row is not None
-            ), f"ds_work_orders has no row for work_order_id={ev_work_order_id}"
+            ), f"business_work_orders has no row for work_order_id={ev_work_order_id}"
             assert wo_row["milestone_id"] == ev_milestone_id, (
-                f"ds_work_orders.milestone_id mismatch: "
+                f"business_work_orders.milestone_id mismatch: "
                 f"{wo_row['milestone_id']} != {ev_milestone_id}"
             )
             assert wo_row["project_id"] == ev_project_id
 
-            # 4. ds_milestones row exists and links to the correct project.
+            # 4. business_milestones row exists and links to the correct project.
             ms_row = conn.execute(
-                "SELECT milestone_id, project_id" " FROM ds_milestones WHERE milestone_id = ?",
+                "SELECT milestone_id, project_id"
+                " FROM business_milestones WHERE milestone_id = ?",
                 (ev_milestone_id,),
             ).fetchone()
             assert (
                 ms_row is not None
-            ), f"ds_milestones has no row for milestone_id={ev_milestone_id}"
+            ), f"business_milestones has no row for milestone_id={ev_milestone_id}"
             assert ms_row["project_id"] == ev_project_id, (
-                f"ds_milestones.project_id mismatch: " f"{ms_row['project_id']} != {ev_project_id}"
+                f"business_milestones.project_id mismatch: "
+                f"{ms_row['project_id']} != {ev_project_id}"
             )
 
-            # 5. ds_projects row exists.
+            # 5. business_projects row exists.
             proj_row = conn.execute(
-                "SELECT project_id FROM ds_projects WHERE project_id = ?",
+                "SELECT project_id FROM business_projects WHERE project_id = ?",
                 (ev_project_id,),
             ).fetchone()
-            assert proj_row is not None, f"ds_projects has no row for project_id={ev_project_id}"
+            assert (
+                proj_row is not None
+            ), f"business_projects has no row for project_id={ev_project_id}"
 
         finally:
             conn.close()

@@ -83,4 +83,4 @@ This mode is **not** for scoping new projects (use `ds-project:scope`), filling 
 - **List**: none (read-only against SQLite).
 - **Switch**: updates `status` to `paused` for any currently-active project and to `active` for the target.
 - **Archive**: sets the target's `status` to `paused`.
-- **Delete**: cascade-deletes rows from `ds_tasks`, `ds_work_orders`, `ds_milestones`, `ds_design_briefs`, then `ds_projects`. Irreversible.
+- **Delete**: cascade-deletes rows from `business_tasks`, `business_work_orders`, `business_milestones`, `business_design_briefs`, then `business_projects`. Irreversible.

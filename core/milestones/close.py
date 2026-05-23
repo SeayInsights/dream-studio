@@ -134,7 +134,7 @@ def close_milestone(
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
         ms_row = conn.execute(
-            "SELECT milestone_id, project_id, title, status FROM ds_milestones"
+            "SELECT milestone_id, project_id, title, status FROM business_milestones"
             " WHERE milestone_id = ?",
             (milestone_id,),
         ).fetchone()
@@ -145,11 +145,11 @@ def close_milestone(
 
         wo_rows = conn.execute(
             "SELECT work_order_id, title, status, work_order_type"
-            " FROM ds_work_orders WHERE milestone_id = ? ORDER BY created_at ASC",
+            " FROM business_work_orders WHERE milestone_id = ? ORDER BY created_at ASC",
             (milestone_id,),
         ).fetchall()
 
-        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "complete"]
+        open_wos = [(r[0], r[1], r[2]) for r in wo_rows if r[2] != "closed"]
         if open_wos:
             return {
                 "ok": False,
@@ -197,7 +197,7 @@ def close_milestone(
                     pass
 
         conn.execute(
-            "UPDATE ds_milestones SET status = 'complete', updated_at = ? WHERE milestone_id = ?",
+            "UPDATE business_milestones SET status = 'complete', updated_at = ? WHERE milestone_id = ?",
             (now, milestone_id),
         )
         conn.commit()

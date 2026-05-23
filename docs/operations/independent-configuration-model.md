@@ -178,3 +178,6 @@ The independent configuration model now includes platform-hardening configuratio
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
 <!-- Last reviewed 2026-05-22 — Phase 18.1.5: projection engine configuration is env-var-backed. PROJECTION_POLL_INTERVAL (float seconds, default 5.0) and PROJECTION_EVENT_TRIGGER (int events, default 100) control daemon scheduling. RetryPolicy parameters (max_retries=3, base_delay_seconds=1.0, backoff_factor=2.0) are declared per-projection class. projection_state is the runtime cursor (not a config store); it belongs in SQLite authority. No new config area row added to the independent configuration model table; projection config is covered by the existing Telemetry modules and Installed adapter router rows. -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->

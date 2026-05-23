@@ -48,21 +48,21 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Env Corr Project", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, '', 'active', 0, ?, ?)",
             (MILESTONE_ID, PROJECT_ID, "First", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'open', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'created', 'api_endpoint', ?, ?)",
             (WO_ID, PROJECT_ID, MILESTONE_ID, "WO", NOW, NOW),
         )
         conn.commit()
@@ -163,7 +163,7 @@ def test_close_work_order_force_emits_well_formed_envelopes(
     # Move the WO to in_progress so close has something to mutate.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'in_progress' WHERE work_order_id = ?",
         (WO_ID,),
     )
     conn.commit()
@@ -205,7 +205,7 @@ def test_close_milestone_force_emits_well_formed_envelopes(
     # All WOs must be complete for close_milestone to proceed.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET status = 'complete' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'closed' WHERE work_order_id = ?",
         (WO_ID,),
     )
     conn.commit()

@@ -47,7 +47,7 @@ def _seed_project(
 ) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
         (project_id, name, "", status, NOW, NOW),
     )
     conn.commit()
@@ -61,11 +61,11 @@ def _seed_work_order(
     project_id: str,
     title: str = "Build it",
     work_order_type: str = "ui_page",
-    status: str = "open",
+    status: str = "created",
 ) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, status,"
         " work_order_type, created_at, updated_at)"
         " VALUES (?, ?, NULL, ?, '', ?, ?, ?, ?)",
@@ -78,7 +78,7 @@ def _seed_work_order(
 def _seed_brief(db_path: Path, *, brief_id: str, project_id: str, status: str = "draft") -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_design_briefs"
+        "INSERT INTO business_design_briefs"
         " (brief_id, project_id, status, created_at, updated_at)"
         " VALUES (?, ?, ?, ?, ?)",
         (brief_id, project_id, status, NOW, NOW),

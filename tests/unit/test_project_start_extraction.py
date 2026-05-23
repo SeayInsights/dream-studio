@@ -30,25 +30,25 @@ def db_path(tmp_path: Path) -> Path:
         # Two projects — the target plus one already-active project so we can
         # prove `start_project` demotes it via `set_active_project`.
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (OTHER_PROJECT_ID, "Other Active", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Test Project", "", "paused", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, status, order_index,"
             " created_at, updated_at)"
             " VALUES (?, ?, ?, '', 'pending', 0, ?, ?)",
             (MILESTONE_ID, PROJECT_ID, "Foundation", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'open', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, ?, ?, '', 'created', 'api_endpoint', ?, ?)",
             (WO_OPEN_ID, PROJECT_ID, MILESTONE_ID, "Backend WO", NOW, NOW),
         )
         conn.commit()
@@ -120,7 +120,7 @@ def test_start_project_demotes_previously_active_project(
     with sqlite3.connect(str(db_path)) as conn:
         statuses = {
             row[0]: row[1]
-            for row in conn.execute("SELECT project_id, status FROM ds_projects").fetchall()
+            for row in conn.execute("SELECT project_id, status FROM business_projects").fetchall()
         }
     assert statuses[PROJECT_ID] == "active"
     assert statuses[OTHER_PROJECT_ID] == "paused"
@@ -139,7 +139,7 @@ def test_start_project_marks_target_work_order_in_progress(
     )
     with sqlite3.connect(str(db_path)) as conn:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?", (WO_OPEN_ID,)
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_OPEN_ID,)
         ).fetchone()[0]
     assert status == "in_progress"
 
@@ -170,7 +170,7 @@ def test_start_project_signals_no_open_work_orders(
     # Mark the only open WO as complete so the project has nothing to start.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET status = 'complete' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'closed' WHERE work_order_id = ?",
         (WO_OPEN_ID,),
     )
     conn.commit()
@@ -195,7 +195,7 @@ def test_start_project_activates_project_even_when_no_open_wos(
 
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET status = 'complete' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET status = 'closed' WHERE work_order_id = ?",
         (WO_OPEN_ID,),
     )
     conn.commit()
@@ -209,7 +209,7 @@ def test_start_project_activates_project_even_when_no_open_wos(
     )
     with sqlite3.connect(str(db_path)) as conn:
         status = conn.execute(
-            "SELECT status FROM ds_projects WHERE project_id = ?", (PROJECT_ID,)
+            "SELECT status FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
         ).fetchone()[0]
     assert status == "active"
 
@@ -227,7 +227,7 @@ def test_start_project_propagates_brief_block_for_ui_wo(
     # ok=False with requires_brief_confirmation=True unless accept_no_brief.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET work_order_type = 'ui_page' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET work_order_type = 'ui_page' WHERE work_order_id = ?",
         (WO_OPEN_ID,),
     )
     conn.commit()
@@ -251,7 +251,7 @@ def test_start_project_accept_no_brief_unblocks_ui_wo(
 
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "UPDATE ds_work_orders SET work_order_type = 'ui_page' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET work_order_type = 'ui_page' WHERE work_order_id = ?",
         (WO_OPEN_ID,),
     )
     conn.commit()

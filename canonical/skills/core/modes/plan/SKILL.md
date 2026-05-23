@@ -49,7 +49,7 @@ Use these templates to structure your plan:
 9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
 9b. **Persist tasks to DB** — After writing tasks.md, call:
     `add_tasks_from_file(work_order_id=..., tasks_file=Path(".planning/specs/<topic>/tasks.md"), source_root=..., dream_studio_home=...)`
-    This reads the numbered list from tasks.md and inserts each item as a `ds_tasks` row.
+    This reads the numbered list from tasks.md and inserts each item as a `business_tasks` row.
     If `work_order_id` is unknown or the call returns `{"ok": False}`, keep the file artifact and note DB persistence was skipped.
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:

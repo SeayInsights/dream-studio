@@ -903,9 +903,17 @@ class ProjectionEngine:
         is_v2 = bool(proj.source_canonical) and bool(proj.consumed_event_types)
 
         if is_v2 and proj.source_canonical in ("business", "ai", "both"):
-            # V2 rebuild: truncate then replay from dual canonical.
-            with transaction() as conn:
-                proj.pre_rebuild(conn)
+            # V2 rebuild: truncate target tables with FK enforcement off so
+            # child tables referencing the projection target don't block DELETE.
+            # PRAGMA foreign_keys cannot be changed inside a transaction, so
+            # we use a raw connection here (separate from the replay transactions).
+            _raw = sqlite3.connect(self.db_path, timeout=30.0)
+            try:
+                _raw.execute("PRAGMA foreign_keys = OFF")
+                proj.pre_rebuild(_raw)
+                _raw.commit()
+            finally:
+                _raw.close()
 
             sources = (
                 ["business", "ai"] if proj.source_canonical == "both" else [proj.source_canonical]

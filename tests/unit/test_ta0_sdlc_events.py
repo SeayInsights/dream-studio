@@ -37,6 +37,57 @@ def _make_db() -> tuple[sqlite3.Connection, Path]:
             schema_version INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS business_projects (
+            project_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS business_milestones (
+            milestone_id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            due_date TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            order_index INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            stage_gate_json TEXT,
+            validation_expectations_json TEXT,
+            security_readiness_checks_json TEXT
+        );
+        CREATE TABLE IF NOT EXISTS business_work_orders (
+            work_order_id TEXT PRIMARY KEY,
+            project_id TEXT,
+            milestone_id TEXT,
+            title TEXT,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'created',
+            work_order_type TEXT,
+            created_at TEXT,
+            started_at TEXT,
+            closed_at TEXT,
+            blocked_at TEXT,
+            unblocked_at TEXT,
+            block_reason TEXT,
+            source_event_id TEXT,
+            last_event_id TEXT,
+            last_updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+            updated_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS business_tasks (
+            task_id TEXT PRIMARY KEY,
+            work_order_id TEXT NOT NULL,
+            project_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS ds_projects (
             project_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -50,6 +101,7 @@ def _make_db() -> tuple[sqlite3.Connection, Path]:
             project_id TEXT NOT NULL,
             title TEXT NOT NULL,
             description TEXT,
+            due_date TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             order_index INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
@@ -63,16 +115,7 @@ def _make_db() -> tuple[sqlite3.Connection, Path]:
             description TEXT,
             status TEXT NOT NULL DEFAULT 'open',
             work_order_type TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS ds_tasks (
-            task_id TEXT PRIMARY KEY,
-            work_order_id TEXT NOT NULL,
-            project_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
+            block_reason TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -83,6 +126,11 @@ def _make_db() -> tuple[sqlite3.Connection, Path]:
 
 def _seed_project(conn: sqlite3.Connection) -> str:
     pid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
+        (pid,),
+    )
     conn.execute(
         "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
         " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
@@ -95,6 +143,11 @@ def _seed_project(conn: sqlite3.Connection) -> str:
 def _seed_milestone(conn: sqlite3.Connection, project_id: str) -> str:
     mid = str(uuid.uuid4())
     conn.execute(
+        "INSERT INTO business_milestones (milestone_id, project_id, title, status, created_at, updated_at)"
+        " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
+        (mid, project_id),
+    )
+    conn.execute(
         "INSERT INTO ds_milestones (milestone_id, project_id, title, status, created_at, updated_at)"
         " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
         (mid, project_id),
@@ -105,6 +158,12 @@ def _seed_milestone(conn: sqlite3.Connection, project_id: str) -> str:
 
 def _seed_work_order(conn: sqlite3.Connection, project_id: str, milestone_id: str) -> str:
     wid = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
+        " VALUES (?, ?, ?, 'WO1', 'created', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
+        (wid, project_id, milestone_id),
+    )
     conn.execute(
         "INSERT INTO ds_work_orders"
         " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
@@ -428,9 +487,9 @@ class TestForwardEmissionIntegration:
             patch("spool.writer.write_event", side_effect=fake_write),
         ):
             conn.execute(
-                "INSERT INTO ds_work_orders"
+                "INSERT INTO business_work_orders"
                 " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
-                " VALUES ('wo-test','proj-test','ms-test','Test WO','open','feature','2026-01-01','2026-01-01')"
+                " VALUES ('wo-test','proj-test','ms-test','Test WO','created','feature','2026-01-01','2026-01-01')"
             )
             conn.commit()
             start_work_order(

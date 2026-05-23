@@ -25,21 +25,21 @@ def db_path(tmp_path: Path) -> Path:
     # Seed a UI-typed work order and a non-UI work order.
     conn = sqlite3.connect(str(target))
     conn.execute(
-        "INSERT INTO ds_projects VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
         ("p1", "Test Project", "", "active", NOW, NOW),
     )
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, status,"
         " work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, NULL, ?, '', 'open', 'api_endpoint', ?, ?)",
+        " VALUES (?, ?, NULL, ?, '', 'created', 'api_endpoint', ?, ?)",
         (WO_ID, "p1", "Backend WO", NOW, NOW),
     )
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, status,"
         " work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, NULL, ?, '', 'open', 'ui_page', ?, ?)",
+        " VALUES (?, ?, NULL, ?, '', 'created', 'ui_page', ?, ?)",
         (UI_WO_ID, "p1", "UI WO", NOW, NOW),
     )
     conn.commit()
@@ -228,28 +228,28 @@ def test_start_work_order_blocks_when_earlier_milestone_incomplete(
     # Add two milestones with order_index 0 and 1, and an open WO in milestone 0.
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO ds_milestones"
+        "INSERT INTO business_milestones"
         " (milestone_id, project_id, title, description, status, order_index, created_at, updated_at)"
         " VALUES (?, ?, ?, '', 'pending', ?, ?, ?)",
         ("ms0", "p1", "First", 0, NOW, NOW),
     )
     conn.execute(
-        "INSERT INTO ds_milestones"
+        "INSERT INTO business_milestones"
         " (milestone_id, project_id, title, description, status, order_index, created_at, updated_at)"
         " VALUES (?, ?, ?, '', 'pending', ?, ?, ?)",
         ("ms1", "p1", "Second", 1, NOW, NOW),
     )
     # Add a still-open WO in milestone 0.
     conn.execute(
-        "INSERT INTO ds_work_orders"
+        "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, description, status,"
         " work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, '', 'open', 'api_endpoint', ?, ?)",
+        " VALUES (?, ?, ?, ?, '', 'created', 'api_endpoint', ?, ?)",
         ("wo-blocker", "p1", "ms0", "Earlier", NOW, NOW),
     )
     # Move the target WO into milestone 1.
     conn.execute(
-        "UPDATE ds_work_orders SET milestone_id = 'ms1' WHERE work_order_id = ?",
+        "UPDATE business_work_orders SET milestone_id = 'ms1' WHERE work_order_id = ?",
         (WO_ID,),
     )
     conn.commit()

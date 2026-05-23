@@ -31,55 +31,55 @@ def db_home(tmp_path):
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Test Project', 'desc', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_projects VALUES (?, 'Other Project', 'desc2', 'active', ?, ?)",
+            "INSERT INTO business_projects VALUES (?, 'Other Project', 'desc2', 'active', ?, ?)",
             (PROJECT_ID_2, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_milestones"
+            "INSERT INTO business_milestones"
             " (milestone_id, project_id, title, description, due_date, status, created_at, updated_at)"
             " VALUES (?, ?, 'Milestone One', NULL, NULL, 'active', ?, ?)",
             (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Build login form', NULL, 'open', 'ui_component', ?, ?)",
+            " VALUES (?, ?, ?, 'Build login form', NULL, 'created', 'ui_component', ?, ?)",
             (WORK_ORDER_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Typeless order', NULL, 'open', ?, ?)",
+            " VALUES (?, ?, NULL, 'Typeless order', NULL, 'created', ?, ?)",
             (WORK_ORDER_ID_NULL_TYPE, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Bad type order', NULL, 'open', 'nonexistent_type', ?, ?)",
+            " VALUES (?, ?, NULL, 'Bad type order', NULL, 'created', 'nonexistent_type', ?, ?)",
             (WORK_ORDER_ID_BAD_TYPE, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_work_orders"
+            "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Other project order', NULL, 'open', 'api_endpoint', ?, ?)",
+            " VALUES (?, ?, NULL, 'Other project order', NULL, 'created', 'api_endpoint', ?, ?)",
             (WORK_ORDER_ID_P2, PROJECT_ID_2, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES ('task-0001', ?, ?, 'Write HTML', 'pending', ?, ?)",
             (WORK_ORDER_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO ds_tasks"
+            "INSERT INTO business_tasks"
             " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
             " VALUES ('task-0002', ?, ?, 'Already done', 'complete', ?, ?)",
             (WORK_ORDER_ID, PROJECT_ID, NOW, NOW),
@@ -182,7 +182,7 @@ def test_start_updates_status_to_in_progress(db_home, tmp_path, monkeypatch):
     conn = sqlite3.connect(str(db_home / "state" / "studio.db"))
     try:
         status = conn.execute(
-            "SELECT status FROM ds_work_orders WHERE work_order_id = ?",
+            "SELECT status FROM business_work_orders WHERE work_order_id = ?",
             (WORK_ORDER_ID,),
         ).fetchone()[0]
     finally:
@@ -255,12 +255,12 @@ def test_list_filters_by_project_id(db_home, tmp_path, monkeypatch, capsys):
 
 
 def test_list_filters_by_status(db_home, tmp_path, monkeypatch, capsys):
-    rc = _list(db_home, monkeypatch, extra=["--status", "open"])
+    rc = _list(db_home, monkeypatch, extra=["--status", "created"])
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
-    assert all(wo["status"] == "open" for wo in out["work_orders"])
+    assert all(wo["status"] == "created" for wo in out["work_orders"])
 
-    rc2 = _list(db_home, monkeypatch, extra=["--status", "complete"])
+    rc2 = _list(db_home, monkeypatch, extra=["--status", "closed"])
     assert rc2 == 0
     out2 = json.loads(capsys.readouterr().out)
     assert out2["work_orders"] == []

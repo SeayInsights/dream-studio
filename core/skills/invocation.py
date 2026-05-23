@@ -133,7 +133,7 @@ def _resolve_project_id(
             if db_path is not None:
                 with _connect(db_path) as conn:
                     row = conn.execute(
-                        "SELECT project_id FROM ds_work_orders WHERE work_order_id = ?",
+                        "SELECT project_id FROM business_work_orders WHERE work_order_id = ?",
                         (work_order_id,),
                     ).fetchone()
                     if row:
@@ -335,7 +335,7 @@ def seed_gate_artifact_files(
             if db_path is not None:
                 with _connect(db_path) as conn:
                     existing = conn.execute(
-                        "SELECT brief_id FROM ds_design_briefs"
+                        "SELECT brief_id FROM business_design_briefs"
                         " WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
                         (project_id,),
                     ).fetchone()

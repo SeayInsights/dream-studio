@@ -74,7 +74,7 @@ def run_gate_check(
     if gate_name == "design_brief_locked":
         try:
             row = conn.execute(
-                "SELECT 1 FROM ds_design_briefs"
+                "SELECT 1 FROM business_design_briefs"
                 " WHERE project_id = ? AND status = 'locked' LIMIT 1",
                 (project_id,),
             ).fetchone()
@@ -174,7 +174,7 @@ def _lookup_work_order_and_gates(conn: Any, work_order_id: str) -> dict[str, Any
 
     wo_row = conn.execute(
         "SELECT work_order_id, title, status, work_order_type, project_id, milestone_id"
-        " FROM ds_work_orders WHERE work_order_id = ?",
+        " FROM business_work_orders WHERE work_order_id = ?",
         (work_order_id,),
     ).fetchone()
     if wo_row is None:
@@ -187,7 +187,7 @@ def _lookup_work_order_and_gates(conn: Any, work_order_id: str) -> dict[str, Any
     if wo_type:
         type_row = conn.execute(
             "SELECT pre_build_gate, build_executor, post_build_gate"
-            " FROM ds_work_order_types WHERE type_id = ?",
+            " FROM business_work_order_types WHERE type_id = ?",
             (wo_type,),
         ).fetchone()
         if type_row is not None:
@@ -309,7 +309,7 @@ def close_work_order(
             "ok": True,
             "work_order_id": str,
             "title": str,
-            "status": "complete",
+            "status": "closed",
             "forced": bool,
             "bypassed_gates": list[str],   # populated when force=True
             "next_work_order": {...} | absent,
@@ -407,7 +407,7 @@ def close_work_order(
             pass
 
         conn.execute(
-            "UPDATE ds_work_orders SET status = 'complete', updated_at = ?"
+            "UPDATE business_work_orders SET status = 'closed', updated_at = ?"
             " WHERE work_order_id = ?",
             (now, work_order_id),
         )
@@ -417,8 +417,8 @@ def close_work_order(
         milestone_complete = False
         if wo_milestone_id:
             next_row = conn.execute(
-                "SELECT work_order_id, title, work_order_type FROM ds_work_orders"
-                " WHERE milestone_id = ? AND status = 'open' ORDER BY created_at ASC LIMIT 1",
+                "SELECT work_order_id, title, work_order_type FROM business_work_orders"
+                " WHERE milestone_id = ? AND status = 'created' ORDER BY created_at ASC LIMIT 1",
                 (wo_milestone_id,),
             ).fetchone()
             if next_row:
@@ -430,8 +430,8 @@ def close_work_order(
                 }
             else:
                 remaining = conn.execute(
-                    "SELECT COUNT(*) FROM ds_work_orders"
-                    " WHERE milestone_id = ? AND status NOT IN ('complete', 'cancelled')",
+                    "SELECT COUNT(*) FROM business_work_orders"
+                    " WHERE milestone_id = ? AND status NOT IN ('closed', 'cancelled')",
                     (wo_milestone_id,),
                 ).fetchone()[0]
                 if remaining == 0:
@@ -441,7 +441,7 @@ def close_work_order(
         "ok": True,
         "work_order_id": work_order_id,
         "title": title,
-        "status": "complete",
+        "status": "closed",
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
     }

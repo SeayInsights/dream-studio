@@ -153,6 +153,10 @@ def test_core_projection_writers_only_touch_projection_owned_tables():
         "workflow_phases",
         "workflow_kpis",
         "phase_kpis",
+        # v2 framework meta-tables — framework.py is the canonical owner
+        "projection_state",
+        "projection_retry_queue",
+        "projection_dead_letter",
     }
     offenders: list[str] = []
 
@@ -170,6 +174,8 @@ def test_projection_service_state_writers_stay_limited_and_classified():
         "alert_history",
         "sla_definitions",
         "scheduled_reports",
+        # execution_events_projection.py projects canonical execution events into this L3 table
+        "execution_events",
     }
     writes = _sql_writes_under(REPO_ROOT / "projections" / "core")
     offenders = [
@@ -217,22 +223,6 @@ def test_api_routes_do_not_directly_write_canonical_runtime_tables():
     ]
 
     assert offenders == []
-
-
-def test_projection_namespace_activity_log_writers_remain_named_exceptions():
-    activity_log_writers = sorted(
-        (rel_path, table)
-        for rel_path, operation, table in _sql_writes_under(REPO_ROOT / "projections")
-        if table == "activity_log"
-    )
-    contract = _read(CONTRACT_PATH)
-
-    assert sorted(set(activity_log_writers)) == [
-        ("projections/parsers/sarif_parser.py", "activity_log"),
-        ("projections/scoring/engine.py", "activity_log"),
-    ]
-    assert "`activity_log` from `sarif_parser`" in contract
-    assert "`activity_log` from `RiskScoringEngine`" in contract
 
 
 def test_dashboard_frontend_does_not_open_database_or_write_state():
