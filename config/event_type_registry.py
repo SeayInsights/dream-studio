@@ -82,6 +82,12 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "Work order blocked with a stated reason",
     ),
     RegistryEntry(
+        "work_order.unblocked",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order unblocked and returned to in_progress state",
+    ),
+    RegistryEntry(
         "work_order.closed",
         _BUSINESS,
         "meaningful-unit",

@@ -233,6 +233,11 @@ def main(argv: list[str] | None = None) -> int:
 
     add_memory_subcommand(subcommands)
 
+    # projection subcommand group (Phase 18.1.5)
+    from interfaces.cli.projection_cli import add_projection_subcommand
+
+    add_projection_subcommand(subcommands)
+
     # project subcommand group (Slice 4 WS3 + Slice 5b)
     project = subcommands.add_parser("project", help="Manage Dream Studio projects")
     project_sub = project.add_subparsers(dest="project_command", required=True)
@@ -750,6 +755,10 @@ def main(argv: list[str] | None = None) -> int:
             return _milestone_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "task":
             return _task_dispatch(args)
+        if args.command == "projection":
+            from interfaces.cli.projection_cli import handle_projection_command
+
+            return handle_projection_command(args)
         if args.command == "diagnostics":
             return _diagnostics_dispatch(args)
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
