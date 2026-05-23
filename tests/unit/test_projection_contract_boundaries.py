@@ -225,26 +225,6 @@ def test_api_routes_do_not_directly_write_canonical_runtime_tables():
     assert offenders == []
 
 
-@pytest.mark.xfail(
-    reason="activity_log dropped in migration 063; sarif_parser and engine now write via canonical event spool",
-    strict=True,
-)
-def test_projection_namespace_activity_log_writers_remain_named_exceptions():
-    activity_log_writers = sorted(
-        (rel_path, table)
-        for rel_path, operation, table in _sql_writes_under(REPO_ROOT / "projections")
-        if table == "activity_log"
-    )
-    contract = _read(CONTRACT_PATH)
-
-    assert sorted(set(activity_log_writers)) == [
-        ("projections/parsers/sarif_parser.py", "activity_log"),
-        ("projections/scoring/engine.py", "activity_log"),
-    ]
-    assert "`activity_log` from `sarif_parser`" in contract
-    assert "`activity_log` from `RiskScoringEngine`" in contract
-
-
 def test_dashboard_frontend_does_not_open_database_or_write_state():
     frontend_root = REPO_ROOT / "projections" / "frontend"
     forbidden_tokens = [

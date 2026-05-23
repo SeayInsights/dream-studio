@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 
@@ -101,44 +100,6 @@ def test_alert_evaluator_honors_explicit_db_path(monkeypatch, tmp_path):
 
     assert triggered[0]["rule_id"] == rule_id
     assert rows == [(rule_id, 0.5, "critical")]
-
-
-@pytest.mark.xfail(
-    reason="activity_log dropped in migration 063; engine.fetch_unscored_events now reads canonical_events",
-    strict=True,
-)
-def test_risk_scoring_engine_reads_explicit_db_path(monkeypatch, tmp_path):
-    monkeypatch.setattr(risk_engine_module, "get_connection", _forbid_global_db)
-    monkeypatch.setattr(risk_engine_module, "transaction", _forbid_global_db)
-
-    db_path = tmp_path / "risk.db"
-    with studio_db._db_transaction(db_path) as conn:
-        conn.execute(
-            """
-            INSERT INTO activity_log (
-                activity_type,
-                event_timestamp,
-                severity,
-                stream_type,
-                stream_id,
-                event_data
-            ) VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                "security.finding",
-                "2026-05-10T00:00:00+00:00",
-                "warning",
-                "security",
-                "finding-1",
-                json.dumps({"file_path": "app.py"}),
-            ),
-        )
-
-    engine = RiskScoringEngine(str(db_path))
-    events = engine.fetch_unscored_events(limit=10)
-
-    assert len(events) == 1
-    assert events[0]["activity_type"] == "security.finding"
 
 
 def test_risk_scoring_writer_uses_configured_transaction_helper():
