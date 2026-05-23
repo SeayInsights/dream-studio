@@ -43,7 +43,7 @@ _WEEKLY_RE = re.compile(r"^spool-processed-\d{4}-\d{2}-\d{2}\.zip$")
 _YEARLY_RE = re.compile(r"^spool-processed-\d{4}\.zip$")
 
 _LARGE_WEEKLY_THRESHOLD = 1000  # events
-_LARGE_YEARLY_THRESHOLD = 52    # weekly zips
+_LARGE_YEARLY_THRESHOLD = 52  # weekly zips
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +135,7 @@ def restore_weekly(
     print("Ingesting events...")
     result = ingest_pending(root=root, db_path=db_path)
     print(
-        f"Done: processed={result.processed}, failed={result.failed}, "
-        f"skipped={result.skipped}"
+        f"Done: processed={result.processed}, failed={result.failed}, " f"skipped={result.skipped}"
     )
 
 
@@ -199,13 +198,11 @@ def restore_yearly(
 
     with zipfile.ZipFile(archive_path) as outer:
         weekly_members = [
-            m for m in outer.infolist()
-            if not m.is_dir() and m.filename.endswith(".zip")
+            m for m in outer.infolist() if not m.is_dir() and m.filename.endswith(".zip")
         ]
         for idx, weekly_member in enumerate(weekly_members, start=1):
             print(
-                f"  Processing weekly zip {idx}/{len(weekly_members)}: "
-                f"{weekly_member.filename}"
+                f"  Processing weekly zip {idx}/{len(weekly_members)}: " f"{weekly_member.filename}"
             )
             raw = outer.read(weekly_member)
             with zipfile.ZipFile(io.BytesIO(raw)) as inner:
@@ -219,8 +216,7 @@ def restore_yearly(
     print("Ingesting events...")
     result = ingest_pending(root=root, db_path=db_path)
     print(
-        f"Done: processed={result.processed}, failed={result.failed}, "
-        f"skipped={result.skipped}"
+        f"Done: processed={result.processed}, failed={result.failed}, " f"skipped={result.skipped}"
     )
 
 
@@ -289,8 +285,7 @@ def main() -> int:
 
     if not archive_path.exists():
         print(
-            f"ERROR: Archive not found: {archive_path}\n"
-            f"Expected location: {archive_dir}",
+            f"ERROR: Archive not found: {archive_path}\n" f"Expected location: {archive_dir}",
             file=sys.stderr,
         )
         return 1

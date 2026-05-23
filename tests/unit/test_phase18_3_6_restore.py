@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Import the restore script as a module
 # ---------------------------------------------------------------------------
@@ -103,9 +102,9 @@ def test_classify_invalid():
 def test_json_members_filters_non_json(tmp_path):
     zp = tmp_path / "test.zip"
     with zipfile.ZipFile(zp, "w") as zf:
-        zf.writestr("a.json", '{}')
+        zf.writestr("a.json", "{}")
         zf.writestr("b.txt", "text")
-        zf.writestr("c.json", '{}')
+        zf.writestr("c.json", "{}")
     with zipfile.ZipFile(zp, "r") as zf:
         members = restore._json_members(zf)
     names = [m.filename for m in members]
@@ -284,6 +283,7 @@ def test_round_trip_weekly_archive_then_restore(spool_root, tmp_path):
     restore_root = tmp_path / "restore_root"
     restore_root.mkdir()
     from spool.states import ensure_dirs as ed
+
     ed(restore_root)
 
     restore_inbox = state_dir(SpoolState.SPOOL, restore_root)

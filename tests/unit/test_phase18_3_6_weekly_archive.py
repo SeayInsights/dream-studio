@@ -15,7 +15,6 @@ import pytest
 from spool.lifecycle import _prior_week_monday, _week_timestamps, archive_week
 from spool.states import SpoolState, ensure_dirs, state_dir
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

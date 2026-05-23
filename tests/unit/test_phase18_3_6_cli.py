@@ -22,7 +22,6 @@ from interfaces.cli.ds_spool import (
 )
 from spool.states import SpoolState, ensure_dirs, state_dir
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -38,7 +37,6 @@ def _write_prior_week_file(processed_dir: Path) -> Path:
     path = processed_dir / f"{eid}.json"
     path.write_text(json.dumps({"event_id": eid}), encoding="utf-8")
     # Set mtime to 14 days ago (safely in the prior-week window)
-    old_ts = (datetime.date.today() - datetime.timedelta(days=14)).strftime
     ts = (datetime.datetime.now() - datetime.timedelta(days=14)).timestamp()
     os.utime(path, (ts, ts))
     return path
@@ -60,7 +58,7 @@ def test_cmd_archive_happy_path(spool_root, capsys):
     """archive command returns exit 0 and prints JSON with ok=True."""
     ensure_dirs(spool_root)
     processed_dir = state_dir(SpoolState.PROCESSED, spool_root)
-    f = _write_prior_week_file(processed_dir)
+    _write_prior_week_file(processed_dir)
 
     args = _make_args()
     rc = cmd_archive(args)

@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 # Existing command
 # ---------------------------------------------------------------------------
 
+
 def cmd_ingest(args) -> int:
     """Process all pending spool events."""
     from spool.ingestor import ingest_pending
@@ -32,6 +33,7 @@ def cmd_ingest(args) -> int:
 # Command 1: ds spool archive
 # ---------------------------------------------------------------------------
 
+
 def cmd_archive(args) -> int:
     """Bundle prior-week processed files into a dated zip."""
     from spool.lifecycle import archive_week
@@ -45,6 +47,7 @@ def cmd_archive(args) -> int:
 # Command 2: ds spool consolidate-year [YEAR]
 # ---------------------------------------------------------------------------
 
+
 def cmd_consolidate_year(args) -> int:
     """Bundle prior-year weekly archives into a single yearly zip."""
     from spool.lifecycle import consolidate_year
@@ -57,6 +60,7 @@ def cmd_consolidate_year(args) -> int:
 # ---------------------------------------------------------------------------
 # Command 3: ds spool archives list
 # ---------------------------------------------------------------------------
+
 
 def cmd_archives_list(args) -> int:
     """List .zip files in the archives directory."""
@@ -84,6 +88,7 @@ def cmd_archives_list(args) -> int:
 # ---------------------------------------------------------------------------
 # Command 4: ds spool archives inspect <archive_name>
 # ---------------------------------------------------------------------------
+
 
 def cmd_archives_inspect(args) -> int:
     """List entries inside a spool archive zip."""
@@ -114,6 +119,7 @@ def cmd_archives_inspect(args) -> int:
 # Fallback for bare "ds spool archives"
 # ---------------------------------------------------------------------------
 
+
 def _cmd_archives_help(args) -> int:
     print("Usage: ds spool archives <subcommand>", file=sys.stderr)
     print("Subcommands: list, inspect", file=sys.stderr)
@@ -123,6 +129,7 @@ def _cmd_archives_help(args) -> int:
 # ---------------------------------------------------------------------------
 # Parser registration
 # ---------------------------------------------------------------------------
+
 
 def add_spool_subcommand(subparsers):
     """Register the 'spool' subcommand group onto the parent parser."""

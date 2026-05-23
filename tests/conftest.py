@@ -224,13 +224,13 @@ def guard_real_homedir(tmp_path, monkeypatch):
         pass
 
     if _before_events_mtime is not None and real_events.exists():
-        assert real_events.stat().st_mtime == _before_events_mtime, (
-            "Test modified real ~/.dream-studio/events. Use the spool_root fixture."
-        )
+        assert (
+            real_events.stat().st_mtime == _before_events_mtime
+        ), "Test modified real ~/.dream-studio/events. Use the spool_root fixture."
     if _before_int_mtime is not None and real_integrations.exists():
-        assert real_integrations.stat().st_mtime == _before_int_mtime, (
-            "Test modified real ~/.dream-studio/integrations. Use the ds_home fixture."
-        )
+        assert (
+            real_integrations.stat().st_mtime == _before_int_mtime
+        ), "Test modified real ~/.dream-studio/integrations. Use the ds_home fixture."
     if _before_db_mtime is not None and real_db.is_file():
         assert real_db.stat().st_mtime == _before_db_mtime, (
             "Test wrote to real ~/.dream-studio/state/studio.db.\n"

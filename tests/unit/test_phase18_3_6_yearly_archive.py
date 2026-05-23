@@ -14,7 +14,6 @@ import pytest
 from spool.lifecycle import consolidate_year
 from spool.states import SpoolState, ensure_dirs, state_dir
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -103,7 +102,7 @@ def test_yearly_archive_ignores_current_year_weeklies(spool_root):
     ensure_dirs(spool_root)
     arch_dir = state_dir(SpoolState.ARCHIVES, spool_root)
 
-    _make_weekly_archive(arch_dir, "2025-12-29")       # prior year → consolidated
+    _make_weekly_archive(arch_dir, "2025-12-29")  # prior year → consolidated
     current = _make_weekly_archive(arch_dir, "2026-01-06")  # current year → untouched
 
     result = consolidate_year(root=spool_root, today=_TODAY)

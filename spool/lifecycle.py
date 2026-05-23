@@ -156,9 +156,7 @@ def archive_week(
         }
 
     if not _verify_zip(archive_path, len(candidates)):
-        logger.error(
-            "Weekly archive %s failed verification; originals preserved.", archive_name
-        )
+        logger.error("Weekly archive %s failed verification; originals preserved.", archive_name)
         try:
             archive_path.unlink(missing_ok=True)
         except OSError:
@@ -346,8 +344,6 @@ def check_and_archive(root: Optional[Path] = None) -> None:
                     result["archives_consolidated"],
                 )
             elif not result["ok"]:
-                logger.warning(
-                    "[lifecycle] Yearly consolidation failed: %s", result.get("error")
-                )
+                logger.warning("[lifecycle] Yearly consolidation failed: %s", result.get("error"))
         except Exception:
             logger.exception("[lifecycle] Yearly consolidation raised unexpectedly")
