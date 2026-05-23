@@ -21,7 +21,6 @@ if str(REPO_ROOT) not in sys.path:
 from core.config.database import get_connection, transaction  # noqa: E402
 from core.config.paths import state_dir  # noqa: E402
 
-
 # ── Engine / runner factories ─────────────────────────────────────────────────
 
 
@@ -122,8 +121,7 @@ def _cmd_list() -> int:
     """List all registered projections with their state from projection_state."""
     try:
         with get_connection(read_only=True) as conn:
-            rows = conn.execute(
-                """
+            rows = conn.execute("""
                 SELECT
                     projection_name,
                     last_processed_business_event_id,
@@ -133,8 +131,7 @@ def _cmd_list() -> int:
                     last_run_at
                 FROM projection_state
                 ORDER BY projection_name
-                """
-            ).fetchall()
+                """).fetchall()
     except Exception as exc:
         print(f"Error reading projection_state: {exc}", file=sys.stderr)
         return 1
@@ -341,14 +338,12 @@ def _fetch_dl_rows(projection_filter: Optional[str]) -> list:
                 """,
                 (projection_filter,),
             ).fetchall()
-        return conn.execute(
-            """
+        return conn.execute("""
             SELECT id, event_id, projection_name, failed_at,
                    retry_count, status, error_message
             FROM projection_dead_letter
             ORDER BY failed_at DESC
-            """
-        ).fetchall()
+            """).fetchall()
 
 
 def _cmd_dl_retry(event_id: str) -> int:

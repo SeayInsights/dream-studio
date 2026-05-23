@@ -684,7 +684,7 @@ class TestWorkOrderMalformedEvents:
         # Should not raise, but may return 0 or 1 depending on work_order_id resolution.
         # The key test is that it doesn't crash.
         try:
-            result = _call_handle(proj, event, tmp_db)
+            _call_handle(proj, event, tmp_db)
         except Exception as exc:
             pytest.fail(f"handle() raised unexpectedly on empty payload: {exc}")
 

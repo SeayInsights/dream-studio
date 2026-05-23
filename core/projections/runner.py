@@ -143,15 +143,13 @@ class ProjectionRunner:
             # Find the most-recent cursor timestamp across all projection_state rows.
             # We use the max of both cursor columns to represent "last seen anywhere".
             with get_connection(read_only=True) as conn:
-                row = conn.execute(
-                    """
+                row = conn.execute("""
                     SELECT MAX(
                         COALESCE(last_processed_business_event_id, ''),
                         COALESCE(last_processed_ai_event_id, '')
                     )
                     FROM projection_state
-                    """
-                ).fetchone()
+                    """).fetchone()
                 last_event_id = row[0] if row and row[0] else None
 
             # Resolve the timestamp for the cursor event (if we have one).

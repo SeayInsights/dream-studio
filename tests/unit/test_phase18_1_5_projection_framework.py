@@ -273,7 +273,7 @@ class TestRetryPolicy:
         policy = RetryPolicy(base_delay_seconds=5.0)
         before = datetime.now(timezone.utc)
         ts = policy.next_retry_at(0)
-        after = datetime.now(timezone.utc)
+        _ = before  # before/after bracket the timestamp for ordering assertions below
 
         # Parse the returned ISO timestamp.
         dt = datetime.fromisoformat(ts)
@@ -810,8 +810,6 @@ class TestDeadLetterAndRetry:
 
         assert retry_row is not None
         # next_retry_at should be in the future (not a past date).
-        retry_at = datetime.fromisoformat(retry_row[0])
-        now_utc = datetime.now(timezone.utc)
         # The retry scheduled by the first cycle must not already be in the past
         # (base_delay is at least 1s, so this should hold within any reasonable test runtime).
         # We just verify the row still exists (not fired) by running cycle again
