@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 18.1.3 Correlation ID Infrastructure (2026-05-22)
+
+- **`core/correlation/composer.py`** — canonical implementation of correlation ID composition rules. Functions: `compose(parts)` builds `sess-X:wf-Y:skill-Z:agent-A:hook-H:tool-T` from a dict; `decompose(cid)` parses back to components; `extend(base, entity_type, entity_id)` adds a context level; `validate(cid)` checks format; `normalize_legacy(cid)` normalizes pre-18.1.3 IDs. Uses lookahead regex splitting so skill IDs containing colons (e.g. `ds-security:scan`) are preserved as single segments.
+- **`core/correlation/__init__.py`** — public re-export of all five composer functions.
+- **Ingestor delegation** (`spool/ingestor.py`) — `_extract_correlation_ids()` now delegates string composition to `core.correlation.composer.compose()` instead of building it inline. Extraction logic (reading trace/payload/top-level fields) stays in the ingestor; composition is canonical.
+- **Backfill script** (`scripts/backfill_correlation_ids.py`) — best-effort correlation ID backfill for all three event tables. Per-row: if valid → kept; if malformed → normalized; if missing → reconstructed from ID columns + trace JSON; if unfixable → marked. Safe to re-run. Live result: 2770 events checked, 756 valid (kept), 0 malformed, 2014 missing (historical events without reconstructible context).
+- **Validation utility** (`tools/correlation_validate.py`) — walks recent events, validates composition rules, reports malformed/missing per table. Exit 0 if all valid, exit 1 if any malformed, exit 2 on DB error. Flags: `--limit`, `--since`, `--db-path`, `--json`. Live result: 0 malformed across all three tables.
+- **54 unit tests** (`tests/unit/test_phase18_1_3_correlation.py`) — covers compose/decompose/extend/validate/normalize_legacy, ingestor integration, backfill dry-run/live, and validation tool.
+
 ### Added — Phase 18.1.2 Dual Canonical Structure + Event Type Registry (2026-05-22)
 
 - **`business_canonical_events` table** — new L2a business canonical table (migration 067). 14 columns including denormalized project_id, milestone_id, work_order_id, task_id for index-backed SDLC queries. 12 explicit indexes (correlation_id, event_type, project_id, milestone_id, work_order_id, task_id, event_timestamp, received_at, compound pairs). Does not replace `canonical_events` — both coexist during Phase 18.1.x transition.

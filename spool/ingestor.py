@@ -172,9 +172,12 @@ def _extract_correlation_ids(envelope: dict[str, Any]) -> dict[str, Any]:
     """Extract correlation IDs from a CanonicalEventEnvelope dict.
 
     Pulls session_id, project_id, and context IDs from top-level fields,
-    trace dict, and payload dict (in that priority order). Composes a
-    correlation_id string from non-null components.
+    trace dict, and payload dict (in that priority order). Delegates string
+    composition to core.correlation.composer so all emitters share a single
+    composition implementation (Phase 18.1.3).
     """
+    from core.correlation.composer import compose as _compose
+
     # Normalize trace
     trace = envelope.get("trace", {})
     if isinstance(trace, str):
@@ -217,22 +220,17 @@ def _extract_correlation_ids(envelope: dict[str, Any]) -> dict[str, Any]:
     model_id = trace.get("model_id")
     adapter_id = trace.get("adapter_id")
 
-    # Compose correlation_id from non-null components in defined order
-    parts = []
-    if session_id is not None:
-        parts.append(f"sess-{session_id}")
-    if workflow_id is not None:
-        parts.append(f"wf-{workflow_id}")
-    if skill_id is not None:
-        parts.append(f"skill-{skill_id}")
-    if agent_id is not None:
-        parts.append(f"agent-{agent_id}")
-    if hook_id is not None:
-        parts.append(f"hook-{hook_id}")
-    if tool_id is not None:
-        parts.append(f"tool-{tool_id}")
-
-    correlation_id = ":".join(parts) if parts else None
+    # Delegate composition to the canonical composer (Phase 18.1.3 formalized rules).
+    correlation_id = _compose(
+        {
+            "session": session_id,
+            "workflow": workflow_id,
+            "skill": skill_id,
+            "agent": agent_id,
+            "hook": hook_id,
+            "tool": tool_id,
+        }
+    )
 
     return {
         "session_id": session_id,

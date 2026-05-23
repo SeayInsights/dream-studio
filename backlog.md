@@ -7,7 +7,7 @@
 | 18.0 — Foundation hardening | Complete — PR #46 (2026-05-22) |
 | 18.1.1 — Raw layer infrastructure | Complete — PR #47 (2026-05-22) |
 | 18.1.2 — Dual canonical structure | Complete — PR pending (2026-05-22) |
-| 18.1.3 — Correlation ID infrastructure | Pending |
+| 18.1.3 — Correlation ID infrastructure | Complete — PR pending (2026-05-22) |
 | 18.1.4 — Event type registry | Complete — embedded in 18.1.2 PR (2026-05-22) |
 | 18.1.5 — Projection framework | Pending |
 | 18.1.6 — Project entity family reconciliation | Pending |
