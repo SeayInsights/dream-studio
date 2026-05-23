@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 18.1.2 Dual Canonical Structure + Event Type Registry (2026-05-22)
+
+- **`business_canonical_events` table** — new L2a business canonical table (migration 067). 14 columns including denormalized project_id, milestone_id, work_order_id, task_id for index-backed SDLC queries. 12 explicit indexes (correlation_id, event_type, project_id, milestone_id, work_order_id, task_id, event_timestamp, received_at, compound pairs). Does not replace `canonical_events` — both coexist during Phase 18.1.x transition.
+- **`ai_canonical_events` table** — new L2b AI canonical table (migration 067). 16 columns including denormalized session_id, skill_id, workflow_id, agent_id, hook_id, model_id for index-backed AI analytics queries. 13 explicit indexes including compound (session × type, skill × time).
+- **Event type registry** (`config/event_type_registry.py`) — 85-entry routing registry mapping every known event_type to its canonical destination(s). `RegistryEntry` dataclass with `routes_to` tuple, `granularity_level`, and `description`. Public API: `get_routes()`, `is_registered()`, `get_entry()`, `all_entries()`. Unknown types default to both canonicals (safe over-record). Raw-only types (tool.execution.completed, tool.execution.started, hook.tool_activity) carry `granularity_level="mechanical-detail"` per Commitment 9.
+- **Ingestor dual canonical write** — `spool/ingestor.py` `_write_to_dual_canonical()` consults the event type registry on every ingest and routes to business, AI, both, or neither. Implemented as best-effort: dual canonical failure logs a warning but does not block the legacy `canonical_events` write. Raw write failure still blocks (inbox restore).
+- **Backfill script** (`scripts/backfill_dual_canonical.py`) — one-time best-effort reconstruction of 1,938 existing `canonical_events` rows into the dual canonical tables. Results: 56 → business_canonical_events, 743 → ai_canonical_events, 1,139 skipped as raw-only per Commitment 9. Source column set to `"backfill"`. Safe to re-run via INSERT OR IGNORE.
+- **Correlation join CLI** (`tools/canonical_join.py`) — verification utility for the dual canonical join. Supports `--stats`, `--list` (top correlation_ids by event count), `--correlation-id ID` (join both tables), `--json`, `--limit`, `--db-path`. Verified: 100 distinct correlation_ids present in ai_canonical_events after backfill.
+
 ### Added — Phase 18.1.1 Raw Layer Infrastructure (2026-05-22)
 
 - **`raw_claude_code_events` table** — new L1 raw layer table (migration 066) that preserves the full native event shape for every Claude Code event. 14 indexes cover individual correlation ID components (session_id, project_id, workflow_id, skill_id, agent_id, hook_id, tool_id), the composed `correlation_id`, event_type, received_at, event_timestamp, and compound pairs (project × time, type × time, session × type). Part of the v2 data architecture; future adapters get their own tables.
