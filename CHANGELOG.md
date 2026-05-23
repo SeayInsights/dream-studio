@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Phase 18.1.1 Raw Layer Infrastructure (2026-05-22)
+
+- **`raw_claude_code_events` table** — new L1 raw layer table (migration 066) that preserves the full native event shape for every Claude Code event. 14 indexes cover individual correlation ID components (session_id, project_id, workflow_id, skill_id, agent_id, hook_id, tool_id), the composed `correlation_id`, event_type, received_at, event_timestamp, and compound pairs (project × time, type × time, session × type). Part of the v2 data architecture; future adapters get their own tables.
+- **Ingestor dual-write** — `spool/ingestor.py` now writes to `raw_claude_code_events` FIRST before writing to `canonical_events`. Raw write failure returns the spool file to the inbox for retry on the next ingest run; canonical write is only attempted after a successful raw write.
+- **`_extract_correlation_ids()`** — new ingestor function that extracts session_id, project_id, workflow_id, skill_id, agent_id, hook_id, tool_id, model_id, adapter_id from top-level fields, trace, and payload; composes a `correlation_id` string in the form `sess-X:wf-Y:skill-Z:agent-A:hook-H:tool-T` (only non-null parts included).
+- **Backfill script** (`scripts/backfill_raw_claude_code_events.py`) — one-time best-effort reconstruction of 1,909 existing `canonical_events` rows into `raw_claude_code_events` via `INSERT OR IGNORE`. Backfilled rows carry `_backfill=True` in source_payload. Safe to re-run.
+- **Drill-down CLI** (`tools/raw_drilldown.py`) — interactive query tool for `raw_claude_code_events` supporting `--stats`, `--correlation-id`, `--session-id`, `--workflow-id`, `--skill-id`, `--hook-id`, `--tool-id`, `--project-id`, `--event-type`, `--limit`, `--json`, and `--db-path` flags.
+
 ### Fixed — Phase 18.0 Emergency Cleanup (2026-05-22)
 - **C1 — spool/emitter.py created**: `on-context-threshold.py` imported `from spool.emitter import emit` but the module did not exist, silently failing every context threshold event. `spool/emitter.emit()` now wraps `CanonicalEventEnvelope` + `write_envelopes` with a non-raising interface (returns `True`/`False`).
 - **C2 — Handoff TTL guards**: `on-prompt-validate.py` can no longer leave `pending-handoff.json` alive indefinitely. Added `HANDOFF_STALE_TTL_S=300` and `HANDOFF_INJECTION_WINDOW_S=60` constants. Files older than 300s are deleted; `in_progress` files past 60s are cleaned up. Discards logged to `DS_DIAGNOSTICS_DIR/stale-handoff.jsonl`.

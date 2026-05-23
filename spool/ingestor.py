@@ -138,11 +138,187 @@ def _process_one(
             result.failed += 1
             return
 
+    # Phase 18.1.1: write to raw FIRST (v2 data architecture — raw before canonical)
+    # If raw write fails, the spool file returns to inbox for retry.
+    try:
+        _write_to_raw_sqlite(data, db_path)
+    except Exception:
+        # Restore file to inbox so it retries on next ingest run.
+        try:
+            os.replace(processing_path, event_file)
+        except OSError:
+            pass
+        raise  # re-raise: outer handler in ingest() decides skip vs fail
+
     _write_to_sqlite(data, db_path)
 
     processed_path = processed_dir / event_file.name
     os.replace(processing_path, processed_path)
     result.processed += 1
+
+
+def _extract_correlation_ids(envelope: dict[str, Any]) -> dict[str, Any]:
+    """Extract correlation IDs from a CanonicalEventEnvelope dict.
+
+    Pulls session_id, project_id, and context IDs from top-level fields,
+    trace dict, and payload dict (in that priority order). Composes a
+    correlation_id string from non-null components.
+    """
+    # Normalize trace
+    trace = envelope.get("trace", {})
+    if isinstance(trace, str):
+        try:
+            trace = json.loads(trace)
+        except (json.JSONDecodeError, TypeError):
+            trace = {}
+    if not isinstance(trace, dict):
+        trace = {}
+
+    # Normalize payload
+    payload = envelope.get("payload", {})
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+
+    def _first(*candidates):
+        for v in candidates:
+            if v is not None:
+                return v
+        return None
+
+    session_id = _first(
+        envelope.get("session_id"), trace.get("session_id"), payload.get("session_id")
+    )
+    project_id = _first(
+        envelope.get("project_id"), trace.get("project_id"), payload.get("project_id")
+    )
+    workflow_id = _first(
+        trace.get("workflow_id"), trace.get("stream_id"), payload.get("workflow_id")
+    )
+    skill_id = _first(trace.get("skill_id"), trace.get("skill_specifier"))
+    agent_id = _first(trace.get("agent_id"), payload.get("agent_id"))
+    hook_id = trace.get("hook_id")
+    tool_id = trace.get("tool_id")
+    model_id = trace.get("model_id")
+    adapter_id = trace.get("adapter_id")
+
+    # Compose correlation_id from non-null components in defined order
+    parts = []
+    if session_id is not None:
+        parts.append(f"sess-{session_id}")
+    if workflow_id is not None:
+        parts.append(f"wf-{workflow_id}")
+    if skill_id is not None:
+        parts.append(f"skill-{skill_id}")
+    if agent_id is not None:
+        parts.append(f"agent-{agent_id}")
+    if hook_id is not None:
+        parts.append(f"hook-{hook_id}")
+    if tool_id is not None:
+        parts.append(f"tool-{tool_id}")
+
+    correlation_id = ":".join(parts) if parts else None
+
+    return {
+        "session_id": session_id,
+        "project_id": project_id,
+        "workflow_id": workflow_id,
+        "skill_id": skill_id,
+        "agent_id": agent_id,
+        "hook_id": hook_id,
+        "tool_id": tool_id,
+        "model_id": model_id,
+        "adapter_id": adapter_id,
+        "correlation_id": correlation_id,
+    }
+
+
+def _write_to_raw_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
+    """Write a raw event to raw_claude_code_events before canonical ingest.
+
+    Uses CREATE TABLE IF NOT EXISTS and INSERT OR IGNORE for idempotency.
+    Indexes are created inline so the table is queryable even if the full
+    migration set has not been applied yet.
+    """
+    import datetime
+
+    ids = _extract_correlation_ids(envelope)
+    received_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    source_payload = json.dumps(envelope)
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path), timeout=5.0)
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS raw_claude_code_events (
+                event_id TEXT PRIMARY KEY,
+                received_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+                event_type TEXT NOT NULL,
+                event_timestamp TEXT NOT NULL,
+                schema_version INTEGER NOT NULL DEFAULT 1,
+                source_payload TEXT NOT NULL DEFAULT '{}',
+                session_id TEXT,
+                project_id TEXT,
+                workflow_id TEXT,
+                skill_id TEXT,
+                agent_id TEXT,
+                hook_id TEXT,
+                tool_id TEXT,
+                model_id TEXT,
+                adapter_id TEXT,
+                correlation_id TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_cce_event_type ON raw_claude_code_events(event_type)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_cce_received_at ON raw_claude_code_events(received_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_cce_correlation_id ON raw_claude_code_events(correlation_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_cce_session_id ON raw_claude_code_events(session_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_cce_project_id ON raw_claude_code_events(project_id)"
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO raw_claude_code_events
+            (event_id, received_at, event_type, event_timestamp, schema_version,
+             source_payload, session_id, project_id, workflow_id, skill_id,
+             agent_id, hook_id, tool_id, model_id, adapter_id, correlation_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                envelope["event_id"],
+                received_at,
+                envelope["event_type"],
+                envelope["timestamp"],
+                envelope.get("schema_version", 1),
+                source_payload,
+                ids["session_id"],
+                ids["project_id"],
+                ids["workflow_id"],
+                ids["skill_id"],
+                ids["agent_id"],
+                ids["hook_id"],
+                ids["tool_id"],
+                ids["model_id"],
+                ids["adapter_id"],
+                ids["correlation_id"],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _write_to_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
