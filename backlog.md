@@ -1,5 +1,27 @@
 # Dream Studio — Backlog
 
+## Phase 18 — v2 Architectural Realignment
+
+| Workstream | Status |
+|-----------|--------|
+| 18.0 — Foundation hardening | Complete — PR #46 (2026-05-22) |
+| 18.1.1 — Raw layer infrastructure | Complete — PR pending (2026-05-22) |
+| 18.1.2 — Dual canonical structure | Pending |
+| 18.1.3 — Correlation ID infrastructure | Pending |
+| 18.1.4 — Event type registry | Pending |
+| 18.1.5 — Projection framework | Pending |
+| 18.1.6 — Project entity family reconciliation | Pending |
+| 18.2 — Writer migration | Pending (starts after 18.1) |
+| 18.3 — File-state migration | Pending (parallel after 18.1) |
+| 18.4 — Security, product readiness, onboarding | Pending (after 18.1) |
+| 18.5 — Telemetry spine completion | Pending (parallel after 18.1) |
+| 18.6 — Schema rationalization | Pending (after 18.2 + 18.3) |
+| 18.7 — Documentation and cleanup | Pending (final) |
+
+See `.planning/phase-18-architectural-realignment.md` for full scope and exit criteria.
+
+---
+
 ## Post-Phase-TA Workstreams
 
 ### brownfield-sdlc-import
