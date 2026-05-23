@@ -595,15 +595,45 @@ def _cleanup_stale_sessions(root: Path | None = None) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Check if a process with the given PID is alive."""
-    try:
-        os.kill(pid, 0)
-        return True
-    except (ProcessLookupError, PermissionError):
-        return False
-    except (OSError, SystemError):
-        # SystemError can occur on Windows when os.kill raises a C-level error
-        return True  # can't tell; assume alive
+    """Check if a process with the given PID is alive.
+
+    Uses platform-specific implementations:
+    - Windows: OpenProcess + GetExitCodeProcess via ctypes. We can't use
+      os.kill(pid, 0) here because on Windows it can actually terminate
+      the target process (including the current process when checking
+      our own pid). This caused pytest sessions to die mid-test when a
+      test created a session file for its own pid and ingest cleanup
+      called _pid_alive on it.
+    - POSIX: os.kill(pid, 0) is the standard liveness probe.
+    """
+    if sys.platform == "win32":
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return False  # Couldn't open process; assume dead
+        try:
+            exit_code = wintypes.DWORD()
+            if kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return exit_code.value == STILL_ACTIVE
+            return False
+        finally:
+            kernel32.CloseHandle(handle)
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # Process exists, we just can't signal it
+        except OSError:
+            return True
 
 
 def _move_to_failed(src: Path, failed_dir: Path, reason: str) -> None:
