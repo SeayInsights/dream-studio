@@ -463,6 +463,18 @@ def start_work_order(
     except Exception:
         pass
 
+    try:
+        _db = _require_db(source_root, dream_studio_home)
+        with _connect(_db) as conn:
+            conn.execute(
+                "UPDATE business_work_orders"
+                " SET status = 'in_progress', started_at = ?, updated_at = ?, last_updated_at = ?"
+                " WHERE work_order_id = ?",
+                (now, now, now, work_order_id),
+            )
+    except Exception:
+        pass
+
     result: dict[str, Any] = {
         "ok": True,
         "work_order_id": work_order_id,

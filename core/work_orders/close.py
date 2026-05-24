@@ -406,6 +406,13 @@ def close_work_order(
         except Exception:
             pass
 
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = 'closed', closed_at = ?, updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (now, now, now, work_order_id),
+        )
+
         next_wo: dict[str, Any] | None = None
         milestone_complete = False
         if wo_milestone_id:

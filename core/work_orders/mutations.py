@@ -159,6 +159,14 @@ def block_work_order(
         _, title, project_id = wo_row
         now = datetime.now(timezone.utc).isoformat()
 
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = 'blocked', blocked_at = ?, block_reason = ?,"
+            " updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (now, reason, now, now, work_order_id),
+        )
+
         try:
             import spool.writer as _spool_writer
 
@@ -219,6 +227,14 @@ def unblock_work_order(
             }
 
         now = datetime.now(timezone.utc).isoformat()
+
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = 'in_progress', unblocked_at = ?, block_reason = NULL,"
+            " updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (now, now, now, work_order_id),
+        )
 
     try:
         import spool.writer as _spool_writer
@@ -377,6 +393,14 @@ def create_work_order(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
+
+        conn.execute(
+            "INSERT OR IGNORE INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description,"
+            " status, work_order_type, created_at, updated_at, last_updated_at)"
+            " VALUES (?, ?, ?, ?, '', 'created', ?, ?, ?, ?)",
+            (work_order_id, project_id, milestone_id, title, work_order_type, now, now, now),
+        )
 
     try:
         import spool.writer as _spool_writer
