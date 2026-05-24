@@ -174,3 +174,7 @@ docs/security-skills-redundancy-analysis.md
 docs/token-reduction-summary.md
 docs/design-skills-guide.md
 docs/demo-script.md
+
+# Local dev artifacts (session output files)
+coverage-first-output.txt
+paths-to-scrub.txt

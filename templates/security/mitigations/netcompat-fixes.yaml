@@ -85,7 +85,7 @@
       CA_BUNDLE = "/app/certs/my-custom-ca.crt"  # hardcoded — no Zscaler CA
 
       response = requests.get(
-          "https://api.kroger.com/v1/products",
+          "https://api.acme-corp.com/v1/products",
           verify=CA_BUNDLE
       )
     code_after: |
@@ -96,11 +96,11 @@
       CA_BUNDLE = os.environ.get("REQUESTS_CA_BUNDLE", certifi.where())
 
       response = requests.get(
-          "https://api.kroger.com/v1/products",
+          "https://api.acme-corp.com/v1/products",
           verify=CA_BUNDLE
       )
   long_term_fix: "Build a combined CA bundle in the CI/CD pipeline that merges certifi's store + the Zscaler root CA + any internal CAs, and distribute it as a build artifact or environment variable; this eliminates the need for per-code-instance CA configuration"
-  verification_test: "REQUESTS_CA_BUNDLE=/etc/ssl/certs/zscaler-combined.crt python -c \"import requests; r = requests.get('https://api.kroger.com/v1/products', headers={'Authorization': 'Bearer test'}); print(r.status_code)\" — expect 401 (auth failure) not SSL error"
+  verification_test: "REQUESTS_CA_BUNDLE=/etc/ssl/certs/zscaler-combined.crt python -c \"import requests; r = requests.get('https://api.acme-corp.com/v1/products', headers={'Authorization': 'Bearer test'}); print(r.status_code)\" — expect 401 (auth failure) not SSL error"
   effort_estimate: "1h per instance + CA bundle build"
   requires_context: true
   references:

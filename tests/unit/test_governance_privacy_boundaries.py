@@ -80,7 +80,6 @@ SCANNER_EVIDENCE_TABLES = {
 }
 
 AUTHORITY_RESIDUE_TOKENS = {
-    "kroger",
     "power bi",
     "powerbi",
     "hipaa",

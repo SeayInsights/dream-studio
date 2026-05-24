@@ -16,7 +16,7 @@
 | Abbrev | Stands For | Context |
 |--------|-----------|---------|
 | [abbr] | [full form] | [where used] |
-| ***REMOVED*** | ***REMOVED*** | Appears in org names, table prefixes |
+| [abbr] | [full form] | [where used] |
 
 ## What Words Mean Here
 

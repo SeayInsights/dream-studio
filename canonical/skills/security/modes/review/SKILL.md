@@ -96,7 +96,7 @@ This mode integrates three reference documents:
    - Technology-specific checks (GraphQL, gRPC, Power BI, Power Apps)
    - Industry-specific checks (retail, financial services, e-commerce)
    - Compliance-focused checks (GDPR, HIPAA, PCI DSS, SOC 2)
-   - ***REMOVED***/***REMOVED*** examples (retail analytics, vendor data, loyalty programs)
+   - Industry client examples (retail analytics, vendor data, loyalty programs)
 
 ## Examples
 
@@ -104,7 +104,7 @@ See `references/examples.md` for:
 - PR security review workflow
 - Pre-commit review with custom rules
 - Review → mitigate → comply pipeline
-- Retail-specific review (***REMOVED*** client)
+- Retail-specific review (example client)
 
 ## Important Notes
 

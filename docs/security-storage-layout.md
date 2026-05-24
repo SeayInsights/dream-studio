@@ -48,7 +48,7 @@ All security skills write to `~/.dream-studio/security/`. This is the single sou
 ### Scan Results
 **Pattern:** `scans/{client}/{repo}/{YYYY-MM-DD}/`
 
-**Example:** `scans/kroger/vendor-portal/2026-04-26/semgrep.sarif`
+**Example:** `scans/acme-corp/vendor-portal/2026-04-26/semgrep.sarif`
 
 **Written by:** `scan:ingest`, `dast:run`  
 **Read by:** `secure`, `mitigate`, `comply`, `security-dashboard`
@@ -59,9 +59,9 @@ All security skills write to `~/.dream-studio/security/`. This is the single sou
 **Pattern:** `datasets/{client}/{dataset}.csv`
 
 **Examples:**
-- `datasets/kroger/mitigations.csv`
-- `datasets/kroger/compliance.csv`
-- `datasets/kroger/dashboard-export-2026-04-26.csv`
+- `datasets/acme-corp/mitigations.csv`
+- `datasets/acme-corp/compliance.csv`
+- `datasets/acme-corp/dashboard-export-2026-04-26.csv`
 
 **Written by:** `mitigate`, `comply`, `security-dashboard`  
 **Read by:** `security-dashboard` (ETL), Power BI (external)
@@ -71,7 +71,7 @@ All security skills write to `~/.dream-studio/security/`. This is the single sou
 ### Generated Rules
 **Pattern:** `rules/{client}/{category}.yaml`
 
-**Example:** `rules/kroger/injection.yaml`
+**Example:** `rules/acme-corp/injection.yaml`
 
 **Written by:** `scan:setup`  
 **Read by:** GitHub Actions scanner workflow (external)
@@ -81,7 +81,7 @@ All security skills write to `~/.dream-studio/security/`. This is the single sou
 ### Actions Workflows
 **Pattern:** `actions/{client}/security-scan.yml`
 
-**Example:** `actions/kroger/security-scan.yml`
+**Example:** `actions/acme-corp/security-scan.yml`
 
 **Written by:** `scan:setup`  
 **Deployed to:** `.github/workflows/security-scan.yml` (user commits to each repo)

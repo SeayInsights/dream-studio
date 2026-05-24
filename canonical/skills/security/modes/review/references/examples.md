@@ -51,7 +51,7 @@ Workflow:
 
 ---
 
-## Example 4: Retail-Specific Review (***REMOVED*** Client)
+## Example 4: Retail-Specific Review (Example Client)
 
 ```
 User: "Review this Power BI dashboard code"

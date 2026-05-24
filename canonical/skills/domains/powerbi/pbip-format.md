@@ -130,7 +130,7 @@ role 'Region Managers'
 
 ## PBIP Detection
 
-- Never hardcode `.SemanticModel` in scripts or searches — projects use named folders like `Sales.SemanticModel` or `***REMOVED***Dashboard.SemanticModel`
+- Never hardcode `.SemanticModel` in scripts or searches — projects use named folders like `Sales.SemanticModel` or `AcmeDashboard.SemanticModel`
 - Detect dynamically using a `*.SemanticModel` glob pattern
 - Store the detected path as `PBIP_DIR` and reuse it throughout the script — do not re-detect per operation
 

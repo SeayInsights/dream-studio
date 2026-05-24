@@ -272,7 +272,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Generate fix recommendations for compliance-mapped security findings"
     )
-    parser.add_argument("--client", required=True, help="Client name (e.g. plmarketing-kroger)")
+    parser.add_argument("--client", required=True, help="Client name (e.g. acme-corp)")
     parser.add_argument("--input", help="Path to compliance-mapped findings JSON. Default: stdin")
     parser.add_argument("--output", help="Output file path. Default: stdout")
     args = parser.parse_args()

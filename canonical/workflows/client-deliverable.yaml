@@ -1,6 +1,6 @@
 name: client-deliverable
 description: >
-  ***REMOVED*** client delivery pipeline — intake → plan → build → validate → screenshot → summary → deliver.
+  Client delivery pipeline — intake → plan → build → validate → screenshot → summary → deliver.
   Supports Power BI, Power Automate, Power Apps deliverables.
 version: 1
 on_failure: abort

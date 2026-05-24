@@ -230,8 +230,8 @@ TEMPLATE EXPORTED: {client}
 ### metadata.json
 ```json
 {
-  "client_name": "***REMOVED***",
-  "enterprise": "***REMOVED***",
+  "client_name": "AcmeCorp",
+  "enterprise": "AcmeOrg",
   "scan_date": "2026-04-22",
   "total_repos": 12,
   "total_findings": 147,
@@ -280,14 +280,14 @@ After `generate` or `refresh`, update `~/.dream-studio/feeds/security.json`:
 ```json
 {
   "last_scan": {
-    "client": "plmarketing-kroger",
+    "client": "acme-corp",
     "date": "2026-04-22",
     "repos_scanned": 12,
     "findings_count": 147,
     "org_score": 62.4
   },
   "last_report": {
-    "path": "~/.dream-studio/security/reports/plmarketing-kroger/executive-report-2026-04-22.md",
+    "path": "~/.dream-studio/security/reports/acme-corp/executive-report-2026-04-22.md",
     "date": "2026-04-22"
   },
   "active_workflow": null
