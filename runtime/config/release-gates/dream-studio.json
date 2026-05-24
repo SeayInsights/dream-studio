@@ -44,5 +44,6 @@
     "python interfaces/cli/contract_docs_drift_gate.py",
     "python interfaces/cli/contract_atlas_lifecycle_gate.py",
     "python scripts/runtime_state_hash_guard.py --help"
-  ]
+  ],
+  "_last_reviewed": "2026-05-24 Phase 18.1.13: ds validate/doctor help text clarified health planes; README health-checks section added; fresh-install-validation.md requires both commands. No gate policy change."
 }
