@@ -340,7 +340,7 @@ Requires: `pip install pyyaml`
 
 **Examples:**
 ```
-py scripts/validate_client_profile.py clients/kroger.yaml
+py scripts/validate_client_profile.py clients/acme-corp.yaml
 ```
 
 ---

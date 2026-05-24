@@ -477,7 +477,7 @@ def generate_sample() -> list[dict]:
             "target_name": "data-processor",
             "rule_id": "BIN-str-2",
             "severity": "medium",
-            "message": "Embedded URL found in binary: https://internal-api.plmarketing.com/v2/data",
+            "message": "Embedded URL found in binary: https://internal-api.acme-corp.com/v2/data",
             "cwe": "CWE-200",
             "owasp": "A01:2021",
             "scanner": "strings",

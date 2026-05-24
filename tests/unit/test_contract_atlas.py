@@ -308,8 +308,8 @@ def test_sanitizer_scrubs_posix_and_dream_studio_paths() -> None:
         },
         "windows_user_with_space": {
             "installed_runtime_model": {
-                "canonical_sqlite_path": "C:\\Users\\Dannis Seay\\.dream-studio\\state\\studio.db",
-                "source_build_location": "C:\\Users\\Dannis Seay\\builds\\dream-studio",
+                "canonical_sqlite_path": "C:\\Users\\Example User\\.dream-studio\\state\\studio.db",
+                "source_build_location": "C:\\Users\\Example User\\builds\\dream-studio",
             },
         },
         "appdata_path": {

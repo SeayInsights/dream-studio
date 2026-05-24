@@ -447,7 +447,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Export enriched security findings to Power BI-ready CSVs"
     )
-    parser.add_argument("--client", required=True, help="Client name (e.g. plmarketing-kroger)")
+    parser.add_argument("--client", required=True, help="Client name (e.g. acme-corp)")
     parser.add_argument("--input", help="Path to enriched findings JSON. Default: stdin")
     parser.add_argument(
         "--output-dir",

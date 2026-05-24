@@ -342,7 +342,7 @@ def generate_sample() -> list[dict]:
     raw = [
         {
             "target_name": "vendor-portal-web",
-            "url": "https://vendor.plmarketing.com/api/vendors",
+            "url": "https://vendor.acme-corp.com/api/vendors",
             "http_method": "POST",
             "rule_id": "DAST-zap-40018",
             "severity": "high",
@@ -356,7 +356,7 @@ def generate_sample() -> list[dict]:
         },
         {
             "target_name": "vendor-portal-web",
-            "url": "https://vendor.plmarketing.com/login",
+            "url": "https://vendor.acme-corp.com/login",
             "http_method": "GET",
             "rule_id": "DAST-zap-10038",
             "severity": "medium",
@@ -370,7 +370,7 @@ def generate_sample() -> list[dict]:
         },
         {
             "target_name": "vendor-portal-web",
-            "url": "https://vendor.plmarketing.com/api/export",
+            "url": "https://vendor.acme-corp.com/api/export",
             "http_method": "GET",
             "rule_id": "DAST-zap-40009",
             "severity": "high",
@@ -384,7 +384,7 @@ def generate_sample() -> list[dict]:
         },
         {
             "target_name": "vendor-portal-web",
-            "url": "https://vendor.plmarketing.com",
+            "url": "https://vendor.acme-corp.com",
             "http_method": "",
             "rule_id": "DAST-nuc-tech-detect-flask",
             "severity": "info",
@@ -398,7 +398,7 @@ def generate_sample() -> list[dict]:
         },
         {
             "target_name": "pricing-api-web",
-            "url": "https://api.plmarketing.com/v1/prices",
+            "url": "https://api.acme-corp.com/v1/prices",
             "http_method": "GET",
             "rule_id": "DAST-zap-40040",
             "severity": "medium",
@@ -412,7 +412,7 @@ def generate_sample() -> list[dict]:
         },
         {
             "target_name": "pricing-api-web",
-            "url": "https://api.plmarketing.com/.env",
+            "url": "https://api.acme-corp.com/.env",
             "http_method": "GET",
             "rule_id": "DAST-nuc-exposure-env",
             "severity": "critical",

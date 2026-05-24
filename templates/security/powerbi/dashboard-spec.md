@@ -221,7 +221,7 @@ CALCULATE(
 |   +-------------------+    +-----------------------------+   |
 |                            |  SEVERITY BREAKDOWN (donut) |   |
 |   +-------------------+    |     Critical: 3             |   |
-|   | KROGER-READY      |    |     High: 18               |   |
+|   | ACME-READY        |    |     High: 18               |   |
 |   | [BADGE]           |    |     Medium: 67              |   |
 |   +-------------------+    |     Low: 59                 |   |
 |                            +-----------------------------+   |
@@ -304,13 +304,13 @@ RETURN
     )
 ```
 
-#### V1.4 — Kroger-Ready Badge
+#### V1.4 — Acme-Ready Badge
 - **Type:** Card
 - **Position:** Left column, below RAG badge
-- **Value:** `[Kroger Ready Badge]`
+- **Value:** `[Acme Ready Badge]`
 
 ```dax
-Kroger Ready Badge =
+Acme Ready Badge =
 VAR _isolation_failures =
     CALCULATE(
         COUNTROWS(Findings),
@@ -327,21 +327,21 @@ VAR _data_exposure =
 RETURN
     IF(
         _isolation_failures = 0 && _data_exposure = 0,
-        "KROGER-READY",
-        "NOT KROGER-READY (" & (_isolation_failures + _data_exposure) & " blocking)"
+        "ACME-READY",
+        "NOT ACME-READY (" & (_isolation_failures + _data_exposure) & " blocking)"
     )
 ```
 
 ```dax
-Kroger Ready Color =
+Acme Ready Color =
 IF(
-    CONTAINSSTRING([Kroger Ready Badge], "NOT"),
+    CONTAINSSTRING([Acme Ready Badge], "NOT"),
     "#C62828",
     "#2E7D32"
 )
 ```
 
-- **Conditional formatting:** Font color = `[Kroger Ready Color]`
+- **Conditional formatting:** Font color = `[Acme Ready Color]`
 
 #### V1.5 — Key Stats Cards
 - **Type:** Multi-row card
@@ -2144,7 +2144,7 @@ RETURN
 
 ## Page 12: Vendor Data Isolation Deep Dive
 
-**Purpose:** Dedicated view for multi-tenant data isolation audit. Shows tenant scoping coverage across all repos, IDOR findings matrix, and vendor data leakage risks. Critical for Kroger vendor data protection.
+**Purpose:** Dedicated view for multi-tenant data isolation audit. Shows tenant scoping coverage across all repos, IDOR findings matrix, and vendor data leakage risks. Critical for Acme vendor data protection.
 
 **Primary data source:** Findings table filtered to access control rules
 **Filter:** Rule IDs containing `auth-001`, `auth-002`, `auth-004`, or CWE-639, CWE-284, CWE-200

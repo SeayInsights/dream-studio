@@ -444,7 +444,7 @@ class PPTXTemplateLoader:
         # Contact info
         contact_box = slide.shapes.add_textbox(Inches(2), Inches(3.5), Inches(6), Inches(1))
         contact_frame = contact_box.text_frame
-        contact_frame.text = "dream-studio analytics\ndannis.seay@twinrootsllc.com"
+        contact_frame.text = "dream-studio analytics\ninfo@example.com"
         for p in contact_frame.paragraphs:
             p.font.size = Pt(18)
             p.font.color.rgb = self.colors["secondary"]

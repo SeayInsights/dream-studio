@@ -5,7 +5,7 @@ Implements TR-007
 
 Usage:
     py -3.12 analyze_netcompat.py --client <name> [--scans-dir <path>]
-    py -3.12 analyze_netcompat.py --sample --client plmarketing-kroger
+    py -3.12 analyze_netcompat.py --sample --client acme-corp
 
 Score formula (per repo, starts at 100, floor 0):
     cert_pinning violation    : -20 per instance
@@ -197,7 +197,7 @@ def build_sample_profile(client_name: str) -> dict:
     return {
         "client": {
             "name": client_name,
-            "github_org": "plmarketing",
+            "github_org": "acme-corp",
         },
         "network": {
             "proxy": {

@@ -91,7 +91,7 @@ Each category should:
 - Deadlock potential in bidirectional streaming
 ```
 
-## PLMarketing/Kroger-Specific Examples
+## AcmeCorp-Specific Examples
 
 ### Retail Analytics Security
 
@@ -129,11 +129,11 @@ Each category should:
 - Scheduled refresh failures exposing connection details in emails
 ```
 
-### Kroger Client-Specific Checks
+### AcmeCorp Client-Specific Checks
 
 ```
-**Kroger Data Handling:**
-- Customer loyalty data (Kroger Plus) exposed in analytics
+**AcmeCorp Data Handling:**
+- Customer loyalty data exposed in analytics
 - PII in transaction logs (names, addresses, payment methods)
 - Prescription data (pharmacy) not segregated with HIPAA controls
 - Employee data (schedules, wages) accessible outside HR systems
