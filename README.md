@@ -1,8 +1,8 @@
 # Dream Studio
 
-[![PR Smoke](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.12.0-blue.svg)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
+[![PR Smoke](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-2026.5.17-blue.svg)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 
 ## What Dream Studio Is
 
@@ -82,7 +82,7 @@ The script checks for Python 3.12+, installs it if missing, runs the Dream Studi
 
 ### 1. Clone the repository
 ```powershell
-git clone https://github.com/SeayInsights/dream-studio ~/builds/dream-studio-clean
+git clone https://github.com/SeayInsights/dream-studio-clean ~/builds/dream-studio-clean
 cd ~/builds/dream-studio-clean
 ```
 
@@ -150,7 +150,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "py C:\\path\\to\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
+            "command": "py C:\\Users\\<YOUR_USERNAME>\\builds\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
           }
         ]
       }
@@ -215,8 +215,8 @@ See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full 
 ### Spool
 | Command | Description |
 |---------|-------------|
-| `ds spool status` | Show spool file status |
-| `ds spool flush` | Flush spool events to SQLite |
+| `ds spool ingest` | Ingest pending spool events into SQLite |
+| `ds spool archive` | Archive processed spool events |
 
 ### Integrate
 | Command | Description |

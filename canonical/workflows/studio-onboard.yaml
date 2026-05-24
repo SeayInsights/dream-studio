@@ -916,9 +916,8 @@ nodes:
         print('emitted' if result else 'failed')
         "
         py -m interfaces.cli.ds spool ingest
-        py -m interfaces.cli.ds spool status
 
-      Pass: spool status shows 0 pending, no errors
+      Pass: spool ingest completes without errors
       Fail: errors during emit or ingest
 
       CHECK 8 — Skill invocation chain
