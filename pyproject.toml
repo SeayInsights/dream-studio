@@ -21,6 +21,8 @@ dependencies = [
     "uvicorn>=0.23",
     "httpx>=0.24",
     "python-multipart>=0.0.6",
+    "python-pptx>=0.6.21",
+    "openpyxl>=3.1.0",
 ]
 
 [project.scripts]

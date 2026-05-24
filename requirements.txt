@@ -26,6 +26,9 @@ python-multipart>=0.0.6
 # rebuff>=0.1
 # llm-guard>=0.3
 
+python-pptx>=0.6.21
+openpyxl>=3.1.0
+
 # Optional: tiktoken (for precise token counting in adapter builds)
 # tiktoken>=0.5
 # Optional: APScheduler (for report scheduler - recommended)
