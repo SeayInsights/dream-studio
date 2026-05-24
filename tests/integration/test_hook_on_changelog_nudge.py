@@ -17,9 +17,10 @@ def _run(handler, tmp_path, capsys, git_output: str = ""):
     sys.stdin = io.StringIO("{}")
     mod = handler("on-changelog-nudge")
 
-    with patch.object(
-        changelog_helpers, "get_git_status", return_value=git_output.splitlines()
-    ), patch.object(changelog_helpers, "find_project_root", return_value=tmp_path):
+    with (
+        patch.object(changelog_helpers, "get_git_status", return_value=git_output.splitlines()),
+        patch.object(changelog_helpers, "find_project_root", return_value=tmp_path),
+    ):
         mod.main()
 
     return capsys.readouterr().out

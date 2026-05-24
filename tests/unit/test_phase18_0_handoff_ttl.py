@@ -117,8 +117,9 @@ class TestHandoffTTLGuards:
 
         diag_dir = state_dir.parent / "diagnostics"
         env_patch = {"DS_DIAGNOSTICS_DIR": str(diag_dir)}
-        with patch("pathlib.Path.home", return_value=state_dir.parent.parent), patch.dict(
-            os.environ, env_patch
+        with (
+            patch("pathlib.Path.home", return_value=state_dir.parent.parent),
+            patch.dict(os.environ, env_patch),
         ):
             spec = importlib.util.spec_from_file_location(
                 "on_prompt_validate_diag",
