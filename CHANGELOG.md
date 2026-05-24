@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.13 — Install correctness + packaging: 12 pieces, fresh-install BLOCKER fixes (2026-05-24)
+
+### Fixed
+- `pyproject.toml` now contains a `[project]` section — `pip install -e .` was failing on fresh machines with "No `[project]` table in your pyproject.toml"
+- Three runtime dependencies added to `requirements.txt`: `python-pptx`, `openpyxl`, `pytest-asyncio` (missing from prior inventory)
+- Floating deps pinned; `pip check` conflicts resolved (3 conflicting packages); `requirements.lock` generated
+- Missing `__init__.py` files added across 6 packages (`runtime/`, `interfaces/`, `interfaces/cli/`, `shared/`, and two others) — resolves `ModuleNotFoundError` on fresh installs
+- Migration `011_memory_entries.sql` added; fresh-install migration gap closed: `_ensure_tables()` now validates the schema version rather than silently creating tables when migrations have not run
+- `ds` CLI commands now exit 0 on success; exit-code regression test added (`tests/unit/cli/test_exit_codes.py`)
+- `install.ps1` and `install.sh` now run `pip install -e .` and `ds rehearsal-install` before `ds integrate install` — prior scripts skipped both
+- README: fixed clone URL (was pointing to non-existent repo path), version badge, and CI badge
+- `test_github_pr_cicd_release_gate.py` assertion updated to `dream-studio-clean` repo name (unblocked `pr-smoke` CI gate)
+
+### Added
+- `docs/operations/fresh-install-validation.md` — step-by-step fresh-machine validation procedure; requires both `ds validate` (DB authority plane) and `ds doctor` (Claude Code integration plane)
+- `ds validate --help` updated with explicit plane label ("DB authority: schema version, migrations, module profiles") and cross-reference to `ds doctor`
+- `ds doctor --help` updated with explicit plane label ("Claude Code integration: hooks, skills, agents, routing") and cross-reference to `ds validate`
+- README "Health checks" section added documenting both planes and when to run each
+
+### Changed (style)
+- `black` formatting applied to pre-existing unformatted files (mechanical; no semantic changes)
+
+### Fixed (18.1.13.0 — test isolation, pulled forward from 18.1.16.3)
+- Systemic test isolation: `DREAM_STUDIO_HOME`, `DREAM_STUDIO_DB_PATH`, and `DS_SPOOL_ROOT` are now set at `conftest.py` **module import time** (before pytest collects or imports any test module). Root cause: `DatabaseRuntime` initializes a singleton on first use and caches the real DB path if any test module's import chain reaches it before a fixture can monkeypatch the env var. The top-of-conftest block ensures the singleton always sees the tmp path on developer machines.
+- `guard_real_homedir` mtime check now skips when `DREAM_STUDIO_DB_PATH` is redirected (the spool ingestor writes legitimate operator events to the real DB on developer machines, making mtime comparison a false positive). Guard now calls `pytest.exit(returncode=2)` on contamination instead of `assert`.
+- `tests/unit/cli/test_exit_codes.py`: `bootstrapped_db` fixture runs `ds rehearsal-install` + `ds project register` before tests that need a populated DB; `test_project_state_exits_zero` and `test_work_order_list_exits_zero` now pass
+- `tests/unit/cli/test_help.py` added: 4 tests enforcing that `ds validate` help references `ds doctor` and vice versa, with plane keywords present in each
+
+### Policy decisions
+- `ds validate` and `ds doctor` check genuinely different health planes and neither substitutes for the other. `ds validate` = DB authority (schema version, migrations, module profiles). `ds doctor` = Claude Code integration (hooks, skills, agents, routing). Both commands are required before declaring a fresh install healthy.
+- Test isolation is now an enforced contract at `conftest.py` import time, not a best-effort fixture. Pull-forward from 18.1.16.3 was validated safe: Category (i) damage assessment confirmed no operator data was corrupted.
+
+### Coverage baseline (post-18.1.13)
+- Scope: `tests/unit/ tests/integration/migrations/ tests/unit/cli/`
+- **2993 passed** / 109 pre-existing failures / 1 error / 10 xfailed / 1 skipped
+- Delta from pre-18.1.13 baseline (2935+ passed, 110 failures, 50 errors): +58 passing, −1 failure, −49 errors
+- Pre-existing failures categorized by phase home in `.planning/pre-existing-failures-categorized.md`
+
 ## Phase 18.1.12 — Audit follow-ups: fail-open gap, coverage scope, Sentry removal, env var audit (2026-05-23)
 
 ### Fixed

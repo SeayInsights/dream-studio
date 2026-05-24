@@ -74,7 +74,17 @@ def main(argv: list[str] | None = None) -> int:
 
     subcommands.add_parser("status", help="Show installed runtime status")
     subcommands.add_parser("version", help="Show Dream Studio source/runtime version")
-    _doctor_cmd = subcommands.add_parser("doctor", help="Run read-only runtime health checks")
+    _doctor_cmd = subcommands.add_parser(
+        "doctor",
+        help="Verify Claude Code integration health (skills, agents, hooks, routing)",
+        description=(
+            "Verify Claude Code integration health: dispatcher hooks wired, skills\n"
+            "installed and current, agents deployed, routing triggers covered, version\n"
+            "current. Use this after `ds integrate install` or before starting a session.\n"
+            "For DB-level health (schema version, migrations), use `ds validate`."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     _doctor_cmd.add_argument("--fix", action="store_true", help="Attempt to fix failing checks")
     subcommands.add_parser("repair", help="Plan repair actions without mutating state")
     _update_cmd = subcommands.add_parser("update", help="Update Dream Studio integration pack")
@@ -116,7 +126,16 @@ def main(argv: list[str] | None = None) -> int:
         default=15.0,
         help="Seconds to wait for dashboard readiness in --open/--check modes.",
     )
-    subcommands.add_parser("validate", help="Validate installed runtime readiness")
+    subcommands.add_parser(
+        "validate",
+        help="Verify DB health (schema version, migrations, module profiles)",
+        description=(
+            "Verify DB health: schema version, migration completeness, module profile\n"
+            "validity. Use this after migrations or DB-related changes. For Claude Code\n"
+            "integration health (skills, agents, hooks, routing), use `ds doctor`."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     subcommands.add_parser("contract-atlas", help="Show Contract Atlas summary")
     atlas_refresh = subcommands.add_parser(
         "contract-atlas-refresh",

@@ -798,9 +798,12 @@ def test_hook_commands_use_sys_executable_on_linux_mock(config_root, canonical_r
 
 def test_launcher_cmd_written_on_windows(ds_home):
     """Windows launcher must be ds.cmd."""
-    with patch("platform.system", return_value="Windows"), patch(
-        "integrations.installer.claude_code._write_path_to_profile",
-        return_value={"action": "skipped", "profile": ""},
+    with (
+        patch("platform.system", return_value="Windows"),
+        patch(
+            "integrations.installer.claude_code._write_path_to_profile",
+            return_value={"action": "skipped", "profile": ""},
+        ),
     ):
         result = _write_global_launcher(ds_home=ds_home)
     assert result["is_windows"] is True
@@ -809,9 +812,12 @@ def test_launcher_cmd_written_on_windows(ds_home):
 
 def test_launcher_shell_script_written_on_nonwindows(ds_home):
     """Non-Windows launcher must be 'ds' (no extension)."""
-    with patch("platform.system", return_value="Linux"), patch(
-        "integrations.installer.claude_code._write_path_to_profile",
-        return_value={"action": "skipped", "profile": ""},
+    with (
+        patch("platform.system", return_value="Linux"),
+        patch(
+            "integrations.installer.claude_code._write_path_to_profile",
+            return_value={"action": "skipped", "profile": ""},
+        ),
     ):
         result = _write_global_launcher(ds_home=ds_home)
     assert result["is_windows"] is False
@@ -823,9 +829,12 @@ def test_launcher_shell_script_is_executable_on_nonwindows(ds_home):
     """Non-Windows launcher must have executable bit set."""
     import stat as _stat
 
-    with patch("platform.system", return_value="Linux"), patch(
-        "integrations.installer.claude_code._write_path_to_profile",
-        return_value={"action": "skipped", "profile": ""},
+    with (
+        patch("platform.system", return_value="Linux"),
+        patch(
+            "integrations.installer.claude_code._write_path_to_profile",
+            return_value={"action": "skipped", "profile": ""},
+        ),
     ):
         result = _write_global_launcher(ds_home=ds_home)
     mode = Path(result["launcher_path"]).stat().st_mode
@@ -835,8 +844,9 @@ def test_launcher_shell_script_is_executable_on_nonwindows(ds_home):
 def test_path_line_added_to_profile_file(tmp_path):
     """_write_path_to_profile must append the DS PATH line to the profile."""
     bin_dir = tmp_path / "bin"
-    with patch("platform.system", return_value="Linux"), patch(
-        "pathlib.Path.home", return_value=tmp_path
+    with (
+        patch("platform.system", return_value="Linux"),
+        patch("pathlib.Path.home", return_value=tmp_path),
     ):
         result = _write_path_to_profile(bin_dir)
     assert result["action"] == "appended"
@@ -849,8 +859,9 @@ def test_path_line_added_to_profile_file(tmp_path):
 def test_path_line_not_duplicated_on_second_install(tmp_path):
     """_write_path_to_profile must be idempotent — second call must skip."""
     bin_dir = tmp_path / "bin"
-    with patch("platform.system", return_value="Linux"), patch(
-        "pathlib.Path.home", return_value=tmp_path
+    with (
+        patch("platform.system", return_value="Linux"),
+        patch("pathlib.Path.home", return_value=tmp_path),
     ):
         result1 = _write_path_to_profile(bin_dir)
         result2 = _write_path_to_profile(bin_dir)

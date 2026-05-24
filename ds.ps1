@@ -21,7 +21,7 @@ foreach ($candidate in @("py", "python3", "python")) {
     }
 }
 if (-not $PythonCmd) {
-    Write-Error "Python not found. Install Python 3.11+ and retry."
+    Write-Error "Python not found. Install Python 3.12+ and retry."
     exit 1
 }
 

@@ -673,9 +673,13 @@ def test_api_graph_endpoint_integration(client: TestClient, test_db: Path):
         return conn
 
     # Patch get_connection for verify_project_exists, _connect for graph queries
-    with patch(
-        "projections.api.routes.discovery_internal.get_connection", side_effect=mock_get_connection
-    ), patch("core.graph.query._connect", side_effect=mock_connect):
+    with (
+        patch(
+            "projections.api.routes.discovery_internal.get_connection",
+            side_effect=mock_get_connection,
+        ),
+        patch("core.graph.query._connect", side_effect=mock_connect),
+    ):
         response = client.get(f"/api/discovery/internal/graph/{project_id}")
 
     assert response.status_code == 200
@@ -843,12 +847,15 @@ def test_api_impact_endpoint_integration(client: TestClient, test_db: Path):
     ]
 
     # Patch get_connection (used by verify_component_exists) and analyze_impact
-    with patch(
-        "projections.api.routes.discovery_internal.get_connection",
-        side_effect=mock_get_db_connection,
-    ), patch(
-        "projections.api.routes.discovery_internal.graph_query.analyze_impact",
-        return_value=mock_impact,
+    with (
+        patch(
+            "projections.api.routes.discovery_internal.get_connection",
+            side_effect=mock_get_db_connection,
+        ),
+        patch(
+            "projections.api.routes.discovery_internal.graph_query.analyze_impact",
+            return_value=mock_impact,
+        ),
     ):
         response = client.get(f"/api/discovery/internal/impact/{comp_id}?depth=1")
 

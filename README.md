@@ -1,8 +1,8 @@
 # Dream Studio
 
-[![PR Smoke](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.12.0-blue.svg)](CHANGELOG.md)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](pyproject.toml)
+[![PR Smoke](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml/badge.svg)](https://github.com/SeayInsights/dream-studio-clean/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-2026.5.17-blue.svg)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 
 ## What Dream Studio Is
 
@@ -82,7 +82,7 @@ The script checks for Python 3.12+, installs it if missing, runs the Dream Studi
 
 ### 1. Clone the repository
 ```powershell
-git clone https://github.com/SeayInsights/dream-studio ~/builds/dream-studio-clean
+git clone https://github.com/SeayInsights/dream-studio-clean ~/builds/dream-studio-clean
 cd ~/builds/dream-studio-clean
 ```
 
@@ -90,6 +90,10 @@ cd ~/builds/dream-studio-clean
 ```powershell
 py -m pip install -r requirements.txt
 ```
+
+> **Reproducible installs:** `requirements.lock` pins all transitive dependencies to the exact versions
+> verified at release time. For strict reproducibility, use `pip install -r requirements.lock`.
+> For patch-version flexibility, use `pip install -r requirements.txt`.
 
 ### 3. Bootstrap the runtime database
 ```powershell
@@ -115,10 +119,14 @@ $env:PATH += ";$env:USERPROFILE\.dream-studio\bin"
 
 After adding to PATH, run `ds` from any directory.
 
-### 6. Run health check
+### 6. Run health checks
+
 ```powershell
-ds doctor
+ds validate   # DB health: schema version, migrations, module profiles
+ds doctor     # Integration health: skills, agents, hooks, routing
 ```
+
+Both must pass before first use. See [Health checks](#health-checks) for when to run each.
 
 ### 7. Register your first project
 
@@ -146,7 +154,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "py C:\\path\\to\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
+            "command": "py C:\\Users\\<YOUR_USERNAME>\\builds\\dream-studio-clean\\runtime\\hooks\\core\\on-post-tool-use.py"
           }
         ]
       }
@@ -211,8 +219,8 @@ See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full 
 ### Spool
 | Command | Description |
 |---------|-------------|
-| `ds spool status` | Show spool file status |
-| `ds spool flush` | Flush spool events to SQLite |
+| `ds spool ingest` | Ingest pending spool events into SQLite |
+| `ds spool archive` | Archive processed spool events |
 
 ### Integrate
 | Command | Description |
@@ -229,13 +237,13 @@ See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full 
 | `ds memory ingest-sessions` | Harvest intelligence from Claude Code session history |
 | `ds memory ingest-sessions --dry-run` | Preview harvest counts without writing |
 
-### Doctor / Validate
-| Command | Description |
-|---------|-------------|
-| `ds doctor` | Run read-only runtime health checks |
-| `ds validate` | Validate installed runtime readiness |
-| `ds version` | Show Dream Studio version |
-| `ds status` | Show installed runtime status |
+### Health checks
+| Command | Plane | Description |
+|---------|-------|-------------|
+| `ds validate` | DB authority | Schema version, migrations, module profiles |
+| `ds doctor` | Claude Code integration | Skills, agents, hooks, routing, version |
+| `ds version` | — | Show Dream Studio version |
+| `ds status` | — | Show installed runtime status |
 
 ---
 
@@ -348,12 +356,31 @@ The test suite has one pre-existing expected failure. All other tests must be gr
 2. Add the mode to `packs.yaml` under the appropriate pack's `modes` list
 3. The compiler picks up the change automatically — no manual routing table edits required
 
-### Running ds doctor
+### Health checks
+
+Dream Studio has two health-check planes. Run both when investigating any issue; run one when you know which plane the issue lives in.
+
+#### `ds validate` — DB authority plane
+Checks the SQLite database is healthy: schema version matches latest migration, no pending migrations, no module profile errors. Run after:
+- `ds migrate` (verify migrations applied)
+- Manual DB changes or backup restore
+
+Returns `ready: true` when the DB is at the current schema version with no profile errors.
+
+#### `ds doctor` — Claude Code integration plane
+Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
+- `ds integrate install claude_code --execute`
+- Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
+- Upgrading Dream Studio or before starting a new session
+
+Returns `status: pass` when the integration layer is fully wired and current.
+
+These commands are independent. A passing `ds validate` does NOT mean the integration is wired; a passing `ds doctor` does NOT mean the DB schema is current. Use both for full coverage.
+
 ```powershell
+ds validate
 ds doctor
 ```
-
-Reports: SQLite health, migration version, spool status, integration status, adapter router state.
 
 ### Personalizing from session history
 ```powershell

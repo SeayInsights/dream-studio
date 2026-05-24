@@ -21,8 +21,11 @@ def db_path(tmp_path: Path) -> str:
 
 @pytest.fixture()
 def store(db_path, monkeypatch) -> MemoryStore:
+    from core.config.sqlite_bootstrap import run_migrations
+
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL")
+    run_migrations(conn)
     conn.close()
 
     monkeypatch.setattr("core.memory.store.transaction", _make_tx(db_path))

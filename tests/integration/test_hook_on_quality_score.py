@@ -34,8 +34,9 @@ def test_runs_checks_with_marker(isolated_home, monkeypatch, handler):
     (isolated_home / "src" / "app.py").write_text("x\n" * 10, encoding="utf-8")
     monkeypatch.chdir(isolated_home)
 
-    with patch.object(quality_scoring, "_changed_files", return_value=["src/app.py"]), patch.object(
-        quality_scoring, "_diff_content", return_value="+print('debug thing')\n"
+    with (
+        patch.object(quality_scoring, "_changed_files", return_value=["src/app.py"]),
+        patch.object(quality_scoring, "_diff_content", return_value="+print('debug thing')\n"),
     ):
         mod.main()
 
@@ -56,10 +57,11 @@ def test_secret_pattern_fails(isolated_home, monkeypatch, handler):
     mod = handler("on-quality-score")
     monkeypatch.chdir(isolated_home)
 
-    with patch.object(
-        quality_scoring, "_changed_files", return_value=["src/secrets.py"]
-    ), patch.object(
-        quality_scoring, "_diff_content", return_value="+api_key = 'abcdef1234567890abcd'\n"
+    with (
+        patch.object(quality_scoring, "_changed_files", return_value=["src/secrets.py"]),
+        patch.object(
+            quality_scoring, "_diff_content", return_value="+api_key = 'abcdef1234567890abcd'\n"
+        ),
     ):
         mod.main()
 

@@ -1163,9 +1163,10 @@ def _migrate_compatible_sqlite_authority(*, source_db: Path, target_db: Path) ->
         }
     migrated = []
     skipped = []
-    with closing(sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)) as src, closing(
-        sqlite3.connect(str(target_db))
-    ) as dst:
+    with (
+        closing(sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)) as src,
+        closing(sqlite3.connect(str(target_db))) as dst,
+    ):
         src.row_factory = sqlite3.Row
         dst.row_factory = sqlite3.Row
         source_tables = _table_names(src)

@@ -557,72 +557,79 @@ async def test_metric_streamer_collect_metrics():
     streamer = MetricStreamer(connection_manager=manager, poll_interval=60, db_path=":memory:")
 
     # Mock collectors to avoid DB dependency
-    with patch.object(
-        streamer.session_collector,
-        "collect",
-        return_value={
-            "total_sessions": 10,
-            "by_project": {},
-            "timeline": [],
-            "day_of_week": {},
-            "outcomes": {},
-            "avg_duration_minutes": 45.0,
-        },
-    ), patch.object(
-        streamer.skill_collector,
-        "collect",
-        return_value={
-            "total_invocations": 50,
-            "by_skill": {},
-            "success_rate_overall": 0.95,
-            "failures": [],
-            "top_skills": [],
-        },
-    ), patch.object(
-        streamer.token_collector,
-        "collect",
-        return_value={
-            "total_input_tokens": 1000,
-            "total_output_tokens": 500,
-            "total_tokens": 1500,
-            "total_cost_usd": 0.05,
-            "by_model": {},
-            "by_project": {},
-            "by_skill": {},
-            "daily_average": 100,
-        },
-    ), patch.object(
-        streamer.model_collector,
-        "collect",
-        return_value={
-            "by_model": {},
-            "distribution": {},
-            "performance_rank": [],
-            "token_efficiency": {},
-        },
-    ), patch.object(
-        streamer.lesson_collector,
-        "collect",
-        return_value={
-            "total_lessons": 5,
-            "by_source": {},
-            "by_status": {},
-            "by_confidence": {},
-            "capture_rate": 0.8,
-            "promoted_count": 2,
-            "recent_lessons": [],
-        },
-    ), patch.object(
-        streamer.workflow_collector,
-        "collect",
-        return_value={
-            "total_runs": 15,
-            "by_workflow": {},
-            "by_status": {},
-            "success_rate": 0.9,
-            "avg_completion_time_minutes": 30.0,
-            "total_nodes_executed": 100,
-        },
+    with (
+        patch.object(
+            streamer.session_collector,
+            "collect",
+            return_value={
+                "total_sessions": 10,
+                "by_project": {},
+                "timeline": [],
+                "day_of_week": {},
+                "outcomes": {},
+                "avg_duration_minutes": 45.0,
+            },
+        ),
+        patch.object(
+            streamer.skill_collector,
+            "collect",
+            return_value={
+                "total_invocations": 50,
+                "by_skill": {},
+                "success_rate_overall": 0.95,
+                "failures": [],
+                "top_skills": [],
+            },
+        ),
+        patch.object(
+            streamer.token_collector,
+            "collect",
+            return_value={
+                "total_input_tokens": 1000,
+                "total_output_tokens": 500,
+                "total_tokens": 1500,
+                "total_cost_usd": 0.05,
+                "by_model": {},
+                "by_project": {},
+                "by_skill": {},
+                "daily_average": 100,
+            },
+        ),
+        patch.object(
+            streamer.model_collector,
+            "collect",
+            return_value={
+                "by_model": {},
+                "distribution": {},
+                "performance_rank": [],
+                "token_efficiency": {},
+            },
+        ),
+        patch.object(
+            streamer.lesson_collector,
+            "collect",
+            return_value={
+                "total_lessons": 5,
+                "by_source": {},
+                "by_status": {},
+                "by_confidence": {},
+                "capture_rate": 0.8,
+                "promoted_count": 2,
+                "recent_lessons": [],
+            },
+        ),
+        patch.object(
+            streamer.workflow_collector,
+            "collect",
+            return_value={
+                "total_runs": 15,
+                "by_workflow": {},
+                "by_status": {},
+                "success_rate": 0.9,
+                "avg_completion_time_minutes": 30.0,
+                "total_nodes_executed": 100,
+            },
+        ),
     ):
         metrics = await streamer._collect_metrics()
 
@@ -670,63 +677,68 @@ async def test_metric_streamer_handles_collector_errors():
     streamer = MetricStreamer(connection_manager=manager, poll_interval=60, db_path=":memory:")
 
     # Mock one collector to fail
-    with patch.object(
-        streamer.session_collector, "collect", side_effect=Exception("DB error")
-    ), patch.object(
-        streamer.skill_collector,
-        "collect",
-        return_value={
-            "total_invocations": 50,
-            "by_skill": {},
-            "success_rate_overall": 0.95,
-            "failures": [],
-            "top_skills": [],
-        },
-    ), patch.object(
-        streamer.token_collector,
-        "collect",
-        return_value={
-            "total_input_tokens": 1000,
-            "total_output_tokens": 500,
-            "total_tokens": 1500,
-            "total_cost_usd": 0.05,
-            "by_model": {},
-            "by_project": {},
-            "by_skill": {},
-            "daily_average": 100,
-        },
-    ), patch.object(
-        streamer.model_collector,
-        "collect",
-        return_value={
-            "by_model": {},
-            "distribution": {},
-            "performance_rank": [],
-            "token_efficiency": {},
-        },
-    ), patch.object(
-        streamer.lesson_collector,
-        "collect",
-        return_value={
-            "total_lessons": 5,
-            "by_source": {},
-            "by_status": {},
-            "by_confidence": {},
-            "capture_rate": 0.8,
-            "promoted_count": 2,
-            "recent_lessons": [],
-        },
-    ), patch.object(
-        streamer.workflow_collector,
-        "collect",
-        return_value={
-            "total_runs": 15,
-            "by_workflow": {},
-            "by_status": {},
-            "success_rate": 0.9,
-            "avg_completion_time_minutes": 30.0,
-            "total_nodes_executed": 100,
-        },
+    with (
+        patch.object(streamer.session_collector, "collect", side_effect=Exception("DB error")),
+        patch.object(
+            streamer.skill_collector,
+            "collect",
+            return_value={
+                "total_invocations": 50,
+                "by_skill": {},
+                "success_rate_overall": 0.95,
+                "failures": [],
+                "top_skills": [],
+            },
+        ),
+        patch.object(
+            streamer.token_collector,
+            "collect",
+            return_value={
+                "total_input_tokens": 1000,
+                "total_output_tokens": 500,
+                "total_tokens": 1500,
+                "total_cost_usd": 0.05,
+                "by_model": {},
+                "by_project": {},
+                "by_skill": {},
+                "daily_average": 100,
+            },
+        ),
+        patch.object(
+            streamer.model_collector,
+            "collect",
+            return_value={
+                "by_model": {},
+                "distribution": {},
+                "performance_rank": [],
+                "token_efficiency": {},
+            },
+        ),
+        patch.object(
+            streamer.lesson_collector,
+            "collect",
+            return_value={
+                "total_lessons": 5,
+                "by_source": {},
+                "by_status": {},
+                "by_confidence": {},
+                "capture_rate": 0.8,
+                "promoted_count": 2,
+                "recent_lessons": [],
+            },
+        ),
+        patch.object(
+            streamer.workflow_collector,
+            "collect",
+            return_value={
+                "total_runs": 15,
+                "by_workflow": {},
+                "by_status": {},
+                "success_rate": 0.9,
+                "avg_completion_time_minutes": 30.0,
+                "total_nodes_executed": 100,
+            },
+        ),
     ):
         metrics = await streamer._collect_metrics()
 
@@ -752,72 +764,79 @@ async def test_metric_streamer_poll_loop():
     )
 
     # Mock collectors
-    with patch.object(
-        streamer.session_collector,
-        "collect",
-        return_value={
-            "total_sessions": 10,
-            "by_project": {},
-            "timeline": [],
-            "day_of_week": {},
-            "outcomes": {},
-            "avg_duration_minutes": 45.0,
-        },
-    ), patch.object(
-        streamer.skill_collector,
-        "collect",
-        return_value={
-            "total_invocations": 50,
-            "by_skill": {},
-            "success_rate_overall": 0.95,
-            "failures": [],
-            "top_skills": [],
-        },
-    ), patch.object(
-        streamer.token_collector,
-        "collect",
-        return_value={
-            "total_input_tokens": 1000,
-            "total_output_tokens": 500,
-            "total_tokens": 1500,
-            "total_cost_usd": 0.05,
-            "by_model": {},
-            "by_project": {},
-            "by_skill": {},
-            "daily_average": 100,
-        },
-    ), patch.object(
-        streamer.model_collector,
-        "collect",
-        return_value={
-            "by_model": {},
-            "distribution": {},
-            "performance_rank": [],
-            "token_efficiency": {},
-        },
-    ), patch.object(
-        streamer.lesson_collector,
-        "collect",
-        return_value={
-            "total_lessons": 5,
-            "by_source": {},
-            "by_status": {},
-            "by_confidence": {},
-            "capture_rate": 0.8,
-            "promoted_count": 2,
-            "recent_lessons": [],
-        },
-    ), patch.object(
-        streamer.workflow_collector,
-        "collect",
-        return_value={
-            "total_runs": 15,
-            "by_workflow": {},
-            "by_status": {},
-            "success_rate": 0.9,
-            "avg_completion_time_minutes": 30.0,
-            "total_nodes_executed": 100,
-        },
+    with (
+        patch.object(
+            streamer.session_collector,
+            "collect",
+            return_value={
+                "total_sessions": 10,
+                "by_project": {},
+                "timeline": [],
+                "day_of_week": {},
+                "outcomes": {},
+                "avg_duration_minutes": 45.0,
+            },
+        ),
+        patch.object(
+            streamer.skill_collector,
+            "collect",
+            return_value={
+                "total_invocations": 50,
+                "by_skill": {},
+                "success_rate_overall": 0.95,
+                "failures": [],
+                "top_skills": [],
+            },
+        ),
+        patch.object(
+            streamer.token_collector,
+            "collect",
+            return_value={
+                "total_input_tokens": 1000,
+                "total_output_tokens": 500,
+                "total_tokens": 1500,
+                "total_cost_usd": 0.05,
+                "by_model": {},
+                "by_project": {},
+                "by_skill": {},
+                "daily_average": 100,
+            },
+        ),
+        patch.object(
+            streamer.model_collector,
+            "collect",
+            return_value={
+                "by_model": {},
+                "distribution": {},
+                "performance_rank": [],
+                "token_efficiency": {},
+            },
+        ),
+        patch.object(
+            streamer.lesson_collector,
+            "collect",
+            return_value={
+                "total_lessons": 5,
+                "by_source": {},
+                "by_status": {},
+                "by_confidence": {},
+                "capture_rate": 0.8,
+                "promoted_count": 2,
+                "recent_lessons": [],
+            },
+        ),
+        patch.object(
+            streamer.workflow_collector,
+            "collect",
+            return_value={
+                "total_runs": 15,
+                "by_workflow": {},
+                "by_status": {},
+                "success_rate": 0.9,
+                "avg_completion_time_minutes": 30.0,
+                "total_nodes_executed": 100,
+            },
+        ),
     ):
         # Start streamer
         await streamer.start()

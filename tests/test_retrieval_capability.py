@@ -176,9 +176,11 @@ class TestDefaultSearchUsesTFIDF:
 
     def test_default_call_routes_to_tfidf_not_embeddings(self):
         """Default search_tools() call must invoke TF-IDF, not embedding search."""
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf, patch("control.research.tools._search_with_embeddings") as mock_embed:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+            patch("control.research.tools._search_with_embeddings") as mock_embed,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             mock_embed.return_value = []
@@ -190,9 +192,11 @@ class TestDefaultSearchUsesTFIDF:
 
     def test_explicit_use_embeddings_true_routes_to_embeddings(self):
         """Passing use_embeddings=True must route to embedding search."""
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf, patch("control.research.tools._search_with_embeddings") as mock_embed:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+            patch("control.research.tools._search_with_embeddings") as mock_embed,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             mock_embed.return_value = []
@@ -207,9 +211,10 @@ class TestBackwardCompatibility:
     """Guarantee 7: existing search_tools() and hybrid_search() return List[ToolMatch]."""
 
     def test_search_tools_returns_list(self):
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             result = search_tools("backward compat check")
@@ -218,9 +223,11 @@ class TestBackwardCompatibility:
     def test_hybrid_search_returns_list(self):
         from control.research.tools import hybrid_search
 
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf, patch("control.research.tools._search_with_embeddings") as mock_embed:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+            patch("control.research.tools._search_with_embeddings") as mock_embed,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             mock_embed.return_value = []
@@ -240,9 +247,10 @@ class TestSearchToolsWithStatus:
     """Guarantee 8: search_tools_with_status() reports retrieval mode honestly."""
 
     def test_returns_search_result_with_status(self):
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             result = search_tools_with_status("test query")
@@ -251,9 +259,10 @@ class TestSearchToolsWithStatus:
 
     def test_default_use_embeddings_false_reports_tfidf_default(self):
         """Default call must report tfidf_default and embeddings_used=False."""
-        with patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             result = search_tools_with_status("test tfidf default")
@@ -263,9 +272,11 @@ class TestSearchToolsWithStatus:
 
     def test_use_embeddings_true_dep_missing_reports_fallback(self):
         """use_embeddings=True with missing dep must report tfidf_fallback_dependency_missing."""
-        with patch.dict(sys.modules, {"sentence_transformers": None}), patch(
-            "control.research.tools._query_cache"
-        ) as mock_cache, patch("control.research.tools._search_with_tfidf") as mock_tfidf:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": None}),
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             result = search_tools_with_status("test dep missing", use_embeddings=True)
@@ -276,12 +287,15 @@ class TestSearchToolsWithStatus:
     def test_use_embeddings_true_runtime_error_reports_semantic_error(self):
         """Embedding build failure with dep present must report tfidf_fallback_semantic_error."""
         mock_st = MagicMock()
-        with patch.dict(sys.modules, {"sentence_transformers": mock_st}), patch(
-            "control.research.tools.build_embedding_index",
-            side_effect=RuntimeError("model load failed"),
-        ), patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": mock_st}),
+            patch(
+                "control.research.tools.build_embedding_index",
+                side_effect=RuntimeError("model load failed"),
+            ),
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             result = search_tools_with_status("test runtime error", use_embeddings=True)
@@ -291,12 +305,14 @@ class TestSearchToolsWithStatus:
 
     def test_reuses_semantic_retrieval_status(self):
         """search_tools_with_status() must call semantic_retrieval_status(), not duplicate logic."""
-        with patch(
-            "control.research.tools.semantic_retrieval_status",
-            return_value={"available": False, "status": "unavailable_dependency_missing"},
-        ) as mock_st_status, patch("control.research.tools._query_cache") as mock_cache, patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch(
+                "control.research.tools.semantic_retrieval_status",
+                return_value={"available": False, "status": "unavailable_dependency_missing"},
+            ) as mock_st_status,
+            patch("control.research.tools._query_cache") as mock_cache,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_cache.get.return_value = None
             mock_tfidf.return_value = []
             search_tools_with_status("test reuse status", use_embeddings=True)
@@ -307,9 +323,10 @@ class TestHybridSearchWithStatus:
     """Guarantee 9: hybrid_search_with_status() reports retrieval mode honestly."""
 
     def test_returns_search_result_with_status(self):
-        with patch.dict(sys.modules, {"sentence_transformers": None}), patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": None}),
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_tfidf.return_value = []
             result = hybrid_search_with_status("test query")
         assert isinstance(result, SearchResultWithStatus)
@@ -323,9 +340,10 @@ class TestHybridSearchWithStatus:
 
     def test_dep_missing_reports_tfidf_fallback_dependency_missing(self):
         """Missing sentence-transformers must be reported as tfidf_fallback_dependency_missing."""
-        with patch.dict(sys.modules, {"sentence_transformers": None}), patch(
-            "control.research.tools._search_with_tfidf"
-        ) as mock_tfidf:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": None}),
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_tfidf.return_value = []
             result = hybrid_search_with_status("data pipeline tools")
         assert result.retrieval_mode == "tfidf_fallback_dependency_missing"
@@ -335,10 +353,14 @@ class TestHybridSearchWithStatus:
     def test_dep_present_build_fails_reports_semantic_error(self):
         """Runtime embedding build failure with dep present must report tfidf_fallback_semantic_error."""
         mock_st = MagicMock()
-        with patch.dict(sys.modules, {"sentence_transformers": mock_st}), patch(
-            "control.research.tools.build_embedding_index",
-            side_effect=RuntimeError("index build failed"),
-        ), patch("control.research.tools._search_with_tfidf") as mock_tfidf:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": mock_st}),
+            patch(
+                "control.research.tools.build_embedding_index",
+                side_effect=RuntimeError("index build failed"),
+            ),
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_tfidf.return_value = []
             result = hybrid_search_with_status("data pipeline tools")
         assert result.retrieval_mode == "tfidf_fallback_semantic_error"
@@ -348,9 +370,11 @@ class TestHybridSearchWithStatus:
     def test_dep_present_build_succeeds_reports_semantic_embeddings(self):
         """Successful embedding build must report semantic_embeddings and embeddings_used=True."""
         mock_st = MagicMock()
-        with patch.dict(sys.modules, {"sentence_transformers": mock_st}), patch(
-            "control.research.tools.build_embedding_index"
-        ), patch("control.research.tools.hybrid_search", return_value=[]) as mock_hybrid:
+        with (
+            patch.dict(sys.modules, {"sentence_transformers": mock_st}),
+            patch("control.research.tools.build_embedding_index"),
+            patch("control.research.tools.hybrid_search", return_value=[]) as mock_hybrid,
+        ):
             result = hybrid_search_with_status("data pipeline tools")
         assert result.retrieval_mode == "semantic_embeddings"
         assert result.semantic_status == "available"
@@ -359,10 +383,13 @@ class TestHybridSearchWithStatus:
 
     def test_reuses_semantic_retrieval_status(self):
         """hybrid_search_with_status() must call semantic_retrieval_status(), not duplicate logic."""
-        with patch(
-            "control.research.tools.semantic_retrieval_status",
-            return_value={"available": False, "status": "unavailable_dependency_missing"},
-        ) as mock_st_status, patch("control.research.tools._search_with_tfidf") as mock_tfidf:
+        with (
+            patch(
+                "control.research.tools.semantic_retrieval_status",
+                return_value={"available": False, "status": "unavailable_dependency_missing"},
+            ) as mock_st_status,
+            patch("control.research.tools._search_with_tfidf") as mock_tfidf,
+        ):
             mock_tfidf.return_value = []
             hybrid_search_with_status("test reuse")
         mock_st_status.assert_called_once()
