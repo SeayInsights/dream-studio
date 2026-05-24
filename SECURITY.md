@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-To report a security issue in dream-studio, email *****REMOVED***** with the subject line:
+To report a security issue in dream-studio, email **info@twinrootsllc.com** with the subject line:
 
 ```
 [dream-studio] Security Report
