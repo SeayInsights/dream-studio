@@ -102,7 +102,7 @@ If `claude_memory_path` is not set in config.json, skip this step and note "memo
 - **Dedup first**: never draft a lesson that already exists in any gotchas.yml
 - **≥2 sources**: only draft lessons with evidence from ≥2 distinct sources
 - **≤5 cap**: draft at most 5 new lessons per run — rank by evidence count, take top 5
-- **Domain tagging**: domain-specific lessons (Kroger, Power BI client-specific, etc.) must be tagged with the target skill and never promoted to core skill gotchas
+- **Domain tagging**: domain-specific lessons (client-specific, Power BI, etc.) must be tagged with the target skill and never promoted to core skill gotchas
 
 ### Auto-harvest draft format
 Auto-harvested drafts use an extended format with two additional fields:

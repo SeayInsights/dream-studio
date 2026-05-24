@@ -16,7 +16,7 @@
 | Abbrev | Stands For | Context |
 |--------|-----------|---------|
 | [abbr] | [full form] | [where used] |
-| PLM | PLMarketing | Appears in org names, table prefixes |
+| [abbr] | [full form] | [where used] |
 
 ## What Words Mean Here
 

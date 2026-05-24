@@ -63,12 +63,12 @@ PRECEDENTS -
 12. All webhooks use HMAC signature verification
 ```
 
-## PLMarketing/Kroger-Specific Examples
+## AcmeCorp-Specific Examples
 
 ### Retail Data Security
 
 ```
-HARD EXCLUSIONS - PLMarketing/Kroger Context:
+HARD EXCLUSIONS - AcmeCorp Context:
 1. Planogram data exposure in internal dashboards - restricted to authenticated users
 2. Vendor pricing data in reports - access controlled via Power BI RLS
 3. Category management metrics - internal use only, behind SSO
