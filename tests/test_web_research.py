@@ -455,8 +455,9 @@ class TestResearchCache:
 
     @pytest.fixture(autouse=True)
     def _patch_db(self, test_db):
-        with patch("control.research.web.get_connection", return_value=test_db), patch(
-            "control.research.web.transaction", _mock_transaction(test_db)
+        with (
+            patch("control.research.web.get_connection", return_value=test_db),
+            patch("control.research.web.transaction", _mock_transaction(test_db)),
         ):
             yield
 

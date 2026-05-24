@@ -1,7 +1,7 @@
 {
   "project_id": "dream-studio",
   "repo_path": "<repo-root>",
-  "github_remote": "https://github.com/SeayInsights/dream-studio.git",
+  "github_remote": "https://github.com/SeayInsights/dream-studio-clean.git",
   "default_branch": "main",
   "release_branch_naming": "integration/{milestone_or_release}",
   "workflow_files": [
@@ -44,5 +44,6 @@
     "python interfaces/cli/contract_docs_drift_gate.py",
     "python interfaces/cli/contract_atlas_lifecycle_gate.py",
     "python scripts/runtime_state_hash_guard.py --help"
-  ]
+  ],
+  "_last_reviewed": "2026-05-24 Phase 18.1.13: ds validate/doctor help text clarified health planes; README health-checks section added; fresh-install-validation.md requires both commands. No gate policy change."
 }

@@ -22,5 +22,5 @@ if %ERRORLEVEL% EQU 0 (
   exit /b %ERRORLEVEL%
 )
 
-echo Python 3.11+ was not found on PATH. >&2
+echo Python 3.12+ was not found on PATH. >&2
 exit /b 1

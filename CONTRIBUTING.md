@@ -72,6 +72,17 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 install-dev
 ```
 
+### Dependency pinning
+
+`requirements.lock` pins all transitive dependencies for reproducible installs. It is generated from `requirements.txt` via pip-tools:
+
+```bash
+pip install pip-tools
+pip-compile requirements.txt -o requirements.lock
+```
+
+Regenerate it when `requirements.txt` changes and commit both files together.
+
 ## Security Issues
 
 Do **not** open GitHub Issues for security vulnerabilities. See [SECURITY.md](SECURITY.md) for the responsible disclosure process.

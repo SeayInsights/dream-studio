@@ -42,15 +42,14 @@ def temp_db():
 @pytest.fixture
 def mock_collectors():
     """Mock all collector classes"""
-    with patch("analytics.core.reports.generator.SkillCollector") as skill, patch(
-        "analytics.core.reports.generator.TokenCollector"
-    ) as token, patch("analytics.core.reports.generator.SessionCollector") as session, patch(
-        "analytics.core.reports.generator.ModelCollector"
-    ) as model, patch(
-        "analytics.core.reports.generator.LessonCollector"
-    ) as lesson, patch(
-        "analytics.core.reports.generator.WorkflowCollector"
-    ) as workflow:
+    with (
+        patch("analytics.core.reports.generator.SkillCollector") as skill,
+        patch("analytics.core.reports.generator.TokenCollector") as token,
+        patch("analytics.core.reports.generator.SessionCollector") as session,
+        patch("analytics.core.reports.generator.ModelCollector") as model,
+        patch("analytics.core.reports.generator.LessonCollector") as lesson,
+        patch("analytics.core.reports.generator.WorkflowCollector") as workflow,
+    ):
 
         # Configure mock return values
         skill.return_value.collect.return_value = {

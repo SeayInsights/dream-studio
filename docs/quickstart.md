@@ -5,8 +5,8 @@ This guide starts from the public repo checkout. Adapter setup is optional.
 ## Clone
 
 ```bash
-git clone https://github.com/SeayInsights/dream-studio.git
-cd dream-studio
+git clone https://github.com/SeayInsights/dream-studio-clean.git
+cd dream-studio-clean
 ```
 
 ## Validate The Checkout

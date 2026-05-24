@@ -49,10 +49,26 @@ fi
 
 echo "Using Python: $PYTHON ($($PYTHON --version))"
 
-# Run Dream Studio installer
+# Install Python dependencies
 echo ""
-echo "Installing Dream Studio..."
+echo "Installing Python dependencies..."
 cd "$REPO_DIR"
+"$PYTHON" -m pip install -r requirements.txt || {
+    echo "ERROR: pip install failed. See output above." >&2
+    exit 1
+}
+
+# Bootstrap the runtime database
+echo ""
+echo "Bootstrapping runtime database..."
+"$PYTHON" -m interfaces.cli.ds rehearsal-install --rehearsal-home "$HOME/.dream-studio" || {
+    echo "ERROR: ds rehearsal-install (DB bootstrap) failed." >&2
+    exit 1
+}
+
+# Install the integration (CLAUDE.md, hooks, skill files)
+echo ""
+echo "Installing Dream Studio integration..."
 "$PYTHON" -m interfaces.cli.ds integrate install claude_code --execute
 
 # Report

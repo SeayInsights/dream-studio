@@ -1,6 +1,46 @@
-"""pytest configuration — make `hooks/` importable as a top-level package."""
+"""pytest configuration — make `hooks/` importable as a top-level package.
+
+Top-of-file test isolation guard
+---------------------------------
+DREAM_STUDIO_HOME, DREAM_STUDIO_DB_PATH, and DS_SPOOL_ROOT are set here —
+at conftest MODULE IMPORT TIME — before pytest collects tests and before any
+test module is imported.
+
+Why this must happen before ``import pytest``:
+pytest imports conftest.py first, then imports each test module during
+collection. Python executes module-level code at import time. Some production
+modules (notably core.config.database.DatabaseRuntime) initialize a singleton
+on first use and cache the DB path. If a test module's top-level import chain
+reaches DatabaseRuntime before any fixture has a chance to run, the singleton
+caches the real operator DB at ~/.dream-studio/state/studio.db.
+
+By setting the env vars here, any DB path resolution that happens at import
+time will see the tmp directory instead of the real one.
+
+This resolves B3 from the 2026-05-24 final audit: 9 tests previously
+contaminated the real production DB on every pytest run.
+"""
 
 from __future__ import annotations
+
+import os as _os
+import pathlib as _pathlib
+import tempfile as _tempfile
+
+# Record the real DB path for the post-test contamination guard.
+_real_home_db = _pathlib.Path.home() / ".dream-studio" / "state" / "studio.db"
+_REAL_DB_MTIME_AT_SESSION_START = _real_home_db.stat().st_mtime if _real_home_db.exists() else None
+
+# Only redirect if not already set — lets callers like tox or CI override.
+if "DREAM_STUDIO_DB_PATH" not in _os.environ:
+    _session_tmp = _pathlib.Path(_tempfile.mkdtemp(prefix="dream-studio-test-"))
+    (_session_tmp / "state").mkdir(parents=True, exist_ok=True)
+    (_session_tmp / "events").mkdir(parents=True, exist_ok=True)
+    (_session_tmp / "events" / "pending").mkdir(parents=True, exist_ok=True)
+    (_session_tmp / "events" / "processed").mkdir(parents=True, exist_ok=True)
+    _os.environ["DREAM_STUDIO_HOME"] = str(_session_tmp)
+    _os.environ["DREAM_STUDIO_DB_PATH"] = str(_session_tmp / "state" / "studio.db")
+    _os.environ["DS_SPOOL_ROOT"] = str(_session_tmp / "events")
 
 # Windows-only: install SIGINT handler before pytest does, so pytest never
 # sees the phantom signals that occur on this platform during the ingest
@@ -9,7 +49,7 @@ from __future__ import annotations
 # test-suite-only fix that prevents pytest's own SIGINT machinery from
 # printing a KeyboardInterrupt banner after the test summary. CI on Linux
 # is unaffected.
-import sys as _sys
+import sys as _sys  # noqa: E402
 
 if _sys.platform == "win32":
     import signal as _signal
@@ -23,13 +63,13 @@ if _sys.platform == "win32":
     _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
 
 
-import importlib.util
-import sys
-import types
-from pathlib import Path
-from typing import Any
+import importlib.util  # noqa: E402
+import sys  # noqa: E402
+import types  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _HOOKS_DIR = _PLUGIN_ROOT / "hooks"
@@ -90,8 +130,7 @@ def isolated_home(tmp_path, monkeypatch):
     return tmp_path
 
 
-import os as _os
-import warnings
+import warnings  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -205,7 +244,18 @@ def guard_real_homedir(tmp_path, monkeypatch):
     real_integrations = Path.home() / ".dream-studio" / "integrations"
     _before_int_mtime = real_integrations.stat().st_mtime if real_integrations.exists() else None
     real_db = Path.home() / ".dream-studio" / "state" / "studio.db"
-    _before_db_mtime = real_db.stat().st_mtime if real_db.is_file() else None
+
+    # Only snapshot real DB mtime when DREAM_STUDIO_DB_PATH is NOT redirected away
+    # from the real DB. When the top-of-conftest block has redirected it to a session
+    # tmp dir, the spool ingestor (a background process) continuously writes real
+    # operator events to the real DB — mtime would change regardless of test activity,
+    # producing false positives. Trust the env-var redirect as the isolation boundary.
+    _real_db_path = str(real_db.resolve())
+    _db_path_env = _os.environ.get("DREAM_STUDIO_DB_PATH", "")
+    _db_redirected = _db_path_env and _db_path_env != _real_db_path
+    _before_db_mtime = (
+        (real_db.stat().st_mtime if real_db.is_file() else None) if not _db_redirected else None
+    )
 
     yield
 
@@ -219,17 +269,28 @@ def guard_real_homedir(tmp_path, monkeypatch):
         pass
 
     if _before_events_mtime is not None and real_events.exists():
-        assert (
-            real_events.stat().st_mtime == _before_events_mtime
-        ), "Test modified real ~/.dream-studio/events. Use the spool_root fixture."
+        if real_events.stat().st_mtime != _before_events_mtime:
+            pytest.exit(
+                "FATAL: Test modified real ~/.dream-studio/events. "
+                "Use the spool_root fixture. Aborting session to prevent further damage.",
+                returncode=2,
+            )
     if _before_int_mtime is not None and real_integrations.exists():
-        assert (
-            real_integrations.stat().st_mtime == _before_int_mtime
-        ), "Test modified real ~/.dream-studio/integrations. Use the ds_home fixture."
+        if real_integrations.stat().st_mtime != _before_int_mtime:
+            pytest.exit(
+                "FATAL: Test modified real ~/.dream-studio/integrations. "
+                "Use the ds_home fixture. Aborting session to prevent further damage.",
+                returncode=2,
+            )
+    # Only check real DB mtime when the redirect is NOT in place (fallback safety).
+    # With the redirect active, the spool ingestor writes legitimately to the real DB
+    # and any mtime check here would be a false positive.
     if _before_db_mtime is not None and real_db.is_file():
-        assert real_db.stat().st_mtime == _before_db_mtime, (
-            "Test wrote to real ~/.dream-studio/state/studio.db.\n"
-            "Ensure DREAM_STUDIO_DB_PATH is set to a tmp path before any DB connection. "
-            "The guard_real_homedir fixture sets this via monkeypatch.setenv, but a DB "
-            "connection initiated before the fixture activates will bypass it."
-        )
+        if real_db.stat().st_mtime != _before_db_mtime:
+            pytest.exit(
+                f"FATAL: Test wrote to real production DB at {real_db}. "
+                "DREAM_STUDIO_DB_PATH was not redirected at fixture time — "
+                "this indicates the top-of-conftest isolation block did not run. "
+                "Aborting session to prevent further damage.",
+                returncode=2,
+            )
