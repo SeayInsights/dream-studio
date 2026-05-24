@@ -1,7 +1,7 @@
 {
   "project_id": "dream-studio",
   "repo_path": "<repo-root>",
-  "github_remote": "https://github.com/SeayInsights/dream-studio.git",
+  "github_remote": "https://github.com/SeayInsights/dream-studio-clean.git",
   "default_branch": "main",
   "release_branch_naming": "integration/{milestone_or_release}",
   "workflow_files": [
