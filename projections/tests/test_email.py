@@ -106,9 +106,10 @@ class TestEmailSender:
 
     def test_send_with_multiple_attachments(self, email_sender):
         """Test sending with multiple attachments"""
-        with tempfile.NamedTemporaryFile(
-            suffix=".pdf", delete=False
-        ) as f1, tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f2:
+        with (
+            tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f1,
+            tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f2,
+        ):
 
             f1.write(b"PDF content")
             f2.write(b"Excel content")

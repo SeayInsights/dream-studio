@@ -583,11 +583,12 @@ def test_graph_endpoint(client, test_db, mock_graph_data, monkeypatch):
     mock_nx_graph.number_of_edges.return_value = 2
 
     # Mock both build_graph (returns NetworkX graph) and graph_to_dict (returns dict)
-    with patch(
-        "projections.api.routes.discovery_internal.graph_query.build_graph"
-    ) as mock_build, patch(
-        "projections.api.routes.discovery_internal.graph_query.graph_to_dict"
-    ) as mock_to_dict:
+    with (
+        patch("projections.api.routes.discovery_internal.graph_query.build_graph") as mock_build,
+        patch(
+            "projections.api.routes.discovery_internal.graph_query.graph_to_dict"
+        ) as mock_to_dict,
+    ):
         mock_build.return_value = mock_nx_graph
         mock_to_dict.return_value = mock_graph_data
 
