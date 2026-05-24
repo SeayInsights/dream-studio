@@ -118,51 +118,17 @@ class MemoryStore:
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:
-        with transaction() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS memory_entries (
-                    memory_id TEXT PRIMARY KEY,
-                    source TEXT NOT NULL,
-                    category TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    source_type TEXT DEFAULT 'unknown',
-                    source_id TEXT,
-                    lifecycle_state TEXT DEFAULT 'ACTIVE',
-                    metadata JSON,
-                    importance REAL NOT NULL DEFAULT 0.5,
-                    confidence REAL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT,
-                    last_accessed TEXT,
-                    access_count INTEGER NOT NULL DEFAULT 0,
-                    tags TEXT,
-                    project TEXT,
-                    skill TEXT,
-                    provenance JSON,
-                    lineage JSON,
-                    relationships JSON
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_memory_source
-                ON memory_entries(source)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_memory_category
-                ON memory_entries(category)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_memory_project
-                ON memory_entries(project)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_memory_importance
-                ON memory_entries(importance DESC)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_memory_lifecycle
-                ON memory_entries(lifecycle_state)
-            """)
+        # Table must exist — created by migration 011_memory_entries.sql.
+        # If missing, the migration sequence did not run correctly.
+        with get_connection(read_only=True) as conn:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='memory_entries'"
+            ).fetchone()
+        if not row:
+            raise RuntimeError(
+                "memory_entries table not found. "
+                "Run the migration sequence: py -m interfaces.cli.ds install"
+            )
 
     # ── Core CRUD ────────────────────────────────────────────────────────────
 
