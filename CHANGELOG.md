@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.12 — Audit follow-ups: fail-open gap, coverage scope, Sentry removal, env var audit (2026-05-23)
+
+### Fixed
+- Hook dispatcher fail-open guarantee restored: `dispatch_tracking.run_handlers()` and `runtime/dispatch/hooks.main()` now catch `BaseException` instead of `Exception`, so `SystemExit` and `KeyboardInterrupt` from handlers can no longer escape and block AI sessions
+- `on-game-validate.py` no longer calls `sys.exit(2)` when validation issues are found; it now prints an advisory to stderr and returns normally (the handler should advise, not block)
+- `on-pulse.py` no longer re-raises exceptions from `run_pulse_check()`; errors are recorded and the hook exits cleanly
+- `on-stop-handoff.py` and `on-meta-review.py` now wrap their bodies in `try/except` for defense in depth
+- Coverage scope corrected: `[tool.coverage.run] source` was pointing to `hooks/lib` (does not exist) and `packs/domains/domain_lib` (empty); now points to the actual production directories (`core`, `runtime`, `interfaces`, `spool`, `projections`, `emitters`, `canonical`, `control`); honest baseline: **9% of 42,683 statements** (was measuring <5% of nothing); `fail_under` set to 5 to reflect reality and give slack for CI variance
+
+### Changed (Removed)
+- Removed `sentry-sdk` from `requirements.txt`; Dream Studio does not phone home; `core/telemetry/telemetry.py` is now a documented no-op; `init_sentry()` and `capture_exception()` are API-preserving stubs
+
+### Added
+- `tests/unit/runtime/test_dispatcher_systemexit.py` — 7 tests verifying dispatcher fail-open for `SystemExit`, `KeyboardInterrupt`, `Exception`, and documenting the `os._exit()` known limitation
+- `docs/operations/environment-variables.md` — complete env var inventory: all production variables, defaults, network/privacy implications; `SENTRY_DSN` listed under "Removed"
+- Architecture doc `dream-studio-ai-orchestration-architecture.md` updated with honest "Current State" section: 2 of 22 hook handlers currently route through canonical events; dispatcher fail-open gap documented and closed
+
+### Policy decisions
+- Dispatcher fail-open is now a tested contract, not just a documented claim (18.1.12 real-world example of architectural-claim-vs-reality drift)
+- Dream Studio does not send telemetry to external services; local crash dashboard planned in 18.8.10.1
+
 ## Phase 18.1.11 — Substrate policy lock: read-after-write + schema evolution (2026-05-23)
 
 ### Fixed
