@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dispatcher fail-open is now a tested contract, not just a documented claim (18.1.12 real-world example of architectural-claim-vs-reality drift)
 - Dream Studio does not send telemetry to external services; local crash dashboard planned in 18.8.10.1
 
+### Fixed (additions from 2026-05-24 execution-verified audit)
+- `WorkOrderProjection` status state machine regression introduced in Phase 18.2.2 and undetected until 2026-05-24 execution-verified audit: `business_work_orders.status` now correctly reflects work order lifecycle events instead of returning `'created'` for all statuses. Root cause: 18.2.2 removed the direct DB writes from CLI mutators (`start_work_order`, `close_work_order`, `block_work_order`, `unblock_work_order`, `create_work_order`) without adding synchronous projection execution; the projection only runs via the background daemon. Fix: restored dual-write pattern — CLI mutators write directly to `business_work_orders` for immediate consistency AND emit canonical events for the projection audit trail. Three eval tests that caught the regression: `test_eval_close_wo`, `test_eval_build_contract`, `test_eval_plan_contract`.
+- Test contract for `create_work_order()` corrected: test was asserting `status == 'open'` (pre-rename status from `ds_work_orders`); `business_work_orders` uses `'created'` per migration 070 status mapping.
+
+### Removed (additions from 2026-05-24 execution-verified audit)
+- `control/research/methods.py` and downstream callers removed. Module returned hardcoded stub data (`placeholder://research-pending` sources, `confidence: 0.0`), never implemented per the Wave 3 plan. Operator decision: remove cleanly rather than ship fake data. `control/research/engine._execute_research()` now returns an explicit `status: "unavailable"` response. Research integration can be added in a future phase if needed.
+
 ## Phase 18.1.11 — Substrate policy lock: read-after-write + schema evolution (2026-05-23)
 
 ### Fixed
