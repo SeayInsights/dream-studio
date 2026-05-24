@@ -582,7 +582,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Parse and normalize security scanner outputs (SARIF, Bandit, TruffleHog, pip-audit)"
     )
-    parser.add_argument("--client", required=True, help="Client name (e.g. plmarketing-kroger)")
+    parser.add_argument("--client", required=True, help="Client name (e.g. acme-corp)")
     parser.add_argument(
         "--scans-dir",
         help="Directory containing scan files. Default: ~/.dream-studio/security/scans/{client}/",

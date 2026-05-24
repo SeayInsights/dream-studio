@@ -173,7 +173,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Score normalized security findings with CVSS + business impact"
     )
-    parser.add_argument("--client", required=True, help="Client name (e.g. plmarketing-kroger)")
+    parser.add_argument("--client", required=True, help="Client name (e.g. acme-corp)")
     parser.add_argument(
         "--input",
         help="Path to normalized findings JSON. Default: stdin",

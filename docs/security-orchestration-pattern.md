@@ -28,8 +28,8 @@ Every security skill follows this sequence. Mode-specific logic goes in phase 3.
 
 **Example:**
 ```
-User: "scan setup --client kroger --repo vendor-portal"
-Parsed: mode="setup", client="kroger", repo="vendor-portal"
+User: "scan setup --client acme-corp --repo vendor-portal"
+Parsed: mode="setup", client="acme-corp", repo="vendor-portal"
 ```
 
 ---
@@ -131,7 +131,7 @@ Each skill implements 2-5 modes (e.g., `setup`, `ingest`, `status`). Mode logic 
 
 5. **Report to user:**
    ```
-   ✓ Written: ~/.dream-studio/security/datasets/kroger/mitigations.csv (47 rows)
+   ✓ Written: ~/.dream-studio/security/datasets/acme-corp/mitigations.csv (47 rows)
    ```
 
 ---
@@ -150,8 +150,8 @@ Each skill implements 2-5 modes (e.g., `setup`, `ingest`, `status`). Mode logic 
 **Example error format:**
 ```
 ❌ ERROR: Client profile not found
-Path: ~/.dream-studio/clients/kroger.yaml
-Fix: Run `client-work:intake --name kroger` to create profile
+Path: ~/.dream-studio/clients/acme-corp.yaml
+Fix: Run `client-work:intake --name acme-corp` to create profile
 ```
 
 ### Soft Warnings (Continue with Defaults)

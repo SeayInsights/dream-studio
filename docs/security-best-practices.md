@@ -82,8 +82,8 @@ Common anti-patterns and best practices for all security skills.
   "timestamp": "2026-04-26T21:45:00Z",
   "skill": "mitigate",
   "mode": "findings",
-  "client": "kroger",
-  "output_path": "~/.dream-studio/security/datasets/kroger/mitigations.csv",
+  "client": "acme-corp",
+  "output_path": "~/.dream-studio/security/datasets/acme-corp/mitigations.csv",
   "row_count": 47
 }
 ```
@@ -97,7 +97,7 @@ Common anti-patterns and best practices for all security skills.
 
 **Pattern:**
 ```
-✅ "Client profile not found at ~/.dream-studio/clients/kroger.yaml. Fix: Run `client-work:intake --name kroger`"
+✅ "Client profile not found at ~/.dream-studio/clients/acme-corp.yaml. Fix: Run `client-work:intake --name acme-corp`"
 ❌ "Error: file not found"
 ```
 
