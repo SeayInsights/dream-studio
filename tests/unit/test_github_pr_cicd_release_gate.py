@@ -31,7 +31,7 @@ def test_dream_studio_profile_records_release_gate_contract() -> None:
 
     assert profile.project_id == "dream-studio"
     assert profile.default_branch == "main"
-    assert profile.github_remote == "https://github.com/SeayInsights/dream-studio.git"
+    assert profile.github_remote == "https://github.com/SeayInsights/dream-studio-clean.git"
     assert profile.merge_policy == MERGE_POLICY_AUTO
     assert profile.deployment_policy == "separate_approval_required"
     assert ".github/workflows/ci.yml" in profile.workflow_files
