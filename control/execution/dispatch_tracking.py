@@ -70,7 +70,7 @@ def run_handlers(
             mod.main()
             elapsed = (time.perf_counter() - t0) * 1000
             write_timing(state_dir, event_name, name, elapsed)
-        except Exception:
+        except BaseException:
             pass
         finally:
             sys.stdin = sys.__stdin__

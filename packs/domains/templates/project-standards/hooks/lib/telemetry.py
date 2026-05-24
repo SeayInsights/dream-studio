@@ -1,23 +1,15 @@
-"""Optional Sentry error tracking stub. Copy to hooks/lib/telemetry.py."""
+"""Error telemetry stub — no-op. Copy to hooks/lib/telemetry.py.
+
+Sentry integration was removed in Phase 18.1.12. Dream Studio does not phone
+home. This stub preserves the API surface for callers.
+"""
 
 from __future__ import annotations
 
-import os
-
 
 def init_sentry() -> None:
-    dsn = os.environ.get("SENTRY_DSN")
-    if dsn:
-        import sentry_sdk  # type: ignore[import]
-
-        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.1)
+    """No-op stub. Sentry was removed in Phase 18.1.12."""
 
 
 def capture_exception(exc: BaseException) -> None:
-    if os.environ.get("SENTRY_DSN"):
-        try:
-            import sentry_sdk  # type: ignore[import]
-
-            sentry_sdk.capture_exception(exc)
-        except Exception:
-            pass
+    """No-op stub. Errors surface to local dashboard (18.8.10.1), not external services."""

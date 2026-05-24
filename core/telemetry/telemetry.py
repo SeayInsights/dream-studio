@@ -1,27 +1,17 @@
-"""Optional Sentry error tracking.
+"""Error telemetry — local-first, no external services.
 
-Set SENTRY_DSN in the environment to enable. If absent, this module is a no-op.
-Add sentry-sdk to requirements.txt to use.
+Dream Studio does not phone home. Crashes and errors are surfaced to the
+local dashboard only. Sentry (removed in Phase 18.1.12) is not used.
+
+Future: 18.8.10.1 will add a local crash dashboard via the projection layer.
 """
 
 from __future__ import annotations
 
-import os
-
 
 def init_sentry() -> None:
-    dsn = os.environ.get("SENTRY_DSN")
-    if dsn:
-        import sentry_sdk  # type: ignore[import]
-
-        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.1)
+    """No-op. Sentry was removed in Phase 18.1.12."""
 
 
 def capture_exception(exc: BaseException) -> None:
-    if os.environ.get("SENTRY_DSN"):
-        try:
-            import sentry_sdk  # type: ignore[import]
-
-            sentry_sdk.capture_exception(exc)
-        except Exception:
-            pass
+    """No-op. Errors surface to local dashboard (18.8.10.1), not external services."""

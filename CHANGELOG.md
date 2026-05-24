@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.12 — Audit follow-ups: fail-open gap, coverage scope, Sentry removal, env var audit (2026-05-23)
+
+### Fixed
+- Hook dispatcher fail-open guarantee restored: `dispatch_tracking.run_handlers()` and `runtime/dispatch/hooks.main()` now catch `BaseException` instead of `Exception`, so `SystemExit` and `KeyboardInterrupt` from handlers can no longer escape and block AI sessions
+- `on-game-validate.py` no longer calls `sys.exit(2)` when validation issues are found; it now prints an advisory to stderr and returns normally (the handler should advise, not block)
+- `on-pulse.py` no longer re-raises exceptions from `run_pulse_check()`; errors are recorded and the hook exits cleanly
+- `on-stop-handoff.py` and `on-meta-review.py` now wrap their bodies in `try/except` for defense in depth
+- Coverage scope corrected: `[tool.coverage.run] source` was pointing to `hooks/lib` (does not exist) and `packs/domains/domain_lib` (empty); now points to the actual production directories (`core`, `runtime`, `interfaces`, `spool`, `projections`, `emitters`, `canonical`, `control`); honest baseline: **9% of 42,683 statements** (was measuring <5% of nothing); `fail_under` set to 5 to reflect reality and give slack for CI variance
+
+### Changed (Removed)
+- Removed `sentry-sdk` from `requirements.txt`; Dream Studio does not phone home; `core/telemetry/telemetry.py` is now a documented no-op; `init_sentry()` and `capture_exception()` are API-preserving stubs
+
+### Added
+- `tests/unit/runtime/test_dispatcher_systemexit.py` — 7 tests verifying dispatcher fail-open for `SystemExit`, `KeyboardInterrupt`, `Exception`, and documenting the `os._exit()` known limitation
+- `docs/operations/environment-variables.md` — complete env var inventory: all production variables, defaults, network/privacy implications; `SENTRY_DSN` listed under "Removed"
+- Architecture doc `dream-studio-ai-orchestration-architecture.md` updated with honest "Current State" section: 2 of 22 hook handlers currently route through canonical events; dispatcher fail-open gap documented and closed
+
+### Policy decisions
+- Dispatcher fail-open is now a tested contract, not just a documented claim (18.1.12 real-world example of architectural-claim-vs-reality drift)
+- Dream Studio does not send telemetry to external services; local crash dashboard planned in 18.8.10.1
+
+### Fixed (additions from 2026-05-24 execution-verified audit)
+- `WorkOrderProjection` status state machine regression introduced in Phase 18.2.2 and undetected until 2026-05-24 execution-verified audit: `business_work_orders.status` now correctly reflects work order lifecycle events instead of returning `'created'` for all statuses. Root cause: 18.2.2 removed the direct DB writes from CLI mutators (`start_work_order`, `close_work_order`, `block_work_order`, `unblock_work_order`, `create_work_order`) without adding synchronous projection execution; the projection only runs via the background daemon. Fix: restored dual-write pattern — CLI mutators write directly to `business_work_orders` for immediate consistency AND emit canonical events for the projection audit trail. Three eval tests that caught the regression: `test_eval_close_wo`, `test_eval_build_contract`, `test_eval_plan_contract`.
+- Test contract for `create_work_order()` corrected: test was asserting `status == 'open'` (pre-rename status from `ds_work_orders`); `business_work_orders` uses `'created'` per migration 070 status mapping.
+
+### Removed (additions from 2026-05-24 execution-verified audit)
+- `control/research/methods.py` and downstream callers removed. Module returned hardcoded stub data (`placeholder://research-pending` sources, `confidence: 0.0`), never implemented per the Wave 3 plan. Operator decision: remove cleanly rather than ship fake data. `control/research/engine._execute_research()` now returns an explicit `status: "unavailable"` response. Research integration can be added in a future phase if needed.
+
 ## Phase 18.1.11 — Substrate policy lock: read-after-write + schema evolution (2026-05-23)
 
 ### Fixed
