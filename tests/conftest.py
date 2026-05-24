@@ -49,7 +49,7 @@ if "DREAM_STUDIO_DB_PATH" not in _os.environ:
 # test-suite-only fix that prevents pytest's own SIGINT machinery from
 # printing a KeyboardInterrupt banner after the test summary. CI on Linux
 # is unaffected.
-import sys as _sys
+import sys as _sys  # noqa: E402
 
 if _sys.platform == "win32":
     import signal as _signal
@@ -63,13 +63,13 @@ if _sys.platform == "win32":
     _signal.signal(_signal.SIGINT, _conftest_sigint_handler)
 
 
-import importlib.util
-import sys
-import types
-from pathlib import Path
-from typing import Any
+import importlib.util  # noqa: E402
+import sys  # noqa: E402
+import types  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 _HOOKS_DIR = _PLUGIN_ROOT / "hooks"
@@ -130,7 +130,7 @@ def isolated_home(tmp_path, monkeypatch):
     return tmp_path
 
 
-import warnings
+import warnings  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

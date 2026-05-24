@@ -119,10 +119,14 @@ $env:PATH += ";$env:USERPROFILE\.dream-studio\bin"
 
 After adding to PATH, run `ds` from any directory.
 
-### 6. Run health check
+### 6. Run health checks
+
 ```powershell
-ds doctor
+ds validate   # DB health: schema version, migrations, module profiles
+ds doctor     # Integration health: skills, agents, hooks, routing
 ```
+
+Both must pass before first use. See [Health checks](#health-checks) for when to run each.
 
 ### 7. Register your first project
 
@@ -233,13 +237,13 @@ See [docs/setup/claude-code-hooks.md](docs/setup/claude-code-hooks.md) for full 
 | `ds memory ingest-sessions` | Harvest intelligence from Claude Code session history |
 | `ds memory ingest-sessions --dry-run` | Preview harvest counts without writing |
 
-### Doctor / Validate
-| Command | Description |
-|---------|-------------|
-| `ds doctor` | Run read-only runtime health checks |
-| `ds validate` | Validate installed runtime readiness |
-| `ds version` | Show Dream Studio version |
-| `ds status` | Show installed runtime status |
+### Health checks
+| Command | Plane | Description |
+|---------|-------|-------------|
+| `ds validate` | DB authority | Schema version, migrations, module profiles |
+| `ds doctor` | Claude Code integration | Skills, agents, hooks, routing, version |
+| `ds version` | — | Show Dream Studio version |
+| `ds status` | — | Show installed runtime status |
 
 ---
 
@@ -352,12 +356,31 @@ The test suite has one pre-existing expected failure. All other tests must be gr
 2. Add the mode to `packs.yaml` under the appropriate pack's `modes` list
 3. The compiler picks up the change automatically — no manual routing table edits required
 
-### Running ds doctor
+### Health checks
+
+Dream Studio has two health-check planes. Run both when investigating any issue; run one when you know which plane the issue lives in.
+
+#### `ds validate` — DB authority plane
+Checks the SQLite database is healthy: schema version matches latest migration, no pending migrations, no module profile errors. Run after:
+- `ds migrate` (verify migrations applied)
+- Manual DB changes or backup restore
+
+Returns `ready: true` when the DB is at the current schema version with no profile errors.
+
+#### `ds doctor` — Claude Code integration plane
+Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
+- `ds integrate install claude_code --execute`
+- Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
+- Upgrading Dream Studio or before starting a new session
+
+Returns `status: pass` when the integration layer is fully wired and current.
+
+These commands are independent. A passing `ds validate` does NOT mean the integration is wired; a passing `ds doctor` does NOT mean the DB schema is current. Use both for full coverage.
+
 ```powershell
+ds validate
 ds doctor
 ```
-
-Reports: SQLite health, migration version, spool status, integration status, adapter router state.
 
 ### Personalizing from session history
 ```powershell

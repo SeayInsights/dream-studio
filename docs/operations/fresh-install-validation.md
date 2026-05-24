@@ -30,7 +30,7 @@ Linux/Mac:
 bash install.sh
 ```
 
-### 3. Verify DB health
+### 3. Verify DB health (DB authority plane)
 
 ```bash
 py -m interfaces.cli.ds validate
@@ -38,13 +38,19 @@ py -m interfaces.cli.ds validate
 
 Expected: `"ready": true`, `"schema_version"` matches `"latest_migration_version"`, `"module_profile_errors": []`.
 
-### 4. Verify integration health
+A passing `ds validate` confirms the SQLite database is healthy and all migrations have been applied. It does NOT confirm that skills, agents, or hooks are installed.
+
+### 4. Verify integration health (Claude Code integration plane)
 
 ```bash
 py -m interfaces.cli.ds doctor
 ```
 
-Expected: all checks pass, no missing required skills.
+Expected: `"status": "pass"`, all skills installed and current, dispatcher hooks wired.
+
+A passing `ds doctor` confirms the Claude Code integration layer is fully wired. It does NOT substitute for `ds validate` — both must pass.
+
+**Both steps are required.** Do not mark a fresh install as passing unless both `ds validate` returns `"ready": true` and `ds doctor` returns `"status": "pass"`.
 
 ### 5. Register a test project
 
@@ -61,8 +67,8 @@ Every command in steps 3-5 should return exit code 0 on success.
 ## Pass criteria
 
 - All steps complete without manual intervention beyond what is documented
-- `ds validate` reports `"ready": true`
-- `ds doctor` reports all skills present (missing skills from the career pack are expected — that pack requires an external service)
+- `ds validate` reports `"ready": true` (DB authority plane)
+- `ds doctor` reports `"status": "pass"` (Claude Code integration plane; missing career pack skills are expected — that pack requires an external service)
 - No tracebacks, `ImportError`, or `ModuleNotFoundError` at any step
 - Exit codes are 0 for all successful commands
 
@@ -78,13 +84,25 @@ This procedure must be re-run before any Phase 18.8 public release sign-off.
 
 ---
 
-## ds validate vs ds doctor — when to use which
+## Health checks
 
-These two commands check different things and are both valuable:
+Dream Studio has two health-check planes. Run both when investigating any issue; run one when you know which plane the issue lives in.
 
-| Command | What it checks | When to run |
-|---------|---------------|-------------|
-| `ds validate` | SQLite DB exists and is at the correct schema version; module profiles are valid | After DB migrations, to verify the database is healthy |
-| `ds doctor` | Skills, agents, and hooks are correctly installed in Claude Code | After `integrate install`, to verify the integration is correct |
+### `ds validate` — DB authority plane
+Checks the SQLite database is healthy: schema version matches latest migration, no pending migrations, no module profile errors. Run after:
+- `ds migrate` (verify migrations applied)
+- Manual DB changes
+- Backup restore
 
-Run `ds validate` to diagnose database problems. Run `ds doctor` to diagnose missing skill or hook problems. A healthy install shows both passing.
+Returns `ready: true` when the DB is at the current schema version with no profile errors.
+
+### `ds doctor` — Claude Code integration plane
+Checks the Claude Code integration is wired correctly: dispatcher hooks present, skills installed and current, agents deployed, routing triggers covered, installed version current. Run after:
+- `ds integrate install claude_code --execute`
+- Manual edits to `~/.claude/settings.json` or `CLAUDE.md`
+- Upgrading Dream Studio
+- Before starting a new session
+
+Returns `status: pass` when the integration layer is fully wired and current.
+
+These commands are independent. A passing `ds validate` does NOT mean the integration is wired; a passing `ds doctor` does NOT mean the DB schema is current. Use both for full coverage.
