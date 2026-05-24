@@ -18,7 +18,7 @@ def _enterprise_required_error(feature: str) -> Dict[str, Any]:
         "message": f"{feature} requires dream-studio-enterprise",
         "feature": feature,
         "learn_more": "https://dreamstudio.dev/enterprise",
-        "contact": "info@twinrootsllc.com",
+        "contact": "https://dreamstudio.dev/enterprise",
     }
 
 
@@ -144,5 +144,5 @@ async def ml_status():
             "evaluation": False,
         },
         "learn_more": "https://dreamstudio.dev/enterprise",
-        "contact": "info@twinrootsllc.com",
+        "contact": "https://dreamstudio.dev/enterprise",
     }

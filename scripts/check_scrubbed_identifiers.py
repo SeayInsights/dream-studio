@@ -23,26 +23,16 @@ FORBIDDEN_PATTERNS = [
     r"PLMarketing",
     r"Kroger",
     r"dannis\.seay@twinrootsllc\.com",
+    r"info@twinrootsllc\.com",
 ]
 
 # Files where one or more forbidden tokens appear intentionally and must not
 # block commits. Paths are relative to repo root, forward-slash separated.
-#
-# Note: info@twinrootsllc.com is intentionally NOT in FORBIDDEN_PATTERNS —
-# it is the company's public business contact, not a scrubbed private identifier.
-# The enterprise stub files below are documented here as known intentional
-# occurrences so that any future addition of info@twinrootsllc.com to
-# FORBIDDEN_PATTERNS would not require re-auditing these files.
 EXEMPT_FILES: set[str] = {
-    "SECURITY.md",  # info@twinrootsllc.com — intentional security contact
+    "SECURITY.md",  # info@twinrootsllc.com — intentional security disclosure contact
     "CHANGELOG.md",  # dannis.seay@twinrootsllc.com in Phase 18.1.8 release note (line 355)
     # This file defines the forbidden patterns as string literals — must self-exempt
     "scripts/check_scrubbed_identifiers.py",
-    # Enterprise feature stubs — info@twinrootsllc.com as public contact branding
-    # (operator confirmed intentional during Phase 18.1.14a)
-    "core/org_intelligence.py",
-    "projections/ml.py",
-    "projections/api/routes/ml.py",
 }
 
 

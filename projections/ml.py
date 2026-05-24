@@ -12,7 +12,6 @@ Features:
 - Benchmarking and model evaluation
 
 Learn more: https://dreamstudio.dev/enterprise
-Contact: info@twinrootsllc.com
 """
 
 
@@ -42,7 +41,7 @@ def generate_recommendations(*args, **kwargs):
     if not check_ml_available():
         raise MLNotAvailableError(
             "ML recommendations require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.ml import recommendations
 
@@ -59,7 +58,7 @@ def forecast_token_usage(*args, **kwargs):
     if not check_ml_available():
         raise MLNotAvailableError(
             "Token usage forecasting requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.ml import forecasting
 
@@ -76,7 +75,7 @@ def detect_patterns(*args, **kwargs):
     if not check_ml_available():
         raise MLNotAvailableError(
             "Pattern detection requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.ml import patterns
 
@@ -93,7 +92,7 @@ def cluster_behaviors(*args, **kwargs):
     if not check_ml_available():
         raise MLNotAvailableError(
             "Behavior clustering requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.ml import clustering
 

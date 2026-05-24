@@ -15,7 +15,6 @@ Features:
 - Multi-project risk assessment
 
 Learn more: https://dreamstudio.dev/enterprise
-Contact: info@twinrootsllc.com
 """
 
 
@@ -45,7 +44,7 @@ def generate_org_intelligence(*args, **kwargs):
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
             "Organization intelligence requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.org_intelligence import insight_engine
 
@@ -62,7 +61,7 @@ def build_org_graph(*args, **kwargs):
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
             "Organization graphs require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.org_intelligence import graph_builder
 
@@ -79,7 +78,7 @@ def analyze_cross_repo(*args, **kwargs):
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
             "Cross-repo analysis requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.org_intelligence import cross_repo_analyzer
 
@@ -96,7 +95,7 @@ def generate_vp_metrics(*args, **kwargs):
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
             "VP metrics require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise or contact info@twinrootsllc.com"
+            "Learn more: https://dreamstudio.dev/enterprise"
         )
     from dream_studio_enterprise.org_intelligence import insight_engine
 
