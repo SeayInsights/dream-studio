@@ -91,6 +91,10 @@ cd ~/builds/dream-studio-clean
 py -m pip install -r requirements.txt
 ```
 
+> **Reproducible installs:** `requirements.lock` pins all transitive dependencies to the exact versions
+> verified at release time. For strict reproducibility, use `pip install -r requirements.lock`.
+> For patch-version flexibility, use `pip install -r requirements.txt`.
+
 ### 3. Bootstrap the runtime database
 ```powershell
 py -m interfaces.cli.ds rehearsal-install --rehearsal-home "$env:USERPROFILE\.dream-studio"
