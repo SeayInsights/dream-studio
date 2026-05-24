@@ -193,7 +193,6 @@ class ProductionDashboard:
 
         if not ML_AVAILABLE:
             print("  [INFO] ML features require dream-studio-enterprise")
-            print("        Learn more: https://dreamstudio.dev/enterprise")
             return ml_insights
 
         try:

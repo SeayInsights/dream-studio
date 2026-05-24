@@ -1,8 +1,6 @@
-"""
-ML/Advanced Analytics API Routes - Enterprise Feature Stubs
+"""ML/Advanced Analytics API Routes - Enterprise Feature Stubs
 
 These endpoints require dream-studio-enterprise.
-Learn more: https://dreamstudio.dev/enterprise
 """
 
 from fastapi import APIRouter, HTTPException
@@ -17,8 +15,6 @@ def _enterprise_required_error(feature: str) -> Dict[str, Any]:
         "error": "enterprise_feature_required",
         "message": f"{feature} requires dream-studio-enterprise",
         "feature": feature,
-        "learn_more": "https://dreamstudio.dev/enterprise",
-        "contact": "https://dreamstudio.dev/enterprise",
     }
 
 
@@ -143,6 +139,4 @@ async def ml_status():
             "benchmarking": False,
             "evaluation": False,
         },
-        "learn_more": "https://dreamstudio.dev/enterprise",
-        "contact": "https://dreamstudio.dev/enterprise",
     }

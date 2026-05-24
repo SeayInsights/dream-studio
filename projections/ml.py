@@ -11,7 +11,6 @@ Features:
 - Pattern detection across sessions
 - Benchmarking and model evaluation
 
-Learn more: https://dreamstudio.dev/enterprise
 """
 
 
@@ -36,13 +35,9 @@ def generate_recommendations(*args, **kwargs):
     Get ML-powered recommendations - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_ml_available():
-        raise MLNotAvailableError(
-            "ML recommendations require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
-        )
+        raise MLNotAvailableError("ML recommendations require dream-studio-enterprise.")
     from dream_studio_enterprise.ml import recommendations
 
     return recommendations.generate_recommendations(*args, **kwargs)
@@ -53,13 +48,9 @@ def forecast_token_usage(*args, **kwargs):
     Forecast token usage using ARIMA - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_ml_available():
-        raise MLNotAvailableError(
-            "Token usage forecasting requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
-        )
+        raise MLNotAvailableError("Token usage forecasting requires dream-studio-enterprise.")
     from dream_studio_enterprise.ml import forecasting
 
     return forecasting.forecast_token_usage(*args, **kwargs)
@@ -70,13 +61,9 @@ def detect_patterns(*args, **kwargs):
     Detect patterns across sessions - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_ml_available():
-        raise MLNotAvailableError(
-            "Pattern detection requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
-        )
+        raise MLNotAvailableError("Pattern detection requires dream-studio-enterprise.")
     from dream_studio_enterprise.ml import patterns
 
     return patterns.detect_patterns(*args, **kwargs)
@@ -87,13 +74,9 @@ def cluster_behaviors(*args, **kwargs):
     Cluster user behaviors - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_ml_available():
-        raise MLNotAvailableError(
-            "Behavior clustering requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
-        )
+        raise MLNotAvailableError("Behavior clustering requires dream-studio-enterprise.")
     from dream_studio_enterprise.ml import clustering
 
     return clustering.cluster_behaviors(*args, **kwargs)

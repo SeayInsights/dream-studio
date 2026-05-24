@@ -14,7 +14,6 @@ Features:
 - Consolidation opportunity analysis
 - Multi-project risk assessment
 
-Learn more: https://dreamstudio.dev/enterprise
 """
 
 
@@ -39,12 +38,10 @@ def generate_org_intelligence(*args, **kwargs):
     Generate organization intelligence graphs - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
-            "Organization intelligence requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
+            "Organization intelligence requires dream-studio-enterprise."
         )
     from dream_studio_enterprise.org_intelligence import insight_engine
 
@@ -56,12 +53,10 @@ def build_org_graph(*args, **kwargs):
     Build organization graph - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
-            "Organization graphs require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
+            "Organization graphs require dream-studio-enterprise."
         )
     from dream_studio_enterprise.org_intelligence import graph_builder
 
@@ -73,12 +68,10 @@ def analyze_cross_repo(*args, **kwargs):
     Analyze patterns across multiple repositories - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_org_intelligence_available():
         raise OrgIntelligenceNotAvailableError(
-            "Cross-repo analysis requires dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
+            "Cross-repo analysis requires dream-studio-enterprise."
         )
     from dream_studio_enterprise.org_intelligence import cross_repo_analyzer
 
@@ -90,13 +83,9 @@ def generate_vp_metrics(*args, **kwargs):
     Generate VP Engineering metrics - Enterprise feature.
 
     This feature requires dream-studio-enterprise.
-    Learn more: https://dreamstudio.dev/enterprise
     """
     if not check_org_intelligence_available():
-        raise OrgIntelligenceNotAvailableError(
-            "VP metrics require dream-studio-enterprise. "
-            "Learn more: https://dreamstudio.dev/enterprise"
-        )
+        raise OrgIntelligenceNotAvailableError("VP metrics require dream-studio-enterprise.")
     from dream_studio_enterprise.org_intelligence import insight_engine
 
     return insight_engine.generate_vp_metrics(*args, **kwargs)
