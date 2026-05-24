@@ -10,3 +10,4 @@ black>=24.0
 flake8>=7.0
 pip-audit>=2.7
 pre-commit>=3.0
+pytest-asyncio>=0.23
