@@ -31,9 +31,12 @@ from core.ontology.lifecycles import (
 
 @pytest.fixture()
 def store(tmp_path: Path, monkeypatch) -> MemoryStore:
+    from core.config.sqlite_bootstrap import run_migrations
+
     db_path = str(tmp_path / "test.db")
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL")
+    run_migrations(conn)
     conn.close()
 
     monkeypatch.setattr("core.memory.store.transaction", _make_tx(db_path))
