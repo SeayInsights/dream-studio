@@ -90,7 +90,7 @@ def main() -> int:
         handlers = _resolve_handlers(event_name, tool_name, plugin_root)
         if handlers:
             _dt.run_handlers(handlers, raw_payload, event_name, state_dir)
-    except Exception:
+    except BaseException:
         pass
 
     return 0

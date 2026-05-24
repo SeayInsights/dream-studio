@@ -322,39 +322,17 @@ def _execute_research(query: str, context: dict, research_type: str) -> dict:
             - data: Research findings
             - primary_source: Source URL
     """
-    # Import research methods (gracefully handle if not implemented yet)
-    try:
-        from control.research.methods import (
-            _research_stack_compatibility,
-            _research_security_pattern,
-            _research_documentation,
-            _research_code_pattern,
-            _research_general,
-        )
-
-        method_map = {
-            "stack": _research_stack_compatibility,
-            "security": _research_security_pattern,
-            "docs": _research_documentation,
-            "pattern": _research_code_pattern,
-            "general": _research_general,
-        }
-
-        method = method_map.get(research_type, _research_general)
-        return method(query, context)
-
-    except ImportError:
-        # Fallback: return stub response if research_methods not implemented yet
-        return {
-            "data": {
-                "query": query,
-                "context": context,
-                "research_type": research_type,
-                "status": "pending_implementation",
-                "note": "Research methods module not yet implemented",
-            },
-            "primary_source": "internal://stub",
-        }
+    # research methods removed in Phase 18.1.12 (operator decision: remove stub, not ship fake data)
+    return {
+        "data": {
+            "query": query,
+            "context": context,
+            "research_type": research_type,
+            "status": "unavailable",
+            "note": "Research integration not implemented. Removed in Phase 18.1.12.",
+        },
+        "primary_source": "internal://not-available",
+    }
 
 
 def _store_research(

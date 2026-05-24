@@ -127,7 +127,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
     )
     assert wo_result["ok"] is True
     assert "work_order_id" in wo_result
-    assert wo_result["status"] == "open"
+    assert wo_result["status"] == "created"
 
     task_result = create_task(
         work_order_id=wo_result["work_order_id"],

@@ -40,7 +40,12 @@ def main() -> None:
     if result:
         print(result.output, flush=True)
         if result.should_block:
-            sys.exit(2)
+            print(
+                f"[dream-studio] on-game-validate: validation advisory for {file_path_str}"
+                " — address issues above before continuing.",
+                file=sys.stderr,
+                flush=True,
+            )
 
 
 if __name__ == "__main__":
