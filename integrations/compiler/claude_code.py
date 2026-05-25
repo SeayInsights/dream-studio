@@ -54,6 +54,31 @@ Do not pass force=True without operator approval.
 ## If you do not have an active work order:
 Call get_next_work_order(project_id=..., source_root=...) or
 invoke ds-project:resume to orient and start the next work order.
+
+## Output discipline:
+Write every file to exactly one of three locations. Diagnostic output at the repo root is forbidden.
+
+Type 1 — Repo-internal working state. PR drafts, inventories, recovery reports, working notes.
+Location: `<repo>/.planning/`
+Subdirectories: `phases/`, `workstreams/<id>/`, `specs/`, `workflows/`, `work-orders/`, `audits/`, `snapshots/`, `personal/`
+
+Type 2 — Project workspace. Briefs, milestones, work orders, exports. Spans repos; tied to a Dream Studio project.
+Location: `~/.dream-studio/projects/<project-id>/`
+Prefer `ds` CLI commands over direct file writes.
+
+Type 3 — Session diagnostic output. Pytest captures, black/lint, drift gates, verification greps. Disposable evidence-of-work.
+Location: `~/.dream-studio/diagnostics/<YYYY-MM-DD>/<repo-name>/<session-purpose>/`
+
+Examples:
+- Wrong: `py -m pytest > pytest-output.txt`
+- Right: `py -m pytest > ~/.dream-studio/diagnostics/2026-05-25/dream-studio-clean/test-run/pytest-output.txt`
+- Wrong: writing `pr-body.md` to repo root
+- Right: writing to `.planning/workstreams/<workstream-id>/pr-body.md`
+
+Rules:
+- NEVER write diagnostic output to the repo root
+- NEVER write working files directly to `.planning/` root — use the right subdirectory
+- If unsure where a file belongs, ask the operator before writing
 """
 
 # Human-readable display names for packs
