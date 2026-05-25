@@ -163,11 +163,6 @@ class DatabaseRuntime:
         logger.debug("DatabaseRuntime cleanup")
 
 
-# ============================================================================
-# LEGACY FUNCTIONS (preserved for backwards compatibility)
-# ============================================================================
-
-
 # SINGLE SOURCE OF TRUTH FOR DATABASE LOCATION
 def get_db_path() -> Path:
     """

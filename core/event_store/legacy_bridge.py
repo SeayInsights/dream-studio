@@ -1,14 +1,15 @@
-# DEPRECATED: Superseded by the spool pipeline (spool/ + emitters/).
-# Retained for backward compatibility during Slice 1-2 transition.
-# Scheduled for deletion in Slice 2 after test suite green.
-"""
-Legacy bridge for dual-write migration.
+"""LegacyBridge — dual-write bridge for skill execution events.
 
-Provides backward-compatible writes to legacy activity_log
-while emitting canonical events to EventStore.
+This module is the active write path for skill execution events. It is imported by:
+- control/skills/router.py (skill dispatch)
+- control/skills/metrics.py (per-invocation metrics)
+- control/skills/loader.py (skill loading)
 
-This is a strangler pattern migration - old code continues to work
-while new canonical event stream is built in parallel.
+Provides backward-compatible writes to legacy activity_log while emitting
+canonical events to EventStore (strangler pattern).
+
+Retirement of this bridge requires migrating skill execution event emission
+directly to the spool pipeline; that migration is not yet scoped.
 """
 
 import json

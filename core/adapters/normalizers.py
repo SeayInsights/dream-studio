@@ -1,4 +1,4 @@
-"""Adapter classes for the legacy normalization layer.
+"""Adapter classes for the event normalization layer.
 
 Moved from interfaces/adapters/ (Slice 4 retirement).
 All imports updated to core.adapters.models.
