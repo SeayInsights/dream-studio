@@ -162,7 +162,10 @@ core/observability/trace_logger.py:272:70: F841 local variable 'op' is assigned 
 core/ontology/schema.py:12:1: F401 'dataclasses.field' imported but unused
 core/ontology/schema.py:13:1: F401 'enum.auto' imported but unused
 core/ontology/schema.py:14:1: F401 'typing.Set' imported but unused
-core/org_intelligence.py:31:9: F401 'dream_studio_enterprise.org_intelligence' imported but unused
+core/org_intelligence/cross_repo_analyzer.py:8:1: F401 'typing.Set' imported but unused
+core/org_intelligence/cross_repo_analyzer.py:8:1: F401 'typing.Tuple' imported but unused
+core/org_intelligence/insight_engine.py:9:1: F401 'dataclasses.field' imported but unused
+core/org_intelligence/normalizer.py:8:1: F401 'typing.Set' imported but unused
 core/projections/framework.py:23:1: F401 'typing.Sequence' imported but unused
 core/projections/workflow_metrics.py:12:1: F401 'datetime.datetime' imported but unused
 core/projects/external_validation.py:135:5: F841 local variable 'commit_allowed' is assigned to but never used
@@ -516,10 +519,15 @@ projections/exporters/test_pptx_exporter.py:272:23: F541 f-string is missing pla
 projections/exporters/test_pptx_exporter.py:344:15: F541 f-string is missing placeholders
 projections/frontend/integrate_improvements.py:10:1: F401 're' imported but unused
 projections/frontend/integrate_improvements.py:416:11: F541 f-string is missing placeholders
-projections/generators/production_dashboard.py:1085:17: F541 f-string is missing placeholders
+projections/generators/production_dashboard.py:1084:17: F541 f-string is missing placeholders
 projections/generators/production_dashboard.py:3:1: F401 'typing.List' imported but unused
 projections/generators/production_dashboard.py:3:1: F401 'typing.Optional' imported but unused
-projections/ml.py:28:9: F401 'dream_studio_enterprise.ml' imported but unused
+projections/ml/forecasting.py:13:1: F401 'datetime.datetime' imported but unused
+projections/ml/forecasting.py:14:1: F401 'typing.Optional' imported but unused
+projections/ml/forecasting.py:14:1: F401 'typing.Union' imported but unused
+projections/ml/patterns.py:29:1: F401 'typing.Set' imported but unused
+projections/ml/patterns.py:30:1: F401 'warnings' imported but unused
+projections/ml/recommendations.py:28:1: F401 'typing.Tuple' imported but unused
 projections/parsers/sarif_parser.py:28:1: F401 'core.event_store.studio_db' imported but unused
 projections/tests/test_analyzers.py:3:1: F401 'pytest' imported but unused
 projections/tests/test_api.py:3:1: F401 'pytest' imported but unused
