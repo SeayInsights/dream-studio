@@ -260,40 +260,29 @@ def test_enterprise_outputs_do_not_write_canonical_authority_tables():
     assert offenders == []
 
 
-def test_main_repo_enterprise_stubs_remain_non_mutating_and_fail_closed():
-    stubs = [
-        REPO_ROOT / "core" / "org_intelligence.py",
-        REPO_ROOT / "projections" / "ml.py",
-        REPO_ROOT / "projections" / "api" / "routes" / "ml.py",
-    ]
-    forbidden_tokens = [
-        "sqlite3",
-        "get_connection(",
-        "_connect(",
-        "transaction(",
-        "INSERT INTO",
-        "UPDATE ",
-        "DELETE FROM",
-        "~/.dream-studio",
-        "studio.db",
-    ]
-    offenders: list[str] = []
+def test_main_repo_ml_and_org_intelligence_are_real_packages():
+    """Verify bring-back complete: real packages exist, stubs removed, ML routes are live."""
+    # Stubs must be gone
+    assert not (
+        REPO_ROOT / "core" / "org_intelligence.py"
+    ).exists(), "stub core/org_intelligence.py must be deleted after bring-back"
+    assert not (
+        REPO_ROOT / "projections" / "ml.py"
+    ).exists(), "stub projections/ml.py must be deleted after bring-back"
 
-    for path in stubs:
-        source = _read(path)
-        for token in forbidden_tokens:
-            if token in source:
-                offenders.append(f"{_rel(path)} contains {token}")
+    # Real packages must exist
+    oi_pkg = REPO_ROOT / "core" / "org_intelligence"
+    assert oi_pkg.is_dir(), "core/org_intelligence must be a package directory"
+    assert (oi_pkg / "__init__.py").exists(), "core/org_intelligence/__init__.py missing"
 
-    api_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "ml.py")
-    projection_ml = _read(REPO_ROOT / "projections" / "ml.py")
-    org_intelligence = _read(REPO_ROOT / "core" / "org_intelligence.py")
+    ml_pkg = REPO_ROOT / "projections" / "ml"
+    assert ml_pkg.is_dir(), "projections/ml must be a package directory"
+    assert (ml_pkg / "__init__.py").exists(), "projections/ml/__init__.py missing"
 
-    assert offenders == []
-    assert "status_code=402" in api_source
-    assert "enterprise_feature_required" in api_source
-    assert "MLNotAvailableError" in projection_ml
-    assert "OrgIntelligenceNotAvailableError" in org_intelligence
+    # ML routes must be real implementations, not 402 stubs
+    ml_routes = _read(REPO_ROOT / "projections" / "api" / "routes" / "ml.py")
+    assert "status_code=402" not in ml_routes, "ML routes must not return 402 after bring-back"
+    assert "enterprise_feature_required" not in ml_routes
 
 
 def test_deprecated_dashboard_generator_is_not_enterprise_input_surface():

@@ -54,6 +54,8 @@ Current-tree cleanliness is not enough if Git history contains private runtime
 artifacts. History rewrite, force-push, tag, push, deploy, cleanup, or
 publication requires explicit operator approval and release-policy alignment.
 
+**Phase 18.1.14b (2026-05-25):** Enterprise bring-back added `core/org_intelligence/` and `projections/ml/` to the public repo. Both packages contain no private content, no personal data, no operator-local paths, and no proprietary framing. They are clean OSS source under the main license. Phase 18.1.14c (Git history rewrite) is explicitly deferred and requires separate operator authorization before proceeding.
+
 ## Sanitized Contract Atlas Export
 
 Use `ds contract-atlas-refresh --output-dir docs\publication --execute` only for

@@ -46,6 +46,8 @@ These steps are planning authority only. The pipeline reports
 `execution_allowed=false` until a later scoped Work Order authorizes real target
 access.
 
+<!-- 18.1.14b review 2026-05-25: enterprise bring-back (core/org_intelligence/, projections/ml/) does not affect the external project validation pipeline. The enterprise source repo (dream-studio-enterprise/) was accessed READ-ONLY during bring-back; no external target read access was used. External targets remain paused. -->
+
 ## Evidence Separation
 
 Private Dream Studio planning artifacts remain in Dream Studio SQLite or
