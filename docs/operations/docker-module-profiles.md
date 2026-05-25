@@ -64,6 +64,8 @@ for core, analytics-only, security-only, dashboard, shared-intelligence,
 adapter-router, or local-first operation unless a future profile explicitly
 enables and approves that runtime.
 
+<!-- 18.1.14b review 2026-05-25: ML analytics modules (projections/ml/) and org intelligence (core/org_intelligence/) are now real implementations. The dashboard-api Docker profile may need to declare scipy/statsmodels/scikit-learn as optional dependencies in a future profile update. Not blocking — ML features degrade gracefully when optional deps are absent. -->
+
 Release-gate validation for Docker profile contracts runs without Docker and
 with isolated temporary Dream Studio runtime state. A passing release gate does
 not imply container execution, host mounts, network exposure, or access to the

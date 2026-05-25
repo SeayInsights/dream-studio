@@ -43,6 +43,8 @@ Keep these out of Git unless separately sanitized and approved:
 
 `.gitignore` excludes local runtime state, database files, backups, logs, and local evidence exports. If a private file has been committed in the past, remove it from current tracking without deleting the local copy, then classify whether history rewrite is required.
 
+**Phase 18.1.14b (2026-05-25):** `core/org_intelligence/` and `projections/ml/` were brought in from the enterprise repo and are now part of the public OSS repo under the main Apache-2.0 license. No proprietary framing, no license gates, no private content. The enterprise repo itself (`../dream-studio-enterprise/`) remains external and is excluded from tracking via `.gitignore`.
+
 Repo publication readiness is checked through the repo-owned command:
 
 ```powershell
