@@ -6,6 +6,15 @@ purpose: Custom false positive filtering templates for security reviews
 
 # Custom False Positive Filtering
 
+## Applicable regulatory anchors
+
+This reference supports filtering decisions aligned with the following sections of [`regulatory-anchors.md`](../../../references/regulatory-anchors.md):
+
+- 🟠 [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP ASVS 5.0 define the vulnerability categories these filters exclude or qualify; precedents align with framework-specific security guarantees.
+- 🟠 [M. Vulnerability management & disclosure](../../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS and the ≥0.8 confidence threshold underpin the signal quality criteria in custom filtering instructions.
+
+See the full anchor list for tier definitions and the complete catalog of applicable regimes.
+
 This reference provides templates and examples for customizing false positive filtering in security reviews. Use these patterns to tailor security analysis to your specific environment and threat model.
 
 ## Overview
@@ -63,12 +72,12 @@ PRECEDENTS -
 12. All webhooks use HMAC signature verification
 ```
 
-## AcmeCorp-Specific Examples
+## Industry-Specific Examples
 
 ### Retail Data Security
 
 ```
-HARD EXCLUSIONS - AcmeCorp Context:
+HARD EXCLUSIONS - Retail Analytics Context:
 1. Planogram data exposure in internal dashboards - restricted to authenticated users
 2. Vendor pricing data in reports - access controlled via Power BI RLS
 3. Category management metrics - internal use only, behind SSO
