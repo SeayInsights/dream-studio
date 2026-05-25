@@ -20,6 +20,8 @@ runtime/config/release-gates/flake8-baseline.txt
 
 The baseline stores normalized flake8 findings for known historical debt. The gate compares current findings against that baseline by file, rule code, and message so line-number movement from formatting does not automatically create false positives.
 
+Phase 18.1.14b enterprise bring-back (2026-05-25): ported code from the enterprise repo (`core/org_intelligence/`, `projections/ml/`) introduced F401 unused-import findings that were present in the source code as-is. These were added to the baseline as tracked debt rather than being removed from the ported code, which preserves fidelity with the original implementation. The two stub entries (`core/org_intelligence.py`, `projections/ml.py`) were removed from the baseline since those files no longer exist.
+
 ## Blocking Rules
 
 The release gate blocks:

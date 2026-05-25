@@ -47,6 +47,8 @@ When you invoke a Dream Studio skill, you are not calling a function. You are en
 │   SDLC Pipeline (scope → design brief → build → gates → close)  │
 │   Design Gates (post-build, anti-slop, CWV results)             │
 │   Memory (gotchas, lessons, session harvest, tech signals)       │
+│   ML Analytics (forecasting, pattern detection, recommendations) │
+│   Org Intelligence (multi-repo graph, capability normalization)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

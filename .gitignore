@@ -60,14 +60,11 @@ env/
 *.backup
 *.dump
 
-# Enterprise features (in separate private repo)
+# Enterprise repo (external — do not track)
 ../dream-studio-enterprise/
-projections/ml/
-!projections/ml.py
+
+# Org intelligence graph (generated output — not source)
 core/org_intelligence_graph/
-!core/org_intelligence.py
-scripts/generate_org_intelligence.py
-projections/tests/test_ml.py
 
 # Enterprise environment
 DREAMSTUDIO_ENTERPRISE_KEY

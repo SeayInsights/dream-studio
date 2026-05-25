@@ -23,18 +23,18 @@ from projections.core.insights import InsightEngine, RecommendationEngine
 ENTERPRISE_AGGREGATION_INPUT_ALLOWED = False
 ENTERPRISE_AGGREGATION_CLASSIFICATION = "legacy_local_projection_generator_not_enterprise_input"
 
-# ML features (Enterprise) - gracefully degrade if not available
+# ML features — gracefully degrade if optional deps (statsmodels, sklearn) not installed
 try:
     from projections.ml import check_ml_available
 
     ML_AVAILABLE = check_ml_available()
     if ML_AVAILABLE:
-        from dream_studio_enterprise.ml.forecasting import TimeSeriesForecaster
-        from dream_studio_enterprise.ml.patterns import PatternDetector
-        from dream_studio_enterprise.ml.recommendations import (
+        from projections.ml.forecasting import TimeSeriesForecaster
+        from projections.ml.patterns import PatternDetector
+        from projections.ml.recommendations import (
             RecommendationEngine as MLRecommendationEngine,
         )
-        from dream_studio_enterprise.ml.benchmarks import BenchmarkEngine
+        from projections.ml.benchmarks import BenchmarkEngine
 except ImportError:
     ML_AVAILABLE = False
     TimeSeriesForecaster = None
@@ -193,7 +193,6 @@ class ProductionDashboard:
 
         if not ML_AVAILABLE:
             print("  [INFO] ML features require dream-studio-enterprise")
-            print("        Learn more: https://dreamstudio.dev/enterprise")
             return ml_insights
 
         try:
