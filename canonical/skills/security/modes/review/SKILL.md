@@ -1,5 +1,16 @@
 # Security Review — Code-Level Vulnerability Analysis
 
+## Applicable regulatory anchors
+
+This skill addresses requirements from the following sections of [`regulatory-anchors.md`](../../references/regulatory-anchors.md):
+
+- 🟠 [L. Application security standards](../../references/regulatory-anchors.md#l-application-security-standards): OWASP Top 10 and OWASP ASVS 5.0 define the vulnerability categories checked; OWASP ASVS Levels 1–3 map to the HIGH/MEDIUM/LOW severity thresholds.
+- 🟠 [M. Vulnerability management & disclosure](../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS provides the universal severity baseline; the ≥0.8 confidence threshold aligns with coordinated vulnerability disclosure standards.
+- 🔴 [C. US federal sector-specific privacy/security](../../references/regulatory-anchors.md#c-us-federal-sector-specific-privacysecurity): HIPAA/HITECH, FTC Act §5, and VPPA apply when the code under review handles user data, health records, or tracking pixels.
+- 🔴 [O. AI-specific](../../references/regulatory-anchors.md#o-ai-specific): EU AI Act and NIST AI RMF apply when reviewing AI feature code for prompt injection, PII leakage, and guardrail bypasses.
+
+See the full anchor list for tier definitions and the complete catalog of applicable regimes.
+
 ## Metadata
 - **Pack:** security
 - **Mode:** review

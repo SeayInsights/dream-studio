@@ -158,7 +158,7 @@ TEMPLATE EXPORTED: {client}
 | repo | string | Repository name |
 | file | string | File path within repo |
 | line | int | Line number |
-| rule_id | string | Scanner rule ID (e.g., ***REMOVED***-001, ZSC-003) |
+| rule_id | string | Scanner rule ID (e.g., `<org>-001`, `ZSC-003`) |
 | severity | string | critical / high / medium / low |
 | cvss | float | Estimated CVSS score |
 | business_impact | string | Impact level from client data classification |
@@ -230,8 +230,8 @@ TEMPLATE EXPORTED: {client}
 ### metadata.json
 ```json
 {
-  "client_name": "AcmeCorp",
-  "enterprise": "AcmeOrg",
+  "client_name": "ExampleCorp",
+  "enterprise": "ExampleOrg",
   "scan_date": "2026-04-22",
   "total_repos": 12,
   "total_findings": 147,
@@ -280,14 +280,14 @@ After `generate` or `refresh`, update `~/.dream-studio/feeds/security.json`:
 ```json
 {
   "last_scan": {
-    "client": "acme-corp",
+    "client": "example-corp",
     "date": "2026-04-22",
     "repos_scanned": 12,
     "findings_count": 147,
     "org_score": 62.4
   },
   "last_report": {
-    "path": "~/.dream-studio/security/reports/acme-corp/executive-report-2026-04-22.md",
+    "path": "~/.dream-studio/security/reports/example-corp/executive-report-2026-04-22.md",
     "date": "2026-04-22"
   },
   "active_workflow": null

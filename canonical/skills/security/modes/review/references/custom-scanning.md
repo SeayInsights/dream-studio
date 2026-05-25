@@ -91,85 +91,19 @@ Each category should:
 - Deadlock potential in bidirectional streaming
 ```
 
-## AcmeCorp-Specific Examples
+## Industry-Specific Considerations
 
-### Retail Analytics Security
+The patterns below describe which regulatory anchors apply when extending the default scan for specific industry contexts. See [`regulatory-anchors.md`](../../../references/regulatory-anchors.md) for tier definitions and the full catalog.
 
-```
-**Retail Data Security:**
-- Competitive pricing data exposure in reports or exports
-- Vendor agreement terms leaked through aggregated metrics
-- Store-level PII in aggregated dashboards (employee schedules, performance)
-- Category management insights accessible to unauthorized roles
-- Planogram data exported without vendor permission controls
-- Sales forecast data exposed before official release
-- Supplier cost data visible outside procurement team
-- Store comparison reports revealing strategic expansion plans
+**Retail and consumer-facing platforms** should extend the default scan to cover customer data flows, loyalty program handling, and pricing integrity. Applicable anchors include [D. US state privacy laws](../../../references/regulatory-anchors.md#d-us-state-privacy-laws) (CCPA/CPRA, Virginia, Colorado) for data portability and deletion rights, and [C. US federal sector-specific privacy/security](../../../references/regulatory-anchors.md#c-us-federal-sector-specific-privacysecurity) for pharmacy or health-adjacent data (HIPAA). Check for customer PII (loyalty records, patient identifiers, or transaction data) exposure in aggregated reports, price manipulation through cart or discount calculation flaws, and row-level security bypass in BI dashboards (Power BI, Tableau, Looker, Metabase).
 
-**Power BI Security:**
-- Row-level security (RLS) bypass through DAX injection in measures
-- Sensitive columns exported via "Analyze in Excel" without masking
-- Workspace permissions granting broader access than intended
-- Embedded report tokens not expiring or lacking scope restrictions
-- DirectQuery connections exposing database schema to end users
-- Custom visuals loading untrusted external scripts
-- Dataset refresh credentials stored with excessive permissions
-- Sharing links generated without expiration dates
-- Gateway connections using service accounts with admin rights
-- Personal workspace content promoted to production without review
+**Healthcare platforms** must add PHI-specific checks beyond the default data exposure category. The primary anchor is [C. US federal sector-specific privacy/security](../../../references/regulatory-anchors.md#c-us-federal-sector-specific-privacysecurity): HIPAA/HITECH requires access controls, audit logging, and encryption for all protected health information. Scan for PHI leakage in error messages and logs, missing encryption at rest for health records, audit trail gaps in data modification flows, and role-based access misconfigurations that allow non-treating staff to access patient data.
 
-**Data Pipeline Security:**
-- ETL processes running with excessive database permissions
-- Transformation logic exposing PII in error logs
-- Incremental refresh patterns leaking row counts or ranges
-- Data lineage metadata revealing sensitive source systems
-- Staging tables accessible to report developers
-- Connection strings or credentials in Power Query M code
-- Dataflow entities missing RLS enforcement before consumption
-- Scheduled refresh failures exposing connection details in emails
-```
+**Financial services platforms** extend the default scan with transaction integrity and regulatory compliance checks. Key anchors: [B. Payments & financial](../../../references/regulatory-anchors.md#b-payments--financial) (PCI DSS v4, SOX IT general controls, GLBA Safeguards Rule) for cardholder data environment boundary enforcement and cryptographic controls, and [C. US federal sector-specific privacy/security](../../../references/regulatory-anchors.md#c-us-federal-sector-specific-privacysecurity) for GLBA safeguards over non-public personal financial information. Check for transaction replay vulnerabilities, double-spending in ledger systems, cardholder data retention beyond PCI-allowed periods, and regulatory reporting data tampering.
 
-### AcmeCorp Client-Specific Checks
+**SaaS platforms** built to SOC 2 Type II requirements should add tenant isolation and audit trail checks to the default scan. Relevant anchors: [A. Cross-industry trust attestations](../../../references/regulatory-anchors.md#a-cross-industry-trust-attestations-the-audit-layer) (SOC 2 CC6.1/CC6.6 logical access and CC7.1/CC7.2 monitoring controls) and [L. Application security standards](../../../references/regulatory-anchors.md#l-application-security-standards) (OWASP ASVS 5.0 Level 2 access control requirements). Scan for cross-tenant data leakage in multi-tenant APIs, insufficient audit logging for security-relevant events, missing authentication on administrative endpoints, and privilege escalation paths in RBAC implementations.
 
-```
-**AcmeCorp Data Handling:**
-- Customer loyalty data exposed in analytics
-- PII in transaction logs (names, addresses, payment methods)
-- Prescription data (pharmacy) not segregated with HIPAA controls
-- Employee data (schedules, wages) accessible outside HR systems
-- Vendor pricing below negotiated floors due to calculation errors
-- Product recall data leaked before public announcement
-- Store security incident data in reports without proper access control
-- Fuel rewards calculation manipulation allowing point inflation
-
-**Retail Operations Security:**
-- Inventory management API allowing unauthorized stock adjustments
-- Price override mechanisms lacking audit trail or approval workflow
-- Promotional pricing applied outside authorized date ranges
-- Shrink reporting data accessible to store-level users
-- Labor scheduling data revealing staffing patterns to competitors
-- Perishable goods markdown timing exploitable for arbitrage
-- Self-checkout bypass patterns not flagged in analytics
-- Loss prevention camera feeds accessible via insecure endpoints
-```
-
-### Compliance for Retail Industry
-
-```
-**Retail Compliance:**
-- SOC 2 Type II audit trail gaps in data modification logs
-- CCPA "Do Not Sell" flags not respected in marketing pipelines
-- GDPR consent records missing or not linked to customer profiles
-- PCI DSS cardholder data environment (CDE) boundary violations
-- State privacy law variations (California, Virginia, Colorado) not handled
-- Data retention policies not enforced (transaction logs, marketing lists)
-- Third-party vendor data sharing without proper DPAs
-- Cross-border data transfer violations (EU, Canada)
-- Children's data (COPPA) in loyalty programs without parental consent
-- Biometric data (time clocks, security) lacking Illinois BIPA compliance
-```
-
-### Microsoft Power Platform Security
+## Power Platform Security
 
 ```
 **Power Apps Security:**

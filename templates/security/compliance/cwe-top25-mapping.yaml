@@ -49,7 +49,6 @@ controls:
       - "*-xss-*"
       - "*-inj-*"
       - "*-val-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Rules detect reflected XSS, stored XSS, DOM-based XSS patterns,
       and missing output encoding in template engines.
@@ -70,7 +69,6 @@ controls:
       - "*-sql-*"
       - "*-inj-*"
       - "*-val-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Rules detect string concatenation in SQL queries, raw SQL execution without
       parameterization, and ORM bypass patterns. Covers SQLite, PostgreSQL, MySQL, MSSQL.
@@ -110,7 +108,6 @@ controls:
       - "*-cmd-*"
       - "*-inj-*"
       - "*-val-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Rules detect shell=True with user input, subprocess with unsanitized args,
       os.system() with concatenated strings, and exec() with user data.
@@ -131,7 +128,6 @@ controls:
     mapped_rule_patterns:
       - "*-val-*"
       - "*-inj-*"
-      - "***REMOVED***-val-*"
     scan_coverage: >
       Rules detect missing input validation at API entry points, unvalidated redirect
       targets, and schema-less data ingestion patterns.
@@ -226,7 +222,6 @@ controls:
       - "*-ac-*"
       - "*-auth-*"
       - "*-rbac-*"
-      - "***REMOVED***-ac-*"
     scan_coverage: >
       Rules detect route handlers missing @require_auth decorators, API endpoints
       without authorization middleware, and direct object references without ownership checks.
@@ -263,7 +258,6 @@ controls:
     mapped_rule_patterns:
       - "*-auth-*"
       - "*-ac-*"
-      - "***REMOVED***-auth-*"
     scan_coverage: >
       Rules detect missing authentication middleware, JWT algorithm confusion,
       weak token validation, and hardcoded bypass conditions.
@@ -300,7 +294,6 @@ controls:
     mapped_rule_patterns:
       - "*-deser-*"
       - "*-inj-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Rules detect pickle.loads(), yaml.load() without Loader, marshal.loads(),
       and JSON deserialization with exec() in Python; ObjectInputStream in Java;
@@ -321,7 +314,6 @@ controls:
     mapped_rule_patterns:
       - "*-cmd-*"
       - "*-inj-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Broader than CWE-78 (OS Command). Covers LDAP injection, expression language
       injection, shell metacharacter injection, and command template injection.
@@ -360,7 +352,6 @@ controls:
       - "*-sec-*"
       - "*-secrets-*"
       - "*-creds-*"
-      - "***REMOVED***-sec-*"
     scan_coverage: >
       Rules detect password = "literal", API_KEY = "literal", connection strings with
       embedded credentials, and private keys in source files. Cross-language coverage.
@@ -399,7 +390,6 @@ controls:
       - "*-auth-*"
       - "*-ac-*"
       - "*-admin-*"
-      - "***REMOVED***-auth-*"
     scan_coverage: >
       Rules detect critical endpoints (DELETE, admin, payment, user management)
       missing authentication decorators or middleware.
@@ -438,7 +428,6 @@ controls:
       - "*-ac-*"
       - "*-priv-*"
       - "*-rbac-*"
-      - "***REMOVED***-ac-*"
     scan_coverage: >
       Rules detect privilege escalation patterns, missing role checks before privilege
       grants, and hardcoded admin role assignments.
@@ -459,7 +448,6 @@ controls:
       - "*-code-inj-*"
       - "*-inj-*"
       - "*-eval-*"
-      - "***REMOVED***-inj-*"
     scan_coverage: >
       Rules detect eval() with user input, exec() with user data, dynamic import with
       user-controlled path, template injection (Jinja2, Twig, Pebble), and expression
@@ -480,7 +468,6 @@ controls:
       - "*-ac-*"
       - "*-rbac-*"
       - "*-authz-*"
-      - "***REMOVED***-ac-*"
     scan_coverage: >
       Rules detect inverted authorization logic (if not is_admin: allow), incorrect role
       comparison, and authorization checks that compare against mutable user-supplied data.
@@ -522,7 +509,6 @@ controls:
       - "A02:2021"
     mapped_rule_patterns:
       - "*-crypto-*"
-      - "***REMOVED***-crypto-*"
     scan_coverage: "Weak cryptographic algorithm detection (MD5, SHA1, DES, RC4, ECB)."
 
   - control_id: CWE-1035
@@ -538,7 +524,6 @@ controls:
       - "A06:2021"
     mapped_rule_patterns:
       - "*-dep-*"
-      - "***REMOVED***-dep-*"
     scan_coverage: "Outdated and CVE-flagged dependency detection via Trivy and pip-audit."
 
   - control_id: CWE-778
@@ -558,5 +543,4 @@ controls:
       - "*-log-*"
       - "*-audit-*"
       - "*-integrity-*"
-      - "***REMOVED***-log-*"
     scan_coverage: "Missing audit log writes, software integrity verification absence detection."

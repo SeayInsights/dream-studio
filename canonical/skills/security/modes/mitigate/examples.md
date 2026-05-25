@@ -8,8 +8,8 @@ Each mitigation is one JSON object (stored as a row in `mitigations.csv`):
 
 ```json
 {
-  "finding_id": "***REMOVED***-001-vendor-portal-auth.py-34",
-  "rule_id": "***REMOVED***-001",
+  "finding_id": "<org>-001-vendor-portal-auth.py-34",
+  "rule_id": "<org>-001",
   "title": "Sensitive data logged without masking",
   "severity": "HIGH",
   "cwe": "CWE-532",
@@ -28,7 +28,7 @@ Each mitigation is one JSON object (stored as a row in `mitigations.csv`):
   "sprint_label": "security-quick-win",
   "compliance_impact": ["SOC2-CC6.1", "NIST-PR.DS-1"],
   "zscaler_impact": null,
-  "template_matched": "secrets-fixes.yaml#***REMOVED***-001",
+  "template_matched": "secrets-fixes.yaml#<org>-001",
   "generated_at": "ISO-8601"
 }
 ```
@@ -75,7 +75,7 @@ Extract from user input:
 
 1. Read all 5 YAML files from `builds/dream-studio-clean/templates/security/mitigations/`.
 2. Build a flat lookup index: `{rule_pattern: template_entry}`.
-3. The `rule_pattern` field in each template is a pipe-delimited string of matching patterns (e.g., `"***REMOVED***-inj-001|CWE-89|sql-injection"`). Split on `|` and index each token.
+3. The `rule_pattern` field in each template is a pipe-delimited string of matching patterns (e.g., `"*-inj-*|CWE-89|sql-injection"`). Split on `|` and index each token.
 4. If a template file fails to load: warn with filename, skip that file, continue.
 
 #### Step F4: Match and Generate Mitigations
@@ -162,7 +162,7 @@ Show:
 
 Extract from user input:
 - `--client <name>` — required.
-- `--finding <id>` — required. The `finding_id` string (e.g., `***REMOVED***-001-vendor-portal-auth.py-34`).
+- `--finding <id>` — required. The `finding_id` string (e.g., `<org>-001-vendor-portal-auth.py-34`).
 
 If either is absent: ask — "Provide `--client <name>` and `--finding <id>` to generate a single mitigation."
 

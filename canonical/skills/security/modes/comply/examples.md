@@ -47,7 +47,7 @@ For each framework in the resolved list:
    - Read `scan-meta.json`. Extract `date`, `repo`, `finding_counts`.
    - Detect SARIF file: look for `*.sarif` or `semgrep.sarif` in the same directory.
    - If SARIF present: parse `runs[].results[]` — extract `ruleId`, `message.text`, `locations[].physicalLocation`, and any `tags` from `properties`.
-   - Extract CWE codes from `properties.cwe` or rule ID pattern (e.g., `***REMOVED***-inj-001` → injection rules → `CWE-89`, `CWE-77`).
+   - Extract CWE codes from `properties.cwe` or rule ID pattern (e.g., `<org>-inj-001` → injection rules → `CWE-89`, `CWE-77`).
    - Extract OWASP category from `properties.owasp` or rule tags.
 3. If no SARIF files found at all: **stop** — "No scan results found for client `{client}`. Run `scan ingest --client {client}` first."
 4. Collect all findings into a flat list:
@@ -57,7 +57,7 @@ For each framework in the resolved list:
   {
     "repo": "repo-name",
     "date": "YYYY-MM-DD",
-    "rule_id": "***REMOVED***-inj-001",
+    "rule_id": "<org>-inj-001",
     "severity": "HIGH",
     "cwe": ["CWE-89"],
     "owasp": ["A03:2021"],
@@ -184,15 +184,15 @@ Write `~/.dream-studio/security/datasets/{client}/evidence-{YYYY-MM-DD}.md`:
 **Description:** The entity implements logical access security software, infrastructure, and architectures over protected information assets.
 
 **Scan Evidence:**
-- Scanner: Semgrep (custom rules ***REMOVED***-ac-001 through ***REMOVED***-ac-010)
-- Rules mapped: ***REMOVED***-ac-001, ***REMOVED***-ac-003, ***REMOVED***-sec-002
+- Scanner: Semgrep (custom rules <org>-ac-001 through <org>-ac-010)
+- Rules mapped: <org>-ac-001, <org>-ac-003, <org>-sec-002
 - CWEs covered: CWE-284, CWE-285, CWE-639
 
 **Findings (as of {date}):**
 | Repo | Rule | Severity | Status |
 |------|------|----------|--------|
-| repo-a | ***REMOVED***-ac-001 | HIGH | open |
-| repo-b | ***REMOVED***-ac-003 | MEDIUM | fixed |
+| repo-a | <org>-ac-001 | HIGH | open |
+| repo-b | <org>-ac-003 | MEDIUM | fixed |
 
 **Finding count:** 2 total (1 open, 1 fixed)
 **Remediation status:** In progress
@@ -243,7 +243,7 @@ Path: `~/.dream-studio/security/datasets/{client}/compliance.csv`
 | `control_title` | string | Human-readable control name |
 | `repo` | string | GitHub repo name |
 | `date` | YYYY-MM-DD | Scan date |
-| `rule_id` | string | Semgrep rule ID (e.g., ***REMOVED***-inj-001) |
+| `rule_id` | string | Semgrep rule ID (e.g., `<org>-inj-001`) |
 | `severity` | string | CRITICAL, HIGH, MEDIUM, LOW |
 | `cwe` | string | Semicolon-separated CWE IDs |
 | `owasp` | string | Semicolon-separated OWASP categories |

@@ -126,7 +126,7 @@
       API_HOST = os.environ["API_HOST"]
 
       response = requests.get(f"https://{API_HOST}:{API_PORT}/v1/data")
-      # Document in .env.example: API_PORT=8443 (requires Zscaler exception ***REMOVED***-EXC-001)
+      # Document in .env.example: API_PORT=8443 (requires Zscaler firewall exception — track in your org's exception register)
     # If 443 is not possible, add to the Zscaler application profile as an allowed destination.
   long_term_fix: "Work with network/IT to configure the Zscaler policy to allow the specific non-standard port for the specific destination; track the exception in a firewall-exceptions.yaml in the infra repo with a review date; reconfigure the target service to use 443 if owned internally"
   verification_test: "curl -v https://{API_HOST}:{API_PORT}/v1/data from a Zscaler-connected machine — expect TLS handshake success (not connection refused or proxy error); check Zscaler admin console that the request is allowed"
