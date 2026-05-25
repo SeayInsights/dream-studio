@@ -54,6 +54,9 @@ ADDCOLUMNS(
 | DatasetPath | ~/.dream-studio/security/datasets/{client}/ | CSV folder connection |
 | GreenThreshold | 85 | Org score RAG boundary |
 | YellowThreshold | 60 | Org score RAG boundary |
+| RulePrefix | (your org's Semgrep rule ID prefix, e.g., `acme`) | Filters rule_id fields to your org's scanner rules |
+
+> **RulePrefix — required for accurate filtering.** DAX measures that filter by rule category (injection, access control, secrets, etc.) use `CONTAINSSTRING(Findings[rule_id], [RulePrefix])` to scope results to your org's Semgrep rules. Set this parameter to your org's rule ID prefix (e.g., `acme` if your rules are named `acme-inj-001`, `acme-ac-001`, etc.). If left blank, category filters will return all findings regardless of rule origin, which may overcount in multi-scanner environments.
 
 ---
 
@@ -304,17 +307,17 @@ RETURN
     )
 ```
 
-#### V1.4 — Acme-Ready Badge
+#### V1.4 — Security Readiness Badge
 - **Type:** Card
 - **Position:** Left column, below RAG badge
-- **Value:** `[Acme Ready Badge]`
+- **Value:** `[Security Readiness Badge]`
 
 ```dax
-Acme Ready Badge =
+Security Readiness Badge =
 VAR _isolation_failures =
     CALCULATE(
         COUNTROWS(Findings),
-        CONTAINSSTRING(Findings[rule_id], "KRG")
+        CONTAINSSTRING(Findings[rule_id], [RulePrefix])
             && Findings[status] = "open"
             && (Findings[severity] = "critical" || Findings[severity] = "high")
     )
@@ -327,21 +330,21 @@ VAR _data_exposure =
 RETURN
     IF(
         _isolation_failures = 0 && _data_exposure = 0,
-        "ACME-READY",
-        "NOT ACME-READY (" & (_isolation_failures + _data_exposure) & " blocking)"
+        "READY",
+        "NOT READY (" & (_isolation_failures + _data_exposure) & " blocking)"
     )
 ```
 
 ```dax
-Acme Ready Color =
+Security Readiness Color =
 IF(
-    CONTAINSSTRING([Acme Ready Badge], "NOT"),
+    CONTAINSSTRING([Security Readiness Badge], "NOT"),
     "#C62828",
     "#2E7D32"
 )
 ```
 
-- **Conditional formatting:** Font color = `[Acme Ready Color]`
+- **Conditional formatting:** Font color = `[Security Readiness Color]`
 
 #### V1.5 — Key Stats Cards
 - **Type:** Multi-row card
@@ -1091,7 +1094,7 @@ Each page accepts these drill-through fields:
 **Purpose:** All injection vulnerabilities — SQL injection, command injection, XSS, template injection, LDAP injection.
 
 **Page-level filter:** `Findings[owasp] = "A03:2021 - Injection"`
-**Rule ID prefix:** `KRG-inj-*`
+**Rule ID prefix:** `[RulePrefix]-inj-*`
 
 ### Page-Specific Visuals
 
@@ -1168,7 +1171,7 @@ CALCULATE(
 **Purpose:** Broken access control, IDOR, missing auth middleware, tenant isolation failures, privilege escalation, unscoped bulk exports.
 
 **Page-level filter:** `Findings[owasp] = "A01:2021 - Broken Access Control"`
-**Rule ID prefixes:** `KRG-auth-*`, `KRG-ac-*`
+**Rule ID prefixes:** `[RulePrefix]-auth-*`, `[RulePrefix]-ac-*`
 
 ### Page-Specific Visuals
 
@@ -1254,7 +1257,7 @@ RETURN
 **Purpose:** Hardcoded credentials, API keys, connection strings, private keys, env fallback defaults. Tracks exposure age and rotation urgency.
 
 **Page-level filter:** `Findings[owasp] = "A07:2021 - Identification and Authentication Failures"`
-**Rule ID prefix:** `KRG-sec-*`
+**Rule ID prefix:** `[RulePrefix]-sec-*`
 
 ### Page-Specific Visuals
 
@@ -1381,7 +1384,7 @@ RETURN
 **Purpose:** Encryption at rest, encryption in transit, sensitive data in logs, insecure cookies, client-side storage exposure.
 
 **Page-level filter:** `Findings[owasp] = "A02:2021 - Cryptographic Failures"`
-**Rule ID prefixes:** `KRG-enc-*`, `KRG-tls-*`, `KRG-crypto-*`
+**Rule ID prefixes:** `[RulePrefix]-enc-*`, `[RulePrefix]-tls-*`, `[RulePrefix]-crypto-*`
 
 ### Page-Specific Visuals
 
@@ -1489,7 +1492,7 @@ RETURN
 **Purpose:** Known CVEs in dependencies, SBOM analysis, CISA KEV cross-reference, outdated packages.
 
 **Page-level filter:** `Findings[scanner] IN ("pip-audit", "npm-audit", "cyclonedx")` OR `Findings[owasp] = "A06:2021 - Vulnerable and Outdated Components"`
-**Rule ID prefix:** `KRG-dep-*`
+**Rule ID prefix:** `[RulePrefix]-dep-*`
 
 ### Page-Specific Visuals
 
@@ -2144,7 +2147,7 @@ RETURN
 
 ## Page 12: Vendor Data Isolation Deep Dive
 
-**Purpose:** Dedicated view for multi-tenant data isolation audit. Shows tenant scoping coverage across all repos, IDOR findings matrix, and vendor data leakage risks. Critical for Acme vendor data protection.
+**Purpose:** Dedicated view for multi-tenant data isolation audit. Shows tenant scoping coverage across all repos, IDOR findings matrix, and vendor data leakage risks. Critical for vendor data protection workflows.
 
 **Primary data source:** Findings table filtered to access control rules
 **Filter:** Rule IDs containing `auth-001`, `auth-002`, `auth-004`, or CWE-639, CWE-284, CWE-200
