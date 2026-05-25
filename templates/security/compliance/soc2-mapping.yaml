@@ -37,10 +37,9 @@ controls:
       - "*-ac-*"     # Access control rules
       - "*-sec-*"    # Security rules
       - "*-auth-*"   # Authentication rules
-      - "KRG-ac-*"
-      - "KRG-sec-*"
     scan_coverage: >
-      Rules KRG-ac-001 through KRG-ac-010, KRG-sec-001 through KRG-sec-006.
+      Access control rules (<org>-ac-001…), security rules (<org>-sec-001…), and
+      authentication rules (<org>-auth-001…) per your org's Semgrep naming convention.
       Covers RBAC enforcement, tenant isolation, session token validation,
       hard-coded credential detection, and missing authentication guards.
 
@@ -68,10 +67,9 @@ controls:
       - "*-inj-*"     # Injection rules
       - "*-val-*"     # Validation rules
       - "*-config-*"  # Configuration rules
-      - "KRG-inj-*"
-      - "KRG-val-*"
     scan_coverage: >
-      Rules KRG-inj-001 through KRG-inj-008, KRG-val-001 through KRG-val-005.
+      Injection rules (<org>-inj-001…) and validation rules (<org>-val-001…)
+      per your org's Semgrep naming convention.
       Covers SQL injection, OS command injection, XSS, deserialization, and
       input validation at API boundaries.
 
@@ -97,10 +95,9 @@ controls:
       - "*-tls-*"       # TLS/transport rules
       - "*-crypto-*"    # Cryptography rules
       - "*-transport-*"
-      - "KRG-tls-*"
-      - "KRG-crypto-*"
     scan_coverage: >
-      Rules KRG-tls-001 through KRG-tls-004, KRG-crypto-001 through KRG-crypto-003.
+      TLS rules (<org>-tls-001…) and cryptography rules (<org>-crypto-001…)
+      per your org's Semgrep naming convention.
       Covers HTTP vs HTTPS enforcement, weak cipher detection, certificate validation,
       and cleartext credential transmission.
 
@@ -122,9 +119,8 @@ controls:
       - "*-log-*"       # Logging rules
       - "*-monitor-*"   # Monitoring rules
       - "*-audit-*"     # Audit rules
-      - "KRG-log-*"
     scan_coverage: >
-      Rules KRG-log-001 through KRG-log-004.
+      Logging rules (<org>-log-001…) per your org's Semgrep naming convention.
       Covers missing audit log writes, sensitive data in logs, and
       log injection vulnerabilities.
 
@@ -147,7 +143,6 @@ controls:
     mapped_rule_patterns:
       - "*-dep-*"     # Dependency rules
       - "*-vuln-*"    # Vulnerability rules
-      - "KRG-dep-*"
     scan_coverage: >
       Covered via dependency-audit mode in dream-studio:secure, using Trivy and pip-audit
       results ingested by dream-studio:scan. Semgrep rules cover known-vulnerable pattern

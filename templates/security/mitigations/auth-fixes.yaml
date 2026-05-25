@@ -1,9 +1,9 @@
 # Authentication & Authorization Fix Templates
 # Maps rule IDs, CWE codes, and OWASP categories to auth/authz mitigation patterns.
 # rule_pattern is pipe-delimited: any token match triggers this template.
-# Covers KRG-auth-001 through KRG-auth-005 and related multi-tenant access control findings.
+# Covers authentication and authorization vulnerability categories with CWE and OWASP cross-references.
 
-- rule_pattern: "KRG-auth-001|CWE-639|missing-tenant-scope|tenant-isolation|idor-tenant"
+- rule_pattern: "*-auth-*|CWE-639|missing-tenant-scope|tenant-isolation|idor-tenant"
   title: "Missing Tenant Scope — Add Vendor/Tenant Filter to All Queries"
   cwe: "CWE-639"
   owasp_category: "A01:2021"
@@ -31,7 +31,7 @@
     - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
     - "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
 
-- rule_pattern: "KRG-auth-002|CWE-284|idor|insecure-direct-object-reference|missing-ownership-check"
+- rule_pattern: "*-auth-*|CWE-284|idor|insecure-direct-object-reference|missing-ownership-check"
   title: "IDOR — Verify Ownership Before Accessing Resource"
   cwe: "CWE-284"
   owasp_category: "A01:2021"
@@ -48,14 +48,14 @@
               vendor_id=current_user.vendor_id
           ).first_or_404()
           return order.to_dict()
-  long_term_fix: "Centralize ownership verification in a reusable decorator or service method; add Semgrep rule KRG-auth-002 to flag any query.get(id) call not followed by an ownership assertion"
+  long_term_fix: "Centralize ownership verification in a reusable decorator or service method; add a Semgrep rule to flag any query.get(id) call not followed by an ownership assertion"
   verification_test: "curl -H 'Authorization: Bearer {vendor_B_token}' /api/orders/{vendor_A_order_id} — expect HTTP 404 (not 200 or 403 that leaks existence)"
   effort_estimate: "1h per instance"
   requires_context: true
   references:
     - "https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html"
 
-- rule_pattern: "KRG-auth-003|CWE-306|missing-auth-middleware|unauthenticated-endpoint|no-login-required"
+- rule_pattern: "*-auth-*|CWE-306|missing-auth-middleware|unauthenticated-endpoint|no-login-required"
   title: "Missing Authentication Middleware — Add Auth Decorator to All Protected Routes"
   cwe: "CWE-306"
   owasp_category: "A07:2021"
@@ -82,7 +82,7 @@
     - "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
     - "https://flask-login.readthedocs.io/en/latest/#flask_login.login_required"
 
-- rule_pattern: "KRG-auth-004|CWE-200|unscoped-bulk-export|data-exposure-export|bulk-export"
+- rule_pattern: "*-auth-*|CWE-200|unscoped-bulk-export|data-exposure-export|bulk-export"
   title: "Unscoped Bulk Export — Add Tenant Filter to Export Queries"
   cwe: "CWE-200"
   owasp_category: "A01:2021"
@@ -107,7 +107,7 @@
     - "https://www.postgresql.org/docs/current/ddl-rowsecurity.html"
     - "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
 
-- rule_pattern: "KRG-auth-005|CWE-269|privilege-escalation|role-bypass|missing-role-check"
+- rule_pattern: "*-auth-*|CWE-269|privilege-escalation|role-bypass|missing-role-check"
   title: "Privilege Escalation — Enforce Role-Based Access Check Before Sensitive Operations"
   cwe: "CWE-269"
   owasp_category: "A01:2021"

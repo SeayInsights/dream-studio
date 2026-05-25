@@ -118,7 +118,6 @@ controls:
     mapped_rule_patterns:
       - "*-sec-*"
       - "*-secrets-*"
-      - "KRG-sec-*"
     scan_coverage: "Hard-coded API key and credential detection in source code."
 
   # ─── V3: Session Management ──────────────────────────────────────────────────
@@ -175,7 +174,6 @@ controls:
     mapped_rule_patterns:
       - "*-ac-*"
       - "*-rbac-*"
-      - "KRG-ac-*"
     scan_coverage: "Server-side authorization enforcement and IDOR detection."
 
   - control_id: V4.2.1
@@ -193,7 +191,6 @@ controls:
     mapped_rule_patterns:
       - "*-ac-*"
       - "*-idor-*"
-      - "KRG-ac-*"
     scan_coverage: "IDOR pattern detection, user-controlled key in database queries."
 
   - control_id: V4.3.1
@@ -232,8 +229,6 @@ controls:
     mapped_rule_patterns:
       - "*-val-*"
       - "*-inj-*"
-      - "KRG-val-*"
-      - "KRG-inj-*"
     scan_coverage: "Input validation and injection prevention rules across all languages."
 
   - control_id: V5.2.1
@@ -268,7 +263,6 @@ controls:
     mapped_rule_patterns:
       - "*-sql-*"
       - "*-inj-*"
-      - "KRG-inj-*"
     scan_coverage: "SQL injection and parameterized query enforcement rules."
 
   # ─── V6: Stored Cryptography ─────────────────────────────────────────────────
@@ -288,7 +282,6 @@ controls:
       - "A02:2021"
     mapped_rule_patterns:
       - "*-crypto-*"
-      - "KRG-crypto-*"
     scan_coverage: "Weak algorithm detection (MD5, SHA1, DES, RC4, ECB mode)."
 
   - control_id: V6.4.1
@@ -306,7 +299,6 @@ controls:
     mapped_rule_patterns:
       - "*-sec-*"
       - "*-secrets-*"
-      - "KRG-sec-*"
     scan_coverage: "Hard-coded secret detection in source and config files."
 
   # ─── V8: Data Protection ─────────────────────────────────────────────────────
@@ -362,7 +354,6 @@ controls:
     mapped_rule_patterns:
       - "*-tls-*"
       - "*-transport-*"
-      - "KRG-tls-*"
     scan_coverage: "HTTP-only communication, TLS version enforcement, certificate validation bypass detection."
 
   - control_id: V9.2.1
@@ -526,7 +517,6 @@ controls:
       - "A06:2021"
     mapped_rule_patterns:
       - "*-dep-*"
-      - "KRG-dep-*"
     scan_coverage: "Outdated dependency detection via Trivy and pip-audit in CI pipeline."
 
   - control_id: V14.4.1
@@ -565,7 +555,6 @@ controls:
     mapped_rule_patterns:
       - "*-log-*"
       - "*-audit-*"
-      - "KRG-log-*"
     scan_coverage: "Missing audit event writes, sensitive data in logs, log injection pattern detection."
 
   - control_id: V13.3.1

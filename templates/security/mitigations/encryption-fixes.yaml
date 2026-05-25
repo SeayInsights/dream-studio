@@ -1,9 +1,9 @@
 # Encryption & Transport Security Fix Templates
 # Maps rule IDs, CWE codes, and OWASP categories to encryption/TLS mitigation patterns.
 # rule_pattern is pipe-delimited: any token match triggers this template.
-# Covers KRG-enc-001 through KRG-enc-005.
+# Covers encryption and transport security vulnerability categories with CWE and OWASP cross-references.
 
-- rule_pattern: "KRG-enc-001|CWE-319|http-not-https|plaintext-http|insecure-http|no-tls"
+- rule_pattern: "*-enc-*|CWE-319|http-not-https|plaintext-http|insecure-http|no-tls"
   title: "HTTP Not HTTPS — Enforce HTTPS Redirect and HSTS"
   cwe: "CWE-319"
   owasp_category: "A02:2021"
@@ -43,7 +43,7 @@
     - "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Strict_Transport_Security_Cheat_Sheet.html"
     - "https://hstspreload.org/"
 
-- rule_pattern: "KRG-enc-002|CWE-295|missing-tls-verification|ssl-verify-false|verify=False|tls-skip-verify"
+- rule_pattern: "*-enc-*|CWE-295|missing-tls-verification|ssl-verify-false|verify=False|tls-skip-verify"
   title: "Missing TLS Verification — Restore verify=True"
   cwe: "CWE-295"
   owasp_category: "A02:2021"
@@ -65,7 +65,7 @@
       )
       # If a custom CA is needed (e.g., internal CA):
       # response = requests.get(url, verify="/path/to/ca-bundle.crt")
-  long_term_fix: "For internal services behind Zscaler or a corporate proxy: install the proxy's CA certificate into the system trust store and set REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE to its path; never ship verify=False in production code; add Semgrep rule KRG-enc-002 to block verify=False commits"
+  long_term_fix: "For internal services behind Zscaler or a corporate proxy: install the proxy's CA certificate into the system trust store and set REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE to its path; never ship verify=False in production code; add a Semgrep rule to block verify=False commits"
   verification_test: "grep -rn 'verify=False\\|verify = False' {file} returns 0 matches; python -c \"import requests; requests.get('https://api.vendor-portal.internal/data')\" exits with code 0"
   effort_estimate: "1h per instance (includes CA bundle setup if needed)"
   requires_context: false
@@ -73,7 +73,7 @@
     - "https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification"
     - "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html"
 
-- rule_pattern: "KRG-enc-003|CWE-311|unencrypted-db-connection|db-no-ssl|sslmode-disable|db-plaintext"
+- rule_pattern: "*-enc-*|CWE-311|unencrypted-db-connection|db-no-ssl|sslmode-disable|db-plaintext"
   title: "Unencrypted Database Connection — Add sslmode=require"
   cwe: "CWE-311"
   owasp_category: "A02:2021"
@@ -103,7 +103,7 @@
     - "https://www.postgresql.org/docs/current/libpq-ssl.html"
     - "https://cheatsheetseries.owasp.org/cheatsheets/Database_Security_Cheat_Sheet.html"
 
-- rule_pattern: "KRG-enc-004|CWE-614|insecure-cookie|cookie-no-secure|cookie-no-httponly|missing-cookie-flags"
+- rule_pattern: "*-enc-*|CWE-614|insecure-cookie|cookie-no-secure|cookie-no-httponly|missing-cookie-flags"
   title: "Insecure Cookie — Add Secure, HttpOnly, and SameSite Flags"
   cwe: "CWE-614"
   owasp_category: "A02:2021"
@@ -142,7 +142,7 @@
     - "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
     - "https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#Security"
 
-- rule_pattern: "KRG-enc-005|CWE-311|unencrypted-data-at-rest|plaintext-pii|no-field-encryption|sensitive-field-unencrypted"
+- rule_pattern: "*-enc-*|CWE-311|unencrypted-data-at-rest|plaintext-pii|no-field-encryption|sensitive-field-unencrypted"
   title: "Unencrypted Sensitive Data at Rest — Add Encryption Wrapper"
   cwe: "CWE-311"
   owasp_category: "A02:2021"
