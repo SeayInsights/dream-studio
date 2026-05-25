@@ -63,13 +63,13 @@ def _get_bridge():
 
 
 PACK_SKILL_DIRS: dict[str, str] = {
-    "ds-core": "skills/core/modes",
-    "ds-quality": "skills/quality/modes",
-    "ds-security": "skills/security/modes",
-    "ds-career": "skills/career/modes",
-    "ds-analyze": "skills/analyze/modes",
-    "ds-domains": "skills/domains/modes",
-    "ds-setup": "skills/setup/modes",
+    "ds-core": "canonical/skills/core/modes",
+    "ds-quality": "canonical/skills/quality/modes",
+    "ds-security": "canonical/skills/security/modes",
+    "ds-career": "skills/career/modes",  # career pack still at legacy location pending 18.1.15a migration
+    "ds-analyze": "canonical/skills/analyze/modes",
+    "ds-domains": "canonical/skills/domains/modes",
+    "ds-setup": "canonical/skills/setup/modes",
 }
 
 UI_EXTENSIONS = {".tsx", ".vue", ".svelte", ".astro", ".css", ".scss", ".jsx"}
