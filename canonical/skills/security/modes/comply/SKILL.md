@@ -13,6 +13,17 @@ dream_studio:
 
 # Comply — Compliance Framework Mapping
 
+## Applicable regulatory anchors
+
+This skill maps findings to the following sections of [`regulatory-anchors.md`](../../references/regulatory-anchors.md):
+
+- 🟠 [A. Cross-industry trust attestations](../../references/regulatory-anchors.md#a-cross-industry-trust-attestations-the-audit-layer): SOC 2 Type I/II and ISO/IEC 27001 are the primary frameworks this skill maps to; SOC 2 CC-series controls are a built-in mapping target.
+- 🟠 [J. Software supply chain & secure SDLC](../../references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc): NIST SSDF (SP 800-218) and SBOM requirements surface as gap analysis targets when federal software supply chain obligations are in scope.
+- 🟠 [L. Application security standards](../../references/regulatory-anchors.md#l-application-security-standards): OWASP ASVS 5.0 and CWE Top 25 are built-in compliance framework targets in the mapping definitions.
+- 🟠 [M. Vulnerability management & disclosure](../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS, VEX, and coordinated vulnerability disclosure appear in compliance evidence documents this skill generates.
+
+See the full anchor list for tier definitions and the complete catalog of applicable regimes.
+
 ## Before you start
 Read `gotchas.yml` in this directory before every invocation.
 
