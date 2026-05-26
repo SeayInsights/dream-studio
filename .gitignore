@@ -175,3 +175,6 @@ docs/demo-script.md
 # Local dev artifacts (session output files)
 coverage-first-output.txt
 paths-to-scrub.txt
+
+# Graphify output (operator-managed; see storage-architecture.md)
+/graphify-out/
