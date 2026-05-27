@@ -56,7 +56,10 @@ def test_installed_verified_when_hashes_match(tmp_path, ds_home):
     )
     write_manifest("claude_code", manifest, ds_home)
 
-    result = doctor("claude_code", config_root, ds_home=ds_home)
+    # Pass an isolated spool_root so _check_spool doesn't fall back to the real
+    # spool directory (which may contain events on a developer machine or CI).
+    empty_spool = tmp_path / "spool_isolated"
+    result = doctor("claude_code", config_root, ds_home=ds_home, spool_root=empty_spool)
     assert result["state"] == IntegrationState.INSTALLED_VERIFIED.value
 
 
