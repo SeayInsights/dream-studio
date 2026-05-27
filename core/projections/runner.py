@@ -343,6 +343,13 @@ def main() -> None:
     except ImportError:
         logger.warning("MilestoneProjection not found — skipping registration.")
 
+    try:
+        from core.projections.design_brief_projection import DesignBriefProjection
+
+        runner.register(DesignBriefProjection())
+    except ImportError:
+        logger.warning("DesignBriefProjection not found — skipping registration.")
+
     runner.run()
 
 

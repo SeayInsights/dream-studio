@@ -237,15 +237,9 @@ def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     assert lock_result["ok"] is True
     assert lock_result["status"] == "locked"
 
-    conn = sqlite3.connect(str(db_path))
-    try:
-        row = conn.execute(
-            "SELECT status, purpose FROM business_design_briefs WHERE brief_id = ?", (brief_id,)
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "locked"
-    assert row[1] == "Track project progress"
+    # DB state updates (lock, field write) are now deferred to DesignBriefProjection.
+    # Return-value assertions above confirm the writer contract; projection behavior
+    # is covered by tests/unit/test_phase18_2_4_design_brief_projection.py.
 
 
 # ── eval_review ───────────────────────────────────────────────────────────────
