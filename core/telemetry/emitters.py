@@ -20,6 +20,7 @@ from core.telemetry.execution_spine import (
     record_research_evidence,
     record_security_finding,
     record_token_usage,
+    resolve_security_finding,
 )
 
 TELEMETRY_DB_ENV = "DREAM_STUDIO_TELEMETRY_DB"
@@ -582,6 +583,32 @@ def emit_security_finding(
             introduced_by_hook_id=introduced_by_hook_id,
             evidence_refs=merged_evidence_refs,
         )
+        try:
+            from canonical.events.envelope import CanonicalEventEnvelope
+            from canonical.events.redactor import redact_file_path as _redact
+            from spool.writer import write_event as _write_event
+
+            _envelope = CanonicalEventEnvelope(
+                event_type="security.finding.logged",
+                payload={
+                    "finding_id": finding_id,
+                    "project_id": ctx.project_id or "",
+                    "severity": normalized_severity,
+                    "status": normalized_status,
+                    "scan_id": scan_id,
+                    "rule_id": rule_id,
+                    "category": category,
+                    "file_path": _redact(file_path or ""),
+                    "start_line": normalized_start_line,
+                    "end_line": normalized_end_line,
+                },
+                project_id=ctx.project_id,
+                session_id=None,
+                confidence="high",
+            )
+            _write_event(_envelope.to_dict(), root=None)
+        except Exception:
+            pass  # fail-open; SQLite write already succeeded
         if normalized_severity in {"critical", "high"} or normalized_status in {
             "open",
             "unresolved",
@@ -608,6 +635,57 @@ def emit_security_finding(
         db_path=db_path,
         mode=mode,
         required_tables=("execution_events", "security_findings", "dashboard_attention_items"),
+    )
+
+
+def emit_security_finding_resolved(
+    *,
+    finding_id: str,
+    project_id: str | None = None,
+    resolution: str | None = None,
+    resolved_by_agent_id: str | None = None,
+    resolved_by_skill_id: str | None = None,
+    context: TelemetryContext | Mapping[str, Any] | None = None,
+    db_path: Path | str | None = None,
+    mode: str = MODE_BEST_EFFORT,
+) -> TelemetryEmitResult:
+    """Mark a security finding resolved and emit security.finding.resolved to spool."""
+    ctx = _context(context)
+    effective_project_id = project_id or ctx.project_id or ""
+
+    def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
+        updated = resolve_security_finding(conn, finding_id=finding_id, resolution=resolution)
+        if not updated:
+            return TelemetryEmitResult(False, error=f"security finding not found: {finding_id}")
+
+        try:
+            from canonical.events.envelope import CanonicalEventEnvelope
+            from spool.writer import write_event as _write_event
+
+            _envelope = CanonicalEventEnvelope(
+                event_type="security.finding.resolved",
+                payload={
+                    "finding_id": finding_id,
+                    "project_id": effective_project_id,
+                    "resolution": resolution,
+                    "resolved_by_agent_id": resolved_by_agent_id,
+                    "resolved_by_skill_id": resolved_by_skill_id,
+                },
+                project_id=effective_project_id or None,
+                session_id=None,
+                confidence="high",
+            )
+            _write_event(_envelope.to_dict(), root=None)
+        except Exception:
+            pass  # fail-open; SQLite update already succeeded
+
+        return TelemetryEmitResult(True, record_id=finding_id)
+
+    return _emit(
+        _write,
+        db_path=db_path,
+        mode=mode,
+        required_tables=("security_findings",),
     )
 
 

@@ -81,6 +81,16 @@ _GOOD_PAYLOADS: dict[str, dict] = {
         "brief_id": str(uuid.uuid4()),
         "project_id": "proj-test",
     },
+    "security.finding.logged": {
+        "finding_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+        "severity": "high",
+        "status": "open",
+    },
+    "security.finding.resolved": {
+        "finding_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
 }
 
 

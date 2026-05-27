@@ -461,6 +461,21 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "Security finding from SARIF scan — AI execution + business fact",
     ),
     RegistryEntry(
+        "security.finding.logged",
+        _BOTH,
+        "meaningful-unit",
+        "Security finding written to execution telemetry spine (W25 path)",
+        payload_required_keys=frozenset({"finding_id", "project_id", "severity", "status"}),
+    ),
+    RegistryEntry(
+        "security.finding.resolved",
+        _BOTH,
+        "meaningful-unit",
+        # resolution values: fixed|mitigated|accepted|false_positive (non-exhaustive; may extend in 18.4.x)
+        "Security finding status transitioned to resolved/fixed/mitigated",
+        payload_required_keys=frozenset({"finding_id", "project_id"}),
+    ),
+    RegistryEntry(
         "security.finding.detected",
         _BOTH,
         "meaningful-unit",

@@ -116,6 +116,8 @@ class EventType(str, Enum):
     SKILL_EXECUTED = "skill.executed"
     RISK_SCORE_COMPUTED = "risk.score.computed"
     SECURITY_FINDING_RECORDED = "security.finding.recorded"
+    SECURITY_FINDING_LOGGED = "security.finding.logged"
+    SECURITY_FINDING_RESOLVED = "security.finding.resolved"
     APPROACH_CAPTURED = "system.approach.captured"
     PROJECT_STATS_UPDATED = "system.project_stats.updated"
     SESSION_RECORDED = "system.session.recorded"
