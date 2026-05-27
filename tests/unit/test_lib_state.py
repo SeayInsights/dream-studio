@@ -105,6 +105,7 @@ def test_set_quiet_mode_clamps_negative_to_zero(tmp_path, monkeypatch):
 
 def test_read_config_future_schema_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     config = tmp_path / ".dream-studio" / "config.json"
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"schema_version": 999}', encoding="utf-8")

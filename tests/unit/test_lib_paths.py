@@ -87,6 +87,7 @@ def test_warn_sentinel_exists_returns_early(tmp_path, monkeypatch):
 
 def test_warn_version_mismatch_detects_cache_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
     plugin_dir = (
         tmp_path / ".claude" / "plugins" / "cache" / "dream-studio" / "dream-studio" / "0.9.0"
@@ -145,6 +146,7 @@ def test_check_for_update_no_newer_version(tmp_path, monkeypatch):
     import json
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
     response_data = json.dumps({"tag_name": "v1.0.0"}).encode()
     mock_resp = MagicMock()
@@ -162,6 +164,7 @@ def test_check_for_update_newer_version_prints_notice(tmp_path, monkeypatch, cap
     import json
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
     response_data = json.dumps({"tag_name": "v1.1.0"}).encode()
     mock_resp = MagicMock()
@@ -217,6 +220,7 @@ def test_check_for_update_repo_parse_exception_and_root_fallback(tmp_path, monke
     from unittest.mock import MagicMock, patch
 
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(lp, "plugin_version", lambda: "1.0.0")
 
     call_count = [0]

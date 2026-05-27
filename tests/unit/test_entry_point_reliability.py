@@ -66,14 +66,14 @@ class TestInstallPs1Validation:
         assert "3.11" in self.source or "version_info" in self.source.lower()
 
     def test_validates_repo_root(self):
-        assert "setup.py" in self.source
-        assert "Test-Path" in self.source or "exist" in self.source.lower()
+        assert "RepoDir" in self.source
+        assert "Set-Location" in self.source or "location" in self.source.lower()
 
     def test_fails_on_missing_python(self):
         assert "exit 1" in self.source or "exit /b 1" in self.source
 
     def test_delegates_to_canonical_setup(self):
-        assert "interfaces" in self.source and "setup.py" in self.source
+        assert "interfaces.cli.ds" in self.source
 
 
 # ── 3. install.sh validation ──────────────────────────────────────────────
@@ -89,14 +89,14 @@ class TestInstallShValidation:
         assert "3.11" in self.source or "version_info" in self.source
 
     def test_validates_repo_root(self):
-        assert "setup.py" in self.source
-        assert "-f" in self.source or "test" in self.source
+        assert "REPO_DIR" in self.source
+        assert "cd" in self.source
 
     def test_fails_on_missing_python(self):
         assert "exit 1" in self.source
 
     def test_delegates_to_canonical_setup(self):
-        assert "interfaces/cli/setup.py" in self.source
+        assert "interfaces.cli.ds" in self.source
 
     def test_has_python_picker(self):
         assert "pick_python" in self.source or "python3" in self.source

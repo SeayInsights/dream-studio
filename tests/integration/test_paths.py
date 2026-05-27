@@ -16,6 +16,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     return tmp_path
 
 
@@ -70,9 +71,18 @@ def test_plugin_root_from_env(tmp_path, monkeypatch):
 
 
 def test_plugin_root_walks_up_to_manifest(tmp_path, monkeypatch):
-    """With no env var set, plugin_root finds the real plugin root by walking up."""
+    """plugin_root walks up from __file__ until it finds .claude-plugin/plugin.json."""
+    # .claude-plugin/ is gitignored, so we create a hermetic test tree in tmp_path
+    plugin_dir = tmp_path / "my-plugin"
+    manifest_dir = plugin_dir / ".claude-plugin"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "plugin.json").write_text('{"version": "1.0.0"}', encoding="utf-8")
+    fake_lib = plugin_dir / "core" / "config"
+    fake_lib.mkdir(parents=True)
+    monkeypatch.setattr(paths, "__file__", str(fake_lib / "paths.py"))
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
     root = paths.plugin_root()
+    assert root == plugin_dir
     assert (root / ".claude-plugin" / "plugin.json").is_file()
 
 
