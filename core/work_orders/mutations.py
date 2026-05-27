@@ -302,7 +302,6 @@ def add_tasks_from_file(
         if not items:
             return {"ok": False, "error": "No numbered list items found in file"}
 
-        now = datetime.now(timezone.utc).isoformat()
         inserted: list[dict[str, Any]] = []
         for raw in items:
             lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
