@@ -58,7 +58,12 @@ def _isolated_check_env() -> dict[str, str]:
 def _isolated_test_env() -> dict[str, str]:
     env = os.environ.copy()
     isolated_home = Path(tempfile.mkdtemp(prefix="dream-studio-ci-home-"))
-    state_dir = isolated_home / ".dream-studio" / "state"
+    # Use a separate temp dir for the DB. conftest.guard_real_homedir checks
+    # whether DREAM_STUDIO_DB_PATH differs from Path.home()/".dream-studio"/...
+    # If HOME and DREAM_STUDIO_DB_PATH share the same base, the guard's
+    # _db_redirected flag is False and it fires on every DB write.
+    db_tmp = Path(tempfile.mkdtemp(prefix="dream-studio-ci-db-"))
+    state_dir = db_tmp / "state"
     state_dir.mkdir(parents=True, exist_ok=True)
     env.pop("DREAM_STUDIO_HOME", None)
     env["DREAM_STUDIO_DB_PATH"] = str(state_dir / "studio.db")
