@@ -99,7 +99,7 @@ def test_db() -> Generator[Path, None, None]:
 
         # Insert project
         conn.execute(
-            "INSERT INTO reg_projects VALUES (?, ?, ?)",
+            "INSERT INTO reg_projects (project_id, name, path) VALUES (?, ?, ?)",
             ("dream-studio", "Dream Studio", "/builds/dream-studio"),
         )
 
@@ -207,7 +207,11 @@ def test_db() -> Generator[Path, None, None]:
             ),
         ]
 
-        conn.executemany("INSERT INTO pi_components VALUES (?, ?, ?, ?, ?, ?, ?, ?)", components)
+        conn.executemany(
+            "INSERT INTO pi_components (component_id, project_id, name, path, component_type, lines, complexity_score, last_analyzed)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            components,
+        )
 
         # Insert dependencies (9 edges)
         dependencies = [
@@ -222,7 +226,10 @@ def test_db() -> Generator[Path, None, None]:
             ("dream-studio", "comp_9", "comp_10"),  # Validators -> Types
         ]
 
-        conn.executemany("INSERT INTO pi_dependencies VALUES (?, ?, ?)", dependencies)
+        conn.executemany(
+            "INSERT INTO pi_dependencies (project_id, from_component, to_component) VALUES (?, ?, ?)",
+            dependencies,
+        )
 
         # Insert 20 test tools
         tools = [
@@ -428,7 +435,11 @@ def test_db() -> Generator[Path, None, None]:
             ),
         ]
 
-        conn.executemany("INSERT INTO tool_registry VALUES (?, ?, ?, ?, ?, ?, ?, ?)", tools)
+        conn.executemany(
+            "INSERT INTO tool_registry (tool_id, name, category, description, source_url, install_command, tags, confidence_score)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            tools,
+        )
 
         conn.commit()
         conn.close()

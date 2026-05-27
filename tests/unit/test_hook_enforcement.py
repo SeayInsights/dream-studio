@@ -49,7 +49,8 @@ def active_project_db(minimal_db: Path) -> Path:
     """minimal_db with an active project pre-seeded."""
     conn = sqlite3.connect(str(minimal_db))
     conn.execute(
-        "INSERT INTO business_projects VALUES (?, 'Test Project', '', 'active', "
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?, 'Test Project', '', 'active', "
         "'2026-05-16T00:00:00+00:00', '2026-05-16T00:00:00+00:00')",
         (PROJECT_ID,),
     )
@@ -77,7 +78,8 @@ def test_in_progress_work_order_returns_none(
     """Active in_progress work order → execution is authorized → return None."""
     conn = sqlite3.connect(str(active_project_db))
     conn.execute(
-        "INSERT INTO business_work_orders VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO business_work_orders (work_order_id, project_id, title, work_order_type, status)"
+        " VALUES (?, ?, ?, ?, ?)",
         (WO_ID, PROJECT_ID, WO_TITLE, "ui_component", "in_progress"),
     )
     conn.commit()
@@ -100,7 +102,8 @@ def test_no_in_progress_next_open_returns_message(
     """No in_progress WO; next open WO exists → blocking message with WO details."""
     conn = sqlite3.connect(str(active_project_db))
     conn.execute(
-        "INSERT INTO business_work_orders VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO business_work_orders (work_order_id, project_id, title, work_order_type, status)"
+        " VALUES (?, ?, ?, ?, ?)",
         (WO_ID, PROJECT_ID, WO_TITLE, "ui_component", "open"),
     )
     conn.commit()
@@ -170,7 +173,8 @@ def test_blocking_message_is_valid_json_envelope(
 
     conn = sqlite3.connect(str(active_project_db))
     conn.execute(
-        "INSERT INTO business_work_orders VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO business_work_orders (work_order_id, project_id, title, work_order_type, status)"
+        " VALUES (?, ?, ?, ?, ?)",
         (WO_ID, PROJECT_ID, WO_TITLE, "ui_component", "open"),
     )
     conn.commit()

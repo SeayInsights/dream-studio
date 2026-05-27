@@ -80,7 +80,9 @@ class TestCustomQueryMatches:
     def test_valid_canonical_events_query_passes(self, evaluator_module, in_memory_db):
         """A valid SELECT against canonical_events must return True when rows match."""
         in_memory_db.execute(
-            "INSERT INTO canonical_events VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO canonical_events (event_id, event_type, timestamp, session_id, project_id,"
+            " severity, confidence, trace, payload, schema_version, source_type)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "ev1",
                 "hook_finding.created",
@@ -113,7 +115,8 @@ class TestCustomQueryMatches:
     def test_hook_invocations_query_is_allowed(self, evaluator_module, in_memory_db):
         """A valid SELECT against hook_invocations must be accepted."""
         in_memory_db.execute(
-            "INSERT INTO hook_invocations VALUES (?,?,?,?,?,?)",
+            "INSERT INTO hook_invocations (id, hook_name, tool_name, session_id, invoked_at, duration_ms)"
+            " VALUES (?,?,?,?,?,?)",
             (1, "on-tool-activity", "Edit", "sess1", "2026-01-01", 12.5),
         )
         in_memory_db.commit()

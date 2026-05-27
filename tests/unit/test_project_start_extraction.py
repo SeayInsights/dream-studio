@@ -30,11 +30,13 @@ def db_path(tmp_path: Path) -> Path:
         # Two projects — the target plus one already-active project so we can
         # prove `start_project` demotes it via `set_active_project`.
         conn.execute(
-            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (OTHER_PROJECT_ID, "Other Active", "", "active", NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Test Project", "", "paused", NOW, NOW),
         )
         conn.execute(

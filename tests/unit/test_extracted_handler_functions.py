@@ -47,7 +47,8 @@ def _seed_project(
 ) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
         (project_id, name, "", status, NOW, NOW),
     )
     conn.commit()

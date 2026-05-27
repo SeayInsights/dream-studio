@@ -29,7 +29,8 @@ def _seed_project(db_path: Path, *, project_id: str, name: str = "P") -> None:
     now = "2026-05-16T00:00:00+00:00"
     conn = sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO business_projects VALUES (?,?,?,'active',?,?)",
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,'active',?,?)",
         (project_id, name, "", now, now),
     )
     conn.commit()
@@ -141,11 +142,13 @@ def test_get_active_project_id_returns_most_recent_when_multiple_active(tmp_path
     pid_new = "22222222-2222-2222-2222-222222222222"
     conn = _sqlite3.connect(str(db_path))
     conn.execute(
-        "INSERT INTO business_projects VALUES (?,?,?,'active','2026-05-01T00:00:00+00:00','2026-05-01T00:00:00+00:00')",
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,'active','2026-05-01T00:00:00+00:00','2026-05-01T00:00:00+00:00')",
         (pid_old, "Old", ""),
     )
     conn.execute(
-        "INSERT INTO business_projects VALUES (?,?,?,'active','2026-05-10T00:00:00+00:00','2026-05-10T00:00:00+00:00')",
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,'active','2026-05-10T00:00:00+00:00','2026-05-10T00:00:00+00:00')",
         (pid_new, "New", ""),
     )
     conn.commit()

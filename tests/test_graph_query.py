@@ -118,7 +118,10 @@ def test_db() -> Generator[Path, None, None]:
             ("test_project", "comp_10", "comp_8"),  # Creates cycle
         ]
 
-        conn.executemany("INSERT INTO pi_dependencies VALUES (?, ?, ?)", dependencies)
+        conn.executemany(
+            "INSERT INTO pi_dependencies (project_id, from_component, to_component) VALUES (?, ?, ?)",
+            dependencies,
+        )
 
         conn.commit()
         conn.close()
@@ -371,10 +374,12 @@ class TestDetectCycles:
                 )
 
             conn.execute(
-                "INSERT INTO pi_dependencies VALUES (?, ?, ?)", ("acyclic", "comp_1", "comp_2")
+                "INSERT INTO pi_dependencies (project_id, from_component, to_component) VALUES (?, ?, ?)",
+                ("acyclic", "comp_1", "comp_2"),
             )
             conn.execute(
-                "INSERT INTO pi_dependencies VALUES (?, ?, ?)", ("acyclic", "comp_2", "comp_3")
+                "INSERT INTO pi_dependencies (project_id, from_component, to_component) VALUES (?, ?, ?)",
+                ("acyclic", "comp_2", "comp_3"),
             )
 
             conn.commit()

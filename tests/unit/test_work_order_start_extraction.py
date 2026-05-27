@@ -25,7 +25,8 @@ def db_path(tmp_path: Path) -> Path:
     # Seed a UI-typed work order and a non-UI work order.
     conn = sqlite3.connect(str(target))
     conn.execute(
-        "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
         ("p1", "Test Project", "", "active", NOW, NOW),
     )
     conn.execute(

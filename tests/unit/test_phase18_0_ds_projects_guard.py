@@ -25,7 +25,7 @@ def test_migration_065_removes_test_fixtures(tmp_path):
     """)
     # Insert real projects
     conn.executemany(
-        "INSERT INTO ds_projects VALUES (?,?,?,?)",
+        "INSERT INTO ds_projects (project_id, name, status, created_at) VALUES (?,?,?,?)",
         [
             ("real-1", "Dream Studio", "active", "2026-05-22"),
             ("real-2", "Dream Command", "paused", "2026-05-17"),
@@ -33,7 +33,7 @@ def test_migration_065_removes_test_fixtures(tmp_path):
     )
     # Insert test fixture rows matching known contamination patterns
     conn.executemany(
-        "INSERT INTO ds_projects VALUES (?,?,?,?)",
+        "INSERT INTO ds_projects (project_id, name, status, created_at) VALUES (?,?,?,?)",
         [
             ("fix-1", "My Project", "paused", "2026-05-22"),
             ("fix-2", "Programmatic Project", "paused", "2026-05-22"),

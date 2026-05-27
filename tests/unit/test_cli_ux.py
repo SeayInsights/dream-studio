@@ -78,21 +78,21 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
                 trace TEXT, severity TEXT, payload TEXT, source_type TEXT
             );
 
-            INSERT INTO business_projects VALUES (
+            INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
                 '{project_id}', 'Test Project', 'desc', 'active', '{now}', '{now}'
             );
-            INSERT INTO business_milestones VALUES (
+            INSERT INTO business_milestones (milestone_id, project_id, title, description, due_date, status, created_at, updated_at, order_index) VALUES (
                 '{milestone_id}', '{project_id}', 'Foundation', 'First milestone',
                 NULL, 'pending', '{now}', '{now}', 0
             );
-            INSERT INTO business_work_order_types VALUES (
+            INSERT INTO business_work_order_types (type_id, label, pre_build_gate, build_executor, post_build_gate, workflow_template, precondition_skill, task_generator, resolution_instructions) VALUES (
                 'infrastructure', 'Infrastructure', NULL, NULL, NULL, NULL, NULL, NULL, NULL
             );
-            INSERT INTO business_work_orders VALUES (
+            INSERT INTO business_work_orders (work_order_id, project_id, milestone_id, title, description, status, work_order_type, created_at, updated_at) VALUES (
                 '{wo_id}', '{project_id}', '{milestone_id}',
                 'Wire Tauri shell', 'desc', 'created', 'infrastructure', '{now}', '{now}'
             );
-            INSERT INTO business_tasks VALUES (
+            INSERT INTO business_tasks (task_id, work_order_id, project_id, title, description, status, created_at, updated_at) VALUES (
                 '{task_id}', '{wo_id}', '{project_id}',
                 'Create Tauri config', 'desc', 'pending', '{now}', '{now}'
             );
@@ -322,7 +322,7 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
                 trace TEXT, severity TEXT, payload TEXT, source_type TEXT
             );
 
-            INSERT INTO business_projects VALUES (
+            INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (
                 '{project_id}', 'Empty Project', 'desc', 'active', '{now}', '{now}'
             );
         """)

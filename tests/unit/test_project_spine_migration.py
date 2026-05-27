@@ -47,7 +47,11 @@ def test_migration_creates_ds_work_orders(tmp_path):
     conn = sqlite3.connect(str(tmp_path / "test.db"))
     _apply(conn)
     now = "2026-05-16T00:00:00+00:00"
-    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (now, now))
+    conn.execute(
+        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES ('p1','P','','active',?,?)",
+        (now, now),
+    )
     conn.execute(
         "INSERT INTO ds_work_orders (work_order_id, project_id, title, status, created_at, updated_at)"
         " VALUES ('w1','p1','WO1','open',?,?)",
@@ -64,7 +68,11 @@ def test_migration_creates_ds_tasks(tmp_path):
     conn = sqlite3.connect(str(tmp_path / "test.db"))
     _apply(conn)
     now = "2026-05-16T00:00:00+00:00"
-    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (now, now))
+    conn.execute(
+        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES ('p1','P','','active',?,?)",
+        (now, now),
+    )
     conn.execute(
         "INSERT INTO ds_work_orders (work_order_id, project_id, title, status, created_at, updated_at)"
         " VALUES ('w1','p1','WO1','open',?,?)",
