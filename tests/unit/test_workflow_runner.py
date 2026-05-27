@@ -17,27 +17,27 @@ from control.execution.workflow.runner import WorkflowRunner, resolve_specifier
 
 
 def test_resolve_specifier_bare_plan():
-    assert resolve_specifier("plan") == "core:plan"
+    assert resolve_specifier("plan") == "ds-core:plan"
 
 
 def test_resolve_specifier_bare_build():
-    assert resolve_specifier("build") == "core:build"
+    assert resolve_specifier("build") == "ds-core:build"
 
 
 def test_resolve_specifier_bare_verify():
-    assert resolve_specifier("verify") == "core:verify"
+    assert resolve_specifier("verify") == "ds-core:verify"
 
 
 def test_resolve_specifier_bare_review():
-    assert resolve_specifier("review") == "core:review"
+    assert resolve_specifier("review") == "ds-core:review"
 
 
 def test_resolve_specifier_bare_debug():
-    assert resolve_specifier("debug") == "quality:debug"
+    assert resolve_specifier("debug") == "ds-quality:debug"
 
 
 def test_resolve_specifier_bare_audit():
-    assert resolve_specifier("audit") == "quality:audit"
+    assert resolve_specifier("audit") == "ds-quality:audit"
 
 
 def test_resolve_specifier_already_qualified():
@@ -49,7 +49,7 @@ def test_resolve_specifier_already_qualified_with_prefix():
 
 
 def test_resolve_specifier_unknown_bare_falls_back_to_core():
-    assert resolve_specifier("unknown-mode") == "core:unknown-mode"
+    assert resolve_specifier("unknown-mode") == "ds-core:unknown-mode"
 
 
 def test_resolve_specifier_scope_maps_to_ds_project():
@@ -57,7 +57,7 @@ def test_resolve_specifier_scope_maps_to_ds_project():
 
 
 def test_resolve_specifier_dast_maps_to_security():
-    assert resolve_specifier("dast") == "security:dast"
+    assert resolve_specifier("dast") == "ds-security:dast"
 
 
 # ── WorkflowRunner.dry_run ────────────────────────────────────────────────────
@@ -367,7 +367,7 @@ def test_command_node_invokes_build_by_default(tmp_path):
         runner._invoke_skill = fake_invoke
         runner.run()
 
-    assert "core:build" in invoked
+    assert "ds-core:build" in invoked
 
 
 def test_command_node_research_type_invokes_think(tmp_path):
@@ -388,7 +388,7 @@ def test_command_node_research_type_invokes_think(tmp_path):
         runner._invoke_skill = fake_invoke
         runner.run()
 
-    assert "core:think" in invoked
+    assert "ds-core:think" in invoked
 
 
 def test_command_node_plan_type_invokes_plan(tmp_path):
@@ -409,7 +409,7 @@ def test_command_node_plan_type_invokes_plan(tmp_path):
         runner._invoke_skill = fake_invoke
         runner.run()
 
-    assert "core:plan" in invoked
+    assert "ds-core:plan" in invoked
 
 
 def test_command_node_writes_context_file(tmp_path):
