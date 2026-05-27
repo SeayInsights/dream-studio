@@ -684,6 +684,14 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         True,
         EventCategory.HOOK_EMITTED,
     ),
+    # Skill execution budget telemetry
+    EventTypeMeta(
+        EventType.SKILL_BUDGET_EXCEEDED,
+        "telemetry",
+        "Skill execution exceeded its configured token/context budget",
+        False,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
 )
 
 # Backward-compatible: hook-emitted types that are implemented in the emitter
