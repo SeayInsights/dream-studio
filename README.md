@@ -431,3 +431,5 @@ See [INSTALL.md](INSTALL.md) for a standalone installation reference.
 
 <!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->
 <!-- Last reviewed 2026-05-27 — Phase 18.1.18: INSTALL.md added. Node.js 24 CI opt-in applied. -->
+
+<!-- Last reviewed 2026-05-27 — fix/ci-gate-db-path-collision: ci_gate.py _isolated_test_env() now uses separate mkdtemp calls for HOME and DREAM_STUDIO_DB_PATH so conftest.guard_real_homedir's _db_redirected check returns True and the CI abort guard does not fire on test DB writes. No release gate policy change; this is a CI isolation bug fix only. -->
