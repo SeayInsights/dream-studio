@@ -127,6 +127,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
     monkeypatch.delenv("CLAUDE_PROJECTS_DIR", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     return tmp_path
 
 
