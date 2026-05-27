@@ -116,7 +116,9 @@ def test_install_output_skips_first_run_guide_when_active_project_exists(tmp_pat
             "CREATE TABLE business_projects "
             "(project_id TEXT PRIMARY KEY, name TEXT, status TEXT)"
         )
-        conn.execute("INSERT INTO business_projects (project_id, name, status) VALUES ('test-id', 'TestProject', 'active')")
+        conn.execute(
+            "INSERT INTO business_projects (project_id, name, status) VALUES ('test-id', 'TestProject', 'active')"
+        )
 
     from integrations.installer.claude_code import _first_run_guide
 
