@@ -98,7 +98,7 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "INSERT INTO canonical_events(event_id, event_type, timestamp, trace, severity, payload) "
             "VALUES('token-evt-1', 'token.consumed', '2026-05-14T00:00:00Z', "
             "'{\"project_id\": \"dream-studio\"}', 'info', "
-            "'{\"input_tokens\": 10, \"output_tokens\": 20}')"
+            '\'{"input_tokens": 10, "output_tokens": 20}\')'
         )
         conn.commit()
     finally:

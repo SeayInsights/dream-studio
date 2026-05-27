@@ -62,6 +62,7 @@ def test_plan_backup_json_cli_uses_fake_home_without_creating_backup(tmp_path: P
     db_path = _db(fake_home / ".dream-studio" / "state" / "studio.db")
     target = db_path.with_suffix(".db.bak")
     import os as _os
+
     env = {
         **_os.environ,
         "HOME": str(fake_home),
