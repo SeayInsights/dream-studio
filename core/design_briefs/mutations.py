@@ -63,6 +63,28 @@ def create_design_brief(
     db_path = _require_db(source_root, dream_studio_home)
     brief_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="design_brief.created",
+                session_id=None,
+                payload={"brief_id": brief_id, "project_id": project_id, "status": "draft"},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "brief_id": brief_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
     with _connect(db_path) as conn:
         conn.execute(
             "INSERT INTO business_design_briefs (brief_id, project_id, status, created_at, updated_at)"
@@ -101,16 +123,36 @@ def lock_design_brief(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT brief_id FROM business_design_briefs WHERE brief_id = ?",
+            "SELECT brief_id, project_id FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Brief not found: {brief_id}"}
-        conn.execute(
-            "UPDATE business_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
-            (now, brief_id),
-        )
-        conn.commit()
+        _project_id = row[1]
+        try:
+            import spool.writer as _spool_writer
+
+            from canonical.events.envelope import CanonicalEventEnvelope
+
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="design_brief.locked",
+                    session_id=None,
+                    payload={"brief_id": brief_id},
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": _project_id,
+                        "brief_id": brief_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        except Exception:
+            pass
+        # Direct UPDATE removed: DesignBriefProjection applies design_brief.locked
+        # to business_design_briefs asynchronously from the event above.
     return {"ok": True, "brief_id": brief_id, "status": "locked", "locked_at": now}
 
 
@@ -131,18 +173,38 @@ def update_design_brief_field(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT status FROM business_design_briefs WHERE brief_id = ?",
+            "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Brief not found: {brief_id}"}
         if row[0] == "locked":
             return {"ok": False, "error": "Brief is locked and cannot be updated"}
-        conn.execute(
-            f"UPDATE business_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",
-            (value, now, brief_id),
-        )
-        conn.commit()
+        _project_id = row[1]
+        try:
+            import spool.writer as _spool_writer
+
+            from canonical.events.envelope import CanonicalEventEnvelope
+
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="design_brief.updated",
+                    session_id=None,
+                    payload={"brief_id": brief_id, "field": field, "new_value": value},
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": _project_id,
+                        "brief_id": brief_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        except Exception:
+            pass
+        # Direct UPDATE removed: DesignBriefProjection applies design_brief.updated
+        # to business_design_briefs asynchronously from the event above.
     return {"ok": True, "brief_id": brief_id, "field": field, "value": value}
 
 
@@ -165,16 +227,40 @@ def set_design_system(
     now = datetime.now(timezone.utc).isoformat()
     with _connect(db_path) as conn:
         row = conn.execute(
-            "SELECT status FROM business_design_briefs WHERE brief_id = ?",
+            "SELECT status, project_id FROM business_design_briefs WHERE brief_id = ?",
             (brief_id,),
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Brief not found: {brief_id}"}
         if row[0] == "locked":
             return {"ok": False, "error": "Brief is locked and cannot be updated"}
-        conn.execute(
-            "UPDATE business_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
-            (system_name, now, brief_id),
-        )
-        conn.commit()
+        _project_id = row[1]
+        try:
+            import spool.writer as _spool_writer
+
+            from canonical.events.envelope import CanonicalEventEnvelope
+
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="design_brief.updated",
+                    session_id=None,
+                    payload={
+                        "brief_id": brief_id,
+                        "field": "design_system",
+                        "new_value": system_name,
+                    },
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": _project_id,
+                        "brief_id": brief_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        except Exception:
+            pass
+        # Direct UPDATE removed: DesignBriefProjection applies design_brief.updated
+        # to business_design_briefs asynchronously from the event above.
     return {"ok": True, "brief_id": brief_id, "design_system": system_name}

@@ -94,6 +94,11 @@ class EventType(str, Enum):
     TASK_STARTED = "task.started"
     TASK_DELETED = "task.deleted"
 
+    # Design brief lifecycle events (18.2.4)
+    DESIGN_BRIEF_CREATED = "design_brief.created"
+    DESIGN_BRIEF_UPDATED = "design_brief.updated"
+    DESIGN_BRIEF_LOCKED = "design_brief.locked"
+
     # Token attribution events (TA3)
     TOKEN_CONSUMED = "token.consumed"
 
@@ -563,6 +568,27 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     # Task lifecycle events (TA1)
+    EventTypeMeta(
+        EventType.DESIGN_BRIEF_CREATED,
+        "sdlc",
+        "Draft design brief created for a project",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.DESIGN_BRIEF_UPDATED,
+        "sdlc",
+        "One field updated on a draft design brief",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.DESIGN_BRIEF_LOCKED,
+        "sdlc",
+        "Design brief locked (human approval gate passed)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
     EventTypeMeta(
         EventType.TASK_CREATED,
         "sdlc",

@@ -105,6 +105,27 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "Work order closed after gate checks passed",
         payload_required_keys=frozenset({"work_order_id", "title", "project_id", "forced"}),
     ),
+    RegistryEntry(
+        "design_brief.created",
+        _BUSINESS,
+        "meaningful-unit",
+        "Draft design brief created for a project",
+        payload_required_keys=frozenset({"brief_id", "project_id"}),
+    ),
+    RegistryEntry(
+        "design_brief.updated",
+        _BUSINESS,
+        "meaningful-unit",
+        "One field updated on a draft design brief",
+        payload_required_keys=frozenset({"brief_id", "field", "new_value"}),
+    ),
+    RegistryEntry(
+        "design_brief.locked",
+        _BUSINESS,
+        "meaningful-unit",
+        "Design brief locked (human approval gate passed)",
+        payload_required_keys=frozenset({"brief_id"}),
+    ),
     RegistryEntry("task.created", _BUSINESS, "meaningful-unit", "New task added to a work order"),
     RegistryEntry("task.started", _BUSINESS, "meaningful-unit", "Work began on a task"),
     RegistryEntry(

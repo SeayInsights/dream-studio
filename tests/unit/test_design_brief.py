@@ -180,15 +180,7 @@ def test_design_brief_lock_sets_status_locked(db_home, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert f"Brief {BRIEF_ID} locked." in out
-
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT status FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "locked"
+    # DB state update is now deferred to DesignBriefProjection (test_phase18_2_4_design_brief_projection.py)
 
 
 # ── 4b. A2.6: direct-call lock_design_brief returns a structured dict ────────
@@ -211,23 +203,19 @@ def test_lock_design_brief_returns_dict_on_success(db_home):
     assert "locked_at" in result
 
 
-def test_lock_design_brief_updates_db_status(db_home):
+def test_lock_design_brief_emits_event_not_direct_write(db_home):
+    """lock_design_brief emits design_brief.locked; DB status update is async via projection."""
     from core.design_briefs.mutations import lock_design_brief
 
     _insert_brief(db_home, status="draft")
-    lock_design_brief(
+    result = lock_design_brief(
         brief_id=BRIEF_ID,
         source_root=REPO_ROOT,
         dream_studio_home=db_home,
     )
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT status FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "locked"
+    assert result["ok"] is True
+    assert result["status"] == "locked"
+    # Direct DB write removed — projection test verifies status='locked' in DB.
 
 
 def test_lock_design_brief_returns_error_for_unknown_brief(db_home):
@@ -276,15 +264,7 @@ def test_design_brief_update_changes_field_on_draft(db_home, capsys):
     assert data["ok"] is True
     assert data["field"] == "tone"
     assert data["value"] == "playful"
-
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT tone FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "playful"
+    # DB field update is now deferred to DesignBriefProjection (test_phase18_2_4_design_brief_projection.py)
 
 
 # ── 6. ds design-brief update exits 1 on locked brief ────────────────────────
@@ -330,15 +310,7 @@ def test_design_brief_set_system_accepts_valid_system(db_home, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["ok"] is True
     assert data["design_system"] == "tech-minimal"
-
-    conn = sqlite3.connect(str(_db_path(db_home)))
-    try:
-        row = conn.execute(
-            "SELECT design_system FROM business_design_briefs WHERE brief_id = ?", (BRIEF_ID,)
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row[0] == "tech-minimal"
+    # DB field update is now deferred to DesignBriefProjection (test_phase18_2_4_design_brief_projection.py)
 
 
 # ── 8. ds design-brief set-system rejects invalid system ─────────────────────
