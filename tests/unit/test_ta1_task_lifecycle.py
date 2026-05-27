@@ -373,8 +373,12 @@ def test_backfill_event_ids_are_deterministic(legacy_db_path):
 # ── integration: create_task → DB + spool ────────────────────────────────────
 
 
-def test_create_task_integration_inserts_db_row(db_home, tmp_path, monkeypatch):
-    monkeypatch.setenv("DS_SPOOL_ROOT", str(tmp_path / "spool-root"))
+def test_create_task_integration_emits_event(db_home, tmp_path, monkeypatch):
+    # Phase 18.2.3: create_task() is event-sourced. It emits task.created to the
+    # spool; TaskProjection applies it to business_tasks asynchronously. The DB
+    # row is NOT written synchronously by this function any longer.
+    spool_root = tmp_path / "spool-root"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     from core.work_orders.mutations import create_task
 
     result = create_task(
@@ -385,21 +389,24 @@ def test_create_task_integration_inserts_db_row(db_home, tmp_path, monkeypatch):
         dream_studio_home=db_home,
     )
     assert result["ok"] is True
-    task_id = result["task_id"]
+    assert result["task_id"] is not None
+    assert result["title"] == "Integration Task"
 
-    db_path = db_home / "state" / "studio.db"
-    conn = sqlite3.connect(str(db_path))
-    try:
-        row = conn.execute(
-            "SELECT title, work_order_id, project_id FROM business_tasks WHERE task_id = ?",
-            (task_id,),
-        ).fetchone()
-    finally:
-        conn.close()
-    assert row is not None
-    assert row[0] == "Integration Task"
-    assert row[1] == WO_ID
-    assert row[2] == PROJECT_ID
+    spool_files = list(spool_root.rglob("*.jsonl")) + list(spool_root.rglob("*.json"))
+    events = []
+    for f in spool_files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    import json as _json
+
+                    events.append(_json.loads(line))
+                except Exception:
+                    pass
+    created = [e for e in events if e.get("event_type") == "task.created"]
+    assert created, "Expected task.created event in spool"
+    assert created[0]["trace"]["task_id"] == result["task_id"]
 
 
 def test_complete_task_integration_event_has_full_trace(db_home, tmp_path, monkeypatch):

@@ -58,14 +58,6 @@ def create_milestone(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-        conn.execute(
-            "INSERT INTO business_milestones"
-            " (milestone_id, project_id, title, description, status, order_index, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)",
-            (milestone_id, project_id, title, description, order_index, now, now),
-        )
-        conn.commit()
-
     try:
         import spool.writer as _spool_writer
 

@@ -127,7 +127,11 @@ def test_eval_start_wo(patched_paths, tmp_path: Path) -> None:
 
 
 def test_eval_task_done(patched_paths, db_path: Path, tmp_path: Path) -> None:
-    """mark_task_done() flips task status to complete in SQLite."""
+    """mark_task_done() emits task.completed and returns the complete status.
+
+    Phase 18.2.3: mark_task_done() is event-sourced. The return dict reflects
+    the completion state; the DB row is updated asynchronously by TaskProjection.
+    """
     from core.work_orders.mutations import mark_task_done
 
     result = mark_task_done(
@@ -142,15 +146,7 @@ def test_eval_task_done(patched_paths, db_path: Path, tmp_path: Path) -> None:
     assert result["status"] == "complete"
     assert result["tasks_remaining"] == 0
     assert result.get("all_tasks_complete") is True
-
-    conn = sqlite3.connect(str(db_path))
-    try:
-        status = conn.execute(
-            "SELECT status FROM business_tasks WHERE task_id = ?", (TASK_ID,)
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert status == "complete"
+    # DB row stays pending until TaskProjection applies the task.completed event.
 
 
 # ── eval_close_wo ─────────────────────────────────────────────────────────────

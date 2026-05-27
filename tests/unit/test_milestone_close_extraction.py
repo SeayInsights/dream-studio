@@ -180,12 +180,8 @@ def test_close_milestone_succeeds_when_artifacts_pass(
     assert result["forced"] is False
     assert result["bypassed_gates"] == []
     assert "completed_at" in result
-
-    with sqlite3.connect(str(db_path)) as conn:
-        row = conn.execute(
-            "SELECT status FROM business_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
-        ).fetchone()
-    assert row[0] == "complete"
+    # Phase 18.2.3: close_milestone() is event-sourced. The DB row is updated
+    # asynchronously by MilestoneProjection; the return dict is authoritative.
 
 
 def test_close_milestone_skips_cwv_for_non_ui_milestone(
@@ -253,12 +249,7 @@ def test_close_milestone_force_bypasses_failures(
     assert result["forced"] is True
     assert result["status"] == "complete"
     assert len(result["bypassed_gates"]) >= 1
-
-    with sqlite3.connect(str(db_path)) as conn:
-        row = conn.execute(
-            "SELECT status FROM business_milestones WHERE milestone_id = ?", (MILESTONE_ID,)
-        ).fetchone()
-    assert row[0] == "complete"
+    # Phase 18.2.3: DB row updated asynchronously by MilestoneProjection.
 
 
 def test_close_milestone_force_emits_gate_bypassed_events(
