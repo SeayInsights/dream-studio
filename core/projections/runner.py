@@ -350,6 +350,13 @@ def main() -> None:
     except ImportError:
         logger.warning("DesignBriefProjection not found — skipping registration.")
 
+    try:
+        from core.projections.project_projection import ProjectProjection
+
+        runner.register(ProjectProjection())
+    except ImportError:
+        logger.warning("ProjectProjection not found — skipping registration.")
+
     runner.run()
 
 

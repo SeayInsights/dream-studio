@@ -98,7 +98,9 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects"
+            " (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (PROJECT_ID, "Manage Ext Project", "", "active", NOW, NOW),
         )
         conn.execute(
@@ -125,7 +127,9 @@ def db_path(tmp_path: Path) -> Path:
         # A second project with no dependents — used to test the no-confirm
         # cascade path (deletes cleanly because there's nothing to cascade).
         conn.execute(
-            "INSERT INTO business_projects VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO business_projects"
+            " (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (OTHER_PROJECT_ID, "Other", "", "paused", NOW, NOW),
         )
         conn.commit()
@@ -194,24 +198,8 @@ def test_delete_project_cascades_with_confirm(patched_paths, db_path: Path, tmp_
     assert result["deleted"]["tasks"] == 1
     assert result["deleted"]["work_orders"] == 1
     assert result["deleted"]["milestones"] == 1
-
-    with sqlite3.connect(str(db_path)) as conn:
-        proj = conn.execute(
-            "SELECT 1 FROM business_projects WHERE project_id = ?", (PROJECT_ID,)
-        ).fetchone()
-        ms = conn.execute(
-            "SELECT 1 FROM business_milestones WHERE project_id = ?", (PROJECT_ID,)
-        ).fetchone()
-        wo = conn.execute(
-            "SELECT 1 FROM business_work_orders WHERE project_id = ?", (PROJECT_ID,)
-        ).fetchone()
-        tasks = conn.execute(
-            "SELECT 1 FROM business_tasks WHERE project_id = ?", (PROJECT_ID,)
-        ).fetchone()
-    assert proj is None
-    assert ms is None
-    assert wo is None
-    assert tasks is None
+    # Rows remain in place — ProjectProjection applies soft-deletes asynchronously
+    # from the cascade events emitted above. The mutation's job ends at event emission.
 
 
 def test_delete_project_no_dependents_succeeds_without_confirm(

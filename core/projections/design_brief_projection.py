@@ -55,6 +55,7 @@ class DesignBriefProjection(Projection):
         "design_brief.created",
         "design_brief.updated",
         "design_brief.locked",
+        "design_brief.deleted",
     ]
     source_canonical = "business"
     target_tables = [_TABLE]
@@ -98,6 +99,8 @@ class DesignBriefProjection(Projection):
                 return self._handle_updated(conn, brief_id, payload, event_id, now)
             elif event_type == "design_brief.locked":
                 return self._handle_locked(conn, brief_id, event_id, now)
+            elif event_type == "design_brief.deleted":
+                return self._handle_deleted(conn, brief_id, event_id, now)
 
         logger.warning(
             "DesignBriefProjection: unhandled event_type '%s' for %s", event_type, brief_id
@@ -189,6 +192,21 @@ class DesignBriefProjection(Projection):
         conn.execute(
             f"UPDATE {_TABLE}"
             " SET status = 'locked', updated_at = ?, last_event_id = ?"
+            " WHERE brief_id = ?",
+            (now, event_id, brief_id),
+        )
+        return 1
+
+    def _handle_deleted(
+        self,
+        conn: sqlite3.Connection,
+        brief_id: str,
+        event_id: str,
+        now: str,
+    ) -> int:
+        conn.execute(
+            f"UPDATE {_TABLE}"
+            " SET status = 'deleted', updated_at = ?, last_event_id = ?"
             " WHERE brief_id = ?",
             (now, event_id, brief_id),
         )

@@ -55,6 +55,32 @@ _GOOD_PAYLOADS: dict[str, dict] = {
         "project_id": "proj-test",
         "forced": False,
     },
+    "design_brief.created": {
+        "brief_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
+    "design_brief.updated": {
+        "brief_id": str(uuid.uuid4()),
+        "field": "audience",
+        "new_value": "enterprise buyers",
+    },
+    "design_brief.locked": {
+        "brief_id": str(uuid.uuid4()),
+    },
+    "project.activated": {
+        "project_id": "proj-test",
+    },
+    "project.deactivated": {
+        "project_id": "proj-test",
+    },
+    "work_order.deleted": {
+        "work_order_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
+    "design_brief.deleted": {
+        "brief_id": str(uuid.uuid4()),
+        "project_id": "proj-test",
+    },
 }
 
 

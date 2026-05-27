@@ -44,15 +44,51 @@ def set_active_project(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-        conn.execute(
-            "UPDATE business_projects SET status = 'paused', updated_at = ? WHERE status = 'active'",
-            (now,),
+        # Collect IDs of currently-active projects before displacing them.
+        displaced_ids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT project_id FROM business_projects WHERE status = 'active'",
+            ).fetchall()
+        ]
+        # Direct UPDATE removed: ProjectProjection applies project.activated and
+        # project.deactivated to business_projects asynchronously from the events below.
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        for displaced_id in displaced_ids:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="project.deactivated",
+                    session_id=None,
+                    payload={"project_id": displaced_id},
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": displaced_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.activated",
+                session_id=None,
+                payload={"project_id": project_id},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
         )
-        conn.execute(
-            "UPDATE business_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
-            (now, project_id),
-        )
-        conn.commit()
+    except Exception:
+        pass
     return {"ok": True, "project_id": project_id, "status": "active"}
 
 
@@ -71,11 +107,29 @@ def deactivate_project(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-        conn.execute(
-            "UPDATE business_projects SET status = 'paused', updated_at = ? WHERE project_id = ?",
-            (now, project_id),
+        # Direct UPDATE removed: ProjectProjection applies project.deactivated
+        # to business_projects asynchronously from the event below.
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.deactivated",
+                session_id=None,
+                payload={"project_id": project_id},
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
         )
-        conn.commit()
+    except Exception:
+        pass
     return {"ok": True, "project_id": project_id, "status": "paused"}
 
 
@@ -145,7 +199,7 @@ def delete_project(
                 "task_count": task_count,
             }
 
-        # Collect task data for post-delete events before removing rows.
+        # Collect entity data for post-delete events before removing rows.
         task_rows = conn.execute(
             "SELECT t.task_id, t.work_order_id, t.project_id, wo.milestone_id"
             " FROM business_tasks t"
@@ -153,17 +207,27 @@ def delete_project(
             " WHERE t.project_id = ?",
             (project_id,),
         ).fetchall()
-
-        # Cascade: tasks → work_orders → milestones → design_briefs → projects
-        conn.execute("DELETE FROM business_tasks WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM business_work_orders WHERE project_id = ?", (project_id,))
-        conn.execute("DELETE FROM business_milestones WHERE project_id = ?", (project_id,))
+        wo_rows = conn.execute(
+            "SELECT work_order_id FROM business_work_orders WHERE project_id = ?",
+            (project_id,),
+        ).fetchall()
+        milestone_rows = conn.execute(
+            "SELECT milestone_id FROM business_milestones WHERE project_id = ?",
+            (project_id,),
+        ).fetchall()
+        brief_rows: list = []
         try:
-            conn.execute("DELETE FROM business_design_briefs WHERE project_id = ?", (project_id,))
+            brief_rows = conn.execute(
+                "SELECT brief_id FROM business_design_briefs WHERE project_id = ?",
+                (project_id,),
+            ).fetchall()
         except Exception:
             pass  # Table may not exist in all schema versions.
-        conn.execute("DELETE FROM business_projects WHERE project_id = ?", (project_id,))
-        conn.commit()
+
+        # Direct DELETEs removed: ProjectProjection (project.deleted) and the
+        # respective entity projections (work_order.deleted, milestone.deleted,
+        # design_brief.deleted, task.deleted) apply soft-deletes asynchronously
+        # from the cascade events emitted below.
 
     try:
         import spool.writer as _spool_writer
@@ -171,25 +235,6 @@ def delete_project(
         from canonical.events.envelope import CanonicalEventEnvelope
 
         now = datetime.now(timezone.utc).isoformat()
-
-        _spool_writer.write_event(
-            CanonicalEventEnvelope(
-                event_type="project.deleted",
-                session_id=None,
-                payload={
-                    "cascade_milestones": ms_count,
-                    "cascade_work_orders": wo_count,
-                    "cascade_tasks": task_count,
-                },
-                timestamp=now,
-                severity="info",
-                trace={
-                    "domain": "sdlc",
-                    "project_id": project_id,
-                    "attribution_status": "fully_attributed",
-                },
-            ).to_dict()
-        )
 
         for t_task_id, t_work_order_id, t_project_id, t_milestone_id in task_rows:
             _spool_writer.write_event(
@@ -212,6 +257,84 @@ def delete_project(
                     },
                 ).to_dict()
             )
+        for (wo_id,) in wo_rows:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="work_order.deleted",
+                    session_id=None,
+                    payload={
+                        "work_order_id": wo_id,
+                        "project_id": project_id,
+                        "deletion_context": "cascaded_from_project_delete",
+                    },
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": project_id,
+                        "work_order_id": wo_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        for (ms_id,) in milestone_rows:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="milestone.deleted",
+                    session_id=None,
+                    payload={
+                        "milestone_id": ms_id,
+                        "project_id": project_id,
+                        "deletion_context": "cascaded_from_project_delete",
+                    },
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": project_id,
+                        "milestone_id": ms_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        for (brief_id,) in brief_rows:
+            _spool_writer.write_event(
+                CanonicalEventEnvelope(
+                    event_type="design_brief.deleted",
+                    session_id=None,
+                    payload={
+                        "brief_id": brief_id,
+                        "project_id": project_id,
+                        "deletion_context": "cascaded_from_project_delete",
+                    },
+                    timestamp=now,
+                    severity="info",
+                    trace={
+                        "domain": "sdlc",
+                        "project_id": project_id,
+                        "brief_id": brief_id,
+                        "attribution_status": "fully_attributed",
+                    },
+                ).to_dict()
+            )
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.deleted",
+                session_id=None,
+                payload={
+                    "cascade_milestones": ms_count,
+                    "cascade_work_orders": wo_count,
+                    "cascade_tasks": task_count,
+                },
+                timestamp=now,
+                severity="info",
+                trace={
+                    "domain": "sdlc",
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
     except Exception:
         pass
 

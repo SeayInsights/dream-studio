@@ -28,6 +28,7 @@ def _get_engine():
     from core.projections.design_brief_projection import DesignBriefProjection
     from core.projections.framework import ProjectionEngine
     from core.projections.milestone_projection import MilestoneProjection
+    from core.projections.project_projection import ProjectProjection
     from core.projections.task_projection import TaskProjection
     from core.projections.work_order_projection import WorkOrderProjection
 
@@ -36,6 +37,7 @@ def _get_engine():
     engine.register(TaskProjection())
     engine.register(MilestoneProjection())
     engine.register(DesignBriefProjection())
+    engine.register(ProjectProjection())
     return engine
 
 

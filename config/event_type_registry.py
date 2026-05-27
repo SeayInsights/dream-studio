@@ -52,6 +52,20 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "Project deleted with cascade to milestones, work orders, tasks",
     ),
     RegistryEntry(
+        "project.activated",
+        _BUSINESS,
+        "meaningful-unit",
+        "Project set as the active project (status → active)",
+        payload_required_keys=frozenset({"project_id"}),
+    ),
+    RegistryEntry(
+        "project.deactivated",
+        _BUSINESS,
+        "meaningful-unit",
+        "Project deactivated (status → paused)",
+        payload_required_keys=frozenset({"project_id"}),
+    ),
+    RegistryEntry(
         "project.registered",
         _BUSINESS,
         "meaningful-unit",
@@ -106,6 +120,13 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         payload_required_keys=frozenset({"work_order_id", "title", "project_id", "forced"}),
     ),
     RegistryEntry(
+        "work_order.deleted",
+        _BUSINESS,
+        "meaningful-unit",
+        "Work order deleted via cascade from project deletion",
+        payload_required_keys=frozenset({"work_order_id", "project_id"}),
+    ),
+    RegistryEntry(
         "design_brief.created",
         _BUSINESS,
         "meaningful-unit",
@@ -125,6 +146,13 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "meaningful-unit",
         "Design brief locked (human approval gate passed)",
         payload_required_keys=frozenset({"brief_id"}),
+    ),
+    RegistryEntry(
+        "design_brief.deleted",
+        _BUSINESS,
+        "meaningful-unit",
+        "Design brief deleted via cascade from project deletion",
+        payload_required_keys=frozenset({"brief_id", "project_id"}),
     ),
     RegistryEntry("task.created", _BUSINESS, "meaningful-unit", "New task added to a work order"),
     RegistryEntry("task.started", _BUSINESS, "meaningful-unit", "Work began on a task"),
