@@ -1,6 +1,8 @@
-name: Manual Full CI
+name: Full CI
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       reason:
@@ -34,3 +36,12 @@ jobs:
 
       - name: Run local parity release gate
         run: python interfaces/cli/ci_gate.py
+
+      - name: Test suite with coverage
+        run: >
+          python -m pytest tests/
+          --cov=core --cov=runtime --cov=interfaces --cov=spool
+          --cov=projections --cov=emitters --cov=canonical --cov=control
+          --cov-report=term-missing
+          --cov-fail-under=8
+          -q --tb=short
