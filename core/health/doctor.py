@@ -75,7 +75,10 @@ def _compute_directory_hash(path: Path) -> str:
     for file_path in sorted(path.rglob("*")):
         if not file_path.is_file():
             continue
-        if any(part.startswith(".") or part == "__pycache__" for part in file_path.relative_to(path).parts):
+        if any(
+            part.startswith(".") or part == "__pycache__"
+            for part in file_path.relative_to(path).parts
+        ):
             continue
         rel = file_path.relative_to(path).as_posix()
         digest.update(rel.encode("utf-8"))
