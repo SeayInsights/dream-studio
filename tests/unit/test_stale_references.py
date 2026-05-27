@@ -72,8 +72,8 @@ def test_no_interfaces_adapters_import():
 
 
 def test_no_hooks_run_py_reference():
-    """hooks/run.py was deleted in Slice 3."""
-    hits = _collect_stale(r"hooks/run\.py")
+    """hooks/run.py was deleted in Slice 3. ~/.claude/hooks/run.py is the installed target (OK)."""
+    hits = _collect_stale(r"hooks/run\.py", exclude_pattern=r"~/")
     assert hits == [], f"Found stale hooks/run.py references: {hits}"
 
 
@@ -111,16 +111,17 @@ def test_no_repo_skills_without_canonical_prefix():
 def test_audit_function_returns_list_of_findings():
     """The audit scan should return a list (zero findings means passing)."""
     findings: list[tuple[Path, int, str]] = []
+    # Patterns with optional per-pattern exclusions: (pattern, exclude_pattern | None)
     patterns = [
-        r"quality:secure",
-        r"interfaces[/\\]adapters",
-        r"hooks/run\.py",
-        r"builds/dream-studio(?!-clean)",
-        r"--set-active",
-        r"repo:skills/",
+        (r"quality:secure", None),
+        (r"interfaces[/\\]adapters", None),
+        (r"hooks/run\.py", r"~/"),  # ~/.claude/hooks/run.py is the installed target (OK)
+        (r"builds/dream-studio(?!-clean)", None),
+        (r"--set-active", None),
+        (r"repo:skills/", None),
     ]
-    for pattern in patterns:
-        findings.extend(_collect_stale(pattern))
+    for pattern, exclude in patterns:
+        findings.extend(_collect_stale(pattern, exclude_pattern=exclude))
     assert isinstance(findings, list)
     assert findings == [], f"Audit found {len(findings)} stale references: {findings[:5]}"
 

@@ -23,7 +23,7 @@ def _minimal_db_without_alert_tables(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(38, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE sla_definitions("
@@ -43,7 +43,7 @@ def _legacy_db_with_alert_history_only(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(38, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE alert_history("

@@ -117,9 +117,7 @@ def _isolate_db(request):
     with (
         patch("control.research.web.get_connection", side_effect=_conn_factory),
         patch("control.research.web.transaction", _mock_transaction(shared_conn)),
-        patch("control.research.web.emit_event"),
         patch("core.event_store.studio_db._connect", side_effect=_conn_factory),
-        patch("core.events.emitter.emit_event"),
     ):
         yield
 

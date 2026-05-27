@@ -6,10 +6,10 @@ import sys
 import pytest
 
 READ_ONLY_COMMANDS = [
-    ["py", "-m", "interfaces.cli.ds", "version"],
-    ["py", "-m", "interfaces.cli.ds", "doctor"],
-    ["py", "-m", "interfaces.cli.ds", "integrate", "status"],
-    ["py", "-m", "interfaces.cli.ds", "projection", "daemon", "status"],
+    [sys.executable, "-m", "interfaces.cli.ds", "version"],
+    [sys.executable, "-m", "interfaces.cli.ds", "doctor"],
+    [sys.executable, "-m", "interfaces.cli.ds", "integrate", "status"],
+    [sys.executable, "-m", "interfaces.cli.ds", "projection", "daemon", "status"],
 ]
 
 
@@ -26,7 +26,7 @@ def bootstrapped_db(tmp_path, monkeypatch):
 
     result = subprocess.run(
         [
-            "py",
+            sys.executable,
             "-m",
             "interfaces.cli.ds",
             "rehearsal-install",
@@ -45,7 +45,7 @@ def bootstrapped_db(tmp_path, monkeypatch):
 
     result = subprocess.run(
         [
-            "py",
+            sys.executable,
             "-m",
             "interfaces.cli.ds",
             "project",
@@ -78,7 +78,7 @@ def test_read_only_command_exits_zero(cmd):
 
 def test_project_state_exits_zero(bootstrapped_db):
     result = subprocess.run(
-        ["py", "-m", "interfaces.cli.ds", "project", "state"],
+        [sys.executable, "-m", "interfaces.cli.ds", "project", "state"],
         capture_output=True,
         text=True,
         timeout=30,
@@ -93,7 +93,7 @@ def test_project_state_exits_zero(bootstrapped_db):
 
 def test_work_order_list_exits_zero(bootstrapped_db):
     result = subprocess.run(
-        ["py", "-m", "interfaces.cli.ds", "work-order", "list"],
+        [sys.executable, "-m", "interfaces.cli.ds", "work-order", "list"],
         capture_output=True,
         text=True,
         timeout=30,
