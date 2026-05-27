@@ -1695,6 +1695,7 @@ def _integrate_dispatch(
             _cfg_path = (ds_home or (Path.home() / ".dream-studio")) / "config.json"
             if _cfg_path.is_file():
                 import json as _json
+
                 _skip_hook = bool(
                     _json.loads(_cfg_path.read_text(encoding="utf-8")).get(
                         "skip_hook_install", False
