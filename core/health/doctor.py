@@ -75,13 +75,14 @@ def _compute_directory_hash(path: Path) -> str:
     for file_path in sorted(path.rglob("*")):
         if not file_path.is_file():
             continue
-        if any(part.startswith(".") or part == "__pycache__" for part in file_path.parts):
+        if any(part.startswith(".") or part == "__pycache__" for part in file_path.relative_to(path).parts):
             continue
         rel = file_path.relative_to(path).as_posix()
         digest.update(rel.encode("utf-8"))
         digest.update(b"\x00")
         try:
-            digest.update(file_path.read_bytes())
+            # Normalize line endings so CRLF (Windows install) == LF (repo source).
+            digest.update(file_path.read_bytes().replace(b"\r\n", b"\n"))
         except OSError:
             digest.update(b"<unreadable>")
         digest.update(b"\x01")
