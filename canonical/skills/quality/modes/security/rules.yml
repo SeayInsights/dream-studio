@@ -1,0 +1,1064 @@
+# Security Rules
+# Version: 1.0.0 (18.4.1 initial)
+# Schema version: 1
+#
+# Source authority:
+#   LIST-2 = docs/architecture/launch-readiness-checklist.md section 3 (security baseline)
+#   LIST-1 = ds-security/references/regulatory-anchors.md section J (software supply chain)
+#   LIST-3 = ds-security/references/regulatory-anchors.md section N (identity/access/crypto)
+#   Regulatory anchors reference: ds-security/references/regulatory-anchors.md
+#
+# Rules deferred to 18.4.3: sec-020 (SBOM), sec-023 (backups), sec-024 (supply chain pinning)
+# Rules with action.build_mode: null are audit-only (multi-file or ops context required)
+
+rules:
+
+  - id: "sec-001"
+    name: "No secrets in source code or git history"
+    severity: critical
+    category: secrets
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Secrets in a vault — never in repo, never in env files in repo"
+
+    regulatory_anchors:
+      - section: J
+        standard: "NIST SSDF (SP 800-218)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc"
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: static
+      static:
+        tool: gitleaks
+        config: null
+        fallback_to_llm: true
+        notes: "gitleaks runs against both current state (--no-git) and full git history. LLM fallback checks for common secret patterns in file content."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 300
+
+    triggers:
+      - "Hardcoded API key, token, password, or secret assigned to a variable as a string literal"
+      - "Secret committed to git history (not just current HEAD state)"
+      - "Common secret prefixes in code: sk-, ghp_, AKIA, xoxb-, ey (JWT)"
+      - ".env files committed to repo (not just .env.example)"
+
+    remediation:
+      summary: "Move secret to environment variable (os.environ.get) or secrets manager. If already committed, rotate the secret immediately — git history rewrite is not sufficient."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/fixtures/**"
+        reason: "Placeholder/fake secrets in test fixtures are expected and safe"
+      - path_glob: "docs/**"
+        reason: "Secret-shaped strings in documentation are examples, not live credentials"
+      - path_glob: "**/.env.example"
+        reason: "Template files showing secret structure, not actual values"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment via inline comment"
+
+    applies_to:
+      languages: [python, javascript, typescript, rust, go, shell, yaml, toml, json]
+      file_types: [".py", ".js", ".ts", ".rs", ".go", ".sh", ".bash", ".yaml", ".yml", ".json", ".toml", ".env", ".env.example", ".config"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-002"
+    name: "Parameterized queries — no string-formatted SQL"
+    severity: critical
+    category: injection
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Parameterized queries (SQLi prevention)"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A03:2021 Injection"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+      - section: L
+        standard: "OWASP ASVS 5.0 V5 Validation"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: hybrid
+      static:
+        tool: semgrep
+        config: "p/sql-injection"
+        fallback_to_llm: true
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "SQL query built using f-string, %-formatting, or string concatenation with user-controlled input"
+      - "ORM raw() or execute() called with a formatted string rather than parameterized placeholders"
+
+    remediation:
+      summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) — never string-format SQL."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may build SQL for test setup — review individually"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, java, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".java", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-003"
+    name: "Input validation at all system boundaries"
+    severity: high
+    category: injection
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Input validation & output encoding (XSS prevention)"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A03:2021 Injection"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 500
+
+    triggers:
+      - "User-supplied input passed to shell commands, file paths, templating engines, or HTML output without sanitization"
+      - "API endpoint accepts input and passes it to downstream function without type/format validation"
+      - "Output encoding missing for user-supplied strings rendered in HTML context"
+
+    remediation:
+      summary: "Validate all inputs at system boundaries (type, length, format). Encode outputs appropriate to context (HTML: escape; shell: avoid entirely, use subprocess list form)."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test code often passes raw values intentionally"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-004"
+    name: "CSRF protection on state-changing endpoints"
+    severity: critical
+    category: auth
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "CSRF protection on state-changing endpoints"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A01:2021 Broken Access Control"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "POST/PUT/DELETE/PATCH endpoint exists with no CSRF token validation"
+      - "State-changing operation reachable without verifying request origin"
+      - "Framework CSRF middleware disabled or excluded for this route"
+
+    remediation:
+      summary: "Enable CSRF protection for all state-changing endpoints. Use framework middleware (Django: CsrfViewMiddleware; Flask: flask-wtf; FastAPI: starlette-csrf) or SameSite=Strict cookies plus Origin header checking."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# csrf-exempt: api-only"
+        reason: "Stateless API endpoints using token auth have no session to protect — document why"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, ruby, go, java]
+      file_types: [".py", ".js", ".ts", ".rb", ".go", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-005"
+    name: "Password storage: argon2/bcrypt/scrypt only"
+    severity: critical
+    category: auth
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Password storage: argon2/bcrypt/scrypt; never plaintext, never reversible"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4 (Digital Identity)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+
+    detection:
+      type: hybrid
+      static:
+        tool: bandit
+        config: null
+        fallback_to_llm: true
+        notes: "Bandit B106/B107 catch hardcoded passwords. LLM catches insufficient hashing patterns."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Password stored as plaintext or base64-encoded"
+      - "Password hashed with MD5, SHA1, or SHA256 (insufficient for passwords)"
+      - "Password hashed without salt"
+      - "hashlib.* used on password variable"
+
+    remediation:
+      summary: "Use argon2-cffi (preferred), bcrypt, or passlib with scrypt. Never use hashlib directly for passwords. Example: argon2.PasswordHasher().hash(password)"
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may use simplified password handling — verify intentional"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rb", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-006"
+    name: "HTTPS everywhere + HSTS + TLS 1.2 minimum"
+    severity: critical
+    category: transport
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "HTTPS everywhere, HSTS, modern TLS (1.2+ / 1.3 preferred)"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "HTTP URLs hardcoded where HTTPS should be used"
+      - "HSTS header not set in security headers configuration"
+      - "TLS version pinned to 1.0 or 1.1"
+      - "SSL verification disabled (verify=False, ssl=False, CERT_NONE)"
+
+    remediation:
+      summary: "Enforce HTTPS at load balancer or app level. Set Strict-Transport-Security header with max-age >= 31536000. Use TLS 1.2+. Never disable SSL certificate verification."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test HTTP clients may use http:// for local test servers"
+      - inline_comment: "# dev-only"
+        reason: "Development-only configuration — must not appear in production config"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, yaml]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".yaml", ".yml", ".toml", ".json", ".conf"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-007"
+    name: "Secure cookie flags: Secure, HttpOnly, SameSite"
+    severity: high
+    category: transport
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Secure cookie flags (Secure, HttpOnly, SameSite)"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: hybrid
+      static:
+        tool: semgrep
+        config: "p/cookie-flags"
+        fallback_to_llm: true
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 300
+
+    triggers:
+      - "set_cookie() called without secure=True"
+      - "set_cookie() called without httponly=True"
+      - "Cookie set with SameSite not set or SameSite=None without Secure"
+      - "Session cookie created without proper security flags"
+
+    remediation:
+      summary: "Set all three flags: Secure=True (HTTPS only), HttpOnly=True (no JS access), SameSite=Strict or Lax. Use framework cookie middleware where possible."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-008"
+    name: "Security headers: CSP, X-Frame-Options, X-Content-Type-Options"
+    severity: high
+    category: transport
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Security headers: CSP, X-Frame-Options/frame-ancestors, X-Content-Type-Options, Referrer-Policy, Permissions-Policy"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A05:2021 Security Misconfiguration"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Web application middleware/headers configuration exists but security headers are not set"
+      - "Content-Security-Policy missing or set to unsafe defaults (unsafe-inline, unsafe-eval, *)"
+      - "X-Frame-Options or frame-ancestors not configured"
+      - "X-Content-Type-Options: nosniff not set"
+
+    remediation:
+      summary: "Add security headers middleware. Minimum: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test servers typically don't need production security headers"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rb", ".yaml", ".yml"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-009"
+    name: "Encryption at rest: database, backups, object storage"
+    severity: critical
+    category: crypto
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Encryption at rest (database, backups, object storage)"
+
+    regulatory_anchors:
+      - section: N
+        standard: "FIPS 140-3 (when federal)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "Database connection string or storage configuration exists with no encryption/SSL setting"
+      - "File storage or S3 bucket configuration without server-side encryption"
+      - "SQLite database created for user data without encryption layer"
+
+    remediation:
+      summary: "Enable encryption at rest via cloud provider (S3 SSE-S3/SSE-KMS, RDS storage encryption) or database-level encryption. SQLite: use SQLCipher for sensitive data."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test databases with no real user data do not need encryption"
+      - inline_comment: "# dev-only"
+        reason: "Development-only storage — must not use same config as production"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, yaml]
+      file_types: [".py", ".js", ".ts", ".go", ".yaml", ".yml", ".toml", ".json"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-010"
+    name: "Encryption in transit between internal services"
+    severity: critical
+    category: transport
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Encryption in transit between internal services"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Internal service-to-service HTTP calls using http:// instead of https://"
+      - "Database connection without SSL/TLS option set"
+      - "Message queue or cache (Redis, RabbitMQ) connection without TLS"
+
+    remediation:
+      summary: "Use HTTPS/TLS for all internal service communication. For databases: set ssl=require or sslmode=verify-full. For Redis: use redis+ssl://. For message queues: configure TLS."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test infrastructure often uses plaintext for simplicity — must not reach production"
+      - inline_comment: "# dev-only"
+        reason: "Development-only configuration"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".yaml", ".yml", ".toml"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-011"
+    name: "Key management and rotation"
+    severity: high
+    category: crypto
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Key management (KMS, rotation)"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4 (Digital Identity)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Encryption keys or signing secrets hardcoded (see also sec-001)"
+      - "No mechanism for key rotation visible in codebase"
+      - "Key stored in application config file rather than secrets manager or KMS reference"
+
+    remediation:
+      summary: "Use a KMS (AWS KMS, GCP KMS, HashiCorp Vault) for key storage and rotation. Application should hold a KMS key reference, not the key material. Implement rotation schedule."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test keys with fake/placeholder values"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".yaml", ".yml", ".toml"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-012"
+    name: "Audit logging: who did what, when, immutable"
+    severity: high
+    category: logging
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Audit logging — who did what, when, immutable, retained"
+
+    regulatory_anchors:
+      - section: J
+        standard: "NIST SSDF (SP 800-218)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc"
+      - section: L
+        standard: "OWASP ASVS 5.0 V7 Error Handling and Logging"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Authentication events (login, logout, failed login) with no audit log entry"
+      - "Sensitive data access or modification with no audit trail"
+      - "Admin actions performed with no record of the acting user and timestamp"
+      - "Audit log entries writable/deletable by the application itself"
+
+    remediation:
+      summary: "Log authentication events, data access on sensitive resources, and all admin actions. Include: timestamp (UTC), user_id, action, resource, result. Write to append-only log store (CloudWatch Logs, Splunk, immutable S3)."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test code typically does not need audit logging"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-013"
+    name: "No PII in logs, URLs, or error messages"
+    severity: critical
+    category: logging
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Encryption at rest / PII tokenization"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A09:2021 Security Logging and Monitoring Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: hybrid
+      static:
+        tool: semgrep
+        config: "p/python.lang.security.audit.logging-pii"
+        fallback_to_llm: true
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "PII field names (email, password, ssn, dob, phone, credit_card, token) passed to logging.*, print(), or response error body"
+      - "Full URL logged including query parameters that may contain auth tokens or PII"
+      - "Stack trace includes sensitive variable values in error response to client"
+
+    remediation:
+      summary: "Mask PII before logging: log user_id, not email. Redact sensitive query params from URL logs. Return generic error messages to clients; log details server-side only."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-014"
+    name: "Authorization check on every endpoint, not just authentication"
+    severity: high
+    category: access
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Authorization checks on every endpoint (not just authentication)"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A01:2021 Broken Access Control"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 500
+
+    triggers:
+      - "Route handler checks that the user is authenticated but not whether they are authorized to access the specific resource"
+      - "Resource (record, file, user) fetched by ID without verifying the requesting user owns or has permission to access it"
+      - "@login_required or equivalent decorator present, but no object-level permission check"
+
+    remediation:
+      summary: "After confirming authentication, verify authorization: does this user have permission to perform this action on this specific resource? Use object-level permissions, not just role checks."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test code may bypass auth for setup"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rb", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-015"
+    name: "Session management: rotation, expiry, logout invalidation"
+    severity: high
+    category: auth
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Session management (secure rotation, expiry, logout invalidation)"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4 (Digital Identity)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+      - section: L
+        standard: "OWASP ASVS 5.0 V3 Session Management"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Session token not rotated after successful authentication (session fixation risk)"
+      - "Session has no expiry or an unreasonably long expiry (>24 hours for sensitive apps)"
+      - "Logout does not invalidate the server-side session"
+      - "JWT token with no expiry (no exp claim)"
+
+    remediation:
+      summary: "Rotate session ID on login. Set session expiry (absolute + idle). On logout, invalidate server-side session, not just clear the cookie. JWTs must have exp claim. Consider refresh token rotation."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-016"
+    name: "Rate limiting and brute-force protection"
+    severity: medium
+    category: access
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Rate limiting + brute-force protection"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A07:2021 Identification and Authentication Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Authentication endpoint (login, password reset, OTP) with no rate limiting visible"
+      - "No account lockout or CAPTCHA after repeated failed attempts"
+      - "API endpoint handling sensitive operations with no rate limiting middleware"
+
+    remediation:
+      summary: "Apply rate limiting on auth endpoints (e.g., 5 attempts per minute per IP). Use framework middleware (slowapi, express-rate-limit) or CDN-level WAF rules."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: null    # Architectural — requires seeing full route registration context; audit only
+
+  - id: "sec-017"
+    name: "MFA available (TOTP minimum)"
+    severity: high
+    category: auth
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "MFA available (TOTP at minimum, WebAuthn/passkeys preferred)"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4 AAL2 (Authenticator Assurance Level 2)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Authentication implementation with no MFA/2FA enrollment or verification flow visible"
+      - "Admin or privileged user paths with no step-up authentication"
+
+    remediation:
+      summary: "Implement TOTP-based MFA (pyotp, speakeasy) at minimum. For admin access, enforce MFA. For user accounts, offer MFA enrollment. WebAuthn/passkeys for best security."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test auth flows may bypass MFA"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-018"
+    name: "No shared accounts; named users and MFA on all admin access"
+    severity: high
+    category: access
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "No shared accounts; named users + MFA on all admin access"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4 (Digital Identity)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+      - section: L
+        standard: "OWASP Top 10 A07:2021 Identification and Authentication Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Generic shared account pattern (admin/admin, admin@company.com used as a service account)"
+      - "Hardcoded admin credentials in application bootstrapping code"
+      - "No audit trail possible because multiple users share one login"
+
+    remediation:
+      summary: "Each person must have an individual named account. Service accounts for automated systems should be non-interactive and tied to specific services. Enforce MFA for all admin-level accounts."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may create a shared test admin account"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, yaml]
+      file_types: [".py", ".js", ".ts", ".go", ".yaml", ".yml", ".json"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-019"
+    name: "Dependency vulnerability scanning (SCA)"
+    severity: high
+    category: supply-chain
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Vulnerability scanning (SAST, DAST, SCA, container scanning)"
+
+    regulatory_anchors:
+      - section: J
+        standard: "NIST SSDF (SP 800-218) PO.3.1"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc"
+      - section: L
+        standard: "OWASP Top 10 A06:2021 Vulnerable and Outdated Components"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: static
+      static:
+        tool: pip-audit
+        config: null
+        fallback_to_llm: false    # No meaningful LLM fallback for CVE scanning
+        notes: "pip-audit checks Python dependencies. For JS: npm audit. pip-audit is installed."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Known CVE in Python dependency found by pip-audit"
+      - "Dependency with no version pin (any version accepted)"
+      - "Dependency with version range that includes known-vulnerable versions"
+
+    remediation:
+      summary: "Pin all dependency versions. Run pip-audit/npm audit in CI. Update vulnerable packages promptly. CRITICAL/HIGH CVEs block ship."
+      guide_ref: null
+
+    suppressions:
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript]
+      file_types: ["requirements.txt", "requirements-dev.txt", "package.json", "package-lock.json", "pyproject.toml", "Pipfile", "Pipfile.lock"]
+
+    action:
+      audit_mode: report
+      build_mode: null    # pip-audit runs against installed packages, not generated code
+
+  - id: "sec-021"
+    name: "No hand-rolled crypto — use vetted libraries only"
+    severity: critical
+    category: crypto
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Authorization checks on every endpoint / crypto hygiene"
+
+    regulatory_anchors:
+      - section: N
+        standard: "FIPS 140-3 (approved algorithm list)"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+      - section: L
+        standard: "OWASP Top 10 A02:2021 Cryptographic Failures"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: hybrid
+      static:
+        tool: bandit
+        config: null
+        fallback_to_llm: true
+        notes: "Bandit B303/B304/B305/B308/B413/B501 catch weak crypto. LLM catches custom implementations."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "Custom/hand-rolled cryptographic implementation (XOR cipher, custom hash, custom RNG)"
+      - "Weak algorithms: MD5, SHA1, DES, 3DES, RC4, Blowfish, ECB mode"
+      - "secrets.token_* replaced with random.* for security-sensitive values"
+      - "IV/nonce reused across encryptions"
+
+    remediation:
+      summary: "Use vetted crypto libraries: cryptography (Python), Web Crypto API (JS), libsodium. Use only approved algorithms: AES-256-GCM, ChaCha20-Poly1305, SHA-256+, argon2. Never implement crypto from scratch."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test utilities may use simplified crypto for fixture generation"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, java]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".java"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "sec-022"
+    name: "Constant-time comparison for tokens and secrets"
+    severity: high
+    category: crypto
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "Encryption and crypto hygiene"
+
+    regulatory_anchors:
+      - section: N
+        standard: "NIST SP 800-63-4"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#n-identity-access--cryptography"
+
+    detection:
+      type: hybrid
+      static:
+        tool: bandit
+        config: null
+        fallback_to_llm: true
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Token or secret comparison using == operator (timing oracle risk)"
+      - "HMAC verification using standard string equality rather than hmac.compare_digest"
+      - "API key comparison with early-exit string equality"
+
+    remediation:
+      summary: "Use hmac.compare_digest() (Python) or crypto.timingSafeEqual() (Node.js) for all secret/token comparisons. Standard == leaks information via timing side channel."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test comparisons with non-sensitive fixture tokens"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go]
+      file_types: [".py", ".js", ".ts", ".go"]
+
+    action:
+      audit_mode: report
+      build_mode: null    # Multi-file context required to determine if this is a security comparison
+
+  - id: "sec-025"
+    name: "SSRF protection on outbound requests"
+    severity: critical
+    category: injection
+
+    source:
+      list: "LIST-2"
+      section: "section-3"
+      item: "SSRF protection on outbound requests"
+
+    regulatory_anchors:
+      - section: L
+        standard: "OWASP Top 10 A10:2021 Server-Side Request Forgery"
+        anchor_ref: "ds-security/references/regulatory-anchors.md#l-application-security-standards"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "User-supplied URL or hostname passed to requests.get(), fetch(), urllib, or equivalent without validation"
+      - "Webhook URL or redirect URL accepted from user input without allowlist or DNS rebinding protection"
+      - "Internal service called using a URL constructed from user-supplied data"
+
+    remediation:
+      summary: "Validate and allowlist URLs before making server-side requests. Block requests to private IP ranges (127.x, 10.x, 172.16-31.x, 192.168.x) and internal hostnames. Use a URL validation library, not manual string checks."
+      guide_ref: null
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test code may make requests to localhost intentionally"
+      - inline_comment: "# nosec"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [python, javascript, typescript, go, rust, ruby]
+      file_types: [".py", ".js", ".ts", ".go", ".rs", ".rb"]
+
+    action:
+      audit_mode: report
+      build_mode: block
