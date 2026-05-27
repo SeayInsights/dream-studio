@@ -195,10 +195,10 @@ def test_chain_3_link_1_dispatcher_in_template():
     import json
 
     entries = json.loads(template_path.read_text(encoding="utf-8"))
-    all_commands = [
-        h.get("command", "") for entry in entries for h in entry.get("hooks", [])
+    all_commands = [h.get("command", "") for entry in entries for h in entry.get("hooks", [])]
+    dispatcher_cmds = [
+        c for c in all_commands if "dispatch/hooks.py" in c or "dispatch\\hooks.py" in c
     ]
-    dispatcher_cmds = [c for c in all_commands if "dispatch/hooks.py" in c or "dispatch\\hooks.py" in c]
     assert dispatcher_cmds, "No dispatcher entries found in hooks_template.json"
 
 
@@ -507,16 +507,19 @@ def test_chain_8_link_2_install_writes_all_files():
         pytest.skip("~/.claude/skills/ not present in this environment")
     # Verify at least 3 mode-level SKILL.md files exist (regression guard)
     mode_skills = list(skills_dir.rglob("modes/*/SKILL.md"))
-    assert len(mode_skills) >= 3, (
-        f"Expected at least 3 mode-level SKILL.md files, found {len(mode_skills)}"
-    )
+    assert (
+        len(mode_skills) >= 3
+    ), f"Expected at least 3 mode-level SKILL.md files, found {len(mode_skills)}"
     # Verify dispatcher in template
     template_path = REPO_ROOT / "integrations" / "targets" / "claude_code" / "hooks_template.json"
     if template_path.is_file():
         import json
+
         entries = json.loads(template_path.read_text(encoding="utf-8"))
         all_cmds = [h.get("command", "") for e in entries for h in e.get("hooks", [])]
-        dispatcher_cmds = [c for c in all_cmds if "dispatch/hooks.py" in c or "dispatch\\hooks.py" in c]
+        dispatcher_cmds = [
+            c for c in all_cmds if "dispatch/hooks.py" in c or "dispatch\\hooks.py" in c
+        ]
         assert dispatcher_cmds, "Dispatcher entries missing from hooks_template.json"
 
 
