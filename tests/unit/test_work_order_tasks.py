@@ -89,18 +89,36 @@ def _tasks(db_home, monkeypatch, work_order_id):
 # ── task-done: core behavior ──────────────────────────────────────────────────
 
 
-def test_task_done_marks_completed_in_db(db_home, tmp_path, monkeypatch):
+def test_task_done_emits_event_not_direct_write(db_home, tmp_path, monkeypatch):
+    # Phase 18.2.3: task.completed is now event-sourced. mark_task_done() emits
+    # a canonical event; the TaskProjection applies it to business_tasks
+    # asynchronously. The DB row stays 'pending' until the projection runs.
+    spool_root = tmp_path / "spool-root"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_A)
     assert rc == 0
+    # DB row is NOT changed directly — projection owns the write.
     db_path = db_home / "state" / "studio.db"
     conn = sqlite3.connect(str(db_path))
     try:
         row = conn.execute(
             "SELECT status FROM business_tasks WHERE task_id = ?", (TASK_A,)
         ).fetchone()
-        assert row[0] == "complete"
+        assert row[0] == "pending"
     finally:
         conn.close()
+    # Canonical event was emitted.
+    spool_files = list(spool_root.rglob("*.jsonl")) + list(spool_root.rglob("*.json"))
+    events = []
+    for f in spool_files:
+        for line in f.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
+    assert any(e.get("event_type") == "task.completed" for e in events)
 
 
 def test_task_done_updates_context_md_checkbox(db_home, tmp_path, monkeypatch):

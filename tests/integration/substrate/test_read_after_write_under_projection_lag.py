@@ -149,3 +149,107 @@ class TestCloseMilestoneH4:
         open_ids = [r["work_order_id"] for r in result["open_work_orders"]]
         assert _WO_GENUINELY_OPEN in open_ids
         assert _WO_CLOSED not in open_ids
+
+
+# ── Phase 18.2.3 task writer→reader chains ───────────────────────────────────
+
+
+class TestTaskH4:
+    """H4 substrate: create_task / mark_task_done under TaskProjection lag.
+
+    Phase 18.2.3 removed direct writes from create_task() and mark_task_done().
+    Both functions now emit canonical events only; TaskProjection materialises the
+    rows asynchronously.  These tests document the resulting lag contract:
+
+      - create_task()   → task.created emitted; business_tasks row NOT written yet
+      - mark_task_done() → reads from business_tasks; fails when row absent
+
+    No canonical-events fallback was added to mark_task_done() in this phase;
+    callers must allow the projection to run before attempting to mark tasks done.
+    """
+
+    def test_create_task_does_not_write_row_directly(self, db_home):
+        """create_task() emits task.created event; business_tasks row is absent
+        until TaskProjection applies the event."""
+        from core.work_orders.mutations import create_task
+
+        result = create_task(
+            work_order_id=_WO_CLOSED,
+            project_id=_PROJECT_ID,
+            title="Read-after-write test task",
+            source_root=REPO_ROOT,
+            dream_studio_home=db_home,
+        )
+        assert result["ok"] is True
+        task_id = result["task_id"]
+
+        db_path = db_home / "state" / "studio.db"
+        conn = sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                "SELECT task_id FROM business_tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is None, "business_tasks row must not be written synchronously"
+
+    def test_mark_task_done_fails_when_task_not_yet_projected(self, db_home):
+        """mark_task_done() reads business_tasks; fails with 'Task not found'
+        when the task.created event has not yet been applied by TaskProjection."""
+        from core.work_orders.mutations import create_task, mark_task_done
+
+        result = create_task(
+            work_order_id=_WO_CLOSED,
+            project_id=_PROJECT_ID,
+            title="Lag test task",
+            source_root=REPO_ROOT,
+            dream_studio_home=db_home,
+        )
+        assert result["ok"] is True
+        task_id = result["task_id"]
+
+        done = mark_task_done(
+            work_order_id=_WO_CLOSED,
+            task_id=task_id,
+            source_root=REPO_ROOT,
+            dream_studio_home=db_home,
+        )
+        assert done["ok"] is False
+        assert "not found" in done["error"].lower()
+
+    def test_mark_task_done_succeeds_after_projection_applied(self, db_home):
+        """Once TaskProjection has materialised the row in business_tasks,
+        mark_task_done() emits task.completed and returns ok=True."""
+        from core.work_orders.mutations import mark_task_done
+
+        task_id = str(uuid.uuid4())
+        db_path = db_home / "state" / "studio.db"
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO business_tasks"
+                " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, 'Projected task', 'pending', ?, ?)",
+                (task_id, _WO_CLOSED, _PROJECT_ID, _NOW, _NOW),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        done = mark_task_done(
+            work_order_id=_WO_CLOSED,
+            task_id=task_id,
+            source_root=REPO_ROOT,
+            dream_studio_home=db_home,
+        )
+        assert done["ok"] is True
+        assert done["status"] == "complete"
+        # DB row is NOT updated directly — MilestoneProjection owns the write.
+        conn = sqlite3.connect(str(db_path))
+        try:
+            row = conn.execute(
+                "SELECT status FROM business_tasks WHERE task_id = ?", (task_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row[0] == "pending", "DB row must remain pending until TaskProjection runs"

@@ -211,12 +211,6 @@ def close_milestone(
                 except Exception:
                     pass
 
-        conn.execute(
-            "UPDATE business_milestones SET status = 'complete', updated_at = ? WHERE milestone_id = ?",
-            (now, milestone_id),
-        )
-        conn.commit()
-
     try:
         import spool.writer as _spool_writer
 

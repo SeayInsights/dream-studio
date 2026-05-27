@@ -329,6 +329,20 @@ def main() -> None:
             "This is expected until core/projections/work_order_projection.py is written."
         )
 
+    try:
+        from core.projections.task_projection import TaskProjection
+
+        runner.register(TaskProjection())
+    except ImportError:
+        logger.warning("TaskProjection not found — skipping registration.")
+
+    try:
+        from core.projections.milestone_projection import MilestoneProjection
+
+        runner.register(MilestoneProjection())
+    except ImportError:
+        logger.warning("MilestoneProjection not found — skipping registration.")
+
     runner.run()
 
 

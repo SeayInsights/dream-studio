@@ -54,17 +54,16 @@ def mark_task_done(
             }
 
         now = datetime.now(timezone.utc).isoformat()
-        conn.execute(
-            "UPDATE business_tasks SET status = 'complete', updated_at = ? WHERE task_id = ?",
-            (now, task_id),
-        )
-        conn.commit()
 
         remaining = conn.execute(
             "SELECT COUNT(*) FROM business_tasks"
             " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')",
             (work_order_id,),
         ).fetchone()[0]
+        # Task is being completed via event but not yet written directly; subtract 1
+        # unless the projection already applied a prior completion for this task.
+        if t_status not in ("complete", "cancelled"):
+            remaining -= 1
 
         task_index = (
             conn.execute(
@@ -312,15 +311,7 @@ def add_tasks_from_file(
             t_title = lines[0]
             t_desc = " ".join(lines[1:]) if len(lines) > 1 else ""
             t_id = str(uuid.uuid4())
-            conn.execute(
-                "INSERT INTO business_tasks"
-                " (task_id, work_order_id, project_id, title, description, status,"
-                " created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-                (t_id, work_order_id, project_id, t_title, t_desc, now, now),
-            )
             inserted.append({"task_id": t_id, "title": t_title, "description": t_desc})
-        conn.commit()
 
     try:
         import spool.writer as _spool_writer
@@ -473,14 +464,6 @@ def create_task(
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
         milestone_id = wo_row[1]
-        conn.execute(
-            "INSERT INTO business_tasks"
-            " (task_id, work_order_id, project_id, title, description, status,"
-            " created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
-            (task_id, work_order_id, project_id, title, description, now, now),
-        )
-        conn.commit()
 
     try:
         import spool.writer as _spool_writer
