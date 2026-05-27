@@ -399,9 +399,25 @@ Dream Studio detects the host OS, shell, Python version, and terminal at install
 
 ---
 
+## CI/CD
+
+Pull requests run a multi-OS smoke gate (Linux, macOS, Windows) that checks:
+
+- **Format** (`black --check`)
+- **Lint** (flake8 baseline)
+- **Contract docs drift** — detects domain doc staleness on impacted files
+- **Contract Atlas lifecycle** — verifies contract Atlas publication state
+- **Dependency scan** (`pip-audit`) — flags known CVEs in requirements
+
+The full test suite (with coverage gate) runs via the **Full CI** workflow on every push to `main` and can be triggered manually from GitHub Actions.
+
+Release candidates are validated via the **Release Validation** workflow before any tag is created.
+
+---
+
 ## Local development on Windows
 
-On Windows, the spool ingestor installs a module-level console control handler that absorbs spurious SIGINT signals delivered during filesystem and SQLite operations. This is fully automatic and requires no setup. Real Ctrl+C is preserved (two signals within 1 second forward to the default handler). On Linux this code is inactive. CI on Linux is unaffected. See `backlog.md` for the investigation history.
+On Windows, the spool ingestor installs a module-level console control handler that absorbs spurious SIGINT signals delivered during filesystem and SQLite operations. This is fully automatic and requires no setup. Real Ctrl+C is preserved (two signals within 1 second forward to the default handler). On Linux this code is inactive. The CI matrix includes Windows runners so cross-platform regressions are caught automatically. See `backlog.md` for the investigation history.
 
 ---
 
