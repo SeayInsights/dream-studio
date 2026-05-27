@@ -241,9 +241,7 @@ def _fetch_milestone(db_path: Path, milestone_id: str) -> Dict[str, Any] | None:
 def test_milestone_created_inserts_row(tmp_db):
     proj = _setup_projection(tmp_db)
     ms_id = str(uuid.uuid4())
-    ev = _mk_milestone_event(
-        "milestone.created", ms_id, title="Phase 1 Complete", status="pending"
-    )
+    ev = _mk_milestone_event("milestone.created", ms_id, title="Phase 1 Complete", status="pending")
     result = _call_handle(proj, ev, tmp_db)
     assert result == 1
     row = _fetch_milestone(tmp_db, ms_id)

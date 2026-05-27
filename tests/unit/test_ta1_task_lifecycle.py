@@ -400,6 +400,7 @@ def test_create_task_integration_emits_event(db_home, tmp_path, monkeypatch):
             if line:
                 try:
                     import json as _json
+
                     events.append(_json.loads(line))
                 except Exception:
                     pass

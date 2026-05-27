@@ -61,9 +61,7 @@ class MilestoneProjection(Projection):
         now = datetime.now(timezone.utc).isoformat()
 
         # milestone_id is denormalized onto the canonical row; fall back to trace.
-        milestone_id = event.get("milestone_id") or (event.get("trace") or {}).get(
-            "milestone_id"
-        )
+        milestone_id = event.get("milestone_id") or (event.get("trace") or {}).get("milestone_id")
         if not milestone_id:
             logger.warning(
                 "MilestoneProjection: event %s (%s) has no milestone_id — skipping",
@@ -75,9 +73,7 @@ class MilestoneProjection(Projection):
         project_id = event.get("project_id") or (event.get("trace") or {}).get("project_id")
 
         if event_type == "milestone.created":
-            return self._handle_created(
-                conn, milestone_id, project_id, payload, event_id, ts, now
-            )
+            return self._handle_created(conn, milestone_id, project_id, payload, event_id, ts, now)
         else:
             self._ensure_skeleton(conn, milestone_id, project_id, now)
 

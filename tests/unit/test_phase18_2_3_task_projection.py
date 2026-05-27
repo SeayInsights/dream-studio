@@ -228,9 +228,7 @@ def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
 def _fetch_task(db_path: Path, task_id: str) -> Dict[str, Any] | None:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    row = conn.execute(
-        "SELECT * FROM business_tasks WHERE task_id = ?", (task_id,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM business_tasks WHERE task_id = ?", (task_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 

@@ -90,9 +90,7 @@ class TaskProjection(Projection):
             elif event_type == "task.deleted":
                 return self._handle_deleted(conn, task_id, event_id, now)
 
-        logger.warning(
-            "TaskProjection: unhandled event_type '%s' for %s", event_type, task_id
-        )
+        logger.warning("TaskProjection: unhandled event_type '%s' for %s", event_type, task_id)
         return 0
 
     # ── Event handlers ────────────────────────────────────────────────────────
