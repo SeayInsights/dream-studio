@@ -1,0 +1,72 @@
+# Required fields
+name: security
+version: 1.0.0
+pack: quality
+created_at: 2026-05-27
+updated_at: 2026-05-27
+
+# Evolution tracking
+origin: new
+parent_skills: []
+generation: 0
+created_by: human
+
+# Quality & Health
+# status: jit-pending — functional, no real-world usage data yet.
+# Batch 7 of 18.4.1 will update times_used and avg_token_usage with measured values.
+status: jit-pending
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+# Performance metrics — populated from 18.4.1 Batch 7 first real audit
+# --changed scope on dream-studio-clean (6 files, Phase 18.2.6 PR)
+quality_metrics:
+  times_used: 1
+  success_rate: 1.0
+  avg_token_usage: 22000
+  avg_execution_time_seconds: null      # not measured; estimate 15-30min for 6-file changed scope
+  last_success: "2026-05-27"
+  last_failure: null
+
+# Failure patterns — populated from real usage via ds-quality:learn
+common_failures: []
+
+# Dependencies
+dependencies:
+  core_modules:
+    - git                           # ds-core/git.md — used for --changed scope (git diff --name-only)
+  tools_required:
+    - pip-audit                     # sec-019 — installed
+  tools_optional:
+    - gitleaks                      # sec-001 — NOT installed; LLM fallback active
+    - bandit                        # sec-005, sec-021 — NOT installed; LLM fallback active
+    - semgrep                       # sec-002, sec-013 — NOT installed; LLM fallback active
+  env_vars_required: []
+  files_required:
+    - ds-security/references/regulatory-anchors.md  # regulatory framework reference
+    - docs/architecture/launch-readiness-checklist.md  # rule source list
+  calls_skills: []
+
+# Compatibility
+compatibility:
+  min_context_window: 100000
+  works_best_with: sonnet
+  works_with: [sonnet, opus]
+  platforms: [windows, macos, linux]
+
+# Discovery
+tags: [security, audit, enforcement, rules, static-analysis, build-time]
+category: quality
+triggers:
+  - "audit:"
+  - "security audit:"
+  - "check security:"
+  - "check codebase security:"
+  - "build:security"
+  - "enforce security:"
+description: >
+  Build-time security enforcement — audits code against 22 security rules using static analysis
+  + LLM semantic pass. Two modes: audit (retrospective codebase scan with --changed/--full-repo/--sample
+  scope) and build (pre-generation static enforcement). Degrades gracefully when static analyzers
+  not installed. Token budgets are estimates; Batch 7 of 18.4.1 will update with real measurements.
