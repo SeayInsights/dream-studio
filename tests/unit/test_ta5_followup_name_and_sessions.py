@@ -206,8 +206,8 @@ class TestSessionMetricsNoneOutcomes:
                 outcome TEXT,
                 project_id TEXT
             );
-            INSERT INTO raw_sessions VALUES ('s1', '2026-05-22T10:00:00', '2026-05-22T10:05:00', NULL, NULL);
-            INSERT INTO raw_sessions VALUES ('s2', '2026-05-22T10:10:00', '2026-05-22T10:15:00', 'completed', NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '2026-05-22T10:00:00', '2026-05-22T10:05:00', NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '2026-05-22T10:10:00', '2026-05-22T10:15:00', 'completed', NULL);
         """)
         conn.commit()
         conn.close()
@@ -235,9 +235,9 @@ class TestSessionMetricsNoneOutcomes:
                 outcome TEXT,
                 project_id TEXT
             );
-            INSERT INTO raw_sessions VALUES ('s1', '2026-05-22T10:00:00', NULL, NULL, NULL);
-            INSERT INTO raw_sessions VALUES ('s2', '2026-05-22T10:01:00', NULL, NULL, NULL);
-            INSERT INTO raw_sessions VALUES ('s3', '2026-05-22T10:02:00', NULL, 'completed', NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '2026-05-22T10:00:00', NULL, NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '2026-05-22T10:01:00', NULL, NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s3', '2026-05-22T10:02:00', NULL, 'completed', NULL);
         """)
         conn.commit()
         conn.close()

@@ -82,7 +82,11 @@ def test_ds_work_order_types_has_exactly_10_rows():
 
 def test_work_order_type_column_accepts_valid_type():
     conn = _fresh_db()
-    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW))
+    conn.execute(
+        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES ('p1','P','','active',?,?)",
+        (_NOW, _NOW),
+    )
     conn.execute(
         "INSERT INTO ds_work_orders"
         " (work_order_id, project_id, title, status, work_order_type, created_at, updated_at)"
@@ -99,7 +103,11 @@ def test_work_order_type_column_accepts_valid_type():
 def test_work_order_type_column_accepts_null_for_backward_compat():
     """Existing rows with no type must remain valid (no NOT NULL constraint)."""
     conn = _fresh_db()
-    conn.execute("INSERT INTO ds_projects VALUES ('p1','P','','active',?,?)", (_NOW, _NOW))
+    conn.execute(
+        "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
+        " VALUES ('p1','P','','active',?,?)",
+        (_NOW, _NOW),
+    )
     conn.execute(
         "INSERT INTO ds_work_orders"
         " (work_order_id, project_id, title, status, work_order_type, created_at, updated_at)"

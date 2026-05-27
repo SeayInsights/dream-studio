@@ -177,7 +177,9 @@ def test_continuation_prompt_includes_project(handler, monkeypatch):
     db = sqlite3.connect(":memory:")
     db.row_factory = sqlite3.Row
     db.execute("CREATE TABLE business_projects (name TEXT, id TEXT, status TEXT)")
-    db.execute("INSERT INTO business_projects VALUES ('MyProject', 'proj-123', 'active')")
+    db.execute(
+        "INSERT INTO business_projects (name, id, status) VALUES ('MyProject', 'proj-123', 'active')"
+    )
     db.execute(
         "CREATE TABLE ds_workflow_runs "
         "(workflow_id TEXT, current_node TEXT, status TEXT, updated_at TEXT)"
