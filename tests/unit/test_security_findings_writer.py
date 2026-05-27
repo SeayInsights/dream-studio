@@ -90,9 +90,7 @@ def test_emit_security_finding_emits_spool_event(patched_db, db_path: Path, tmp_
     assert payload["status"] == "open"
 
 
-def test_emit_security_finding_spool_calls_redact_file_path(
-    patched_db, db_path: Path
-) -> None:
+def test_emit_security_finding_spool_calls_redact_file_path(patched_db, db_path: Path) -> None:
     """file_path in the spool payload is passed through redact_file_path.
 
     redact_file_path() is currently a stub (returns the path unchanged) — a
@@ -104,9 +102,12 @@ def test_emit_security_finding_spool_calls_redact_file_path(
 
     test_path = "C:\\Users\\Dannis Seay\\builds\\dream-studio-clean\\src\\config.py"
 
-    with patch("spool.writer.write_event"), patch(
-        "canonical.events.redactor.redact_file_path", return_value="<redacted>"
-    ) as mock_redact:
+    with (
+        patch("spool.writer.write_event"),
+        patch(
+            "canonical.events.redactor.redact_file_path", return_value="<redacted>"
+        ) as mock_redact,
+    ):
         emit_security_finding(
             severity="medium",
             description="Hardcoded credentials",
@@ -120,9 +121,7 @@ def test_emit_security_finding_spool_calls_redact_file_path(
     mock_redact.assert_called_once_with(test_path)
 
 
-def test_emit_security_finding_duplicate_does_not_emit_spool(
-    patched_db, db_path: Path
-) -> None:
+def test_emit_security_finding_duplicate_does_not_emit_spool(patched_db, db_path: Path) -> None:
     """Duplicate finding (same deterministic ID) skips the spool write."""
     from core.telemetry.emitters import emit_security_finding
 
@@ -203,9 +202,7 @@ def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> N
     assert status == "mitigated"
 
 
-def test_resolve_security_finding_returns_false_for_unknown_id(
-    patched_db, db_path: Path
-) -> None:
+def test_resolve_security_finding_returns_false_for_unknown_id(patched_db, db_path: Path) -> None:
     from core.telemetry.execution_spine import resolve_security_finding
 
     with sqlite3.connect(str(db_path)) as conn:
@@ -216,9 +213,7 @@ def test_resolve_security_finding_returns_false_for_unknown_id(
 # ── emit_security_finding_resolved: emitter ───────────────────────────────
 
 
-def test_emit_security_finding_resolved_emits_spool_event(
-    patched_db, db_path: Path
-) -> None:
+def test_emit_security_finding_resolved_emits_spool_event(patched_db, db_path: Path) -> None:
     """emit_security_finding_resolved() emits security.finding.resolved to spool."""
     from core.telemetry.emitters import emit_security_finding, emit_security_finding_resolved
 

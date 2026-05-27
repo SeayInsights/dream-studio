@@ -484,7 +484,9 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
     )
 
 
-def resolve_security_finding(conn: sqlite3.Connection, *, finding_id: str, resolution: str | None = None) -> bool:
+def resolve_security_finding(
+    conn: sqlite3.Connection, *, finding_id: str, resolution: str | None = None
+) -> bool:
     """Update security_findings.status for a resolved finding.
 
     Returns True if the row was found and updated, False if not found.
