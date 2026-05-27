@@ -273,6 +273,13 @@ def main(argv: list[str] | None = None) -> int:
     project_list.add_argument(
         "--status", default="active", help="Filter by status (default: active)"
     )
+    project_list.add_argument(
+        "--include-deleted",
+        action="store_true",
+        default=False,
+        dest="include_deleted",
+        help="Include soft-deleted projects (status=deleted) in output",
+    )
     project_status_cmd = project_sub.add_parser(
         "status", help="Show milestone/work-order summary for a project"
     )
@@ -1297,6 +1304,7 @@ def _project_dispatch(
     if args.project_command == "list":
         return _project_list(
             status_filter=args.status,
+            include_deleted=getattr(args, "include_deleted", False),
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
@@ -1378,6 +1386,7 @@ def _project_register(
 def _project_list(
     *,
     status_filter: str,
+    include_deleted: bool = False,
     source_root: Path,
     dream_studio_home: Path | None,
 ) -> int:
@@ -1385,6 +1394,7 @@ def _project_list(
 
     result = get_project_list(
         status_filter=status_filter,
+        include_deleted=include_deleted,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )

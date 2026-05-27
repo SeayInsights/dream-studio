@@ -39,7 +39,7 @@ def db_path(tmp_path: Path) -> Path:
     conn = sqlite3.connect(str(target))
     try:
         conn.execute(
-            "INSERT INTO business_projects VALUES (?, 'Eval Project', '', 'active', ?, ?)",
+            "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at) VALUES (?, 'Eval Project', '', 'active', ?, ?)",
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(

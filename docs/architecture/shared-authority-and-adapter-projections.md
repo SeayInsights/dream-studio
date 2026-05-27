@@ -247,3 +247,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15a: adapter-projections/ floating files removed (chatgpt, codex, copilot, cursor, local-model, mcp, shell adapter projection files and README). These were stale drafts not wired to the adapter runtime; their removal does not change the adapter boundary or projection authority described in this doc. No policy or contract change. -->
 
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15b: ds.py updated to read skip_hook_install from config.json in _integrate_dispatch. No changes to the installed runtime contract, adapter routing, or global command surface described in this doc. -->
+
+<!-- Last reviewed 2026-05-27 — Phase 18.2.5: ds.py gains --include-deleted flag on ds project list subcommand to surface soft-deleted projects. No changes to installed runtime paths, adapter routing contracts, global command surface, productization lifecycle, or platform hardening policy described in this doc. -->

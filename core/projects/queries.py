@@ -34,16 +34,23 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
 def get_project_list(
     *,
     status_filter: str = "active",
+    include_deleted: bool = False,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT project_id, name, description, status, created_at FROM business_projects"
-            " WHERE status = ? ORDER BY created_at DESC",
-            (status_filter,),
-        ).fetchall()
+        if include_deleted:
+            rows = conn.execute(
+                "SELECT project_id, name, description, status, created_at FROM business_projects"
+                " ORDER BY created_at DESC",
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT project_id, name, description, status, created_at FROM business_projects"
+                " WHERE status = ? ORDER BY created_at DESC",
+                (status_filter,),
+            ).fetchall()
     projects = [
         {
             "project_id": r[0],

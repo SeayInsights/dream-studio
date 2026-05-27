@@ -42,6 +42,7 @@ class WorkOrderProjection(Projection):
         "work_order.blocked",
         "work_order.unblocked",
         "work_order.closed",
+        "work_order.deleted",
     ]
     source_canonical = "business"
     target_tables = [_TABLE]
@@ -99,6 +100,8 @@ class WorkOrderProjection(Projection):
                 return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
             elif event_type == "work_order.closed":
                 return self._handle_closed(conn, work_order_id, event_id, ts, now)
+            elif event_type == "work_order.deleted":
+                return self._handle_deleted(conn, work_order_id, event_id, now)
 
         # Declared in consumed_event_types but not handled — defensive fallback.
         logger.warning(
@@ -244,6 +247,25 @@ class WorkOrderProjection(Projection):
                 "work_order_id": work_order_id,
                 "status": "closed",
                 "closed_at": ts,
+                "last_event_id": event_id,
+                "last_updated_at": now,
+            },
+            conflict_key="work_order_id",
+        )
+
+    def _handle_deleted(
+        self,
+        conn: sqlite3.Connection,
+        work_order_id: str,
+        event_id: str,
+        now: str,
+    ) -> int:
+        return self.safe_upsert(
+            conn,
+            _TABLE,
+            {
+                "work_order_id": work_order_id,
+                "status": "deleted",
                 "last_event_id": event_id,
                 "last_updated_at": now,
             },

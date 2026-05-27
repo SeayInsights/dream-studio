@@ -32,8 +32,12 @@ class EventType(str, Enum):
     RESEARCH_COMPLETED = "research.completed"
     RESEARCH_CACHE_STORED = "research.cache_stored"
     RESEARCH_CACHE_CLEARED = "research.cache_cleared"
-    PROJECT_REGISTERED = "project.registered"
-    PROJECT_UPDATED = "project.updated"
+    PROJECT_REGISTERED = (
+        "project.registered"  # DEPRECATED — no callers; superseded by project.created
+    )
+    PROJECT_UPDATED = (
+        "project.updated"  # DEPRECATED — no callers; superseded by project.activated/deactivated
+    )
     ANALYSIS_STARTED = "analysis.started"
     ANALYSIS_DISCOVERY_COMPLETED = "analysis.discovery_completed"
     ANALYSIS_RESEARCH_COMPLETED = "analysis.research_completed"
@@ -85,9 +89,12 @@ class EventType(str, Enum):
     # SDLC entity creation events (TA0)
     PROJECT_CREATED = "project.created"
     PROJECT_DELETED = "project.deleted"
+    PROJECT_ACTIVATED = "project.activated"
+    PROJECT_DEACTIVATED = "project.deactivated"
     MILESTONE_CREATED = "milestone.created"
     MILESTONE_DELETED = "milestone.deleted"
     WORK_ORDER_CREATED = "work_order.created"
+    WORK_ORDER_DELETED = "work_order.deleted"
 
     # Task lifecycle events (TA1)
     TASK_CREATED = "task.created"
@@ -98,6 +105,7 @@ class EventType(str, Enum):
     DESIGN_BRIEF_CREATED = "design_brief.created"
     DESIGN_BRIEF_UPDATED = "design_brief.updated"
     DESIGN_BRIEF_LOCKED = "design_brief.locked"
+    DESIGN_BRIEF_DELETED = "design_brief.deleted"
 
     # Token attribution events (TA3)
     TOKEN_CONSUMED = "token.consumed"
@@ -547,6 +555,20 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
+        EventType.PROJECT_ACTIVATED,
+        "sdlc",
+        "A project was set as the active project (status → active)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.PROJECT_DEACTIVATED,
+        "sdlc",
+        "A project was deactivated (status → paused)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
         EventType.MILESTONE_CREATED,
         "sdlc",
         "A new milestone was created under a project",
@@ -567,7 +589,14 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
-    # Task lifecycle events (TA1)
+    EventTypeMeta(
+        EventType.WORK_ORDER_DELETED,
+        "sdlc",
+        "A work order was deleted via cascade from project deletion",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # Design brief + task lifecycle events (18.2.4 / TA1)
     EventTypeMeta(
         EventType.DESIGN_BRIEF_CREATED,
         "sdlc",
@@ -586,6 +615,13 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventType.DESIGN_BRIEF_LOCKED,
         "sdlc",
         "Design brief locked (human approval gate passed)",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.DESIGN_BRIEF_DELETED,
+        "sdlc",
+        "A design brief was deleted via cascade from project deletion",
         True,
         EventCategory.PRODUCTION_EMITTED,
     ),
