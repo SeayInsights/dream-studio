@@ -162,6 +162,9 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 4. Add structured logging for workflow state transitions
 5. Clean up stale workflow docs references
 
+<!-- Last reviewed 2026-05-27 — Phase 18.1.16: canonical/skills/workflow/docs/contracts/workflow-contract.md promoted from installed-only to canonical source. Defines the portable primitive contract for workflow skills (required fields, authority boundaries, portable rendering table, validation expectations). No engine, state, or gate policy change in this PR. -->
+
+
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
 <!-- Last reviewed 2026-05-20 — A3: `control/execution/workflow/runner.py:_invoke_skill` no longer self-shells via `subprocess.run(['ds','skill','invoke', specifier])`; instead it calls `core.skills.invocation.load_skill_content` + `record_skill_invocation` directly in-process. ~40x faster per node, tracebacks intact, mockable. dry_run path unchanged. No policy or contract change here. -->

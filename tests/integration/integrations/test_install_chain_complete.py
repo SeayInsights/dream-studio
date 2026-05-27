@@ -158,8 +158,10 @@ def test_reinstall_does_not_duplicate_hooks(config_root, ds_home):
                 or "hooks\\dispatch\\hooks.py" in h.get("command", "")
             )
         )
-        # PostToolUse has 3 matchers (Skill, Edit|Write, Read) — each gets its own entry
-        expected = 3 if event == "PostToolUse" else 1
+        # PostToolUse has 2 active matchers (Skill, Edit|Write).
+        # Read matcher is intentionally removed by purge_read_posttooluse_matcher
+        # (pure overhead — no active consumer).
+        expected = 2 if event == "PostToolUse" else 1
         assert disp_count == expected, f"Dispatcher hook count wrong for {event}: {disp_count}"
 
 

@@ -345,8 +345,10 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
 # ── adapters: exit code ───────────────────────────────────────────────────────
 
 
-def test_adapters_exits_0():
-    rc, stdout, stderr = _run_ds("adapters")
+def test_adapters_exits_0(tmp_path):
+    # ds adapters requires an initialized DB; bootstrap a rehearsal runtime first.
+    _run_ds("rehearsal-install", "--rehearsal-home", str(tmp_path))
+    rc, stdout, stderr = _run_ds("--home", str(tmp_path), "adapters")
     assert rc == 0, f"Expected exit 0, got {rc}. stderr: {stderr[:200]}"
 
 

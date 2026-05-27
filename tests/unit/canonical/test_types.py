@@ -2,11 +2,12 @@ from __future__ import annotations
 import pytest
 
 
-def test_all_14_hook_types_defined():
+def test_all_hook_types_defined():
     from canonical.events.types import EventType, EventCategory, EVENT_TYPE_REGISTRY
 
     hook_types = [m for m in EVENT_TYPE_REGISTRY if m.category == EventCategory.HOOK_EMITTED]
-    assert len(hook_types) == 14
+    # 14 original + TOKEN_CONSUMED (added TA3) = 15
+    assert len(hook_types) == 15
 
 
 def test_production_types_defined():
@@ -20,7 +21,8 @@ def test_emitter_implemented_count():
     from canonical.events.types import EMITTER_IMPLEMENTED
 
     # Hook-emitted implemented types (backward-compat set)
-    assert len(EMITTER_IMPLEMENTED) == 5
+    # 5 original + TOKEN_CONSUMED (TA3) = 6
+    assert len(EMITTER_IMPLEMENTED) == 6
 
 
 def test_exercised_types_flagged():
@@ -32,6 +34,7 @@ def test_exercised_types_flagged():
         EventType.TOOL_EXECUTION_COMPLETED,
         EventType.TOKEN_CONSUMPTION_RECORDED,
         EventType.CONTEXT_THRESHOLD_CROSSED,
+        EventType.TOKEN_CONSUMED,  # added TA3
     }
     assert EMITTER_IMPLEMENTED == expected
 
