@@ -685,6 +685,20 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         EventCategory.PRODUCTION_EMITTED,
     ),
     EventTypeMeta(
+        EventType.SECURITY_FINDING_LOGGED,
+        "telemetry",
+        "Security finding written to canonical log",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.SECURITY_FINDING_RESOLVED,
+        "telemetry",
+        "Security finding marked as resolved",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
         EventType.APPROACH_CAPTURED,
         "telemetry",
         "Skill approach pattern captured for reuse",
