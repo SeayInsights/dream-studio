@@ -61,13 +61,16 @@ def test_plan_backup_json_cli_uses_fake_home_without_creating_backup(tmp_path: P
     fake_home = tmp_path / "home"
     db_path = _db(fake_home / ".dream-studio" / "state" / "studio.db")
     target = db_path.with_suffix(".db.bak")
+    import os as _os
     env = {
-        **dict(),
-        **__import__("os").environ,
+        **_os.environ,
         "HOME": str(fake_home),
         "USERPROFILE": str(fake_home),
         "PYTHONIOENCODING": "utf-8",
     }
+    # conftest sets DREAM_STUDIO_HOME to a session temp path; unset it so that
+    # state_dir() falls back to Path.home() and resolves under fake_home.
+    env.pop("DREAM_STUDIO_HOME", None)
 
     result = subprocess.run(
         [

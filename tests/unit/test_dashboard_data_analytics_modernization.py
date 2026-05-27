@@ -26,7 +26,7 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(39, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE reg_projects("
@@ -110,6 +110,17 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
             "VALUES('run-1', 'dream-studio', 'dashboard_authority', '2026-05-14T00:00:00Z', "
             "'2026-05-14T00:01:00Z', 60, 'completed', 1, 1, 1)"
         )
+        # execution_events from migration 037 (_built_from_event_id added by migration 059)
+        conn.execute(
+            "CREATE TABLE execution_events("
+            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, event_name TEXT NOT NULL, "
+            "project_id TEXT, milestone_id TEXT, task_id TEXT, process_run_id TEXT, "
+            "parent_event_id TEXT, actor_type TEXT, actor_id TEXT, agent_id TEXT, "
+            "skill_id TEXT, workflow_id TEXT, hook_id TEXT, tool_id TEXT, model_id TEXT, "
+            "adapter_id TEXT, source_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', "
+            "outcome_status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
         conn.commit()
     finally:
         conn.close()
@@ -126,7 +137,7 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(39, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE reg_projects("
@@ -158,7 +169,13 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
         )
         conn.execute(
             "CREATE TABLE execution_events("
-            "event_id TEXT PRIMARY KEY, event_type TEXT, event_name TEXT, project_id TEXT, outcome_status TEXT, created_at TEXT)"
+            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, event_name TEXT NOT NULL, "
+            "project_id TEXT, milestone_id TEXT, task_id TEXT, process_run_id TEXT, "
+            "parent_event_id TEXT, actor_type TEXT, actor_id TEXT, agent_id TEXT, "
+            "skill_id TEXT, workflow_id TEXT, hook_id TEXT, tool_id TEXT, model_id TEXT, "
+            "adapter_id TEXT, source_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', "
+            "outcome_status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
         conn.execute(
             "INSERT INTO execution_events(event_id, event_type, event_name, project_id, outcome_status, created_at) "

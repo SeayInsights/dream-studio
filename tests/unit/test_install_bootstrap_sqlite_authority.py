@@ -115,10 +115,82 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "finding_id TEXT PRIMARY KEY, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
         )
+        # Full schemas required so migration 062's INSERT...SELECT * succeeds (column-count match).
+        conn.execute(
+            "CREATE TABLE execution_events("
+            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, event_name TEXT NOT NULL, "
+            "project_id TEXT, milestone_id TEXT, task_id TEXT, process_run_id TEXT, "
+            "parent_event_id TEXT, actor_type TEXT, actor_id TEXT, agent_id TEXT, "
+            "skill_id TEXT, workflow_id TEXT, hook_id TEXT, tool_id TEXT, model_id TEXT, "
+            "adapter_id TEXT, source_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', "
+            "outcome_status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE hook_executions("
+            "hook_exec_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "hook_name TEXT NOT NULL, hook_type TEXT, trigger_context TEXT, "
+            "started_at DATETIME NOT NULL, completed_at DATETIME, duration_ms INTEGER, "
+            "exit_code INTEGER, status TEXT, output TEXT, error_message TEXT, "
+            "cpu_time_ms INTEGER, memory_mb REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE hook_findings("
+            "finding_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "hook_exec_id INTEGER NOT NULL, finding_type TEXT NOT NULL, "
+            "severity TEXT, message TEXT NOT NULL, context TEXT, recommendation TEXT, "
+            "status TEXT, resolved_at DATETIME, resolution_notes TEXT, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+        )
         conn.execute(
             "CREATE TABLE sec_sarif_findings("
-            "sarif_finding_id INTEGER PRIMARY KEY, scan_tool TEXT, severity TEXT, file_path TEXT, "
-            "line_number INTEGER, message TEXT, status TEXT, created_at TEXT)"
+            "sarif_finding_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "scan_tool TEXT NOT NULL, rule_id TEXT NOT NULL, rule_name TEXT, "
+            "severity TEXT, file_path TEXT NOT NULL, line_number INTEGER, "
+            "message TEXT NOT NULL, cwe_ids TEXT, cvss_score REAL, "
+            "status TEXT DEFAULT 'open', mitigated_at TEXT, mitigation_task_id TEXT, "
+            "created_at TEXT DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE sec_manual_reviews("
+            "review_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "reviewer TEXT NOT NULL, review_type TEXT, findings TEXT, risk_level TEXT, "
+            "recommendations TEXT, status TEXT DEFAULT 'draft', "
+            "created_at TEXT DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE sec_cve_matches("
+            "cve_match_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "cve_id TEXT NOT NULL, package_name TEXT NOT NULL, package_version TEXT NOT NULL, "
+            "severity TEXT, cvss_score REAL, description TEXT, fixed_version TEXT, "
+            "status TEXT DEFAULT 'vulnerable', patched_at TEXT, "
+            "created_at TEXT DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE sec_hook_checks("
+            "hook_check_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "hook_exec_id INTEGER NOT NULL, check_type TEXT, check_result TEXT, "
+            "details TEXT, remediation TEXT, created_at TEXT DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE adapter_executions("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
+            "adapter_type TEXT NOT NULL, normalized_at TEXT NOT NULL, "
+            "execution_time_ms REAL, metadata TEXT)"
+        )
+        # Migration 071 does CREATE TABLE ... AS SELECT * FROM raw_workflow_runs/nodes.
+        conn.execute(
+            "CREATE TABLE raw_workflow_runs("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, run_key TEXT NOT NULL UNIQUE, "
+            "workflow TEXT NOT NULL, yaml_path TEXT NOT NULL, status TEXT NOT NULL, "
+            "started_at TEXT NOT NULL, finished_at TEXT, node_count INTEGER, "
+            "nodes_done INTEGER, activity_id INTEGER, prd_id TEXT, task_id TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE raw_workflow_nodes("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, run_key TEXT NOT NULL, "
+            "node_id TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT, "
+            "finished_at TEXT, duration_s REAL, output TEXT, activity_id INTEGER)"
         )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
         conn.commit()

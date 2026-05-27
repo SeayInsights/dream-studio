@@ -34,7 +34,6 @@ def _mock_transaction(conn):
 def disable_research_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     """Research logic tests should not write telemetry/events to native state."""
     monkeypatch.setattr(web_research, "_emit_metric", lambda *args, **kwargs: None)
-    monkeypatch.setattr(web_research, "emit_event", lambda *args, **kwargs: None)
 
 
 # ── Test Fixtures ──────────────────────────────────────────────────────────

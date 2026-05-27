@@ -19,7 +19,7 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(38, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
         conn.execute(
@@ -82,6 +82,23 @@ def _schema_drift_db(tmp_path: Path) -> Path:
         conn.execute(
             "INSERT INTO hook_invocations(invocation_id, event_id, hook_id, status, purpose, created_at) "
             "VALUES('hook-1', 'event-1', 'UserPromptSubmit', 'success', 'prompt_guard', '2026-05-14T00:00:00Z')"
+        )
+        # canonical_events required by /api/v1/metrics/tokens (canonical_token_metrics reads from it).
+        conn.execute(
+            "CREATE TABLE canonical_events("
+            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, timestamp TEXT NOT NULL, "
+            "trace JSON NOT NULL DEFAULT '{}', severity TEXT NOT NULL DEFAULT 'info', "
+            "payload JSON NOT NULL DEFAULT '{}', actor JSON, confidence_score REAL, "
+            "source_type TEXT, raw_prompt_retained INTEGER NOT NULL DEFAULT 0, "
+            "raw_tool_output_retained INTEGER NOT NULL DEFAULT 0, "
+            "schema_version INTEGER NOT NULL DEFAULT 1, "
+            "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, invocation_mode TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO canonical_events(event_id, event_type, timestamp, trace, severity, payload) "
+            "VALUES('token-evt-1', 'token.consumed', '2026-05-14T00:00:00Z', "
+            "'{\"project_id\": \"dream-studio\"}', 'info', "
+            "'{\"input_tokens\": 10, \"output_tokens\": 20}')"
         )
         conn.commit()
     finally:

@@ -48,7 +48,7 @@ dependencies = ["fastapi", "pydantic"]
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(39, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE reg_projects("
@@ -131,8 +131,15 @@ dependencies = ["fastapi", "pydantic"]
         conn.execute(
             "INSERT INTO validation_results VALUES('validation-2', 'dream-studio', 'failed')"
         )
-        conn.execute("CREATE TABLE execution_events(event_id TEXT, project_id TEXT)")
-        conn.execute("INSERT INTO execution_events VALUES('event-1', 'dream-studio')")
+        conn.execute(
+            "CREATE TABLE execution_events("
+            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, event_name TEXT NOT NULL, "
+            "project_id TEXT, outcome_status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "INSERT INTO execution_events(event_id, event_type, event_name, project_id, outcome_status) "
+            "VALUES('event-1', 'bootstrap.test', 'Test event', 'dream-studio', 'passed')"
+        )
         conn.execute(
             "CREATE TABLE route_decision_records("
             "record_id TEXT, project_id TEXT, handoff_required INTEGER, operator_action_required INTEGER, "
@@ -155,6 +162,79 @@ dependencies = ["fastapi", "pydantic"]
         )
         conn.execute(
             "INSERT INTO pi_dependencies VALUES('dream-studio', 'dashboard', 'telemetry_api')"
+        )
+        # Migration 040: production readiness tables required by build_secure_production_readiness_gate.
+        conn.execute(
+            "CREATE TABLE production_readiness_assessment_runs("
+            "assessment_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, workflow_id TEXT NOT NULL, "
+            "lifecycle_event TEXT NOT NULL, status TEXT NOT NULL, confidence TEXT NOT NULL, "
+            "full_review_required INTEGER NOT NULL DEFAULT 0, release_readiness_effect TEXT NOT NULL, "
+            "health_score_json TEXT NOT NULL DEFAULT '{}', readiness_score_json TEXT NOT NULL DEFAULT '{}', "
+            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
+            "source_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE production_readiness_control_results("
+            "result_id TEXT PRIMARY KEY, assessment_id TEXT NOT NULL, project_id TEXT NOT NULL, "
+            "control_id TEXT NOT NULL, control_family TEXT NOT NULL, name TEXT NOT NULL, "
+            "skill_owner TEXT NOT NULL, workflow_owner TEXT NOT NULL, applicability TEXT NOT NULL, "
+            "status TEXT NOT NULL, severity TEXT NOT NULL, blocking INTEGER NOT NULL DEFAULT 0, "
+            "score_impact REAL, evidence_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "source_refs_json TEXT NOT NULL DEFAULT '[]', file_path TEXT, line INTEGER, "
+            "remediation_work_order TEXT, reason_not_applicable TEXT, created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE production_readiness_findings("
+            "finding_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
+            "control_id TEXT NOT NULL, control_family TEXT NOT NULL, skill_owner TEXT NOT NULL, "
+            "workflow_owner TEXT NOT NULL, applicability TEXT NOT NULL, status TEXT NOT NULL, "
+            "severity TEXT NOT NULL, blocking INTEGER NOT NULL DEFAULT 0, score_impact REAL, "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', source_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "file_path TEXT, line INTEGER, remediation_work_order TEXT, reason_not_applicable TEXT, "
+            "created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE production_readiness_remediation_work_orders("
+            "remediation_work_order_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, "
+            "assessment_id TEXT NOT NULL, control_id TEXT NOT NULL, finding_id TEXT, "
+            "status TEXT NOT NULL, recommended_phase_type TEXT NOT NULL, objective TEXT NOT NULL, "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE production_readiness_skill_control_mappings("
+            "mapping_id TEXT PRIMARY KEY, control_id TEXT NOT NULL, control_family TEXT NOT NULL, "
+            "existing_skill_or_check TEXT NOT NULL, proposed_canonical_owner TEXT NOT NULL, "
+            "overlap_reason TEXT NOT NULL, decision TEXT NOT NULL, evidence_json TEXT NOT NULL DEFAULT '[]', "
+            "validation_requirement TEXT NOT NULL, rollback_or_supersession_plan TEXT NOT NULL, "
+            "dashboard_project_health_impact TEXT NOT NULL, contract_atlas_impact TEXT NOT NULL, "
+            "created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE project_readiness_scorecards("
+            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
+            "readiness_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
+            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE project_health_scorecards("
+            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
+            "health_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
+            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE release_readiness_records("
+            "release_readiness_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
+            "status TEXT NOT NULL, release_readiness_effect TEXT NOT NULL, "
+            "blocker_count INTEGER NOT NULL DEFAULT 0, manual_review_count INTEGER NOT NULL DEFAULT 0, "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE compliance_review_flags("
+            "flag_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
+            "control_id TEXT NOT NULL, flag_type TEXT NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL, "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
         )
         conn.commit()
     finally:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -22,6 +23,13 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+# Stub sentence_transformers if not installed so patch() can find the module
+if "sentence_transformers" not in sys.modules:
+    import types as _types
+    _st_stub = _types.ModuleType("sentence_transformers")
+    _st_stub.SentenceTransformer = MagicMock  # type: ignore[attr-defined]
+    sys.modules["sentence_transformers"] = _st_stub
 
 from control.research import tools as tool_search
 from core.config.database import get_connection, transaction
