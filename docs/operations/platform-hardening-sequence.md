@@ -113,3 +113,5 @@ file sprawl, expose private project history, or authorize execution.
 
 
 <!-- Last reviewed 2026-05-24 — Phase 18.1.13: ds validate and ds doctor --help text updated to explicitly identify each command's health-check plane. ds validate description now reads: DB authority plane (schema version, migrations, module profiles). ds doctor description now reads: Claude Code integration plane (skills, agents, hooks, routing, version). Each help text cross-references the other command. README.md health-checks section expanded; docs/operations/fresh-install-validation.md updated to require both commands. No runtime behavior change. No new CLI surface. No policy or contract change in this doc. -->
+
+<!-- Last reviewed 2026-05-26 — Phase 18.1.15b: ClaudeCodeInstaller gains skip_hook_install opt-out read from ~/.dream-studio/config.json via _integrate_dispatch in ds.py. Hook installation (pre-push) is now gated on that flag; the six platform-hardening gate checks themselves (format-check, lint-check, skill-sync, test-suite, atlas-leak, docs-drift) are unchanged. No policy or boundary change in this doc. -->

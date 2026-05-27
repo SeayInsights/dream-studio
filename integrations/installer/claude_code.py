@@ -463,12 +463,14 @@ class ClaudeCodeInstaller(InstallerBase):
         canonical_root: Path | None = None,
         ds_home: Path | None = None,
         git_repo_root: Path | None = None,
+        skip_hook_install: bool = False,
     ):
         self.config_root = config_root
         self.scope = scope
         self.canonical_root = canonical_root
         self.ds_home = ds_home
         self.git_repo_root = git_repo_root
+        self.skip_hook_install = skip_hook_install
 
     def _get_source_root(self) -> Path:
         """Resolve source root (repo root) for VERSION and canonical/ lookups."""
@@ -635,9 +637,15 @@ class ClaudeCodeInstaller(InstallerBase):
         # Opt-in: only when git_repo_root is explicitly provided. The CLI sets this
         # to cwd when running `ds integrate install`; tests leave it None so the
         # operator's real .git/hooks/ is never touched.
+        # Skipped when skip_hook_install=True (set via config.json skip_hook_install key).
         git_hook_src = source_root / "hooks" / "git" / "pre-push"
         git_hooks_dir = (self.git_repo_root / ".git" / "hooks") if self.git_repo_root else None
-        if git_hook_src.is_file() and git_hooks_dir is not None and git_hooks_dir.is_dir():
+        if (
+            not self.skip_hook_install
+            and git_hook_src.is_file()
+            and git_hooks_dir is not None
+            and git_hooks_dir.is_dir()
+        ):
             hook_content = git_hook_src.read_text(encoding="utf-8")
             git_hook_target = git_hooks_dir / "pre-push"
             ops.append(
@@ -811,15 +819,37 @@ class ClaudeCodeInstaller(InstallerBase):
 
         # B.3: ensure the git pre-push hook is executable on Unix-like systems.
         # FileOp's atomic_write does not preserve the +x bit and Windows ignores it.
-        if self.git_repo_root is not None and platform.system() != "Windows":
+        git_hook_installed = False
+        if self.skip_hook_install:
+            print(
+                "\nPre-push hook installation skipped"
+                " (config: skip_hook_install=true).\n"
+                "To install it, remove skip_hook_install from config.json"
+                " and re-run ds integrate install."
+            )
+        elif self.git_repo_root is not None:
             git_hook_path = self.git_repo_root / ".git" / "hooks" / "pre-push"
             if git_hook_path.is_file():
-                try:
-                    git_hook_path.chmod(
-                        git_hook_path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
-                    )
-                except OSError:
-                    pass
+                if platform.system() != "Windows":
+                    try:
+                        git_hook_path.chmod(
+                            git_hook_path.stat().st_mode
+                            | stat.S_IEXEC
+                            | stat.S_IXGRP
+                            | stat.S_IXOTH
+                        )
+                    except OSError:
+                        pass
+                git_hook_installed = True
+                print(
+                    "\nPre-push hook installed to .git/hooks/pre-push\n"
+                    "  Checks: formatting (black), lint baseline, skill-sync,"
+                    " eval suite, atlas-leak, docs-drift\n"
+                    "  To bypass once:    git push --no-verify\n"
+                    "  To disable always: set skip_hook_install=true in"
+                    " ~/.dream-studio/config.json, then re-run ds integrate install\n"
+                    "  Docs: docs/contributing/pre-push-hook.md"
+                )
 
         # Post-install validation (inline lightweight check)
         validation = _post_install_validate(self.config_root, self.config_root / "settings.json")
@@ -862,6 +892,7 @@ class ClaudeCodeInstaller(InstallerBase):
             "agents_installed": agents_installed,
             "hooks_installed": hooks_installed,
             "hook_files_installed": hook_files_installed,
+            "git_hook_installed": git_hook_installed,
             "launcher": launcher_output,
             "plan": plan_summary,
             "validation": validation,

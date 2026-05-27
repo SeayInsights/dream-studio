@@ -1689,12 +1689,27 @@ def _integrate_dispatch(
         # Tests do NOT pass cwd, so the operator's real .git/hooks/ is untouched.
         cwd = Path.cwd()
         git_repo_root = cwd if (cwd / ".git").is_dir() else None
+        # Read skip_hook_install from ~/.dream-studio/config.json if present.
+        _skip_hook = False
+        try:
+            _cfg_path = (ds_home or (Path.home() / ".dream-studio")) / "config.json"
+            if _cfg_path.is_file():
+                import json as _json
+
+                _skip_hook = bool(
+                    _json.loads(_cfg_path.read_text(encoding="utf-8")).get(
+                        "skip_hook_install", False
+                    )
+                )
+        except Exception:
+            pass
         installer = ClaudeCodeInstaller(
             detected.config_root,
             detected.scope,
             canonical_root=canonical_root,
             ds_home=ds_home,
             git_repo_root=git_repo_root,
+            skip_hook_install=_skip_hook,
         )
         result = installer.install(mode)
         return _print(
