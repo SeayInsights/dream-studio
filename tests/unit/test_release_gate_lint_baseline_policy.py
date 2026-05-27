@@ -74,17 +74,18 @@ def test_ci_gate_env_uses_isolated_runtime_state() -> None:
 
 def test_ci_gate_test_env_lets_test_fixtures_control_dream_studio_home() -> None:
     env = ci_gate._isolated_test_env()
+    isolated_home = Path(env["HOME"])
     isolated_db = Path(env["DREAM_STUDIO_DB_PATH"])
-    isolated_home = isolated_db.parents[2]
 
     assert isolated_home.name.startswith("dream-studio-ci-home-")
     assert "DREAM_STUDIO_HOME" not in env
     assert env["GITHUB_ACTIONS"] == "true"
     assert env["HOME"] == str(isolated_home)
     assert env["USERPROFILE"] == str(isolated_home)
-    assert env["DREAM_STUDIO_DB_PATH"] == str(
-        isolated_home / ".dream-studio" / "state" / "studio.db"
-    )
+    # DB must NOT live under HOME — if it did, conftest.guard_real_homedir's
+    # _db_redirected check would be False and any test DB write would trigger
+    # the FATAL abort (the bug this change fixes).
+    assert not str(isolated_db).startswith(str(isolated_home))
 
 
 def test_ci_gate_run_check_uses_isolated_env_for_non_test_checks(monkeypatch) -> None:
