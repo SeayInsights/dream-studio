@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Phase 18.1.16–18.1.17 — Test contamination + CI/CD infrastructure (2026-05-27)
+
+### Fixed
+- `_compute_directory_hash` in `core/health/doctor.py` used absolute path parts for hidden-dir filter, causing all installed skills under `~/.claude/` to always hash to empty — `ds doctor` falsely reported 11 stale skills on every run
+- CRLF/LF normalization added to `_compute_directory_hash` so Windows-installed skills compare equal to LF repo source
+- `canonical/skills/workflow/docs/contracts/workflow-contract.md` promoted from installed-only to canonical source
+- `on-context-threshold.py` hook rewrote to delegate to `control.context.monitor`; removed `sys.exit()` calls that leaked `SystemExit` through the dispatcher into integration tests
+- `SKILL_BUDGET_EXCEEDED` added to `EVENT_TYPE_REGISTRY`; `test_types.py` counts updated for `TOKEN_CONSUMED` (15 HOOK_EMITTED types, 6 emitter-implemented)
+- Coverage floor restored to 8% (was incorrectly set to 5%)
+
+### Added
+- PR Smoke CI now runs on multi-OS matrix: `ubuntu-latest`, `macos-latest`, `windows-latest`
+- `pip-audit` dependency vulnerability scan added to PR Smoke (advisory)
+- Full CI workflow now triggers on push to `main` in addition to manual dispatch
+- Full CI adds `pytest-cov --cov-fail-under=8` coverage enforcement
+- `INSTALL.md` added as standalone installation reference
+- README CI/CD section added
+
 ## Phase 18.1.13 — Install correctness + packaging: 12 pieces, fresh-install BLOCKER fixes (2026-05-24)
 
 ### Fixed
