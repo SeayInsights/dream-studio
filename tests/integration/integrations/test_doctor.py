@@ -39,7 +39,13 @@ def test_installed_verified_after_execute(tmp_path, canonical_root, ds_home):
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
     installer.install("execute")
-    result = doctor("claude_code", config_root, ds_home=ds_home, canonical_root=canonical_root)
+    result = doctor(
+        "claude_code",
+        config_root,
+        ds_home=ds_home,
+        canonical_root=canonical_root,
+        spool_root=tmp_path / "empty_spool",
+    )
     assert result["state"] == IntegrationState.INSTALLED_VERIFIED.value
 
 

@@ -300,10 +300,15 @@ def test_no_operator_home_path_is_hardcoded_in_source_files() -> None:
 def test_tests_do_not_target_live_local_db_for_validation_writes() -> None:
     test_root = REPO_ROOT / "tests"
     live = str(LIVE_DB)
+    # test_contract_atlas.py intentionally uses live-style paths as sanitizer
+    # test data (to verify the public export scrubber strips them). Exclude it.
+    SANITIZER_TEST_VECTORS = {"tests/unit/test_contract_atlas.py"}
     offenders: list[str] = []
     for path in test_root.rglob("test_*.py"):
         text = path.read_text(encoding="utf-8", errors="ignore")
         if live in text or "C:\\Users\\Example User\\.dream-studio\\state\\studio.db" in text:
-            offenders.append(str(path.relative_to(REPO_ROOT)))
+            rel = str(path.relative_to(REPO_ROOT))
+            if rel not in SANITIZER_TEST_VECTORS:
+                offenders.append(rel)
 
     assert offenders == []
