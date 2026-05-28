@@ -23,18 +23,33 @@ from typing import Union
 # ── Framework decorator patterns ────────────────────────────────────────────
 
 # FastAPI / Starlette route decorators
-_FASTAPI_DECORATORS = frozenset({
-    "get", "post", "put", "delete", "patch", "head", "options", "trace",
-    "websocket", "on_event",
-})
+_FASTAPI_DECORATORS = frozenset(
+    {
+        "get",
+        "post",
+        "put",
+        "delete",
+        "patch",
+        "head",
+        "options",
+        "trace",
+        "websocket",
+        "on_event",
+    }
+)
 
 # Flask route decorators
 _FLASK_DECORATORS = frozenset({"route", "get", "post", "put", "delete", "patch"})
 
 # Click / Typer CLI command decorators
-_CLI_DECORATORS = frozenset({
-    "command", "group", "argument", "option",
-})
+_CLI_DECORATORS = frozenset(
+    {
+        "command",
+        "group",
+        "argument",
+        "option",
+    }
+)
 
 # Dream Studio-specific: argparse subcommand entry points
 # Matches function signatures used in interfaces/cli/ds.py and siblings
