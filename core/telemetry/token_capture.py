@@ -14,7 +14,7 @@ from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.types import EventType
 from core.telemetry.diagnostics import log_diagnostic
 from core.telemetry.machine_id import get_machine_id
-from emitters.shared.spool_writer import write_envelopes
+import emitters.shared.spool_writer as _spool_writer_mod
 
 # Performance thresholds (ms)
 _THRESH_TOTAL = 100.0
@@ -321,7 +321,7 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
         )
 
         t_spool = time.monotonic()
-        write_envelopes([envelope])
+        _spool_writer_mod.write_envelopes([envelope])
         spool_elapsed = (time.monotonic() - t_spool) * 1000
         if spool_elapsed > _THRESH_SPOOL:
             log_diagnostic(

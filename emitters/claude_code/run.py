@@ -66,12 +66,32 @@ def _version_check() -> str | None:
     try:
         plugin_root = _get_plugin_root()
         repo_version_file = plugin_root / "VERSION"
-        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
-        installed_version_file = Path(home) / ".dream-studio" / "state" / "installed-version"
         if not repo_version_file.exists():
             return None
         repo_version = repo_version_file.read_text(encoding="utf-8").strip()
-        if not installed_version_file.exists():
+        # Resolve installed-version location via db path (allows test patching),
+        # then fall back to the canonical home-based path if the derived one
+        # does not exist (e.g. when DREAM_STUDIO_DB_PATH points to a test db
+        # that has no installed-version sidecar).
+        _db_derived: Path | None = None
+        try:
+            from emitters.claude_code.project import _get_db_path
+
+            _db_derived = _get_db_path().parent.parent / "state" / "installed-version"
+        except Exception:
+            pass
+        home = os.environ.get("USERPROFILE") or os.environ.get("HOME") or ""
+        _home_derived: Path | None = (
+            Path(home) / ".dream-studio" / "state" / "installed-version" if home else None
+        )
+        installed_version_file: Path | None = None
+        for candidate in (_db_derived, _home_derived):
+            if candidate is not None and candidate.exists():
+                installed_version_file = candidate
+                break
+        if installed_version_file is None:
+            installed_version_file = _db_derived or _home_derived
+        if installed_version_file is None or not installed_version_file.exists():
             return (
                 "DREAM STUDIO: Install not verified. "
                 "Run: ds integrate install claude_code --execute"

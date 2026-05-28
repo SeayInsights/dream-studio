@@ -232,6 +232,8 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 
 <!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
 
+<!-- Last reviewed 2026-05-28 — Projection staleness fix: adapter-projections/claude/CLAUDE.md was carrying a stale Skill Routing section that made its SHA256 mismatch the generator output, causing aligned_count to report 7 instead of 8 and boundary_violation_report to show attention_required. The extra block was removed so the file matches _projection_content exactly. Policy unchanged: adapter-projections/ files are generated artifacts, not active config. No adapter boundary or authority change. -->
+
 <!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->

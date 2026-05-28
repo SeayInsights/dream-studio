@@ -5,7 +5,7 @@ Covers:
 2. core/config/database.py is SSOT for connections
 3. No direct sqlite3.connect in projection routes
 4. No direct sqlite3.connect in core/security/
-5. Canonical migration directory has sequential numbering (except intentional 011 gap)
+5. Canonical migration directory has sequential numbering (011 gap was closed in phase 18.1.13)
 6. Root migrations/ directory is legacy-only (no new files expected)
 7. _schema_version table managed exclusively by studio_db
 8. Projection routes import get_connection from canonical module
@@ -121,10 +121,12 @@ class TestMigrationNumbering:
         sql_files = sorted(CANONICAL_MIGRATIONS.glob("*.sql"))
         assert len(sql_files) > 0, "No canonical migration files found"
 
-    def test_no_migration_011(self):
-        """Migration 011 gap is intentional — no file should fill it."""
+    def test_migration_011_exists(self):
+        """Migration 011 gap was closed in phase 18.1.13 — file must exist."""
         files_011 = list(CANONICAL_MIGRATIONS.glob("011_*"))
-        assert len(files_011) == 0, "Migration 011 should not exist (intentional gap)"
+        assert (
+            len(files_011) == 1
+        ), "Migration 011 should exist (gap was closed by 011_memory_entries.sql)"
 
     def test_migrations_are_numbered(self):
         for f in CANONICAL_MIGRATIONS.glob("*.sql"):
