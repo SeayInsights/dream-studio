@@ -52,9 +52,7 @@ def set_active_project(
             ).fetchall()
         ]
         # Dual-write: direct SQL for synchronous callers + events for ProjectProjection.
-        conn.execute(
-            "UPDATE business_projects SET status = 'paused' WHERE status = 'active'"
-        )
+        conn.execute("UPDATE business_projects SET status = 'paused' WHERE status = 'active'")
         conn.execute(
             "UPDATE business_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
             (now, project_id),
@@ -240,9 +238,7 @@ def delete_project(
         conn.execute("DELETE FROM business_work_orders WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM business_milestones WHERE project_id = ?", (project_id,))
         try:
-            conn.execute(
-                "DELETE FROM business_design_briefs WHERE project_id = ?", (project_id,)
-            )
+            conn.execute("DELETE FROM business_design_briefs WHERE project_id = ?", (project_id,))
         except Exception:
             pass  # Table may not exist in all schema versions.
         conn.execute("DELETE FROM business_projects WHERE project_id = ?", (project_id,))
