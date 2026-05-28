@@ -766,6 +766,10 @@
                     <span class="nav-mark">ML</span>
                     <span>ML Insights</span>
                 </div>
+                <div class="sidebar-item" onclick="navigate('attribution-coverage')">
+                    <span class="nav-mark">AT</span>
+                    <span>Token Attribution</span>
+                </div>
                 <div class="sidebar-item hidden" data-retired-nav="knowledge-graph">
                     <span class="nav-mark">GR</span>
                     <span>Knowledge Graph</span>
@@ -1525,6 +1529,66 @@
                             <div id="hourly-grid" class="grid grid-rows-7 gap-1">
                                 <!-- Will be populated by JS -->
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Token Attribution Coverage Tab (18.4.2a — internal diagnostics) -->
+        <div id="attribution-coverage" class="tab-content">
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-900">Token Attribution Coverage</h2>
+                        <p class="text-sm text-gray-500 mt-1">Percentage of AI spend traceable to a unit of work. Internal diagnostic — based on live canonical_events.</p>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Internal</span>
+                </div>
+
+                <!-- Primary metric -->
+                <div class="flex items-center gap-4 mb-6">
+                    <div id="attr-coverage-pct" class="text-5xl font-bold text-gray-900">--</div>
+                    <div>
+                        <div class="text-sm text-gray-600">Fully Attributed</div>
+                        <div id="attr-coverage-status" class="text-xs text-gray-400">loading…</div>
+                    </div>
+                </div>
+
+                <!-- Three-segment bar -->
+                <div class="mb-2">
+                    <div class="flex rounded-full overflow-hidden h-6 w-full" id="attr-bar" title="Fully attributed / Partial / Orphan">
+                        <div id="attr-bar-full" class="bg-green-500 h-full transition-all duration-500" style="width:0%"></div>
+                        <div id="attr-bar-partial" class="bg-yellow-400 h-full transition-all duration-500" style="width:0%"></div>
+                        <div id="attr-bar-orphan" class="bg-red-400 h-full transition-all duration-500" style="width:0%"></div>
+                    </div>
+                </div>
+                <div class="flex gap-6 text-xs text-gray-600 mb-6">
+                    <span><span class="inline-block w-3 h-3 rounded-sm bg-green-500 mr-1"></span> Fully attributed: <span id="attr-full-lbl">--</span></span>
+                    <span><span class="inline-block w-3 h-3 rounded-sm bg-yellow-400 mr-1"></span> Partial: <span id="attr-partial-lbl">--</span></span>
+                    <span><span class="inline-block w-3 h-3 rounded-sm bg-red-400 mr-1"></span> Orphan: <span id="attr-orphan-lbl">--</span></span>
+                    <span class="ml-auto text-gray-400">Total: <span id="attr-total-lbl">--</span> events</span>
+                </div>
+
+                <!-- Orphan drill-down (collapsed by default) -->
+                <div>
+                    <button onclick="toggleAttrDrilldown()" class="text-sm text-blue-600 hover:underline focus:outline-none" id="attr-drilldown-btn">▶ View recent orphans</button>
+                    <div id="attr-drilldown" class="hidden mt-4">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-3 py-2 border-b">Timestamp</th>
+                                        <th class="px-3 py-2 border-b">Status</th>
+                                        <th class="px-3 py-2 border-b">Tool</th>
+                                        <th class="px-3 py-2 border-b">Project</th>
+                                        <th class="px-3 py-2 border-b">Probable Cause</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attr-orphan-rows">
+                                    <tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">Loading…</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -3858,6 +3922,87 @@
             document.getElementById('sidebar').classList.remove('mobile-open');
         }
     }
+
+    // ── Attribution coverage panel (18.4.2a) ─────────────────────────────
+    async function loadAttributionCoverage() {
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-coverage');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+
+            const fully = d.fully_attributed_pct || 0;
+            const partial = d.partial_pct || 0;
+            const orphan = d.orphan_pct || 0;
+
+            document.getElementById('attr-coverage-pct').textContent = fully.toFixed(1) + '%';
+
+            const el = document.getElementById('attr-coverage-pct');
+            if (fully >= 90) el.classList.add('text-green-600');
+            else if (fully >= 70) el.classList.add('text-yellow-600');
+            else el.classList.add('text-red-600');
+
+            document.getElementById('attr-coverage-status').textContent =
+                d.below_threshold ? '⚠ Below 90% threshold' : '✓ Above threshold';
+
+            document.getElementById('attr-bar-full').style.width = fully + '%';
+            document.getElementById('attr-bar-partial').style.width = partial + '%';
+            document.getElementById('attr-bar-orphan').style.width = orphan + '%';
+
+            document.getElementById('attr-full-lbl').textContent =
+                fully.toFixed(1) + '% (' + (d.fully_attributed_count || 0) + ')';
+            document.getElementById('attr-partial-lbl').textContent =
+                partial.toFixed(1) + '% (' + (d.partial_count || 0) + ')';
+            document.getElementById('attr-orphan-lbl').textContent =
+                orphan.toFixed(1) + '% (' + (d.orphan_count || 0) + ')';
+            document.getElementById('attr-total-lbl').textContent = d.total_events || 0;
+        } catch (e) {
+            document.getElementById('attr-coverage-status').textContent = 'Error: ' + e.message;
+        }
+    }
+
+    async function loadAttributionOrphans() {
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-coverage/orphans?limit=50');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+            const tbody = document.getElementById('attr-orphan-rows');
+            if (!d.orphans || d.orphans.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-3 py-4 text-center text-gray-400">No orphan events found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = d.orphans.map(ev => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 text-gray-500">${(ev.timestamp||'').slice(0,19)}</td>
+                    <td class="px-3 py-2"><span class="text-red-600">${ev.attribution_status}</span></td>
+                    <td class="px-3 py-2">${ev.tool_name||'—'}</td>
+                    <td class="px-3 py-2 font-mono text-xs">${(ev.project_id||'—').slice(0,8)}</td>
+                    <td class="px-3 py-2 text-gray-500">${ev.probable_cause}</td>
+                </tr>`).join('');
+        } catch (e) {
+            document.getElementById('attr-orphan-rows').innerHTML =
+                `<tr><td colspan="5" class="px-3 py-4 text-center text-red-400">Error: ${e.message}</td></tr>`;
+        }
+    }
+
+    function toggleAttrDrilldown() {
+        const panel = document.getElementById('attr-drilldown');
+        const btn = document.getElementById('attr-drilldown-btn');
+        if (panel.classList.contains('hidden')) {
+            panel.classList.remove('hidden');
+            btn.textContent = '▼ Hide orphans';
+            loadAttributionOrphans();
+        } else {
+            panel.classList.add('hidden');
+            btn.textContent = '▶ View recent orphans';
+        }
+    }
+
+    // Load attribution data when tab becomes active
+    const _origNavigate = navigate;
+    navigate = function(tabName) {
+        _origNavigate(tabName);
+        if (tabName === 'attribution-coverage') loadAttributionCoverage();
+    };
 
     // Add hooks script
 

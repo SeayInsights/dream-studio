@@ -351,3 +351,84 @@ async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
         }
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Attribution coverage — 18.4.2a
+# ---------------------------------------------------------------------------
+
+from core.telemetry.attribution_config import ATTRIBUTION_COVERAGE_MIN as _ATTRIBUTION_COVERAGE_MIN
+
+
+@router.get("/attribution-coverage")
+async def get_attribution_coverage(project_id: str = Query(default=None)):
+    """Return attribution coverage breakdown for token.consumed events.
+
+    Internal diagnostic panel — surfaced under Intelligence > Token Attribution.
+    Compares fully_attributed / partial / orphan counts.
+    Logs a warning when coverage drops below the configured threshold.
+    """
+    from projections.api.queries.token_attribution import attribution_coverage
+    import logging
+
+    log = logging.getLogger(__name__)
+
+    try:
+        data = attribution_coverage(project_id=project_id)
+        fully_pct = data.get("fully_attributed_pct", 0.0)
+
+        # Log warning if fully-attributed coverage falls below threshold.
+        if data.get("data_status") == "ok" and (fully_pct / 100) < _ATTRIBUTION_COVERAGE_MIN:
+            log.warning(
+                "attribution_coverage below threshold: %.1f%% < %.0f%% "
+                "(project_id=%s total_events=%d)",
+                fully_pct,
+                _ATTRIBUTION_COVERAGE_MIN * 100,
+                project_id,
+                data.get("total_events", 0),
+            )
+
+        return {
+            "schema": "dream_studio.attribution_coverage.v1",
+            "project_id": project_id,
+            "total_events": data.get("total_events", 0),
+            "fully_attributed_count": data.get("fully_attributed_count", 0),
+            "partial_count": data.get("partial_count", 0),
+            "orphan_count": data.get("orphan_count", 0),
+            "fully_attributed_pct": data.get("fully_attributed_pct", 0.0),
+            "partial_pct": data.get("partial_pct", 0.0),
+            "orphan_pct": data.get("orphan_pct", 0.0),
+            "coverage_threshold_pct": _ATTRIBUTION_COVERAGE_MIN * 100,
+            "below_threshold": (fully_pct / 100) < _ATTRIBUTION_COVERAGE_MIN,
+            "data_status": data.get("data_status", "empty"),
+            "visibility": "internal",
+            "generated_at": datetime.now().isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error computing attribution coverage: {exc}")
+
+
+@router.get("/attribution-coverage/orphans")
+async def get_attribution_orphans(
+    project_id: str = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Return recent orphan token.consumed events for drill-down.
+
+    Orphans are events where attribution_status is NULL or 'orphan'.
+    No raw payloads or PII are included.
+    """
+    from projections.api.queries.token_attribution import orphan_events
+
+    try:
+        events = orphan_events(project_id=project_id, limit=limit)
+        return {
+            "schema": "dream_studio.attribution_orphans.v1",
+            "project_id": project_id,
+            "orphan_count": len(events),
+            "limit": limit,
+            "orphans": events,
+            "generated_at": datetime.now().isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error fetching orphan events: {exc}")
