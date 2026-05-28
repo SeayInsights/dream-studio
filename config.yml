@@ -1,0 +1,23 @@
+# Dream Studio runtime configuration.
+# Read by hooks and runtime components at startup.
+
+intelligence_surfacing:
+  enabled: true
+
+  # max_memory_entries_per_inject: backstop against context flooding.
+  # 3 entries at ~120 chars each ≈ 500 tokens injected per prompt.
+  max_memory_entries_per_inject: 3
+
+  max_injections_per_session: 50
+
+  # min_relevance_score: 0.0 is a placeholder.
+  # Calibrate after first real memory_entries data accumulates.
+  # Score = abs(FTS5 rank) * importance (0.0-1.0). At 0.0 any FTS
+  # match is eligible. Tune upward once score distribution is known.
+  # See .planning/workstreams/18-4-4/verification-report.md for calibration notes.
+  min_relevance_score: 0.0
+
+  # scope: project = filter to active project + cross-project (project=NULL) entries.
+  scope: project
+
+  dedupe_within_session: true

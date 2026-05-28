@@ -49,6 +49,9 @@ HANDLERS: list[tuple[str, Path]] = [
     ("on-session-start", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-session-start.py"),
     ("on-first-run", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-first-run.py"),
     ("on-memory-retrieve", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-memory-retrieve.py"),
+    # Chain 7 — SQLite memory_entries injection (18.4.4).
+    # Runs after file-based on-memory-retrieve; both write independent <xml> blocks.
+    ("on-context-inject", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-context-inject.py"),
     ("on-milestone-start", PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-milestone-start.py"),
     (
         "on-context-threshold",

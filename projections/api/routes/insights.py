@@ -433,3 +433,73 @@ async def get_attribution_orphans(
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error fetching orphan events: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Memory Surface — Chain 7 dashboard panel (18.4.4)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/memory-surface")
+async def get_memory_surface(project_id: str = Query(default=None)) -> dict:
+    """Return memory_entries summary for the Chain 7 dashboard panel.
+
+    Shows total entries, surfaced-this-session count, source type breakdown,
+    and the 10 most recently surfaced entries. Read-only.
+    """
+    from core.config.database import get_connection
+
+    try:
+        conn = get_connection()
+        conn.row_factory = __import__("sqlite3").Row
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM memory_entries").fetchone()[0]
+
+            surfaced = conn.execute(
+                "SELECT COUNT(*) FROM memory_entries WHERE intelligence_surfaced_at IS NOT NULL"
+            ).fetchone()[0]
+
+            source_rows = conn.execute(
+                "SELECT source, COUNT(*) cnt FROM memory_entries GROUP BY source ORDER BY cnt DESC"
+            ).fetchall()
+            source_types = {r["source"]: r["cnt"] for r in source_rows}
+
+            recent_rows = conn.execute(
+                "SELECT memory_id, content, importance, category, intelligence_surfaced_at"
+                " FROM memory_entries"
+                " WHERE intelligence_surfaced_at IS NOT NULL"
+                " ORDER BY intelligence_surfaced_at DESC LIMIT 10"
+            ).fetchall()
+
+            def _label(imp: float) -> str:
+                if imp >= 0.8:
+                    return "high"
+                if imp >= 0.5:
+                    return "medium"
+                return "low"
+
+            recently_surfaced = [
+                {
+                    "memory_id": r["memory_id"],
+                    "content": (r["content"] or "")[:150],
+                    "importance": r["importance"],
+                    "importance_label": _label(r["importance"] or 0.5),
+                    "category": r["category"],
+                    "surfaced_at": r["intelligence_surfaced_at"],
+                }
+                for r in recent_rows
+            ]
+        finally:
+            conn.close()
+
+        return {
+            "schema": "dream_studio.memory_surface.v1",
+            "project_id": project_id,
+            "total_entries": total,
+            "surfaced_this_session": surfaced,
+            "source_types": source_types,
+            "recently_surfaced": recently_surfaced,
+            "generated_at": datetime.now().isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error fetching memory surface: {exc}")

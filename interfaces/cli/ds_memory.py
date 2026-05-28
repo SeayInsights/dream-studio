@@ -578,6 +578,48 @@ def cmd_memory_ingest_sessions(args) -> int:
     return 0
 
 
+def cmd_memory_ingest_entries(args) -> int:
+    """Entry point for `ds memory ingest-entries`.
+
+    Syncs domain tables (reg_gotchas, raw_lessons, corrections, decisions) into
+    memory_entries via run_all_ingestion(). Chain 7 prerequisite — populates the
+    SQLite table queried by the on-context-inject hook.
+    """
+    dry_run = getattr(args, "dry_run", False)
+    if dry_run:
+        print(json.dumps({"ok": True, "dry_run": True, "note": "dry-run: no changes written"}))
+        return 0
+
+    try:
+        from core.memory.ingestion import run_all_ingestion
+        from core.memory.store import MemoryStore
+
+        store = MemoryStore()
+        results = run_all_ingestion(store=store)
+        summary = {
+            "ok": True,
+            "consumers": [
+                {
+                    "name": r.consumer_name,
+                    "records_found": r.records_found,
+                    "records_ingested": r.records_ingested,
+                    "records_updated": r.records_updated,
+                    "records_skipped": r.records_skipped,
+                    "errors": r.errors,
+                }
+                for r in results
+            ],
+            "total_ingested": sum(r.records_ingested for r in results),
+            "total_updated": sum(r.records_updated for r in results),
+        }
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
+        return 1
+
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
 def add_memory_subcommand(subparsers) -> None:
     """Register the 'memory' subcommand group onto the parent parser."""
     memory_parser = subparsers.add_parser("memory", help="Memory intelligence commands")
@@ -631,3 +673,15 @@ def add_memory_subcommand(subparsers) -> None:
         help="Skip consent prompt (for automated testing only)",
     )
     ingest_sessions.set_defaults(func=cmd_memory_ingest_sessions)
+
+    ingest_entries = memory_sub.add_parser(
+        "ingest-entries",
+        help="Sync reg_gotchas, raw_lessons, corrections, and decisions into memory_entries (Chain 7)",
+    )
+    ingest_entries.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Report counts without writing to DB",
+    )
+    ingest_entries.set_defaults(func=cmd_memory_ingest_entries)
