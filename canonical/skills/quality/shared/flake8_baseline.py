@@ -13,9 +13,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_BASELINE_LINE_RE = re.compile(
-    r"^(?P<path>[^:]+):(?P<line>\d+):\d+:\s+\w+\d+\s+"
-)
+_BASELINE_LINE_RE = re.compile(r"^(?P<path>[^:]+):(?P<line>\d+):\d+:\s+\w+\d+\s+")
 
 
 def load_flake8_baseline(path: str | Path) -> set[tuple[str, int]]:
