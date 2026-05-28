@@ -31,7 +31,7 @@ PRAGMA foreign_keys = OFF;
 -- SQLite 3.26+ validates all views during ALTER TABLE RENAME; any view referencing
 -- a missing table aborts the rename.  vw_activity_timeline references canonical_events,
 -- which is owned by EventStore._init_tables() and absent from migrations (pre-existing
--- architectural debt captured in .planning/workstreams/18-4-2-followup-1/findings.md).
+-- architectural debt captured in docs/architecture/aspirational-schema-debt.md).
 -- Alternative pattern: drop all views before reconstruction then recreate (migration 062
 -- approach), but that cannot recreate vw_activity_timeline for the same reason.
 -- legacy_alter_table is scoped to this migration: ON here, OFF at end.
