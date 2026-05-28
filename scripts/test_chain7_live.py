@@ -100,7 +100,7 @@ def main() -> int:
             print(f"  {e}")
         return 1
 
-    print(f"\nBatch 8 PASSED — Chain 7 mechanism verified with real data")
+    print("\nBatch 8 PASSED — Chain 7 mechanism verified with real data")
     print(f"  memory_entries: {mem_count} rows (reg_gotchas from Batch 7.5)")
     print(f"  memory_fts: {fts_count} rows (backfilled)")
     print("  NOTE: This confirms mechanism with real source data.")
