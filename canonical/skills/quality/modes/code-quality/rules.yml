@@ -285,6 +285,8 @@ rules:
     suppressions:
       - inline_comment: "# cq-006-suppress"
         reason: "Intentional swallow — documented reason why this exception is safe to ignore"
+      - inline_comment: "# cq-006-suppress: intentional graceful degradation on malformed event payload"
+        reason: "Pattern used in core/event_store/studio_db.py JSON parsing: malformed canonical_events payload should not crash the event store. Architectural decision not yet documented in a dedicated doc; tracked for documentation in 18.4.2-followup or equivalent schema doc."
 
     applies_to:
       languages: [python]
