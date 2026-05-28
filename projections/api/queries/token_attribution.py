@@ -213,11 +213,79 @@ def attribution_coverage(project_id: Optional[str] = None) -> dict:
 
     return {
         "total_events": total,
+        "fully_attributed_count": fully,
+        "partial_count": partial,
+        "orphan_count": orphan,
         "fully_attributed_pct": round(fully / total * 100, 1),
         "partial_pct": round(partial / total * 100, 1),
         "orphan_pct": round(orphan / total * 100, 1),
         "data_status": "ok",
     }
+
+
+def orphan_events(project_id: Optional[str] = None, limit: int = 50) -> list[dict]:
+    """Return recent orphan token.consumed events for drill-down.
+
+    Events are considered orphans when attribution_status is NULL or 'orphan'.
+    Returns a list of dicts with event_id, timestamp, trace context, and
+    probable_cause hint — no raw payload or PII.
+    """
+    conn = get_connection()
+    conn.row_factory = sqlite3.Row
+    try:
+        params: list = []
+        project_clause = ""
+        if project_id is not None:
+            project_clause = " AND json_extract(trace, '$.project_id') = ?"
+            params.append(project_id)
+        params.append(limit)
+        rows = conn.execute(
+            f"""
+            SELECT event_id, timestamp,
+                   json_extract(trace, '$.attribution_status') AS attribution_status,
+                   json_extract(trace, '$.project_id')         AS project_id,
+                   json_extract(trace, '$.task_id')            AS task_id,
+                   json_extract(trace, '$.work_order_id')      AS work_order_id,
+                   json_extract(trace, '$.tool_name')          AS tool_name,
+                   json_extract(trace, '$.session_id')         AS session_id
+            FROM canonical_events
+            WHERE event_type = 'token.consumed'
+              AND (json_extract(trace, '$.attribution_status') = 'orphan'
+                   OR json_extract(trace, '$.attribution_status') IS NULL)
+              {project_clause}
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    results = []
+    for row in rows:
+        status = row["attribution_status"] or "orphan"
+        if row["task_id"]:
+            cause = "task_id present but status not updated to partial"
+        elif row["project_id"]:
+            cause = "project_id captured; task and work_order missing"
+        elif row["session_id"]:
+            cause = "session only — emitted outside active work context"
+        else:
+            cause = "no attribution context captured"
+
+        results.append(
+            {
+                "event_id": row["event_id"],
+                "timestamp": row["timestamp"],
+                "attribution_status": status,
+                "project_id": row["project_id"],
+                "work_order_id": row["work_order_id"],
+                "task_id": row["task_id"],
+                "tool_name": row["tool_name"],
+                "probable_cause": cause,
+            }
+        )
+    return results
 
 
 def canonical_token_metrics(days: int) -> dict:

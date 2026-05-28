@@ -191,3 +191,126 @@ def test_start_work_order_consults_db(patched_paths, tmp_path: Path) -> None:
     assert result["ok"] is True
     assert rec.invocations, "start_work_order did not call _connect"
     assert any("_connect" in entry for entry in rec.invocations)
+
+
+# ---------------------------------------------------------------------------
+# 18.4.2a: attribution_coverage query shape
+# ---------------------------------------------------------------------------
+
+
+def _migrated_db(db_path: Path) -> Path:
+    """Bootstrap, fully migrate, and create runtime tables for a fresh DB."""
+    from core.event_store.studio_db import _connect as _ds_connect, _run_migrations
+
+    with _ds_connect(db_path) as conn:
+        _run_migrations(conn)
+        # canonical_events is runtime-created (not in migrations); create it so
+        # attribution queries don't 500 on "no such table".
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS canonical_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                trace JSON NOT NULL DEFAULT '{}',
+                severity TEXT NOT NULL DEFAULT 'info',
+                payload JSON NOT NULL DEFAULT '{}',
+                actor JSON,
+                confidence_score REAL,
+                source_type TEXT,
+                raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
+                raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
+                schema_version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                invocation_mode TEXT
+            )
+        """)
+        conn.commit()
+    return db_path
+
+
+def _seed_token_events(db_path: Path) -> None:
+    """Seed canonical_events with a known mix of attribution statuses."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        for i, status in enumerate(
+            ["fully_attributed", "fully_attributed", "partial", "partial", "partial", "orphan"]
+        ):
+            conn.execute(
+                "INSERT INTO canonical_events"
+                " (event_id, event_type, timestamp, trace, severity, payload)"
+                " VALUES (?, 'token.consumed', ?, json(?), 'info', json(?))",
+                (
+                    f"evt-attr-{i:04d}",
+                    NOW,
+                    f'{{"attribution_status": "{status}", "project_id": "{PROJECT_ID}"}}',
+                    '{"input_tokens": 100, "output_tokens": 50}',
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_attribution_coverage_query_shape(tmp_path: Path, monkeypatch) -> None:
+    """attribution_coverage() returns the expected shape and correct bucket counts."""
+    attr_db = _migrated_db(tmp_path / "attr_test.db")
+    _seed_token_events(attr_db)
+
+    import projections.api.queries.token_attribution as ta_module
+
+    def _fake_get_connection():
+        conn = sqlite3.connect(str(attr_db))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    monkeypatch.setattr(ta_module, "get_connection", _fake_get_connection)
+
+    result = ta_module.attribution_coverage()
+
+    assert result["data_status"] == "ok"
+    assert result["total_events"] == 6
+    assert result["fully_attributed_count"] == 2
+    assert result["partial_count"] == 3
+    assert result["orphan_count"] == 1
+    assert abs(result["fully_attributed_pct"] - 33.3) < 1.0
+    assert abs(result["partial_pct"] - 50.0) < 1.0
+    assert abs(result["orphan_pct"] - 16.7) < 1.0
+    # Percentages must sum to ~100%
+    total_pct = result["fully_attributed_pct"] + result["partial_pct"] + result["orphan_pct"]
+    assert abs(total_pct - 100.0) < 1.0
+
+
+def test_orphan_events_query_shape(tmp_path: Path, monkeypatch) -> None:
+    """orphan_events() returns a list of dicts with required keys and no PII."""
+    attr_db = _migrated_db(tmp_path / "orphan_test.db")
+    _seed_token_events(attr_db)
+
+    import projections.api.queries.token_attribution as ta_module
+
+    def _fake_get_connection():
+        conn = sqlite3.connect(str(attr_db))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    monkeypatch.setattr(ta_module, "get_connection", _fake_get_connection)
+
+    results = ta_module.orphan_events(limit=10)
+
+    assert isinstance(results, list)
+    assert len(results) == 1  # only 1 orphan was seeded
+    ev = results[0]
+    required_keys = {
+        "event_id",
+        "timestamp",
+        "attribution_status",
+        "project_id",
+        "work_order_id",
+        "task_id",
+        "tool_name",
+        "probable_cause",
+    }
+    assert required_keys.issubset(ev.keys())
+    assert ev["attribution_status"] == "orphan"
+    # No raw payload or PII fields
+    assert "payload" not in ev
+    assert "trace" not in ev
