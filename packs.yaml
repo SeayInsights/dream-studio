@@ -12,7 +12,7 @@ packs:
   quality:
     description: Code quality, learning, and structural discipline
     skill: quality
-    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database]
+    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database, code-quality]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
