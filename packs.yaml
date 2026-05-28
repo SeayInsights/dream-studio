@@ -12,7 +12,7 @@ packs:
   quality:
     description: Code quality, learning, and structural discipline
     skill: quality
-    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility]
+    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database]
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
@@ -58,6 +58,7 @@ packs:
       # Added — Flag 5 fix
       - on-first-run
       - on-memory-retrieve
+      - on-context-inject
       - on-prompt-validate
       - on-session-start
       - on-session-end
