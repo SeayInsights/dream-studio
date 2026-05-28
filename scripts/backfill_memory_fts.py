@@ -2,6 +2,7 @@
 
 Run when the FTS trigger was added after rows were already inserted.
 """
+
 import os
 import sqlite3
 import sys

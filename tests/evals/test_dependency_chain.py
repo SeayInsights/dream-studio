@@ -484,6 +484,7 @@ def test_chain_7_link_4_memory_hook_query_path_exists():
 
     # Hook must expose _fts_query and _search_memories
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("on_context_inject", hook_path)
     mod = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(repo_root))
@@ -502,6 +503,7 @@ def test_chain_7_link_4_memory_hook_query_path_exists():
     db_path = Path(tmpdir) / "studio.db"
     try:
         from core.event_store.studio_db import _connect, _run_migrations
+
         with _connect(db_path) as c:
             _run_migrations(c)
             c.execute(
@@ -515,13 +517,15 @@ def test_chain_7_link_4_memory_hook_query_path_exists():
 
         output_lines = []
         with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-            with patch("builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
+            ):
                 mod.main({"prompt": "modal dialog focus trap inert attribute"})
 
         output = "\n".join(output_lines)
-        assert "<project-memory>" in output, (
-            f"Hook produced no <project-memory> output. Got: {output!r}"
-        )
+        assert (
+            "<project-memory>" in output
+        ), f"Hook produced no <project-memory> output. Got: {output!r}"
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -538,6 +542,7 @@ def test_chain_7_hook_fails_open_on_empty_db():
     repo_root = REPO_ROOT
     hook_path = repo_root / "runtime" / "hooks" / "meta" / "on-context-inject.py"
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("on_context_inject_empty", hook_path)
     mod = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(repo_root))
@@ -547,13 +552,16 @@ def test_chain_7_hook_fails_open_on_empty_db():
     db_path = Path(tmpdir) / "studio.db"
     try:
         from core.event_store.studio_db import _connect, _run_migrations
+
         with _connect(db_path) as c:
             _run_migrations(c)
             c.commit()
 
         output_lines = []
         with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-            with patch("builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
+            ):
                 mod.main({"prompt": "modal dialog focus trap"})
 
         assert output_lines == [], f"Empty DB produced output: {output_lines}"
@@ -573,6 +581,7 @@ def test_chain_7_hook_dedup_within_session():
     repo_root = REPO_ROOT
     hook_path = repo_root / "runtime" / "hooks" / "meta" / "on-context-inject.py"
     import importlib.util
+
     spec = importlib.util.spec_from_file_location("on_context_inject_dedup", hook_path)
     mod = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(repo_root))
@@ -582,6 +591,7 @@ def test_chain_7_hook_dedup_within_session():
     db_path = Path(tmpdir) / "studio.db"
     try:
         from core.event_store.studio_db import _connect, _run_migrations
+
         with _connect(db_path) as c:
             _run_migrations(c)
             c.execute(
@@ -597,21 +607,25 @@ def test_chain_7_hook_dedup_within_session():
         output_second: list[str] = []
 
         with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-            with patch("builtins.print", side_effect=lambda *a, **kw: output_first.append(str(a[0]))):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_first.append(str(a[0]))
+            ):
                 mod.main({"prompt": "modal inert attribute", "session_id": session_id})
 
         # First invocation should produce output
         assert output_first, "First invocation produced no output"
 
         with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-            with patch("builtins.print", side_effect=lambda *a, **kw: output_second.append(str(a[0]))):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_second.append(str(a[0]))
+            ):
                 mod.main({"prompt": "modal inert attribute", "session_id": session_id})
 
         # Second invocation with same session_id should not re-inject (dedup via intelligence_surfaced_at)
         # Entry was stamped in first call; second call sees it as already surfaced
-        assert not output_second, (
-            f"Second invocation re-injected already-surfaced memory. Output: {output_second}"
-        )
+        assert (
+            not output_second
+        ), f"Second invocation re-injected already-surfaced memory. Output: {output_second}"
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

@@ -20,6 +20,7 @@ sys.path.insert(0, str(REPO))
 
 from core.event_store.studio_db import _connect, _run_migrations  # noqa: E402
 
+
 def main() -> int:
     tmpdir = tempfile.mkdtemp(prefix="ds-test-079-")
     db = Path(tmpdir) / "test.db"

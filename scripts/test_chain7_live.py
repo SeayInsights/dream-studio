@@ -36,6 +36,7 @@ def main() -> int:
         return 0
 
     import sqlite3
+
     c = sqlite3.connect(live_db)
     mem_count = c.execute("SELECT COUNT(*) FROM memory_entries").fetchone()[0]
     fts_count = c.execute("SELECT COUNT(*) FROM memory_fts").fetchone()[0]
@@ -66,6 +67,7 @@ def main() -> int:
 
     # Test 2: Output has no nested JSON or tool-call-shaped content
     import json
+
     if output.strip():
         try:
             json.loads(output)
@@ -84,10 +86,14 @@ def main() -> int:
     # Test 4: Hook handles an unrelated prompt gracefully (may or may not match)
     unrelated_lines: list[str] = []
     with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": live_db}):
-        with patch("builtins.print", side_effect=lambda *a, **kw: unrelated_lines.append(str(a[0]))):
+        with patch(
+            "builtins.print", side_effect=lambda *a, **kw: unrelated_lines.append(str(a[0]))
+        ):
             mod.main({"prompt": "XYZABCQWERTY123 completely_nonsense_prompt_no_match"})
     # Either empty output (no match) or output (some match) — both are valid
-    print(f"INFO: Nonsense prompt result: {'no output (expected)' if not unrelated_lines else 'produced output'}")
+    print(
+        f"INFO: Nonsense prompt result: {'no output (expected)' if not unrelated_lines else 'produced output'}"
+    )
 
     if errors:
         print("\nFAILURES:")

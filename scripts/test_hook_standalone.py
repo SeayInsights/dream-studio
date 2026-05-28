@@ -39,7 +39,11 @@ def _seed_db(db_path: Path, project_id: str) -> None:
             "INSERT INTO memory_entries"
             " (memory_id, source, category, content, importance, created_at, project)"
             " VALUES (?, 'raw_lessons', 'lesson', ?, 0.7, '2026-01-01', ?)",
-            ("l1", "CI tests must use isolated DB path to avoid contaminating real state", project_id),
+            (
+                "l1",
+                "CI tests must use isolated DB path to avoid contaminating real state",
+                project_id,
+            ),
         )
         c.commit()
 
@@ -62,13 +66,16 @@ def main() -> int:
             # Fresh import in temp context
             hook_path = REPO / "runtime" / "hooks" / "meta" / "on-context-inject.py"
             import importlib.util
+
             spec = importlib.util.spec_from_file_location("on_context_inject", hook_path)
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
 
             # Test 1: empty prompt → no output
             captured = StringIO()
-            with patch("builtins.print", side_effect=lambda *a, **k: captured.write(str(a[0]) + "\n")):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **k: captured.write(str(a[0]) + "\n")
+            ):
                 mod.main({"prompt": ""})
             if captured.getvalue().strip():
                 errors.append(f"FAIL: empty prompt produced output: {captured.getvalue()!r}")
@@ -78,7 +85,9 @@ def main() -> int:
             # Test 2: non-existent DB path → fail-open
             captured2 = StringIO()
             with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": "/nonexistent/path/studio.db"}):
-                with patch("builtins.print", side_effect=lambda *a, **k: captured2.write(str(a[0]) + "\n")):
+                with patch(
+                    "builtins.print", side_effect=lambda *a, **k: captured2.write(str(a[0]) + "\n")
+                ):
                     mod.main({"prompt": "modal dialog focus trap"})
             if captured2.getvalue().strip():
                 errors.append("FAIL: non-existent DB produced output instead of failing open")
@@ -88,7 +97,9 @@ def main() -> int:
             # Test 3: relevant prompt → output with <project-memory> tags
             captured3 = StringIO()
             with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-                with patch("builtins.print", side_effect=lambda *a, **k: captured3.write(str(a[0]) + "\n")):
+                with patch(
+                    "builtins.print", side_effect=lambda *a, **k: captured3.write(str(a[0]) + "\n")
+                ):
                     mod.main({"prompt": "modal dialog focus trap inert attribute"})
             out = captured3.getvalue()
             if "<project-memory>" not in out:
@@ -113,13 +124,17 @@ def main() -> int:
                 # Mock active project to test-project-001
                 orig_resolve = mod._resolve_active_project
                 mod._resolve_active_project = lambda conn: project_id
-                with patch("builtins.print", side_effect=lambda *a, **k: captured4.write(str(a[0]) + "\n")):
+                with patch(
+                    "builtins.print", side_effect=lambda *a, **k: captured4.write(str(a[0]) + "\n")
+                ):
                     mod.main({"prompt": "isolated DB path CI contamination tests"})
                 mod._resolve_active_project = orig_resolve
             out4 = captured4.getvalue()
             if "isolated" not in out4.lower() and "CI" not in out4:
                 # The FTS search may or may not match depending on tokenization; log but don't fail
-                print(f"INFO: project-scoped lesson search result (may be empty if FTS tokenization differs): {out4[:80]!r}")
+                print(
+                    f"INFO: project-scoped lesson search result (may be empty if FTS tokenization differs): {out4[:80]!r}"
+                )
             else:
                 print(f"PASS: project-scoped lesson surfaces: {out4[:80].strip()!r}")
 
