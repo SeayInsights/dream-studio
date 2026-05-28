@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS token_usage_records (
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
     total_tokens INTEGER NOT NULL DEFAULT 0,
-    estimated_cost REAL NOT NULL DEFAULT 0,
+    estimated_cost NUMERIC(20, 8) NOT NULL DEFAULT 0,
     purpose TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     source_refs_json TEXT NOT NULL DEFAULT '[]',
