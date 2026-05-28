@@ -68,6 +68,7 @@ def test_read_config_corrupt_json_returns_default(tmp_path, monkeypatch):
 
 
 def test_read_pulse_corrupt_json_returns_empty(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     pulse = tmp_path / ".dream-studio" / "meta" / "pulse-latest.json"
     pulse.parent.mkdir(parents=True, exist_ok=True)

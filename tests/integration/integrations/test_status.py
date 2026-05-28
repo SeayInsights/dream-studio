@@ -31,7 +31,11 @@ def test_status_reflects_install_state(tmp_path, canonical_root, ds_home):
     config_root.mkdir()
 
     result_before = doctor(
-        "claude_code", config_root, ds_home=ds_home, canonical_root=canonical_root
+        "claude_code",
+        config_root,
+        ds_home=ds_home,
+        canonical_root=canonical_root,
+        spool_root=tmp_path / "empty_spool",
     )
     assert result_before["state"] == IntegrationState.PLAN_AVAILABLE.value
 
@@ -41,7 +45,11 @@ def test_status_reflects_install_state(tmp_path, canonical_root, ds_home):
     installer.install("execute")
 
     result_after = doctor(
-        "claude_code", config_root, ds_home=ds_home, canonical_root=canonical_root
+        "claude_code",
+        config_root,
+        ds_home=ds_home,
+        canonical_root=canonical_root,
+        spool_root=tmp_path / "empty_spool",
     )
     assert result_after["state"] == IntegrationState.INSTALLED_VERIFIED.value
 

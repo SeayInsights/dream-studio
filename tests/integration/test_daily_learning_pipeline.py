@@ -36,6 +36,9 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    # user_data_dir() checks DREAM_STUDIO_HOME before Path.home(); clear it so
+    # the monkeypatched home is used and tests don't share the conftest spool dir.
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     return tmp_path
 
 

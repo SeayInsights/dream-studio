@@ -79,6 +79,7 @@ def test_write_handoff_kb_mode(tmp_path, monkeypatch):
 
 
 def test_write_recap_creates_file(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     handoff = tmp_path / "handoff.md"
     handoff.write_text("# Handoff", encoding="utf-8")
@@ -90,6 +91,7 @@ def test_write_recap_creates_file(tmp_path, monkeypatch):
 
 
 def test_write_recap_no_handoff_path(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     write_recap(tmp_path, 65.0, session_id="nohandoff1", handoff_path=None)
     sessions = list((tmp_path / ".dream-studio" / ".sessions").glob("**/recap-*.md"))
@@ -106,6 +108,7 @@ def test_checkpoint_career_ops_no_file(tmp_path, monkeypatch):
 
 
 def test_checkpoint_career_ops_in_progress(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     cp_dir = tmp_path / ".dream-studio" / "career-ops"
     cp_dir.mkdir(parents=True)
@@ -131,6 +134,7 @@ def test_checkpoint_career_ops_completed_returns_none(tmp_path, monkeypatch):
 
 
 def test_draft_handoff_lesson_creates_draft(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(
         65.0, "branch: main | last commit: abc | repo: /project", "sess9999", is_pct=True
@@ -142,6 +146,7 @@ def test_draft_handoff_lesson_creates_draft(tmp_path, monkeypatch):
 
 
 def test_draft_handoff_lesson_no_duplicate(tmp_path, monkeypatch):
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
@@ -198,6 +203,7 @@ def test_write_handoff_mkdir_failure_returns_none(tmp_path, monkeypatch):
     import control.context.handoff as handoff_mod
     from datetime import datetime, timezone
 
+    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     # Mock utcnow to return a fixed date so we can pre-block it
