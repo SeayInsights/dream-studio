@@ -34,13 +34,11 @@ The root `migrations/` directory contains legacy migration files from an earlier
 | 014_migrate_events_and_delete_tables.sql | Event migration | Applied; destructive |
 | 015_final_table_reduction.sql | Table cleanup | Applied; destructive |
 
-## Migration 011 Gap
+## Migration 011
 
-`core/event_store/migrations/011_*.sql` does not exist. This is an intentional numbering gap.
+`core/event_store/migrations/011_memory_entries.sql` — this migration exists and is valid.
 
-The root `migrations/011_delete_prd_tables.sql` performed destructive PRD table cleanup during an earlier phase. When the canonical migration directory was established in `core/event_store/migrations/`, migration 011 was deliberately skipped to avoid collision with the root migration numbering. The PRD schema was subsequently rebuilt as `012_prd_schema.sql`.
-
-**Do not fill this gap** with a dummy migration. The migration runner handles non-sequential numbers correctly.
+**History:** The 011 slot was originally left as an intentional numbering gap to avoid collision with the legacy root `migrations/011_delete_prd_tables.sql`. The gap was intentionally closed in phase 18.1.13 by adding `011_memory_entries.sql`, which creates the `memory_entries` table previously bootstrapped at application startup. The `IF NOT EXISTS` guard in the migration safely handles existing databases.
 
 ## Database Connection Authority
 
