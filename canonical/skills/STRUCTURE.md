@@ -83,7 +83,7 @@ If the skill file is unavailable, fall back to <safe default standard>.
 | Field | Required | Notes |
 |---|---|---|
 | `name` | ✅ | Must match filename stem; used by Task tool for dispatch |
-| `description` | ✅ | Used for discovery UI; include `(Tools: All tools)` suffix |
+| `description` | ✅ | Used for discovery UI; plain prose description (no `(Tools: All tools)` suffix — that is added by Claude Code display layer) |
 | `model` | ❌ | Not used by dispatch; omit for consistency with existing agents |
 | `tools` | ❌ | Not used by dispatch; omit for consistency with existing agents |
 
@@ -101,6 +101,10 @@ Before merging any agent wrapper reduction, verify all four:
 4. Subagent response shape matches pre-promotion behavior
 
 If any fail: STOP. Document the failure mode. Do not merge.
+
+### Session timing
+
+New agent files added mid-session won't dispatch until the next Claude Code session start. Pre-existing agents being modified to wrappers (the 18.9 case) dispatch immediately after install — no session restart required.
 
 ### Agents promoted via this pattern
 
