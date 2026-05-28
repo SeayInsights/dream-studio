@@ -8,15 +8,14 @@ MECHANISM works with real data. True cross-session verification happens
 when memory accumulates naturally across future operator sessions.
 """
 
+import importlib.util
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-
-import importlib.util
-from unittest.mock import patch
 
 
 def load_hook():
@@ -62,7 +61,7 @@ def main() -> int:
     elif "<project-memory>" not in output:
         errors.append(f"FAIL: Output missing <project-memory> tag. Got: {output[:200]!r}")
     else:
-        print(f"PASS: Hook surfaces real memory data")
+        print("PASS: Hook surfaces real memory data")
         print(f"      Output: {output[:200].strip()!r}")
 
     # Test 2: Output has no nested JSON or tool-call-shaped content
@@ -104,8 +103,8 @@ def main() -> int:
     print(f"\nBatch 8 PASSED — Chain 7 mechanism verified with real data")
     print(f"  memory_entries: {mem_count} rows (reg_gotchas from Batch 7.5)")
     print(f"  memory_fts: {fts_count} rows (backfilled)")
-    print(f"  NOTE: This confirms mechanism with real source data.")
-    print(f"  Cross-session intelligence will accumulate naturally over future sessions.")
+    print("  NOTE: This confirms mechanism with real source data.")
+    print("  Cross-session intelligence will accumulate naturally over future sessions.")
     return 0
 
 

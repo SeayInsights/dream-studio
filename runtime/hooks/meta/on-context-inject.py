@@ -254,11 +254,6 @@ def _format_output(results: list[dict], total_matches: int) -> str:
     if not results:
         return ""
 
-    importance_label = {
-        True: "high",  # importance >= 0.8
-        False: None,
-    }
-
     lines = ["<project-memory>"]
     lines.append("Prior lessons and gotchas relevant to this project:")
     lines.append("")
@@ -308,7 +303,6 @@ def main(payload: dict) -> None:
         return
 
     now = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
-    session_start = payload.get("session_id")  # use as dedup anchor if present
 
     try:
         conn = sqlite3.connect(str(db_path), timeout=0.8)

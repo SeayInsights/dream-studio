@@ -12,11 +12,10 @@ Tests:
 import json
 import os
 import shutil
-import sqlite3
 import sys
 import tempfile
-from pathlib import Path
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
@@ -60,12 +59,10 @@ def main() -> int:
 
         # Patch DB path to point to test DB
         with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
-            import importlib
-            import runtime.hooks.meta as meta_pkg
+            import importlib.util
 
             # Fresh import in temp context
             hook_path = REPO / "runtime" / "hooks" / "meta" / "on-context-inject.py"
-            import importlib.util
 
             spec = importlib.util.spec_from_file_location("on_context_inject", hook_path)
             mod = importlib.util.module_from_spec(spec)
@@ -107,7 +104,7 @@ def main() -> int:
             elif "</project-memory>" not in out:
                 errors.append(f"FAIL: output missing </project-memory> tag. Got: {out!r}")
             else:
-                print(f"PASS: relevant prompt produces <project-memory> output")
+                print("PASS: relevant prompt produces <project-memory> output")
                 print(f"      Output preview: {out[:150].strip()!r}")
 
             # Test 4: no nested JSON in output
