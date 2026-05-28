@@ -10,6 +10,13 @@
 #
 # Rules deferred to 18.4.3: sec-020 (SBOM), sec-023 (backups), sec-024 (supply chain pinning)
 # Rules with action.build_mode: null are audit-only (multi-file or ops context required)
+#
+# Backup ownership boundary (established 18.4.2):
+#   ds-quality:database owns: backup strategy/ops — db-016 (automated backups enabled),
+#     db-017 (restore testing), db-018 (RTO/RPO documented).
+#   sec-023 (this skill, 18.4.3) will own: backup encryption, access controls on backups,
+#     key management for backup encryption keys.
+#   Cross-reference: db-016/017/018 ↔ sec-023. Different angles, no duplication.
 
 rules:
 

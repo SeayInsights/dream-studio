@@ -1,0 +1,991 @@
+# Database Rules
+# Version: 1.0.0 (18.4.2 initial)
+# Schema version: 1
+#
+# Source authority:
+#   LIST-3 = canonical/skills/quality/references/database-best-practices.md (sections A-M)
+#
+# Skill boundary with ds-quality:security:
+#   Security owns: parameterized queries (sec-002, inject risk), encryption at rest (sec-009),
+#     encryption in transit (sec-010), PII in runtime logs (sec-013), backup encryption (sec-023 future)
+#   Database owns: schema design, query patterns, migration safety, backup strategy/ops
+#   Cross-references: db-009 ↔ sec-002; db-020 ↔ sec-013; db-016/017/018 ↔ sec-023
+#
+# Sections J (multi-tenancy) and K (compliance) deferred:
+#   J → future when Dream Studio has multi-tenant scope
+#   K → 18.7.1 db-compliance skill
+#
+# Rules with action.build_mode: null are audit-only (require file-level or ops context)
+#
+# Schema extension note (18.4.2):
+#   This skill introduces 'config_section' as a new detection.llm.context_scope value
+#   beyond what ds-quality:security uses. It extracts the relevant config block from
+#   config files (connection pool settings, WAL mode, backup config) rather than
+#   the full file. Other skills may adopt this value; it is an upward-compatible
+#   extension to the shared rules schema.
+
+rules:
+
+  - id: "db-001"
+    name: "Primary key on every table"
+    severity: high
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Primary keys on every table"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: sqlparse
+        config: null
+        fallback_to_llm: true
+        notes: "Parse CREATE TABLE statements in .sql migration files; flag tables missing PRIMARY KEY or equivalent (INTEGER PRIMARY KEY, TEXT PRIMARY KEY)."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "CREATE TABLE statement with no PRIMARY KEY constraint or column-level PRIMARY KEY"
+      - "Table definition using only NOT NULL without designating a unique identity column"
+
+    remediation:
+      summary: "Add PRIMARY KEY to every table. Use INTEGER PRIMARY KEY (SQLite rowid alias) for auto-incrementing integer PKs, or TEXT PRIMARY KEY for UUID-based PKs."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - path_glob: "tests/fixtures/**"
+        reason: "Test fixture tables may omit PK for brevity"
+      - inline_comment: "# db-001-suppress"
+        reason: "Explicit operator acknowledgment — document why this table has no PK"
+      - name_pattern: ".*(_bak|_backup|_temp|_old|_copy)[0-9]*$"
+        reason: "Migration backup/temp tables (CREATE TABLE x_bak AS SELECT) inherit PK from source; standard SQLite table-reconstruction pattern. NOTE: if a business table uses _bak/_temp naming, this suppression silently misses a real missing-PK violation. Avoid those suffixes for business tables."
+
+    applies_to:
+      languages: [sql, python]
+      file_types: [".sql", ".py"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "db-002"
+    name: "Foreign keys with explicit ON DELETE behavior"
+    severity: high
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Foreign keys with ON DELETE behavior chosen deliberately (cascade vs. restrict vs. null)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect FK constraints missing ON DELETE clause. Also flag REFERENCES without ON DELETE."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "REFERENCES clause without an ON DELETE or ON UPDATE action"
+      - "FK column that could cause orphaned rows or silent cascades"
+
+    remediation:
+      summary: "Choose ON DELETE behavior deliberately: CASCADE (child rows deleted with parent), RESTRICT (block deletion if child exists), SET NULL (child FK set to NULL), or NO ACTION. Document the choice in a migration comment."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-002-suppress"
+        reason: "Explicit operator acknowledgment"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-003"
+    name: "NOT NULL constraints where appropriate"
+    severity: medium
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "NOT NULL constraints where appropriate"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "LLM semantic check: identify columns that logically should never be NULL but lack NOT NULL constraint."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "Column that semantically cannot be NULL (e.g., created_at, status, user_id) missing NOT NULL"
+      - "Surrogate key column nullable when it's always set at insert time"
+
+    remediation:
+      summary: "Add NOT NULL to columns that logically cannot be null. If NULL is intentional (optional FK, optional metadata), document it with a comment."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-003-suppress"
+        reason: "NULL is intentional here — operator has documented rationale"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-004"
+    name: "CHECK constraints for status/enum columns"
+    severity: medium
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "CHECK constraints for invariants (status enums, ranges)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect columns named status, state, type, tier, category, role that use TEXT/VARCHAR without a CHECK constraint constraining allowed values."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Column named status, state, type, or role is TEXT without CHECK IN (...) constraint"
+      - "Application logic enforces enum values but DB schema has no constraint"
+
+    remediation:
+      summary: "Add CHECK constraint: status TEXT CHECK(status IN ('active','inactive','deleted')). Alternatively, use a foreign key to a lookup table."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-004-suppress"
+        reason: "Open enum — new values added programmatically; CHECK would require migration on each extension"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-005"
+    name: "Money stored as integer cents or NUMERIC, never REAL/FLOAT"
+    severity: critical
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Always store money as integer cents or numeric/decimal, never float"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: semgrep
+        fallback_to_llm: true
+        availability_note: "semgrep not installed in Dream Studio environment; this rule executes via LLM fallback. Install semgrep for cheaper static execution: pattern `(REAL|FLOAT|DOUBLE)` near financial field names."
+        notes: "Preferred static: semgrep regex on REAL/FLOAT/DOUBLE near financial field names. Current state: LLM fallback active (semgrep unavailable)."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Column named amount, price, cost, fee, payment, balance, total, revenue, tax, or charge uses REAL, FLOAT, or DOUBLE type"
+      - "Python code using float() for monetary calculations where integer cents are appropriate"
+
+    remediation:
+      summary: "Store money as INTEGER (cents/smallest currency unit) or NUMERIC/DECIMAL with explicit precision. Never REAL or FLOAT — floating-point arithmetic causes silent rounding errors in financial calculations."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-005-suppress"
+        reason: "Float is intentional here — not a monetary value despite the column name"
+
+    applies_to:
+      languages: [sql, python, typescript, javascript]
+      file_types: [".sql", ".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "db-006"
+    name: "Timestamps stored as UTC with timezone convention"
+    severity: high
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Always store timestamps as UTC with timezone; convert at the edge"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect timestamp columns using TEXT (common in SQLite) without an explicit UTC convention comment or application-enforced UTC policy. Also detect TIMESTAMP WITHOUT TIME ZONE in Postgres."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Timestamp column type has no UTC enforcement (TEXT without documented policy, TIMESTAMP without time zone in Postgres)"
+      - "datetime.now() used instead of datetime.now(timezone.utc) or datetime.utcnow()"
+
+    remediation:
+      summary: "Store timestamps as UTC. In SQLite: use TEXT ISO-8601 with Z suffix convention and enforce in application code. In Postgres: use TIMESTAMPTZ. In Python: always use datetime.now(timezone.utc), never datetime.now() or datetime.utcnow()."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-006-suppress"
+        reason: "Local time is intentional here — UTC convention documented elsewhere"
+
+    applies_to:
+      languages: [sql, python]
+      file_types: [".sql", ".py"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-007"
+    name: "Index on every foreign key column"
+    severity: high
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Indexes on every foreign key"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Parse migration files: identify FK columns and check for corresponding CREATE INDEX. Match by column name across CREATE TABLE and CREATE INDEX statements."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "Column with REFERENCES constraint has no corresponding CREATE INDEX"
+      - "FK column participates in JOIN queries but no index exists"
+
+    remediation:
+      summary: "Add CREATE INDEX idx_<table>_<column> ON <table>(<column>) for every FK column. Missing FK indexes cause table scans on join operations."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-007-suppress"
+        reason: "Table is read-rarely; full scan acceptable; FK index not worth the write overhead"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-008"
+    name: "Indexes on high-selectivity WHERE/ORDER BY/JOIN columns"
+    severity: medium
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Indexes on every column used in WHERE, ORDER BY, JOIN"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "LLM semantic: identify hot query paths in Python application code and verify corresponding indexes exist in migration files."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 700
+
+    triggers:
+      - "WHERE clause on a column with no index, in a query on a table with expected high row count"
+      - "ORDER BY on an unindexed column in a list endpoint"
+
+    remediation:
+      summary: "Add indexes for columns used in WHERE, ORDER BY, and JOIN in frequent queries. Use EXPLAIN ANALYZE to verify the index is used. Composite indexes should list the most selective column first."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-008-suppress"
+        reason: "Table expected to stay small; full scan acceptable"
+
+    applies_to:
+      languages: [sql, python]
+      file_types: [".sql", ".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-009"
+    name: "No string-formatted SQL (query design angle)"
+    severity: high
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Parameterized queries / prepared statements (never string concatenation — SQLi vector)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: semgrep
+        fallback_to_llm: true
+        availability_note: "semgrep not installed in Dream Studio environment; this rule executes via LLM fallback. Install semgrep for cheaper static execution: pattern for f-string + SQL keyword combination."
+        notes: "Preferred static: semgrep on f-string SQL patterns. Current state: LLM fallback active. Cross-reference with sec-002 (injection risk angle): this rule fires on the design anti-pattern; sec-002 fires on the injection risk. Both may fire on the same code."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "f-string used to construct SQL query (f'SELECT ... {user_input}')"
+      - "% string formatting with SQL keywords (cursor.execute('SELECT * FROM t WHERE x=%s' % val))"
+      - "string concatenation to build SQL: 'SELECT * FROM t WHERE ' + condition"
+
+    remediation:
+      summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) or SQLAlchemy bound parameters. F-string SQL is both an injection risk (see sec-002) and a code quality anti-pattern — string construction makes queries hard to cache, trace, and safely modify."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may use string SQL for brevity — verify no user input reaches these"
+      - inline_comment: "# db-009-suppress"
+        reason: "Explicit operator acknowledgment — values are hardcoded constants, not user input"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "db-010"
+    name: "Schema in version control — migration files, not GUI changes"
+    severity: high
+    category: migration
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Schema in version control (migration files, not GUI changes)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Check for existence of a migrations directory with numbered .sql files. Flag if schema changes appear in application code (CREATE TABLE in non-migration .py files outside of test fixtures)."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "CREATE TABLE or ALTER TABLE in .py files outside of migration runner or test fixtures"
+      - "No migrations directory found with versioned .sql files"
+
+    remediation:
+      summary: "All schema changes must go through versioned migration files. Never alter schema via DB GUI or ad-hoc scripts. Dream Studio uses core/event_store/migrations/*.sql — follow this pattern."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may create in-memory tables for isolation"
+      - inline_comment: "# db-010-suppress"
+        reason: "Intentional — migration runner bootstrap code"
+
+    applies_to:
+      languages: [python, sql]
+      file_types: [".py", ".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-011"
+    name: "Migrations are additive and reversible — no silent column drops"
+    severity: high
+    category: migration
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Migrations are forward-only, reversible, and tested"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect DROP TABLE, DROP COLUMN, or TRUNCATE in migration files without an explicit deprecation comment. Also flag RENAME COLUMN (requires data migration to be safe)."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "DROP TABLE or DROP COLUMN in a migration without a preceding deprecation migration"
+      - "RENAME TABLE or RENAME COLUMN without a corresponding data copy step"
+      - "Migration that changes column type without ensuring data compatibility"
+
+    remediation:
+      summary: "Follow expand-contract for destructive migrations: (1) add new column, (2) migrate data in a separate step or via application dual-write, (3) remove old column in a later migration after confirming no live references. Never drop columns in the same migration that stops using them."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - inline_comment: "# db-011-suppress"
+        reason: "Destructive migration approved — pre-conditions verified (no live references, backup taken)"
+      - pattern: "DROP TABLE .*(bak|temp|_old|_copy)[0-9]*"
+        reason: "Dropping migration backup/temp table (created in same migration as part of table-reconstruction pattern). Narrow pattern — only matches explicit _bak/_temp suffixes."
+      # context_pattern for "CREATE TABLE ... AS SELECT" was removed: too broad, could mask real DROP issues.
+      # Follow-up: add inline # db-011-suppress comments to affected migrations (022, 071) instead.
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "db-012"
+    name: "Connection pool configured with limits and timeout"
+    severity: medium
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Connection pooling (PgBouncer, RDS Proxy, app-side pool)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Detect SQLAlchemy create_engine() calls without pool_size, max_overflow, pool_timeout parameters. Also detect direct sqlite3.connect() in hot paths without connection reuse."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 500
+
+    triggers:
+      - "SQLAlchemy create_engine() without pool_size or pool_timeout"
+      - "Database connection created per-request without pooling in a web server context"
+
+    remediation:
+      summary: "Configure connection pool: pool_size (default connections), max_overflow (burst connections), pool_timeout (wait time before error), pool_recycle (reconnect interval). For SQLite: use a singleton connection or connection pool manager; avoid per-request sqlite3.connect()."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-012-suppress"
+        reason: "Single-process app with controlled concurrency; default pool acceptable"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-013"
+    name: "Query statement timeout configured"
+    severity: medium
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Query timeout / statement timeout configured (don't let one query hang the DB)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Detect absence of statement_timeout in Postgres config/connection, or absence of timeout= parameter in sqlite3.connect() calls in long-running query paths."
+      llm:
+        prompt_template: null
+        context_scope: config_section
+        estimated_tokens: 400
+
+    triggers:
+      - "Postgres connection without SET statement_timeout"
+      - "Long-running query function with no timeout guard"
+
+    remediation:
+      summary: "Set statement timeouts per connection or per query: Postgres: SET statement_timeout = '30s'; SQLite: sqlite3.connect(db, timeout=30.0). Unbounded queries can exhaust connection pool and block the application."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-013-suppress"
+        reason: "Known long-running query — timeout handled at infrastructure level"
+
+    applies_to:
+      languages: [python, sql]
+      file_types: [".py", ".sql", ".cfg", ".ini", ".env"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-014"
+    name: "Cursor/keyset pagination, not OFFSET for large tables"
+    severity: medium
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Pagination via cursors/keysets, not OFFSET on large tables"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect OFFSET in SQL queries, especially in list endpoints. Flag as medium unless the table is known to be small."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 500
+
+    triggers:
+      - "LIMIT ? OFFSET ? pattern in a query on a table expected to grow large"
+      - "Page-based pagination using OFFSET in an API endpoint"
+
+    remediation:
+      summary: "Replace OFFSET pagination with keyset/cursor pagination: WHERE id > last_seen_id ORDER BY id LIMIT N. OFFSET scans grow linearly with page depth — page 1000 requires scanning 1000×N rows before returning results."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-014-suppress"
+        reason: "Table bounded by design; OFFSET pagination acceptable at this scale"
+
+    applies_to:
+      languages: [sql, python]
+      file_types: [".sql", ".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-015"
+    name: "No N+1 query patterns in hot paths"
+    severity: high
+    category: query
+
+    source:
+      list: "LIST-3"
+      section: "E"
+      item: "Avoid N+1 queries — measure with APM"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "LLM semantic: detect loop + query pattern where a query is executed inside a for/while loop with a loop variable used as the query predicate."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 700
+
+    triggers:
+      - "for item in items: db.execute('SELECT ... WHERE id = ?', (item.id,)) — query per loop iteration"
+      - "ORM relationship accessed inside a loop without eager loading"
+
+    remediation:
+      summary: "Replace N+1 with batch query: db.execute('SELECT * FROM t WHERE id IN (?)', ids) outside the loop. For ORMs, use eager loading (joinedload, selectinload) or explicit batch fetch."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
+
+    suppressions:
+      - inline_comment: "# db-015-suppress"
+        reason: "Loop is bounded (small N); N+1 is acceptable here"
+
+    applies_to:
+      languages: [python, typescript]
+      file_types: [".py", ".ts"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-016"
+    name: "Automated backups enabled and scheduled"
+    severity: high
+    category: backup
+
+    source:
+      list: "LIST-3"
+      section: "F"
+      item: "Automated backups enabled (point-in-time recovery where the DB supports it)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Checklist-style: LLM verifies backup config exists in infrastructure config, CI, or documented runbook. Not auto-detectable from source code alone. May require manual verification annotation."
+      llm:
+        prompt_template: null
+        context_scope: config_section
+        estimated_tokens: 500
+
+    triggers:
+      - "No backup configuration found in infrastructure config (terraform, docker-compose, cloud config)"
+      - "Database used in production context with no backup runbook documented"
+
+    remediation:
+      summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving; managed DB (RDS, Supabase, D1) → enable point-in-time recovery and configure retention. Note: backup encryption is a separate concern owned by ds-quality:security (sec-023 future)."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+
+    suppressions:
+      - inline_comment: "# db-016-suppress"
+        reason: "Backup configuration documented in ops runbook outside this repo"
+
+    applies_to:
+      languages: [yaml, python, sql]
+      file_types: [".yml", ".yaml", ".tf", ".py", ".md"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-017"
+    name: "Backup restore tested, not just configured"
+    severity: medium
+    category: backup
+
+    source:
+      list: "LIST-3"
+      section: "F"
+      item: "Test restores at least quarterly — backups you haven't restored are aspirational"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Checklist-style: LLM looks for restore test documentation (DR runbook, CI restore test, dated restore log). Always requires manual verification."
+      llm:
+        prompt_template: null
+        context_scope: config_section
+        estimated_tokens: 400
+
+    triggers:
+      - "No restore test or DR drill documented in runbooks or CI"
+      - "Backup process exists but no evidence of restore validation"
+
+    remediation:
+      summary: "Document and schedule restore tests. At minimum quarterly: restore a backup to a test instance, verify data integrity, document the result with a date. A backup you haven't successfully restored is aspirational, not operational."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+
+    suppressions:
+      - inline_comment: "# db-017-suppress"
+        reason: "Restore test documented in ops wiki outside this repo"
+
+    applies_to:
+      languages: [yaml, markdown]
+      file_types: [".yml", ".yaml", ".md"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-018"
+    name: "RTO and RPO documented"
+    severity: medium
+    category: backup
+
+    source:
+      list: "LIST-3"
+      section: "F"
+      item: "Documented RTO (recovery time) and RPO (data loss tolerance)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Checklist-style: LLM looks for RTO/RPO definitions in runbooks, architecture docs, or infra config. Key terms: RTO, RPO, recovery time, recovery point."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Production database with no documented RTO (how long to restore) or RPO (how much data loss is acceptable)"
+
+    remediation:
+      summary: "Document RTO (e.g., 4 hours) and RPO (e.g., 15 minutes) for each production database. These drive backup frequency, replication strategy, and DR runbook SLAs. Without them, you cannot evaluate whether your backup strategy is adequate."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
+
+    suppressions:
+      - inline_comment: "# db-018-suppress"
+        reason: "RTO/RPO documented in ops wiki outside this repo"
+
+    applies_to:
+      languages: [markdown, yaml]
+      file_types: [".md", ".yml", ".yaml"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "db-019"
+    name: "DB engine on supported version — no EOL"
+    severity: high
+    category: access
+
+    source:
+      list: "LIST-3"
+      section: "I"
+      item: "DB engine on a supported version (don't run EOL Postgres/MySQL/Mongo)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Detect DB engine version in requirements.txt, pyproject.toml, Dockerfile, docker-compose.yml, or .python-version. Compare against known EOL dates for SQLite (bundled with Python — generally safe), Postgres, MySQL, MongoDB."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "DB engine version pinned to an EOL release in requirements or Dockerfile"
+      - "DB engine image tag using :latest without pinning to a supported version"
+
+    remediation:
+      summary: "Pin to a supported, actively maintained version. For SQLite: use the bundled Python version (kept current). For Postgres/MySQL/MongoDB: check official EOL schedule; upgrade to latest LTS. EOL engines receive no security patches."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#i-vulnerability--patch-management"
+
+    suppressions:
+      - inline_comment: "# db-019-suppress"
+        reason: "EOL version in use by explicit choice — migration planned"
+
+    applies_to:
+      languages: [python, yaml, dockerfile]
+      file_types: [".txt", ".toml", ".yml", ".yaml", "Dockerfile", ".cfg"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-020"
+    name: "No PII in non-PII columns (schema classification)"
+    severity: high
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "C"
+      item: "Classify every column by sensitivity (public / internal / confidential / restricted / regulated)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "LLM semantic: look for PII field names (email, ssn, dob, phone, address, credit_card, passport, tax_id) stored in columns typed as TEXT without explicit classification comments. Cross-reference with sec-013 (PII in runtime logs — different layer, complementary)."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 600
+
+    triggers:
+      - "Column named email, ssn, phone, address stored in a generic 'notes TEXT' or 'metadata JSON' column"
+      - "PII field stored without access control or classification comment"
+
+    remediation:
+      summary: "Store PII in explicitly named, typed columns with access control comments. Separate PII into its own table where feasible for access control granularity. Add column comments documenting sensitivity level. Cross-ref: sec-013 owns runtime PII leaks in logs/URLs."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#c-data-classification--minimization"
+
+    suppressions:
+      - inline_comment: "# db-020-suppress"
+        reason: "PII column placement is intentional — access control documented in schema comments"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-021"
+    name: "Audit columns (created_at, updated_at) on business tables"
+    severity: medium
+    category: schema
+
+    source:
+      list: "LIST-3"
+      section: "D"
+      item: "Audit columns: created_at, updated_at, created_by, updated_by"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: sqlparse
+        fallback_to_llm: true
+        notes: "Detect business tables (heuristic: tables with more than 3 non-audit columns) missing created_at and updated_at columns."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Business table missing created_at or updated_at columns"
+      - "Audit column naming inconsistency: table uses last_updated_at instead of updated_at"
+
+    remediation:
+      summary: "Add created_at TEXT NOT NULL DEFAULT (datetime('now','utc')) and updated_at TEXT NOT NULL DEFAULT (datetime('now','utc')) to every business table. Ensure trigger or application code updates updated_at on UPDATE. Use consistent naming across all tables."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
+
+    suppressions:
+      - path_glob: "*/migrations/*_fts*.sql"
+        reason: "FTS virtual tables don't support audit columns"
+      - inline_comment: "# db-021-suppress"
+        reason: "Lookup/reference table — immutable rows, audit columns not needed"
+
+    applies_to:
+      languages: [sql]
+      file_types: [".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "db-022"
+    name: "Engine-specific: SQLite WAL mode; D1 eventual-consistency awareness"
+    severity: medium
+    category: engine-specific
+
+    source:
+      list: "LIST-3"
+      section: "M"
+      item: "SQLite (D1, edge DBs): WAL mode matters for concurrent reads; concurrent write limits"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Engine detection: (1) look for 'import sqlite3', '.db' extension in config, PRAGMA statements → SQLite engine. (2) 'from cloudflare:d1' or D1 binding references → D1 engine. Apply engine-specific check. SQLite: verify PRAGMA journal_mode=WAL is set. D1: verify no row-level security assumptions."
+      llm:
+        prompt_template: null
+        context_scope: config_section
+        estimated_tokens: 500
+
+    triggers:
+      - "SQLite DB without PRAGMA journal_mode=WAL — default DELETE mode causes write-lock contention"
+      - "D1 (Cloudflare) usage where reads from read-replicas assume immediate consistency"
+
+    remediation:
+      summary: "SQLite: Set PRAGMA journal_mode=WAL on first connection to enable concurrent reads with a single writer. Critical for any app with multiple readers. D1: Design reads to tolerate eventual consistency on read replicas; use the primary binding for consistency-sensitive reads."
+      guide_ref: "canonical/skills/quality/references/database-best-practices.md#m-specific-engines--quick-gotchas"
+
+    suppressions:
+      - inline_comment: "# db-022-suppress"
+        reason: "WAL mode not applicable — single-writer, single-reader context"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js", ".sql"]
+
+    action:
+      audit_mode: report
+      build_mode: warn

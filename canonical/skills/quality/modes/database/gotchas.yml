@@ -1,0 +1,15 @@
+# Database Skill — Gotchas
+# Status: JIT-pending — populated from first real audit (Batch 7, 18.4.2)
+# Do not speculate. Real gotchas only.
+
+gotchas: []
+
+# Template for when real gotchas are added:
+# - id: db-gotcha-001
+#   title: <short title>
+#   description: <what went wrong>
+#   severity: high | medium | low
+#   category: schema | query | migration | backup | static-analysis | llm
+#   discovered: <YYYY-MM-DD>
+#   context: <which rule triggered it, what codebase>
+#   fix: <what the right behavior is>
