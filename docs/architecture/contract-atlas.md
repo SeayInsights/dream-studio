@@ -357,3 +357,5 @@ and boundary report without inventing new dependency data.
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15b: no new contract domains; platform_hardening_sequence domain is unchanged. skip_hook_install is an implementation detail in ClaudeCodeInstaller, not a new domain surface. No policy or contract change in this doc. -->
 
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: core/shared_intelligence/contract_atlas.py added to _skip_private_content_scan_path() in repo_publication_readiness.py. The file legitimately contains "Dream Studio Live Backups" as a regex pattern string definition, not a private content reference. No contract domain boundary change; no new domains registered; no contract atlas policy change. -->

@@ -50,7 +50,7 @@ The daemon also calls `spool.lifecycle.check_and_archive()` at startup, so resta
 All spool commands run from the dream-studio-clean repo root:
 
 ```powershell
-cd "C:\Users\Dannis Seay\builds\dream-studio-clean"
+cd "<repo-root>"
 ```
 
 ### Trigger weekly archive immediately

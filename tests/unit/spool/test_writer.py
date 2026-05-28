@@ -43,7 +43,7 @@ def test_write_event_auto_adds_schema_version(spool_root):
 
     envelope = {
         "event_id": "test-auto-schema-001",
-        "event_type": "work_order.started",
+        "event_type": "prompt.lifecycle.submitted",
         "timestamp": "2026-05-17T00:00:00+00:00",
         "payload": {},
     }
@@ -57,7 +57,7 @@ def test_write_event_preserves_schema_version_when_present(spool_root):
 
     envelope = {
         "event_id": "test-schema-preserve-001",
-        "event_type": "work_order.started",
+        "event_type": "prompt.lifecycle.submitted",
         "timestamp": "2026-05-17T00:00:00+00:00",
         "schema_version": 2,
         "payload": {},
@@ -72,7 +72,7 @@ def test_write_event_auto_adds_event_id(spool_root):
     import uuid as _uuid
 
     envelope = {
-        "event_type": "work_order.started",
+        "event_type": "prompt.lifecycle.submitted",
         "timestamp": "2026-05-17T00:00:00+00:00",
         "payload": {},
     }
@@ -87,7 +87,7 @@ def test_write_event_preserves_event_id_when_present(spool_root):
 
     envelope = {
         "event_id": "my-custom-id-preserve-001",
-        "event_type": "work_order.started",
+        "event_type": "prompt.lifecycle.submitted",
         "timestamp": "2026-05-17T00:00:00+00:00",
         "payload": {},
     }

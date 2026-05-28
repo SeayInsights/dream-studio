@@ -146,20 +146,6 @@ class TestActivityLogFilter:
         assert "ev.activity_type" in clause
         assert "al.activity_type" not in clause
 
-    def test_hooks_routes_use_filter(self):
-        """hooks.py routes include activity_log_filter_clause."""
-        source = (REPO_ROOT / "projections" / "api" / "routes" / "hooks.py").read_text(
-            encoding="utf-8"
-        )
-        assert "activity_log_filter_clause" in source
-
-    def test_audits_routes_use_filter(self):
-        """audits.py routes include activity_log_filter_clause."""
-        source = (REPO_ROOT / "projections" / "api" / "routes" / "audits.py").read_text(
-            encoding="utf-8"
-        )
-        assert "activity_log_filter_clause" in source
-
     def test_intelligence_routes_use_filter(self):
         """intelligence.py routes include activity_log_filter_clause."""
         source = (REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py").read_text(

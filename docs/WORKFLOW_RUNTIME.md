@@ -177,3 +177,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Last reviewed 2026-05-23 — Phase 18.1.9: control/execution/workflow/runner.py _BARE_TO_PACK entries corrected to use ds-* prefixed pack names (e.g., "core" → "ds-core", "quality" → "ds-quality") matching packs.yaml as of Slice 9. Fallback pack updated from "core" to "ds-core". Workflows using bare mode names in skill specifiers now route to the correct pack at runtime. No workflow YAML, gate, or state contract change. -->
 
 <!-- Last reviewed 2026-05-23 — Phase 18.1.12: No workflow runtime changes. Hook fail-open hardening (BaseException catch, sys.exit(2) removal, individual hook defensive wrappers) is confined to runtime/hooks/ and control/execution/dispatch_tracking.py. No workflow YAML, engine, state, validator, gate, or retry contract change required. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: on-context-threshold.py hook updated (see HOOK_RUNTIME.md for details). No workflow YAML, engine, state, validator, gate, or retry contract change. -->

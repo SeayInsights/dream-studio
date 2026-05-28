@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 import threading
+
+import pytest
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -452,6 +454,7 @@ def test_repair_adapters_can_refresh_launchers_without_hook_execution(tmp_path: 
     assert str(REPO_ROOT) in (command_dir / "ds.ps1").read_text(encoding="utf-8")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell launcher only")
 def test_windows_ds_launcher_runs_from_outside_repo(tmp_path: Path) -> None:
     home = tmp_path / "launcher-home"
     outside = tmp_path / "outside"

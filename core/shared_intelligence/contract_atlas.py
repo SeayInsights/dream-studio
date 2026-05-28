@@ -1506,8 +1506,8 @@ def _sanitize_value(value: Any) -> Any:
 # because we want to detect even an unanchored hit (e.g. `.dream-studio/` mid-
 # token) but replace the entire surrounding path token, not just the match.
 # Token boundary for path sanitization. Must allow spaces — Windows user
-# paths legitimately contain them (e.g. "C:\Users\Dannis Seay\builds\..."), and
-# stopping at the first space would leave the tail (e.g. "Seay\builds\...")
+# paths legitimately contain them (e.g. paths with spaces in usernames), and
+# stopping at the first space would leave a tail fragment
 # in the JSON-encoded output where the UNC-style leak pattern picks it up.
 _SANITIZE_TOKEN_CHARS = r"[^\"'\n\r,}\]]"
 _PRIVATE_PATH_RULES: tuple[tuple[re.Pattern[str], re.Pattern[str]], ...] = (

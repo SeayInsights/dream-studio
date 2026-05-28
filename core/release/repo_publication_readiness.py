@@ -306,13 +306,18 @@ def _content_findings(repo_root: Path, tracked_files: Sequence[str]) -> list[dic
 
 
 def _skip_secret_scan_path(path: str) -> bool:
-    return path.startswith("templates/security/") or path.startswith("docs/security")
+    return (
+        path.startswith("templates/security/")
+        or path.startswith("docs/security")
+        or path.startswith("canonical/skills/quality/modes/security/")
+    )
 
 
 def _skip_private_content_scan_path(path: str) -> bool:
     return path in {
         "core/release/repo_publication_readiness.py",
         "core/shared_intelligence/contract_atlas_lifecycle.py",
+        "core/shared_intelligence/contract_atlas.py",
         "tests/unit/test_repo_publication_readiness.py",
     }
 

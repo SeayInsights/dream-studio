@@ -6,7 +6,7 @@ Create a minimal test fixture with a deliberately bad security pattern:
 
 ```powershell
 # Windows
-$fixture = "C:\Users\Dannis Seay\builds\dream-studio-clean\.planning\workstreams\18-4-1\smoke-fixture.py"
+$fixture = "<repo-root>\.planning\workstreams\18-4-1\smoke-fixture.py"
 @'
 # Smoke test fixture — hardcoded secret (should trigger sec-001)
 import sqlite3

@@ -51,8 +51,13 @@ def set_active_project(
                 "SELECT project_id FROM business_projects WHERE status = 'active'",
             ).fetchall()
         ]
-        # Direct UPDATE removed: ProjectProjection applies project.activated and
-        # project.deactivated to business_projects asynchronously from the events below.
+        # Dual-write: direct SQL for synchronous callers + events for ProjectProjection.
+        conn.execute("UPDATE business_projects SET status = 'paused' WHERE status = 'active'")
+        conn.execute(
+            "UPDATE business_projects SET status = 'active', updated_at = ? WHERE project_id = ?",
+            (now, project_id),
+        )
+        conn.commit()
     try:
         import spool.writer as _spool_writer
 
@@ -107,8 +112,12 @@ def deactivate_project(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-        # Direct UPDATE removed: ProjectProjection applies project.deactivated
-        # to business_projects asynchronously from the event below.
+        # Dual-write: direct SQL for synchronous callers + event for ProjectProjection.
+        conn.execute(
+            "UPDATE business_projects SET status = 'paused', updated_at = ? WHERE project_id = ?",
+            (now, project_id),
+        )
+        conn.commit()
     try:
         import spool.writer as _spool_writer
 
@@ -224,10 +233,16 @@ def delete_project(
         except Exception:
             pass  # Table may not exist in all schema versions.
 
-        # Direct DELETEs removed: ProjectProjection (project.deleted) and the
-        # respective entity projections (work_order.deleted, milestone.deleted,
-        # design_brief.deleted, task.deleted) apply soft-deletes asynchronously
-        # from the cascade events emitted below.
+        # Dual-write: direct SQL for synchronous callers + events for projections.
+        conn.execute("DELETE FROM business_tasks WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_work_orders WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM business_milestones WHERE project_id = ?", (project_id,))
+        try:
+            conn.execute("DELETE FROM business_design_briefs WHERE project_id = ?", (project_id,))
+        except Exception:
+            pass  # Table may not exist in all schema versions.
+        conn.execute("DELETE FROM business_projects WHERE project_id = ?", (project_id,))
+        conn.commit()
 
     try:
         import spool.writer as _spool_writer

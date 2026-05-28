@@ -433,3 +433,5 @@ See [INSTALL.md](INSTALL.md) for a standalone installation reference.
 <!-- Last reviewed 2026-05-27 — Phase 18.1.18: INSTALL.md added. Node.js 24 CI opt-in applied. -->
 
 <!-- Last reviewed 2026-05-27 — fix/ci-gate-db-path-collision: ci_gate.py _isolated_test_env() now uses separate mkdtemp calls for HOME and DREAM_STUDIO_DB_PATH so conftest.guard_real_homedir's _db_redirected check returns True and the CI abort guard does not fire on test DB writes. No release gate policy change; this is a CI isolation bug fix only. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: 37 Linux CI failures repaired. Changes span: canonical_events table isolation, migration 078 (memory_entries), adapter projection file generation (7 new), publication readiness scan exclusions, cloud backup test mock, TA6 milestone direct SQL, context threshold hook _emit_harvest, ML routes sqlite3 import cleanup. No README policy change required. -->

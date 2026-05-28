@@ -39,7 +39,12 @@ def test_ingest_writes_to_env_override_db(monkeypatch, tmp_path: Path) -> None:
     envelope = CanonicalEventEnvelope(
         event_type=EventType.WORK_ORDER_STARTED.value,
         session_id=None,
-        payload={"work_order_id": "test-wo"},
+        payload={
+            "work_order_id": "test-wo",
+            "project_id": "test-proj",
+            "title": "Test WO",
+            "type": "api_endpoint",
+        },
     )
     write_envelopes([envelope], root=spool_root)
 

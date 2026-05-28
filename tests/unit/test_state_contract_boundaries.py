@@ -123,6 +123,9 @@ def test_projection_writers_only_touch_projection_owned_tables():
         "workflow_phases",
         "workflow_kpis",
         "phase_kpis",
+        "projection_retry_queue",
+        "projection_dead_letter",
+        "projection_state",
     }
     offenders: list[str] = []
 

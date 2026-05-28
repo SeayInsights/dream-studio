@@ -20,6 +20,27 @@ if str(_runtime_dir) not in sys.path:
     sys.path.insert(0, str(_runtime_dir))
 
 
+def _emit_harvest(session_id: str, context_kb: float = 0.0) -> None:
+    """Emit a session harvest event to the spool (best-effort, never raises)."""
+    try:
+        repo = _get_plugin_root()
+        if str(repo) not in sys.path:
+            sys.path.insert(0, str(repo))
+        import spool.writer as _writer  # noqa: PLC0415
+        from canonical.events.envelope import CanonicalEventEnvelope  # noqa: PLC0415
+
+        _writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="session.harvested",
+                session_id=session_id,
+                payload={"context_kb": context_kb},
+                severity="info",
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+
 def _get_plugin_root() -> Path:
     env = os.environ.get("CLAUDE_PLUGIN_ROOT")
     if env:

@@ -1,7 +1,7 @@
-# Claude Code Dream Studio Projection
+# Cursor Dream Studio Projection
 
-adapter_id: claude
-adapter_type: claude
+adapter_id: cursor
+adapter_type: cursor
 project_id: dream-studio
 
 Authority:
@@ -11,14 +11,12 @@ Authority:
 - Config writes require a future explicit approval boundary.
 
 Supported Context Packets:
+- editor_context
 - resume
-- work_order_execution
-- review
 
 Supported Result Types:
-- decision
 - code_change
-- validation
+- review
 - evidence
 
 Resume Rules:

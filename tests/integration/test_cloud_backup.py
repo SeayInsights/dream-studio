@@ -247,6 +247,12 @@ class TestAutoPushIntegration:
         cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
         monkeypatch.setattr("core.config.state.paths.state_dir", lambda: tmp_path)
 
+        # Create the expected script so the is_file() check passes
+        script_path = tmp_path / "interfaces" / "cli"
+        script_path.mkdir(parents=True, exist_ok=True)
+        (script_path / "studio_backup.py").write_text("", encoding="utf-8")
+        monkeypatch.setattr("core.config.state.paths.plugin_root", lambda: tmp_path)
+
         mock_popen = MagicMock()
         monkeypatch.setattr("core.config.state.subprocess.Popen", mock_popen)
 

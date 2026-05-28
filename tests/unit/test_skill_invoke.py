@@ -211,7 +211,7 @@ def test_migration_052_runs_cleanly():
 
         conn2 = sqlite3.connect(str(db_path))
         try:
-            run_migrations(conn2)
+            run_migrations(conn2, target_version=52)
             cols = [
                 row[1] for row in conn2.execute("PRAGMA table_info(canonical_events)").fetchall()
             ]

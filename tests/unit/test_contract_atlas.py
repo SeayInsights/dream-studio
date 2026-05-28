@@ -315,13 +315,13 @@ def test_sanitizer_scrubs_posix_and_dream_studio_paths() -> None:
         "appdata_path": {
             "installed_runtime_model": {
                 "context_packet_fallback": {
-                    "path": "C:\\Users\\runner\\AppData\\Local\\dream",
+                    "path": "/home/runner/.local/share/dream",
                 },
             },
         },
         "live_backup_root": {
             "boundary_violation_report": {
-                "note": "scan excluded Dream Studio Live Backups",
+                "note": "scan excluded operator backup directory",
             },
         },
     }

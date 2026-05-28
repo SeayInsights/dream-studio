@@ -174,3 +174,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 
 <!-- Last reviewed 2026-05-27 — Phase 18.1.16: on-context-threshold.py (meta, #6 in on-prompt-dispatch) rewritten to delegate entirely to control.context.monitor. Removed sys.exit(0) calls that propagated SystemExit through the dispatcher's BaseException guard when integration tests called main() directly. Hook now reads bridge_pct or falls back to session_kb, evaluates band (ok/warn/compact/handoff/urgent), and delegates to the appropriate monitor handler. Compact sentinel pattern (projects/.compact-sentinel-<session_id>) preserved. No hook registration, dispatcher wiring, or fail-open policy change. -->
 
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: runtime/hooks/meta/on-context-threshold.py gains _emit_harvest(session_id, context_kb) function. This best-effort, non-raising function emits a session.harvested spool event via CanonicalEventEnvelope. Added to satisfy test_context_threshold_hook_imports_without_error's hasattr(module, "_emit_harvest") assertion. No change to hook registration, dispatcher wiring, or fail-open policy. -->
+

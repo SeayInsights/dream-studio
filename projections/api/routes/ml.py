@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional, Literal
 from datetime import datetime
 from pathlib import Path
-import sqlite3
 
 from projections.ml import (
     PatternDetector,
@@ -179,11 +178,11 @@ def _read_sql(db_path: str, query: str):
             detail="pandas is required for analytics. Install with: pip install pandas",
         )
 
-    conn = sqlite3.connect(db_path)
-    try:
+    from pathlib import Path as _Path
+    from core.event_store.studio_db import _connect as _open_conn
+
+    with _open_conn(_Path(db_path)) as conn:
         return pd.read_sql_query(query, conn)
-    finally:
-        conn.close()
 
 
 def collect_time_series_data(metric: str, days: int = 30, input_path: Optional[str] = None):

@@ -120,9 +120,9 @@ from spool.session_harvester import (
 
 
 def test_sanitize_removes_windows_path():
-    text = "Error at C:\\Users\\Dannis\\myfile.py line 42"
+    text = "Error at C:\\Users\\Example\\myfile.py line 42"
     result = _sanitize(text)
-    assert "C:\\Users\\Dannis\\myfile.py" not in result
+    assert "C:\\Users\\Example\\myfile.py" not in result
     assert "[PATH]" in result
 
 
