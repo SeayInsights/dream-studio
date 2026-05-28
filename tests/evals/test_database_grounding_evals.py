@@ -276,9 +276,7 @@ def test_attribution_coverage_query_shape(tmp_path: Path, monkeypatch) -> None:
     assert abs(result["partial_pct"] - 50.0) < 1.0
     assert abs(result["orphan_pct"] - 16.7) < 1.0
     # Percentages must sum to ~100%
-    total_pct = (
-        result["fully_attributed_pct"] + result["partial_pct"] + result["orphan_pct"]
-    )
+    total_pct = result["fully_attributed_pct"] + result["partial_pct"] + result["orphan_pct"]
     assert abs(total_pct - 100.0) < 1.0
 
 
@@ -302,8 +300,14 @@ def test_orphan_events_query_shape(tmp_path: Path, monkeypatch) -> None:
     assert len(results) == 1  # only 1 orphan was seeded
     ev = results[0]
     required_keys = {
-        "event_id", "timestamp", "attribution_status",
-        "project_id", "work_order_id", "task_id", "tool_name", "probable_cause",
+        "event_id",
+        "timestamp",
+        "attribution_status",
+        "project_id",
+        "work_order_id",
+        "task_id",
+        "tool_name",
+        "probable_cause",
     }
     assert required_keys.issubset(ev.keys())
     assert ev["attribution_status"] == "orphan"

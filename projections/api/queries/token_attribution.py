@@ -273,16 +273,18 @@ def orphan_events(project_id: Optional[str] = None, limit: int = 50) -> list[dic
         else:
             cause = "no attribution context captured"
 
-        results.append({
-            "event_id": row["event_id"],
-            "timestamp": row["timestamp"],
-            "attribution_status": status,
-            "project_id": row["project_id"],
-            "work_order_id": row["work_order_id"],
-            "task_id": row["task_id"],
-            "tool_name": row["tool_name"],
-            "probable_cause": cause,
-        })
+        results.append(
+            {
+                "event_id": row["event_id"],
+                "timestamp": row["timestamp"],
+                "attribution_status": status,
+                "project_id": row["project_id"],
+                "work_order_id": row["work_order_id"],
+                "task_id": row["task_id"],
+                "tool_name": row["tool_name"],
+                "probable_cause": cause,
+            }
+        )
     return results
 
 
