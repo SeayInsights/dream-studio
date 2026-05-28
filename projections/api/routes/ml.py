@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Any, Optional, Literal
 from datetime import datetime
 from pathlib import Path
-import sqlite3
 
 from projections.ml import (
     PatternDetector,
