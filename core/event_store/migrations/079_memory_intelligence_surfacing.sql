@@ -21,7 +21,20 @@ CREATE INDEX IF NOT EXISTS idx_memory_intelligence_surfaced
 ON memory_entries(intelligence_surfaced_at)
 WHERE intelligence_surfaced_at IS NOT NULL;
 
--- B: FTS sync triggers (contentless FTS5 — must manage index manually)
+-- B: Create memory_fts if it does not exist.
+--   memory_fts was originally created at application-startup time in
+--   core/memory/store.py, so it exists in live databases but NOT in
+--   fresh databases created by running migrations from scratch (e.g., test
+--   fixtures that start at schema version 0). This CREATE ensures the table
+--   exists before the sync triggers and backfill below are applied.
+CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+    memory_id UNINDEXED,
+    content,
+    category,
+    tags
+);
+
+-- FTS sync triggers (contentless FTS5 — must manage index manually)
 
 CREATE TRIGGER IF NOT EXISTS memory_entries_fts_insert
 AFTER INSERT ON memory_entries
