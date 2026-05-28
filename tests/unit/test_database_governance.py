@@ -124,7 +124,9 @@ class TestMigrationNumbering:
     def test_migration_011_exists(self):
         """Migration 011 gap was closed in phase 18.1.13 — file must exist."""
         files_011 = list(CANONICAL_MIGRATIONS.glob("011_*"))
-        assert len(files_011) == 1, "Migration 011 should exist (gap was closed by 011_memory_entries.sql)"
+        assert (
+            len(files_011) == 1
+        ), "Migration 011 should exist (gap was closed by 011_memory_entries.sql)"
 
     def test_migrations_are_numbered(self):
         for f in CANONICAL_MIGRATIONS.glob("*.sql"):
