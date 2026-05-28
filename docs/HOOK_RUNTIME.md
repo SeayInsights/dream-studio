@@ -99,6 +99,7 @@ the `production-readiness` workflow and explicit runtime authorization.
 7. `on-meta-review` — runtime/hooks/meta
 8. `on-workflow-progress` — runtime/hooks/core
 9. `on-changelog-nudge` — runtime/hooks/core
+10. `on-memory-ingest` — runtime/hooks/meta (18.4.5: batch-syncs reg_gotchas/raw_lessons/corrections/decisions into memory_entries; 300s cooldown; writes ~/.dream-studio/state/memory-ingest-last-run.json; emits memory.ingested canonical event)
 
 ### on-edit-dispatch (PostToolUse Edit|Write)
 1. `on-agent-correction` — runtime/hooks/quality

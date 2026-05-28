@@ -164,6 +164,8 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- Last reviewed 2026-05-27 — Phase 18.1.16: canonical/skills/workflow/docs/contracts/workflow-contract.md promoted from installed-only to canonical source. Defines the portable primitive contract for workflow skills (required fields, authority boundaries, portable rendering table, validation expectations). No engine, state, or gate policy change in this PR. -->
 
+<!-- Last reviewed 2026-05-28 — Phase 18.4.5: on-memory-ingest added to Stop HANDLERS (position 10). No workflow engine change — this is a hook addition, not a workflow template or execution graph change. Hook doc updates in docs/HOOK_RUNTIME.md. -->
+
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
