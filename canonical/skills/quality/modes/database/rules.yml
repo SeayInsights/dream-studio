@@ -16,6 +16,13 @@
 #   K → 18.7.1 db-compliance skill
 #
 # Rules with action.build_mode: null are audit-only (require file-level or ops context)
+#
+# Schema extension note (18.4.2):
+#   This skill introduces 'config_section' as a new detection.llm.context_scope value
+#   beyond what ds-quality:security uses. It extracts the relevant config block from
+#   config files (connection pool settings, WAL mode, backup config) rather than
+#   the full file. Other skills may adopt this value; it is an upward-compatible
+#   extension to the shared rules schema.
 
 rules:
 
@@ -57,7 +64,7 @@ rules:
       - inline_comment: "# db-001-suppress"
         reason: "Explicit operator acknowledgment — document why this table has no PK"
       - name_pattern: ".*(_bak|_backup|_temp|_old|_copy)[0-9]*$"
-        reason: "Migration backup/temp tables (CREATE TABLE x_bak AS SELECT) inherit PK from source; standard SQLite table-reconstruction pattern"
+        reason: "Migration backup/temp tables (CREATE TABLE x_bak AS SELECT) inherit PK from source; standard SQLite table-reconstruction pattern. NOTE: if a business table uses _bak/_temp naming, this suppression silently misses a real missing-PK violation. Avoid those suffixes for business tables."
 
     applies_to:
       languages: [sql, python]
@@ -209,11 +216,12 @@ rules:
     regulatory_anchors: []
 
     detection:
-      type: static
+      type: hybrid
       static:
         tool: semgrep
         fallback_to_llm: true
-        notes: "Semgrep regex: REAL or FLOAT or DOUBLE near financial field name (amount, price, cost, fee, payment, balance, total, revenue, tax, charge). LLM fallback for context-sensitive cases."
+        availability_note: "semgrep not installed in Dream Studio environment; this rule executes via LLM fallback. Install semgrep for cheaper static execution: pattern `(REAL|FLOAT|DOUBLE)` near financial field names."
+        notes: "Preferred static: semgrep regex on REAL/FLOAT/DOUBLE near financial field names. Current state: LLM fallback active (semgrep unavailable)."
       llm:
         prompt_template: null
         context_scope: full_file
@@ -381,11 +389,12 @@ rules:
     regulatory_anchors: []
 
     detection:
-      type: static
+      type: hybrid
       static:
         tool: semgrep
         fallback_to_llm: true
-        notes: "Detect f-string SQL construction: f'SELECT ... {var}', or % formatting with SQL keywords. Cross-reference with sec-002 (injection risk angle). This rule fires on the design pattern; sec-002 fires on the injection risk. Both may fire on the same code."
+        availability_note: "semgrep not installed in Dream Studio environment; this rule executes via LLM fallback. Install semgrep for cheaper static execution: pattern for f-string + SQL keyword combination."
+        notes: "Preferred static: semgrep on f-string SQL patterns. Current state: LLM fallback active. Cross-reference with sec-002 (injection risk angle): this rule fires on the design anti-pattern; sec-002 fires on the injection risk. Both may fire on the same code."
       llm:
         prompt_template: null
         context_scope: function
@@ -495,9 +504,9 @@ rules:
       - inline_comment: "# db-011-suppress"
         reason: "Destructive migration approved — pre-conditions verified (no live references, backup taken)"
       - pattern: "DROP TABLE .*(bak|temp|_old|_copy)[0-9]*"
-        reason: "Dropping migration backup/temp table (created in same migration as part of table-reconstruction pattern)"
-      - context_pattern: "CREATE TABLE .* AS SELECT .* FROM"
-        reason: "CREATE TABLE ... AS SELECT followed by DROP TABLE is a standard SQLite column-rename/type-change migration pattern"
+        reason: "Dropping migration backup/temp table (created in same migration as part of table-reconstruction pattern). Narrow pattern — only matches explicit _bak/_temp suffixes."
+      # context_pattern for "CREATE TABLE ... AS SELECT" was removed: too broad, could mask real DROP issues.
+      # Follow-up: add inline # db-011-suppress comments to affected migrations (022, 071) instead.
 
     applies_to:
       languages: [sql]

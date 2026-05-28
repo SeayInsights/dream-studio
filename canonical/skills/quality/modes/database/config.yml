@@ -14,11 +14,13 @@ scope_modes:
   sample_size: 50
 
 # Token budgets per scope mode
-# ESTIMATED — to be measured in Batch 7 (first real audit on dream-studio-clean)
-# Database rules are more localized than security (schema files, migrations, query code)
-# so full-repo cost should be significantly lower than security skill's 6M for large repos.
+# These are roadmap estimates. LLM cost measurement pending —
+# first real LLM-pass audit will validate. See 18.4.2-followup or
+# next real invocation report for measured values.
+# Batch 7 (18.4.2) ran static-only; LLM pass not yet executed.
+# Baseline reference: security skill measured 22k for --changed on 6 files.
 budgets:
-  max_tokens_per_audit_changed: 12000            # estimate; schema rules are fast to evaluate
+  max_tokens_per_audit_changed: 12000            # estimate; awaiting LLM-pass measurement
   max_tokens_per_audit_full_small: 300000         # repos < 200 files
   max_tokens_per_audit_full_medium: 1200000       # repos 200-500 files
   max_tokens_per_audit_full_large: 3000000        # repos > 500 files
