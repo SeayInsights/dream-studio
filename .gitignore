@@ -139,7 +139,7 @@ docs/repo_actions/
 docs/audits/
 docs/publication/
 .claude/
-.claude-plugin/
+.claude-plugin/plugin.json
 
 # Test output captures
 pytest-*.txt

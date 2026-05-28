@@ -1,7 +1,7 @@
-# Claude Code Dream Studio Projection
+# Local Model Dream Studio Projection
 
-adapter_id: claude
-adapter_type: claude
+adapter_id: local-model
+adapter_type: local_model
 project_id: dream-studio
 
 Authority:
@@ -12,14 +12,12 @@ Authority:
 
 Supported Context Packets:
 - resume
-- work_order_execution
-- review
+- offline_analysis
 
 Supported Result Types:
-- decision
-- code_change
+- analysis
 - validation
-- evidence
+- risk
 
 Resume Rules:
 - Use shared context packets and evidence refs.

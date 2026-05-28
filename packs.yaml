@@ -7,7 +7,7 @@ packs:
     modes: [think, plan, build, review, verify, ship, handoff, recap, explain]
     agents: [director, engineering, chief-of-staff]
     context: [session-context, session-primer, director-preferences, director-corrections, fullstack-standards]
-    hooks: [on-milestone-start, on-milestone-end, on-workflow-progress, on-changelog-nudge, on-stop-handoff]
+    hooks: [on-milestone-start, on-milestone-end, on-workflow-progress, on-changelog-nudge, on-stop-handoff, on-post-tool-use]
 
   quality:
     description: Code quality, learning, and structural discipline

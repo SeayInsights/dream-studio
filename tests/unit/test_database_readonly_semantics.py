@@ -16,6 +16,9 @@ pytestmark = pytest.mark.runtime_reliability
 def _fake_home(monkeypatch: pytest.MonkeyPatch, home: Path) -> Path:
     home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    # Clear the env-var override so _default_db_path() falls back to Path.home().
+    # conftest sets DREAM_STUDIO_DB_PATH to a guard path; these tests need it absent.
+    monkeypatch.delenv("DREAM_STUDIO_DB_PATH", raising=False)
     return home
 
 

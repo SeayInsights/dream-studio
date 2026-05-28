@@ -100,7 +100,7 @@ def test_emit_security_finding_spool_calls_redact_file_path(patched_db, db_path:
     """
     from core.telemetry.emitters import emit_security_finding
 
-    test_path = "C:\\Users\\Dannis Seay\\builds\\dream-studio-clean\\src\\config.py"
+    test_path = "/home/user/builds/dream-studio-clean/src/config.py"
 
     with (
         patch("spool.writer.write_event"),

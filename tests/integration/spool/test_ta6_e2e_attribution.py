@@ -107,16 +107,22 @@ def sdlc_hierarchy(ta6_db):
     finally:
         conn.close()
 
-    # 2. Milestone via canonical mutation.
-    from core.milestones.mutations import create_milestone
-
-    ms_result = create_milestone(
-        project_id=project_id,
-        title="TA6 Test Milestone",
-        source_root=_SOURCE_ROOT,
-    )
-    assert ms_result["ok"], f"create_milestone failed: {ms_result}"
-    milestone_id = ms_result["milestone_id"]
+    # 2. Milestone via direct SQL — create_milestone is projection-only and
+    #    does not write to business_milestones synchronously, same as work_order.
+    milestone_id = str(uuid.uuid4())
+    now_ms = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            "INSERT INTO business_milestones"
+            " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'pending', 0, ?, ?)",
+            (milestone_id, project_id, "TA6 Test Milestone", now_ms, now_ms),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     # 3. Work order via direct SQL — create_work_order is projection-only and
     #    does not write to business_work_orders synchronously, which breaks the

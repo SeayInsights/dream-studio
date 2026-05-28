@@ -1,7 +1,7 @@
-# Claude Code Dream Studio Projection
+# ChatGPT Dream Studio Projection
 
-adapter_id: claude
-adapter_type: claude
+adapter_id: chatgpt
+adapter_type: chatgpt
 project_id: dream-studio
 
 Authority:
@@ -12,14 +12,14 @@ Authority:
 
 Supported Context Packets:
 - resume
-- work_order_execution
+- research
 - review
 
 Supported Result Types:
 - decision
-- code_change
-- validation
-- evidence
+- research
+- review
+- risk
 
 Resume Rules:
 - Use shared context packets and evidence refs.

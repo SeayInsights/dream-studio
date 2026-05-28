@@ -1,7 +1,7 @@
-# Claude Code Dream Studio Projection
+# GitHub Copilot Dream Studio Projection
 
-adapter_id: claude
-adapter_type: claude
+adapter_id: copilot
+adapter_type: copilot
 project_id: dream-studio
 
 Authority:
@@ -11,14 +11,12 @@ Authority:
 - Config writes require a future explicit approval boundary.
 
 Supported Context Packets:
-- resume
-- work_order_execution
+- repo_instructions
 - review
 
 Supported Result Types:
-- decision
-- code_change
-- validation
+- code_suggestion
+- review
 - evidence
 
 Resume Rules:

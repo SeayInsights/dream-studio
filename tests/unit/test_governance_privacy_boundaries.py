@@ -241,9 +241,7 @@ def test_scanner_outputs_write_only_security_evidence_surfaces():
     )
 
     assert writes == [
-        ("projections/parsers/sarif_parser.py", "INSERT INTO", "activity_log"),
         ("projections/parsers/sarif_parser.py", "INSERT INTO", "sec_sarif_findings"),
-        ("projections/scoring/engine.py", "INSERT INTO", "activity_log"),
     ]
 
     offenders = [
@@ -295,19 +293,19 @@ def test_guardrail_trigger_fields_are_aligned_to_activity_log_schema():
     contract = _read(GOVERNANCE_CONTRACT)
 
     for token in [
-        "activity_type = ?",
-        "json_extract(event_data, '$.finding_type') = ?",
+        "event_type = ?",
+        "json_extract(payload, '$.finding_type') = ?",
         "severity = ?",
         "stream_id LIKE",
-        "activity_id = ?",
+        "event_id = ?",
     ]:
         assert token in evaluator_source
 
     for stale_token in [
-        "event_type = ?",
-        "json_extract(metadata",
+        "activity_type = ?",
+        "json_extract(event_data,",
         "tool_name = ?",
-        "event_id = ?",
+        "activity_id = ?",
     ]:
         assert stale_token not in evaluator_source
 
@@ -341,6 +339,29 @@ def _activity_log_conn() -> sqlite3.Connection:
     return conn
 
 
+def _canonical_events_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE canonical_events (
+            event_id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            trace JSON NOT NULL DEFAULT '{}',
+            severity TEXT NOT NULL DEFAULT 'info',
+            payload JSON NOT NULL DEFAULT '{}',
+            actor JSON,
+            confidence_score REAL,
+            source_type TEXT,
+            raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
+            raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            invocation_mode TEXT
+        )
+        """)
+    return conn
+
+
 def _guardrail_rule(trigger):
     from guardrails.models import GuardrailAction, GuardrailRule, Severity
 
@@ -358,62 +379,62 @@ def test_guardrail_trigger_matching_uses_supported_activity_log_fields():
     from guardrails.evaluator import evaluate_rule_trigger
     from guardrails.models import Severity, TriggerCondition
 
-    conn = _activity_log_conn()
-    cursor = conn.execute(
+    conn = _canonical_events_conn()
+    conn.execute(
         """
-        INSERT INTO activity_log
-        (activity_type, stream_id, stream_type, event_data, status, severity)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO canonical_events
+        (event_id, event_type, timestamp, severity, payload)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
+            "test-event-1",
             "security_finding",
-            "giskard:rule-1",
-            "security_scan",
+            "2026-05-27T00:00:00+00:00",
+            "critical",
             json.dumps(
                 {
                     "finding_type": "hardcoded credential",
                     "file_path": "src/app.py",
                 }
             ),
-            "completed",
-            "critical",
         ),
     )
-    activity_id = str(cursor.lastrowid)
+    event_id = "test-event-1"
 
     matching_trigger = TriggerCondition(
         event_type="security_finding",
         finding_type="hardcoded credential",
         severity=Severity.CRITICAL,
-        tool_name="giskard",
+        # tool_name omitted: stream_id/stream_type columns don't exist in canonical_events
         file_pattern=r"src/app\.py",
     )
-    assert evaluate_rule_trigger(_guardrail_rule(matching_trigger), activity_id, conn)
+    assert evaluate_rule_trigger(_guardrail_rule(matching_trigger), event_id, conn)
 
     missing_trigger = TriggerCondition(event_type="hook_execution", severity=Severity.CRITICAL)
-    assert not evaluate_rule_trigger(_guardrail_rule(missing_trigger), activity_id, conn)
+    assert not evaluate_rule_trigger(_guardrail_rule(missing_trigger), event_id, conn)
 
 
 def test_guardrail_custom_query_rejects_legacy_activity_log_fields():
     from guardrails.evaluator import evaluate_rule_trigger
     from guardrails.models import EvaluationError, TriggerCondition
 
-    conn = _activity_log_conn()
+    conn = _canonical_events_conn()
     conn.execute("""
-        INSERT INTO activity_log (activity_type, event_data, severity)
-        VALUES ('security_finding', '{"finding_type":"secret"}', 'critical')
+        INSERT INTO canonical_events (event_id, event_type, timestamp, severity, payload)
+        VALUES ('test-2', 'security_finding', '2026-05-27T00:00:00+00:00', 'critical', '{"finding_type":"secret"}')
         """)
 
     valid_query = TriggerCondition(
-        custom_query="SELECT 1 FROM activity_log WHERE activity_type = 'security_finding'"
+        custom_query="SELECT 1 FROM canonical_events WHERE event_type = 'security_finding'"
     )
     assert evaluate_rule_trigger(_guardrail_rule(valid_query), None, conn)
 
-    stale_query = TriggerCondition(
-        custom_query="SELECT 1 FROM activity_log WHERE event_type = 'security_finding'"
+    # activity_log was removed in migration 063; custom_query must use canonical_events.
+    legacy_query = TriggerCondition(
+        custom_query="SELECT 1 FROM activity_log WHERE activity_type = 'security_finding'"
     )
-    with pytest.raises(EvaluationError, match="unsupported activity_log field"):
-        evaluate_rule_trigger(_guardrail_rule(stale_query), None, conn)
+    with pytest.raises(EvaluationError, match="removed table"):
+        evaluate_rule_trigger(_guardrail_rule(legacy_query), None, conn)
 
 
 def test_security_and_audit_routes_keep_named_write_exceptions_only():
