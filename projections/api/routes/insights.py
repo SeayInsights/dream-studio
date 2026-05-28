@@ -1,7 +1,10 @@
 """Insights API routes"""
 
-from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, Query
+
+from core.telemetry.attribution_config import ATTRIBUTION_COVERAGE_MIN as _ATTRIBUTION_COVERAGE_MIN
 
 from ..models.insights import (
     InsightsResponse,
@@ -356,8 +359,6 @@ async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
 # ---------------------------------------------------------------------------
 # Attribution coverage — 18.4.2a
 # ---------------------------------------------------------------------------
-
-from core.telemetry.attribution_config import ATTRIBUTION_COVERAGE_MIN as _ATTRIBUTION_COVERAGE_MIN
 
 
 @router.get("/attribution-coverage")
