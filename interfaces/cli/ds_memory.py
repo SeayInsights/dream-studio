@@ -620,6 +620,41 @@ def cmd_memory_ingest_entries(args) -> int:
     return 0
 
 
+def cmd_memory_ingest_status(args) -> int:
+    """Entry point for `ds memory ingest-status`.
+
+    Reads ~/.dream-studio/state/memory-ingest-last-run.json and prints the
+    last automated ingestion run summary.
+    """
+    import os
+    from pathlib import Path
+
+    state_file = (
+        Path(os.path.expanduser("~")) / ".dream-studio" / "state" / "memory-ingest-last-run.json"
+    )
+    if not state_file.exists():
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "No ingestion run recorded yet. Memory ingestion fires automatically at session end via the Stop hook.",
+                }
+            )
+        )
+        return 0
+
+    try:
+        data = json.loads(state_file.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(
+            json.dumps({"ok": False, "error": f"Could not read state file: {exc}"}), file=sys.stderr
+        )
+        return 1
+
+    print(json.dumps(data, indent=2))
+    return 0
+
+
 def add_memory_subcommand(subparsers) -> None:
     """Register the 'memory' subcommand group onto the parent parser."""
     memory_parser = subparsers.add_parser("memory", help="Memory intelligence commands")
@@ -685,3 +720,9 @@ def add_memory_subcommand(subparsers) -> None:
         help="Report counts without writing to DB",
     )
     ingest_entries.set_defaults(func=cmd_memory_ingest_entries)
+
+    ingest_status = memory_sub.add_parser(
+        "ingest-status",
+        help="Show last automated memory ingestion run (from ~/.dream-studio/state/memory-ingest-last-run.json)",
+    )
+    ingest_status.set_defaults(func=cmd_memory_ingest_status)
