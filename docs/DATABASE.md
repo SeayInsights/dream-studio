@@ -156,6 +156,8 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
+<!-- Last reviewed 2026-05-28 — migration 079 fix: added CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts to migration 079 Part B. memory_fts was previously only created at application-startup time; fresh DBs built from migrations (test fixtures starting at schema v0) failed with "no such table: memory_fts". Fix is additive and safe on live DBs via IF NOT EXISTS. -->
+
 <!-- Last reviewed 2026-05-28 — 18.4.3-cleanup: studio_db.py modified (black reformatting only; no schema changes). Added inline cq-006-suppress comments to 3 JSON payload parsing sites. No primary authority table changes. No migration. -->
 
 <!-- Last reviewed 2026-05-28 — 18.4.4 Chain 7: migrations 079 + 080 extend memory_entries. 079 adds intelligence_surfaced_at (dedup field) + FTS sync triggers. 080 adds source_type/source_id/lifecycle_state and other columns required by MemoryStore.upsert_by_provenance (pre-existing schema gap). Both migrations use IF NOT EXISTS / nullable additions — safe on existing DBs. memory_entries authority unchanged (private local state). -->
