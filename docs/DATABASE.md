@@ -60,6 +60,14 @@ Current AI usage accounting authority lives in:
   validations, outcome, rework state, commit/PR/result refs, and
   security/readiness impact belong to a meaningful task or Work Order.
 
+Migration `081_cost_columns_numeric.sql` corrects the declared type of two
+financial columns from `REAL` (IEEE 754 float) to `NUMERIC(20,8)` (exact
+decimal): `token_usage_records.estimated_cost` and
+`ai_usage_operational_records.cost_amount`. The correction uses the standard
+table-reconstruction pattern; see `docs/architecture/aspirational-schema-debt.md`
+for a note on the `legacy_alter_table` PRAGMA choice and the pre-existing
+`vw_activity_timeline`/`canonical_events` debt surfaced during this migration.
+
 Tokens are usage telemetry. They are not dollars unless the adapter billing
 mode and source metadata explicitly make cost reportable. Plan/subscription
 usage preserves observed tokens where available and shows cost as unknown

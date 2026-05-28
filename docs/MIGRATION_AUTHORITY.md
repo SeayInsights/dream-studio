@@ -78,6 +78,19 @@ be reconciled into current telemetry authority without recreating
 `canonical_events`. The migration is repair-safe for partial historical
 fixtures by ensuring the target table exists before applying column additions.
 
+Migration `081_cost_columns_numeric.sql` is a type-correction migration (not
+additive). It converts `token_usage_records.estimated_cost` and
+`ai_usage_operational_records.cost_amount` from `REAL` to `NUMERIC(20,8)` to
+close `db-005` findings from the 18.4.2 database audit. SQLite does not support
+`ALTER COLUMN TYPE`; the migration uses the table-reconstruction pattern with
+`PRAGMA legacy_alter_table = ON` to sidestep SQLite 3.26+ view-validation
+during RENAME (explained in the migration file comment; `legacy_alter_table` is
+scoped ON/OFF within the migration, not persisted). The `db-005-suppress`
+comments in migrations 037, 042, and 043 mark the original REAL declarations
+that this migration supersedes. See `docs/architecture/aspirational-schema-debt.md`
+for architectural debt in `vw_activity_timeline`/`canonical_events` surfaced during
+pre-push diligence; remediation is deferred to 18.4.6.
+
 Migration `043_ai_usage_accounting.sql` is additive. It extends
 `token_usage_records` with adapter accounting visibility fields and creates
 `ai_adapter_accounting_profiles` plus `ai_usage_operational_records`. It does

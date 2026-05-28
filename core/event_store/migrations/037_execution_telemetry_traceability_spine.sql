@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS token_usage_records (
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
     total_tokens INTEGER NOT NULL DEFAULT 0,
-    estimated_cost REAL NOT NULL DEFAULT 0,
+    estimated_cost REAL NOT NULL DEFAULT 0,  -- db-005-suppress: original REAL type; corrected to NUMERIC(20,8) in migration 081
     purpose TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
