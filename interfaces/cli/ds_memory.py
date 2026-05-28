@@ -629,15 +629,26 @@ def cmd_memory_ingest_status(args) -> int:
     import os
     from pathlib import Path
 
-    state_file = Path(os.path.expanduser("~")) / ".dream-studio" / "state" / "memory-ingest-last-run.json"
+    state_file = (
+        Path(os.path.expanduser("~")) / ".dream-studio" / "state" / "memory-ingest-last-run.json"
+    )
     if not state_file.exists():
-        print(json.dumps({"ok": False, "error": "No ingestion run recorded yet. Memory ingestion fires automatically at session end via the Stop hook."}))
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": "No ingestion run recorded yet. Memory ingestion fires automatically at session end via the Stop hook.",
+                }
+            )
+        )
         return 0
 
     try:
         data = json.loads(state_file.read_text(encoding="utf-8"))
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": f"Could not read state file: {exc}"}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "error": f"Could not read state file: {exc}"}), file=sys.stderr
+        )
         return 1
 
     print(json.dumps(data, indent=2))
