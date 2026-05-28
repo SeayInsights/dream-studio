@@ -1,0 +1,17 @@
+# Accessibility skill — runtime configuration
+# This skill is invoked via subagent dispatch (Task tool).
+# Not directly callable via ds skill invoke in the current setup.
+
+invocation:
+  type: subagent-target          # invoked as accessibility-expert subagent
+  wrapper_agent: accessibility-expert
+  dispatch_path: ~/.claude/agents/accessibility-expert.md
+
+behavior:
+  graceful_degradation: true     # axe-core / lighthouse may not be installed
+  fallback_standard: WCAG 2.2 Level AA
+
+budgets:
+  # Not measured yet — first real audit will populate these
+  max_tokens_per_session: null
+  typical_tokens_per_audit: null
