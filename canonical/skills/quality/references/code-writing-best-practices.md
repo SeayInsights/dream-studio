@@ -6,7 +6,7 @@
 
 ## Boundary with sibling skills
 
-This document covers sections A, B, C, D, E, F, G, H, I, L, N of the master LIST 4. The following sections are deliberately excluded:
+This document covers sections A, B, C, D, E, F, G, H, I, L, M-partial, N of the master LIST 4. The following sections are deliberately excluded:
 
 - **Section J (Security in code)** — covered by ds-quality:security (18.4.1). Code-quality rules cross-reference sec-* rules rather than duplicate.
 - **Section K (Dependencies)** — deferred to ds-quality:types-dependencies (18.5.2).
@@ -148,7 +148,7 @@ When code-quality rules touch concepts in deferred sections, they cross-referenc
 - 🔴 Tests run in CI before merge
 - 🟠 Tests run fast locally
 
-**Note:** Future ds-quality:testing skill (18.5.1) will be the dedicated home for testing rules. Code-quality covers basics until then. When 18.5.1 ships, these rules either migrate or are reduced to cross-references.
+**Status: Source content preserved for future use. NOT implemented as rules in this skill (18.4.3).** The future ds-quality:testing skill (18.5.1) will implement testing rules. When 18.5.1 begins, it runs a pre-flight check to decide which Section G rules to implement. No rules from Section G appear in code-quality's rules.yml.
 
 ## H. Code structure & control flow
 
