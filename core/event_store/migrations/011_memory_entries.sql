@@ -1,8 +1,8 @@
--- Migration 078: Retained no-op guard for memory_entries table.
--- The canonical CREATE is at 011_memory_entries.sql (restored 2026-05-28).
--- This migration was briefly used as the sole source of the table creation
--- after 011 was renamed; 011 is now restored and this is a safe no-op.
--- IF NOT EXISTS means this is harmless on any DB state.
+-- Migration 011: Create memory_entries table.
+-- Previously created at startup by core/memory/store.py; moved to migration
+-- so fresh databases work. IF NOT EXISTS is intentional: existing DBs that had
+-- the table created by application code before this migration was added will
+-- skip the CREATE without error.
 
 CREATE TABLE IF NOT EXISTS memory_entries (
     memory_id TEXT PRIMARY KEY,

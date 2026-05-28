@@ -6,7 +6,7 @@ Migrations are numbered `NNN_description.sql` and applied in ascending order by 
 
 The following numbers are intentionally absent from the migration sequence. They were skipped during schema development and no files were ever created for them.
 
-- **011** — Filled in 2026-05-24 by migration `011_memory_entries.sql` (was the gap that caused fresh-install BLOCKER; the table was previously created at application startup by `core/memory/store.py`).
+- **011** — Filled in 2026-05-24 by migration `011_memory_entries.sql` (was the gap that caused fresh-install BLOCKER; the table was previously created at application startup by `core/memory/store.py`). Briefly renamed to 078 during CI repair batch2 (2026-05-28); restored to 011 in batch3. Migration 078 is a retained no-op guard.
 - **035** — Intentional skip. Number was reserved but never used; no migration was created or deleted.
 - **036** — Intentional skip. Number was reserved but never used; no migration was created or deleted.
 
