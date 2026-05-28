@@ -1394,7 +1394,7 @@ def get_latest_handoff(project_id: str, db_path: Path | None = None) -> dict | N
             if d.get(col):
                 try:
                     d[col] = json.loads(d[col])
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError):  # cq-006-suppress: intentional graceful degradation on malformed event payload. See: docs/architecture/event-store-corruption-tolerance.md
                     pass
         return d
     except Exception:
@@ -1427,7 +1427,7 @@ def get_latest_unconsumed_handoff(db_path: Path | None = None) -> dict | None:
             if d.get(col):
                 try:
                     d[col] = json.loads(d[col])
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError):  # cq-006-suppress: intentional graceful degradation on malformed event payload. See: docs/architecture/event-store-corruption-tolerance.md
                     pass
         return d
     except Exception:
@@ -2263,7 +2263,7 @@ def get_research_cache(topic: str, db_path: Path | None = None) -> dict | None:
             if d.get(col):
                 try:
                     d[col] = json.loads(d[col])
-                except (json.JSONDecodeError, TypeError):
+                except (json.JSONDecodeError, TypeError):  # cq-006-suppress: intentional graceful degradation on malformed event payload. See: docs/architecture/event-store-corruption-tolerance.md
                     pass
         return d
     except Exception:
