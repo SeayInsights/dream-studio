@@ -54,6 +54,7 @@ HANDLERS: list[tuple[str, Path]] = [
         PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-workflow-progress.py",
     ),
     ("on-changelog-nudge", PLUGIN_ROOT / "runtime" / "hooks" / "core" / "on-changelog-nudge.py"),
+    ("on-memory-ingest", PLUGIN_ROOT / "runtime" / "hooks" / "meta" / "on-memory-ingest.py"),
 ]
 
 STATE_DIR = Path.home() / ".dream-studio" / "state"
