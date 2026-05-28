@@ -1,0 +1,63 @@
+name: code-quality
+model_tier: sonnet
+description: "Code quality enforcement — audit and build modes"
+argument-hint: "audit | build"
+user_invocable: true
+args: mode
+
+# Scope mode flags for audit mode
+scope_modes:
+  default: changed
+  sample_size: 50
+  # circular-imports rule (cq-014) defaults to full-repo/sample only.
+  # Set circular_imports_in_changed: true to include in --changed scope.
+  circular_imports_in_changed: false
+
+# Token budgets per scope mode
+# These are roadmap estimates. LLM cost measurement pending —
+# first real LLM-pass audit will validate. See 18.4.3-followup or
+# next real invocation report for measured values.
+# Batch 7 (18.4.3) static-only pass first; LLM-pass pending.
+# Baseline reference: security skill measured 22k for --changed on 6 files.
+# Code-quality LLM costs expected HIGHER — more rules require semantic
+# reasoning (cq-001 one-job, cq-016 validation, cq-009 predicates).
+budgets:
+  max_tokens_per_audit_changed: 18000            # estimate; awaiting LLM-pass measurement
+  max_tokens_per_audit_full_small: 500000         # repos < 200 files
+  max_tokens_per_audit_full_medium: 2000000       # repos 200-500 files
+  max_tokens_per_audit_full_large: 6000000        # repos > 500 files (Dream Studio scale)
+  max_tokens_per_audit_sample: 35000             # 50 files
+
+# Gate: require --force-full for full-repo on large repos
+full_repo_llm_gate_file_count: 500
+
+# Function/class size thresholds (configurable per cq-002, cq-003, cq-005)
+thresholds:
+  max_function_lines: 50          # cq-002: functions > this are flagged
+  max_param_count: 4              # cq-003: params > this are flagged
+  max_nesting_depth: 3            # cq-005: nesting > this is flagged
+  min_confidence_for_llm_finding: 0.75
+  # Build mode: block on critical only (not high — see decision D4)
+  halt_on_critical_in_build: true
+  warn_on_high_in_build: true     # warn but don't block on high
+  suppression_default_expires_days: 90
+
+behavior:
+  llm_cache_enabled: true
+  cache_by: [rule_id, file_hash]
+  fallback_to_llm_when_tool_missing: true
+  log_tool_degradation: true
+  classify_before_fix: true
+
+# flake8 baseline awareness
+# When a finding co-locates with a known flake8-baselined line, mark it
+# rather than silently suppressing. Baseline path relative to repo root.
+flake8_baseline:
+  enabled: true
+  path: runtime/config/release-gates/flake8-baseline.txt
+  behavior: mark_with_baseline_note  # options: suppress | mark_with_baseline_note
+
+models:
+  default: sonnet
+  audit_llm_pass: sonnet
+  build_check: sonnet
