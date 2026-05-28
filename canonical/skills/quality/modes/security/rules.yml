@@ -115,6 +115,12 @@ rules:
       summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) — never string-format SQL."
       guide_ref: null
 
+    cross_references:
+      - rule_id: "db-009"
+        skill: "ds-quality:database"
+        reason: "db-009 fires on the same f-string SQL from the design-quality angle. sec-002 catches the injection risk; db-009 catches the anti-pattern. Both may fire co-located."
+        surface_co_located: true
+
     suppressions:
       - path_glob: "tests/**"
         reason: "Test fixtures may build SQL for test setup — review individually"
@@ -631,6 +637,12 @@ rules:
     remediation:
       summary: "Mask PII before logging: log user_id, not email. Redact sensitive query params from URL logs. Return generic error messages to clients; log details server-side only."
       guide_ref: null
+
+    cross_references:
+      - rule_id: "db-020"
+        skill: "ds-quality:database"
+        reason: "db-020 owns PII at the schema design layer (wrong column type/placement). sec-013 owns PII at the runtime layer (logging, URLs, error messages). Complementary — different code paths, different failure modes."
+        surface_co_located: false
 
     suppressions:
       - inline_comment: "# nosec"

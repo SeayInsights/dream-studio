@@ -409,6 +409,12 @@ rules:
       summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) or SQLAlchemy bound parameters. F-string SQL is both an injection risk (see sec-002) and a code quality anti-pattern — string construction makes queries hard to cache, trace, and safely modify."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
 
+    cross_references:
+      - rule_id: "sec-002"
+        skill: "ds-quality:security"
+        reason: "sec-002 fires on the same f-string SQL from the injection-risk angle; db-009 fires from the design-quality angle. Both may fire on the same line. Security catches the exploit; database catches the anti-pattern."
+        surface_co_located: true
+
     suppressions:
       - path_glob: "tests/**"
         reason: "Test fixtures may use string SQL for brevity — verify no user input reaches these"
@@ -889,6 +895,12 @@ rules:
     remediation:
       summary: "Store PII in explicitly named, typed columns with access control comments. Separate PII into its own table where feasible for access control granularity. Add column comments documenting sensitivity level. Cross-ref: sec-013 owns runtime PII leaks in logs/URLs."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#c-data-classification--minimization"
+
+    cross_references:
+      - rule_id: "sec-013"
+        skill: "ds-quality:security"
+        reason: "sec-013 owns runtime PII leaks (logs, URLs, error messages). db-020 owns schema-level PII classification (wrong column design). Different layers — schema design vs. runtime behavior."
+        surface_co_located: false
 
     suppressions:
       - inline_comment: "# db-020-suppress"
