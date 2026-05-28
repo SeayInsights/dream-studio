@@ -42,20 +42,25 @@ Filter file list: `.py`, `.ts`, `.js` files matching rules' `applies_to.file_typ
 
 **Load the flake8 baseline before running any analysis.**
 
+Baseline overlap detection is implemented in `canonical/skills/quality/shared/flake8_baseline.py`:
+
 ```python
-# Load known-debt lines from baseline
-baseline_path = "runtime/config/release-gates/flake8-baseline.txt"
-baseline_findings = load_flake8_baseline(baseline_path)
-# baseline_findings: set of (file_path, line_number) or (file_path, rule_code, line_text)
+from canonical.skills.quality.shared.flake8_baseline import (
+    load_flake8_baseline, is_baselined, BASELINE_ANNOTATION
+)
+
+baseline = load_flake8_baseline("runtime/config/release-gates/flake8-baseline.txt")
+# baseline: set of (relative_file_path, line_number) tuples
+# Returns empty set if file missing — never crashes
 ```
 
 When a code-quality finding co-locates with a baselined flake8 entry:
 - Per `config.yml:flake8_baseline.behavior: mark_with_baseline_note`:
   - **Do NOT suppress** the finding — it is still real signal
-  - **Annotate** the finding with: `(also in flake8-baseline: known accepted debt)`
+  - Call `is_baselined(finding.file, finding.line, baseline)` — if True, append `BASELINE_ANNOTATION` to the finding's explanation: `(also in flake8-baseline: known accepted debt)`
   - This makes "things we already know about" visible without drowning the report
 
-This ensures code-quality audit reveals the full scope of signal, while helping operators distinguish new findings from known-debt findings.
+This ensures code-quality audit reveals the full scope of signal, while helping operators distinguish new findings from documented technical debt (736 baseline entries as of 18.4.3).
 
 ---
 
