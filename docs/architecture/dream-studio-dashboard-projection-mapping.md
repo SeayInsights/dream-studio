@@ -451,6 +451,8 @@ recommended_next_work_order: none
 
 <!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->
 
+<!-- Last reviewed 2026-05-28 — 18.4.4 Memory Surface Panel: new dashboard tab `memory-surface` added under Intelligence sidebar (C7 badge). Sources: GET /api/v1/insights/memory-surface (projections/api/routes/insights.py) reads memory_entries and memory_fts (Chain 7 tables). Shows total entries, surfaced-this-session count, source type breakdown, and recently surfaced entries. No new projection table; dashboard reads direct from SQLite memory_entries runtime table (private local state per database contract). Derived view: primary_authority=false, db_write_authorized=false. -->
+
 <!-- Last reviewed 2026-05-28 — 18.4.2a Attribution Coverage Panel: new dashboard tab `attribution-coverage` added under Intelligence sidebar. Sources: GET /api/v1/insights/attribution-coverage (projections/api/routes/insights.py) and GET /api/v1/insights/attribution-coverage/orphans, both read from canonical_events via projections/api/queries/token_attribution.py. Panel is internal-first (marked with yellow "Internal" badge). No new projection table; dashboard reads direct from the canonical_events runtime table (zero synthetic data). The three-segment bar and drill-down are derived views; primary_authority=false per dashboard contract. -->
 
 

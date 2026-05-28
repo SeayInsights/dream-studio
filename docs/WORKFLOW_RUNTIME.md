@@ -172,6 +172,8 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
 
+<!-- Last reviewed 2026-05-28 — 18.4.4 reviewed; no workflow runtime changes in this PR. The on-context-inject hook is UserPromptSubmit-only and does not interact with the workflow engine, state, or orchestration layer. -->
+
 <!-- Last reviewed 2026-05-22 — Phase 18.0: spool/emitter.py created (C1 fix). on-context-threshold.py imported from spool.emitter but the module did not exist; every context threshold event silently failed. spool/emitter.emit() wraps CanonicalEventEnvelope + write_envelopes with a non-raising interface (returns True/False). No workflow YAML or hook registration change required. -->
 
 <!-- Last reviewed 2026-05-23 — Phase 18.1.9: control/execution/workflow/runner.py _BARE_TO_PACK entries corrected to use ds-* prefixed pack names (e.g., "core" → "ds-core", "quality" → "ds-quality") matching packs.yaml as of Slice 9. Fallback pack updated from "core" to "ds-core". Workflows using bare mode names in skill specifiers now route to the correct pack at runtime. No workflow YAML, gate, or state contract change. -->

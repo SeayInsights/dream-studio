@@ -156,6 +156,8 @@ Never commit live DB files, backups, WAL/SHM files, dumps, raw telemetry, cutove
 
 <!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
 
+<!-- Last reviewed 2026-05-28 — 18.4.4 Chain 7: migrations 079 + 080 extend memory_entries. 079 adds intelligence_surfaced_at (dedup field) + FTS sync triggers. 080 adds source_type/source_id/lifecycle_state and other columns required by MemoryStore.upsert_by_provenance (pre-existing schema gap). Both migrations use IF NOT EXISTS / nullable additions — safe on existing DBs. memory_entries authority unchanged (private local state). -->
+
 <!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->
 
 <!-- Last reviewed 2026-05-20 — A1 extraction: 22 CLI handlers refactored into importable functions under core/projects, core/work_orders, core/design_briefs, core/milestones, core/skills, core/health. ds.py wrappers are now thin (call function, print result, return exit code). No policy or contract change in this doc. -->
