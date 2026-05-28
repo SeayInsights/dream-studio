@@ -3,6 +3,18 @@
 Machine-checked projection of `.audit/dependency-chain-map-2026-05-17.md`
 (post-A0/A3 reclassifications in `.audit/dependency-chain-map-2026-05-20-post-A0-A3.md`).
 
+Chain 7 status — 2026-05-28 (18.4.4):
+  L1: PROVEN (session events → SQLite)
+  L2: UNTESTED (memory harvest trigger — manual only; automation is follow-up WO)
+  L3: PROVEN (technology signals schema — post-18.1.15a)
+  L4: ✅ PROVEN (18.4.4) — on-context-inject hook injects reg_gotchas from
+      memory_entries via FTS5+relevance before every UserPromptSubmit.
+      Verified with real data: 1488 reg_gotchas ingested via Batch 7.5,
+      hook surfaces relevant entries on accessibility/form/keyboard prompts.
+      Batch 8 real-data verification passed 2026-05-28.
+  L5: UNTESTED (raw_approaches → model routing)
+  L6: UNKNOWN (tech signals → skill recommendations)
+
 Every link in the 8-chain audit gets exactly one test here, totaling 46.
 Tests are organized by chain. The docstring of each test cites the current
 classification from the chain map. The body either:
@@ -446,14 +458,176 @@ def test_chain_7_link_3_technology_signals_schema_aligned():
     assert "ds_technology_signals" in content, "ds_technology_signals not referenced in harvester"
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="C7-L4 UNTESTED per chain map; no query path connects reg_gotchas to skill "
-    "invocation or context.md injection",
-)
-def test_chain_7_link_4_gotchas_to_skill_untested():
-    """C7-L4: reg_gotchas populated → skill invocations benefit. UNTESTED."""
-    pytest.fail("UNTESTED: gotchas stored but not consumed")
+def test_chain_7_link_4_memory_hook_query_path_exists():
+    """C7-L4: memory_entries hook injection path exists. PROVEN post-18.4.4.
+
+    The on-context-inject hook provides the query path from memory_entries
+    (populated by GotchaIngestionConsumer from reg_gotchas) to prompt context
+    via UserPromptSubmit. Tests:
+    - Hook file exists at expected path
+    - FTS search function is present
+    - Hook produces <project-memory> output on seeded DB
+    """
+    import os
+    import shutil
+    import sqlite3
+    import sys
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    repo_root = REPO_ROOT
+    hook_path = repo_root / "runtime" / "hooks" / "meta" / "on-context-inject.py"
+
+    # Hook file must exist
+    assert hook_path.is_file(), f"on-context-inject.py missing at {hook_path}"
+
+    # Hook must expose _fts_query and _search_memories
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("on_context_inject", hook_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(repo_root))
+    spec.loader.exec_module(mod)
+
+    assert hasattr(mod, "_fts_query"), "Hook missing _fts_query function"
+    assert hasattr(mod, "_search_memories"), "Hook missing _search_memories function"
+    assert hasattr(mod, "main"), "Hook missing main function"
+
+    # FTS query conversion works
+    query = mod._fts_query("modal dialog focus trap inert attribute")
+    assert "OR" in query, f"_fts_query should produce OR query, got: {query!r}"
+
+    # End-to-end: seeded DB → hook produces injection output
+    tmpdir = tempfile.mkdtemp(prefix="ds-c7-test-")
+    db_path = Path(tmpdir) / "studio.db"
+    try:
+        from core.event_store.studio_db import _connect, _run_migrations
+
+        with _connect(db_path) as c:
+            _run_migrations(c)
+            c.execute(
+                "INSERT INTO memory_entries"
+                " (memory_id, source, category, content, importance, created_at)"
+                " VALUES ('cg1', 'reg_gotchas', 'gotcha',"
+                " 'Modal dialogs need inert attribute on background to prevent focus escape',"
+                " 0.9, '2026-01-01')"
+            )
+            c.commit()
+
+        output_lines = []
+        with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
+            ):
+                mod.main({"prompt": "modal dialog focus trap inert attribute"})
+
+        output = "\n".join(output_lines)
+        assert (
+            "<project-memory>" in output
+        ), f"Hook produced no <project-memory> output. Got: {output!r}"
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_chain_7_hook_fails_open_on_empty_db():
+    """C7: Hook produces no output and no error when memory_entries is empty."""
+    import os
+    import shutil
+    import sys
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    repo_root = REPO_ROOT
+    hook_path = repo_root / "runtime" / "hooks" / "meta" / "on-context-inject.py"
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("on_context_inject_empty", hook_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(repo_root))
+    spec.loader.exec_module(mod)
+
+    tmpdir = tempfile.mkdtemp(prefix="ds-c7-empty-")
+    db_path = Path(tmpdir) / "studio.db"
+    try:
+        from core.event_store.studio_db import _connect, _run_migrations
+
+        with _connect(db_path) as c:
+            _run_migrations(c)
+            c.commit()
+
+        output_lines = []
+        with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_lines.append(str(a[0]))
+            ):
+                mod.main({"prompt": "modal dialog focus trap"})
+
+        assert output_lines == [], f"Empty DB produced output: {output_lines}"
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_chain_7_hook_dedup_within_session():
+    """C7: Hook does not re-inject a memory already surfaced in this session."""
+    import os
+    import shutil
+    import sys
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    repo_root = REPO_ROOT
+    hook_path = repo_root / "runtime" / "hooks" / "meta" / "on-context-inject.py"
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("on_context_inject_dedup", hook_path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(repo_root))
+    spec.loader.exec_module(mod)
+
+    tmpdir = tempfile.mkdtemp(prefix="ds-c7-dedup-")
+    db_path = Path(tmpdir) / "studio.db"
+    try:
+        from core.event_store.studio_db import _connect, _run_migrations
+
+        with _connect(db_path) as c:
+            _run_migrations(c)
+            c.execute(
+                "INSERT INTO memory_entries"
+                " (memory_id, source, category, content, importance, created_at)"
+                " VALUES ('dd1', 'reg_gotchas', 'gotcha',"
+                " 'Modal dialogs need inert attribute on background', 0.9, '2026-01-01')"
+            )
+            c.commit()
+
+        session_id = "test-session-dedup"
+        output_first: list[str] = []
+        output_second: list[str] = []
+
+        with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_first.append(str(a[0]))
+            ):
+                mod.main({"prompt": "modal inert attribute", "session_id": session_id})
+
+        # First invocation should produce output
+        assert output_first, "First invocation produced no output"
+
+        with patch.dict(os.environ, {"DREAM_STUDIO_DB_PATH": str(db_path)}):
+            with patch(
+                "builtins.print", side_effect=lambda *a, **kw: output_second.append(str(a[0]))
+            ):
+                mod.main({"prompt": "modal inert attribute", "session_id": session_id})
+
+        # Second invocation with same session_id should not re-inject (dedup via intelligence_surfaced_at)
+        # Entry was stamped in first call; second call sees it as already surfaced
+        assert (
+            not output_second
+        ), f"Second invocation re-injected already-surfaced memory. Output: {output_second}"
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @pytest.mark.xfail(

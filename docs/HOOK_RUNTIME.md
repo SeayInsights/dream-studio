@@ -165,6 +165,8 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- Last reviewed 2026-05-20 — B.3: git pre-push hook + installer wiring landed. `ds workflow run pre-push --non-interactive` dispatches deterministic gates; `ClaudeCodeInstaller.git_repo_root` opt-in plants `<repo>/.git/hooks/pre-push`. No policy or contract change in this doc. -->
 <!-- Last reviewed 2026-05-22 — TA3: `runtime/hooks/core/on-post-tool-use.py` added. Registered via settings.json PostToolUse matcher:*; emits token.consumed canonical events. Added to Registered Hooks table above. -->
 
+<!-- Last reviewed 2026-05-28 — 18.4.4 Chain 7: `runtime/hooks/meta/on-context-inject.py` added to UserPromptSubmit HANDLERS list in on-prompt-dispatch.py (position after on-memory-retrieve). Queries memory_entries via FTS5 and injects relevant gotchas/lessons as <project-memory> XML block to stdout. Fail-open. 24-hour dedup via intelligence_surfaced_at field. No additionalContext JSON — uses same stdout pattern as on-memory-retrieve.py. -->
+
 
 <!-- Last reviewed 2026-05-22 — Phase 18.0 C2: on-prompt-validate.py (meta hook) gained HANDOFF_STALE_TTL_S=300 and HANDOFF_INJECTION_WINDOW_S=60 constants and _log_stale_handoff_discarded() helper. _check_pending_handoff() now deletes files older than HANDOFF_STALE_TTL_S (any status) and in_progress files past the injection window. Discards are logged to DS_DIAGNOSTICS_DIR/stale-handoff.jsonl. Prevents pending-handoff.json from persisting indefinitely across sessions. -->
 
