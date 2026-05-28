@@ -249,3 +249,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15b: ds.py updated to read skip_hook_install from config.json in _integrate_dispatch. No changes to the installed runtime contract, adapter routing, or global command surface described in this doc. -->
 
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ds.py gains --include-deleted flag on ds project list subcommand to surface soft-deleted projects. No changes to installed runtime paths, adapter routing contracts, global command surface, productization lifecycle, or platform hardening policy described in this doc. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: adapter-projections/ now contains all 8 generated files from default authority profiles (chatgpt, claude, codex, copilot, cursor, local-model, mcp, shell). The 7 previously missing files (removed in Phase 18.1.15a as stale drafts) have been regenerated from sqlite:adapter_authority_profiles defaults. The claude/CLAUDE.md file was also regenerated to match default profile sha256. No adapter boundary or projection authority policy change. -->

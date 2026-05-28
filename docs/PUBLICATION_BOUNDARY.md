@@ -186,3 +186,5 @@ career data, or unsanitized security/readiness findings.
 <!-- Last reviewed 2026-05-27 — fix/ci-gate-db-path-collision: ci_gate.py _isolated_test_env() now uses separate mkdtemp calls for HOME and DREAM_STUDIO_DB_PATH so conftest.guard_real_homedir's _db_redirected check returns True and the CI abort guard does not fire on test DB writes. No release gate policy change; this is a CI isolation bug fix only. -->
 
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: repo_publication_readiness.py extended with two precision exclusions: (1) contract_atlas.py added to _skip_private_content_scan_path() for known regex literal; (2) canonical/skills/quality/modes/security/ added to _skip_secret_scan_path() for deliberate fake API keys in smoke test docs. No publication boundary policy change. -->
