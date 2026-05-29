@@ -37,18 +37,41 @@ rules:
     # (not matching a unit test file) still passes if coverage > 0.
     # This avoids false criticals on modules that are tested via integration or differently-named files.
     #
-    # REQUIRES FULL TEST SUITE COVERAGE (confirmed by first audit 2026-05-29):
-    # Running evals-only coverage produces false positives — all 6 spot-checked 0%-from-evals
-    # modules had corresponding unit tests in tests/unit/. The evals scope covers only ~7% of
-    # code; 353 modules appear at 0% on evals but many are tested by unit tests.
-    # Always run: `coverage run -m pytest tests/` (full suite) before invoking tst-001.
-    # Evals-only run (tests/evals/) is NOT a valid input for this rule.
+    # OPERATING CONSTRAINT (confirmed by first audit 2026-05-29):
+    # tst-001 is a CI-time / non-Windows check. The full test suite OOMs on Windows locally;
+    # only evals run in the pre-push hook. Full-suite coverage is only available in remote CI
+    # or on a non-Windows machine. Therefore:
+    #   - tst-001 results from `ds-quality:testing audit` on Windows are unreliable for this rule.
+    #   - CI is the authoritative environment for tst-001.
+    #
+    # FAIL-LOUD ON INADEQUATE DATA: if the coverage data looks like evals-only (total < 15%),
+    # the rule must NOT emit critical findings — it must emit a single informational notice:
+    # "tst-001 requires full-suite coverage (actual: {%}%). Evals-only data detected — run
+    # `coverage run -m pytest tests/` in CI or on a non-Windows machine for accurate results."
+    # This is the fail-loud principle: a rule that can't run reliably on the given input should
+    # say so explicitly rather than emitting a wall of false criticals that look like real findings.
+    coverage_adequacy_threshold: 15    # coverage% below this → skip tst-001, emit inadequate-data notice
     detection:
       type: tool
       tool:
         name: coverage
         command: "coverage report --format=json"
-        notes: "Parse coverage.json; flag source files with 0% line coverage. REQUIRES full test suite run (coverage run -m pytest tests/), not evals-only. Evals-only coverage produces false positives (evals cover ~7% of code; modules tested by unit tests appear at 0% in evals-only data). If coverage data unavailable or only evals coverage available, fall back to path-scan with reduced confidence."
+        notes: |
+          Parse coverage.json; flag source files with 0% line coverage.
+
+          FAIL-LOUD CHECK FIRST: if total coverage < coverage_adequacy_threshold (default 15%),
+          do NOT emit tst-001 findings. Instead emit:
+          "tst-001 skipped: coverage data appears to be evals-only or incomplete (total: {%}%).
+          Full-suite coverage required (coverage run -m pytest tests/). Run in CI or on a
+          non-Windows machine. Windows pre-push hook runs evals only — this is a known
+          CI-discipline decision, not a test quality problem."
+          Then stop tst-001 execution for this run.
+
+          If total coverage >= threshold: proceed. Flag source files with 0% line coverage.
+          Excludes suppressions (example_usage.py, migrations, __init__.py with no implementation).
+
+          Fallback if no coverage data: path-scan with reduced confidence (check whether any
+          test file imports or exercises the module). Reduced confidence path only.
         fallback_to_llm: false
         fallback_to_path_scan: true
       llm:
@@ -864,7 +887,7 @@ rules:
 
 
   - id: "tst-015"
-    name: "Unit tests do not contain slow patterns (DB connections, network, subprocess)"
+    name: "Unit tests do not contain slow patterns (real DB/network/subprocess connections)"
     severity: medium
     category: speed
 
@@ -876,40 +899,83 @@ rules:
     # NOTE: This rule applies to tests/unit/** only.
     # Integration tests (tests/integration/**) and evals (tests/evals/**) legitimately
     # use DB connections and network. The "fast locally" requirement is unit-specific.
+    #
+    # CANDIDATE/CONFIRM STRUCTURE (same as tst-003 — identical static-can't-tell limitation):
+    # The static pass finds DB/network/subprocess patterns in unit test bodies, but cannot
+    # determine whether the connection is:
+    #   (a) An isolated test fixture (tmp_path, :memory:, bootstrap_database(tmp_path)) — FINE
+    #   (b) A real external connection (production DB, external API) — SLOW PATTERN VIOLATION
+    # Confirmed by first audit 2026-05-29: test_critique_gate.py uses bootstrap_database(tmp_path)
+    # and was flagged by static pass but is correctly isolated (not a slow pattern violation).
+    # Static pass severity = medium (candidate). LLM confirmation required to confirm
+    # the connection is real/external (not a fixture/tmp/in-memory path).
+    severity_static_candidate: medium    # severity from static pass alone
+    severity_confirmed: medium           # severity after LLM confirms connection is real/external
+    # (medium stays medium when confirmed — a slow unit test is meaningful but not critical)
 
     applies_to_paths:
       include: ["tests/unit/**"]
       exclude: ["tests/integration/**", "tests/evals/**"]
 
     detection:
-      type: static
+      type: hybrid
       static:
         tool: ast
         notes: |
           Parse tests/unit/**/*.py only. Flag test functions containing:
-          - sqlite3.connect() or similar DB connection (not via monkeypatched fixture)
-          - requests.get(), httpx.get(), urllib.request — real network calls
+          - sqlite3.connect() — DB connection pattern
+          - requests.get/post/put/delete(), httpx.get/post/put/delete() — HTTP calls
           - subprocess.run(), subprocess.Popen() — process invocation
-          - Any socket.connect() or similar network binding
-          Note: If the connection is through a fixture that redirects to tmp (like Dream Studio's
-          conftest.py redirecting DREAM_STUDIO_DB_PATH), it is NOT flagged.
-        fallback_to_llm: false
+          Report as: "CANDIDATE (medium severity) — slow pattern detected; confirm whether
+          the connection is isolated (tmp_path, :memory:, test fixture) or real/external."
+          DO NOT report as a confirmed finding — the static pass cannot distinguish
+          bootstrap_database(tmp_path) from sqlite3.connect(PRODUCTION_DB).
+        fallback_to_llm: true
       llm:
-        prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-015 — Unit tests do not contain slow patterns
+          Severity: medium (candidate) — confirm only if connection is real/external
+
+          The static analysis detected a DB/network pattern:
+          {static_finding_excerpt}
+
+          Is this connection REAL/EXTERNAL (slow pattern violation) or ISOLATED (fine)?
+
+          ISOLATED / NOT A VIOLATION:
+          - sqlite3.connect(str(tmp_path / "test.db")) or bootstrap_database(tmp_path)
+          - sqlite3.connect(":memory:")
+          - Connection through a pytest fixture that provides a tmp_path or in-memory DB
+          - Dream Studio's conftest.py pattern (DREAM_STUDIO_DB_PATH redirected to tmp)
+
+          REAL / EXTERNAL (violation — slow unit test):
+          - sqlite3.connect(PRODUCTION_DB_PATH) where path is not from tmp_path
+          - requests.get("https://real-api.com/...") — real HTTP call
+          - subprocess.run(["some_external_command"])
+          - A hardcoded database path not in a temp directory
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "location": "filename:function_name",
+           "excerpt": "the connection call and its argument, max 100 chars",
+           "explanation": "one sentence: why this is real/external or why it is isolated"}
+
+          Only return finding: true if confidence >= 0.75 AND the connection is real/external.
+        context_scope: function
+        estimated_tokens: 350
 
     triggers:
-      - "sqlite3.connect() or DB adapter call in tests/unit/ without fixture abstraction"
-      - "Real network call (requests/httpx) in tests/unit/"
-      - "subprocess.run() or Popen in tests/unit/"
+      - "sqlite3.connect() in tests/unit/ — confirm whether path is tmp/in-memory (isolated) or real (violation)"
+      - "Real HTTP call (requests/httpx) in tests/unit/ — confirm not mocked"
+      - "subprocess.run() or Popen in tests/unit/ — confirm not a test utility"
 
     suppressions:
       - inline_comment: "# slow-ok: integration boundary"
         reason: "Operator explicitly accepts slow pattern as integration boundary"
 
     remediation:
-      summary: "Move test to tests/integration/ (for legitimate integration tests) or replace the DB/network call with a mock or in-memory substitute. Use pytest fixtures to provide test doubles."
+      summary: "Move test to tests/integration/ (for legitimate integration tests) or replace the DB/network call with a mock or in-memory substitute. Use pytest fixtures to provide test doubles. If using bootstrap_database(tmp_path), this is NOT a violation — the fixture provides proper isolation."
       guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
 
     action:
