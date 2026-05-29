@@ -437,3 +437,5 @@ See [INSTALL.md](INSTALL.md) for a standalone installation reference.
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: 37 Linux CI failures repaired. Changes span: canonical_events table isolation, migration 078 (memory_entries), adapter projection file generation (7 new), publication readiness scan exclusions, cloud backup test mock, TA6 milestone direct SQL, context threshold hook _emit_harvest, ML routes sqlite3 import cleanup. No README policy change required. -->
 
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. The migration-risk gate is described in docs/operations/lightweight-github-ci-strategy.md. No README content change required; gate is an internal pre-push enforcement mechanism. -->
+
+<!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps (sqlite_bootstrap.py + schema_coherence.py now trigger appropriate domain reviews). No README content change required. -->

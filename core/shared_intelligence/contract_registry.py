@@ -177,6 +177,10 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "core/event_store/migrations/**",
             "core/event_store/studio_db.py",
             "core/config/database.py",
+            # O2: migration runner — schema-authority; changes require migration-docs review.
+            # Phase 18.4 evidence: every sqlite_bootstrap.py change involved swallow handler
+            # or migration ordering behavior, all schema-authority relevant.
+            "core/config/sqlite_bootstrap.py",
         ],
         "contract_refs": [
             "docs/MIGRATION_AUTHORITY.md",
@@ -500,6 +504,31 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "release_blocking": True,
         "freshness_policy": "platform_hardening_authority_or_surface_changes_require_policy_privacy_installer_demo_docs_refresh",
         "public_export_boundary": "private_evidence_stays_private_sanitized_rollups_and_demo_packets_only",
+    },
+    {
+        # O2: schema coherence audit detector — narrow domain, intentionally separate from
+        # sqlite_schema_authority. The detector's relevant doc is aspirational-schema-debt.md
+        # (what it finds, the severity logic, the blind spots), NOT DATABASE.md/MIGRATION_AUTHORITY.md
+        # which document the schema itself. Coupling the detector to schema-structure docs would
+        # create a stamp-trap: detector changes (finding types, severity, swallow inventory) have
+        # no bearing on the schema definition docs. Phase 18.4 evidence: every schema_coherence.py
+        # change was accompanied by a substantive aspirational-schema-debt.md update (PRs #103,
+        # #105, #106, #110). Zero cases where debt-doc review would have been content-free.
+        "domain_id": "schema_coherence_audit",
+        "domain_name": "Schema Coherence Audit",
+        "source_patterns": [
+            "core/config/schema_coherence.py",
+        ],
+        "contract_refs": [
+            "docs/architecture/aspirational-schema-debt.md",
+        ],
+        "docs_refs": [],
+        "required_doc_refs": [
+            "docs/architecture/aspirational-schema-debt.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "schema_coherence_audit_changes_require_debt_doc_refresh",
+        "public_export_boundary": "schema_coherence_findings_are_operational_evidence_not_public_claims",
     },
 )
 
