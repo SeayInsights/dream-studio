@@ -102,3 +102,5 @@ forbids host writes by default.
 <!-- Last reviewed 2026-05-27 — fix/ci-gate-db-path-collision: ci_gate.py _isolated_test_env() now uses separate mkdtemp calls for HOME and DREAM_STUDIO_DB_PATH so conftest.guard_real_homedir's _db_redirected check returns True and the CI abort guard does not fire on test DB writes. No release gate policy change; this is a CI isolation bug fix only. -->
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: docker-compose.yml was removed in this batch (not referenced by any active CI or test path). No docker module profile policy change. -->
+
+<!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No docker module profile change. -->

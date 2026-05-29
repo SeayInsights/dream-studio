@@ -134,13 +134,13 @@ core/config/state.py:29:1: F401 'core.config.database.get_connection' imported b
 core/dispatch/bus.py:24:1: F401 'dataclasses.field' imported but unused
 core/dispatch/bus.py:25:1: F401 'typing.Sequence' imported but unused
 core/event_store/event_store.py:11:1: F401 'pathlib.Path' imported but unused
-core/event_store/legacy_bridge.py:14:1: F401 'json' imported but unused
-core/event_store/studio_db.py:1206:5: F811 redefinition of unused 're' from line 5
+core/event_store/legacy_bridge.py:15:1: F401 'json' imported but unused
+core/event_store/studio_db.py:1208:5: F811 redefinition of unused 're' from line 5
 core/event_store/studio_db.py:16:1: E402 module level import not at top of file
 core/event_store/studio_db.py:17:1: E402 module level import not at top of file
 core/event_store/studio_db.py:26:5: F401 'core.adapters.models.CanonicalEvent' imported but unused
 core/event_store/studio_db.py:27:5: F401 'core.events.trace.TraceContext' imported but unused
-core/event_store/studio_db.py:520:39: E741 ambiguous variable name 'l'
+core/event_store/studio_db.py:522:39: E741 ambiguous variable name 'l'
 core/event_store/studio_db.py:5:16: E401 multiple imports on one line
 core/event_store/studio_db.py:5:1: F401 're' imported but unused
 core/event_store/studio_db.py:5:1: F811 redefinition of unused 'sys' from line 4
@@ -148,6 +148,7 @@ core/event_store/studio_db.py:60:1: E731 do not assign a lambda expression, use 
 core/execution/ci_collector.py:127:9: F841 local variable 'e' is assigned to but never used
 core/execution/context_compiler.py:392:22: F541 f-string is missing placeholders
 core/execution/github_adapter.py:121:13: F841 local variable 'result' is assigned to but never used
+core/gates/migration_risk.py:88:11: F541 f-string is missing placeholders
 core/graph/query.py:861:49: E203 whitespace before ':'
 core/learning/correction_patterns.py:58:25: E203 whitespace before ':'
 core/learning/pattern_learning.py:13:1: E731 do not assign a lambda expression, use a def
@@ -166,7 +167,6 @@ core/org_intelligence/cross_repo_analyzer.py:8:1: F401 'typing.Set' imported but
 core/org_intelligence/cross_repo_analyzer.py:8:1: F401 'typing.Tuple' imported but unused
 core/org_intelligence/insight_engine.py:9:1: F401 'dataclasses.field' imported but unused
 core/org_intelligence/normalizer.py:8:1: F401 'typing.Set' imported but unused
-core/projections/framework.py:23:1: F401 'typing.Sequence' imported but unused
 core/projections/workflow_metrics.py:12:1: F401 'datetime.datetime' imported but unused
 core/projects/external_validation.py:135:5: F841 local variable 'commit_allowed' is assigned to but never used
 core/repo_actions/executor.py:252:13: F541 f-string is missing placeholders
@@ -217,10 +217,10 @@ core/validation/event_validator.py:12:1: F401 'typing.Optional' imported but unu
 core/work_orders/evals.py:31:1: F401 '.models.WorkOrderError' imported but unused
 core/work_orders/handoff.py:2907:5: F841 local variable 'final_decision' is assigned to but never used
 core/work_orders/handoff.py:3466:38: E203 whitespace before ':'
-guardrails/evaluator.py:284:19: F541 f-string is missing placeholders
-guardrails/evaluator.py:286:19: F541 f-string is missing placeholders
-guardrails/evaluator.py:288:19: F541 f-string is missing placeholders
-guardrails/evaluator.py:324:5: F841 local variable 'event_id' is assigned to but never used
+guardrails/evaluator.py:279:19: F541 f-string is missing placeholders
+guardrails/evaluator.py:281:19: F541 f-string is missing placeholders
+guardrails/evaluator.py:283:19: F541 f-string is missing placeholders
+guardrails/evaluator.py:319:5: F841 local variable 'event_id' is assigned to but never used
 guardrails/scanners/giskard_scanner.py:21:1: F401 'typing.Tuple' imported but unused
 guardrails/scanners/giskard_scanner.py:22:1: F401 'dataclasses.field' imported but unused
 guardrails/scanners/llm_guard_scorer.py:21:1: F401 'collections.Counter' imported but unused
@@ -274,7 +274,7 @@ interfaces/cli/dream_exec.py:39:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:40:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:41:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:42:1: E402 module level import not at top of file
-interfaces/cli/ds.py:1607:9: F841 local variable 'tool_id' is assigned to but never used
+interfaces/cli/ds.py:1645:9: F841 local variable 'tool_id' is assigned to but never used
 interfaces/cli/ds_analytics/analyzer.py:10:1: E402 module level import not at top of file
 interfaces/cli/ds_analytics/analyzer.py:9:1: E402 module level import not at top of file
 interfaces/cli/ds_analytics/backfill_pulse.py:18:35: E203 whitespace before ':'
@@ -375,7 +375,6 @@ projections/api/routes/intelligence.py:176:32: F541 f-string is missing placehol
 projections/api/routes/intelligence.py:482:30: F541 f-string is missing placeholders
 projections/api/routes/intelligence.py:62:9: F841 local variable 'avg_per_session' is assigned to but never used
 projections/api/routes/intelligence.py:75:26: F541 f-string is missing placeholders
-projections/api/routes/metrics.py:415:9: F841 local variable 'db_path' is assigned to but never used
 projections/api/routes/prd.py:20:1: E402 module level import not at top of file
 projections/api/routes/project_intelligence.py:12:1: F401 'typing.List' imported but unused
 projections/api/routes/project_intelligence.py:12:1: F401 'typing.Optional' imported but unused
@@ -541,7 +540,7 @@ projections/tests/test_exporters.py:12:1: F401 'unittest.mock.patch' imported bu
 projections/tests/test_insights.py:3:1: F401 'pytest' imported but unused
 projections/tests/test_reports.py:13:1: F401 'unittest.mock.MagicMock' imported but unused
 projections/tests/test_reports.py:13:1: F401 'unittest.mock.Mock' imported but unused
-projections/tests/test_reports.py:165:9: F841 local variable 'section_titles' is assigned to but never used
+projections/tests/test_reports.py:164:9: F841 local variable 'section_titles' is assigned to but never used
 projections/tests/test_reports.py:24:1: E402 module level import not at top of file
 projections/tests/test_reports.py:38:5: E722 do not use bare 'except'
 projections/tests/test_scheduler.py:111:9: F841 local variable 'job_id' is assigned to but never used
@@ -624,12 +623,8 @@ spool/ingestor.py:15:1: E402 module level import not at top of file
 spool/ingestor.py:5:1: F401 'signal' imported but unused
 spool/ingestor.py:8:1: F401 'dataclasses.field' imported but unused
 spool/session_harvester.py:18:1: F401 'dataclasses.field' imported but unused
-tests/conftest.py:98:1: E402 module level import not at top of file
-tests/conftest.py:99:1: E402 module level import not at top of file
-tests/core/test_dual_write.py:15:1: E402 module level import not at top of file
-tests/core/test_dual_write.py:96:23: F541 f-string is missing placeholders
-tests/integration/test_cloud_backup.py:282:9: F841 local variable 'db_path' is assigned to but never used
-tests/integration/test_daily_learning_pipeline.py:57:28: E741 ambiguous variable name 'l'
+tests/integration/test_cloud_backup.py:288:9: F841 local variable 'db_path' is assigned to but never used
+tests/integration/test_daily_learning_pipeline.py:60:28: E741 ambiguous variable name 'l'
 tests/integration/test_execution_graph_integration.py:25:1: E402 module level import not at top of file
 tests/integration/test_execution_graph_integration.py:26:1: E402 module level import not at top of file
 tests/integration/test_execution_graph_integration.py:27:1: E402 module level import not at top of file
@@ -666,7 +661,7 @@ tests/unit/test_compiler_routing.py:49:15: E741 ambiguous variable name 'l'
 tests/unit/test_compiler_routing.py:78:20: E741 ambiguous variable name 'l'
 tests/unit/test_context7_manager.py:10:1: E402 module level import not at top of file
 tests/unit/test_dashboard_safety.py:63:70: E203 whitespace before ':'
-tests/unit/test_design_brief.py:392:5: F841 local variable 'rc' is assigned to but never used
+tests/unit/test_design_brief.py:365:5: F841 local variable 'rc' is assigned to but never used
 tests/unit/test_document_catalog_integration.py:21:1: E402 module level import not at top of file
 tests/unit/test_document_catalog_integration.py:418:9: F841 local variable 'doc_id' is assigned to but never used
 tests/unit/test_entry_point_reliability.py:332:32: E203 whitespace before ':'
@@ -676,7 +671,7 @@ tests/unit/test_event_emission_reliability.py:25:1: E402 module level import not
 tests/unit/test_event_type_advisory.py:23:1: E402 module level import not at top of file
 tests/unit/test_execution_catalog_integration.py:20:1: E402 module level import not at top of file
 tests/unit/test_giskard_scanner.py:9:1: E402 module level import not at top of file
-tests/unit/test_global_ds_entry.py:184:45: F841 local variable 'mock_path_cls' is assigned to but never used
+tests/unit/test_global_ds_entry.py:187:45: F841 local variable 'mock_path_cls' is assigned to but never used
 tests/unit/test_lib_models.py:10:1: E402 module level import not at top of file
 tests/unit/test_llm_guard_scorer.py:9:1: E402 module level import not at top of file
 tests/unit/test_memory_catalog_integration.py:17:1: E402 module level import not at top of file
@@ -698,7 +693,7 @@ tests/unit/test_session_harvester.py:421:5: F841 local variable 'result' is assi
 tests/unit/test_session_harvester.py:450:5: F841 local variable 'result' is assigned to but never used
 tests/unit/test_session_harvester.py:549:5: F841 local variable 'result' is assigned to but never used
 tests/unit/test_skill_calibration.py:11:1: E402 module level import not at top of file
-tests/unit/test_skill_execution_logging.py:13:1: E402 module level import not at top of file
+tests/unit/test_skill_execution_logging.py:17:1: E402 module level import not at top of file
 tests/unit/test_studio_db.py:10:1: E402 module level import not at top of file
 tests/unit/test_version_check.py:165:5: F841 local variable 'original_open' is assigned to but never used
 tests/unit/test_version_check.py:193:21: F841 local variable 'result' is assigned to but never used
@@ -710,28 +705,3 @@ tests/unit/test_workflow_runner.py:14:1: E402 module level import not at top of 
 tests/unit/test_workflow_runtime_reliability.py:208:59: E203 whitespace before ':'
 tests/unit/test_workflow_runtime_reliability.py:258:47: E203 whitespace before ':'
 tests/unit/test_workflow_runtime_reliability.py:264:48: E203 whitespace before ':'
-tests/validation/T134_end_to_end_validation.py:252:29: F541 f-string is missing placeholders
-tests/validation/T145_end_to_end_validation.py:25:1: E402 module level import not at top of file
-tmp_debug_migrate.py:2:1: F401 'core.config.sqlite_bootstrap._migration_version' imported but unused
-tmp_debug_migrate.py:3:1: F401 'pathlib.Path' imported but unused
-tmp_run_migrations.py:3:1: E402 module level import not at top of file
-tmp_run_migrations.py:4:1: E402 module level import not at top of file
-tmp_schema2.py:12:104: E231 missing whitespace after ','
-tmp_schema2.py:12:122: E231 missing whitespace after ','
-tmp_schema2.py:12:143: E231 missing whitespace after ','
-tmp_schema2.py:12:28: E231 missing whitespace after ','
-tmp_schema2.py:12:44: E231 missing whitespace after ','
-tmp_schema2.py:12:65: E231 missing whitespace after ','
-tmp_schema2.py:12:86: E231 missing whitespace after ','
-tmp_schema_check.py:4:104: E231 missing whitespace after ','
-tmp_schema_check.py:4:122: E231 missing whitespace after ','
-tmp_schema_check.py:4:28: E231 missing whitespace after ','
-tmp_schema_check.py:4:44: E231 missing whitespace after ','
-tmp_schema_check.py:4:65: E231 missing whitespace after ','
-tmp_schema_check.py:4:86: E231 missing whitespace after ','
-verify_ta0.py:1:11: E401 multiple imports on one line
-verify_ta0.py:3:1: E402 module level import not at top of file
-verify_ta0b.py:1:11: E401 multiple imports on one line
-verify_ta0b.py:3:1: E402 module level import not at top of file
-verify_ta0b.py:4:1: E402 module level import not at top of file
-verify_ta0b.py:5:1: E402 module level import not at top of file

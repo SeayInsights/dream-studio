@@ -54,3 +54,16 @@ gates:
       drifted apart.
     command: [py, interfaces/cli/contract_docs_drift_gate.py]
     fail_hint: "Reconcile docs vs code, or update the drift baseline."
+
+  - id: migration-risk
+    description: >
+      Migration risk classifier. Detects SQL/migration-file changes and
+      requires explicit matrix-watch confirmation before merge. Migration
+      changes have historically passed local tests but failed on macOS/Windows
+      in the remote 3-platform matrix. Skip with
+      MIGRATION_RISK_ACKNOWLEDGED=1 git push after confirming matrix is running.
+    command: [py, -m, core.gates.migration_risk]
+    fail_hint: >
+      SQL/migration files changed. Run `gh pr checks <N> --watch` and confirm
+      all three platforms (ubuntu, macos, windows) are green before merging.
+      To bypass: MIGRATION_RISK_ACKNOWLEDGED=1 git push

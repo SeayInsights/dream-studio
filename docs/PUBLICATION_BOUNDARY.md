@@ -188,3 +188,5 @@ career data, or unsanitized security/readiness findings.
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: repo_publication_readiness.py extended with two precision exclusions: (1) contract_atlas.py added to _skip_private_content_scan_path() for known regex literal; (2) canonical/skills/quality/modes/security/ added to _skip_secret_scan_path() for deliberate fake API keys in smoke test docs. No publication boundary policy change. -->
+
+<!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No publication boundary change; migration SQL files and sqlite_bootstrap.py are not publication-boundary concerns. -->

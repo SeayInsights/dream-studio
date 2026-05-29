@@ -82,3 +82,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- Last reviewed 2026-05-27 — fix/ci-gate-db-path-collision: ci_gate.py _isolated_test_env() now uses separate mkdtemp calls for HOME and DREAM_STUDIO_DB_PATH so conftest.guard_real_homedir's _db_redirected check returns True and the CI abort guard does not fire on test DB writes. No release gate policy change; this is a CI isolation bug fix only. -->
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: repo_publication_readiness.py extended with precision exclusions for contract_atlas.py (private content scan) and canonical/skills/quality/modes/security/ (secret scan). No privacy policy change. -->
+
+<!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No repo publication privacy change; the new gate operates at pre-push time and does not affect what is or is not tracked in Git. -->
