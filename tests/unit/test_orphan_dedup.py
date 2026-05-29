@@ -94,11 +94,15 @@ class TestStandardCase:
         assert result.preserved_null == 0
         assert result.errors == []
 
-        remaining = conn.execute("SELECT memory_id FROM memory_entries ORDER BY memory_id").fetchall()
+        remaining = conn.execute(
+            "SELECT memory_id FROM memory_entries ORDER BY memory_id"
+        ).fetchall()
         assert [r[0] for r in remaining] == ["k1", "k2", "k3"]
 
         # FTS should have been cleaned up
-        fts_remaining = conn.execute("SELECT memory_id FROM memory_fts ORDER BY memory_id").fetchall()
+        fts_remaining = conn.execute(
+            "SELECT memory_id FROM memory_fts ORDER BY memory_id"
+        ).fetchall()
         assert [r[0] for r in fts_remaining] == ["k1", "k2", "k3"]
         conn.close()
 

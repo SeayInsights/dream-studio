@@ -37,9 +37,7 @@ def _has_fts_delete_trigger(conn: sqlite3.Connection) -> bool:
 
 
 def _has_memory_fts(conn: sqlite3.Connection) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE name='memory_fts'"
-    ).fetchone()
+    row = conn.execute("SELECT 1 FROM sqlite_master WHERE name='memory_fts'").fetchone()
     return row is not None
 
 
@@ -51,8 +49,7 @@ def find_orphan_candidates(conn: sqlite3.Connection) -> list[str]:
       - there exists at least one OTHER row with the same content AND
         source_type IS NOT NULL
     """
-    rows = conn.execute(
-        """
+    rows = conn.execute("""
         SELECT m.memory_id
         FROM memory_entries m
         WHERE m.source_type IS NULL
@@ -63,15 +60,13 @@ def find_orphan_candidates(conn: sqlite3.Connection) -> list[str]:
                 AND other.content = m.content
                 AND other.memory_id != m.memory_id
           )
-        """
-    ).fetchall()
+        """).fetchall()
     return [row[0] for row in rows]
 
 
 def count_unmatched_nulls(conn: sqlite3.Connection) -> int:
     """Count NULL entries with no keyed counterpart (these are preserved)."""
-    row = conn.execute(
-        """
+    row = conn.execute("""
         SELECT COUNT(*)
         FROM memory_entries m
         WHERE m.source_type IS NULL
@@ -82,8 +77,7 @@ def count_unmatched_nulls(conn: sqlite3.Connection) -> int:
                 AND other.content = m.content
                 AND other.memory_id != m.memory_id
           )
-        """
-    ).fetchone()
+        """).fetchone()
     return int(row[0]) if row else 0
 
 
