@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
+from core.config.sqlite_bootstrap import latest_migration_version
 from projections.api.main import app
 
 
@@ -19,7 +20,7 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(77, '2026-05-14T00:00:00Z')"
+            "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')", (latest_migration_version(),)
         )
         conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
         conn.execute(
