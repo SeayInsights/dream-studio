@@ -228,8 +228,9 @@ def test_install_safety_fresh_full_migration_sequence():
 
 def test_audit_detects_missing_nonunique_index_as_medium():
     """swallowed_statement_casualty: non-unique index missing → severity medium."""
+    import tempfile
+
     from core.config.schema_coherence import check_schema_coherence
-    import shutil, tempfile
 
     source_root = _source_root()
 
