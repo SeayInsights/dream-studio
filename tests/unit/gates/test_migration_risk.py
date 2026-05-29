@@ -18,13 +18,19 @@ def test_is_risk_file_sqlite_bootstrap():
     assert _is_risk_file("core/config/sqlite_bootstrap.py")
 
 
+def test_is_risk_file_schema_coherence_returns_true():
+    # schema_coherence.py is in _RISK_PATTERNS — if the schema auditor changes,
+    # the matrix-watch reminder fires.
+    assert _is_risk_file("core/config/schema_coherence.py")
+
+
 def test_is_risk_file_pure_python_returns_false():
-    assert not _is_risk_file("core/config/schema_coherence.py")
     assert not _is_risk_file("core/health/doctor.py")
     assert not _is_risk_file("tests/unit/test_schema_coherence_audit.py")
 
 
-def test_main_returns_zero_on_no_risk_files(capsys):
+def test_main_returns_zero_on_no_risk_files(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     with patch(
         "core.gates.migration_risk._changed_files",
         return_value=["core/health/doctor.py", "tests/unit/test_x.py"],
@@ -33,7 +39,8 @@ def test_main_returns_zero_on_no_risk_files(capsys):
     assert result == 0
 
 
-def test_main_returns_one_on_migration_change(capsys):
+def test_main_returns_one_on_migration_change(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     with patch(
         "core.gates.migration_risk._changed_files",
         return_value=["core/event_store/migrations/083_new.sql"],
@@ -46,7 +53,8 @@ def test_main_returns_one_on_migration_change(capsys):
     assert "gh pr checks" in captured.out
 
 
-def test_main_returns_one_on_sqlite_bootstrap_change(capsys):
+def test_main_returns_one_on_sqlite_bootstrap_change(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     with patch(
         "core.gates.migration_risk._changed_files",
         return_value=["core/config/sqlite_bootstrap.py"],
@@ -80,7 +88,8 @@ def test_main_bypass_with_env_var(monkeypatch, capsys):
     assert "bypassing" in captured.out.lower()
 
 
-def test_main_includes_platform_list(capsys):
+def test_main_includes_platform_list(monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     with patch(
         "core.gates.migration_risk._changed_files",
         return_value=["core/event_store/migrations/083_new.sql"],

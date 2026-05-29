@@ -1279,8 +1279,11 @@ def validate_reconciliation(
         """).fetchone()[0]
     quick_check = active_conn.execute("PRAGMA quick_check").fetchone()[0]
     errors = []
-    if active_has_canonical_events:
-        errors.append("active install must not recreate canonical_events")
+    # NOTE: active_has_canonical_events check removed (18.4.6-followup-1).
+    # Migration 083 deliberately creates canonical_events in all active DBs.
+    # The old check (active install must not recreate canonical_events) assumed
+    # canonical_events would be retired post-reconciliation, which is no longer
+    # the case. The table is now migration-owned and always present.
     if missing_source_ref_count:
         errors.append("import map contains imported rows without backup source refs")
     if execution_missing_refs:

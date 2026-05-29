@@ -232,10 +232,12 @@ def test_apply_imports_only_high_confidence_and_keeps_source_refs(tmp_path: Path
     assert token_ref[2] == 3
     assert token_ref[3] == "anthropic"
     assert validate_reconciliation(conn)["valid"] is True
+    # Migration 083 (18.4.6-followup-1) makes canonical_events migration-owned.
+    # It is now present in all properly-migrated active DBs — presence is expected.
     assert (
         conn.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_events'"
         ).fetchone()[0]
-        == 0
+        == 1
     )
     conn.close()
