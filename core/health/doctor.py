@@ -318,6 +318,10 @@ def run_doctor_checks(
     failed_info = _check_failed_events(paths.dream_studio_home)
     version_info = _check_version_current(source_root, paths.dream_studio_home)
 
+    from core.config.schema_coherence import check_schema_coherence
+
+    schema_coherence_info = check_schema_coherence(source_root=source_root)
+
     core_pass = validation["ready"]
     critical_fail = (
         not dispatcher_ok
@@ -404,6 +408,7 @@ def run_doctor_checks(
             "agents_installed": agents_info,
             "failed_events": failed_info,
             "version_current": version_info,
+            "schema_coherence": schema_coherence_info,
         },
         "validation": validation,
     }
