@@ -169,3 +169,46 @@ debt — columns exist and are queryable; no runtime failure. The 18.4.6 audit
 (`schema_coherence` check) focuses on structural references that fail at runtime
 (Python-owned tables, column mismatches). The column-naming pattern is out of scope
 for the automated audit. Remediation options above remain open for a future WO.
+
+---
+
+## Closed instance: coherence checks satisfiable by relabeling (the Phase 18.4 meta-pattern)
+
+**Discovered:** 2026-05-29 post-merge of PR #105, during 18.4.6-followup-1-postmerge coherence audit.
+**Fixed:** PR #106 (`_effective_swallow_classification()` in `core/config/schema_coherence.py`).
+**Cross-reference:** `.planning/workstreams/18-4-consolidation/coupling-map-audit.md` documents the same pattern in the docs-drift gate.
+
+**What happened:**
+
+PR #105 (migration 083) reclassified the canonical_events swallow entry in `_SWALLOW_INVENTORY` from `"classification": "stale"` to `"classification": "legitimate"`. The `schema_coherence` audit's `stale_swallow` finding immediately cleared — the headline "9 → 0 findings" was true, but the Q2 post-merge audit revealed that the finding cleared *because a string changed*, not because the audit probed whether the underlying condition had actually changed.
+
+The `stale_swallow` detection at the time was:
+```python
+for entry in _SWALLOW_INVENTORY:
+    if entry["classification"] == "stale":
+        findings.append(...)
+```
+
+This is a label-based check. Editing `"stale"` → `"legitimate"` silences the finding regardless of whether anything in the schema changed. The reclassification was factually correct (canonical_events IS now in `migration_tables` after migration 083), but the audit couldn't verify it — it just believed the label.
+
+**The fix:**
+
+`_effective_swallow_classification()` (PR #106) probes `migration_tables` for "no such table: X" patterns and overrides the hardcoded label with real evidence:
+- If X is in `migration_tables` → auto-classify as `"legitimate"` (table exists migration-side, sequencing issue)
+- If X is not in `migration_tables` AND X is in `_PYTHON_OWNED_TABLES` → auto-classify as `"stale"` (Python-owned table, real debt)
+- Otherwise → fall back to hardcoded classification
+
+This makes the canonical_events swallow classification *self-verifying*: if migration 083 were removed, canonical_events would drop out of `migration_tables` and the finding would automatically return. The reclassification is locked by two regression tests that confirm the check cannot be silenced by relabeling alone.
+
+**The meta-pattern:**
+
+Phase 18.4 encountered this same failure mode across multiple systems. A coherence check enforces a *label* rather than a *condition*. The label can be edited to satisfy the check without changing reality. Instances:
+
+1. **`stale_swallow` in `schema_coherence.py`** (this instance): fixed in PR #106.
+2. **`<!-- Last reviewed ... -->` stamps in docs-drift domains**: the coupling map fires when certain source files change; the gate is satisfied by appending a `<!-- Last reviewed -->` comment to a doc regardless of whether the doc was actually reviewed. See `coupling-map-audit.md` for the over-broad source_patterns that cause this gate to fire on unrelated changes, training operators to paste boilerplate. (Narrowing the coupling map is 18.4-consolidation-followup-1.)
+
+The pattern: **a check that enforces a label rather than a condition can be silenced by editing the label**. The fix is always the same — replace the label check with a probe of the underlying condition. For `stale_swallow`: probe `migration_tables`. For docs-drift stamps: narrow the source_patterns so the gate only fires on genuine dependencies, reducing the incentive to paste boilerplate.
+
+**Status of the two instances:**
+- Instance 1 (stale_swallow): CLOSED. Fixed in PR #106.
+- Instance 2 (docs-drift stamp-traps): OPEN as O1 in the Phase 18.4 open-debt ledger. Narrowing is 18.4-consolidation-followup-1.
