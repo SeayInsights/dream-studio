@@ -115,7 +115,6 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                     continue
                 if "no such table" in msg and (
                     "fts_gotchas" in msg
-                    or "memory_entries" in msg
                     or "ds_documents" in msg
                     # canonical_events: migrations 052-064 reference this table but run BEFORE
                     # migration 083 (which creates it) in the migration sequence. On fresh installs
@@ -126,6 +125,27 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                     or "canonical_events" in msg
                 ):
                     continue
+                # memory_entries: narrowed from substring-match to statement-type-aware (O7,
+                # 18.4-consolidation-followup-3). CREATE INDEX and CREATE TRIGGER on an absent
+                # memory_entries are M2 casualties — the migration intends to create a schema
+                # object, the broad substring swallow ate the failure, and the object silently
+                # never existed (confirmed casualty: idx_memory_lifecycle, migration 032, on DBs
+                # created before migration 011 added memory_entries 2026-05-24).
+                # Data statements (INSERT/UPDATE/ALTER TABLE/DROP/SELECT) on an absent
+                # memory_entries are graceful degradation — no schema object is permanently lost.
+                # Migration 011 ensures memory_entries exists before any migration that references
+                # it on a valid install. A CREATE INDEX/TRIGGER reaching this handler indicates
+                # a real installation problem that should surface, not be silently discarded.
+                # Seam verified: all CREATE INDEX/TRIGGER on memory_entries are in migrations
+                # 032, 078, 079, 080, 082 (all > v11) — they succeed on any valid install.
+                if "no such table" in msg and "memory_entries" in msg:
+                    stmt_upper = stmt.strip().upper()
+                    if not (
+                        stmt_upper.startswith("CREATE INDEX")
+                        or stmt_upper.startswith("CREATE TRIGGER")
+                    ):
+                        continue
+                    # CREATE INDEX and CREATE TRIGGER fall through to raise.
                 # Migration 081 reconstructs token_usage_records and
                 # ai_usage_operational_records to change column types.  Test fixtures
                 # that declare schema version 77 but omit these tables (or use an

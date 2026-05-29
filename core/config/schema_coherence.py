@@ -153,6 +153,60 @@ _SWALLOW_INVENTORY: list[dict[str, Any]] = [
 ]
 
 
+def _build_migration_object_inventory(source_root: Path) -> dict[str, dict[str, str]]:
+    """Build the set of indexes and triggers a full migration sequence should produce.
+
+    Returns:
+        {
+          "indexes": {name: sql_ddl},   # sql_ddl used to determine UNIQUE vs non-unique
+          "triggers": {name: sql_ddl},
+        }
+
+    Views are excluded: the M1-scar class (live-only objects like vw_activity_timeline,
+    present-in-live/absent-in-fresh) is the opposite direction from a swallowed casualty
+    and would false-positive without direction-aware diffing. Revisit when a fresh-only
+    view casualty is confirmed.
+    """
+    from core.config.sqlite_bootstrap import run_migrations
+
+    conn = sqlite3.connect(":memory:")
+    try:
+        run_migrations(conn)
+        indexes = {
+            row[0]: (row[1] or "")
+            for row in conn.execute(
+                "SELECT name, sql FROM sqlite_master "
+                "WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+        }
+        triggers = {
+            row[0]: (row[1] or "")
+            for row in conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
+            ).fetchall()
+        }
+        return {"indexes": indexes, "triggers": triggers}
+    finally:
+        conn.close()
+
+
+def _swallowed_casualty_severity(obj_type: str, ddl: str) -> str:
+    """Derive severity from object type and DDL text.
+
+    - Trigger: high (correctness loss — the automated op doesn't run)
+    - UNIQUE index: high (uniqueness constraint unenforced = silent data-integrity loss)
+    - Non-unique index: medium (performance loss only)
+
+    Severity is derived from the DDL so future migrations get correct severity
+    automatically — no hardcoded per-index list to maintain.
+    """
+    if obj_type == "trigger":
+        return "high"
+    if "UNIQUE" in ddl.upper():
+        return "high"
+    return "medium"
+
+
 def _effective_swallow_classification(entry: dict[str, Any], migration_tables: set[str]) -> str:
     """Derive the real classification of a swallow entry from migration schema state.
 
@@ -610,6 +664,92 @@ def check_schema_coherence(
                                     "Add missing columns via a new migration (ALTER TABLE ADD COLUMN)."
                                 ),
                                 "cross_references": [],
+                            }
+                        )
+
+                # ── Swallowed-statement casualties: index and trigger diff ──────────
+                # Compare live DB's index/trigger inventory against the migration-only set.
+                # Objects present in migration-only (fresh) but ABSENT in live are M2
+                # casualties: a migration intended to create them but the swallow handler
+                # silently discarded the creation statement.
+                # Direction-aware: only flag fresh-only absences (M2 class). Live-only
+                # objects (vw_activity_timeline etc.) are M1 scars — the opposite
+                # direction — and are intentionally not flagged here.
+                # Views excluded: M1-scar class (live-only views like vw_activity_timeline)
+                # would false-positive; revisit when a fresh-only view casualty is confirmed.
+                migration_inventory = _build_migration_object_inventory(source_root)
+                live_indexes = {
+                    r["name"]
+                    for r in conn.execute(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+                    ).fetchall()
+                }
+                live_triggers = {
+                    r["name"]
+                    for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='trigger'"
+                    ).fetchall()
+                }
+                for missing_idx, ddl in sorted(migration_inventory["indexes"].items()):
+                    if missing_idx not in live_indexes:
+                        sev = _swallowed_casualty_severity("index", ddl)
+                        findings.append(
+                            {
+                                "check": "schema_coherence",
+                                "severity": sev,
+                                "scope": "live_drift",
+                                "finding_type": "swallowed_statement_casualty",
+                                "object_type": "index",
+                                "object_name": missing_idx,
+                                "explanation": (
+                                    f"Index '{missing_idx}' is declared by a migration but absent "
+                                    "from the live DB. A swallow handler silently discarded its "
+                                    "creation — the migration runner reported success but the object "
+                                    "was never created (M2 mechanism). "
+                                    + (
+                                        "UNIQUE index: the uniqueness constraint is unenforced, "
+                                        "which may cause silent data-integrity failures."
+                                        if "UNIQUE" in ddl.upper()
+                                        else "Non-unique index: performance impact only, "
+                                        "no correctness loss."
+                                    )
+                                ),
+                                "remediation": (
+                                    "Add the index via a repair migration. "
+                                    "See docs/architecture/aspirational-schema-debt.md for the "
+                                    "M2 mechanism and docs/architecture/event-store-corruption-tolerance.md "
+                                    "for the repair-migration pattern."
+                                ),
+                                "cross_references": [
+                                    "docs/architecture/aspirational-schema-debt.md"
+                                ],
+                            }
+                        )
+                for missing_trig, ddl in sorted(migration_inventory["triggers"].items()):
+                    if missing_trig not in live_triggers:
+                        findings.append(
+                            {
+                                "check": "schema_coherence",
+                                "severity": "high",
+                                "scope": "live_drift",
+                                "finding_type": "swallowed_statement_casualty",
+                                "object_type": "trigger",
+                                "object_name": missing_trig,
+                                "explanation": (
+                                    f"Trigger '{missing_trig}' is declared by a migration but absent "
+                                    "from the live DB. A swallow handler silently discarded its "
+                                    "creation. Trigger absence is a correctness loss: the automated "
+                                    "operation the trigger performs (FTS sync, access tracking, etc.) "
+                                    "will not run."
+                                ),
+                                "remediation": (
+                                    "Add the trigger via a repair migration "
+                                    "(pattern: migration 082 for FTS triggers)."
+                                ),
+                                "cross_references": [
+                                    "docs/architecture/aspirational-schema-debt.md"
+                                ],
                             }
                         )
             finally:
