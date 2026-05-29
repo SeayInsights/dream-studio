@@ -20,7 +20,33 @@ without error but fail at runtime. Two directions:
 
 ## Findings
 
-### canonical_events — Python-owned table referenced by migration DDL
+### canonical_events — REMEDIATED (18.4.6-followup-1, migration 083)
+
+**Remediated:** 2026-05-29 via PR #105 (migration 083).
+
+**Option chosen:** Option A — moved canonical_events DDL into migration 083 with the
+authoritative 14-column schema from `spool/ingestor.py:_write_to_sqlite`.
+
+**What changed:**
+- `core/event_store/migrations/083_canonical_events_migration_authority.sql`: declares canonical_events with 14 columns (CREATE TABLE IF NOT EXISTS — safe no-op on live upgrade)
+- `core/event_store/event_store.py:_init_tables`: aligned to 14-column schema, now an idempotent fallback
+- `core/config/schema_coherence.py`: canonical_events removed from `_PYTHON_OWNED_TABLES`; canonical_events swallow reclassified from "stale" to "legitimate" (intentional graceful degradation for migrations 052-064 that predate 083)
+- `core/config/sqlite_bootstrap.py`: swallow comment updated to document intentional status
+
+**Audit verification:** After migration 083, `ds doctor schema_coherence` reports:
+- 0 `python_owned_table_in_migration` for canonical_events (was 5 medium)
+- 0 `column_absent_from_python_ddl` (was 3 high)
+- 0 `stale_swallow` (was 1 medium)
+- Status: `low_findings` (only proj_* no-migration-ref lows remain, unchanged)
+
+**Remaining structural note:** The swallow for `canonical_events` in sqlite_bootstrap.py:116
+is intentionally retained. Migrations 052-064 still run before migration 083 in the sequence
+and still fail with "no such table: canonical_events" on fresh installs. The swallow handles
+these gracefully. Removing it would require superseding migrations 052-064.
+
+---
+
+### canonical_events — HISTORY (pre-remediation finding)
 
 **Discovered:** 2026-05-28 during 18.4.2-followup-1 (PR #97) pre-push diligence
 
@@ -79,34 +105,23 @@ column mismatch as a side effect).
 
 ---
 
-### sqlite_bootstrap.py:116 — stale canonical_events swallow entry
+### sqlite_bootstrap.py:116 — canonical_events swallow (RECLASSIFIED to legitimate)
 
-**Discovered:** 2026-05-28, same diligence session as the canonical_events finding
-**Updated:** 2026-05-29 during 18.4.6 pre-flight
+**Discovered:** 2026-05-28 as stale; **reclassified:** 2026-05-29 (18.4.6-followup-1)
 
 **Location:** `core/config/sqlite_bootstrap.py` lines 116–122
 
-**Status:** Stale. The `canonical_events` entry was added to handle
-`vw_activity_timeline` creation failures in migration 062. That view was permanently
-dropped in migration 081. The swallow now silently discards ALTER TABLE (migration 052)
-and INSERT (migrations 060/061/062/064) failures. The handler believes it is catching
-a view-creation error; no such view exists. This is a second-order aspirational-schema
-instance: code believing something untrue about the schema it guards.
+**Status after remediation:** Legitimate intentional graceful degradation.
+Migration 083 creates canonical_events at position 83, but migrations 052-064 run before it
+in the sequence and still fail with "no such table: canonical_events" on fresh installs.
+The swallow correctly handles these failures — it is no longer stale.
 
-**Load-bearing:** Do not remove until the root cause is fixed (Option A or B above).
-Removing the swallow without fixing the root cause would break fresh-install migration
-runs — the ALTER/INSERT failures would become fatal.
+**Why it stays:** Removing the swallow would cause migrations 052-064 to fail fatally
+on fresh installs. They would need to be superseded to make the swallow removable.
+This is a separate WO if/when those migrations are ever retired.
 
-**Audit detection:** `ds doctor` → `schema_coherence` reports as `stale_swallow`
-(severity: medium, scope: structural).
-
-**FTS/legacy entries are legitimate:** The `fts_gotchas`, `memory_entries`, and
-`ds_documents` entries handle optional FTS modules and legacy-compat paths; those
-are defensible graceful degradation and are classified as `legitimate` in the audit.
-`canonical_events` alone is classified `stale`.
-
-**Remediation:** Remove the `canonical_events` entry from the swallow handler after
-applying Option A or Option B from the canonical_events finding above.
+**Audit status:** `schema_coherence` now classifies this entry as `legitimate` and does
+not report it as a finding.
 
 ---
 

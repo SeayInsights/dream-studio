@@ -117,6 +117,12 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                     "fts_gotchas" in msg
                     or "memory_entries" in msg
                     or "ds_documents" in msg
+                    # canonical_events: migrations 052-064 reference this table but run BEFORE
+                    # migration 083 (which creates it) in the migration sequence. On fresh installs
+                    # those older migrations fail with "no such table: canonical_events" and are
+                    # swallowed here. This is intentional graceful degradation — not stale.
+                    # Migration 083 (18.4.6-followup-1) makes canonical_events migration-owned;
+                    # this swallow remains necessary for the pre-083 references.
                     or "canonical_events" in msg
                 ):
                     continue

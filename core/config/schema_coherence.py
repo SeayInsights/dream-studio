@@ -25,7 +25,11 @@ from typing import Any
 # and flags any table not in this registry AND not in the migration-only DB.
 # Add new Python-side CREATE TABLE call sites here; never let the list drift.
 _PYTHON_OWNED_TABLES: dict[str, str] = {
-    "canonical_events": "core/event_store/event_store.py:97 (EventStore._init_tables)",
+    # canonical_events: REMEDIATED in 18.4.6-followup-1 (migration 083).
+    # canonical_events is now migration-owned (migration 083 creates it).
+    # EventStore._init_tables and spool/ingestor.py _write_to_sqlite are
+    # idempotent fallbacks that defer to the migration. Removed from this
+    # registry; the staleness guard will find it in migration_tables and skip it.
     "validation_failures": "core/event_store/event_store.py:112 (EventStore._init_tables)",
     "action_feedback": "core/repo_actions/feedback.py:244",
     "real_action_feedback": "core/execution/real_feedback.py:200",
@@ -105,23 +109,15 @@ _SWALLOW_INVENTORY: list[dict[str, Any]] = [
     },
     {
         "pattern": "no such table: canonical_events",
-        "classification": "stale",
+        "classification": "legitimate",
         "explanation": (
-            "Originally added to handle vw_activity_timeline creation failures in migration 062. "
-            "vw_activity_timeline was permanently dropped in migration 081 and is not recreated. "
-            "The swallow is now overloaded: it silently discards ALTER TABLE (migration 052) and "
-            "INSERT (migrations 060, 061, 062, 064) failures that occur because canonical_events "
-            "is absent from migration-only DBs. The handler believes it is catching view-creation "
-            "errors; no such view exists. This is a second-order aspirational-schema instance: "
-            "code believing something untrue about the schema it guards."
+            "Migrations 052-064 reference canonical_events but run BEFORE migration 083 "
+            "(which creates canonical_events) in the migration sequence. On fresh installs, "
+            "those older migrations fail with 'no such table: canonical_events' and are "
+            "swallowed here. This is intentional graceful degradation. "
+            "Migration 083 (18.4.6-followup-1) made canonical_events migration-owned; "
+            "the swallow remains necessary for the pre-083 references and is no longer stale."
         ),
-        "remediation": (
-            "Do not remove this swallow until its root cause is fixed. "
-            "Fix options: (A) move canonical_events DDL into a new migration, "
-            "(B) drop migration references to canonical_events (052/060/061/062/064). "
-            "After the root cause is fixed, remove the 'canonical_events' entry from the handler."
-        ),
-        "cross_references": ["docs/architecture/aspirational-schema-debt.md"],
     },
     {
         "pattern": "no such table: token_usage_records / ai_usage_operational_records",

@@ -90,21 +90,32 @@ class EventStore:
             conn.close()
 
     def _init_tables(self):
-        """Initialize database tables if they don't exist."""
+        """Initialize database tables if they don't exist.
+
+        canonical_events is primarily declared by migration 083.
+        This block is an idempotent fallback (IF NOT EXISTS) for environments
+        where the migration runner has not yet run (e.g. direct EventStore instantiation
+        in isolation). The column list matches migration 083's authoritative schema.
+        """
         with self._transaction() as conn:
-            # Canonical event stream (NEW architecture)
+            # Canonical event stream — mirror of migration 083 DDL.
+            # Migration 083 is the authoritative declaration; this is a runtime fallback.
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS canonical_events (
                     event_id TEXT PRIMARY KEY,
                     event_type TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
-                    trace JSON NOT NULL,
-                    severity TEXT NOT NULL,
-                    payload JSON NOT NULL,
+                    trace JSON NOT NULL DEFAULT '{}',
+                    severity TEXT NOT NULL DEFAULT 'info',
+                    payload JSON NOT NULL DEFAULT '{}',
                     actor JSON,
                     confidence_score REAL,
                     source_type TEXT,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
+                    raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    invocation_mode TEXT
                 )
             """)
 
