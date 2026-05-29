@@ -129,8 +129,7 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                 # in the migration removes any partial source table.  This matches
                 # the migration 070 pattern for partial-fixture tolerance.
                 if "no such table" in msg and (
-                    "token_usage_records" in msg
-                    or "ai_usage_operational_records" in msg
+                    "token_usage_records" in msg or "ai_usage_operational_records" in msg
                 ):
                     continue
                 # Migration 081 column-error counterpart: INSERT from a partial

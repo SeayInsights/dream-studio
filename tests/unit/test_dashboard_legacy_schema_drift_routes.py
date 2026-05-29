@@ -20,7 +20,8 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
         conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')", (latest_migration_version(),)
+            "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')",
+            (latest_migration_version(),),
         )
         conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
         conn.execute(
