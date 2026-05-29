@@ -20,88 +20,93 @@ without error but fail at runtime. Two directions:
 
 ## Findings
 
-### canonical_events — Python-owned table referenced by a migration-defined view
+### canonical_events — Python-owned table referenced by migration DDL
 
 **Discovered:** 2026-05-28 during 18.4.2-followup-1 (PR #97) pre-push diligence
 
-**Symptom:** `SELECT COUNT(*) FROM vw_activity_timeline` raises
-`no such table: main.canonical_events` on any DB initialized through migrations
-alone (without `EventStore` initialization).
+**Partial remediation (migration 081, Phase 18.4.5):** `vw_activity_timeline`
+was permanently dropped in `081_cost_columns_numeric.sql` (Part 0 + Part 3) and
+is NOT recreated. The view that triggered this finding is gone.
 
-**Root cause:** `canonical_events` is created by `EventStore._init_tables()` in
-`core/event_store/event_store.py:97` — not by any migration. Migration 062
-(`062_nullify_activity_id_backfill_and_replace_views.sql`) created
-`vw_activity_timeline`, which queries `FROM canonical_events`. The view has been
-unqueryable on migration-only DBs since migration 062, approximately 20 migrations
-ago. No test or runtime reader has raised the failure because the exception handler
-at `sqlite_bootstrap.py:120` silently swallows `OperationalError` where
-`"no such table"` and `"canonical_events"` both appear in the message.
+**Remaining debt:** `canonical_events` is still Python-owned (`EventStore._init_tables()`
+at `core/event_store/event_store.py:97`) and is still referenced by 5 migrations:
 
-**Reproduction:** Build any DB via the migration runner alone (no `EventStore`
-initialization). Query `SELECT COUNT(*) FROM vw_activity_timeline`. Error:
-`no such table: main.canonical_events`.
+| Migration | Reference type | Notes |
+|-----------|---------------|-------|
+| `052_invocation_mode.sql` | `ALTER TABLE canonical_events ADD COLUMN invocation_mode TEXT` | Swallowed: no such table |
+| `060_ta0b_backfill_execution_events_from_canonical.sql` | `UPDATE canonical_events ...` | Swallowed |
+| `061_backfill_sdlc_creation_events.sql` | `INSERT OR IGNORE INTO canonical_events (... raw_prompt_retained, raw_tool_output_retained, schema_version)` | Swallowed; see column-mismatch finding below |
+| `062_nullify_activity_id_backfill_and_replace_views.sql` | 6× `INSERT OR IGNORE INTO canonical_events (... raw_prompt_retained, ...)` | Swallowed |
+| `064_backfill_task_creation_events.sql` | `INSERT OR IGNORE INTO canonical_events (...)` | Swallowed |
 
-**Inverse-of-080 pattern:** Migration 080 was Python code referencing schema absent
-from migrations (forward reference in code). This is the mirror: a migration
-creating schema that references a Python-owned table. Both are aspirational-schema
-debt; both surface late; both are masked by silent-swallow patterns elsewhere in
-the stack.
+**Symptom (structural):** On any migration-only DB, all 5 migration operations on
+`canonical_events` fail silently (swallowed by `sqlite_bootstrap.py:116`). The
+system works only because EventStore initializes after migrations.
 
-**Scope for 18.4.6:** The audit should detect both directions — scan migrations for
-`FROM`/`JOIN`/`INTO` references to tables that appear in no `CREATE TABLE`
-migration statement, then cross-reference against Python `_init_tables()` calls.
-`canonical_events` should be the first hit.
+**Audit detection:** `ds doctor` → `schema_coherence` check reports these as
+`python_owned_table_in_migration` findings (severity: **medium**, scope: structural).
 
-**Recommended remediation (decision deferred to 18.4.6):**
-- **Option A** — Move `canonical_events` into a migration (e.g., migration 082+).
-  Note: EventStore's DDL for `canonical_events` lacks `raw_prompt_retained`,
-  `raw_tool_output_retained`, and `schema_version` columns that migration 062's
-  backfill assumed. A reconciliation migration would be needed.
-- **Option B** — Drop `vw_activity_timeline`. The view has been silently broken for
-  ~20 migrations with no identified runtime reader. Grep confirms no production
-  call site queries it directly. Cheaper and verifiable.
+**Recommended remediation:**
+- **Option A** — Move `canonical_events` DDL into a new migration (083+) with the
+  full column set: 10 Python-declared cols + `raw_prompt_retained` +
+  `raw_tool_output_retained` + `schema_version` + `invocation_mode` (added by 052).
+  EventStore._init_tables changes to `CREATE TABLE IF NOT EXISTS` (harmless idempotent).
+  Then remove the `canonical_events` entry from `sqlite_bootstrap.py:116`.
+- **Option B** — Drop migration references to `canonical_events` (migrations
+  052/060/061/062/064). The backfill data is already silently lost on fresh installs.
+  Remove the `canonical_events` swallow entry afterward.
 
 ---
 
-### sqlite_bootstrap.py:120 — schema-error swallowing in migration runner
+### canonical_events — column mismatch between migration INSERTs and Python DDL
 
-**Discovered:** 2026-05-28, same diligence session as above
+**Discovered:** 2026-05-29 during 18.4.6 pre-flight
+
+**Finding type:** `column_absent_from_python_ddl` (severity: **high**)
+
+**Root cause:** Migrations 061, 062, and 064 insert into `canonical_events` with
+columns `raw_prompt_retained`, `raw_tool_output_retained`, and `schema_version`.
+`EventStore._init_tables()` creates `canonical_events` with only 10 columns — none
+of these three. On upgrade paths from schema 58–62 where `canonical_events` already
+exists from a prior EventStore initialization (10 cols), the INSERT fails with
+`no such column: raw_prompt_retained` — an error the swallow handler does NOT catch.
+
+**Audit detection:** `ds doctor` → `schema_coherence` reports as
+`column_absent_from_python_ddl` (severity: high, scope: structural).
+
+**Remediation:** Resolved by either Option A or Option B above (both cover the
+column mismatch as a side effect).
+
+---
+
+### sqlite_bootstrap.py:116 — stale canonical_events swallow entry
+
+**Discovered:** 2026-05-28, same diligence session as the canonical_events finding
+**Updated:** 2026-05-29 during 18.4.6 pre-flight
 
 **Location:** `core/config/sqlite_bootstrap.py` lines 116–122
 
-**Current behavior:**
-```python
-if "no such table" in msg and (
-    "fts_gotchas" in msg
-    or "memory_entries" in msg
-    or "ds_documents" in msg
-    or "canonical_events" in msg
-):
-    continue
-```
+**Status:** Stale. The `canonical_events` entry was added to handle
+`vw_activity_timeline` creation failures in migration 062. That view was permanently
+dropped in migration 081. The swallow now silently discards ALTER TABLE (migration 052)
+and INSERT (migrations 060/061/062/064) failures. The handler believes it is catching
+a view-creation error; no such view exists. This is a second-order aspirational-schema
+instance: code believing something untrue about the schema it guards.
 
-**Concern:** This swallows schema-coherence failures — missing tables that
-migrations reference. It was added to handle graceful degradation for known-absent
-optional tables (FTS modules, legacy tables). But applying it to `canonical_events`
-hid the `vw_activity_timeline` breakage for ~20 migrations.
+**Load-bearing:** Do not remove until the root cause is fixed (Option A or B above).
+Removing the swallow without fixing the root cause would break fresh-install migration
+runs — the ALTER/INSERT failures would become fatal.
 
-**Compare to the approved cq-006 pattern** (documented in
-`docs/architecture/event-store-corruption-tolerance.md`): `studio_db.py` swallows
-malformed event *payload* errors at ingest time — data is the unknown, and partial
-writes are acceptable. That is appropriate graceful degradation. The
-`sqlite_bootstrap.py:120` handler swallows schema *reference* errors — schema is
-the contract, and a broken contract should surface. These two patterns are not
-equivalent.
+**Audit detection:** `ds doctor` → `schema_coherence` reports as `stale_swallow`
+(severity: medium, scope: structural).
 
 **FTS/legacy entries are legitimate:** The `fts_gotchas`, `memory_entries`, and
-`ds_documents` entries in the list handle optional FTS modules and legacy-compat
-paths. Those are defensible. `canonical_events` should be removed once the
-remediation in the finding above is applied.
+`ds_documents` entries handle optional FTS modules and legacy-compat paths; those
+are defensible graceful degradation and are classified as `legitimate` in the audit.
+`canonical_events` alone is classified `stale`.
 
-**Scope:** 18.4.6 follow-up, or its own small WO. Not blocking any current work.
-After canonical_events is moved into migrations or the view is dropped, audit the
-remaining entries to confirm each is optional-module graceful-degradation (as
-intended) rather than schema-coherence masking.
+**Remediation:** Remove the `canonical_events` entry from the swallow handler after
+applying Option A or Option B from the canonical_events finding above.
 
 ---
 
@@ -144,8 +149,8 @@ diverge as more consumers are added.
 3. Add a docstring to MemoryStore and a comment to migration 032/080 explaining
    the semantic distinction. Cheapest; documents the debt without fixing it.
 
-**Pattern for 18.4.6 to audit:**
-Look for column pairs on the same table where one name is a substring or near-match
-of the other (e.g., `name`/`display_name`, `type`/`subtype`, `id`/`source_id`).
-For each: is the semantic relationship between them documented? Could a developer
-write a correct query on the first try without reading the schema comments?
+**18.4.6 audit scope decision:** The `source`/`source_type` ambiguity is adjacent
+debt — columns exist and are queryable; no runtime failure. The 18.4.6 audit
+(`schema_coherence` check) focuses on structural references that fail at runtime
+(Python-owned tables, column mismatches). The column-naming pattern is out of scope
+for the automated audit. Remediation options above remain open for a future WO.
