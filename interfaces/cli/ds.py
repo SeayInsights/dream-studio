@@ -1840,7 +1840,12 @@ def _work_order_start(
             file=sys.stderr,
         )
         if sys.stdin.isatty():
-            answer = sys.stdin.readline().strip().lower()
+            try:
+                answer = sys.stdin.readline().strip().lower()
+            except OSError:
+                # On Windows, stdin may claim isatty()=True but fail on read
+                # (WinError 1) in certain pipe/test contexts. Treat as non-interactive.
+                answer = ""
             if answer not in ("y", "yes"):
                 return 0
         # Non-interactive context (tests, scripts): auto-accept to preserve
