@@ -26,9 +26,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # File patterns that constitute a migration-risk change.
 # Any changed path that matches one of these is considered high-risk.
+# Scope: the schema-authority set — files that declare or apply schema that the
+# migration runner alone cannot reproduce (Python DDL sites), or files that
+# control which schema operations are swallowed silently (the bootstrap runner).
+# This is deliberately wider than just the .sql files because the canonical_events
+# regression class (Phase 18.x) was caused by Python DDL in event_store.py and
+# the exception handler in sqlite_bootstrap.py, neither of which are .sql files.
 _RISK_PATTERNS = (
     "core/event_store/migrations/",  # SQL migration files
     "core/config/sqlite_bootstrap.py",  # migration runner + swallow handler
+    "core/event_store/event_store.py",  # EventStore._init_tables() — Python DDL for canonical_events
+    "core/config/schema_coherence.py",  # aspirational-schema audit — if the detector changes, re-watch
 )
 
 _MATRIX_PLATFORMS = "ubuntu-latest, macos-latest, windows-latest"

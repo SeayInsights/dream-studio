@@ -115,13 +115,35 @@ py -m interfaces.cli.ds design-brief lock <brief_id>
 - Never push to stale/old branches — check branch freshness first.
 - **Before pushing to a branch with an existing PR**, run `gh pr view <branch> --json state` to check if it's been merged or closed. If merged/closed, pull latest main, create a new branch, cherry-pick or reapply changes, and open a new PR. Never push commits to a branch whose PR is already merged.
 
+## Merge Authorization — Two-Tier Rule (universal, no exceptions)
+
+**Push authorization:** pre-push gate green (format, lint, skill-sync, evals, atlas-leak, docs-drift).
+
+**Merge authorization:** ALL THREE matrix platforms green — `ubuntu-latest`, `macos-latest`, `windows-latest`.
+
+**The correct merge sequence for every PR:**
+```powershell
+gh pr ready <N>
+gh pr checks <N> --watch   # wait for all 3 platforms — do NOT skip this
+gh pr merge <N> --squash --delete-branch
+```
+
+Never chain `gh pr ready && gh pr merge`. That skips the matrix watch and is the documented cause of Phases 18.4.x post-merge hotfixes.
+
+**Why this matters — the OOM/subset gap:** The pre-push gate runs `tests/evals/` only (a subset). The full test suite OOMs on Windows locally (exit 137) and only runs on remote CI. Passing the pre-push gate is necessary but not sufficient. Local-green ≠ CI-green — not because of subtle platform quirks alone, but because the local gate runs less. The remote 3-platform `pr-smoke` matrix is the only place the full suite runs on all platforms and is the sole source of merge-authorization confidence.
+
+**Migration-class escalation:** Changes to `core/event_store/migrations/`, `core/config/sqlite_bootstrap.py`, or `core/event_store/event_store.py` (Python DDL sites) additionally trigger the `migration-risk` pre-push gate, which prints the matrix-watch reminder and blocks push until acknowledged. The matrix-watch rule applies universally; the migration-risk gate is an escalation for the historically highest-risk change class.
+
+See `docs/operations/lightweight-github-ci-strategy.md` for the full rationale.
+
 ## Issue → PR Workflow (default for regular work)
 1. Create GitHub issue via `gh issue create`
 2. Create branch named after issue (e.g., `fix/issue-123-description`)
 3. Implement, build, verify
 4. Commit referencing issue: `fix: description (fixes #123)`
 5. Push branch and create PR with issue reference in body: `Fixes #123`
-6. Verify PR is green, then merge
+6. `gh pr checks <N> --watch` — all 3 platforms green
+7. Merge
 
 ## Debug Workflow
 When `ds-quality debug` finds a root cause: create GitHub issue with debug log, then follow Issue → PR workflow. Bugs found during Dream Command builds get tracked even if the fix is trivial.

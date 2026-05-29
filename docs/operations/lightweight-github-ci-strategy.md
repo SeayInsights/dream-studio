@@ -8,13 +8,44 @@ without burning a full matrix on every push.
 
 | Workflow | Trigger | Purpose | Cost posture |
 | --- | --- | --- | --- |
-| `.github/workflows/ci.yml` | pull request, manual | Cheap PR smoke: docs drift, Contract Atlas lifecycle, format, lint baseline, focused release/atlas tests | Required remote confidence |
-| `.github/workflows/full-ci.yml` | manual only | Remote run of `python interfaces/cli/ci_gate.py` when an operator wants GitHub-hosted parity evidence | Operator-triggered heavy check |
+| `.github/workflows/ci.yml` | pull request, manual | **3-platform matrix** (ubuntu-latest, macos-latest, windows-latest): docs drift, Contract Atlas lifecycle, format, lint baseline, focused release/atlas tests. `fail-fast: false` — all platforms run to completion even if one fails. | Required remote confidence |
+| `.github/workflows/full-ci.yml` | push to main, manual | Remote run of `python interfaces/cli/ci_gate.py` + full test suite with coverage. Ubuntu-only. Post-merge verification that the merge commit is healthy on Linux. | Comprehensive ubuntu check |
 | `.github/workflows/release-validation.yml` | manual or `v*` tag | Release-candidate evidence; runs the local release gate and release profile tests | Release-only evidence |
 | `.github/workflows/validate-skills.yml` | PRs changing `skills/**/*.md` | Path-scoped skill standards validation | Optional/path-scoped |
 
-The required branch-protection check is `pr-smoke`. Full CI and release
+The required branch-protection check is `pr-smoke` (3 platforms). Full CI and release
 validation are not required on every PR by default.
+
+**The 3-platform PR Smoke is the load-bearing gate.** It runs on `pull_request` against
+main — meaning it runs only on the PR branch, not after merge. `full-ci.yml` (post-merge)
+is ubuntu-only and provides no cross-platform confidence. If you merge before `pr-smoke`
+completes on all 3 platforms, you have committed code that has never been tested on macOS
+or Windows in this CI cycle.
+
+## Local Gate Reality
+
+The local gate runs a subset:
+
+```text
+pre-push hook (canonical/workflows/pre-push.yaml):
+  - format-check    (black --check)
+  - lint-check      (lint_baseline.py)
+  - skill-sync      (enforcement block regression check)
+  - test-suite      (tests/evals/ ONLY — subset to stay OOM-safe on Windows)
+  - atlas-leak      (contract atlas lifecycle)
+  - docs-drift      (contract docs drift)
+  - migration-risk  (schema-authority file change escalation)
+```
+
+The full test suite (`tests/`) OOMs on Windows locally (exit 137). It runs only in CI.
+`py interfaces/cli/ci_gate.py` is the single local entry point for comprehensive parity
+evidence (runs `tests/` + format + lint + docs drift + atlas lifecycle + security), but
+it is not safe to run locally on Windows for the same reason. Ubuntu is the practical
+target for `ci_gate.py` locally.
+
+**Local-green ≠ CI-green** — not because of subtle cross-platform SQLite quirks (though
+those exist), but because the local gate executes a subset of the test suite. Merge
+authorization must come from the remote 3-platform matrix, not from local gate results.
 
 ## Local Parity
 
@@ -39,6 +70,26 @@ that needs full confidence.
   evidence, but it is not burned on every push.
 - Deployment, tag creation, publishing, and merge remain explicit
   operator-approved actions.
+
+### The Universal Merge Sequence
+
+Every PR, no exceptions:
+
+```powershell
+gh pr ready <N>
+gh pr checks <N> --watch   # wait — do NOT skip this step
+gh pr merge <N> --squash --delete-branch
+```
+
+Never chain `gh pr ready && gh pr merge`. The chained form skips `pr-smoke`'s
+3-platform completion and is the documented cause of multiple post-merge hotfix
+cycles in Phase 18.x (migrations 081, 082, and the 18.4.6 near-miss).
+
+The `migration-risk` pre-push gate fires when schema-authority files change
+(migrations, sqlite_bootstrap.py, event_store.py) and blocks the push with a
+visible matrix-watch reminder. It is an escalation for the highest-risk change
+class; the universal matrix-watch rule applies to all PRs regardless of whether
+the migration-risk gate fired.
 
 If GitHub Actions is disabled, unaffordable, unavailable, or blocked by account
 limits, development is not blocked. The release gate should record the remote
