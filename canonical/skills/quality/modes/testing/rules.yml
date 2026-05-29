@@ -36,12 +36,19 @@ rules:
     # A module with 0% test coverage is critical. A module tested via integration tests
     # (not matching a unit test file) still passes if coverage > 0.
     # This avoids false criticals on modules that are tested via integration or differently-named files.
+    #
+    # REQUIRES FULL TEST SUITE COVERAGE (confirmed by first audit 2026-05-29):
+    # Running evals-only coverage produces false positives — all 6 spot-checked 0%-from-evals
+    # modules had corresponding unit tests in tests/unit/. The evals scope covers only ~7% of
+    # code; 353 modules appear at 0% on evals but many are tested by unit tests.
+    # Always run: `coverage run -m pytest tests/` (full suite) before invoking tst-001.
+    # Evals-only run (tests/evals/) is NOT a valid input for this rule.
     detection:
       type: tool
       tool:
         name: coverage
         command: "coverage report --format=json"
-        notes: "Parse coverage.json; flag source files with 0% line coverage. Requires coverage run to have been executed first. If coverage data unavailable, fall back to path-scan (check for any test file pattern in tests/ that imports the module) with reduced confidence."
+        notes: "Parse coverage.json; flag source files with 0% line coverage. REQUIRES full test suite run (coverage run -m pytest tests/), not evals-only. Evals-only coverage produces false positives (evals cover ~7% of code; modules tested by unit tests appear at 0% in evals-only data). If coverage data unavailable or only evals coverage available, fall back to path-scan with reduced confidence."
         fallback_to_llm: false
         fallback_to_path_scan: true
       llm:
@@ -605,6 +612,14 @@ rules:
     # A large gap means the gate permits large regressions before triggering.
     # This is the testing-skill instance of the phase's throughline:
     # a check nominally green but not enforcing what it claims.
+    #
+    # SCOPE NOTE (confirmed by first audit 2026-05-29):
+    # Evals-only coverage = 7% (Dream Studio), which is BELOW fail_under=8%.
+    # This means evals alone don't meet the enforcement floor — the gap finding only
+    # applies when running the full test suite (actual ~40%+, gap ~34 points).
+    # The gate CORRECTLY fires on evals-only (7% < 8%); that's different from the
+    # tst-010 gap finding (full suite actual >> fail_under).
+    # Always use full-suite coverage for tst-010 gap calculation.
     detection:
       type: tool
       tool:
