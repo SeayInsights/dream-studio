@@ -212,3 +212,35 @@ The pattern: **a check that enforces a label rather than a condition can be sile
 **Status of the two instances:**
 - Instance 1 (stale_swallow): CLOSED. Fixed in PR #106.
 - Instance 2 (docs-drift stamp-traps): OPEN as O1 in the Phase 18.4 open-debt ledger. Narrowing is 18.4-consolidation-followup-1.
+
+---
+
+## Live mechanism: swallowed migration statements (silent schema loss)
+
+**Discovered:** 2026-05-29, divergence diagnosis (followup-2) + complete sweep (followup-2-close).
+**Status:** OPEN as O7 in the Phase 18.4 open-debt ledger (Medium priority, not an 18.5 blocker).
+**Relation to Q2:** Same family — a signal that quietly stops meaning what it claims. Q2 was a check enforcing a label. This is a migration runner reporting "applied" while silently discarding the migration's effects.
+
+**Mechanism:**
+
+`sqlite_bootstrap.py`'s swallow handler catches "no such table" errors for covered tables (`memory_entries`, `canonical_events`, `fts_gotchas`, `ds_documents`, `ds_*`, `token_usage_records`, `ai_usage_operational_records`). The match is substring-based: `"memory_entries" in error_message`. When a migration statement references a covered table that is absent at run time — because it hasn't been created yet, was temporarily removed from the migration sequence, or the migration runner hasn't reached the table's own creating migration — the statement fails, the error is swallowed, and the migration is recorded as successfully applied in `_schema_version`. The statement's intended effect is silently discarded.
+
+**Confirmed casualty:**
+
+`idx_memory_lifecycle` (migration 032) — a non-unique index on `memory_entries(lifecycle_state)`.
+
+Root cause chain: migration 011 (`011_memory_entries.sql`) was absent from the initial publication (2026-05-14) and was added on 2026-05-24. The live DB was created on 2026-05-16. When migration 032 ran on this DB, `memory_entries` did not exist — there was no migration to create it, only Python code (MemoryStore) which hadn't run yet. All of migration 032's statements failed with "no such table: memory_entries" and were swallowed. The index was never created. Memory_entries was later created by Python code and extended by migration 080, which does not declare `idx_memory_lifecycle`. Result: the column exists, the index does not.
+
+**Complete sweep result (2026-05-29):**
+
+A comprehensive diff of all 511 migration-declared objects against the live DB copy found `idx_memory_lifecycle` is the **only** swallowed-statement casualty on this DB. No other index, trigger, view, or table-column is missing because of M2. The mechanism's realized blast radius on this specific live DB is exactly one benign index on a 1,488-row table.
+
+**Why it matters despite being benign:**
+
+The schema_coherence audit compares Python-owned tables vs. migrations and checks column mismatches. It does NOT detect swallowed-statement casualties — objects a migration tried to create but the swallow handler silently discarded. The audit's foundational assumption (`_schema_version` says applied → migration took effect) is exactly what M2 violates. A swallowed index leaves no trace. The audit would report "clean" on a DB that is missing an arbitrary number of swallowed objects; you find the casualties only by diffing live vs. fresh.
+
+This is the audit's documented blind spot. A future extension could add live-vs-fresh index and trigger comparison to the live-drift probe. This is not implemented.
+
+**Relation to the swallow handler (N2):**
+
+N2 in the ledger marks removal of the `canonical_events` swallow as intentionally-never (removing it would break fresh installs until migrations 052-064 are superseded). O7 reopens the narrowing question specifically: the `"memory_entries" in msg` pattern that swallowed migration 032 is a substring match that catches anything mentioning memory_entries — including CREATE INDEX statements on memory_entries that have nothing to do with the "graceful degradation for optional FTS module" intent. Narrowing from substring-match to table-and-statement-specific matching would prevent future M2 casualties without requiring migration supersession. This is a distinct operation from removal; N2's "never" applies to removal, not to narrowing.
