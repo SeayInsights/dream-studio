@@ -106,19 +106,19 @@ class TestRetiredViews:
 
 
 class TestRewrittenViews:
-    def test_vw_activity_timeline_reads_canonical_events(self, tmp_path):
+    def test_vw_activity_timeline_dropped_by_migration_081(self, tmp_path):
+        # vw_activity_timeline was created by migration 062 referencing canonical_events.
+        # Migration 081 drops it permanently: canonical_events is Python-owned
+        # (EventStore._init_tables) and absent from migrations, making the view
+        # unqueryable on any migration-only DB. Architectural debt tracked in
+        # docs/architecture/aspirational-schema-debt.md.
         db = tmp_path / "test.db"
         conn = _connect(db)
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='view' AND name='vw_activity_timeline'"
         ).fetchone()
         conn.close()
-        assert row is not None, "vw_activity_timeline should exist after migration 062"
-        assert "canonical_events" in row[0]
-        assert "activity_log" not in row[0], "vw_activity_timeline must not reference activity_log"
-
-    def test_vw_activity_timeline_is_queryable(self, db_with_canonical):
-        db_with_canonical.execute("SELECT * FROM vw_activity_timeline LIMIT 1").fetchall()
+        assert row is None, "vw_activity_timeline must be dropped by migration 081"
 
     def test_vw_guardrail_decisions_reads_guardrail_table(self, tmp_path):
         db = tmp_path / "test.db"
