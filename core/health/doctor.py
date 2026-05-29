@@ -320,7 +320,10 @@ def run_doctor_checks(
 
     from core.config.schema_coherence import check_schema_coherence
 
-    schema_coherence_info = check_schema_coherence(source_root=source_root)
+    # Use the canonical live-DB path (same resolver as database.py).
+    # paths.dream_studio_home is already resolved from the env/default chain.
+    live_db = paths.dream_studio_home / "state" / "studio.db"
+    schema_coherence_info = check_schema_coherence(source_root=source_root, live_db_path=live_db)
 
     core_pass = validation["ready"]
     critical_fail = (

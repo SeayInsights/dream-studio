@@ -51,6 +51,16 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
 # and the Python-side is a harmless idempotent fallback. Reported as informational.
 _DUAL_OWNED_TABLES: frozenset[str] = frozenset({"memory_fts"})
 
+# Files excluded from the staleness-guard scan.
+# The guard's own source and its test file contain DDL-pattern text for
+# illustrative/test purposes; scanning them would produce false positives.
+_SELF_SCAN_EXCLUDE: frozenset[str] = frozenset(
+    {
+        "core/config/schema_coherence.py",
+        "tests/unit/test_schema_coherence_audit.py",
+    }
+)
+
 # Columns declared in EventStore._init_tables for canonical_events.
 # Used in the supplementary column-level pass (Technique 1 extension).
 _CANONICAL_EVENTS_PYTHON_COLS: frozenset[str] = frozenset(
@@ -249,9 +259,12 @@ def _staleness_guard(
 
         def file_iter():  # type: ignore[misc]
             for py_file in sorted((source_root / "core").rglob("*.py")):
-                rel = str(py_file.relative_to(source_root))
+                # Normalise to forward-slash posix for cross-platform exclusion matching.
+                rel_posix = py_file.relative_to(source_root).as_posix()
+                if rel_posix in _SELF_SCAN_EXCLUDE:
+                    continue
                 try:
-                    yield rel, py_file.read_text(encoding="utf-8", errors="replace")
+                    yield rel_posix, py_file.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     pass
 
@@ -456,6 +469,35 @@ def check_schema_coherence(
                     }
                 )
 
+    # ── Structural: cross-reference enrichment ───────────────────────────────
+    # For migrations that have BOTH a python_owned_table_in_migration medium AND a
+    # column_absent_from_python_ddl high, enrich the medium's explanation so a reader
+    # can distinguish the ghost-view reference (historical, low risk) from the live
+    # INSERT column mismatch (actionable, unguarded crash path).
+    _high_mig = {
+        f["migration"] for f in findings if f.get("finding_type") == "column_absent_from_python_ddl"
+    }
+    for f in findings:
+        if f.get("finding_type") != "python_owned_table_in_migration":
+            continue
+        mig = f.get("migration", "")
+        ctx = f.get("context", "").upper()
+        # Detect view-query ghost: matched line is a FROM clause (SELECT/VIEW context).
+        is_view_ghost = ctx.startswith("FROM ") or " FROM " in ctx
+        if mig in _high_mig:
+            suffix = (
+                " — This reference is the dropped vw_activity_timeline view text "
+                "(migration 062 DDL; view permanently dropped by migration 081). "
+                "The view is gone but its immutable SQL remains in this migration file. "
+                "See the separate column_absent_from_python_ddl HIGH finding on this "
+                "same migration for the live, unguarded crash path."
+                if is_view_ghost
+                else " — This migration also has a column_absent_from_python_ddl HIGH "
+                "finding (live unguarded crash path). See that finding for the "
+                "actionable issue; this medium documents the structural reference."
+            )
+            f["explanation"] = f["explanation"] + suffix
+
     # ── Structural: staleness guard ───────────────────────────────────────────
     findings.extend(
         _staleness_guard(
@@ -483,7 +525,16 @@ def check_schema_coherence(
             )
 
     # ── Live drift: probe the live DB ─────────────────────────────────────────
-    if live_db_path is not None and live_db_path.is_file():
+    # Probe status is always explicit: "ran: N findings", "ran: 0 findings",
+    # or "skipped: no DB at <path>" — never a silent zero.
+    live_drift_probe_status: str
+    live_drift_findings_before = len([f for f in findings if f.get("scope") == "live_drift"])
+
+    if live_db_path is None:
+        live_drift_probe_status = "skipped: live_db_path not provided"
+    elif not live_db_path.is_file():
+        live_drift_probe_status = f"skipped: no DB at {live_db_path}"
+    else:
         try:
             conn = sqlite3.connect(str(live_db_path), timeout=5.0)
             conn.row_factory = sqlite3.Row
@@ -512,12 +563,19 @@ def check_schema_coherence(
                                     f"{sorted(missing_in_live)} that EventStore._init_tables declares. "
                                     "The table may have been created by an older EventStore version."
                                 ),
-                                "remediation": "Add missing columns via a new migration (ALTER TABLE ADD COLUMN).",
+                                "remediation": (
+                                    "Add missing columns via a new migration (ALTER TABLE ADD COLUMN)."
+                                ),
                                 "cross_references": [],
                             }
                         )
             finally:
                 conn.close()
+            n_new = (
+                len([f for f in findings if f.get("scope") == "live_drift"])
+                - live_drift_findings_before
+            )
+            live_drift_probe_status = f"ran: {n_new} finding{'s' if n_new != 1 else ''}"
         except Exception as exc:
             findings.append(
                 {
@@ -531,6 +589,7 @@ def check_schema_coherence(
                     "cross_references": [],
                 }
             )
+            live_drift_probe_status = f"error: {exc}"
 
     # ── Summarise ─────────────────────────────────────────────────────────────
     structural = [f for f in findings if f.get("scope") == "structural"]
@@ -547,5 +606,6 @@ def check_schema_coherence(
         "findings": findings,
         "scope_structural": len(structural),
         "scope_live_drift": len(live_drift),
+        "live_drift_probe_status": live_drift_probe_status,
         "summary": summary,
     }

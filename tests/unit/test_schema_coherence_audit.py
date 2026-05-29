@@ -287,6 +287,118 @@ def test_stale_swallow_is_reported():
         assert f["scope"] == "structural"
 
 
+# ── Fixture F: staleness guard ignores non-DDL CREATE TABLE text ─────────────
+
+
+def test_fixture_f_guard_ignores_comment_lines():
+    """Lines starting with # are skipped — CREATE TABLE in comments must not fire the guard."""
+    source_root = _source_root()
+    migration_tables = _build_migration_only_tables(source_root)
+
+    # All occurrences of CREATE TABLE are in Python comment lines.
+    fake_content = (
+        "# This helper creates tables like CREATE TABLE sample_thing\n"
+        "# See also: CREATE TABLE other_thing (id INTEGER)\n"
+        "# Example DDL: CREATE TABLE yet_another_thing (name TEXT)\n"
+    )
+    staleness_findings = _staleness_guard(
+        source_root,
+        migration_tables,
+        _override_python_files=[("core/some_helper.py", fake_content)],
+    )
+    flagged = {f.get("table") for f in staleness_findings}
+    assert "sample_thing" not in flagged, "Comment-line CREATE TABLE must not be flagged."
+    assert "other_thing" not in flagged, "Comment-line CREATE TABLE must not be flagged."
+    assert "yet_another_thing" not in flagged, "Comment-line CREATE TABLE must not be flagged."
+
+
+def test_fixture_f_guard_excludes_own_source_file():
+    """The staleness guard must not scan schema_coherence.py itself (self-exclusion)."""
+    source_root = _source_root()
+    migration_tables = _build_migration_only_tables(source_root)
+
+    # schema_coherence.py contains CREATE TABLE in its own source (the regex pattern,
+    # the _SELF_SCAN_EXCLUDE comment text, the docstrings). Run the guard against the
+    # real filesystem and confirm no findings come from schema_coherence.py itself.
+    all_findings = _staleness_guard(source_root, migration_tables)
+    self_findings = [f for f in all_findings if "schema_coherence" in f.get("file", "")]
+    assert (
+        not self_findings
+    ), f"Staleness guard must not flag its own source file. Got: {self_findings}"
+
+
+# ── Live-drift probe status ───────────────────────────────────────────────────
+
+
+def test_live_drift_probe_status_skipped_when_no_path():
+    """check_schema_coherence must report 'skipped' when live_db_path is not provided."""
+    result = check_schema_coherence(_source_root())
+    assert "live_drift_probe_status" in result
+    assert result["live_drift_probe_status"].startswith(
+        "skipped:"
+    ), f"Expected skipped status when no live_db_path, got: {result['live_drift_probe_status']}"
+
+
+def test_live_drift_probe_status_skipped_when_path_absent(tmp_path):
+    """check_schema_coherence must report 'skipped: no DB at <path>' for missing DB file."""
+    missing = tmp_path / "state" / "studio.db"
+    result = check_schema_coherence(_source_root(), live_db_path=missing)
+    assert result["live_drift_probe_status"].startswith(
+        "skipped: no DB at"
+    ), f"Expected 'skipped: no DB at ...' for missing path, got: {result['live_drift_probe_status']}"
+    assert str(missing) in result["live_drift_probe_status"]
+
+
+def test_live_drift_probe_status_ran_for_real_db(tmp_path):
+    """check_schema_coherence must report 'ran: N findings' when probe executes."""
+    from core.event_store.studio_db import _connect, _run_migrations
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    with _connect(db) as conn:
+        _run_migrations(conn)
+        conn.commit()
+
+    result = check_schema_coherence(_source_root(), live_db_path=db)
+    assert result["live_drift_probe_status"].startswith(
+        "ran:"
+    ), f"Expected 'ran: N findings' for real DB, got: {result['live_drift_probe_status']}"
+
+
+# ── Cross-reference enrichment ────────────────────────────────────────────────
+
+
+def test_medium_finding_on_migration_with_high_is_cross_referenced():
+    """Migration 062 medium must mention the high column_absent finding in its explanation."""
+    result = check_schema_coherence(_source_root())
+
+    mediums_062 = [
+        f
+        for f in result["findings"]
+        if f.get("finding_type") == "python_owned_table_in_migration"
+        and f.get("migration") == "062_nullify_activity_id_backfill_and_replace_views.sql"
+    ]
+    assert mediums_062, "Expected a medium finding for migration 062."
+    explanation = mediums_062[0]["explanation"]
+    assert "column_absent_from_python_ddl" in explanation or "HIGH" in explanation.upper(), (
+        "Migration 062 medium should cross-reference the HIGH column_absent finding. "
+        f"Got explanation: {explanation[:200]}"
+    )
+
+
+def test_high_finding_explanation_is_independently_actionable():
+    """HIGH column_absent findings must stand alone — not rely on the medium for context."""
+    result = check_schema_coherence(_source_root())
+    highs = _findings_of_type(result, "column_absent_from_python_ddl")
+    for f in highs:
+        expl = f["explanation"]
+        assert "no such column" in expl or "unhandled" in expl or "crash" in expl, (
+            f"High finding on {f.get('migration')} should clearly state the crash-path risk. "
+            f"Got: {expl[:200]}"
+        )
+        assert f.get("missing_columns"), "High finding must list the missing column names."
+
+
 # ── Doctor integration ────────────────────────────────────────────────────────
 
 
@@ -305,3 +417,4 @@ def test_doctor_includes_schema_coherence_check(tmp_path):
     assert "status" in sc
     assert "findings" in sc
     assert "summary" in sc
+    assert "live_drift_probe_status" in sc
