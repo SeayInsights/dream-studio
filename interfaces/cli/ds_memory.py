@@ -655,6 +655,34 @@ def cmd_memory_ingest_status(args) -> int:
     return 0
 
 
+def cmd_memory_dedup_orphans(args) -> int:
+    """Entry point for `ds memory dedup-orphans`.
+
+    Removes NULL-source_type memory_entries that have a content-matched keyed
+    counterpart. Dry-run by default; pass --execute to commit deletions.
+    """
+    from core.config.database import get_connection
+    from core.memory.orphan_dedup import dedup_orphans
+
+    try:
+        with get_connection() as conn:
+            result = dedup_orphans(conn, dry_run=not args.execute)
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
+        return 1
+
+    payload = {
+        "ok": not result.errors,
+        "mode": "execute" if args.execute else "dry_run",
+        "candidates_found": result.candidates_found,
+        "deleted": result.deleted,
+        "preserved_null_unmatched": result.preserved_null,
+        "errors": result.errors,
+    }
+    print(json.dumps(payload, indent=2))
+    return 0 if not result.errors else 1
+
+
 def add_memory_subcommand(subparsers) -> None:
     """Register the 'memory' subcommand group onto the parent parser."""
     memory_parser = subparsers.add_parser("memory", help="Memory intelligence commands")
@@ -726,3 +754,14 @@ def add_memory_subcommand(subparsers) -> None:
         help="Show last automated memory ingestion run (from ~/.dream-studio/state/memory-ingest-last-run.json)",
     )
     ingest_status.set_defaults(func=cmd_memory_ingest_status)
+
+    dedup_parser = memory_sub.add_parser(
+        "dedup-orphans",
+        help="Remove NULL-source_type memory_entries that have a content-matched keyed counterpart",
+    )
+    dedup_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Actually delete (default: dry-run, count only)",
+    )
+    dedup_parser.set_defaults(func=cmd_memory_dedup_orphans)
