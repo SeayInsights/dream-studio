@@ -253,3 +253,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt regenerated to remove stale entries for temp/scratch files that no longer exist (tmp_schema2.py, tmp_schema_check.py, verify_ta0.py, verify_ta0b.py). No policy change; this is routine stale-entry cleanup. The migration-risk pre-push gate (core/gates/migration_risk.py) was added to canonical/workflows/pre-push.yaml in the same commit. The gate fires when SQL migration files or sqlite_bootstrap.py are changed, requires explicit gh pr checks --watch confirmation before merge, and is silent on all other change classes. -->
 
 <!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps. No lint/format baseline policy change; this is a coupling-map config addition only. -->
+
+<!-- Last reviewed 2026-05-29 — O1: contract_registry.py narrowed 4 over-broad domains. No lint/format baseline policy change. -->

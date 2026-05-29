@@ -81,7 +81,10 @@ def test_contract_atlas_lifecycle_manifest_flags_missing_prd_or_readme_docs(
     assert manifest["status"] == "fail"
     impact = manifest["docs_prd_readme_impact"]
     assert impact["status"] == "attention_required"
-    assert impact["readme_update_required_domains"] == ["release_publication_gate"]
+    # README.md was removed from release_publication_gate required_doc_refs (O1 narrowing).
+    # Release-gate / CI-pipeline changes no longer trigger README review as a per-PR coupling.
+    # README currency is a release-boundary human judgment — see PUBLICATION_BOUNDARY.md.
+    assert impact["readme_update_required_domains"] == []
     assert "release_publication_gate" in impact["docs_update_required_domains"]
 
 

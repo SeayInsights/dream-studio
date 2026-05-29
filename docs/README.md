@@ -175,3 +175,5 @@ When in doubt, keep generated operational history local. Public examples should 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: contract_atlas.py private-content scan exclusion added; 7 new adapter projection files generated and committed (chatgpt, codex, copilot, cursor, local-model, mcp, shell). These are generated projection files from default authority profiles. No documentation structure or policy change required. -->
 
 <!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps. Domain count is now 15. No docs structure or policy change. -->
+
+<!-- Last reviewed 2026-05-29 — O1: contract_registry.py narrowed 4 over-broad domains. No docs structure or policy change. -->
