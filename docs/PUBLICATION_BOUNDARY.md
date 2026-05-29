@@ -141,6 +141,24 @@ through a sanitized profile. Public examples must be synthetic or redacted and
 must not expose private operator history, local paths, external-project details,
 career data, or unsanitized security/readiness findings.
 
+## README Currency At Release
+
+README.md accuracy is a **release-boundary human judgment**, not a per-PR mechanical
+coupling. The per-PR docs-drift gate does not enforce README review (that coupling
+was removed in Phase 18.4 consolidation because CI-gate and lint-baseline changes
+were training content-free stamps — "No README content change required" — not real
+reviews). Instead, README currency is confirmed at release time:
+
+Before release or public publication: confirm README.md accurately reflects this
+cycle's product-level changes — new or changed top-level capabilities, install flow
+changes, core concept updates, and user-facing surface changes. This is a human
+review at the release boundary, not a file-glob trigger. The release-validation
+command (`python interfaces/cli/repo_publication_readiness.py --strict`) checks
+README/PRD product framing as part of its validation; that's the automated signal.
+README accuracy for specific feature/change cycles is reviewed by the operator
+exercising judgment about product-level communication, not by an automated gate
+that fires on every baseline cleanup.
+
 <!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->
 
 <!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->

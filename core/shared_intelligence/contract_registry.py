@@ -85,7 +85,11 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "core/shared_intelligence/result_normalization.py",
             "adapter-projections/**",
             "AGENTS.md",
-            "CLAUDE.md",
+            # CLAUDE.md removed (O1): root project-instruction file, not an adapter-projection
+            # file. Every Phase 18.4 substantive fire came from adapter-projections/** changes
+            # (real projection regenerations). The 4 CLAUDE.md-triggered fires were content-free
+            # stamps ("no adapter boundary change"). The real adapter-routing signal lands in
+            # adapter-projections/** which remains in source_patterns.
         ],
         "contract_refs": [
             "docs/contracts/adapter-contract.md",
@@ -209,7 +213,14 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "core/release/local_dogfood_stability.py",
             "ds.cmd",
             "ds.ps1",
-            "interfaces/cli/ds.py",
+            # interfaces/cli/ds.py removed (O1): 5000+ line catch-all that fired on every CLI
+            # change and produced content-free stamps. The installed-runtime/platform-hardening
+            # surface is defined in this domain's other source files (installed_runtime.py,
+            # ds.cmd, ds.ps1, etc.). KNOWN LIMITATION: a change made PURELY in ds.py's command
+            # handler that alters installed-runtime behavior without touching those core files
+            # would not fire this domain. Accepted tradeoff — the whole-file coupling was so
+            # noisy it trained stamping and caught nothing real. If a ds.py-only behavior change
+            # is ever found to have drifted these docs, revisit.
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
@@ -363,8 +374,18 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_name": "Expert Skills And Workflow System",
         "source_patterns": [
             "core/shared_intelligence/expert_workflows.py",
-            "skills/**",
-            "workflows/**",
+            # skills/**: narrowed from all of skills/ to the career skill specifically (O1).
+            # The expert workflow system uses career skills; skills/templates/** and utility
+            # scripts are not expert-workflow-system relevant. canonical/skills/** (DS packs)
+            # is a different path and is NOT matched by this pattern.
+            "skills/career/**",
+            # workflows/**: removed (O1). This pattern was BROKEN — workflow YAMLs live at
+            # canonical/workflows/ but "workflows/**" does NOT match "canonical/workflows/**"
+            # (fnmatch prefix mismatch). The pattern matched zero files. Also: the 24 canonical
+            # workflow templates are general dev tools, not expert-workflow-system components
+            # (grep confirmed zero coupling to expert_workflows.py). The 7 relevant workflow
+            # files (idea-to-pr, fix-issue, etc.) are a separate O2 coverage gap to add
+            # deliberately with correct canonical/ prefixes in a follow-on WO.
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
@@ -423,7 +444,11 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/operations/repo-publication-privacy.md",
             "docs/operations/external-project-validation-pipeline.md",
             "docs/operations/docker-module-profiles.md",
-            "README.md",
+            # README.md removed (O1): release-gate / lint-baseline changes don't affect README
+            # content. Phase 18.4 stamps confirmed "No README content change required." README
+            # accuracy is a release-boundary judgment (reviewed by a human at release/publication
+            # time), not a per-PR mechanical coupling. See PUBLICATION_BOUNDARY.md for the
+            # release-boundary checklist where README currency is now recorded.
         ],
         "release_blocking": True,
         "freshness_policy": "release_gate_changes_require_release_docs_refresh",
@@ -475,7 +500,11 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "source_patterns": [
             "core/shared_intelligence/platform_hardening.py",
             "core/event_store/migrations/046_platform_hardening_authority.sql",
-            "interfaces/cli/ds.py",
+            # interfaces/cli/ds.py removed (O1): same catch-all issue as installed_adapter_runtime.
+            # Platform hardening behavior is defined in platform_hardening.py + the specific
+            # migration above. KNOWN LIMITATION: a ds.py-only handler change that alters
+            # platform-hardening behavior without touching those files would not fire this domain.
+            # Accepted — the whole-file coupling produced only content-free stamps.
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
