@@ -323,8 +323,6 @@ def test_swallow_classification_is_not_deceivable_by_relabeling():
     AND is in _PYTHON_OWNED_TABLES must still be reported as stale. Relabeling alone
     cannot silence the finding.
     """
-    from core.config.schema_coherence import _effective_swallow_classification
-
     migration_tables = _build_migration_only_tables(_source_root())
 
     # Simulate a swallow entry labeled 'legitimate' for a table that is:
@@ -353,8 +351,6 @@ def test_swallow_classification_correctly_detects_migration_owned_as_legitimate(
     """A swallow for a table that IS in migration_tables is auto-detected as legitimate,
     even if the hardcoded label says 'stale'. The probe overrides the label.
     """
-    from core.config.schema_coherence import _effective_swallow_classification
-
     migration_tables = _build_migration_only_tables(_source_root())
 
     # canonical_events is the canonical test case: it IS in migration_tables after
