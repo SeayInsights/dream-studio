@@ -153,6 +153,49 @@ _SWALLOW_INVENTORY: list[dict[str, Any]] = [
 ]
 
 
+def _effective_swallow_classification(entry: dict[str, Any], migration_tables: set[str]) -> str:
+    """Derive the real classification of a swallow entry from migration schema state.
+
+    For "no such table: X" patterns, probes migration_tables rather than trusting the
+    hardcoded classification string. This prevents the audit from being silenced by
+    editing a comment — the finding reflects the actual schema state, not a label.
+
+    Classification logic:
+      - "no such table: X" AND X in migration_tables:
+          Intentional sequencing — the table exists migration-side but an older migration
+          runs before the table-creation migration. "legitimate".
+      - "no such table: X" AND X NOT in migration_tables AND X in _PYTHON_OWNED_TABLES:
+          Python-owned table referenced by migrations, still absent from migrations.
+          This is real aspirational-schema debt. "stale".
+      - All other patterns (module errors, column errors, legacy-gone tables):
+          Fall back to the hardcoded classification string.
+    """
+    pattern = entry.get("pattern", "")
+    hardcoded = entry.get("classification", "legitimate")
+
+    if "no such table:" not in pattern:
+        return hardcoded
+
+    # Extract the first table name after "no such table:" — handles compound entries like
+    # "no such table: token_usage_records / ai_usage_operational_records"
+    after = pattern.split("no such table:", 1)[-1].strip()
+    table_name = after.split()[0].rstrip("/,;")
+
+    if table_name in migration_tables:
+        # Table exists in migration-only DB: the swallow is intentional sequencing.
+        # Even if the hardcoded classification says "stale", reality wins.
+        return "legitimate"
+
+    if table_name in _PYTHON_OWNED_TABLES:
+        # Table is Python-owned and still absent from migrations: real schema debt.
+        # Even if the hardcoded classification says "legitimate", reality wins.
+        return "stale"
+
+    # Unknown/legacy table (e.g., fts_gotchas, ds_documents — gone and not in the
+    # Python-owned registry): fall back to the hardcoded classification.
+    return hardcoded
+
+
 def _build_migration_only_tables(source_root: Path) -> set[str]:
     """Run all migrations into a fresh in-memory DB. Return the resulting table names."""
     from core.config.sqlite_bootstrap import run_migrations
@@ -504,8 +547,12 @@ def check_schema_coherence(
     )
 
     # ── Structural: stale swallow entries ────────────────────────────────────
+    # Uses _effective_swallow_classification() to probe migration_tables rather than
+    # trusting the hardcoded classification string. This prevents the audit from being
+    # silenced by relabeling a swallow entry without fixing the underlying schema.
     for entry in _SWALLOW_INVENTORY:
-        if entry["classification"] == "stale":
+        effective = _effective_swallow_classification(entry, migration_tables)
+        if effective == "stale":
             findings.append(
                 {
                     "check": "schema_coherence",
@@ -513,7 +560,7 @@ def check_schema_coherence(
                     "scope": "structural",
                     "finding_type": "stale_swallow",
                     "pattern": entry["pattern"],
-                    "classification": entry["classification"],
+                    "classification": effective,
                     "explanation": entry["explanation"],
                     "remediation": entry.get("remediation", ""),
                     "cross_references": entry.get("cross_references", []),
