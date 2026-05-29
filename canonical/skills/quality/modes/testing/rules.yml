@@ -44,13 +44,28 @@ rules:
     #   - tst-001 results from `ds-quality:testing audit` on Windows are unreliable for this rule.
     #   - CI is the authoritative environment for tst-001.
     #
-    # FAIL-LOUD ON INADEQUATE DATA: if the coverage data looks like evals-only (total < 15%),
-    # the rule must NOT emit critical findings — it must emit a single informational notice:
-    # "tst-001 requires full-suite coverage (actual: {%}%). Evals-only data detected — run
-    # `coverage run -m pytest tests/` in CI or on a non-Windows machine for accurate results."
-    # This is the fail-loud principle: a rule that can't run reliably on the given input should
-    # say so explicitly rather than emitting a wall of false criticals that look like real findings.
-    coverage_adequacy_threshold: 15    # coverage% below this → skip tst-001, emit inadequate-data notice
+    # FAIL-LOUD ON INADEQUATE DATA — SCOPE-AWARE DETECTION (Phase 6 fix):
+    # The real question is "did the full suite run?", not "is the total percentage low?"
+    # A genuinely-low-coverage repo (real 12%) would have its findings wrongly suppressed
+    # by a percentage threshold. The correct check is SCOPE: which test directories were measured.
+    #
+    # PRIMARY CHECK: read coverage.json's context/measurement metadata.
+    # coverage.py records the measured paths (files that contributed to coverage).
+    # If the measurement only includes tests/evals/ paths (and no tests/unit/ or tests/integration/
+    # test files ran), the data is evals-only — emit the skip notice.
+    # If tests/unit/ test files contributed: the full suite (or a meaningful portion) ran.
+    #
+    # SECONDARY FALLBACK: if scope metadata is unavailable, check for the configured
+    # full_suite_command in config.yml — if the last coverage run doesn't match it, skip.
+    #
+    # PER-PROJECT OVERRIDE: operators can set full_suite_paths in config.yml to specify
+    # which directories must have contributed for the data to be considered "full suite."
+    # Default: ["tests/unit", "tests/integration"] — at least one must have run.
+    #
+    # This replaces the 15% magic-number proxy. A real 12% coverage repo gets its findings;
+    # an evals-only run on a well-tested repo correctly skips with an honest message.
+    coverage_adequacy_threshold: 15    # fallback percentage proxy IF scope detection unavailable
+    full_suite_paths: ["tests/unit", "tests/integration"]    # at least one must appear as a source
     detection:
       type: tool
       tool:
@@ -59,19 +74,27 @@ rules:
         notes: |
           Parse coverage.json; flag source files with 0% line coverage.
 
-          FAIL-LOUD CHECK FIRST: if total coverage < coverage_adequacy_threshold (default 15%),
-          do NOT emit tst-001 findings. Instead emit:
-          "tst-001 skipped: coverage data appears to be evals-only or incomplete (total: {%}%).
-          Full-suite coverage required (coverage run -m pytest tests/). Run in CI or on a
-          non-Windows machine. Windows pre-push hook runs evals only — this is a known
-          CI-discipline decision, not a test quality problem."
-          Then stop tst-001 execution for this run.
+          SCOPE CHECK FIRST (the real question — did the full suite run?):
+          1. Inspect coverage.json metadata: which test directories contributed to the measurement.
+             coverage.py JSON includes the list of measured files (or the run context).
+             If only tests/evals/ files appear as sources and no tests/unit/ files contributed:
+             this is evals-only data.
+          2. If scope metadata unavailable: fall back to checking total coverage against
+             coverage_adequacy_threshold (15%). This is a proxy, not the real check.
+          3. Per-project override: config.yml full_suite_paths specifies which directories
+             must have contributed for data to be considered adequate.
+             Default: ["tests/unit", "tests/integration"] — at least one must appear.
 
-          If total coverage >= threshold: proceed. Flag source files with 0% line coverage.
-          Excludes suppressions (example_usage.py, migrations, __init__.py with no implementation).
+          SKIP MESSAGE if data is evals-only (scope check failed OR percentage fallback):
+          "tst-001 skipped: coverage data is evals-only or incomplete.
+          Measured paths: {measured_test_dirs}. Required: {full_suite_paths}.
+          Run `coverage run -m pytest tests/` in CI or on a non-Windows machine.
+          Windows pre-push hook runs tests/evals/ only — this is a documented CI-discipline
+          decision, not a test quality problem."
 
-          Fallback if no coverage data: path-scan with reduced confidence (check whether any
-          test file imports or exercises the module). Reduced confidence path only.
+          REAL-DATA PATH (scope check passed): flag source files with 0% coverage.
+          Use pyproject.toml coverage.omit list to exclude known legitimate exclusions.
+          Fallback if no coverage data: path-scan with reduced confidence.
         fallback_to_llm: false
         fallback_to_path_scan: true
       llm:
