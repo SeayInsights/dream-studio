@@ -202,6 +202,8 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15b: no new migrations; schema remains at 71. No policy or contract change in this doc. -->
 
+<!-- Last reviewed 2026-05-29 (rev3) — migration 082 (082_memory_fts_triggers_repair.sql): defensive trigger repair. Uses CREATE TRIGGER IF NOT EXISTS to restore memory_entries_fts_{insert,update,delete}. Idempotent no-op on any DB where triggers already exist. No schema content change needed in this document — trigger restoration is not an authority or policy change. -->
+
 <!-- Last reviewed 2026-05-29 (rev2) — migration 081 extended fix: full drop-all-13-views pattern replaces single DROP VIEW; 12 views recreated using migration 062 DDL; vw_activity_timeline permanently retired. sqlite_bootstrap.py exception handler updated to tolerate partial fixtures for token_usage_records/ai_usage_operational_records. No policy or content change to migration 081 section. -->
 
 <!-- Last reviewed 2026-05-29 — migration 081 fix: DROP VIEW IF EXISTS vw_activity_timeline replaces PRAGMA legacy_alter_table = ON to ensure RENAME succeeds on all SQLite versions. The view is not recreated (it references Python-owned canonical_events; debt tracked in docs/architecture/aspirational-schema-debt.md). No policy or content change to migration 081 section in this doc — already present from PR #97. -->
