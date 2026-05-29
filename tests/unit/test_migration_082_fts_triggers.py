@@ -74,9 +74,7 @@ def test_migration_082_triggers_fire_correctly(tmp_path):
     conn.commit()
 
     # Trigger should have synced to memory_fts
-    fts_row = conn.execute(
-        "SELECT memory_id FROM memory_fts WHERE memory_id = 'm1'"
-    ).fetchone()
+    fts_row = conn.execute("SELECT memory_id FROM memory_fts WHERE memory_id = 'm1'").fetchone()
     assert fts_row is not None, "Insert trigger did not sync to memory_fts"
 
     # Delete the row
