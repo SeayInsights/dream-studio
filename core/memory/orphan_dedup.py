@@ -105,7 +105,7 @@ def dedup_orphans(conn: sqlite3.Connection, dry_run: bool = True) -> DedupResult
     deleted = 0
     BATCH = 200
     for i in range(0, len(candidates), BATCH):
-        chunk = candidates[i : i + BATCH]
+        chunk = candidates[i : i + BATCH]  # noqa: E203
         placeholders = ",".join("?" * len(chunk))
         try:
             if needs_manual_fts:
