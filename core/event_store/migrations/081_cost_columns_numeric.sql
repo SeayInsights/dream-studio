@@ -28,14 +28,16 @@
 --   2. ai_usage_operational_records.cost_amount  REAL               → NUMERIC(20,8)
 
 PRAGMA foreign_keys = OFF;
--- SQLite 3.26+ validates all views during ALTER TABLE RENAME; any view referencing
+-- SQLite 3.26+ validates ALL views during ALTER TABLE RENAME; any view referencing
 -- a missing table aborts the rename.  vw_activity_timeline references canonical_events,
 -- which is owned by EventStore._init_tables() and absent from migrations (pre-existing
--- architectural debt captured in docs/architecture/aspirational-schema-debt.md).
--- Alternative pattern: drop all views before reconstruction then recreate (migration 062
--- approach), but that cannot recreate vw_activity_timeline for the same reason.
--- legacy_alter_table is scoped to this migration: ON here, OFF at end.
-PRAGMA legacy_alter_table = ON;
+-- architectural debt documented in docs/architecture/aspirational-schema-debt.md).
+-- The exception handler in sqlite_bootstrap.py:120 swallows "no such table"
+-- errors that contain "canonical_events" — which means a failed RENAME would be
+-- silently ignored, leaving the schema broken.  The safe fix (migration 062 pattern)
+-- is to drop the view before reconstruction.  It is NOT recreated because it depends
+-- on the Python-owned canonical_events table; a future migration will handle cleanup.
+DROP VIEW IF EXISTS vw_activity_timeline;
 
 -- ── Part 1: token_usage_records.estimated_cost ──────────────────────────────
 
@@ -213,5 +215,4 @@ FROM ai_usage_operational_records;
 DROP TABLE ai_usage_operational_records;
 ALTER TABLE ai_usage_operational_records_new RENAME TO ai_usage_operational_records;
 
-PRAGMA legacy_alter_table = OFF;
 PRAGMA foreign_keys = ON;

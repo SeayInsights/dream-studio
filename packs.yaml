@@ -62,6 +62,7 @@ packs:
       - on-prompt-validate
       - on-session-start
       - on-session-end
+      - on-memory-ingest
       # Internal dispatch hooks (called via hooks.json directly, not pack routing)
       - on-prompt-dispatch
       - on-stop-dispatch
