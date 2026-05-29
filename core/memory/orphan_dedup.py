@@ -100,6 +100,9 @@ def dedup_orphans(conn: sqlite3.Connection, dry_run: bool = True) -> DedupResult
             errors=errors,
         )
 
+    # Migration 082 (18.4.5-followup-2) defensively restores memory_entries_fts_delete.
+    # This manual sync path should not fire on any DB that has run migration 082.
+    # Retained for resilience against unmigrated databases or future trigger loss.
     needs_manual_fts = _has_memory_fts(conn) and not _has_fts_delete_trigger(conn)
 
     deleted = 0

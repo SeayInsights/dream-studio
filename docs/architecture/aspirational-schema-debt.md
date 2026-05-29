@@ -102,3 +102,50 @@ remediation in the finding above is applied.
 After canonical_events is moved into migrations or the view is dropped, audit the
 remaining entries to confirm each is optional-module graceful-degradation (as
 intended) rather than schema-coherence masking.
+
+---
+
+## Adjacent debt: ambiguous column naming
+
+Not aspirational schema in the strict sense — these columns exist and are queryable.
+But similar-sounding column names on the same table lead developers to query the
+wrong one, producing the same "code believed something about schema that wasn't true"
+failure mode. 18.4.6 should consider including this pattern in its audit scope.
+
+### memory_entries.source vs memory_entries.source_type
+
+**Discovered:** 2026-05-29 during 18.4.5-followup-1 pre-flight
+**Symptom:** Pre-flight query used `WHERE source = 'reg_gotchas'` and returned 0 rows.
+The correct column was `source_type = 'reg_gotchas'`. The design assumption
+("1,488 orphans to dedup") was built on this misread — the D3 concern from
+18.4.5 was based on a column confusion, not real data.
+
+**Schema reality:**
+- `source` (TEXT NOT NULL) — memory type taxonomy: 'gotcha', 'lesson', 'correction',
+  'decision'. This is WHAT the memory IS. Set by ingestion consumers to describe
+  the memory's category.
+- `source_type` (TEXT, nullable) — provenance domain table: 'reg_gotchas',
+  'raw_lessons', 'cor_skill_corrections'. This is WHERE the memory CAME FROM.
+  Set by `upsert_by_provenance` as the idempotency key.
+
+Both columns are nullable in the extended schema (source was NOT NULL in the
+original 011 DDL; source_type was added by migration 032/080). Both have similar
+names. Neither name strongly implies its semantic. A query for "all gotchas" works
+on either column for the narrow case where source='gotcha' iff source_type='reg_gotchas'
+— which is true today for GotchaIngestionConsumer but is not enforced and could
+diverge as more consumers are added.
+
+**Remediation options (18.4.6 to evaluate):**
+1. Rename `source_type` to `provenance_table` or `ingestion_source`. Large blast
+   radius: touches MemoryStore, ingestion consumers, FTS triggers, hook queries,
+   and tests. A dedicated migration + global rename commit.
+2. Add a CHECK constraint asserting the implied invariant (or document it in a
+   schema comment migration). Cheap, no blast radius.
+3. Add a docstring to MemoryStore and a comment to migration 032/080 explaining
+   the semantic distinction. Cheapest; documents the debt without fixing it.
+
+**Pattern for 18.4.6 to audit:**
+Look for column pairs on the same table where one name is a substring or near-match
+of the other (e.g., `name`/`display_name`, `type`/`subtype`, `id`/`source_id`).
+For each: is the semantic relationship between them documented? Could a developer
+write a correct query on the first try without reading the schema comments?
