@@ -16,6 +16,7 @@ from pathlib import Path
 
 from core.config.schema_coherence import (
     _PYTHON_OWNED_TABLES,
+    _effective_swallow_classification,
     _build_migration_only_tables,
     _migration_insert_columns,
     _migration_references,
@@ -309,6 +310,66 @@ def test_stale_swallow_is_no_longer_reported():
     assert not stale, (
         f"Expected zero stale_swallow findings after canonical_events remediation, "
         f"but found: {[f.get('pattern') for f in stale]}"
+    )
+
+
+# ── Q2 regression tests: stale_swallow detection is not deceivable by relabeling ──
+
+
+def test_swallow_classification_is_not_deceivable_by_relabeling():
+    """The stale_swallow detection probes migration_tables, not the hardcoded label.
+
+    A swallow labeled 'legitimate' for a table that is ABSENT from migration_tables
+    AND is in _PYTHON_OWNED_TABLES must still be reported as stale. Relabeling alone
+    cannot silence the finding.
+    """
+    migration_tables = _build_migration_only_tables(_source_root())
+
+    # Simulate a swallow entry labeled 'legitimate' for a table that is:
+    # - absent from migration_tables (not in any migration)
+    # - present in _PYTHON_OWNED_TABLES (Python-owned → schema debt)
+    # Pick any table we know is Python-owned and not in migrations.
+    python_owned_table = "validation_failures"
+    assert python_owned_table in _PYTHON_OWNED_TABLES, f"{python_owned_table} not in registry"
+    assert (
+        python_owned_table not in migration_tables
+    ), f"{python_owned_table} should NOT be in migration-only DB"
+
+    fake_entry = {
+        "pattern": f"no such table: {python_owned_table}",
+        "classification": "legitimate",  # deliberately relabeled as legitimate
+        "explanation": "fake entry for regression test",
+    }
+    effective = _effective_swallow_classification(fake_entry, migration_tables)
+    assert effective == "stale", (
+        f"Expected 'stale' for a relabeled swallow of a Python-owned table, "
+        f"got '{effective}'. The detection must not be deceivable by relabeling."
+    )
+
+
+def test_swallow_classification_correctly_detects_migration_owned_as_legitimate():
+    """A swallow for a table that IS in migration_tables is auto-detected as legitimate,
+    even if the hardcoded label says 'stale'. The probe overrides the label.
+    """
+    migration_tables = _build_migration_only_tables(_source_root())
+
+    # canonical_events is the canonical test case: it IS in migration_tables after
+    # migration 083. Even if someone labels the swallow 'stale', the probe sees it
+    # in migration_tables and classifies it as legitimate.
+    assert "canonical_events" in migration_tables, (
+        "canonical_events should be in migration_tables after migration 083. "
+        "If this fails, migration 083 is missing."
+    )
+
+    fake_entry = {
+        "pattern": "no such table: canonical_events",
+        "classification": "stale",  # deliberately relabeled as stale
+        "explanation": "fake entry for regression test",
+    }
+    effective = _effective_swallow_classification(fake_entry, migration_tables)
+    assert effective == "legitimate", (
+        f"Expected 'legitimate' for a swallow of a migration-owned table, "
+        f"got '{effective}'. The probe should override the 'stale' label."
     )
 
 
