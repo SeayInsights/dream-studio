@@ -14,10 +14,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 from core.config.schema_coherence import (
-    _CANONICAL_EVENTS_PYTHON_COLS,
     _PYTHON_OWNED_TABLES,
     _build_migration_only_tables,
     _migration_insert_columns,
@@ -42,37 +39,65 @@ def _findings_for_table(result: dict, table: str) -> list[dict]:
     return [f for f in result["findings"] if f.get("table") == table]
 
 
-# ── Fixture A: canonical_events absent from migration-only DB ─────────────────
+# ── Fixture A: canonical_events remediated (18.4.6-followup-1) ───────────────
+# Migration 083 moved canonical_events into migrations. These tests now assert
+# the CLEAN state: the table IS present in migration-only DBs and the audit
+# reports ZERO canonical_events findings.
 
 
-def test_fixture_a_canonical_events_absent_from_migration_replay():
-    """canonical_events must be absent from a migration-only DB build."""
+def test_fixture_a_canonical_events_present_in_migration_replay():
+    """canonical_events must be present in a migration-only DB after migration 083."""
     migration_tables = _build_migration_only_tables(_source_root())
-    assert "canonical_events" not in migration_tables, (
-        "canonical_events should NOT be created by migrations alone. "
-        "If it is now present, it has been moved into a migration — update this test and the debt doc."
+    assert "canonical_events" in migration_tables, (
+        "canonical_events should be created by migration 083. "
+        "If it is absent, migration 083 did not run or was removed."
     )
 
 
-def test_fixture_a_audit_detects_canonical_events_aspirational():
-    """Audit reports medium structural findings for canonical_events referenced by migrations."""
+def test_fixture_a_canonical_events_has_14_columns_in_migration_replay():
+    """Migration 083 creates canonical_events with the authoritative 14-column schema."""
+    from core.config.sqlite_bootstrap import run_migrations
+
+    conn = __import__("sqlite3").connect(":memory:")
+    run_migrations(conn)
+    conn.row_factory = __import__("sqlite3").Row
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(canonical_events)").fetchall()}
+    conn.close()
+
+    expected = {
+        "event_id",
+        "event_type",
+        "timestamp",
+        "trace",
+        "severity",
+        "payload",
+        "actor",
+        "confidence_score",
+        "source_type",
+        "raw_prompt_retained",
+        "raw_tool_output_retained",
+        "schema_version",
+        "created_at",
+        "invocation_mode",
+    }
+    assert cols == expected, f"Column mismatch: {cols ^ expected}"
+
+
+def test_fixture_a_audit_reports_zero_canonical_events_findings():
+    """Audit must report zero canonical_events findings after migration 083 remediation."""
     result = check_schema_coherence(_source_root())
-
     ce_findings = _findings_for_table(result, "canonical_events")
-    aspirational = [
-        f for f in ce_findings if f["finding_type"] == "python_owned_table_in_migration"
-    ]
-    assert aspirational, (
-        "Expected at least one python_owned_table_in_migration finding for canonical_events. "
-        "If canonical_events has been moved into a migration, update this test."
+    assert not ce_findings, (
+        f"Expected zero canonical_events findings after migration 083 remediation, "
+        f"but found: {[f['finding_type'] for f in ce_findings]}"
     )
-    for f in aspirational:
-        assert f["severity"] == "medium", f"Expected medium, got {f['severity']}"
-        assert f["scope"] == "structural"
 
 
-def test_fixture_a_migrations_referenced_include_known_set():
-    """Migrations 052, 060, 061, 062, 064 must appear in the canonical_events reference set."""
+def test_fixture_a_migrations_still_reference_canonical_events_structurally():
+    """Migrations 052, 060, 061, 062, 064 still reference canonical_events in their SQL.
+    This is expected — they predate migration 083. The structural references remain
+    but no longer produce audit findings because canonical_events is now migration-owned.
+    """
     source_root = _source_root()
     migration_dir = source_root / "core" / "event_store" / "migrations"
     refs = _migration_references(migration_dir, "canonical_events")
@@ -87,8 +112,8 @@ def test_fixture_a_migrations_referenced_include_known_set():
     }
     missing = expected_migrations - migration_names
     assert not missing, (
-        f"Expected migrations {missing} to reference canonical_events. "
-        "If any have been cleaned up, update this test."
+        f"Expected migrations {missing} to still reference canonical_events in their SQL. "
+        "These references are expected (legacy migrations before 083)."
     )
 
 
@@ -117,40 +142,37 @@ def test_fixture_b_python_owned_no_migration_ref_is_low():
 # ── Fixture C: column mismatch → high finding ─────────────────────────────────
 
 
-def test_fixture_c_column_mismatch_detected():
-    """Migration INSERT references columns absent from EventStore._init_tables → high severity."""
+def test_fixture_c_migration_inserts_use_columns_now_in_migration_083():
+    """The columns that were 'missing' from Python DDL (raw_prompt_retained etc.) are now
+    declared in migration 083 — they were always in the ingestor's DDL.
+    The INSERTs in migrations 061/062/064 still reference them; the mismatch is resolved.
+    """
     source_root = _source_root()
     migration_dir = source_root / "core" / "event_store" / "migrations"
 
     inserts = _migration_insert_columns(migration_dir, "canonical_events")
     assert inserts, "Expected at least one INSERT INTO canonical_events in migrations."
 
-    # Verify the known missing columns are present in at least one INSERT
+    # The historically-missing columns must still appear in the INSERT statements
+    # (they were not removed — they're valid now that migration 083 declares them)
     all_insert_cols = {c for entry in inserts for c in entry["columns"]}
-    known_missing = {"raw_prompt_retained", "raw_tool_output_retained", "schema_version"}
-    found_missing = known_missing & all_insert_cols
-    assert found_missing, (
-        f"Expected migration INSERTs to reference at least one of {known_missing}, "
-        f"but only found {all_insert_cols}."
+    expected_cols = {"raw_prompt_retained", "raw_tool_output_retained", "schema_version"}
+    assert expected_cols <= all_insert_cols, (
+        f"Expected migration INSERTs to still reference {expected_cols}; "
+        f"found: {all_insert_cols}"
     )
 
 
-def test_fixture_c_audit_reports_high_for_column_mismatch():
-    """Audit reports high-severity column_absent_from_python_ddl for canonical_events."""
+def test_fixture_c_audit_reports_zero_column_mismatch_findings():
+    """After migration 083, column_absent_from_python_ddl findings must be zero.
+    canonical_events is now migration-owned with the full 14-column schema.
+    """
     result = check_schema_coherence(_source_root())
     col_findings = _findings_of_type(result, "column_absent_from_python_ddl")
-    assert col_findings, (
-        "Expected at least one column_absent_from_python_ddl finding. "
-        "If the column mismatch has been resolved, update this test."
+    assert not col_findings, (
+        f"Expected zero column_absent_from_python_ddl findings after migration 083, "
+        f"but found: {[(f.get('migration'), f.get('missing_columns')) for f in col_findings]}"
     )
-    for f in col_findings:
-        assert (
-            f["severity"] == "high"
-        ), f"Column mismatch findings must be high, got {f['severity']}"
-        assert f["scope"] == "structural"
-        assert "raw_prompt_retained" in f["missing_columns"] or any(
-            c in f["missing_columns"] for c in ("raw_tool_output_retained", "schema_version")
-        ), f"Unexpected missing_columns: {f['missing_columns']}"
 
 
 # ── Fixture D: clean scenario → no high/medium findings ───────────────────────
@@ -181,17 +203,22 @@ def test_fixture_d_clean_db_produces_no_high_medium(tmp_path):
     assert not high_findings, f"Unexpected high findings: {high_findings}"
 
 
-def test_fixture_d_real_audit_status_is_findings():
-    """The real codebase audit status is 'findings' (has medium/high) — confirming debt exists."""
+def test_fixture_d_real_audit_status_is_low_findings_after_remediation():
+    """After migration 083, the real codebase audit has zero high/medium findings.
+    Status is 'low_findings' (only the 14 low proj_* no-migration-ref findings remain).
+    """
     result = check_schema_coherence(_source_root())
-    assert result["status"] == "findings", (
-        f"Expected 'findings' status (known debt in codebase), got '{result['status']}'. "
-        "If all debt is resolved, update this assertion."
+    assert result["status"] == "low_findings", (
+        f"Expected 'low_findings' after canonical_events remediation, got '{result['status']}'. "
+        "If new high/medium debt was introduced, investigate."
     )
-    assert result["summary"]["high"] >= 1, "Expected at least 1 high finding (column mismatch)"
     assert (
-        result["summary"]["medium"] >= 1
-    ), "Expected at least 1 medium finding (aspirational ref or stale swallow)"
+        result["summary"]["high"] == 0
+    ), f"Expected zero high findings, got {result['summary']['high']}"
+    assert (
+        result["summary"]["medium"] == 0
+    ), f"Expected zero medium findings, got {result['summary']['medium']}"
+    assert result["summary"]["low"] >= 1, "Expected low findings for proj_* tables still present"
 
 
 # ── Fixture E: staleness guard fires for unregistered table ──────────────────
@@ -272,19 +299,17 @@ def test_fixture_e_staleness_guard_does_not_flag_migration_owned_table(tmp_path)
 # ── Swallow inventory ─────────────────────────────────────────────────────────
 
 
-def test_stale_swallow_is_reported():
-    """The stale canonical_events swallow entry must appear in the audit findings."""
+def test_stale_swallow_is_no_longer_reported():
+    """After migration 083, the canonical_events swallow is reclassified as 'legitimate'
+    (intentional graceful degradation for migrations 052-064 that predate migration 083).
+    No stale_swallow findings should appear.
+    """
     result = check_schema_coherence(_source_root())
     stale = _findings_of_type(result, "stale_swallow")
-    assert stale, "Expected at least one stale_swallow finding."
-    patterns = [f["pattern"] for f in stale]
-    assert any("canonical_events" in p for p in patterns), (
-        "Expected the canonical_events swallow to be classified as stale. "
-        "If it has been removed or reclassified, update this test."
+    assert not stale, (
+        f"Expected zero stale_swallow findings after canonical_events remediation, "
+        f"but found: {[f.get('pattern') for f in stale]}"
     )
-    for f in stale:
-        assert f["severity"] == "medium"
-        assert f["scope"] == "structural"
 
 
 # ── Fixture F: staleness guard ignores non-DDL CREATE TABLE text ─────────────
@@ -368,35 +393,35 @@ def test_live_drift_probe_status_ran_for_real_db(tmp_path):
 # ── Cross-reference enrichment ────────────────────────────────────────────────
 
 
-def test_medium_finding_on_migration_with_high_is_cross_referenced():
-    """Migration 062 medium must mention the high column_absent finding in its explanation."""
+def test_no_medium_findings_for_migration_062_after_remediation():
+    """After migration 083, migration 062 no longer produces medium or high findings.
+    canonical_events is migration-owned, so old migration references are no longer reported.
+    """
     result = check_schema_coherence(_source_root())
 
     mediums_062 = [
         f
         for f in result["findings"]
-        if f.get("finding_type") == "python_owned_table_in_migration"
+        if f.get("finding_type")
+        in ("python_owned_table_in_migration", "column_absent_from_python_ddl")
         and f.get("migration") == "062_nullify_activity_id_backfill_and_replace_views.sql"
     ]
-    assert mediums_062, "Expected a medium finding for migration 062."
-    explanation = mediums_062[0]["explanation"]
-    assert "column_absent_from_python_ddl" in explanation or "HIGH" in explanation.upper(), (
-        "Migration 062 medium should cross-reference the HIGH column_absent finding. "
-        f"Got explanation: {explanation[:200]}"
+    assert not mediums_062, (
+        f"Expected zero medium/high findings for migration 062 after remediation, "
+        f"but found: {[f['finding_type'] for f in mediums_062]}"
     )
 
 
-def test_high_finding_explanation_is_independently_actionable():
-    """HIGH column_absent findings must stand alone — not rely on the medium for context."""
+def test_no_column_absent_findings_after_remediation():
+    """After migration 083, column_absent_from_python_ddl findings must be zero.
+    The previously-missing columns are now declared in migration 083.
+    """
     result = check_schema_coherence(_source_root())
     highs = _findings_of_type(result, "column_absent_from_python_ddl")
-    for f in highs:
-        expl = f["explanation"]
-        assert "no such column" in expl or "unhandled" in expl or "crash" in expl, (
-            f"High finding on {f.get('migration')} should clearly state the crash-path risk. "
-            f"Got: {expl[:200]}"
-        )
-        assert f.get("missing_columns"), "High finding must list the missing column names."
+    assert not highs, (
+        f"Expected zero column_absent_from_python_ddl findings after remediation, "
+        f"but found {len(highs)}: {[(f.get('migration'), f.get('missing_columns')) for f in highs]}"
+    )
 
 
 # ── Doctor integration ────────────────────────────────────────────────────────
