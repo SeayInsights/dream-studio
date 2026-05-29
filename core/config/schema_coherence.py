@@ -53,10 +53,20 @@ _DUAL_OWNED_TABLES: frozenset[str] = frozenset({"memory_fts"})
 
 # Columns declared in EventStore._init_tables for canonical_events.
 # Used in the supplementary column-level pass (Technique 1 extension).
-_CANONICAL_EVENTS_PYTHON_COLS: frozenset[str] = frozenset({
-    "event_id", "event_type", "timestamp", "trace", "severity", "payload",
-    "actor", "confidence_score", "source_type", "created_at",
-})
+_CANONICAL_EVENTS_PYTHON_COLS: frozenset[str] = frozenset(
+    {
+        "event_id",
+        "event_type",
+        "timestamp",
+        "trace",
+        "severity",
+        "payload",
+        "actor",
+        "confidence_score",
+        "source_type",
+        "created_at",
+    }
+)
 
 # Swallow entries in sqlite_bootstrap.py, classified for the audit report.
 _SWALLOW_INVENTORY: list[dict[str, Any]] = [
@@ -161,8 +171,7 @@ def _migration_references(migration_dir: Path, table_name: str) -> list[dict[str
     """
     escaped = re.escape(table_name)
     structural_re = re.compile(
-        r"(?:FROM|JOIN|INTO|ON|UPDATE|TABLE)\s+" + escaped
-        + r"|ALTER\s+TABLE\s+" + escaped,
+        r"(?:FROM|JOIN|INTO|ON|UPDATE|TABLE)\s+" + escaped + r"|ALTER\s+TABLE\s+" + escaped,
         re.IGNORECASE,
     )
     trailing_comment_re = re.compile(r"\s*--.*$")
@@ -176,11 +185,13 @@ def _migration_references(migration_dir: Path, table_name: str) -> list[dict[str
             # Strip trailing inline comment before matching
             without_comment = trailing_comment_re.sub("", stripped)
             if structural_re.search(without_comment):
-                hits.append({
-                    "migration": sql_file.name,
-                    "line": line_no,
-                    "context": stripped[:120],
-                })
+                hits.append(
+                    {
+                        "migration": sql_file.name,
+                        "line": line_no,
+                        "context": stripped[:120],
+                    }
+                )
     return hits
 
 
@@ -198,11 +209,13 @@ def _migration_insert_columns(migration_dir: Path, table_name: str) -> list[dict
             raw_cols = match.group(1)
             cols = [c.strip() for c in raw_cols.replace("\n", " ").split(",") if c.strip()]
             line_no = text[: match.start()].count("\n") + 1
-            results.append({
-                "migration": sql_file.name,
-                "line": line_no,
-                "columns": cols,
-            })
+            results.append(
+                {
+                    "migration": sql_file.name,
+                    "line": line_no,
+                    "columns": cols,
+                }
+            )
     return results
 
 
@@ -233,6 +246,7 @@ def _staleness_guard(
     if _override_python_files is not None:
         file_iter = iter(_override_python_files)
     else:
+
         def file_iter():  # type: ignore[misc]
             for py_file in sorted((source_root / "core").rglob("*.py")):
                 rel = str(py_file.relative_to(source_root))
@@ -240,6 +254,7 @@ def _staleness_guard(
                     yield rel, py_file.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     pass
+
         file_iter = file_iter()
 
     for filename, content in file_iter:
@@ -255,26 +270,28 @@ def _staleness_guard(
                     continue
                 if table in migration_tables:
                     continue
-                findings.append({
-                    "check": "schema_coherence",
-                    "severity": "medium",
-                    "scope": "structural",
-                    "finding_type": "unregistered_python_owned_table",
-                    "table": table,
-                    "file": filename,
-                    "line": line_no,
-                    "explanation": (
-                        f"Python source at {filename}:{line_no} creates table '{table}' "
-                        "outside of migrations, but it is not registered in the "
-                        "schema_coherence audit inventory (_PYTHON_OWNED_TABLES in "
-                        "core/config/schema_coherence.py)."
-                    ),
-                    "remediation": (
-                        f"Add '{table}' to _PYTHON_OWNED_TABLES with its source location, "
-                        "or move the table definition into a migration."
-                    ),
-                    "cross_references": [],
-                })
+                findings.append(
+                    {
+                        "check": "schema_coherence",
+                        "severity": "medium",
+                        "scope": "structural",
+                        "finding_type": "unregistered_python_owned_table",
+                        "table": table,
+                        "file": filename,
+                        "line": line_no,
+                        "explanation": (
+                            f"Python source at {filename}:{line_no} creates table '{table}' "
+                            "outside of migrations, but it is not registered in the "
+                            "schema_coherence audit inventory (_PYTHON_OWNED_TABLES in "
+                            "core/config/schema_coherence.py)."
+                        ),
+                        "remediation": (
+                            f"Add '{table}' to _PYTHON_OWNED_TABLES with its source location, "
+                            "or move the table definition into a migration."
+                        ),
+                        "cross_references": [],
+                    }
+                )
     return findings
 
 
@@ -311,21 +328,23 @@ def check_schema_coherence(
         if is_dual_owned:
             if not in_migration_only_db:
                 # e.g. memory_fts on FTS5-absent system
-                findings.append({
-                    "check": "schema_coherence",
-                    "severity": "informational",
-                    "scope": "structural",
-                    "finding_type": "dual_owned_table_fts_absent",
-                    "table": table,
-                    "location": location,
-                    "explanation": (
-                        f"Table '{table}' is dual-owned (Python + migration both create it "
-                        "with IF NOT EXISTS). On this system the migration-side creation "
-                        "failed (likely FTS5 absent), leaving Python as sole creator."
-                    ),
-                    "remediation": "Ensure FTS5 is available, or treat as informational.",
-                    "cross_references": [],
-                })
+                findings.append(
+                    {
+                        "check": "schema_coherence",
+                        "severity": "informational",
+                        "scope": "structural",
+                        "finding_type": "dual_owned_table_fts_absent",
+                        "table": table,
+                        "location": location,
+                        "explanation": (
+                            f"Table '{table}' is dual-owned (Python + migration both create it "
+                            "with IF NOT EXISTS). On this system the migration-side creation "
+                            "failed (likely FTS5 absent), leaving Python as sole creator."
+                        ),
+                        "remediation": "Ensure FTS5 is available, or treat as informational.",
+                        "cross_references": [],
+                    }
+                )
             continue
 
         if in_migration_only_db:
@@ -336,23 +355,25 @@ def check_schema_coherence(
         # Table is Python-owned (absent from migration-only DB). Check for references.
         refs = _migration_references(migration_dir, table)
         if not refs:
-            findings.append({
-                "check": "schema_coherence",
-                "severity": "low",
-                "scope": "structural",
-                "finding_type": "python_owned_table_no_migration_ref",
-                "table": table,
-                "location": location,
-                "explanation": (
-                    f"Table '{table}' is created by Python code ({location}) and has no "
-                    "references in any migration. Schema fragmentation: this table is "
-                    "invisible to the migration runner."
-                ),
-                "remediation": (
-                    f"Consider moving '{table}' DDL into a migration for full schema visibility."
-                ),
-                "cross_references": [],
-            })
+            findings.append(
+                {
+                    "check": "schema_coherence",
+                    "severity": "low",
+                    "scope": "structural",
+                    "finding_type": "python_owned_table_no_migration_ref",
+                    "table": table,
+                    "location": location,
+                    "explanation": (
+                        f"Table '{table}' is created by Python code ({location}) and has no "
+                        "references in any migration. Schema fragmentation: this table is "
+                        "invisible to the migration runner."
+                    ),
+                    "remediation": (
+                        f"Consider moving '{table}' DDL into a migration for full schema visibility."
+                    ),
+                    "cross_references": [],
+                }
+            )
             continue
 
         # Python-owned AND referenced by migrations → aspirational (structural).
@@ -362,30 +383,32 @@ def check_schema_coherence(
             if ref["migration"] in seen_migrations:
                 continue
             seen_migrations.add(ref["migration"])
-            findings.append({
-                "check": "schema_coherence",
-                "severity": "medium",
-                "scope": "structural",
-                "finding_type": "python_owned_table_in_migration",
-                "table": table,
-                "location": location,
-                "migration": ref["migration"],
-                "line": ref["line"],
-                "context": ref["context"],
-                "explanation": (
-                    f"Migration '{ref['migration']}' references table '{table}', "
-                    f"but '{table}' is created by Python code ({location}), not by any migration. "
-                    "On a migration-only DB (fresh install, CI fixture, alternative bootstrapper), "
-                    "this reference silently fails. The system works only because Python "
-                    "initializes after migrations and the exception handler swallows the error."
-                ),
-                "remediation": (
-                    f"Option A: Move '{table}' DDL into a migration (superset of Python + migration columns). "
-                    f"Option B: Remove migration references to '{table}'. "
-                    "See docs/architecture/aspirational-schema-debt.md."
-                ),
-                "cross_references": ["docs/architecture/aspirational-schema-debt.md"],
-            })
+            findings.append(
+                {
+                    "check": "schema_coherence",
+                    "severity": "medium",
+                    "scope": "structural",
+                    "finding_type": "python_owned_table_in_migration",
+                    "table": table,
+                    "location": location,
+                    "migration": ref["migration"],
+                    "line": ref["line"],
+                    "context": ref["context"],
+                    "explanation": (
+                        f"Migration '{ref['migration']}' references table '{table}', "
+                        f"but '{table}' is created by Python code ({location}), not by any migration. "
+                        "On a migration-only DB (fresh install, CI fixture, alternative bootstrapper), "
+                        "this reference silently fails. The system works only because Python "
+                        "initializes after migrations and the exception handler swallows the error."
+                    ),
+                    "remediation": (
+                        f"Option A: Move '{table}' DDL into a migration (superset of Python + migration columns). "
+                        f"Option B: Remove migration references to '{table}'. "
+                        "See docs/architecture/aspirational-schema-debt.md."
+                    ),
+                    "cross_references": ["docs/architecture/aspirational-schema-debt.md"],
+                }
+            )
 
         # Supplementary column-level pass: only meaningful for canonical_events today.
         # Deduplicate: one finding per (migration, missing_cols set) — a migration with
@@ -394,8 +417,7 @@ def check_schema_coherence(
             seen_col_findings: set[tuple[str, frozenset[str]]] = set()
             for insert in _migration_insert_columns(migration_dir, table):
                 extra_cols = [
-                    c for c in insert["columns"]
-                    if c not in _CANONICAL_EVENTS_PYTHON_COLS
+                    c for c in insert["columns"] if c not in _CANONICAL_EVENTS_PYTHON_COLS
                 ]
                 if not extra_cols:
                     continue
@@ -403,34 +425,36 @@ def check_schema_coherence(
                 if dedup_key in seen_col_findings:
                     continue
                 seen_col_findings.add(dedup_key)
-                findings.append({
-                    "check": "schema_coherence",
-                    "severity": "high",
-                    "scope": "structural",
-                    "finding_type": "column_absent_from_python_ddl",
-                    "table": table,
-                    "migration": insert["migration"],
-                    "line": insert["line"],
-                    "missing_columns": extra_cols,
-                    "python_ddl_location": location,
-                    "explanation": (
-                        f"Migration '{insert['migration']}' inserts into columns "
-                        f"{extra_cols} of '{table}', but those columns are not declared "
-                        f"in the Python DDL at {location}. "
-                        "On upgrade paths where the table was previously created by Python init "
-                        "(canonical_events exists with only the Python-declared 10 columns), "
-                        "this INSERT fails with an unhandled 'no such column' error "
-                        "that the swallow handler does NOT catch."
-                    ),
-                    "remediation": (
-                        "Option A: Move canonical_events into a migration with the full column set "
-                        "(EventStore._init_tables 10 cols + raw_prompt_retained + "
-                        "raw_tool_output_retained + schema_version + invocation_mode). "
-                        "Option B: Remove the INSERT statements from migrations 061/062/064. "
-                        "See docs/architecture/aspirational-schema-debt.md."
-                    ),
-                    "cross_references": ["docs/architecture/aspirational-schema-debt.md"],
-                })
+                findings.append(
+                    {
+                        "check": "schema_coherence",
+                        "severity": "high",
+                        "scope": "structural",
+                        "finding_type": "column_absent_from_python_ddl",
+                        "table": table,
+                        "migration": insert["migration"],
+                        "line": insert["line"],
+                        "missing_columns": extra_cols,
+                        "python_ddl_location": location,
+                        "explanation": (
+                            f"Migration '{insert['migration']}' inserts into columns "
+                            f"{extra_cols} of '{table}', but those columns are not declared "
+                            f"in the Python DDL at {location}. "
+                            "On upgrade paths where the table was previously created by Python init "
+                            "(canonical_events exists with only the Python-declared 10 columns), "
+                            "this INSERT fails with an unhandled 'no such column' error "
+                            "that the swallow handler does NOT catch."
+                        ),
+                        "remediation": (
+                            "Option A: Move canonical_events into a migration with the full column set "
+                            "(EventStore._init_tables 10 cols + raw_prompt_retained + "
+                            "raw_tool_output_retained + schema_version + invocation_mode). "
+                            "Option B: Remove the INSERT statements from migrations 061/062/064. "
+                            "See docs/architecture/aspirational-schema-debt.md."
+                        ),
+                        "cross_references": ["docs/architecture/aspirational-schema-debt.md"],
+                    }
+                )
 
     # ── Structural: staleness guard ───────────────────────────────────────────
     findings.extend(
@@ -444,17 +468,19 @@ def check_schema_coherence(
     # ── Structural: stale swallow entries ────────────────────────────────────
     for entry in _SWALLOW_INVENTORY:
         if entry["classification"] == "stale":
-            findings.append({
-                "check": "schema_coherence",
-                "severity": "medium",
-                "scope": "structural",
-                "finding_type": "stale_swallow",
-                "pattern": entry["pattern"],
-                "classification": entry["classification"],
-                "explanation": entry["explanation"],
-                "remediation": entry.get("remediation", ""),
-                "cross_references": entry.get("cross_references", []),
-            })
+            findings.append(
+                {
+                    "check": "schema_coherence",
+                    "severity": "medium",
+                    "scope": "structural",
+                    "finding_type": "stale_swallow",
+                    "pattern": entry["pattern"],
+                    "classification": entry["classification"],
+                    "explanation": entry["explanation"],
+                    "remediation": entry.get("remediation", ""),
+                    "cross_references": entry.get("cross_references", []),
+                }
+            )
 
     # ── Live drift: probe the live DB ─────────────────────────────────────────
     if live_db_path is not None and live_db_path.is_file():
@@ -473,34 +499,38 @@ def check_schema_coherence(
                     }
                     missing_in_live = _CANONICAL_EVENTS_PYTHON_COLS - live_cols
                     if missing_in_live:
-                        findings.append({
-                            "check": "schema_coherence",
-                            "severity": "high",
-                            "scope": "live_drift",
-                            "finding_type": "live_db_column_missing",
-                            "table": "canonical_events",
-                            "missing_columns": sorted(missing_in_live),
-                            "explanation": (
-                                f"Live DB canonical_events is missing columns "
-                                f"{sorted(missing_in_live)} that EventStore._init_tables declares. "
-                                "The table may have been created by an older EventStore version."
-                            ),
-                            "remediation": "Add missing columns via a new migration (ALTER TABLE ADD COLUMN).",
-                            "cross_references": [],
-                        })
+                        findings.append(
+                            {
+                                "check": "schema_coherence",
+                                "severity": "high",
+                                "scope": "live_drift",
+                                "finding_type": "live_db_column_missing",
+                                "table": "canonical_events",
+                                "missing_columns": sorted(missing_in_live),
+                                "explanation": (
+                                    f"Live DB canonical_events is missing columns "
+                                    f"{sorted(missing_in_live)} that EventStore._init_tables declares. "
+                                    "The table may have been created by an older EventStore version."
+                                ),
+                                "remediation": "Add missing columns via a new migration (ALTER TABLE ADD COLUMN).",
+                                "cross_references": [],
+                            }
+                        )
             finally:
                 conn.close()
         except Exception as exc:
-            findings.append({
-                "check": "schema_coherence",
-                "severity": "low",
-                "scope": "live_drift",
-                "finding_type": "live_db_probe_failed",
-                "table": None,
-                "explanation": f"Could not probe live DB at {live_db_path}: {exc}",
-                "remediation": "",
-                "cross_references": [],
-            })
+            findings.append(
+                {
+                    "check": "schema_coherence",
+                    "severity": "low",
+                    "scope": "live_drift",
+                    "finding_type": "live_db_probe_failed",
+                    "table": None,
+                    "explanation": f"Could not probe live DB at {live_db_path}: {exc}",
+                    "remediation": "",
+                    "cross_references": [],
+                }
+            )
 
     # ── Summarise ─────────────────────────────────────────────────────────────
     structural = [f for f in findings if f.get("scope") == "structural"]

@@ -26,7 +26,6 @@ from core.config.schema_coherence import (
     check_schema_coherence,
 )
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
@@ -60,7 +59,9 @@ def test_fixture_a_audit_detects_canonical_events_aspirational():
     result = check_schema_coherence(_source_root())
 
     ce_findings = _findings_for_table(result, "canonical_events")
-    aspirational = [f for f in ce_findings if f["finding_type"] == "python_owned_table_in_migration"]
+    aspirational = [
+        f for f in ce_findings if f["finding_type"] == "python_owned_table_in_migration"
+    ]
     assert aspirational, (
         "Expected at least one python_owned_table_in_migration finding for canonical_events. "
         "If canonical_events has been moved into a migration, update this test."
@@ -98,7 +99,8 @@ def test_fixture_b_python_owned_no_migration_ref_is_low():
     """Tables like proj_* that are Python-owned and unreferenced by migrations → low severity."""
     result = check_schema_coherence(_source_root())
     low_findings = [
-        f for f in result["findings"]
+        f
+        for f in result["findings"]
         if f["finding_type"] == "python_owned_table_no_migration_ref" and f["severity"] == "low"
     ]
     assert low_findings, (
@@ -142,11 +144,12 @@ def test_fixture_c_audit_reports_high_for_column_mismatch():
         "If the column mismatch has been resolved, update this test."
     )
     for f in col_findings:
-        assert f["severity"] == "high", f"Column mismatch findings must be high, got {f['severity']}"
+        assert (
+            f["severity"] == "high"
+        ), f"Column mismatch findings must be high, got {f['severity']}"
         assert f["scope"] == "structural"
         assert "raw_prompt_retained" in f["missing_columns"] or any(
-            c in f["missing_columns"]
-            for c in ("raw_tool_output_retained", "schema_version")
+            c in f["missing_columns"] for c in ("raw_tool_output_retained", "schema_version")
         ), f"Unexpected missing_columns: {f['missing_columns']}"
 
 
@@ -186,7 +189,9 @@ def test_fixture_d_real_audit_status_is_findings():
         "If all debt is resolved, update this assertion."
     )
     assert result["summary"]["high"] >= 1, "Expected at least 1 high finding (column mismatch)"
-    assert result["summary"]["medium"] >= 1, "Expected at least 1 medium finding (aspirational ref or stale swallow)"
+    assert (
+        result["summary"]["medium"] >= 1
+    ), "Expected at least 1 medium finding (aspirational ref or stale swallow)"
 
 
 # ── Fixture E: staleness guard fires for unregistered table ──────────────────
@@ -196,11 +201,11 @@ def test_fixture_e_staleness_guard_flags_unregistered_table():
     """Staleness guard flags a Python CREATE TABLE not in the registry."""
     fake_python_content = (
         "def setup():\n"
-        "    conn.execute(\"\"\"\n"
+        '    conn.execute("""\n'
         "        CREATE TABLE IF NOT EXISTS test_audit_orphan_table (\n"
         "            id INTEGER PRIMARY KEY\n"
         "        )\n"
-        "    \"\"\")\n"
+        '    """)\n'
     )
     source_root = _source_root()
     # Build migration_tables so the guard can check for migration-ownership
@@ -212,13 +217,10 @@ def test_fixture_e_staleness_guard_flags_unregistered_table():
         _override_python_files=[("core/test_module.py", fake_python_content)],
     )
 
-    orphan_findings = [
-        f for f in staleness_findings
-        if f.get("table") == "test_audit_orphan_table"
-    ]
-    assert orphan_findings, (
-        "Staleness guard should have flagged 'test_audit_orphan_table' as unregistered."
-    )
+    orphan_findings = [f for f in staleness_findings if f.get("table") == "test_audit_orphan_table"]
+    assert (
+        orphan_findings
+    ), "Staleness guard should have flagged 'test_audit_orphan_table' as unregistered."
     assert orphan_findings[0]["finding_type"] == "unregistered_python_owned_table"
     assert orphan_findings[0]["severity"] == "medium"
     assert orphan_findings[0]["scope"] == "structural"
@@ -230,9 +232,7 @@ def test_fixture_e_staleness_guard_does_not_flag_registered_table():
     migration_tables = _build_migration_only_tables(source_root)
 
     # Simulate a Python file containing a known registered table
-    fake_content = (
-        'conn.execute("CREATE TABLE IF NOT EXISTS canonical_events (event_id TEXT)")\n'
-    )
+    fake_content = 'conn.execute("CREATE TABLE IF NOT EXISTS canonical_events (event_id TEXT)")\n'
     staleness_findings = _staleness_guard(
         source_root,
         migration_tables,
@@ -240,9 +240,9 @@ def test_fixture_e_staleness_guard_does_not_flag_registered_table():
     )
 
     flagged_tables = {f.get("table") for f in staleness_findings}
-    assert "canonical_events" not in flagged_tables, (
-        "canonical_events is registered in _PYTHON_OWNED_TABLES; staleness guard must not flag it."
-    )
+    assert (
+        "canonical_events" not in flagged_tables
+    ), "canonical_events is registered in _PYTHON_OWNED_TABLES; staleness guard must not flag it."
 
 
 def test_fixture_e_staleness_guard_does_not_flag_migration_owned_table(tmp_path):
@@ -264,9 +264,9 @@ def test_fixture_e_staleness_guard_does_not_flag_migration_owned_table(tmp_path)
         _override_python_files=[("core/some_module.py", fake_content)],
     )
     flagged_tables = {f.get("table") for f in staleness_findings}
-    assert "business_canonical_events" not in flagged_tables, (
-        "business_canonical_events is migration-owned; staleness guard must not flag it."
-    )
+    assert (
+        "business_canonical_events" not in flagged_tables
+    ), "business_canonical_events is migration-owned; staleness guard must not flag it."
 
 
 # ── Swallow inventory ─────────────────────────────────────────────────────────
@@ -298,9 +298,9 @@ def test_doctor_includes_schema_coherence_check(tmp_path):
         source_root=_source_root(),
         dream_studio_home=tmp_path,
     )
-    assert "schema_coherence" in result["checks"], (
-        "run_doctor_checks should include schema_coherence in its checks dict."
-    )
+    assert (
+        "schema_coherence" in result["checks"]
+    ), "run_doctor_checks should include schema_coherence in its checks dict."
     sc = result["checks"]["schema_coherence"]
     assert "status" in sc
     assert "findings" in sc
