@@ -268,28 +268,54 @@ rules:
       item: "All public function signatures annotated (parameters + return type)"
 
     # CALIBRATION: Static AST. No LLM needed.
-    # Exemptions (do NOT flag):
-    #   - __init__ methods (convention: return type None is implicit, omit per PEP 484)
-    #   - __del__, __new__ (protocol methods)
-    #   - @property getters (return type declared on the property, not the function)
-    #   - Test functions (test_* in test files) — tested by tst-* rules; not this rule
-    #   - Functions decorated with @override / @abstractmethod are acceptable either way
-    # Flag: public functions (no leading _) without -> in their signature.
-    # Do NOT flag private/internal functions (_ prefix) — only public API surfaces.
+    # Scope — PUBLIC functions only:
+    #   Public = name does NOT start with _ (single underscore private functions are excluded).
+    #   Dunder methods (__foo__) are a special case: most are exempt (see EXEMPT_DUNDERS below).
+    #   Raw grep counts that include _private functions will OVERCOUNT by 2x or more on
+    #   a well-typed codebase. The AST pass is the authoritative count; grep is NOT.
+    #
+    # Exemptions (do NOT flag — exempt at AST level, not manually):
+    #   - All standard dunder methods: __init__, __del__, __new__, __str__, __repr__,
+    #     __len__, __bool__, __eq__, __hash__, __lt__, __le__, __gt__, __ge__, __ne__,
+    #     __iter__, __next__, __enter__, __exit__, __contains__, __getitem__, __setitem__,
+    #     __delitem__, __call__, __class_getitem__, __init_subclass__, __set_name__,
+    #     __get__, __set__, __delete__ — return types are well-known by protocol convention
+    #   - @property getters — return type declared via the property descriptor
+    #   - Test functions in test files — tst-* rules own test code
+    #
+    # OUTPUT FORMAT — summary-first, detail as drill-down:
+    #   Report MUST lead with the gap summary, NOT a flat list of findings.
+    #   A flat list of 50+ items is a wall nobody acts on.
+    #   Format:
+    #     "X% of public functions lack return annotations (N of ~M), in K files."
+    #     Ranked file list (most unannotated first) → these are the actionable targets.
+    #     Per-function detail is secondary (available on request / collapsible).
+    #   Severity is set at the SUMMARY level (one medium finding per project), not per function.
 
     detection:
       type: static
       tool: ast
       notes: |
         Parse source files via Python ast.
-        Find FunctionDef/AsyncFunctionDef where:
+        Find FunctionDef/AsyncFunctionDef where ALL are true:
           - returns is None (no -> annotation)
-          - Function name does NOT start with _ (public)
-          - Function name is NOT __init__, __del__, __new__, __str__, __repr__, etc.
-            (dunder methods where return type is well-known by convention)
-          - File is NOT in tests/ or test_*.py (testing skill handles test code)
-          - Function is NOT a @property (ast.decorator_list check)
-        Report: "function X in file Y has no return type annotation"
+          - Name does NOT start with _ (not private/internal — single _ prefix excluded)
+          - Name is NOT a standard dunder (see EXEMPT_DUNDERS list in calibration above)
+          - File is NOT in tests/ or matches test_*.py pattern
+          - No @property decorator in the decorator_list
+        Collect ALL findings, then produce a SUMMARY REPORT (not a flat list):
+          1. Compute: N unannotated / M total public functions = X%
+          2. Group by file; rank files by unannotated count (highest first)
+          3. Report:
+               "X% of public functions lack return annotations (N of ~M), across K files.
+                Top files by gap density:
+                  17  core/observability/trace_logger.py
+                   7  core/config/database.py
+                   5  core/decisions/discovery.py
+                  [...]
+                Per-function detail available on request."
+          4. Severity: one MEDIUM finding for the project (not per function).
+             Escalate to HIGH if gap exceeds 20% of public functions.
       fallback_to_llm: false
 
     triggers:
