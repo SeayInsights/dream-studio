@@ -407,15 +407,17 @@ def register_project(
     name: str,
     description: str = "",
     project_path: Path | None = None,
+    write_marker: bool = True,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
     """Insert a new project row with status 'active'.
 
-    When ``project_path`` is provided, writes a .dream-studio-project JSON
-    marker to that directory so the CWD resolver can attribute token events
-    to this project. When omitted (programmatic/test callers), logs a warning
-    to the diagnostic stream.
+    When ``project_path`` is provided and ``write_marker=True`` (default),
+    writes a .dream-studio-project JSON marker so the CWD resolver can
+    attribute token events. Set ``write_marker=False`` for brownfield
+    one-time scans (no-marker default) — project_path is still stored in
+    business_projects for the SQLite path-fallback resolver.
 
     Returns::
 
@@ -438,7 +440,7 @@ def register_project(
         conn.commit()
 
     marker_written = False
-    if project_path is not None:
+    if project_path is not None and write_marker:
         try:
             _write_project_marker(
                 project_path=Path(project_path).resolve(),

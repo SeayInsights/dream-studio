@@ -1,7 +1,12 @@
-"""CWD → project resolution via .dream-studio-project marker file.
+"""CWD → project resolution via .dream-studio-project marker or SQLite path lookup.
 
-Walks up from the current working directory looking for a marker file.
-Supports both the legacy plain-UUID format and the new JSON format (TA3+).
+Resolution order (first match wins):
+  1. Walk up from CWD looking for .dream-studio-project marker (persistent projects)
+  2. At the .git/ repo root boundary: SQLite project_path fallback (no-marker intake default)
+  3. None — truly unregistered directory, graceful drop (never throws)
+
+The SQLite fallback (step 2) supports brownfield repos registered without a marker.
+It queries business_projects WHERE project_path = repo_root.
 """
 
 from __future__ import annotations
@@ -25,8 +30,9 @@ _UUID_RE = re.compile(
 class CWDProjectContext:
     project_id: str
     project_name: Optional[str]  # None for plain-UUID legacy markers
-    marker_path: Path
-    marker_format: Literal["json", "plain_uuid"]
+    marker_path: Optional[Path]  # None for project_path SQLite resolution
+    marker_format: Literal["json", "plain_uuid", "project_path"]
+    # "project_path" = resolved via SQLite business_projects.project_path (no marker)
 
 
 def _is_valid_uuid(text: str) -> bool:
@@ -194,9 +200,9 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
 
             return ctx
 
-        # Boundary 1: hit .git/ — repo root, don't walk past it.
+        # Boundary 1: hit .git/ — repo root. Try SQLite project_path fallback before None.
         if (current / ".git").is_dir():
-            return None
+            return resolve_project_from_path(current)
 
         # Boundary 2 & 3: stop before reaching home, or at filesystem root.
         parent = current.parent
@@ -204,3 +210,42 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
             return None
 
         current = parent
+
+
+def resolve_project_from_path(path: Path) -> Optional[CWDProjectContext]:
+    """SQLite fallback: resolve project from business_projects.project_path.
+
+    Used when no .dream-studio-project marker is present (no-marker intake default).
+    Queries business_projects WHERE project_path = resolved_path.
+
+    Returns CWDProjectContext with marker_format="project_path" on success,
+    or None if the path is not registered.
+    Never throws — fail-open like the rest of the resolver.
+    """
+    try:
+        from core.config.database import _default_db_path
+
+        resolved = str(path.resolve())
+        db_path = _default_db_path()
+        if not db_path.is_file():
+            return None
+        conn = sqlite3.connect(str(db_path), timeout=1.0)
+        try:
+            row = conn.execute(
+                "SELECT project_id, name FROM business_projects"
+                " WHERE project_path = ? AND status != 'deleted'"
+                " ORDER BY updated_at DESC LIMIT 1",
+                (resolved,),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        return CWDProjectContext(
+            project_id=row[0],
+            project_name=row[1],
+            marker_path=None,  # No marker file — resolved via SQLite
+            marker_format="project_path",
+        )
+    except Exception:
+        return None  # fail-open — never block a session on a lookup failure
