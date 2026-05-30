@@ -167,12 +167,36 @@ def create_security_scan_run(
     scope: str = "full_repo",
     previous_scan_id: str | None = None,
 ) -> str:
-    """Create a security_scan_runs row and return the scan_id.
+    """Create a security scan run. Delegates to create_skill_scan_run(skill_id='security')."""
+    return create_skill_scan_run(
+        project_id,
+        target_path,
+        skill_id="security",
+        execution_ctx=execution_ctx,
+        scope=scope,
+        previous_scan_id=previous_scan_id,
+    )
 
-    Determines if this is the baseline scan (first completed scan for this project).
-    When previous_scan_id is provided, links this scan to its predecessor for
-    delta computation. When omitted, the most recent completed scan for this project
-    is used as the predecessor (if any).
+
+def create_skill_scan_run(
+    project_id: str,
+    target_path: Path,
+    *,
+    skill_id: str,
+    execution_ctx: dict[str, Any],
+    scope: str = "full_repo",
+    previous_scan_id: str | None = None,
+) -> str:
+    """Create a skill scan run row and return the scan_id.
+
+    Generic version of create_security_scan_run() that works for any quality skill
+    (security, code-quality, types-deps, etc.). All skills share the same
+    security_scan_runs table (differentiated by skill_id) and security_findings
+    table (differentiated by rule_id prefix: sec-*, cq-*, typ-*, dep-*, etc.).
+
+    Determines if this is the baseline scan (first completed scan for this project
+    AND this skill_id). When previous_scan_id is provided, links this scan to its
+    predecessor for delta computation.
 
     Requires a valid approved execution context — safety is re-asserted here.
     """
@@ -187,28 +211,27 @@ def create_security_scan_run(
     db_path = _require_db()
 
     with _connect(db_path) as conn:
-        # Determine baseline and predecessor
+        # Baseline = first completed scan for this (project, skill) pair
         existing_completed = conn.execute(
             "SELECT scan_id FROM security_scan_runs"
-            " WHERE project_id = ? AND status = 'completed'"
+            " WHERE project_id = ? AND skill_id = ? AND status = 'completed'"
             " ORDER BY completed_at DESC LIMIT 1",
-            (project_id,),
+            (project_id, skill_id),
         ).fetchone()
         is_baseline = 1 if existing_completed is None else 0
-        # Use provided predecessor or auto-detect most recent completed scan
         prev_id = previous_scan_id or (existing_completed[0] if existing_completed else None)
 
-        # Collect tool versions
         tool_versions = _collect_tool_versions()
 
         conn.execute(
             """INSERT INTO security_scan_runs
-               (scan_id, project_id, is_baseline, scope, target_path,
+               (scan_id, project_id, skill_id, is_baseline, scope, target_path,
                 tool_versions_json, previous_scan_id, status, started_at, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
             (
                 scan_id,
                 project_id,
+                skill_id,
                 is_baseline,
                 scope,
                 str(Path(target_path).resolve()),

@@ -227,3 +227,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- reviewed: 2026-05-30, migration 086 delta infrastructure + no-marker attribution. No semantic changes required. -->
 
 <!-- reviewed: 2026-05-30, migration 086 delta infrastructure + no-marker attribution. No semantic changes required. -->
+
+<!-- reviewed: 2026-05-30, migration 087 skill_id on scan runs + code-quality fan-out. No semantic changes required. -->
