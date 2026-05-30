@@ -117,3 +117,5 @@ file sprawl, expose private project history, or authorize execution.
 <!-- Last reviewed 2026-05-26 — Phase 18.1.15b: ClaudeCodeInstaller gains skip_hook_install opt-out read from ~/.dream-studio/config.json via _integrate_dispatch in ds.py. Hook installation (pre-push) is now gated on that flag; the six platform-hardening gate checks themselves (format-check, lint-check, skill-sync, test-suite, atlas-leak, docs-drift) are unchanged. No policy or boundary change in this doc. -->
 
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

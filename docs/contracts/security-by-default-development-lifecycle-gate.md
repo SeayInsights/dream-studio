@@ -169,3 +169,5 @@ marked current.
 ## Platform Hardening Refresh
 
 The policy/permission engine is a supporting control-plane surface for the security-by-default lifecycle gate. High-risk actions such as secret access, destructive cleanup, external mutation, push/deploy, Docker execution, package changes, and career submission are denied or deferred by default and must record evidence, approval, rollback, and dashboard attention requirements.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

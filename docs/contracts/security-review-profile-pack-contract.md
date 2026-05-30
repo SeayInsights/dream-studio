@@ -360,3 +360,5 @@ the same security review profile pack when they touch security, privacy,
 database/schema, integrations, release targets, public/private boundaries, or
 legal/compliance assumptions. The profile maps those impacts to existing
 controls instead of creating a competing PRD-specific security system.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

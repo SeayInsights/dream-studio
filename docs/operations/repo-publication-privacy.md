@@ -84,3 +84,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: repo_publication_readiness.py extended with precision exclusions for contract_atlas.py (private content scan) and canonical/skills/quality/modes/security/ (secret scan). No privacy policy change. -->
 
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No repo publication privacy change; the new gate operates at pre-push time and does not affect what is or is not tracked in Git. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

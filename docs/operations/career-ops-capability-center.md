@@ -77,3 +77,5 @@ Career Ops data is not included in PRD context packets by default. Capability
 Center may show that PRD lifecycle workflows exist and are evaluated, but
 career/private data must stay out of Project Details, public exports, and
 adapter context unless Career Ops is enabled and the task is explicitly scoped.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

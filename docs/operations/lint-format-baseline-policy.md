@@ -255,3 +255,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps. No lint/format baseline policy change; this is a coupling-map config addition only. -->
 
 <!-- Last reviewed 2026-05-29 — O1: contract_registry.py narrowed 4 over-broad domains. No lint/format baseline policy change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

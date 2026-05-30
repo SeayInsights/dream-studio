@@ -195,3 +195,5 @@ database, API, caching, accessibility, observability, performance,
 dependency/supply-chain, privacy/compliance, backup/rollback, code quality, and
 release-readiness applicability. Missing evidence remains partial or
 unavailable until a targeted or full applicable review supplies evidence.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

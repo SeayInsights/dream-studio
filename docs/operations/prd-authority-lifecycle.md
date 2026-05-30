@@ -148,3 +148,5 @@ security/compliance uncertainty, dependency/package changes without approval,
 legal/regulatory uncertainty, user identity/private data risks, major
 architecture changes, public/private boundary changes, and policy-defined
 approval boundaries.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
