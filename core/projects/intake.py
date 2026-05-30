@@ -17,7 +17,6 @@ prior safety re-assertion.
 from __future__ import annotations
 
 import json
-import sqlite3
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -26,7 +25,6 @@ from typing import Any
 
 from core.event_store.studio_db import _connect
 from core.projects.external_validation import (
-    PRIVATE_TARGET_ARTIFACT_PATTERNS,
     assert_step_is_permitted,
     validate_approved_read_only_execution,
 )
