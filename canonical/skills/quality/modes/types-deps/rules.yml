@@ -1,0 +1,627 @@
+# Types & Dependencies Rules
+# Source: canonical/skills/quality/references/types-deps-best-practices.md
+# 8 rules: 4 types (typ-001 through typ-004) + 4 deps (dep-001, dep-002, dep-003, dep-007)
+#
+# Rule numbering follows the domain prefix convention:
+#   typ-* = type safety rules (Section M-types of best-practices)
+#   dep-* = dependency health rules (Section K of best-practices)
+#   dep-007 (not dep-004) — reserving dep-004/005/006 for rules
+#   owned by pr-security-scan:dependency-audit (CVE findings, pinning, unused)
+#
+# Candidate/confirm rules: typ-002, dep-007.
+#   typ-002: static clears obvious boundary Any; LLM confirms interior leakage
+#   dep-007: static clears TYPE_CHECKING-guarded cycles; LLM confirms unguarded ones
+#
+# PROJECT-AGNOSTIC: typ-001, dep-002, dep-003 discover this project's structure.
+# They do NOT hardcode dream-studio's core/ / interfaces/ / spool/ layout.
+
+rules:
+
+  # ── Types family ────────────────────────────────────────────────────────────
+
+  - id: "typ-001"
+    name: "Type checker does not cover all production source directories"
+    severity: high
+    category: type_enforcement
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section M-types"
+      item: "Type checker configured and covering all production source directories"
+
+    # CALIBRATION: Static config inspection only. No AST needed.
+    # This rule is a FINDING that reports a gap; it does NOT modify the type checker config.
+    # The resolution (expanding pyrightconfig.json / mypy coverage) is an ops/CI change.
+    # PROJECT-AGNOSTIC: discovers this project's source dirs from pyproject.toml or
+    # root-level __init__.py scan; compares to the type checker's include/coverage config.
+    # Does NOT assume any specific directory names.
+    #
+    # Severity calibration: high (not critical) because the code is likely well-typed;
+    # the gap is enforcement coverage, not annotation absence. Critical would be appropriate
+    # if the checker is completely absent (no config file found at all).
+    severity_no_checker: critical   # no type checker config found at all
+    severity_partial_coverage: high  # checker exists but misses some source dirs
+    severity_full_coverage: null     # pass — no finding
+
+    detection:
+      type: static
+      tool: config
+      notes: |
+        1. Discover this project's production source dirs:
+           a. Read pyproject.toml [tool.setuptools.packages.find], [tool.setuptools.packages],
+              or [tool.coverage.run.source] if present.
+           b. Fallback: scan root-level directories containing __init__.py.
+           c. Exclude: tests/, docs/, .planning/, build/, dist/, __pycache__
+        2. Find the type checker config (try in order: pyrightconfig.json, mypy.ini,
+           .mypy.ini, [tool.mypy] in pyproject.toml, [tool.pyright] in pyproject.toml).
+           If NONE found: report critical "No type checker configured."
+        3. Read the checker's coverage declaration:
+           - pyright: "include" array
+           - mypy: "files" / "packages" list, or absence (mypy defaults to analyzing
+             all files passed on command line, so check if it runs in CI).
+        4. Compare: which discovered source dirs are NOT listed in the checker's include?
+        5. Report: "Type checker covers X/N source directories. Uncovered: [list]"
+
+    triggers:
+      - "Type checker config exists but does not include all source directories"
+      - "No type checker config found (pyrightconfig.json, mypy.ini, pyproject.toml [tool.mypy])"
+
+    suppressions:
+      - inline_comment: "# typ-001: intentional — this directory is excluded from type checking"
+        reason: "Operator explicitly excludes this directory with documented justification"
+
+    remediation:
+      summary: |
+        Add uncovered source directories to your type checker's include/coverage config.
+        For pyright: expand the "include" array in pyrightconfig.json.
+        For mypy: add packages to [mypy] in pyproject.toml or mypy.ini.
+        After expanding coverage, expect new type errors — these are the finding.
+        Resolution of those errors is separate work; this rule tracks enforcement scope.
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#section-m-types-type-safety"
+
+    action:
+      build_mode: warn    # build mode notes if new files are in uncovered dirs
+
+
+  - id: "typ-002"
+    name: "Any used at non-boundary site (potential type erasure)"
+    severity: high       # candidate severity; confirmed interior-leakage = critical
+    category: type_safety
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section M-types"
+      item: "Any confined to system boundaries; not used in interior logic"
+
+    # CALIBRATION: candidate/confirm hybrid.
+    # Static pass has two stages:
+    #   1. Find all Any usage in type-annotation positions.
+    #   2. AUTO-ACCEPT (no LLM needed) obvious boundary patterns:
+    #      - dict[str, Any], List[Any] in annotation position
+    #      - Functions/params named parse_*, load_*, from_json, from_dict, deserialize_*, etc.
+    #      - Parameters named data, payload, raw, response, body
+    #      These are community-consensus legitimate boundary uses; auto-accepting them avoids
+    #      200+ LLM confirmations on a well-typed codebase.
+    #   3. Remaining candidates → LLM confirmation.
+    #
+    # LLM confirmation question (sharpened per gate decision):
+    #   "Is a more specific type knowable here?" (interior leakage)
+    #   vs. "Does the data genuinely arrive untyped from outside the system?" (benign boundary)
+    #
+    severity_static_candidate: high
+    severity_confirmed: critical
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Stage 1 — find Any candidates:
+          Parse source files via Python ast. Find `Any` used in:
+          - Function parameter annotations (ast.arg.annotation)
+          - Return type annotations (ast.FunctionDef.returns)
+          - Variable annotations (ast.AnnAssign)
+          Do NOT flag:
+          - `from typing import Any` or `from typing_extensions import Any` (import lines)
+          - `Any` used as a TYPE variable bound or constraint (rare; LLM handles if unclear)
+
+          Stage 2 — auto-accept obvious boundaries (skip LLM for these):
+          Accept without LLM if ANY of:
+          a. Annotation form is `dict[str, Any]` / `Dict[str, Any]` / `list[Any]` / `List[Any]`
+          b. Function name starts with: parse_, load_, from_json, from_dict, from_yaml,
+             deserialize, decode_, read_, fetch_, get_ (high-confidence boundary)
+          c. Parameter name is: data, payload, raw, response, body, result (boundary signal)
+          d. Function's containing module name contains: parser, loader, deserializer,
+             serializer, adapter, schema, codec
+          e. The Any-annotated parameter has name `kwargs` (standard **kwargs typing)
+
+          Stage 3 — remaining: report as "CANDIDATE (high) — Any at potentially non-boundary
+          site; confirm whether a more specific type is knowable."
+
+        fallback_to_llm: true
+
+      llm:
+        prompt_template: |
+          You are a type-safety auditor checking one specific rule.
+
+          Rule: typ-002 — Any used at non-boundary site
+          Severity: high (candidate) → critical if confirmed as interior leakage
+
+          The static analysis found `Any` in a type annotation position that was not
+          automatically recognized as an obvious JSON/external-data boundary.
+
+          Context:
+          {static_finding_excerpt}
+
+          The key question is: **Is a more specific type knowable here?**
+
+          Classify as INTERIOR LEAKAGE (confirm finding, critical severity) if:
+          - The variable/parameter/return value's type IS determinable from the code context
+            (e.g., it's always a str, always a Project object, always a list[dict]) but Any
+            was used for convenience or to avoid a refactor.
+          - Downstream code treats the Any-typed value as a specific type without re-checking.
+          - The Any annotation removes type-checking guarantees for the callers of this function.
+
+          Classify as BENIGN BOUNDARY (reject finding) if:
+          - The data genuinely arrives untyped from outside the system (parsed JSON before
+            validation, plugin return value, external API response with no schema, **kwargs).
+          - A TypedDict or Protocol would be the "proper" type here, but the Any is a known
+            temporary limitation at a system edge.
+          - The function is explicitly a deserialization/parsing entry point.
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_or_var",
+           "excerpt": "the specific Any annotation, max 80 chars",
+           "verdict": "interior_leakage | benign_boundary",
+           "explanation": "one sentence: why the type is or isn't knowable here"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Any in function parameter annotation (not auto-accepted as boundary pattern)"
+      - "Any in return type annotation (not auto-accepted as boundary pattern)"
+      - "Any in variable annotation (not dict[str, Any] or boundary context)"
+
+    suppressions:
+      - inline_comment: "# typ-002: boundary Any — [reason]"
+        reason: "Operator confirms this is a boundary and documents why"
+
+    remediation:
+      summary: |
+        Replace Any with a more specific type. Options by situation:
+        - Known concrete type: use that type (str, int, list[str], etc.)
+        - Structured dict: use TypedDict to describe the shape
+        - Multiple possible types: use Union[str, int] or str | int (Python 3.10+)
+        - Duck-typed interface: define a Protocol
+        - Genuinely unvalidated external data: keep Any but add a comment; consider
+          adding a validation step to narrow the type at the boundary
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#any-discipline"
+
+    action:
+      build_mode: warn    # warn if new function uses Any without boundary markers
+
+
+  - id: "typ-003"
+    name: "# type: ignore without justification comment"
+    severity: medium
+    category: type_hygiene
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section M-types"
+      item: "# type: ignore always accompanied by a brief justification comment"
+
+    # CALIBRATION: Static grep only. No LLM needed.
+    # Pattern: `# type: ignore` (bare) or `# type: ignore[rule]` with no subsequent explanation.
+    # Pass: `# type: ignore  # stubs incomplete`, `# type: ignore[assignment]  # mypy bug #1234`
+    # Fail: `# type: ignore`, `# type: ignore[misc]` (rule named but not explained)
+    # The distinction: the RULE name (in [brackets]) says WHAT is being suppressed; the
+    # trailing comment says WHY. We require WHY. Rule name alone is not sufficient.
+
+    detection:
+      type: static
+      tool: grep_ast
+      notes: |
+        Search for: `# type: ignore` patterns in all Python files.
+        Pass (no finding) if the comment has EITHER:
+          - Text after `# type: ignore...` that is NOT just brackets: e.g., `# type: ignore  # reason`
+          - Text after `# type: ignore[rule]` with additional explanation
+        Fail (finding) if:
+          - Bare `# type: ignore` with nothing following
+          - `# type: ignore[rule]` with nothing following the closing bracket
+          - `# pyright: ignore[rule]` with nothing following (apply same standard)
+        Report: location + the full comment line
+      fallback_to_llm: false
+
+    triggers:
+      - "# type: ignore with no explanation text following it"
+      - "# type: ignore[rule] with no explanation text after the bracket"
+
+    suppressions:
+      - inline_comment: "# typ-003: bare suppress — pre-existing; tracked in issue #N"
+        reason: "Operator acknowledges the bare suppress and has a tracking reference"
+
+    remediation:
+      summary: |
+        Add a brief explanation after `# type: ignore`. Examples:
+        - # type: ignore[assignment]  # third-party stubs are incomplete for this library
+        - # type: ignore  # mypy false positive; see https://github.com/python/mypy/issues/NNNN
+        - # type: ignore[return-value]  # dynamic return type from plugin interface
+        The explanation should tell a future maintainer why the checker is being suppressed,
+        so they can remove the suppression when the underlying issue is resolved.
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#section-m-types-type-safety"
+
+    action:
+      build_mode: null    # audit-only; build mode doesn't generate type:ignore comments
+
+
+  - id: "typ-004"
+    name: "Function missing return type annotation"
+    severity: medium
+    category: annotation_coverage
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section M-types"
+      item: "All public function signatures annotated (parameters + return type)"
+
+    # CALIBRATION: Static AST. No LLM needed.
+    # Exemptions (do NOT flag):
+    #   - __init__ methods (convention: return type None is implicit, omit per PEP 484)
+    #   - __del__, __new__ (protocol methods)
+    #   - @property getters (return type declared on the property, not the function)
+    #   - Test functions (test_* in test files) — tested by tst-* rules; not this rule
+    #   - Functions decorated with @override / @abstractmethod are acceptable either way
+    # Flag: public functions (no leading _) without -> in their signature.
+    # Do NOT flag private/internal functions (_ prefix) — only public API surfaces.
+
+    detection:
+      type: static
+      tool: ast
+      notes: |
+        Parse source files via Python ast.
+        Find FunctionDef/AsyncFunctionDef where:
+          - returns is None (no -> annotation)
+          - Function name does NOT start with _ (public)
+          - Function name is NOT __init__, __del__, __new__, __str__, __repr__, etc.
+            (dunder methods where return type is well-known by convention)
+          - File is NOT in tests/ or test_*.py (testing skill handles test code)
+          - Function is NOT a @property (ast.decorator_list check)
+        Report: "function X in file Y has no return type annotation"
+      fallback_to_llm: false
+
+    triggers:
+      - "Public function without -> return type annotation"
+
+    suppressions:
+      - inline_comment: "# typ-004: unannotated — dynamic return type; annotate as Any or narrow later"
+        reason: "Operator acknowledges the missing annotation with documented justification"
+
+    remediation:
+      summary: |
+        Add a return type annotation. Examples:
+        - def get_user(user_id: str) -> User:
+        - def process(items: list[str]) -> list[str]:
+        - def load_config() -> dict[str, Any]:   (if return type is truly dict-shaped JSON)
+        - def handle_event(event: dict) -> None:
+        If the return type is unknown or depends on runtime data, use Any with a comment.
+        Use `-> None` for functions that explicitly return nothing.
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#annotation-coverage"
+
+    action:
+      build_mode: warn    # build mode adds return type annotation stubs to new functions
+
+
+  # ── Dependencies family ──────────────────────────────────────────────────────
+
+  - id: "dep-001"
+    name: "CVE gate is non-blocking (continue-on-error)"
+    severity: high       # elevated to critical if actual CVEs currently pass through
+    category: cve_enforcement
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section K"
+      item: "CVE scanner is configured AND blocking (not continue-on-error)"
+
+    # CALIBRATION: Two-stage check.
+    # Stage 1 (static): read CI yaml files for CVE tool steps; check for continue-on-error.
+    # Stage 2 (dynamic): run the CVE tool on this project's requirements if possible.
+    # Severity from REAL OUTPUT (not just config):
+    #   - continue-on-error + CVEs present in current deps → critical (real exposure today)
+    #   - continue-on-error + no CVEs currently → high (gate is latent risk; any new CVE slips through)
+    #   - No CVE tool configured at all → critical (no gate)
+    #   - CVE tool, blocking, no CVEs → pass (no finding)
+    #   - CVE tool, blocking, CVEs present → NOT this rule (security:scan owns CVE findings)
+    # This rule owns the ENFORCEMENT GAP, not the CVE findings themselves.
+
+    detection:
+      type: hybrid
+      static:
+        tool: config
+        notes: |
+          1. Scan .github/workflows/*.yml (and any CI config at root: .circleci/, Jenkinsfile, etc.)
+             for steps that invoke: pip-audit, safety, cyclonedx-bom, or similar CVE tools.
+          2. For each found step, check for `continue-on-error: true`.
+          3. If no CVE tool found in CI at all → critical "No CVE gate configured."
+          4. If CVE tool found with continue-on-error → proceed to dynamic stage.
+          5. If CVE tool found, blocking (no continue-on-error) → pass on the enforcement check.
+             (CVE findings, if any, are reported by pr-security-scan:dependency-audit.)
+        fallback_to_llm: false
+      dynamic:
+        tool: pip-audit
+        command: "python -m pip_audit -r {requirements_file} --format json"
+        notes: |
+          Run pip-audit on this project's requirements file(s) if pip-audit is available.
+          Parse output JSON for vulnerability count.
+          If CVEs present + gate non-blocking → escalate severity to critical.
+          If no CVEs + gate non-blocking → keep severity at high (latent risk).
+          If pip-audit not available or requirements file not found → report enforcement
+          gap at high severity without CVE count ("cannot verify current CVE status").
+
+    triggers:
+      - "continue-on-error: true on CVE scanner step in CI"
+      - "No CVE tool step found in any CI workflow"
+
+    suppressions:
+      - inline_comment: "# dep-001: non-blocking intentional — triaged, no actionable CVEs"
+        reason: "Operator explicitly documents why non-blocking is accepted"
+
+    remediation:
+      summary: |
+        Remove `continue-on-error: true` from the CVE scanner step to make it blocking.
+        If the gate was non-blocking because existing CVEs would fail it: address the CVEs
+        (upgrade packages, apply patches, or add justified exceptions in pip-audit's
+        config) before making the gate blocking.
+        pip-audit supports an audit configuration file (.pip-audit-ignore) for documented
+        exceptions: https://pypa.github.io/pip-audit/
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#cve-gate-enforcement"
+
+    action:
+      build_mode: null    # build mode does not modify CI config
+
+
+  - id: "dep-002"
+    name: "Dependency lock not in sync or absent"
+    severity: high
+    category: dep_reproducibility
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section K"
+      item: "All dependencies locked to exact versions for reproducible installs"
+
+    # CALIBRATION: Static file-presence check.
+    # PROJECT-AGNOSTIC: checks for common lock file patterns in this project.
+    # Acceptable lock strategies (any of these counts as "locked"):
+    #   1. A pip-compile-generated .lock file alongside the .txt requirements
+    #   2. poetry.lock (poetry projects)
+    #   3. Pipfile.lock (pipenv projects)
+    #   4. requirements.txt using ONLY == pins (the file IS the lock)
+    # Separate check for dev deps: production lock present but no dev lock = high (distinct finding).
+    # NOTE: the library-vs-application distinction. If pyproject.toml indicates this is a
+    # library (has "classifiers" or "project.urls" with PyPI), note this in the finding.
+    # Application projects SHOULD lock; library projects should NOT lock production (but
+    # may still want a dev lock for reproducible CI).
+
+    detection:
+      type: static
+      tool: config
+      notes: |
+        1. Detect project type: check pyproject.toml for classifiers indicating a library
+           (presence of "Programming Language :: Python", "Framework :: ...", etc.) or
+           for a requirements.txt / pyproject.toml with only >= bounds (library convention).
+           If library: note it in the finding, reduce severity to medium for production lock.
+        2. Check for production lock file (see config.yml lock_file_patterns).
+           Also check if requirements.txt uses only == pins throughout.
+        3. Check for dev lock file (see config.yml dev_lock_patterns).
+           Also check if requirements-dev.txt uses only == pins throughout.
+        4. Report:
+           - Production lock absent (or only ranges, no lock file): high
+           - Production lock present, dev lock absent: high (separate finding)
+           - Both present: pass
+      fallback_to_llm: false
+
+    triggers:
+      - "No requirements.lock / poetry.lock / Pipfile.lock found"
+      - "requirements-dev.txt present but no companion dev lock file"
+      - "requirements files use >= ranges without a lock file"
+
+    suppressions:
+      - inline_comment: "# dep-002: no lock intentional — library project, not an application"
+        reason: "Library projects should not lock production deps; operator confirms this is a library"
+      - inline_comment: "# dep-002: dev lock intentional — pinned == in requirements-dev.txt"
+        reason: "Operator uses == pins in the dev requirements file as the lock mechanism"
+
+    remediation:
+      summary: |
+        For applications: generate a lock file with pip-compile (pip-tools):
+          pip install pip-tools
+          pip-compile requirements.txt --output-file requirements.lock
+          pip-compile requirements-dev.txt --output-file requirements-dev.lock
+        Commit both lock files. Run pip-compile on dependency updates.
+        For libraries: lock dev deps only (CI reproducibility) but not production.
+        For poetry projects: `poetry lock` generates poetry.lock automatically.
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#dependency-locking"
+
+    action:
+      build_mode: null    # build mode does not generate lock files
+
+
+  - id: "dep-003"
+    name: "No license gate configured"
+    severity: high
+    category: license_compliance
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section K"
+      item: "License compatibility verified for all direct dependencies"
+
+    # CALIBRATION: Static tool-presence check.
+    # This rule checks that A license gate EXISTS — not what it contains.
+    # The specific allowlist is organizational (not prescribed by this skill).
+    # Output text points to tools and documentation; does NOT prescribe an allowlist.
+    # Finding: "No license gate is configured. This means the project's dependency
+    #           licenses have not been systematically verified."
+    # Recommendation: tool-pointing, not policy-dictating.
+
+    detection:
+      type: static
+      tool: config
+      notes: |
+        1. Check if pip-licenses is in requirements-dev.txt / pyproject.toml dev-deps.
+        2. Check if liccheck or fossa is in requirements or CI config.
+        3. Check for license config files: .licenserc, liccheck.ini, .fossa.yml, liccheck.cfg
+        4. Check CI workflows for license-check steps.
+        5. If NONE found: report "No license gate configured."
+        6. If found: check that it is configured to FAIL on violations (not just report).
+           A license tool in advisory mode (no fail) is lower severity (medium) than absent.
+      fallback_to_llm: false
+
+    triggers:
+      - "No pip-licenses, liccheck, or fossa tool found in requirements or CI"
+      - "License tool found but configured in advisory mode only (no fail-on-violation)"
+
+    suppressions:
+      - inline_comment: "# dep-003: license review handled externally — [process ref]"
+        reason: "Operator has an external license review process with documented reference"
+
+    remediation:
+      summary: |
+        Install a license-checking tool and define your project's allowlist.
+        Two common options:
+        - pip-licenses (https://pypi.org/project/pip-licenses/): simple CLI tool that
+          lists all dep licenses and can fail on violations.
+          Usage: pip-licenses --allow-only="MIT;BSD-2-Clause;Apache-2.0;..." --fail-on-violation
+        - liccheck (https://pypi.org/project/liccheck/): config-file-driven; supports
+          allowlists and warnings in liccheck.ini or setup.cfg.
+        Your allowlist should reflect your distribution model and legal requirements.
+        Consult your organization's legal counsel for the specific licenses to allow.
+        Common starting point for permissive commercial use: MIT, BSD-2-Clause,
+        BSD-3-Clause, Apache-2.0, ISC, Python-2.0. GPL variants need legal review.
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#license-compatibility"
+
+    action:
+      build_mode: null    # build mode does not install or configure license tools
+
+
+  - id: "dep-007"
+    name: "Runtime circular import between Python modules"
+    severity: high       # escalated to critical after LLM confirmation
+    category: import_cycles
+
+    source:
+      doc: "canonical/skills/quality/references/types-deps-best-practices.md"
+      section: "Section K"
+      item: "No Python runtime circular imports (TYPE_CHECKING-guarded imports are exempt)"
+
+    # CALIBRATION: candidate/confirm hybrid.
+    # The AST pass MUST clear TYPE_CHECKING-guarded imports before generating candidates.
+    # Without this, ~50% of findings are false positives (TYPE_CHECKING is the standard
+    # Python idiom for breaking cycles at runtime while keeping the type checker informed).
+    #
+    # Static pass:
+    #   1. Parse all Python files in scope, build import graph (module → modules it imports)
+    #   2. EXCLUDE from graph edges: imports inside `if TYPE_CHECKING:` blocks
+    #   3. EXCLUDE from graph edges: imports inside function/method bodies (deferred)
+    #   4. Run strongly-connected-component / DFS cycle detection on the PRUNED graph
+    #   5. Only modules with cycles in the PRUNED graph become candidates
+    #   6. Report as "CANDIDATE — runtime circular import detected after excluding TYPE_CHECKING guards"
+    #
+    # LLM confirmation:
+    #   The LLM sees only genuinely-ambiguous unguarded cycles. Its job is to confirm:
+    #   "Is this actually a runtime cycle, or did the AST miss a deferred/conditional import?"
+    #
+    severity_static_candidate: high
+    severity_confirmed: critical
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Build import graph from Python AST:
+          1. For each source file, parse with ast.parse().
+          2. Walk ast.Import and ast.ImportFrom nodes.
+          3. SKIP if the node is inside:
+             - An `if TYPE_CHECKING:` block (ast.If where test is ast.Name('TYPE_CHECKING')
+               or ast.Attribute(value=ast.Name('typing'), attr='TYPE_CHECKING'))
+             - A function definition body (ast.FunctionDef / ast.AsyncFunctionDef)
+             - A try/except block where the except branch handles ImportError — indicates
+               optional dependency (skip this edge)
+          4. Build directed graph: {module_path → set of imported module_paths}
+             (resolve relative imports to absolute paths using the project's source root)
+          5. Use DFS or SCC to find cycles in the pruned graph.
+          6. For each cycle: report the cycle path (A → B → C → A) as a candidate.
+          7. Do NOT escalate to critical at this stage — that requires LLM confirmation.
+        fallback_to_llm: true
+
+      llm:
+        prompt_template: |
+          You are a dependency health auditor checking one specific rule.
+
+          Rule: dep-007 — Runtime circular import between Python modules
+          Severity: high (candidate) → critical if confirmed as real runtime cycle
+
+          The static analysis found a potential circular import cycle AFTER excluding
+          imports inside `if TYPE_CHECKING:` blocks and function bodies.
+
+          Detected cycle:
+          {cycle_path}
+
+          Relevant import statements from each module in the cycle:
+          {static_finding_excerpt}
+
+          Confirm whether this is a REAL RUNTIME CIRCULAR IMPORT:
+          - Does the cycle exist at module load time (when Python executes the import
+            statements at the top of each file)?
+          - OR is there a structural reason the AST missed that breaks the cycle at runtime
+            (e.g., a conditional import, an __all__ guard, a lazy-loading pattern, a
+            deferred attribute lookup)?
+
+          If it is a real runtime cycle: it will produce ImportError or AttributeError
+          depending on import order. Confirm it is critical.
+
+          If it is NOT a real runtime cycle: explain what breaks the cycle at runtime.
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "cycle": "A → B → C → A (simplified path)",
+           "verdict": "real_runtime_cycle | broken_at_runtime",
+           "explanation": "one sentence: why this is or isn't a real runtime cycle"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: module_group    # provide all files in the cycle as context
+        estimated_tokens: 500
+
+    triggers:
+      - "Module-level circular import detected (excluding TYPE_CHECKING guards and deferred imports)"
+
+    suppressions:
+      - inline_comment: "# dep-007: acknowledged cycle — [reason]; refactor tracked in #N"
+        reason: "Operator acknowledges the cycle with a documented refactor plan"
+
+    remediation:
+      summary: |
+        Resolve the circular import by one of:
+        1. Extract the shared concept into a third module that both A and B import
+           (the most architecturally sound solution — the cycle often reveals a missing abstraction)
+        2. Use `if TYPE_CHECKING:` guard for any import that's only needed for type hints:
+              from __future__ import annotations
+              from typing import TYPE_CHECKING
+              if TYPE_CHECKING:
+                  from core.b import B  # typing-only; no runtime cycle
+        3. Move the import inside the function that needs it (deferred import):
+              def my_function() -> "B":
+                  from core.b import B  # delayed until function call
+                  return B()
+        Option 1 is preferred. Options 2 and 3 are acceptable workarounds.
+        Note: Option 2 is the community-standard idiom and is NOT flagged as a cycle by
+        this rule (the static pass excludes TYPE_CHECKING guards at the AST level).
+      guide_ref: "canonical/skills/quality/references/types-deps-best-practices.md#circular-imports"
+
+    action:
+      build_mode: null    # build mode does not restructure import graphs
