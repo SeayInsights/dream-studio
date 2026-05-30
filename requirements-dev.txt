@@ -11,3 +11,6 @@ flake8>=7.0
 pip-audit>=2.7
 pre-commit>=3.0
 pytest-asyncio>=0.23
+# Security scanning tools (ds-quality:security static passes — brownfield slice 18.x)
+bandit>=1.7
+semgrep>=1.60

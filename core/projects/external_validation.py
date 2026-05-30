@@ -1,8 +1,21 @@
-"""Planning-only external project validation pipeline helpers.
+"""External project validation pipeline — planning and approved read-only execution.
 
-External target work must remain explicit, evidence-backed, and approval-gated.
-This module creates a reusable validation plan from registry metadata without
-opening, scanning, or mutating the target repository.
+Two distinct layers with a strict safety boundary between them:
+
+PLANNING LAYER (existing):
+  build_external_project_validation_pipeline() always returns execution_allowed=False.
+  The planning validator rejects any plan with execution_allowed=True.
+  These are the default and the invariant for all planning operations.
+
+EXECUTION LAYER (added in brownfield slice 18.x):
+  approve_read_only_execution() is the ONLY path that produces execution_allowed=True.
+  It does so by re-asserting every safety property at the execution boundary —
+  not by trusting them from the planning layer. The execution validator (separate
+  from the planning validator) checks: read-only scope enforced, no push/commit/
+  mutation/deploy, private artifact exclusions present, operator approval ref required.
+
+  A safety property that only holds at planning time but not at execution time is
+  a hole. The dual-validator design makes each layer responsible for its own invariants.
 """
 
 from __future__ import annotations
@@ -315,3 +328,170 @@ def _truthy(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y", "approved", "present"}
     return bool(value)
+
+
+# ── Approved read-only execution layer ────────────────────────────────────────
+# These are the ONLY functions that produce execution_allowed=True.
+# They are deliberately separate from the planning layer and re-assert
+# every safety property independently.
+
+_APPROVED_ALLOWED_MODES: frozenset[str] = frozenset({"read_only", "dry_run"})
+_APPROVED_FORBIDDEN_MODES: frozenset[str] = frozenset(
+    {"mutation", "cleanup", "push", "deploy", "commit", "stage"}
+)
+_APPROVED_DEFAULT_STEPS: tuple[str, ...] = ("run_read_only_validation",)
+
+
+def approve_read_only_execution(
+    plan: Mapping[str, Any],
+    *,
+    operator_approval_ref: str,
+    execution_steps: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Build an approved, read-only-scoped execution context from a validated plan.
+
+    THIS IS THE ONLY PATH THAT SETS execution_allowed=True.
+
+    Safety properties re-asserted at the execution boundary (not inherited):
+    - push_allowed: False
+    - commit_allowed: False
+    - stage_allowed: False
+    - mutation_allowed: False
+    - deploy_allowed: False
+    - allowed_modes: read_only, dry_run only
+    - private_artifact_exclusions: full PRIVATE_TARGET_ARTIFACT_PATTERNS list
+    - execution_scope: read_only_validation_only
+
+    Args:
+        plan: A planning-only plan from build_external_project_validation_pipeline().
+              It is validated before the execution context is created — a plan with
+              safety violations cannot yield an approved execution context.
+        operator_approval_ref: Non-empty string identifying the operator's explicit
+              approval. Required — no approval ref, no execution context.
+        execution_steps: Steps permitted in this execution context. Defaults to
+              ["run_read_only_validation"]. Any step outside this list is forbidden.
+
+    Returns:
+        Approved execution context dict. Must be passed to validate_approved_read_only_execution()
+        before any execution step runs.
+
+    Raises:
+        ValueError: If plan has safety violations, or operator_approval_ref is empty.
+    """
+    if not _text(operator_approval_ref):
+        raise ValueError(
+            "operator_approval_ref is required and must be non-empty. "
+            "Approved execution cannot proceed without explicit operator approval."
+        )
+
+    # Validate the source plan — a plan with violations cannot yield execution
+    plan_issues = validate_external_project_validation_pipeline(plan)
+    if plan_issues:
+        raise ValueError(
+            f"Source plan has safety violations and cannot be promoted to execution: "
+            f"{plan_issues}"
+        )
+
+    allowed_steps = tuple(execution_steps or _APPROVED_DEFAULT_STEPS)
+    if not allowed_steps:
+        raise ValueError("execution_steps must be non-empty")
+
+    # Re-assert every safety property independently at the execution boundary.
+    # These are NOT inherited from the plan — each is explicitly set here.
+    return {
+        "derived_from_plan": True,
+        "execution_allowed": True,  # The ONLY True in the codebase
+        "execution_scope": "read_only_validation_only",
+        "approved_execution_steps": list(allowed_steps),
+        "operator_approval_ref": _text(operator_approval_ref),
+        # ── Safety properties RE-ASSERTED (not inherited) ──────────────────────
+        "safety_assertions": {
+            "push_allowed": False,
+            "commit_allowed": False,
+            "stage_allowed": False,
+            "mutation_allowed": False,
+            "deploy_allowed": False,
+            "allowed_execution_modes": sorted(_APPROVED_ALLOWED_MODES),
+            "forbidden_execution_modes": sorted(_APPROVED_FORBIDDEN_MODES),
+            "private_artifact_exclusions": list(PRIVATE_TARGET_ARTIFACT_PATTERNS),
+            "execution_scope_constraint": "read_only_validation_steps_only",
+        },
+        # ── Context from plan (for traceability, not safety) ──────────────────
+        "target_id": _text(_mapping(plan.get("target_policy")).get("target_id")),
+        "validation_profile": _mapping(plan.get("validation_profile")).get("profile_id"),
+        "source_evidence_refs": list(_sequence_text(plan.get("source_evidence_refs"))),
+    }
+
+
+def validate_approved_read_only_execution(ctx: Mapping[str, Any]) -> list[str]:
+    """Validate an approved execution context before any execution step runs.
+
+    This is the execution-layer validator — separate from the planning-layer validator.
+    It checks that all safety re-assertions are present and correct.
+
+    Called immediately before any execution step. A non-empty issues list must
+    block execution, not proceed with a warning.
+
+    Returns:
+        List of safety violation strings. Empty list = safe to execute.
+    """
+    issues: list[str] = []
+
+    if not _truthy(ctx.get("derived_from_plan")):
+        issues.append("execution_context_must_derive_from_validated_plan")
+    if not _truthy(ctx.get("execution_allowed")):
+        issues.append("execution_context_must_have_execution_allowed_true")
+    if ctx.get("execution_scope") != "read_only_validation_only":
+        issues.append("execution_scope_must_be_read_only_validation_only")
+    if not _text(ctx.get("operator_approval_ref")):
+        issues.append("operator_approval_ref_required_in_execution_context")
+    if not ctx.get("approved_execution_steps"):
+        issues.append("approved_execution_steps_must_be_non_empty")
+
+    safety = _mapping(ctx.get("safety_assertions"))
+
+    # Each safety property re-checked independently — not by reference to the plan
+    if safety.get("push_allowed") is not False:
+        issues.append("push_must_not_be_allowed_in_execution_context")
+    if safety.get("commit_allowed") is not False:
+        issues.append("commit_must_not_be_allowed_in_execution_context")
+    if safety.get("stage_allowed") is not False:
+        issues.append("stage_must_not_be_allowed_in_execution_context")
+    if safety.get("mutation_allowed") is not False:
+        issues.append("mutation_must_not_be_allowed_in_execution_context")
+    if safety.get("deploy_allowed") is not False:
+        issues.append("deploy_must_not_be_allowed_in_execution_context")
+
+    allowed_modes = set(safety.get("allowed_execution_modes") or [])
+    if not allowed_modes:
+        issues.append("allowed_execution_modes_must_be_non_empty_in_execution_context")
+    elif not allowed_modes.issubset(_APPROVED_ALLOWED_MODES):
+        disallowed = allowed_modes - _APPROVED_ALLOWED_MODES
+        issues.append(f"execution_context_allows_non_read_only_modes:{disallowed}")
+
+    if not safety.get("private_artifact_exclusions"):
+        issues.append("private_artifact_exclusions_required_in_execution_context")
+
+    scope_constraint = safety.get("execution_scope_constraint")
+    if scope_constraint != "read_only_validation_steps_only":
+        issues.append("execution_scope_constraint_must_be_read_only_validation_steps_only")
+
+    return issues
+
+
+def assert_step_is_permitted(
+    step: str,
+    execution_ctx: Mapping[str, Any],
+) -> None:
+    """Assert that a step is in the approved execution steps list.
+
+    Raises ValueError if not permitted — prevents executing a step that was
+    not in the original approved scope.
+    """
+    approved = set(execution_ctx.get("approved_execution_steps") or [])
+    if step not in approved:
+        raise ValueError(
+            f"Step '{step}' is not in the approved execution steps {approved}. "
+            "The execution context only permits the steps explicitly approved. "
+            "This is a safety boundary — steps cannot be added at execution time."
+        )
