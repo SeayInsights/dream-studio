@@ -158,11 +158,7 @@ def compute_scan_delta(
         for r in resolved_links
         if r["verdict"] == "same_edited"
     }
-    distinct = {
-        (r["prev_finding_id"], r["curr_finding_id"])
-        for r in resolved_links
-        if r["verdict"] == "distinct"
-    }
+    # "distinct" verdicts leave findings in possibly_fixed/new — no set needed
 
     resolved_prev_ids = {pid for pid, _ in same_edited}
     resolved_curr_ids = {cid for _, cid in same_edited}
