@@ -1149,28 +1149,7 @@ async def list_projects(
             if "created_at" in prd_columns
             else "NULL"
         )
-        bug_count_expr = (
-            _optional_count_expr("pi_bugs", "project_id", condition="status != 'fixed'")
-            if object_exists(conn, "pi_bugs")
-            else "0"
-        )
-        critical_bug_count_expr = (
-            _optional_count_expr(
-                "pi_bugs", "project_id", condition="status != 'fixed' AND severity = 'critical'"
-            )
-            if object_exists(conn, "pi_bugs")
-            else "0"
-        )
-        violation_count_expr = (
-            _optional_count_expr("pi_violations", "project_id", condition="status != 'resolved'")
-            if object_exists(conn, "pi_violations")
-            else "0"
-        )
-        dependency_count_expr = (
-            _optional_count_expr("pi_dependencies", "project_id")
-            if object_exists(conn, "pi_dependencies")
-            else "0"
-        )
+        # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 — return 0 constants
         security_columns = (
             table_columns(conn, "security_findings")
             if object_exists(conn, "security_findings")
@@ -1415,7 +1394,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             if "created_at" in prd_columns
             else "NULL"
         )
-        dependency_count_expr = "0"  # pi_dependencies dropped in migration 084
+        # pi_dependencies dropped in migration 084; 0 is hardcoded in the query
         security_columns = (
             table_columns(conn, "security_findings")
             if object_exists(conn, "security_findings")
@@ -1502,7 +1481,6 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             latest_prd_title_expr=latest_prd_title_expr,
             latest_prd_file_path_expr=latest_prd_file_path_expr,
             latest_prd_created_at_expr=latest_prd_created_at_expr,
-            dependency_count_expr=dependency_count_expr,
             security_open_count_expr=security_open_count_expr,
             attention_open_count_expr=attention_open_count_expr,
             validation_failed_count_expr=validation_failed_count_expr,
