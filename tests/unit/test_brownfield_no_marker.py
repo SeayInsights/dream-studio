@@ -74,7 +74,8 @@ def test_no_marker_project_path_fallback(tmp_path, monkeypatch):
 
     os.chdir(str(repo_dir))
     # Reload module to clear any cached state
-    import importlib, core.sdlc.cwd_resolver as mod
+    import importlib
+    import core.sdlc.cwd_resolver as mod
 
     importlib.reload(mod)
     ctx = mod.resolve_project_from_cwd()
@@ -131,7 +132,8 @@ def test_resolve_project_from_path_found(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    import importlib, core.sdlc.cwd_resolver as mod
+    import importlib
+    import core.sdlc.cwd_resolver as mod
 
     importlib.reload(mod)
     ctx = mod.resolve_project_from_path(repo_dir)

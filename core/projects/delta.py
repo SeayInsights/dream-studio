@@ -173,10 +173,7 @@ def compute_scan_delta(
     possibly_fixed = [f for f in possibly_fixed if f["finding_id"] not in resolved_prev_ids]
     possibly_new = [f for f in possibly_new if f["finding_id"] not in resolved_curr_ids]
 
-    # Remove "distinct" adjudicated pairs — they're genuinely new and fixed
-    distinct_prev = {pid for pid, _ in distinct}
-    distinct_curr = {cid for _, cid in distinct}
-    # These stay as possibly_fixed / possibly_new (they are genuinely different)
+    # "distinct" adjudicated pairs stay in possibly_fixed/possibly_new (genuinely different)
 
     # ── Step 3: Pre-pair residuals by rule + file + line proximity ─────────────
     # Only pairs with same rule_id AND same file_path AND lines within window
