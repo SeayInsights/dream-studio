@@ -411,9 +411,21 @@ def test_audit_against_actual_live_copy():
     assert (
         "idx_memory_lifecycle" in casualty_names
     ), f"Expected idx_memory_lifecycle as a casualty on the live DB copy. Found: {casualty_names}"
-    # And exactly one (the complete sweep confirmed this was the only one)
-    assert len(casualties) == 1, (
-        f"Expected exactly 1 swallowed casualty on the live DB copy (the 511-object sweep "
-        f"confirmed this), but found {len(casualties)}: {casualty_names}"
+    # Migration 084 (2026-05-30) added two new indexes to business_projects
+    # (idx_business_projects_last_session, idx_business_projects_path) that postdate
+    # the 2026-05-29 live-copy; those are expected casualties on this historical copy.
+    # The original 511-object sweep (pre-084) found exactly 1; after 084 we expect 3.
+    expected_names = {
+        "idx_memory_lifecycle",
+        "idx_business_projects_last_session",
+        "idx_business_projects_path",
+    }
+    assert (
+        "idx_memory_lifecycle" in casualty_names
+    ), f"idx_memory_lifecycle casualty missing. Found: {casualty_names}"
+    assert casualty_names == expected_names, (
+        f"Unexpected casualty set on the live DB copy. "
+        f"Expected {expected_names}, found {casualty_names}"
     )
-    assert casualties[0]["severity"] == "medium", "idx_memory_lifecycle is non-unique → medium"
+    idx_mem = next(c for c in casualties if c["object_name"] == "idx_memory_lifecycle")
+    assert idx_mem["severity"] == "medium", "idx_memory_lifecycle is non-unique → medium"

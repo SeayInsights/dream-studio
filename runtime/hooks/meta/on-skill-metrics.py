@@ -32,6 +32,7 @@ if str(_PLUGIN_ROOT / "hooks") not in sys.path:
 from control.execution.models.selector import get_model_for_skill
 from core.event_store.studio_db import insert_token_usage
 from control.skills.metrics import build_display_name, write_skill_usage
+from core.sdlc.cwd_resolver import resolve_project_from_cwd
 
 
 def main() -> None:
@@ -62,9 +63,10 @@ def main() -> None:
         model,
     )
     try:
+        ctx = resolve_project_from_cwd()
         insert_token_usage(
             session_id=payload.get("session_id", ""),
-            project_id=Path.cwd().name,
+            project_id=ctx.project_id if ctx is not None else None,
             skill_name=display_name,
             input_tokens=0,
             output_tokens=0,

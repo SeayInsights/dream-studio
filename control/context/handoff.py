@@ -303,9 +303,12 @@ def write_session_handoff(cwd: Path, session_id: str | None) -> Path | None:
 def record_session_to_db(cwd: Path, session_id: str | None, handoff_path: Path | None) -> None:
     """Record session and handoff to database."""
     try:
-        from core.event_store.studio_db import upsert_project, insert_session, insert_handoff
+        from core.event_store.studio_db import insert_session, insert_handoff
+        from core.sdlc.cwd_resolver import resolve_project_from_cwd
 
-        project_id = cwd.name
+        # Resolve UUID project_id via marker. Falls back to None for unregistered dirs.
+        ctx = resolve_project_from_cwd()
+        project_id = ctx.project_id if ctx is not None else None
         sid = session_id or "unknown"
         branch = (
             subprocess.run(
@@ -328,7 +331,6 @@ def record_session_to_db(cwd: Path, session_id: str | None, handoff_path: Path |
             or "unknown"
         )
 
-        upsert_project(project_id, str(cwd))
         insert_session(sid, project_id)
         insert_handoff(
             sid,

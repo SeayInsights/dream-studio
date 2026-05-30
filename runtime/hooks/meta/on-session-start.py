@@ -41,8 +41,9 @@ from core.event_store.studio_db import (
     has_sentinel,
     insert_session,
     set_sentinel,
-    upsert_project,
+    update_project_stats,
 )  # noqa: E402
+from core.sdlc.cwd_resolver import resolve_project_from_cwd  # noqa: E402
 
 
 def main() -> None:
@@ -57,16 +58,23 @@ def main() -> None:
     sentinel_key = f"session-started-{session_id}"
     if has_sentinel(sentinel_key):
         return
-    project_id = Path.cwd().name
+
+    # Resolve project_id via .dream-studio-project marker (UUID from business_projects).
+    # Returns None for unregistered directories — session records without project attribution
+    # are valid (project_id is nullable). Never throws.
+    ctx = resolve_project_from_cwd()
+    project_id = ctx.project_id if ctx is not None else None
     cwd = str(Path.cwd())
-    try:
-        upsert_project(project_id, cwd)
-    except Exception:
-        pass
+
     try:
         insert_session(session_id, project_id)
     except Exception:
         pass
+    if project_id is not None:
+        try:
+            update_project_stats(project_id, sessions_delta=1)
+        except Exception:
+            pass
     try:
         set_sentinel(sentinel_key, "session")
     except Exception:

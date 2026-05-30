@@ -427,12 +427,13 @@ def register_project(
     db_path = _require_db(source_root, dream_studio_home)
     project_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
+    resolved_path = str(Path(project_path).resolve()) if project_path is not None else None
     with _connect(db_path) as conn:
         conn.execute(
             "INSERT INTO business_projects"
-            " (project_id, name, description, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'active', ?, ?)",
-            (project_id, name, description, now, now),
+            " (project_id, name, description, status, project_path, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'active', ?, ?, ?)",
+            (project_id, name, description, resolved_path, now, now),
         )
         conn.commit()
 

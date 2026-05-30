@@ -81,13 +81,13 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     registry.register(AstroAdapter())
     registry.register(PythonGenericAdapter())
 
-    # Check if project already exists by path
+    # reg_projects deleted in migration 084. Look up project in business_projects by path.
+    # The broken project_source INSERT path is removed here; business_projects is now the
+    # canonical project registry.
     with transaction() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT project_id FROM reg_projects WHERE project_path = ?
-        """,
+            "SELECT project_id FROM business_projects WHERE project_path = ? LIMIT 1",
             (str(path),),
         )
         existing_project = cursor.fetchone()
@@ -95,13 +95,13 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     if existing_project:
         project_id = existing_project[0]
     else:
-        project_id = f"proj_{path.name}_{uuid.uuid4().hex[:8]}"
+        # Register new project in business_projects with a UUID.
+        project_id = str(uuid.uuid4())
         project_name = path.name
 
         planning_path = str(project_planning_dir(project_name))
         sessions_path = str(project_sessions_dir(project_name))
 
-        # Slice 3: Emit event via spool pipeline
         write_envelopes(
             [
                 CanonicalEventEnvelope(
@@ -111,7 +111,7 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                         "project_id": project_id,
                         "project_path": redact_file_path(str(path)),
                         "project_name": project_name,
-                        "project_source": "local",
+                        "project_source": "analysis_engine",
                         "planning_path": redact_file_path(planning_path),
                         "sessions_path": redact_file_path(sessions_path),
                     },
@@ -121,16 +121,12 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
             ]
         )
 
-        # Keep existing DB write (dual-write)
         with transaction() as conn:
             conn.execute(
-                """
-                INSERT INTO reg_projects (
-                    project_id, project_path, project_name, created_at,
-                    project_source, planning_path, sessions_path
-                ) VALUES (?, ?, ?, ?, 'local', ?, ?)
-            """,
-                (project_id, str(path), project_name, started_at, planning_path, sessions_path),
+                "INSERT OR IGNORE INTO business_projects"
+                " (project_id, name, description, status, project_path, created_at, updated_at)"
+                " VALUES (?, ?, '', 'active', ?, ?, ?)",
+                (project_id, project_name, str(path), started_at, started_at),
             )
 
     result = {
@@ -366,7 +362,7 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
                 (run_id,),
             )
 
-        # Update project metadata in reg_projects
+        # Update project metadata in business_projects (reg_projects deleted in migration 084)
         _update_project_metadata(project_id, path, project_data, stack, audit)
 
         # Mark analysis as completed
@@ -569,19 +565,23 @@ def _update_project_metadata(
     stack: Dict[str, Any],
     audit: Dict[str, Any],
 ) -> None:
-    """Update or insert project metadata in reg_projects."""
-    # Check if project exists
+    """Update project metadata in business_projects.
+
+    reg_projects deleted in migration 084. Analysis columns (stack_detected, health_score,
+    total_files, lines_of_code) are not stored in business_projects in this release —
+    they need a dedicated project_analysis_metadata table when the analysis engine is
+    rebuilt against business_projects. For now, emit the event for traceability only.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    # Check if project exists in business_projects
     with transaction() as conn:
         cursor = conn.execute(
-            """
-            SELECT project_id FROM reg_projects WHERE project_id = ?
-        """,
+            "SELECT project_id FROM business_projects WHERE project_id = ?",
             (project_id,),
         )
         exists = cursor.fetchone()
 
     if exists:
-        # Slice 3: Emit event via spool pipeline
         write_envelopes(
             [
                 CanonicalEventEnvelope(
@@ -599,32 +599,13 @@ def _update_project_metadata(
                 )
             ]
         )
-
-        # Update existing
+        # Update path and timestamps in business_projects (analysis metrics deferred)
         with transaction() as conn:
             conn.execute(
-                """
-                UPDATE reg_projects
-                SET stack_detected = ?,
-                    stack_json = ?,
-                    health_score = ?,
-                    total_files = ?,
-                    lines_of_code = ?,
-                    last_analyzed = ?
-                WHERE project_id = ?
-            """,
-                (
-                    stack.get("framework", "unknown"),
-                    str(stack),
-                    min(1.0, audit.get("health_score", 0.0) / 10.0),  # Normalize to 0-1
-                    len(project_data.get("file_inventory", {})),
-                    project_data.get("lines_of_code", {}).get("total", 0),
-                    datetime.now(timezone.utc).isoformat(),
-                    project_id,
-                ),
+                "UPDATE business_projects SET project_path = ?, updated_at = ? WHERE project_id = ?",
+                (str(path), now, project_id),
             )
     else:
-        # Slice 3: Emit event via spool pipeline
         write_envelopes(
             [
                 CanonicalEventEnvelope(
@@ -643,25 +624,10 @@ def _update_project_metadata(
                 )
             ]
         )
-
-        # Insert new
         with transaction() as conn:
             conn.execute(
-                """
-                INSERT INTO reg_projects (
-                    project_id, project_name, stack_detected, stack_json,
-                    health_score, total_files, lines_of_code, first_analyzed, last_analyzed
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    project_id,
-                    project_data.get("project_name", path.name),
-                    stack.get("framework", "unknown"),
-                    str(stack),
-                    min(1.0, audit.get("health_score", 0.0) / 10.0),
-                    len(project_data.get("file_inventory", {})),
-                    project_data.get("lines_of_code", {}).get("total", 0),
-                    datetime.now(timezone.utc).isoformat(),
-                    datetime.now(timezone.utc).isoformat(),
-                ),
+                "INSERT OR IGNORE INTO business_projects"
+                " (project_id, name, description, status, project_path, created_at, updated_at)"
+                " VALUES (?, ?, '', 'active', ?, ?, ?)",
+                (project_id, project_data.get("project_name", path.name), str(path), now, now),
             )

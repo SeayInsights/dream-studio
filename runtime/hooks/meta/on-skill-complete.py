@@ -34,6 +34,7 @@ if str(_PLUGIN_ROOT / "hooks") not in sys.path:
 from control.skills.calibration import record_outcome  # noqa: E402
 from control.skills import completion as skill_completion  # noqa: E402
 from core.event_store import studio_db  # noqa: E402
+from core.sdlc.cwd_resolver import resolve_project_from_cwd  # noqa: E402
 
 
 def _model_label() -> str:
@@ -54,7 +55,8 @@ def main() -> None:
     try:
         payload = json.loads(raw_input)
         session_id = payload.get("session_id")
-        project_id = Path.cwd().name
+        ctx = resolve_project_from_cwd()
+        project_id = ctx.project_id if ctx is not None else None
     except Exception:
         pass
 
