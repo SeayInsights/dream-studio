@@ -67,12 +67,13 @@ behavior:
   fallback_to_llm_when_tool_missing: true
   log_tool_degradation: true
   classify_before_fix: true
-  # Dream Studio specific: the pre-push hook runs tests/evals/ only due to Windows OOM.
-  # This is a documented CI-discipline decision, NOT a violation of tst-014.
+  # Dream Studio specific: the pre-push hook runs tests/evals/ only due to runtime cost.
+  # The full unit suite takes ~79 min on Windows (subprocess spawn overhead, verified 2026-05-29).
+  # It does NOT OOM (peak 283MB/16GB). This is a documented CI-discipline decision, NOT a tst-014 violation.
   # The testing skill notes this as context in reports but does not fire tst-014 against it.
   known_context:
     - id: dream-studio-evals-only-prepush
-      note: "Pre-push hook runs tests/evals/ only (Windows OOM with full suite). Full suite runs remote CI. Documented in CLAUDE.md and lightweight-github-ci-strategy.md. Not a tst-014 violation."
+      note: "Pre-push hook runs tests/evals/ only — full unit suite takes ~79 min on Windows (subprocess.run() spawn cost, 52 calls x 3-12s each). Does not OOM. Full suite runs ubuntu-only post-merge in full-ci.yml. Documented in CLAUDE.md. Not a tst-014 violation."
 
 models:
   default: sonnet
