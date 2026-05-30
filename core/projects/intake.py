@@ -295,8 +295,9 @@ def build_scan_scope(
 ) -> list[Path]:
     """Return the list of files in scope for a read-only security scan.
 
-    Excludes PRIVATE_TARGET_ARTIFACT_PATTERNS from the execution context's
-    safety assertions (re-asserted at this boundary, not assumed from the plan).
+    Enforces TWO exclusion layers:
+    1. Private artifact exclusions (safety requirement, from execution context)
+    2. Generated/vendored dirs (performance, correctness — not source code)
 
     This is the enforcement point for private artifact exclusion at execution time.
     """
@@ -311,14 +312,56 @@ def build_scan_scope(
             "Cannot build scan scope without the exclusion list — this is a safety requirement."
         )
 
+    # Generated/vendored dirs — not source code, excluded for performance + accuracy
+    _SKIP_DIRS: frozenset[str] = frozenset(
+        {
+            "node_modules",
+            ".next",
+            ".nuxt",
+            ".svelte-kit",
+            "dist",
+            "build",
+            "out",
+            ".git",
+            "__pycache__",
+            ".pytest_cache",
+            ".tox",
+            "venv",
+            ".venv",
+            "vendor",
+            ".wrangler",
+            ".react-router",
+            "playwright-report",
+            "test-results",
+            "coverage",
+            ".cache",
+        }
+    )
+
     root = Path(target_path).resolve()
     in_scope: list[Path] = []
 
     for p in root.rglob("*"):
         if not p.is_file():
             continue
+        # Skip generated/vendored dirs
+        if any(part in _SKIP_DIRS for part in p.parts):
+            continue
         rel = str(p.relative_to(root)).replace("\\", "/")
-        excluded = any(fnmatch.fnmatch(rel, pattern.lstrip("/")) for pattern in exclusion_patterns)
+        # Apply private artifact exclusions using pathlib.match() which handles ** correctly,
+        # plus fnmatch for non-** patterns. Pathlib match() anchors from the right so
+        # "**/.env.*" matches both root-level .env.local and nested .env.local.
+        excluded = False
+        for pattern in exclusion_patterns:
+            pat = pattern.lstrip("/")
+            # pathlib.Path.match() handles ** patterns correctly
+            if p.match(pat):
+                excluded = True
+                break
+            # fallback: fnmatch for simple patterns (no **)
+            if "**" not in pat and fnmatch.fnmatch(rel, pat):
+                excluded = True
+                break
         if not excluded:
             in_scope.append(p)
 
