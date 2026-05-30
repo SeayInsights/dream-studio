@@ -185,3 +185,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: on-context-threshold.py hook updated (see HOOK_RUNTIME.md for details). No workflow YAML, engine, state, validator, gate, or retry contract change. -->
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->

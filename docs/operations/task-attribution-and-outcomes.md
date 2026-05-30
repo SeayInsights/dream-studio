@@ -106,3 +106,5 @@ Task attribution does not own or rewrite PRD authority; it links outcomes back
 to recorded Work Order or milestone identifiers when those IDs are available.
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->

@@ -465,3 +465,5 @@ recommended_next_work_order: none
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: projections/api/routes/ml.py had unused sqlite3 import removed (left after replacing sqlite3.connect with _open_conn in an earlier edit). No route contract, response shape, or projection mapping change. -->
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
