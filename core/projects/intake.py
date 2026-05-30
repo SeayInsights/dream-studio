@@ -16,7 +16,9 @@ prior safety re-assertion.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import subprocess
 import uuid
 from datetime import datetime, timezone
@@ -35,6 +37,42 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# ── Finding hash computation ──────────────────────────────────────────────────
+
+
+def compute_finding_hash(
+    rule_id: str,
+    file_path: str,
+    code_excerpt: str | None,
+) -> str:
+    """Structural identity hash for a finding.
+
+    Hash = SHA-256(rule_id + "|" + normalized_file_path + "|" + normalized_snippet).
+    Stable across: line-number shifts, whitespace changes, comment edits.
+    Sensitive to: the code excerpt itself changing (intentional — case 4 edge case).
+    """
+    norm_file = file_path.replace("\\", "/").strip()
+    norm_snippet = _normalize_snippet(code_excerpt or "")
+    h = hashlib.sha256()
+    h.update(f"{rule_id}|{norm_file}|{norm_snippet}".encode("utf-8"))
+    return h.hexdigest()
+
+
+def _normalize_snippet(s: str) -> str:
+    """Aggressively normalize a code snippet for structural comparison.
+
+    Strips leading/trailing whitespace, collapses internal whitespace,
+    and removes trailing comment content so reformatting doesn't churn.
+    """
+    if not s:
+        return ""
+    s = s.strip()
+    s = re.sub(r"\s+", " ", s)  # collapse any whitespace run to single space
+    # Remove trailing JS/TS line comment (// ...) to absorb comment reformats
+    s = re.sub(r"\s*//.*$", "", s, flags=re.MULTILINE)
+    return s.strip()
+
+
 def _require_db() -> Path:
     from core.config.database import _default_db_path
 
@@ -48,18 +86,20 @@ def register_project_for_intake(
     target_path: Path,
     *,
     project_name: str | None = None,
+    write_marker: bool = False,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Register a brownfield project in business_projects and write its marker.
+    """Register a brownfield project in business_projects.
+
+    No-marker default (write_marker=False): project_path stored in business_projects;
+    no .dream-studio-project file written to the target repo. The SQLite path-fallback
+    resolver handles session attribution for developers who work in this repo later.
+
+    write_marker=True for persistent projects where marker-based resolution is preferred
+    (e.g., active ongoing development, not one-time brownfield scans).
 
     Returns the register_project() result dict with project_id UUID.
-    After this call, resolve_project_from_cwd() on target_path returns the UUID
-    (session hooks attribute correctly, not to None).
-
-    This is a WRITE to Dream Studio's own SQLite — it does not touch the target repo.
-    The .dream-studio-project marker IS written to target_path (that's the intent —
-    register the repo so findings attribute correctly).
     """
     resolved = Path(target_path).resolve()
     name = project_name or resolved.name
@@ -68,6 +108,7 @@ def register_project_for_intake(
         name=name,
         description=f"Brownfield intake: {resolved}",
         project_path=resolved,
+        write_marker=write_marker,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
@@ -124,10 +165,15 @@ def create_security_scan_run(
     *,
     execution_ctx: dict[str, Any],
     scope: str = "full_repo",
+    previous_scan_id: str | None = None,
 ) -> str:
     """Create a security_scan_runs row and return the scan_id.
 
-    Determines if this is the baseline scan (first scan for this project).
+    Determines if this is the baseline scan (first completed scan for this project).
+    When previous_scan_id is provided, links this scan to its predecessor for
+    delta computation. When omitted, the most recent completed scan for this project
+    is used as the predecessor (if any).
+
     Requires a valid approved execution context — safety is re-asserted here.
     """
     # Re-assert execution safety before touching the scan record
@@ -141,12 +187,16 @@ def create_security_scan_run(
     db_path = _require_db()
 
     with _connect(db_path) as conn:
-        # Determine if this is the baseline (first scan for this project)
-        existing = conn.execute(
-            "SELECT COUNT(*) FROM security_scan_runs WHERE project_id = ?",
+        # Determine baseline and predecessor
+        existing_completed = conn.execute(
+            "SELECT scan_id FROM security_scan_runs"
+            " WHERE project_id = ? AND status = 'completed'"
+            " ORDER BY completed_at DESC LIMIT 1",
             (project_id,),
-        ).fetchone()[0]
-        is_baseline = 1 if existing == 0 else 0
+        ).fetchone()
+        is_baseline = 1 if existing_completed is None else 0
+        # Use provided predecessor or auto-detect most recent completed scan
+        prev_id = previous_scan_id or (existing_completed[0] if existing_completed else None)
 
         # Collect tool versions
         tool_versions = _collect_tool_versions()
@@ -154,8 +204,8 @@ def create_security_scan_run(
         conn.execute(
             """INSERT INTO security_scan_runs
                (scan_id, project_id, is_baseline, scope, target_path,
-                tool_versions_json, status, started_at, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
+                tool_versions_json, previous_scan_id, status, started_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
             (
                 scan_id,
                 project_id,
@@ -163,6 +213,7 @@ def create_security_scan_run(
                 scope,
                 str(Path(target_path).resolve()),
                 json.dumps(tool_versions),
+                prev_id,
                 now,
                 now,
             ),
@@ -206,7 +257,11 @@ def persist_security_findings(
 
     Each finding dict must have at minimum:
       rule_id, severity, description
-    Optional: file_path, start_line, end_line, category, recommendation
+    Optional: file_path, start_line, end_line, category, recommendation,
+              code_excerpt (used for finding_hash), enclosing_symbol
+
+    Computes finding_hash = structural identity hash for each finding.
+    The hash enables exact-match delta computation across scans without LLM.
 
     Returns count of findings written.
     """
@@ -224,24 +279,36 @@ def persist_security_findings(
             severity = str(f.get("severity", "medium")).lower()
             severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
+            # Compute structural hash for delta computation
+            rule_id = f.get("rule_id") or ""
+            file_path = f.get("file_path") or ""
+            code_excerpt = f.get("code_excerpt") or f.get("excerpt") or ""
+            norm_snippet = _normalize_snippet(code_excerpt)
+            fhash = compute_finding_hash(rule_id, file_path, code_excerpt)
+
             conn.execute(
                 """INSERT OR IGNORE INTO security_findings
                    (finding_id, project_id, scan_id, severity, category,
                     rule_id, file_path, start_line, end_line, description,
-                    recommendation, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
+                    recommendation, finding_hash, normalized_snippet,
+                    code_excerpt, enclosing_symbol, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
                 (
                     str(uuid.uuid4()),
                     project_id,
                     scan_id,
                     severity,
                     f.get("category"),
-                    f.get("rule_id"),
-                    f.get("file_path"),
+                    rule_id,
+                    file_path or None,
                     f.get("start_line"),
                     f.get("end_line"),
                     str(f.get("description", "")),
                     f.get("recommendation"),
+                    fhash,
+                    norm_snippet or None,
+                    code_excerpt or None,
+                    f.get("enclosing_symbol"),
                     now,
                     now,
                 ),
