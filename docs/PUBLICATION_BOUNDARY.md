@@ -208,3 +208,5 @@ that fires on every baseline cleanup.
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: repo_publication_readiness.py extended with two precision exclusions: (1) contract_atlas.py added to _skip_private_content_scan_path() for known regex literal; (2) canonical/skills/quality/modes/security/ added to _skip_secret_scan_path() for deliberate fake API keys in smoke test docs. No publication boundary policy change. -->
 
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No publication boundary change; migration SQL files and sqlite_bootstrap.py are not publication-boundary concerns. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

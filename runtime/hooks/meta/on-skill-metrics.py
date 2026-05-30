@@ -62,9 +62,12 @@ def main() -> None:
         model,
     )
     try:
+        from core.sdlc.cwd_resolver import resolve_project_from_cwd  # noqa: E402
+
+        ctx = resolve_project_from_cwd()
         insert_token_usage(
             session_id=payload.get("session_id", ""),
-            project_id=Path.cwd().name,
+            project_id=ctx.project_id if ctx is not None else None,
             skill_name=display_name,
             input_tokens=0,
             output_tokens=0,

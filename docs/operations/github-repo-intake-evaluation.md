@@ -74,3 +74,5 @@ selected and approved for read-only intake. It must not mutate the external
 repo, copy PRD files into that repo, or adopt code/dependencies. Any adoption
 path becomes a Project Change Order or Work Order with license, security,
 overlap, and attribution evidence.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

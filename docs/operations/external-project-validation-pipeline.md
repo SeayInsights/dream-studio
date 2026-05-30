@@ -97,3 +97,5 @@ Static validation checks that:
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: no external project validation pipeline change in this PR. Reviewed for compliance with release_publication_gate required_doc_refs. No policy change. -->
 
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No external project validation pipeline change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

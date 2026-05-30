@@ -463,3 +463,5 @@ recommended_next_work_order: none
 <!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: projections/api/routes/ml.py had unused sqlite3 import removed (left after replacing sqlite3.connect with _open_conn in an earlier edit). No route contract, response shape, or projection mapping change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

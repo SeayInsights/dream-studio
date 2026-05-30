@@ -30,7 +30,7 @@ INGESTION_SECTIONS: tuple[str, ...] = (
 )
 
 SECTION_TABLES: dict[str, tuple[str, ...]] = {
-    "projects": ("reg_projects",),
+    "projects": ("business_projects",),
     "validations": ("validation_results",),
     "security_findings": ("security_findings",),
     "token_usage": ("token_usage_records",),
@@ -48,7 +48,7 @@ SECTION_TABLES: dict[str, tuple[str, ...]] = {
 }
 
 TABLE_KEYS: dict[str, str] = {
-    "reg_projects": "project_id",
+    "business_projects": "project_id",
     "validation_results": "validation_id",
     "security_findings": "finding_id",
     "token_usage_records": "token_usage_id",
@@ -272,32 +272,23 @@ def _project_rows(
     stack = record.get("stack_json")
     if isinstance(stack, (dict, list)):
         stack = _json(stack)
+    # reg_projects deleted in migration 084; write to business_projects.
+    # Analysis columns (stack_detected, health_score, etc.) not present in business_projects;
+    # they are dropped along with the reg_projects bolt-on. Ingest the core identity fields only.
     return [
         (
-            "reg_projects",
+            "business_projects",
             {
                 "project_id": project_id,
-                "project_name": record.get("project_name") or project_id,
+                "name": record.get("project_name") or project_id,
+                "description": record.get("description") or "",
+                "status": record.get("status") or "active",
                 "project_path": record.get("project_path"),
-                "project_type": record.get("project_type") or "external_project",
-                "project_source": record.get("project_source") or "current_authority",
-                "git_remote": record.get("git_remote"),
-                "last_session_at": record.get("last_session_at"),
                 "total_sessions": _int(record.get("total_sessions"), 0),
                 "total_tokens": _int(record.get("total_tokens"), 0),
+                "last_session_at": record.get("last_session_at"),
                 "created_at": record.get("created_at") or ingested_at,
-                "stack_detected": record.get("stack_detected"),
-                "stack_json": stack,
-                "adapter": record.get("adapter"),
-                "health_score": _score(record.get("health_score")),
-                "security_score": _score(record.get("security_score")),
-                "maintainability_score": _score(record.get("maintainability_score")),
-                "total_files": record.get("total_files"),
-                "lines_of_code": record.get("lines_of_code"),
-                "first_analyzed": record.get("first_analyzed"),
-                "last_analyzed": record.get("last_analyzed") or ingested_at,
-                "planning_path": record.get("planning_path"),
-                "sessions_path": record.get("sessions_path"),
+                "updated_at": ingested_at,
             },
         )
     ]

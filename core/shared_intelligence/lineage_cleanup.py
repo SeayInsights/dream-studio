@@ -284,7 +284,7 @@ def quarantined_project_lineage_status(
     dependent_counts = {
         "ds_documents": _project_count(conn, "ds_documents", project_ids),
         "raw_approaches": _project_count(conn, "raw_approaches", project_ids),
-        "reg_projects": _project_count(conn, "reg_projects", project_ids),
+        # reg_projects deleted in migration 084; no longer a dependent table
     }
     active_reference_counts = project_reference_counts(conn, project_ids)
     blocking_refs = {
@@ -363,25 +363,26 @@ def manual_review_lineage_plan(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def _project_rows(conn: sqlite3.Connection, project_ids: tuple[str, ...]) -> list[dict[str, Any]]:
-    if not _exists(conn, "reg_projects") or not project_ids:
+    # reg_projects deleted in migration 084; use business_projects.
+    if not _exists(conn, "business_projects") or not project_ids:
         return []
     placeholders = ",".join("?" for _ in project_ids)
-    columns = _columns(conn, "reg_projects")
+    columns = _columns(conn, "business_projects")
     select_columns = [
         _select_column(columns, "project_id"),
         _select_column(columns, "project_path"),
-        _select_column(columns, "project_name"),
-        _select_column(columns, "project_source"),
-        _select_column(columns, "is_temp"),
+        "name AS project_name",
+        "NULL AS project_source",
+        "0 AS is_temp",
         _select_column(columns, "status"),
-        _select_column(columns, "deactivation_reason"),
+        "NULL AS deactivation_reason",
     ]
     return [
         dict(row)
         for row in conn.execute(
             f"""
             SELECT {", ".join(select_columns)}
-            FROM reg_projects
+            FROM business_projects
             WHERE project_id IN ({placeholders})
             ORDER BY project_id
             """,

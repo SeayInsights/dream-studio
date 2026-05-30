@@ -28,7 +28,7 @@ PRD_AUTHORITY_SOURCE_TABLES: tuple[str, ...] = (
     "prd_amendment_records",
     "prd_route_reconciliation_records",
     "prd_documents",
-    "reg_projects",
+    "business_projects",  # reg_projects deleted in migration 084
 )
 
 QUESTION_MODES = {
@@ -1221,7 +1221,9 @@ def validate_prd_authority_schema(conn: sqlite3.Connection) -> list[str]:
     missing = [
         table
         for table in PRD_AUTHORITY_SOURCE_TABLES
-        if table != "reg_projects" and not _table_exists(conn, table)
+        if table != "reg_projects"
+        and table != "business_projects"
+        and not _table_exists(conn, table)
     ]
     if missing:
         raise RuntimeError(f"missing PRD authority tables: {', '.join(missing)}")
@@ -1526,12 +1528,14 @@ def _project_evidence(
     descriptions: list[str] = []
     if project.get("project_name"):
         descriptions.append(str(project["project_name"]))
+    # stack_detected and stack_json were in reg_projects (deleted migration 084).
+    # These columns will return None until the analysis engine is rebuilt against business_projects.
     if project.get("stack_detected"):
-        refs.append("sqlite:reg_projects.stack_detected")
-        evidence_refs.append("sqlite:reg_projects")
+        refs.append("sqlite:business_projects.stack_detected")
+        evidence_refs.append("sqlite:business_projects")
     if project.get("stack_json"):
-        refs.append("sqlite:reg_projects.stack_json")
-        evidence_refs.append("sqlite:reg_projects")
+        refs.append("sqlite:business_projects.stack_json")
+        evidence_refs.append("sqlite:business_projects")
     if repo_root:
         root = Path(repo_root)
         for name in (
@@ -1557,10 +1561,13 @@ def _project_evidence(
 
 
 def _project_row(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
-    if not _table_exists(conn, "reg_projects"):
+    # reg_projects deleted in migration 084; use business_projects.
+    if not _table_exists(conn, "business_projects"):
         return None
     row = conn.execute(
-        "SELECT * FROM reg_projects WHERE project_id = ? LIMIT 1",
+        "SELECT project_id, name AS project_name, description, status,"
+        " project_path, created_at, updated_at"
+        " FROM business_projects WHERE project_id = ? LIMIT 1",
         (project_id,),
     ).fetchone()
     return dict(row) if row else None
@@ -1979,7 +1986,9 @@ def _missing_source_tables(conn: sqlite3.Connection) -> list[str]:
     return [
         table
         for table in PRD_AUTHORITY_SOURCE_TABLES
-        if table != "reg_projects" and not _table_exists(conn, table)
+        if table != "reg_projects"
+        and table != "business_projects"
+        and not _table_exists(conn, table)
     ]
 
 

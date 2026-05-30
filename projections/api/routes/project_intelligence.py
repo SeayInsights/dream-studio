@@ -83,29 +83,13 @@ def get_db_connection():
 
 
 def _active_project_where(conn) -> str:
-    """Filter out quarantined/temp project records when live schema supports it."""
+    """Filter out quarantined/temp project records.
 
-    clauses = ["project_name IS NOT NULL"]
-    columns = table_columns(conn, "reg_projects")
-    if "status" in columns:
-        clauses.append(
-            "(status IS NULL OR status NOT IN ('inactive', 'archived', 'deactivated', 'quarantined'))"
-        )
-    if "is_temp" in columns:
-        clauses.append("(is_temp IS NULL OR is_temp = 0)")
-    if "project_source" in columns:
-        try:
-            has_local_builds = (
-                conn.execute(
-                    "SELECT COUNT(*) FROM reg_projects WHERE project_source = 'local_builds'"
-                ).fetchone()[0]
-                > 0
-            )
-        except sqlite3.Error:
-            has_local_builds = False
-        if has_local_builds:
-            clauses.append("project_source = 'local_builds'")
-    return " AND ".join(clauses)
+    reg_projects deleted in migration 084; this function is retained for callers
+    that have not yet been updated. Returns a WHERE clause for business_projects.
+    """
+    # business_projects: status IN ('active', 'paused', 'deleted') — exclude deleted
+    return "p.status != 'deleted'"
 
 
 def _optional_column_expr(
@@ -211,7 +195,7 @@ def _classify_project_authority(project: dict[str, Any]) -> dict[str, Any]:
         "classification": classification,
         "operational_classification": operational_classification,
         "retention_class": retention_class,
-        "source_authority": "reg_projects",
+        "source_authority": "business_projects",
         "path_status": "confirmed" if path_exists else "unverified_missing_path",
         "reasons": reasons or ["current project path and authority record are confirmed"],
         "manual_review_required": classification == "manual_review_required",
@@ -907,7 +891,7 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
     project["path_status"] = "confirmed" if path_exists else "unverified_missing_path"
     project["project_authority_status"] = _classify_project_authority(project)
     project["authority_source"] = {
-        "source_table": "reg_projects",
+        "source_table": "business_projects",
         "source_authority": "current_project_registry",
         "derived_view": True,
         "primary_authority": False,
@@ -920,7 +904,7 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
         "dependency_count": len(dependencies),
         "config_files": config_files[:8],
         "entry_points": entry_points[:8],
-        "source_tables": ["reg_projects"],
+        "source_tables": ["business_projects"],
         "source_fields": ["stack_detected", "stack_json", "project_path"],
         "inferred": False,
         "path_status": project["path_status"],
@@ -1034,10 +1018,14 @@ def _project_surface_availability(conn) -> dict[str, bool]:
 
 
 def _project_row_for_authority(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
-    if not object_exists(conn, "reg_projects"):
+    # reg_projects deleted in migration 084; use business_projects
+    if not object_exists(conn, "business_projects"):
         return None
     row = conn.execute(
-        "SELECT * FROM reg_projects WHERE project_id = ? LIMIT 1", (project_id,)
+        "SELECT project_id, name AS project_name, description, status, project_path,"
+        " total_sessions, total_tokens, last_session_at, created_at, updated_at"
+        " FROM business_projects WHERE project_id = ? LIMIT 1",
+        (project_id,),
     ).fetchone()
     return dict(row) if row else None
 
@@ -1110,7 +1098,7 @@ async def list_projects(
     try:
         cursor = conn.cursor()
 
-        if not object_exists(conn, "reg_projects"):
+        if not object_exists(conn, "business_projects"):
             return {
                 "total": 0,
                 "limit": limit,
@@ -1118,23 +1106,19 @@ async def list_projects(
                 "projects": [],
                 "source_status": {
                     "classification": "missing because live DB schema is behind repo migrations",
-                    "reason": "reg_projects is not available.",
+                    "reason": "business_projects is not available.",
                 },
             }
 
-        # Get total count of distinct projects
-        active_project_where = _active_project_where(conn)
-        project_columns = table_columns(conn, "reg_projects")
-        stack_detected_expr = (
-            "p.stack_detected" if "stack_detected" in project_columns else "NULL AS stack_detected"
-        )
-        stack_json_expr = (
-            "p.stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
-        )
-        project_type_expr = _optional_column_expr(project_columns, "project_type")
-        project_source_expr = _optional_column_expr(project_columns, "project_source")
-        status_expr = _optional_column_expr(project_columns, "status")
-        is_temp_expr = _optional_column_expr(project_columns, "is_temp")
+        # Get total count of distinct projects — business_projects (UUID ids, no path dedup needed)
+        project_columns = table_columns(conn, "business_projects")
+        # Analysis columns removed in migration 084; return NULL/0 placeholders for compatibility
+        stack_detected_expr = "NULL AS stack_detected"
+        stack_json_expr = "NULL AS stack_json"
+        project_type_expr = "NULL AS project_type"
+        project_source_expr = "NULL AS project_source"
+        status_expr = "p.status AS status" if "status" in project_columns else "NULL AS status"
+        is_temp_expr = "0 AS is_temp"
 
         # Get projects with pagination (deduplicated by path, prioritizing entries with most sessions)
         prd_columns = (
@@ -1165,28 +1149,7 @@ async def list_projects(
             if "created_at" in prd_columns
             else "NULL"
         )
-        bug_count_expr = (
-            _optional_count_expr("pi_bugs", "project_id", condition="status != 'fixed'")
-            if object_exists(conn, "pi_bugs")
-            else "0"
-        )
-        critical_bug_count_expr = (
-            _optional_count_expr(
-                "pi_bugs", "project_id", condition="status != 'fixed' AND severity = 'critical'"
-            )
-            if object_exists(conn, "pi_bugs")
-            else "0"
-        )
-        violation_count_expr = (
-            _optional_count_expr("pi_violations", "project_id", condition="status != 'resolved'")
-            if object_exists(conn, "pi_violations")
-            else "0"
-        )
-        dependency_count_expr = (
-            _optional_count_expr("pi_dependencies", "project_id")
-            if object_exists(conn, "pi_dependencies")
-            else "0"
-        )
+        # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 — return 0 constants
         security_columns = (
             table_columns(conn, "security_findings")
             if object_exists(conn, "security_findings")
@@ -1241,20 +1204,13 @@ async def list_projects(
             if object_exists(conn, "route_decision_records")
             else "0"
         )
+        # business_projects has UUID ids — no path deduplication needed (no ranked_projects CTE)
+        # Analysis columns (health_score, pi_* counts) removed in migration 084; return NULL/0.
+        # Column mapping: reg_projects.project_name → business_projects.name
         query = """
-        WITH ranked_projects AS (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY project_path
-                    ORDER BY total_sessions DESC, last_analyzed DESC
-                ) as rn
-            FROM reg_projects
-            WHERE {active_project_where}
-        )
         SELECT
             p.project_id,
-            p.project_name,
+            p.name AS project_name,
             p.project_path,
             {project_type_expr},
             {project_source_expr},
@@ -1262,14 +1218,14 @@ async def list_projects(
             {is_temp_expr},
             {stack_detected_expr},
             {stack_json_expr},
-            p.health_score,
-            p.security_score,
-            p.maintainability_score,
-            p.total_files,
-            p.lines_of_code,
-            p.first_analyzed,
-            p.last_analyzed,
-            p.total_sessions,
+            NULL AS health_score,
+            NULL AS security_score,
+            NULL AS maintainability_score,
+            NULL AS total_files,
+            NULL AS lines_of_code,
+            NULL AS first_analyzed,
+            NULL AS last_analyzed,
+            COALESCE(p.total_sessions, 0) AS total_sessions,
             COALESCE(
                 {prd_count_expr},
                 0
@@ -1278,21 +1234,20 @@ async def list_projects(
             {latest_prd_title_expr} as latest_prd_title,
             {latest_prd_file_path_expr} as latest_prd_file_path,
             {latest_prd_created_at_expr} as latest_prd_created_at,
-            COALESCE({bug_count_expr}, 0) as bug_count,
-            COALESCE({critical_bug_count_expr}, 0) as critical_bug_count,
-            COALESCE({violation_count_expr}, 0) as violation_count,
-            COALESCE({dependency_count_expr}, 0) as dependency_count,
+            0 as bug_count,
+            0 as critical_bug_count,
+            0 as violation_count,
+            0 as dependency_count,
             COALESCE({security_open_count_expr}, 0) as security_open_count,
             COALESCE({attention_open_count_expr}, 0) as attention_open_count,
             COALESCE({validation_failed_count_expr}, 0) as validation_failed_count,
             COALESCE({validation_passed_count_expr}, 0) as validation_passed_count,
             COALESCE({telemetry_event_count_expr}, 0) as telemetry_event_count,
             COALESCE({route_blocker_count_expr}, 0) as route_blocker_count
-        FROM ranked_projects p
-        WHERE p.rn = 1
-        ORDER BY p.total_sessions DESC, p.last_analyzed DESC
+        FROM business_projects p
+        WHERE p.status != 'deleted'
+        ORDER BY COALESCE(p.last_session_at, p.updated_at) DESC
         """.format(
-            active_project_where=active_project_where,
             project_type_expr=project_type_expr,
             project_source_expr=project_source_expr,
             status_expr=status_expr,
@@ -1304,10 +1259,6 @@ async def list_projects(
             latest_prd_title_expr=latest_prd_title_expr,
             latest_prd_file_path_expr=latest_prd_file_path_expr,
             latest_prd_created_at_expr=latest_prd_created_at_expr,
-            bug_count_expr=bug_count_expr,
-            critical_bug_count_expr=critical_bug_count_expr,
-            violation_count_expr=violation_count_expr,
-            dependency_count_expr=dependency_count_expr,
             security_open_count_expr=security_open_count_expr,
             attention_open_count_expr=attention_open_count_expr,
             validation_failed_count_expr=validation_failed_count_expr,
@@ -1345,11 +1296,8 @@ async def list_projects(
             "source_status": {
                 "classification": "fresh",
                 "reason": "Default All Projects shows only current legitimate project authority rows; temp, pytest, demo, placeholder, inactive, adapter-worktree, missing-path, and retained legacy rows are excluded from normal operator views.",
-                "source_tables": ["reg_projects"]
+                "source_tables": ["business_projects"]
                 + (["prd_documents"] if object_exists(conn, "prd_documents") else [])
-                + (["pi_bugs"] if object_exists(conn, "pi_bugs") else [])
-                + (["pi_violations"] if object_exists(conn, "pi_violations") else [])
-                + (["pi_dependencies"] if object_exists(conn, "pi_dependencies") else [])
                 + (["security_findings"] if object_exists(conn, "security_findings") else [])
                 + (
                     ["dashboard_attention_items"]
@@ -1410,57 +1358,43 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
     try:
         cursor = conn.cursor()
 
-        # Get project details
-        project_columns = table_columns(conn, "reg_projects")
-        stack_detected_expr = (
-            "stack_detected" if "stack_detected" in project_columns else "NULL AS stack_detected"
-        )
-        stack_json_expr = "stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
-        project_type_expr = (
-            "project_type AS project_type"
-            if "project_type" in project_columns
-            else "NULL AS project_type"
-        )
-        project_source_expr = (
-            "project_source AS project_source"
-            if "project_source" in project_columns
-            else "NULL AS project_source"
-        )
+        # Get project details — reg_projects deleted in migration 084; use business_projects
+        project_columns = table_columns(conn, "business_projects")
+        stack_detected_expr = "NULL AS stack_detected"
+        stack_json_expr = "NULL AS stack_json"
+        project_type_expr = "NULL AS project_type"
+        project_source_expr = "NULL AS project_source"
         status_expr = "status AS status" if "status" in project_columns else "NULL AS status"
-        is_temp_expr = "is_temp AS is_temp" if "is_temp" in project_columns else "NULL AS is_temp"
+        is_temp_expr = "0 AS is_temp"
         prd_columns = (
             table_columns(conn, "prd_documents") if object_exists(conn, "prd_documents") else set()
         )
         prd_count_expr = (
-            "(SELECT COUNT(*) FROM prd_documents WHERE project_id = reg_projects.project_id)"
+            "(SELECT COUNT(*) FROM prd_documents WHERE project_id = business_projects.project_id)"
             if object_exists(conn, "prd_documents")
             else "0"
         )
         latest_prd_status_expr = (
-            "(SELECT status FROM prd_documents WHERE project_id = reg_projects.project_id ORDER BY created_at DESC LIMIT 1)"
+            "(SELECT status FROM prd_documents WHERE project_id = business_projects.project_id ORDER BY created_at DESC LIMIT 1)"
             if "status" in prd_columns
             else "NULL"
         )
         latest_prd_title_expr = (
-            "(SELECT title FROM prd_documents WHERE project_id = reg_projects.project_id ORDER BY created_at DESC LIMIT 1)"
+            "(SELECT title FROM prd_documents WHERE project_id = business_projects.project_id ORDER BY created_at DESC LIMIT 1)"
             if "title" in prd_columns
             else "NULL"
         )
         latest_prd_file_path_expr = (
-            "(SELECT file_path FROM prd_documents WHERE project_id = reg_projects.project_id ORDER BY created_at DESC LIMIT 1)"
+            "(SELECT file_path FROM prd_documents WHERE project_id = business_projects.project_id ORDER BY created_at DESC LIMIT 1)"
             if "file_path" in prd_columns
             else "NULL"
         )
         latest_prd_created_at_expr = (
-            "(SELECT created_at FROM prd_documents WHERE project_id = reg_projects.project_id ORDER BY created_at DESC LIMIT 1)"
+            "(SELECT created_at FROM prd_documents WHERE project_id = business_projects.project_id ORDER BY created_at DESC LIMIT 1)"
             if "created_at" in prd_columns
             else "NULL"
         )
-        dependency_count_expr = (
-            "(SELECT COUNT(*) FROM pi_dependencies WHERE project_id = reg_projects.project_id)"
-            if object_exists(conn, "pi_dependencies")
-            else "0"
-        )
+        # pi_dependencies dropped in migration 084; 0 is hardcoded in the query
         security_columns = (
             table_columns(conn, "security_findings")
             if object_exists(conn, "security_findings")
@@ -1468,33 +1402,33 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         )
         security_open_count_expr = (
             "(SELECT COUNT(*) FROM security_findings WHERE "
-            f"{_security_alias_expr('reg_projects.project_id')} "
+            f"{_security_alias_expr('business_projects.project_id')} "
             "AND status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed'))"
             if "project_id" in security_columns
             else "0"
         )
         attention_open_count_expr = (
-            "(SELECT COUNT(*) FROM dashboard_attention_items WHERE project_id = reg_projects.project_id AND status NOT IN ('resolved', 'closed', 'dismissed'))"
+            "(SELECT COUNT(*) FROM dashboard_attention_items WHERE project_id = business_projects.project_id AND status NOT IN ('resolved', 'closed', 'dismissed'))"
             if object_exists(conn, "dashboard_attention_items")
             else "0"
         )
         validation_failed_count_expr = (
-            "(SELECT COUNT(*) FROM validation_results WHERE project_id = reg_projects.project_id AND status IN ('failed', 'error', 'incomplete'))"
+            "(SELECT COUNT(*) FROM validation_results WHERE project_id = business_projects.project_id AND status IN ('failed', 'error', 'incomplete'))"
             if object_exists(conn, "validation_results")
             else "0"
         )
         validation_passed_count_expr = (
-            "(SELECT COUNT(*) FROM validation_results WHERE project_id = reg_projects.project_id AND status = 'passed')"
+            "(SELECT COUNT(*) FROM validation_results WHERE project_id = business_projects.project_id AND status = 'passed')"
             if object_exists(conn, "validation_results")
             else "0"
         )
         telemetry_event_count_expr = (
-            "(SELECT COUNT(*) FROM execution_events WHERE project_id = reg_projects.project_id)"
+            "(SELECT COUNT(*) FROM execution_events WHERE project_id = business_projects.project_id)"
             if object_exists(conn, "execution_events")
             else "0"
         )
         route_blocker_count_expr = (
-            "(SELECT COUNT(*) FROM route_decision_records WHERE project_id = reg_projects.project_id "
+            "(SELECT COUNT(*) FROM route_decision_records WHERE project_id = business_projects.project_id "
             "AND (handoff_required = 1 OR operator_action_required = 1 OR prompt_required = 1 "
             "OR (recommended_next_work_order IS NOT NULL AND recommended_next_work_order != 'none')))"
             if object_exists(conn, "route_decision_records")
@@ -1503,7 +1437,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         project_query = """
         SELECT
             project_id,
-            project_name,
+            name AS project_name,
             project_path,
             {project_type_expr},
             {project_source_expr},
@@ -1511,13 +1445,13 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             {is_temp_expr},
             {stack_detected_expr},
             {stack_json_expr},
-            health_score,
-            security_score,
-            maintainability_score,
-            total_files,
-            lines_of_code,
-            first_analyzed,
-            last_analyzed,
+            NULL AS health_score,
+            NULL AS security_score,
+            NULL AS maintainability_score,
+            NULL AS total_files,
+            NULL AS lines_of_code,
+            NULL AS first_analyzed,
+            NULL AS last_analyzed,
             COALESCE(
                 {prd_count_expr},
                 0
@@ -1526,14 +1460,14 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             {latest_prd_title_expr} as latest_prd_title,
             {latest_prd_file_path_expr} as latest_prd_file_path,
             {latest_prd_created_at_expr} as latest_prd_created_at,
-            COALESCE({dependency_count_expr}, 0) as dependency_count,
+            0 as dependency_count,
             COALESCE({security_open_count_expr}, 0) as security_open_count,
             COALESCE({attention_open_count_expr}, 0) as attention_open_count,
             COALESCE({validation_failed_count_expr}, 0) as validation_failed_count,
             COALESCE({validation_passed_count_expr}, 0) as validation_passed_count,
             COALESCE({telemetry_event_count_expr}, 0) as telemetry_event_count,
             COALESCE({route_blocker_count_expr}, 0) as route_blocker_count
-        FROM reg_projects
+        FROM business_projects
         WHERE project_id = ?
         """.format(
             stack_detected_expr=stack_detected_expr,
@@ -1547,7 +1481,6 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
             latest_prd_title_expr=latest_prd_title_expr,
             latest_prd_file_path_expr=latest_prd_file_path_expr,
             latest_prd_created_at_expr=latest_prd_created_at_expr,
-            dependency_count_expr=dependency_count_expr,
             security_open_count_expr=security_open_count_expr,
             attention_open_count_expr=attention_open_count_expr,
             validation_failed_count_expr=validation_failed_count_expr,
@@ -1563,54 +1496,11 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
 
         project = _decorate_project_for_dashboard(dict(project_row))
 
-        missing_optional = _missing_tables(
-            conn,
-            ["pi_violations", "pi_bugs", "pi_improvements", "pi_analysis_runs"],
-        )
-
+        # pi_violations, pi_bugs, pi_improvements, pi_analysis_runs dropped in migration 084
+        missing_optional = []
         violations = {}
-        if object_exists(conn, "pi_violations"):
-            violations_query = """
-            SELECT severity, COUNT(*) as count
-            FROM pi_violations
-            WHERE project_id = ? AND status != 'resolved'
-            GROUP BY severity
-            """
-            violations = {
-                row["severity"]: row["count"]
-                for row in cursor.execute(violations_query, (project_id,))
-            }
-
         bugs = {}
-        if object_exists(conn, "pi_bugs"):
-            bugs_query = """
-            SELECT severity, COUNT(*) as count
-            FROM pi_bugs
-            WHERE project_id = ? AND status != 'fixed'
-            GROUP BY severity
-            """
-            bugs = {
-                row["severity"]: row["count"] for row in cursor.execute(bugs_query, (project_id,))
-            }
-
         improvements = {}
-        if object_exists(conn, "pi_improvements"):
-            improvements_query = """
-            SELECT
-                CASE
-                    WHEN priority_score >= 8 THEN 'high'
-                    WHEN priority_score >= 5 THEN 'medium'
-                    ELSE 'low'
-                END as priority,
-                COUNT(*) as count
-            FROM pi_improvements
-            WHERE project_id = ? AND status != 'implemented'
-            GROUP BY priority
-            """
-            improvements = {
-                row["priority"]: row["count"]
-                for row in cursor.execute(improvements_query, (project_id,))
-            }
 
         latest_run = None
         if object_exists(conn, "pi_analysis_runs"):
@@ -2047,12 +1937,14 @@ async def websocket_project_health(websocket: WebSocket, project_id: str):
         )
 
         # Send current health data immediately
+        # reg_projects deleted in migration 084; analysis scores are NULL until rebuilt
         conn = get_db_connection()
         try:
             cursor = conn.cursor()
             query = """
-            SELECT health_score, security_score, maintainability_score, last_analyzed
-            FROM reg_projects
+            SELECT NULL AS health_score, NULL AS security_score,
+                   NULL AS maintainability_score, NULL AS last_analyzed
+            FROM business_projects
             WHERE project_id = ?
             """
             row = cursor.execute(query, (project_id,)).fetchone()
@@ -2286,7 +2178,7 @@ async def get_project_prds(project_id: str) -> Dict[str, Any]:
                     if prds
                     else "No PRD authority rows are linked; draft_generated/manual review status is exposed instead."
                 ),
-                "source_tables": ["prd_documents", "reg_projects"],
+                "source_tables": ["prd_documents", "business_projects"],
                 "derived_view": True,
                 "primary_authority": False,
             },

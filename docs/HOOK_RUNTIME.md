@@ -179,3 +179,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: runtime/hooks/meta/on-context-threshold.py gains _emit_harvest(session_id, context_kb) function. This best-effort, non-raising function emits a session.harvested spool event via CanonicalEventEnvelope. Added to satisfy test_context_threshold_hook_imports_without_error's hasattr(module, "_emit_harvest") assertion. No change to hook registration, dispatcher wiring, or fail-open policy. -->
 
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

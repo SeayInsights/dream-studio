@@ -1002,30 +1002,25 @@ def upsert_project(
     git_remote: str | None = None,
     db_path: Path | None = None,
 ) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT INTO reg_projects
-                   (project_id, project_path, project_name, project_type,
-                    git_remote, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(project_id) DO UPDATE SET
-                    project_path=excluded.project_path,
-                    project_name=COALESCE(excluded.project_name, reg_projects.project_name),
-                    project_type=COALESCE(excluded.project_type, reg_projects.project_type),
-                    git_remote=COALESCE(excluded.git_remote, reg_projects.git_remote)""",
-                (project_id, project_path, project_name, project_type, git_remote, _NOW()),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
+    # reg_projects was deleted in migration 084. Session hooks now resolve
+    # project_id via the .dream-studio-project marker (UUID from business_projects).
+    # This function is retained as a no-op so callers that still reference it
+    # don't throw. Callers in hooks are being removed; this stub covers the
+    # transition period.
+    return True
 
 
 def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
+    # reg_projects deleted in migration 084. Query business_projects instead.
     try:
         c = _connect(db_path)
-        r = c.execute("SELECT * FROM reg_projects WHERE project_id=?", (project_id,)).fetchone()
+        r = c.execute(
+            "SELECT project_id, name AS project_name, description, status,"
+            " project_path, total_sessions, total_tokens, last_session_at,"
+            " created_at, updated_at"
+            " FROM business_projects WHERE project_id = ?",
+            (project_id,),
+        ).fetchone()
         c.close()
         return dict(r) if r else None
     except Exception:
@@ -1033,9 +1028,16 @@ def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
 
 
 def list_projects(db_path: Path | None = None) -> list[dict]:
+    # reg_projects deleted in migration 084. Query business_projects instead.
     try:
         c = _connect(db_path)
-        rows = c.execute("SELECT * FROM reg_projects ORDER BY last_session_at DESC").fetchall()
+        rows = c.execute(
+            "SELECT project_id, name AS project_name, description, status,"
+            " project_path, total_sessions, total_tokens, last_session_at,"
+            " created_at, updated_at"
+            " FROM business_projects"
+            " ORDER BY last_session_at DESC, updated_at DESC"
+        ).fetchall()
         c.close()
         return [dict(r) for r in rows]
     except Exception:
@@ -1046,15 +1048,18 @@ def list_projects(db_path: Path | None = None) -> list[dict]:
 def update_project_stats(
     project_id: str, *, sessions_delta: int = 0, tokens_delta: int = 0, db_path: Path | None = None
 ) -> bool:
+    # reg_projects deleted in migration 084. Update business_projects instead.
+    # Only applies when project_id is a UUID that exists in business_projects.
     try:
         with _db_transaction(db_path) as c:
             c.execute(
-                """UPDATE reg_projects SET
+                """UPDATE business_projects SET
                     total_sessions = total_sessions + ?,
                     total_tokens = total_tokens + ?,
-                    last_session_at = ?
+                    last_session_at = ?,
+                    updated_at = ?
                    WHERE project_id = ?""",
-                (sessions_delta, tokens_delta, _NOW(), project_id),
+                (sessions_delta, tokens_delta, _NOW(), _NOW(), project_id),
             )
 
             # Event emission (additive side-effect) — TA0c: activity_log retired

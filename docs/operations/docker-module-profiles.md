@@ -104,3 +104,5 @@ forbids host writes by default.
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: docker-compose.yml was removed in this batch (not referenced by any active CI or test path). No docker module profile policy change. -->
 
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: flake8-baseline.txt stale-entry cleanup + pre-push migration-risk gate added. No docker module profile change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

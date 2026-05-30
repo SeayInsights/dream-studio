@@ -177,3 +177,5 @@ When in doubt, keep generated operational history local. Public examples should 
 <!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps. Domain count is now 15. No docs structure or policy change. -->
 
 <!-- Last reviewed 2026-05-29 — O1: contract_registry.py narrowed 4 over-broad domains. No docs structure or policy change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->

@@ -263,3 +263,5 @@ current PRD version, milestone map, active Work Orders, pending change orders,
 and route reconciliation. These records explain intended vs actual product
 direction, but readiness scores still require evidence-backed controls and must
 not treat a PRD draft as proof of production readiness.
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
