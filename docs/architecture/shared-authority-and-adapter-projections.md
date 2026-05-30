@@ -261,3 +261,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-05-29 — Phase 18.4.6 migration-risk gate: CLAUDE.md updated to add the universal merge-authorization two-tier rule (pre-push gate = push-auth; 3-platform matrix = merge-auth) and the OOM/subset reality note (pre-push runs tests/evals/ only; full suite only runs in remote CI). This is an adapter-projection boundary change because CLAUDE.md is the claude-adapter projection document. The rule content is factual operational discipline, not a new adapter boundary or authority-model change. -->
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->

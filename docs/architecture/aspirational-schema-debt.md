@@ -250,3 +250,5 @@ N2 in the ledger marks removal of the `canonical_events` swallow as intentionall
 **Audit blind spot CLOSED:** `check_schema_coherence()` now includes a direction-aware index/trigger diff in the live-drift probe. Objects present in a fresh migration-only DB but absent in the live DB are flagged as `swallowed_statement_casualty` (medium for non-unique indexes, high for UNIQUE indexes and triggers). The probe builds the migration inventory from the same migration-replay machinery as the structural checks. Verified: the live DB copy correctly reports `idx_memory_lifecycle` as the one medium casualty; a coherent DB reports zero casualties.
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
