@@ -63,6 +63,7 @@ def main() -> None:
     )
     try:
         from core.sdlc.cwd_resolver import resolve_project_from_cwd  # noqa: E402
+
         ctx = resolve_project_from_cwd()
         insert_token_usage(
             session_id=payload.get("session_id", ""),
