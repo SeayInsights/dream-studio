@@ -1,0 +1,75 @@
+gotchas:
+
+  - id: "g001"
+    title: "TYPE_CHECKING imports are NOT circular imports"
+    severity: critical
+    description: |
+      The pattern `if TYPE_CHECKING: from module import Type` is the Python community's
+      standard idiom for breaking runtime circular imports while keeping type checkers
+      informed (PEP 484 §33). These imports DO NOT execute at runtime. dep-007's static
+      pass MUST exclude them at the AST level before generating candidates. Failing to
+      do so produces ~50% false positives on a well-structured codebase.
+    watch_for: "flagging `if TYPE_CHECKING:` imports as circular"
+    fix: "Verify the AST pass uses exclude_type_checking_guards: true (config.yml)"
+
+  - id: "g002"
+    title: "Config rules must discover structure — never hardcode Dream Studio dirs"
+    severity: critical
+    description: |
+      typ-001, dep-001, dep-002, dep-003 are project-agnostic config rules. They
+      run in the user's projects, not only in Dream Studio. A rule that hardcodes
+      `core/`, `interfaces/`, `spool/` produces wrong results in every other repo.
+      Source dirs are discovered from pyproject.toml or root-package scan. Type checker
+      coverage is discovered from the checker's own config file. Never inject Dream
+      Studio-specific dir names into config-rule logic.
+    watch_for: "hardcoded dir names (core/, interfaces/, spool/) in config rule detection"
+    fix: "Use the source_dir_discovery config in config.yml"
+
+  - id: "g003"
+    title: "dep-001 severity comes from real pip-audit output, not just CI config"
+    severity: high
+    description: |
+      A non-blocking CVE gate with zero current CVEs is high (latent risk), not critical.
+      A non-blocking gate WITH actual CVEs in the current deps is critical (real exposure).
+      Do not report critical based on the continue-on-error flag alone — run pip-audit
+      to determine whether CVEs are actually passing through. If pip-audit cannot run
+      (not installed in the audited project), note this explicitly and report high.
+    watch_for: "reporting dep-001 as critical based only on continue-on-error without running pip-audit"
+    fix: "Run dynamic stage of dep-001 before setting severity to critical"
+
+  - id: "g004"
+    title: "typ-002 auto-accept clears ~80% of Any on a well-typed codebase"
+    severity: high
+    description: |
+      A well-typed Python codebase has most `Any` at genuine boundaries (JSON deserialization,
+      plugin interfaces, **kwargs). The auto-accept patterns in config.yml should clear
+      these without LLM confirmation. If the audit is generating large numbers of typ-002
+      LLM confirmations, the auto-accept patterns may be too narrow — check whether
+      dict[str, Any], boundary param names, and boundary function prefixes are being applied.
+      A pile of LLM confirmations that all come back as benign_boundary is a calibration
+      signal to expand auto-accept.
+    watch_for: "many typ-002 LLM confirmations all returning benign_boundary verdict"
+    fix: "Expand auto_accept_patterns in config.yml for this project's specific patterns"
+
+  - id: "g005"
+    title: "dep-003 output is tool-pointing, not allowlist-prescribing"
+    severity: medium
+    description: |
+      The dep-003 remediation text points to pip-licenses and liccheck and notes common
+      license categories. It does NOT prescribe a specific allowlist (MIT + Apache-2.0 + ...)
+      as required. The specific licenses to allow depend on the project's distribution
+      model and legal counsel. The remediation must never say "your allowlist MUST include X."
+    watch_for: "dep-003 remediation text listing specific required license names"
+    fix: "Remediation text uses phrases like 'common starting point' or 'typical for permissive use'"
+
+  - id: "g006"
+    title: "typ-004 exemptions: __init__, dunders, @property"
+    severity: medium
+    description: |
+      Several function forms are conventionally unannotated and must be exempted:
+      - __init__ methods (return type None is implicit; PEP 484 exempts these)
+      - __del__, __new__, __enter__, __exit__, __iter__, __next__ (protocol methods)
+      - @property getters (return type is on the property, not the function signature)
+      Flagging these as missing annotations produces noise, not signal.
+    watch_for: "typ-004 finding on __init__ or @property getter"
+    fix: "Verify AST pass checks for dunder methods and @property decorator"
