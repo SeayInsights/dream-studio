@@ -187,7 +187,7 @@ class TestValidateGdscriptCoverage:
         f.write_text("x = 1\n")
         mock_stat = MagicMock()
         mock_stat.st_size = 20 * 1024 * 1024
-        monkeypatch.setattr(type(f), "stat", lambda self_: mock_stat)
+        monkeypatch.setattr(type(f), "stat", lambda self_, **_: mock_stat)
         result = validate_gdscript(f, {"gameplay"})
         assert any("Skipped" in i for i in result.info)
 
