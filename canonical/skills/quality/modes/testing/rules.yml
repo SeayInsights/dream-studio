@@ -37,12 +37,13 @@ rules:
     # (not matching a unit test file) still passes if coverage > 0.
     # This avoids false criticals on modules that are tested via integration or differently-named files.
     #
-    # OPERATING CONSTRAINT (confirmed by first audit 2026-05-29):
-    # tst-001 is a CI-time / non-Windows check. The full test suite OOMs on Windows locally;
-    # only evals run in the pre-push hook. Full-suite coverage is only available in remote CI
-    # or on a non-Windows machine. Therefore:
+    # OPERATING CONSTRAINT (confirmed by bisect + full run 2026-05-29):
+    # tst-001 is a CI-time / non-Windows check. The full unit suite takes ~79 min on Windows
+    # (subprocess spawn overhead); only evals run in the pre-push hook. Full-suite coverage is
+    # only available in remote CI or on a non-Windows machine. Therefore:
     #   - tst-001 results from `ds-quality:testing audit` on Windows are unreliable for this rule.
     #   - CI is the authoritative environment for tst-001.
+    # NOTE: does NOT OOM — peak 283MB/16GB verified 2026-05-29. The constraint is runtime cost.
     #
     # FAIL-LOUD ON INADEQUATE DATA — SCOPE-AWARE DETECTION (Phase 6 fix):
     # The real question is "did the full suite run?", not "is the total percentage low?"
@@ -659,13 +660,14 @@ rules:
     # This is the testing-skill instance of the phase's throughline:
     # a check nominally green but not enforcing what it claims.
     #
-    # SCOPE NOTE (confirmed by first audit 2026-05-29):
+    # SCOPE NOTE (confirmed by full CI run 2026-05-29 — 4013 passed in 545s):
     # Evals-only coverage = 7% (Dream Studio), which is BELOW fail_under=8%.
     # This means evals alone don't meet the enforcement floor — the gap finding only
-    # applies when running the full test suite (actual ~40%+, gap ~34 points).
+    # applies when running the full test suite (actual 47.78%, gap 39.78 points).
     # The gate CORRECTLY fires on evals-only (7% < 8%); that's different from the
     # tst-010 gap finding (full suite actual >> fail_under).
     # Always use full-suite coverage for tst-010 gap calculation.
+    # VERIFIED NUMBERS (CI run 2026-05-29): actual=47.78%, fail_under=8%, gap=39.78 points.
     detection:
       type: tool
       tool:
@@ -888,9 +890,10 @@ rules:
           - A step that runs pytest or equivalent test runner
           - Applied on pull_request or push event (not only manual/workflow_dispatch)
           Flag as critical if no test execution step is found in CI config.
-          Dream Studio known context: The pre-push hook runs tests/evals/ only (Windows OOM
-          documented in CLAUDE.md). This is NOT a violation — the full suite runs in CI.
-          Report the known context note when evaluating Dream Studio.
+          Dream Studio known context: The pre-push hook runs tests/evals/ only — full suite
+          takes ~79 min on Windows (subprocess spawn overhead), documented in CLAUDE.md.
+          Does NOT OOM (verified 2026-05-29). This is NOT a violation — the full suite runs
+          ubuntu-only post-merge in full-ci.yml. Report the known context when evaluating Dream Studio.
         fallback_to_llm: false
       llm:
         prompt_template: null

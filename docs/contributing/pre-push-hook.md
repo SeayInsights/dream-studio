@@ -13,7 +13,7 @@ Six gates run in order (cheapest first). A failure in any gate blocks the push.
 | `format-check` | `py -m black --check .` | Unformatted Python files |
 | `lint-check` | `py interfaces/cli/lint_baseline.py check` | New lint findings beyond pinned baseline |
 | `skill-sync` | `py -m core.gates.skill_sync_source` | CLI references in the enforcement block (A4/A5 invariant) |
-| `test-suite` | `py -m pytest tests/evals -q` | Eval regressions (OOM-safe scope) |
+| `test-suite` | `py -m pytest tests/evals -q` | Eval regressions (runtime-scoped: full unit suite takes ~79 min on Windows, too slow for pre-push) |
 | `atlas-leak` | `py interfaces/cli/contract_atlas_lifecycle_gate.py` | PRD/contract leakage into unauthorized surfaces |
 | `docs-drift` | `py interfaces/cli/contract_docs_drift_gate.py` | Docs/code reference drift |
 
