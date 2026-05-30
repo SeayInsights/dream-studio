@@ -17,7 +17,7 @@
 `ds-quality:code-quality:audit`, `audit:`, `code-quality audit:`, `cq audit:`
 
 ## Purpose
-Audit Python code against rules.yml for maintainability, correctness, and idiomatic patterns. Static analysis first (AST, pyflakes, regex), then LLM semantic pass for rules requiring design judgment. Classify findings by severity. Report. Never fix — classify and report only.
+Audit code against rules.yml for maintainability, correctness, and idiomatic patterns. Works on Python, TypeScript, and JavaScript. For Python: full static analysis (AST, pyflakes, regex). For TypeScript/JavaScript: AST-described rules degrade to LLM semantic pass (Python ast cannot parse TS/JS; the concepts are universal). Seven rules are genuinely Python-specific (import ordering, bare except, docstrings, sleep-as-sync, wildcard imports, circular imports) — they skip gracefully on non-Python files without false-firing. Static analysis first, then LLM semantic pass for rules requiring design judgment. Classify findings by severity. Report. Never fix — classify and report only.
 
 ---
 
@@ -77,19 +77,28 @@ Per `config.yml log_tool_degradation: true`: include degraded-mode warning in re
 
 ## Step 4 — Static Analysis Pass
 
-For each in-scope file, run applicable static rules:
+**For Python files (`.py`):** Run all applicable static rules below.
+**For TypeScript/JavaScript files (`.ts`, `.js`):** Run regex-based rules only. AST-based rules automatically degrade to LLM semantic pass (Python ast cannot parse TS/JS — `fallback_to_llm: true` fires). Seven Python-specific rules skip entirely (`languages: [python]`).
 
-### AST-based rules (Python stdlib ast — always available)
-- **cq-002** (function length): Count AST function body lines. Flag if > `config.thresholds.max_function_lines`.
-- **cq-003** (param count): Count AST function arguments (excluding self/cls). Flag if > `config.thresholds.max_param_count`.
-- **cq-005** (nesting depth): Walk AST nesting depth of if/for/while/with/try nodes. Flag if > `config.thresholds.max_nesting_depth`.
-- **cq-010** (constants): Detect module-level assignments not SCREAMING_SNAKE_CASE.
-- **cq-013** (import order): Parse import blocks, verify ordering groups.
-- **cq-019** (sleep as sync): Detect sleep() calls inside retry/assertion loops.
-- **cq-020** (docstrings): Detect public functions/classes missing docstrings.
-- **cq-021** (property side effects): Detect @property with mutation AST nodes.
-- **cq-A-explicit** (wildcard imports): Detect `from X import *`.
-- **cq-014** (circular imports, full-repo/sample only): Build multi-file import graph. Detect cycles.
+### AST-based rules (Python ast for Python; LLM semantic fallback for TypeScript/JavaScript)
+- **cq-002** (function length): Python: AST line count. TS/JS: LLM counts function body lines.
+- **cq-003** (param count): Python: AST param count (excluding self/cls). TS/JS: LLM counts parameters.
+- **cq-005** (nesting depth): Python: AST nesting depth. TS/JS: LLM measures conditional/loop nesting.
+- **cq-010** (constants): Python: AST module-level constant detection. TS/JS: LLM identifies non-SCREAMING constant declarations.
+- **cq-021** (property side effects): Python: AST @property mutation detection. TS/JS: LLM identifies get methods with mutations.
+
+### Python-only rules (skip gracefully on non-Python files — no findings, no errors)
+- **cq-013** (import order): Python import system — skip on TS/JS.
+- **cq-014** (circular imports): Python import graph — skip on TS/JS. Cross-reference dep-007 (calibrated version with TYPE_CHECKING exclusion).
+- **cq-015** (bare except): Python exception syntax — skip on TS/JS.
+- **cq-019** (sleep as sync): Python time.sleep/asyncio.sleep — skip on TS/JS.
+- **cq-020** (docstrings): Python docstring convention — skip on TS/JS.
+- **cq-A-explicit** (wildcard imports): Python `from X import *` — skip on TS/JS.
+Note: cq-006 uses pyflakes (Python-specific tool) but has `fallback_to_llm: true` — on TS/JS, LLM handles silent-failure detection.
+
+### pyflakes-based rules (if installed; LLM fallback if not)
+- **cq-006** (silent failures): Detect `except: pass` / `except Exception: pass` with no log/reraise. Python: pyflakes. Others: LLM.
+- **cq-015** (bare except): Detect `except:` and `except BaseException:`. Python only.
 
 ### pyflakes-based rules (if installed)
 - **cq-006** (silent failures): Detect `except: pass` / `except Exception: pass` with no log/reraise.

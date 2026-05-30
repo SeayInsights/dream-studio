@@ -94,12 +94,12 @@ rules:
       type: static
       static:
         tool: null
-        fallback_to_llm: false
-        notes: "AST line count. Threshold from config.yml thresholds.max_function_lines (default 50). Reports functions exceeding threshold with line count."
+        fallback_to_llm: true
+        notes: "For Python: Python ast line count. Threshold from config.yml thresholds.max_function_lines (default 50). For TypeScript/JavaScript: LLM counts lines in function body (any language — the concept is universal). LLM fallback fires automatically for non-Python files."
       llm:
         prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        context_scope: function
+        estimated_tokens: 200
 
     triggers:
       - "Function body exceeds max_function_lines lines (default 50)"
@@ -111,7 +111,7 @@ rules:
     suppressions:
       - inline_comment: "# cq-002-suppress"
         reason: "Long function is justified — e.g., generated migration or template with unavoidable length"
-      - path_glob: "core/event_store/migrations/**"
+      - path_glob: "**/migrations/**"
         reason: "Migration files may contain long single-statement blocks by design"
 
     applies_to:
@@ -139,11 +139,11 @@ rules:
       static:
         tool: null
         fallback_to_llm: false
-        notes: "AST param count. Threshold from config.yml thresholds.max_param_count (default 4). Excludes self/cls."
+        notes: "For Python: Python ast param count, excludes self/cls. Threshold from config.yml thresholds.max_param_count (default 4). For TypeScript/JavaScript: LLM counts function parameters (any language). LLM fallback fires for non-Python files."
       llm:
         prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        context_scope: function
+        estimated_tokens: 150
 
     triggers:
       - "Function has more than max_param_count parameters (default 4, excluding self/cls)"
@@ -181,8 +181,8 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "AST: detect bool-typed parameters (annotated as bool or defaulting to True/False) in function signatures. Flag for LLM confirmation."
-        availability_note: "ruff not installed; using AST + LLM. Install ruff for cheaper static execution."
+        notes: "For Python: detect bool-typed parameters (annotated as bool or defaulting to True/False) in function signatures. For TypeScript/JavaScript: LLM identifies boolean parameters that branch behavior (any language — the anti-pattern is universal). LLM fires for all languages."
+        availability_note: "ruff not installed; using AST + LLM for Python, LLM-only for other languages."
       llm:
         prompt_template: null
         context_scope: function
@@ -225,11 +225,11 @@ rules:
       static:
         tool: null
         fallback_to_llm: false
-        notes: "AST nesting depth. Count max if/for/while/with/try nesting depth within a function body. Threshold from config.yml thresholds.max_nesting_depth (default 3)."
+        notes: "For Python: Python ast nesting depth (if/for/while/with/try nodes). Threshold from config.yml thresholds.max_nesting_depth (default 3). For TypeScript/JavaScript: LLM counts nesting depth of conditionals and loops (any language — deep nesting is a universal smell). LLM fallback fires for non-Python files."
       llm:
         prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        context_scope: function
+        estimated_tokens: 200
 
     triggers:
       - "Function has nesting depth > max_nesting_depth (default 3 levels of if/for/while/with/try)"
@@ -286,7 +286,7 @@ rules:
       - inline_comment: "# cq-006-suppress"
         reason: "Intentional swallow — documented reason why this exception is safe to ignore"
       - inline_comment: "# cq-006-suppress: intentional graceful degradation on malformed event payload"
-        reason: "Pattern used in core/event_store/studio_db.py JSON parsing: malformed canonical_events payload should not crash the event store. Architectural decision not yet documented in a dedicated doc; tracked for documentation in 18.4.2-followup or equivalent schema doc."
+        reason: "Graceful-degradation pattern: silent failure is intentional when malformed external data (e.g., event payload, JSON parse) must not crash a critical path. Document the rationale inline."
 
     applies_to:
       languages: [python]
@@ -446,11 +446,11 @@ rules:
       static:
         tool: null
         fallback_to_llm: false
-        notes: "AST: detect module-level assignments of string/numeric literals that are clearly constant (not varied by logic) but not SCREAMING_SNAKE_CASE. Also detect literal magic values inside function bodies that should be module-level constants."
+        notes: "For Python: Python ast detects module-level constant assignments not in SCREAMING_SNAKE_CASE. For TypeScript/JavaScript: LLM identifies top-level const declarations and enum values not following the SCREAMING_SNAKE or ALL_CAPS convention (TypeScript commonly uses SCREAMING_SNAKE for true constants). LLM fallback fires for non-Python files."
       llm:
         prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        context_scope: full_file
+        estimated_tokens: 300
 
     triggers:
       - "Module-level constant named with lowercase (should be SCREAMING_SNAKE_CASE)"
@@ -533,7 +533,7 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "AST: detect module-level mutable containers (list, dict, set) assigned at module scope. Also detect global keyword used to write to module-scope variables in functions."
+        notes: "For Python: Python ast detects module-level mutable containers (list, dict, set) and global keyword mutation. For TypeScript/JavaScript: LLM identifies module-level let variables, exported mutable arrays/objects, and functions that mutate module-scope state (the anti-pattern is universal; syntax differs). LLM fires for all languages."
       llm:
         prompt_template: null
         context_scope: full_file
@@ -615,12 +615,25 @@ rules:
 
     regulatory_anchors: []
 
+    # CROSS-REFERENCE: dep-007 in ds-quality:types-deps is the CALIBRATED version of this rule.
+    # dep-007 excludes TYPE_CHECKING-guarded imports at the AST level before generating candidates,
+    # which prevents ~50% false positives from the standard Python pattern of breaking runtime cycles
+    # via `if TYPE_CHECKING: from module import Type`. cq-014 lacks this exclusion — if running
+    # both skills, dep-007 is the authoritative circular-import detector; cq-014 defers to it.
+    # When running code-quality without types-deps, cq-014 fires with the caveat that
+    # TYPE_CHECKING-guarded imports will appear as false positives.
+    cross_references:
+      - rule_id: "dep-007"
+        skill: "ds-quality:types-deps"
+        reason: "dep-007 is the calibrated circular-import detector with TYPE_CHECKING guard exclusion. cq-014 defers to dep-007 when both skills are running. cq-014 exists for code-quality-only audits."
+        surface_co_located: true
+
     detection:
       type: static
       static:
         tool: null
         fallback_to_llm: false
-        notes: "Multi-file import graph analysis. Build directed import graph; detect cycles. Default scope: --full-repo and --sample only (not --changed — circular imports often involve files the changed file didn't touch). Operator can override with circular_imports_in_changed: true in config.yml."
+        notes: "Multi-file import graph analysis for Python only. Build directed import graph; detect cycles. Default scope: --full-repo and --sample only. Note: does NOT exclude TYPE_CHECKING-guarded imports — see dep-007 for the calibrated version with that exclusion. Operator can override with circular_imports_in_changed: true in config.yml."
       llm:
         prompt_template: null
         context_scope: null
@@ -631,7 +644,7 @@ rules:
       - "Longer import cycles: A → B → C → A"
 
     remediation:
-      summary: "Break cycles by: (1) moving shared code to a new module both can import; (2) using dependency injection; (3) moving one import inside a function body (lazy import). Python's circular import errors can be silent until runtime."
+      summary: "Break cycles by: (1) moving shared code to a new module both can import; (2) using dependency injection; (3) moving one import inside a function body (lazy import). For typing-only cycles, use `if TYPE_CHECKING:` guard (dep-007 in ds-quality:types-deps handles this correctly)."
       guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#d-files--module-organization"
 
     suppressions:
@@ -756,15 +769,15 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Regex: detect comment blocks that appear to be former code (lines starting with # that contain Python keywords, assignments, or function calls). LLM confirms."
+        notes: "Regex: detect comment blocks that appear to be former code. Patterns: lines starting with `#` (Python) or `//` (TypeScript/JavaScript) containing keywords, assignments, or function calls. LLM confirms whether it's dead code vs. a legitimate explanation comment."
       llm:
         prompt_template: null
         context_scope: full_file
         estimated_tokens: 400
 
     triggers:
-      - "Comment block containing Python/JS syntax: `# x = foo()` or `# if condition:`"
-      - "Multi-line commented-out function or class definition"
+      - "Comment block containing code syntax: `# x = foo()` or `// x = foo()` or `# if condition:` or `// if (cond) {`"
+      - "Multi-line commented-out function or class definition (any language)"
 
     remediation:
       summary: "Delete the commented-out code. Git history preserves it. Dead code confuses readers who can't tell if it was intentional removal or a mistake."
@@ -799,14 +812,14 @@ rules:
       static:
         tool: null
         fallback_to_llm: false
-        notes: "Regex: `# TODO:?\\s*$` or `# TODO:?\\s*\\w{1,3}$` — bare TODO with no following context. Requires at least a few words beyond the label."
+        notes: "Regex: `# TODO:?\\s*$`, `// TODO:?\\s*$`, or bare `TODO:?` with no following context. Matches both Python `#` and TypeScript/JavaScript `//` comment styles. Requires at least a few words beyond the label."
       llm:
         prompt_template: null
         context_scope: null
         estimated_tokens: 0
 
     triggers:
-      - "Bare `# TODO` or `# TODO:` with no following context"
+      - "Bare `# TODO` or `# TODO:` or `// TODO` with no following context (Python or TypeScript/JavaScript)"
       - "TODO that names a task but doesn't say who owns it or when it should be resolved"
 
     remediation:
@@ -931,7 +944,7 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "AST: detect @property methods that contain mutations (self.x = ..., list.append, dict update, etc.). Also detect functions named get_*/fetch_*/read_* that mutate state."
+        notes: "For Python: Python ast detects @property methods with mutations. For TypeScript/JavaScript: LLM identifies getter methods (get foo() {...}) or functions named get*/fetch*/read* that mutate object state. The anti-pattern is universal — getter = read-only by convention in any language. LLM fires for all languages."
       llm:
         prompt_template: null
         context_scope: function
