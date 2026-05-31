@@ -203,11 +203,11 @@ def _find_latest_handoff(project_dir: Path) -> Path | None:
     return handoffs[-1] if handoffs else None
 
 
-def _find_reg_project_id(conn: sqlite3.Connection, dir_name: str) -> str | None:
-    """Match project directory name against reg_projects by path or name."""
+def _find_project_id(conn: sqlite3.Connection, dir_name: str) -> str | None:
+    """Match project directory name against business_projects by path or name."""
     row = conn.execute(
-        "SELECT project_id FROM reg_projects"
-        " WHERE project_path LIKE ? OR project_name = ? OR project_path = ?",
+        "SELECT project_id FROM business_projects"
+        " WHERE project_path LIKE ? OR name = ? OR project_path = ?",
         (f"%{dir_name}%", dir_name, dir_name),
     ).fetchone()
     return row[0] if row else None
@@ -326,13 +326,13 @@ def _pass2_architecture(
         project_id = None
         if conn is not None:
             if project:
-                project_id = _find_reg_project_id(conn, project)
+                project_id = _find_project_id(conn, project)
             else:
                 # Try to infer project from path components
                 for part in reversed(path.parts):
                     if part in ("planning", "sessions", ".planning", ".sessions"):
                         continue
-                    pid = _find_reg_project_id(conn, part)
+                    pid = _find_project_id(conn, part)
                     if pid:
                         project_id = pid
                         break
@@ -393,7 +393,7 @@ def _pass3_session_handoffs(
 
         project_id = None
         if conn is not None:
-            project_id = _find_reg_project_id(conn, project_name)
+            project_id = _find_project_id(conn, project_name)
 
         try:
             mtime = latest.stat().st_mtime

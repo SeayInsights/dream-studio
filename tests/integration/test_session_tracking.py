@@ -15,7 +15,6 @@ def test_session_start_inserts_session(isolated_home, monkeypatch, handler):
     monkeypatch.setattr(mod, "insert_session", lambda *a, **kw: calls.append((a, kw)) or True)
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
-    monkeypatch.setattr(mod, "upsert_project", lambda *a, **kw: True)
 
     payload = {"session_id": "test-session-abc"}
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
@@ -34,7 +33,6 @@ def test_session_start_generates_uuid_when_no_session_id(isolated_home, monkeypa
     monkeypatch.setattr(mod, "insert_session", lambda *a, **kw: calls.append((a, kw)) or True)
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
-    monkeypatch.setattr(mod, "upsert_project", lambda *a, **kw: True)
     monkeypatch.delenv("CLAUDE_SESSION_ID", raising=False)
 
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({})))
@@ -67,7 +65,6 @@ def test_session_start_sentinel_prevents_double_fire(isolated_home, monkeypatch,
     monkeypatch.setattr(mod, "insert_session", lambda *a, **kw: calls.append((a, kw)) or True)
     monkeypatch.setattr(mod, "has_sentinel", _has)
     monkeypatch.setattr(mod, "set_sentinel", _set)
-    monkeypatch.setattr(mod, "upsert_project", lambda *a, **kw: True)
 
     payload = {"session_id": "dup-session"}
 

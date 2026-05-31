@@ -157,6 +157,13 @@ def verify_component_exists(component_id: str) -> None:
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        # pi_components was dropped in migration 084; treat as not found
+        tables = {
+            r[0]
+            for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+        if "pi_components" not in tables:
+            raise HTTPException(status_code=404, detail=f"Component {component_id} not found")
         query = "SELECT COUNT(*) as count FROM pi_components WHERE component_id = ?"
         result = cursor.execute(query, (component_id,)).fetchone()
 
@@ -320,6 +327,18 @@ async def list_components(
         conn = get_connection()
         try:
             cursor = conn.cursor()
+
+            # pi_components was dropped in migration 084; return empty list if absent
+            tables = {
+                r[0]
+                for r in cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            if "pi_components" not in tables:
+                return ComponentListResponse(
+                    project_id=project_id, components=[], total=0, filtered_by=type
+                )
 
             # Build count query
             if type:

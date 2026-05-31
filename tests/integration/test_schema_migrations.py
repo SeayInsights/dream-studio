@@ -141,14 +141,19 @@ class TestForeignKeys:
         conn.close()
 
     def test_fk_violation_raises(self, tmp_path):
-        """Inserting a raw_sessions row with a non-existent project_id should fail."""
+        """raw_sessions.project_id FK to reg_projects was removed in migration 088."""
         db = tmp_path / "test.db"
         conn = _connect(db)
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO raw_sessions(session_id, project_id, started_at) "
-                "VALUES('s1', 'nonexistent-project', '2026-01-01')"
-            )
+        # FK to reg_projects no longer enforced (reg_projects dropped in migration 084,
+        # dead FK ref removed in migration 088). Session inserts succeed even with
+        # a non-existent project_id.
+        conn.execute(
+            "INSERT INTO raw_sessions(session_id, project_id, started_at) "
+            "VALUES('s1', 'nonexistent-project', '2026-01-01')"
+        )
+        conn.commit()
+        row = conn.execute("SELECT project_id FROM raw_sessions WHERE session_id='s1'").fetchone()
+        assert row["project_id"] == "nonexistent-project"
         conn.close()
 
     def test_fk_null_allowed(self, tmp_path):
@@ -187,7 +192,6 @@ class TestIndexes:
         "idx_opsnapshots_project",
         "idx_pulse_date",
         "idx_specs_path",
-        "idx_projects_last_session",
         "idx_sessions_project",
         "idx_sessions_started",
         "idx_handoffs_session",
@@ -269,7 +273,6 @@ class TestRetry:
 
 class TestOperationalTables:
     EXPECTED_TABLES = [
-        "reg_projects",
         "raw_sessions",
         "raw_handoffs",
         "raw_specs",

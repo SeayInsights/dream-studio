@@ -148,7 +148,7 @@ def test_connector_ingestion_normalizes_into_current_authority(tmp_path: Path) -
             execute=True,
         )
         project_count = conn.execute(
-            "SELECT COUNT(*) FROM reg_projects WHERE project_id = 'pilot'"
+            "SELECT COUNT(*) FROM business_projects WHERE project_id = 'pilot'"
         ).fetchone()[0]
         validation_count = conn.execute(
             "SELECT COUNT(*) FROM validation_results WHERE validation_id = 'validation-1'"

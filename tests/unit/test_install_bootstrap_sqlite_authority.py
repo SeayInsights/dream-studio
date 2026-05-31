@@ -109,7 +109,38 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
         conn.execute(
             "INSERT INTO _schema_version(version, applied_at) VALUES(38, '2026-05-14T00:00:00Z')"
         )
-        conn.execute("CREATE TABLE raw_sessions(session_id TEXT PRIMARY KEY, created_at TEXT)")
+        # Full schema required so migration 088's explicit INSERT...SELECT succeeds.
+        conn.execute(
+            "CREATE TABLE raw_sessions("
+            "session_id TEXT PRIMARY KEY, project_id TEXT, "
+            "topic TEXT, started_at TEXT NOT NULL DEFAULT (datetime('now')), ended_at TEXT, "
+            "duration_s REAL, input_tokens INTEGER, output_tokens INTEGER, "
+            "tasks_completed INTEGER DEFAULT 0, pipeline_phase TEXT, "
+            "handoff_consumed INTEGER DEFAULT 0, outcome TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE raw_handoffs("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, project_id TEXT, "
+            "topic TEXT NOT NULL, plan_path TEXT, pipeline_phase TEXT, "
+            "current_task_id TEXT, current_task_name TEXT, tasks_completed INTEGER, "
+            "tasks_total INTEGER, branch TEXT, last_commit TEXT, working TEXT, broken TEXT, "
+            "pending_decisions TEXT, active_files TEXT, next_action TEXT, lessons_json TEXT, "
+            "gotchas_hit TEXT, approaches_json TEXT, created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "CREATE TABLE raw_specs("
+            "spec_id TEXT PRIMARY KEY, project_id TEXT, title TEXT NOT NULL, "
+            "status TEXT DEFAULT 'draft', task_count INTEGER, tasks_done INTEGER DEFAULT 0, "
+            "spec_content TEXT, plan_content TEXT, created_at TEXT NOT NULL, "
+            "completed_at TEXT, pr_numbers TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE raw_tasks("
+            "task_id TEXT NOT NULL, spec_id TEXT NOT NULL, project_id TEXT, "
+            "title TEXT NOT NULL, status TEXT DEFAULT 'planned', depends_on TEXT, "
+            "estimated_hours REAL, actual_hours REAL, assigned_session TEXT, "
+            "commit_sha TEXT, completed_at TEXT, PRIMARY KEY (task_id, spec_id))"
+        )
         conn.execute(
             "CREATE TABLE security_findings("
             "finding_id TEXT PRIMARY KEY, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, "
@@ -191,6 +222,38 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "id INTEGER PRIMARY KEY AUTOINCREMENT, run_key TEXT NOT NULL, "
             "node_id TEXT NOT NULL, status TEXT NOT NULL, started_at TEXT, "
             "finished_at TEXT, duration_s REAL, output TEXT, activity_id INTEGER)"
+        )
+        # raw_skill_telemetry and cor_skill_corrections are created in migration 001;
+        # both are needed by the effective_skill_runs view (migration 081) to avoid
+        # schema-validation errors during migration 088's ALTER TABLE RENAME operations.
+        conn.execute(
+            "CREATE TABLE raw_skill_telemetry("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, skill_name TEXT NOT NULL, "
+            "invoked_at TEXT NOT NULL, success INTEGER, input_tokens INTEGER, "
+            "output_tokens INTEGER, execution_time_s REAL, project_id TEXT, session_id TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE cor_skill_corrections("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, telemetry_id INTEGER NOT NULL "
+            "REFERENCES raw_skill_telemetry(id), corrected_success INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL)"
+        )
+        # execution_nodes and execution_dependencies are created in migration 034;
+        # needed by views v_active_execution, v_blocked_nodes, v_completion_rate (migration 081).
+        conn.execute(
+            "CREATE TABLE execution_nodes("
+            "node_id TEXT PRIMARY KEY, node_type TEXT NOT NULL, parent_id TEXT, "
+            "project_id TEXT, prd_id TEXT, plan_id TEXT, phase_id TEXT, wave_id TEXT, "
+            "title TEXT NOT NULL, description TEXT, metadata TEXT, context_hash TEXT, "
+            "context_summary TEXT, context_tokens INTEGER, status TEXT NOT NULL DEFAULT 'pending', "
+            "priority INTEGER DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "started_at TEXT, completed_at TEXT, duration_seconds REAL)"
+        )
+        conn.execute(
+            "CREATE TABLE execution_dependencies("
+            "dependency_id TEXT PRIMARY KEY, source_node_id TEXT NOT NULL, "
+            "target_node_id TEXT NOT NULL, dependency_type TEXT NOT NULL, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
         conn.commit()
