@@ -131,6 +131,22 @@ def _detect_by_files(path: Path) -> List[StackSignal]:
                 )
             )
 
+    # Check for Go
+    if (path / "go.mod").exists():
+        signals.append(
+            StackSignal(
+                name="golang", confidence=0.95, source="file_check", evidence=["go.mod exists"]
+            )
+        )
+
+    # Check for Rust
+    if (path / "Cargo.toml").exists():
+        signals.append(
+            StackSignal(
+                name="rust", confidence=0.95, source="file_check", evidence=["Cargo.toml exists"]
+            )
+        )
+
     return signals
 
 
@@ -166,6 +182,10 @@ def _detect_test_framework(path: Path) -> Optional[str]:
     if (path / "pyproject.toml").exists() or (path / "pytest.ini").exists():
         return "pytest"
 
+    # Rust
+    if (path / "Cargo.toml").exists():
+        return "cargo"
+
     return None
 
 
@@ -190,7 +210,14 @@ def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
     best_confidence = stack_scores[best_name]
 
     # Framework name mapping
-    framework_names = {"nextjs": "Next.js", "astro": "Astro", "python": "Python", "node": "Node.js"}
+    framework_names = {
+        "nextjs": "Next.js",
+        "astro": "Astro",
+        "python": "Python",
+        "node": "Node.js",
+        "golang": "Go",
+        "rust": "Rust",
+    }
 
     return DetectedStack(
         adapter=best_name,

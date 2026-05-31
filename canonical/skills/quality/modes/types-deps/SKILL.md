@@ -102,3 +102,21 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
 **Stack detection:** `detect_stack().test_framework` identifies the ecosystem. TypeScript detection via tsconfig.json / package.json. Results dispatch to TypeScript-specific detection steps.
 
 **Proving ground:** DreamySuite (builds/dreamysuite) — TypeScript, tsconfig.json, package-lock.json, real CVE-potential dependencies, circular import risk.
+
+### Rust Support (Phase 4)
+
+**Applies (3 rules):**
+- **typ-001** reframed: "cargo build/test/check in CI" — Rust compiler IS the type checker
+- **dep-001**: cargo audit in CI (RustSec — official Rust CVE tool)
+- **dep-002**: Cargo.lock presence + cargo tree --locked; severity reduced for libraries ([lib] without [[bin]])
+
+**Skips (5 rules — compiler prevents or no equivalent):**
+- **typ-002**: Rust has no `any` type. Language design prevents interior type erasure. Box<dyn Trait> requires explicit `dyn` — conspicuous, compiler-visible. No-op.
+- **typ-003**: No inline type-suppression mechanism. #[allow(...)] is a warning/linter attribute, not type-error suppression.
+- **typ-004**: Compiler enforces return types syntactically. 100% auto-satisfied.
+- **dep-007**: Cargo rejects all circular crate dependencies. Stricter than Go — no escape hatch.
+- **dep-003**: cargo-deny/cargo-license are community tools, not standard Rust ecosystem.
+
+**Key difference from Go:** typ-002 is a NO-OP (not just a skip — the language design makes it impossible to have interior type erasure without obvious explicit syntax). Go still has interface{}/any with boundary patterns to calibrate; Rust has nothing analogous.
+
+**Proving ground:** ripgrep (github.com/BurntSushi/ripgrep) — mature binary Rust crate.

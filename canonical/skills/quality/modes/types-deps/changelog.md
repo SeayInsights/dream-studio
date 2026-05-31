@@ -1,5 +1,14 @@
 # Changelog — ds-quality:types-deps
 
+## 1.2.0 — 2026-05-31
+
+Rust support (Phase 4). All ecosystems complete: Python, TypeScript/JS, Go, Rust.
+- typ-001 reframed for Rust (cargo build/test/check in CI)
+- dep-001 ported: cargo audit (RustSec advisory DB)
+- dep-002 ported: Cargo.lock + cargo tree --locked (library vs binary severity)
+- 5 rules skip: typ-002 (no any type), typ-003 (no suppress mechanism), typ-004 (compiler enforces), dep-003 (no standard tooling), dep-007 (compiler enforces circular dep prevention)
+- Stack detector: Rust detection added (Cargo.toml signal)
+
 ## 1.0.0 — 2026-05-30
 
 Initial release (Phase 18.5.2).

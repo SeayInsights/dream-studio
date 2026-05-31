@@ -24,9 +24,9 @@ rules:
     severity: high
     category: type_enforcement
     applies_to:
-      languages: [python, typescript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
-      note: "Per-ecosystem type checker config discovery. Python: pyrightconfig.json/mypy.ini. TypeScript: tsconfig.json include/exclude."
+      languages: [python, typescript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Per-ecosystem type checker config discovery. Python: pyrightconfig.json/mypy.ini. TypeScript: tsconfig.json include/exclude. Rust: cargo build/test/check in CI (rustc IS the type checker)."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -77,6 +77,25 @@ rules:
              Report gap only if "exclude" removes source directories from checking.
           5. Report: "TypeScript type checker (tsc) covers X/N source dirs. Uncovered: [list]"
 
+          FOR RUST:
+          Rust's type checker IS the compiler (rustc). The question reframes from
+          "type checker config covers source dirs" to "does CI exercise the full crate build?"
+
+          1. Detect crate root: find Cargo.toml (required for any Rust project).
+          2. Check for workspace: if Cargo.toml has [workspace], enumerate all member crates.
+          3. Scan .github/workflows/*.yml (or Makefile, scripts/) for:
+             - `cargo build` (compiles all declared targets)
+             - `cargo test` (also triggers type-checking + tests)
+             - `cargo check` (fast type-check without building)
+             Any of these exercises the full crate type check.
+          4. If NO build/test/check step found → finding: "Rust crate has no CI build step.
+             cargo build/test/check must run in CI to guarantee type-correctness."
+
+          finding_hash: SHA-256("typ-001|Cargo.toml|")
+          Severity: high if no build step; pass if build/test/check step found.
+
+          TOOLING: Static CI YAML inspection only — no Rust tooling required.
+
     triggers:
       - "Type checker config exists but does not include all source directories"
       - "No type checker config found (pyrightconfig.json, mypy.ini, pyproject.toml [tool.mypy])"
@@ -105,6 +124,9 @@ rules:
     applies_to:
       languages: [python, typescript]
       file_types: [".py", ".ts", ".tsx"]
+      skip_on:
+        languages: [rust]
+        reason: "Rust has no `any` type. The language prevents interior type erasure — Box<dyn Trait> is the only dynamic dispatch mechanism and requires explicit `dyn` keyword (compiler-visible, conspicuous). Unlike Python's Any, TypeScript's any, and Go's interface{}/any, Rust forces type specificity. typ-002 is a language-enforced no-op for Rust."
       note: "Universal concept. Python: Any keyword. TypeScript: any type (equivalent interior leakage risk). Same LLM boundary classification applies."
 
     source:
@@ -255,7 +277,7 @@ rules:
       file_types: [".py", ".ts", ".tsx"]
       skip_on:
         languages: [go, rust]
-        reason: "Go uses //nolint build tags (different mechanism); Rust uses #[allow(...)] attributes (different syntax). Neither maps to the type-ignore justification pattern. Skip cleanly."
+        reason: "Go uses //nolint pragmas (different mechanism). Rust uses #[allow(...)] attribute macros (item-level, not inline type suppression). Rust's compiler has no inline type-error suppression syntax — type errors cause build failure with no override. typ-003 skips cleanly on both Go and Rust with 0 findings."
       note: "Python: # type: ignore. TypeScript: // @ts-ignore / // @ts-expect-error. Same rule: suppression without justification is a hygiene violation."
 
     source:
@@ -325,6 +347,9 @@ rules:
     applies_to:
       languages: [python, typescript]
       file_types: [".py", ".ts", ".tsx"]
+      skip_on:
+        languages: [golang, rust]
+        reason: "Go and Rust both require explicit return type syntax — function will not compile without one. 100% return type coverage is compiler-enforced in both languages; no audit needed."
       note: "Universal concept. Python: -> return annotation. TypeScript: explicit return type after function signature. Same AST detection, different syntax."
 
     source:
@@ -426,9 +451,9 @@ rules:
     severity: high       # elevated to critical if actual CVEs currently pass through
     category: cve_enforcement
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
-      note: "Per-ecosystem CVE tool. Python: pip-audit/safety. TypeScript/JS: npm audit/yarn audit. CI config inspection pattern is portable."
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go", ".rs"]
+      note: "Per-ecosystem CVE tool. Python: pip-audit/safety. TypeScript/JS: npm audit/yarn audit. Rust: cargo audit (RustSec advisory DB). CI config inspection pattern is portable."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -467,6 +492,24 @@ rules:
           4. If no CVE tool found in CI: report critical "No JS/TS CVE gate configured."
           5. If CVE tool found with continue-on-error: report high (non-blocking gate).
           6. If CVE tool found, blocking: pass on enforcement check.
+
+          FOR RUST:
+          1. Check for Cargo.toml (required — confirms this is a Rust crate).
+          2. Scan .github/workflows/*.yml for steps invoking:
+             cargo audit, cargo-deny (which includes CVE checking).
+          3. For each found step, check for `continue-on-error: true`.
+          4. If no CVE tool in CI: report critical "No Rust CVE gate configured.
+             Recommended: cargo audit (cargo install cargo-audit — RustSec advisory DB)."
+          5. If CVE tool found with continue-on-error: report high (non-blocking gate).
+          6. If blocking: pass on enforcement check.
+
+          TOOLING DEGRADATION:
+          If `cargo audit` available in PATH: run `cargo audit` on the crate (reads Cargo.lock).
+          If NOT available: report enforcement gap at high severity without CVE count.
+          Message: "cargo audit not found — install: cargo install cargo-audit"
+          cargo audit is the official Rust CVE scanner (RustSec advisory DB).
+
+          finding_hash: SHA-256("dep-001|.github/workflows/ci.yml|") — same pattern as other ecosystems
         fallback_to_llm: false
       dynamic:
         tool: pip-audit
@@ -484,6 +527,12 @@ rules:
           Parse output for vulnerability count.
           If CVEs present + gate non-blocking: escalate severity to critical.
           If npm audit not available: report enforcement gap at high severity without CVE count.
+
+          FOR RUST (if cargo audit available):
+          command: "cargo audit"
+          Reads Cargo.lock for vulnerability data.
+          Exit 0 → clean. Non-zero → vulnerabilities found.
+          If not available → degrade to high severity without CVE count.
 
     triggers:
       - "continue-on-error: true on CVE scanner step in CI"
@@ -512,9 +561,9 @@ rules:
     severity: high
     category: dep_reproducibility
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
-      note: "Per-ecosystem lock file. Python: requirements.lock/poetry.lock/Pipfile.lock. TypeScript/JS: package-lock.json/yarn.lock/pnpm-lock.yaml."
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go", ".rs"]
+      note: "Per-ecosystem lock file. Python: requirements.lock/poetry.lock/Pipfile.lock. TypeScript/JS: package-lock.json/yarn.lock/pnpm-lock.yaml. Rust: Cargo.lock."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -564,6 +613,29 @@ rules:
              - Lock absent: high
              - Lock present but out of sync (package.json newer): high
              - Lock present and in sync: pass
+
+          FOR RUST:
+          Rust's lock file is Cargo.lock. Two checks:
+
+          Check 1 — Cargo.lock presence:
+          Find Cargo.lock in same directory as Cargo.toml.
+          If absent: check if project is a library:
+            - Library ([lib] in Cargo.toml WITHOUT [[bin]]): absence is CORRECT PRACTICE.
+              Report medium "Cargo.lock absent — correct for libraries (per Cargo guidelines)."
+              Recommend: developers should still verify lock in CI via cargo tree --locked.
+            - Application ([[bin]] in Cargo.toml OR no [lib]): absence is high severity.
+              Report high "Cargo.lock missing for binary crate — should be committed."
+
+          Check 2 — Cargo.lock sync (requires cargo in PATH):
+          Run: `cargo tree --locked`
+          Exit 0 → lock is consistent with Cargo.toml.
+          Non-zero exit → lock is missing or stale; report high.
+          DEGRADATION: if `cargo` not in PATH, skip this check; note "cargo tree --locked skipped — cargo not found."
+
+          NOTE: Cargo has ONE lock file covering all deps (prod + dev/test).
+          No separate dev lock needed.
+
+          finding_hash: SHA-256("dep-002|Cargo.lock|") — stable across all scan states
       fallback_to_llm: false
 
     triggers:
@@ -599,6 +671,9 @@ rules:
     applies_to:
       languages: [python, typescript, javascript]
       file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
+      skip_on:
+        languages: [golang, rust]
+        reason: "Neither Go nor Rust has a standard license-gate tool ecosystem. Go: go-licenses is community. Rust: cargo-deny and cargo-license are community tools, not standard. License tooling is organizational policy, not a default ecosystem expectation in either language."
       note: "Per-ecosystem license tool. Python: pip-licenses/liccheck. TypeScript/JS: license-checker/npm-license-checker. CI integration pattern is portable."
 
     source:
@@ -675,7 +750,7 @@ rules:
     applies_to:
       languages: [python, typescript]
       file_types: [.py, .ts, .tsx]
-      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Same candidate/confirm structure."
+      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Same candidate/confirm structure. Go: SKIP (compiler enforces, no escape hatch). Rust: SKIP (Cargo rejects all circular crate dependencies — stricter than Go, no escape hatch exists). Phase 4 confirmed."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
