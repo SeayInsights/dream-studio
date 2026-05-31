@@ -188,14 +188,15 @@ def backfill_sessions(
 
     # Write operations in transaction
     if not dry_run:
+        # reg_projects deleted in migration 084; ensure project exists in business_projects
+        studio_db.upsert_project(
+            project_id,
+            str(paths.project_root()),
+            project_name=project_id,
+            db_path=db_path,
+        )
         with studio_db._db_transaction(db_path) as conn:
             conn.row_factory = sqlite3.Row
-            conn.execute(
-                """INSERT OR IGNORE INTO reg_projects
-                   (project_id, project_path, project_name, created_at)
-                   VALUES (?, ?, ?, ?)""",
-                (project_id, str(paths.project_root()), project_id, datetime.now().isoformat()),
-            )
             for sess in session_updates:
                 sid = sess["session_id"]
                 existing = conn.execute(

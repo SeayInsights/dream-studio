@@ -143,7 +143,7 @@ def verify_project_exists(project_id: str) -> None:
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        query = "SELECT COUNT(*) as count FROM reg_projects WHERE project_id = ?"
+        query = "SELECT COUNT(*) as count FROM business_projects WHERE project_id = ?"
         result = cursor.execute(query, (project_id,)).fetchone()
 
         if result["count"] == 0:

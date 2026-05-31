@@ -434,8 +434,10 @@ class TestTokenUsage:
 
 class TestFKConstraints:
     def test_session_requires_valid_project(self, db):
+        # FK from raw_sessions to reg_projects was removed in migration 088
+        # (reg_projects deleted in 084). Sessions no longer enforce project existence.
         result = insert_session("s1", "nonexistent-project", db_path=db)
-        assert result is False
+        assert result is True
 
     def test_handoff_requires_valid_session(self, db):
         upsert_project("proj-1", "/path", db_path=db)

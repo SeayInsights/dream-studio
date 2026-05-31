@@ -56,6 +56,12 @@ def test_db() -> Generator[Path, None, None]:
         db_path = Path(f.name)
 
     try:
+        # Run migrations first so the schema is current, then recreate pi_components
+        # (dropped in migration 084) for graph query testing purposes.
+        from core.event_store.studio_db import _connect as _studio_connect
+
+        _studio_connect(db_path).close()
+
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -538,10 +544,14 @@ class TestGraphCache:
         second_db = tmp_path / "second.db"
 
         def seed(path: Path, count: int) -> None:
+            # Run migrations first so the schema is current, then recreate pi_components
+            from core.event_store.studio_db import _connect as _studio_connect
+
+            _studio_connect(path).close()
             conn = sqlite3.connect(path)
             try:
                 conn.execute("""
-                    CREATE TABLE pi_components (
+                    CREATE TABLE IF NOT EXISTS pi_components (
                         component_id TEXT PRIMARY KEY,
                         project_id TEXT NOT NULL,
                         name TEXT NOT NULL,
@@ -553,7 +563,7 @@ class TestGraphCache:
                     )
                     """)
                 conn.execute("""
-                    CREATE TABLE pi_dependencies (
+                    CREATE TABLE IF NOT EXISTS pi_dependencies (
                         project_id TEXT NOT NULL,
                         from_component TEXT NOT NULL,
                         to_component TEXT NOT NULL,

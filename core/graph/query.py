@@ -180,6 +180,17 @@ class CachedGraphBuilder:
         try:
             conn = _connect(db_path)
 
+            # pi_components was dropped in migration 084; return empty graph if absent
+            tables = {
+                r[0]
+                for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            if "pi_components" not in tables:
+                conn.close()
+                return graph
+
             # Load all components
             components_query = """
                 SELECT component_id, name, path, component_type, lines, complexity_score
