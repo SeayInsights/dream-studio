@@ -24,8 +24,8 @@ rules:
     severity: high
     category: type_enforcement
     applies_to:
-      languages: [python, typescript, golang]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go"]
+      languages: [python, typescript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
       note: "Per-ecosystem type checker config discovery. Python: pyrightconfig.json/mypy.ini. TypeScript: tsconfig.json include/exclude. Go: reframed as 'does CI exercise go build/test ./...?'"
 
     source:
@@ -96,6 +96,14 @@ rules:
 
           TOOLING: Static CI YAML inspection only — no Go tooling required.
 
+          FOR RUST:
+          Rust's type checker IS the compiler (rustc). Reframes to: "does CI exercise the full crate build?"
+          1. Detect crate root: find Cargo.toml.
+          2. Scan .github/workflows/*.yml for: cargo build, cargo test, cargo check.
+          3. If NO build/test/check step → finding: "Rust crate has no CI build step."
+          finding_hash: SHA-256("typ-001|Cargo.toml|")
+          TOOLING: Static CI YAML inspection only — no Rust tooling required.
+
     triggers:
       - "Type checker config exists but does not include all source directories"
       - "No type checker config found (pyrightconfig.json, mypy.ini, pyproject.toml [tool.mypy])"
@@ -125,6 +133,9 @@ rules:
       languages: [python, typescript, golang]
       file_types: [".py", ".ts", ".tsx", ".go"]
       note: "Universal concept. Python: Any keyword. TypeScript: any type. Go: interface{}/any (pre/post-1.18). Same LLM boundary classification applies."
+      skip_on:
+        languages: [rust]
+        reason: "Rust has no `any` type. Box<dyn Trait> requires explicit `dyn` keyword. Language prevents interior type erasure. typ-002 is a language-enforced no-op for Rust."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -383,7 +394,7 @@ rules:
       file_types: [".py", ".ts", ".tsx"]
       note: "Universal concept. Python: -> return annotation. TypeScript: explicit return type after function signature. Same AST detection, different syntax."
       skip_on:
-        languages: [golang]
+        languages: [golang, rust]
         reason: "Go requires explicit return type syntax — function will not compile without one. 100% return type coverage is compiler-enforced; no audit needed."
 
     source:
@@ -485,7 +496,7 @@ rules:
     severity: high       # elevated to critical if actual CVEs currently pass through
     category: cve_enforcement
     applies_to:
-      languages: [python, typescript, javascript, golang]
+      languages: [python, typescript, javascript, golang, rust]
       file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
       note: "Per-ecosystem CVE tool. Python: pip-audit/safety. TypeScript/JS: npm audit/yarn audit. Go: govulncheck (golang.org/x/vuln). CI config inspection pattern is portable."
 
@@ -568,6 +579,14 @@ rules:
           If vulns present + gate non-blocking → escalate severity to critical.
           If not available → degrade to high severity without CVE count.
 
+          FOR RUST:
+          1. Check for Cargo.toml (required for Rust).
+          2. Scan .github/workflows/*.yml for: cargo audit, cargo-deny.
+          3. Check for continue-on-error: true.
+          4. If no CVE tool: report critical "No Rust CVE gate. Recommended: cargo audit."
+          TOOLING: if cargo audit available: run it. If not: report high without CVE count.
+          finding_hash: SHA-256("dep-001|.github/workflows/ci.yml|")
+
     triggers:
       - "continue-on-error: true on CVE scanner step in CI"
       - "No CVE tool step found in any CI workflow"
@@ -595,8 +614,8 @@ rules:
     severity: high
     category: dep_reproducibility
     applies_to:
-      languages: [python, typescript, javascript, golang]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go", ".rs", ".toml"]
       note: "Per-ecosystem lock file. Python: requirements.lock/poetry.lock/Pipfile.lock. TypeScript/JS: package-lock.json/yarn.lock/pnpm-lock.yaml. Go: go.sum."
 
     source:
@@ -670,6 +689,15 @@ rules:
           No separate dev lock needed.
 
           finding_hash: SHA-256("dep-002|go.sum|") — stable across all scan states
+
+          FOR RUST:
+          Lock file: Cargo.lock. Two checks:
+          1. Cargo.lock presence. If absent:
+             - [[bin]] in Cargo.toml (binary) → high (should commit)
+             - [lib] without [[bin]] (library) → medium (omitting is correct per Cargo)
+          2. cargo tree --locked: exit 0 = in sync; non-zero = stale.
+             DEGRADATION: skip if cargo not in PATH.
+          finding_hash: SHA-256("dep-002|Cargo.lock|")
       fallback_to_llm: false
 
     triggers:
@@ -706,6 +734,9 @@ rules:
       languages: [python, typescript, javascript, golang]
       file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
       note: "Per-ecosystem license tool. Python: pip-licenses/liccheck. TypeScript/JS: license-checker/npm-license-checker. Go: go-licenses/wwhrd/licensed (not standard — presence check only)."
+      skip_on:
+        languages: [golang, rust]
+        reason: "No standard license tooling in Go or Rust ecosystems. Absence is a gap, not a guarantee of risk. Phase 4 confirmed skip for Rust."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -789,7 +820,7 @@ rules:
     applies_to:
       languages: [python, typescript]
       file_types: [".py", ".ts", ".tsx"]
-      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Go: SKIP — compiler rejects all circular imports, no escape hatch. Phase 3 confirmed skip."
+      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Go: SKIP — compiler rejects all circular imports, no escape hatch. Phase 3 confirmed skip. Rust: SKIP (Cargo rejects all circular crate deps, stricter than Go — no escape hatch). Phase 4 confirmed."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"

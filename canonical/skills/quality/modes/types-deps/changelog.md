@@ -1,5 +1,12 @@
 # Changelog — ds-quality:types-deps
 
+## 1.2.0 — 2026-05-31
+
+Rust support (Phase 4). All four ecosystems complete: Python, TypeScript/JS, Go, Rust.
+- typ-001/dep-001/dep-002 ported to Rust
+- 5 rules skip: typ-002 (no any), typ-003, typ-004 (compiler), dep-003, dep-007 (compiler)
+- Stack detector: Rust detection (Cargo.toml signal)
+
 ## 1.1.0 — 2026-05-31
 
 TypeScript port (Phase 1 + 2). All 8 rules extended to TypeScript.
