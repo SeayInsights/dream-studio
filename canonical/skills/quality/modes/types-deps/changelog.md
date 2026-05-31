@@ -1,5 +1,14 @@
 # Changelog — ds-quality:types-deps
 
+## 1.1.0 — 2026-05-31
+
+TypeScript port (Phase 1 + 2). All 8 rules extended to TypeScript.
+- typ-001/002/003/004: TypeScript variants (tsconfig.json, `any`, `@ts-ignore`, return types)
+- dep-001/002/003: npm audit / package-lock.json / license-checker
+- dep-007: TypeScript `import type` exclusion (analog of Python `TYPE_CHECKING` guard)
+- Stack detector: `_detect_test_framework()` added for coverage dispatch
+- Proving run on DreamySuite (vitest/TypeScript): all rules verified against real manifest
+
 ## 1.0.0 — 2026-05-30
 
 Initial release (Phase 18.5.2).
