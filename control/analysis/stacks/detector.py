@@ -3,9 +3,10 @@
 Combines multiple detection strategies to identify project stack with confidence scoring.
 """
 
+import json
 from pathlib import Path
 from typing import Optional, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -27,6 +28,9 @@ class DetectedStack:
     signals: List[StackSignal]  # all signals detected
     framework: Optional[str]  # framework name
     version: Optional[str]  # framework version if detected
+    test_framework: Optional[str] = (
+        None  # test framework for coverage parser dispatch (vitest/jest/pytest/mocha)
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -63,8 +67,13 @@ def detect_stack(path: Path) -> DetectedStack:
     # Signal 2: File-based detection
     signals.extend(_detect_by_files(path))
 
-    # Combine signals
-    return _combine_signals(signals)
+    # Combine signals into stack result
+    result = _combine_signals(signals)
+
+    # Augment with test framework for coverage parser dispatch
+    result.test_framework = _detect_test_framework(path)
+
+    return result
 
 
 def _detect_by_files(path: Path) -> List[StackSignal]:
@@ -123,6 +132,41 @@ def _detect_by_files(path: Path) -> List[StackSignal]:
             )
 
     return signals
+
+
+def _detect_test_framework(path: Path) -> Optional[str]:
+    """
+    Detect test framework for coverage parser dispatch (tst-001 and tst-010).
+
+    Checks package.json devDependencies/dependencies for vitest/jest/mocha,
+    and pyproject.toml / pytest.ini for pytest.
+
+    Returns the test framework name string, or None if not detected.
+    Priority: vitest > jest > mocha > pytest (JS/TS takes precedence when both present).
+    """
+    # Check package.json for JS/TS test frameworks
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            with pkg_json.open(encoding="utf-8") as fh:
+                pkg = json.load(fh)
+            all_deps: dict = {}
+            all_deps.update(pkg.get("dependencies", {}))
+            all_deps.update(pkg.get("devDependencies", {}))
+            if "vitest" in all_deps:
+                return "vitest"
+            if "jest" in all_deps or "@jest/core" in all_deps:
+                return "jest"
+            if "mocha" in all_deps:
+                return "mocha"
+        except Exception:
+            pass  # malformed package.json — fall through
+
+    # Check for Python test frameworks
+    if (path / "pyproject.toml").exists() or (path / "pytest.ini").exists():
+        return "pytest"
+
+    return None
 
 
 def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
