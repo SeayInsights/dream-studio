@@ -32,11 +32,18 @@ Parse invocation flags:
 | `--sample` | N files per top-level test directory (N from config `scope_modes.sample_size`, default 10) |
 | `--scope <path>` | Single file or directory override |
 
-Filter: keep only files matching `test_*.py` pattern under test directories.
+Filter: keep only test files matching language-appropriate patterns:
+- **Python:** `test_*.py`, `*_test.py` under configured test directories
+- **TypeScript/JavaScript:** `*.test.ts`, `*.test.tsx`, `*.spec.ts`, `*.spec.tsx`, `*.test.js`, `*.spec.js`
+  (co-located anywhere in src/; also check for separate test/ directory)
 
-**For --sample:** Enumerate top-level test directories (unit/, integration/, evals/, and root test files). Select N random files from each. Report: `Scope: --sample (N per dir, M total files)`.
+**Language detection:** Use `detect_stack()` from `control/analysis/stacks/detector.py`.
+- `detected_stack.test_framework` identifies vitest/jest/pytest for coverage dispatch
+- If Python detected → use Python patterns; if JS/TS detected → use JS/TS patterns; if mixed → both
 
-**Report header must state:** `Scope: --changed | --full-repo | --sample (N/dir) | --scope <path> — {file_count} test files`
+**For --sample:** Enumerate top-level test directories (unit/, integration/, evals/, and root test files) for Python; enumerate co-located test files under src/ for JS/TS. Select N random files from each. Report: `Scope: --sample (N per dir, M total files)`.
+
+**Report header must state:** `Scope: --changed | --full-repo | --sample (N/dir) | --scope <path> — {file_count} test files [{language}: {framework}]`
 
 **Dream Studio note (from config.yml known_context):** The pre-push hook runs tests/evals/ only. Full suite runs remote CI. This is NOT a tst-014 violation — include as an informational note in the report, not a finding.
 
@@ -44,17 +51,21 @@ Filter: keep only files matching `test_*.py` pattern under test directories.
 
 ## Step 2 — Load Coverage Data
 
-Check for coverage data:
+**Python (pytest + coverage.py):**
 ```
 coverage report --format=json > /tmp/coverage_report.json
 ```
-
-If coverage data available:
-- Parse for module-level coverage %
-- Note fail_under from pyproject.toml
-- Compute enforcement gap: gap = actual_total - fail_under
-
+If coverage data available: parse for module-level coverage %, note fail_under from pyproject.toml,
+compute enforcement gap: gap = actual_total - fail_under.
 If coverage data unavailable (no .coverage file): note in report. tst-001 falls back to path-scan.
+
+**JavaScript/TypeScript (vitest/jest):**
+Check for `coverage/coverage-final.json` (vitest with coverage-v8/istanbul provider).
+If present: parse per-file coverage. For each file: if sum(s.values()) == 0 → 0% coverage (tst-001 candidate).
+Threshold: read `vitest.config.ts` → `test.coverage.thresholds` (or `jest.config.js/ts` → `coverageThreshold`).
+Gap = actual total % - threshold %. If gap is negative (actual < threshold), coverage gate is already
+failing — report that instead of a gap finding.
+If `coverage/coverage-final.json` absent: note "Run: npx vitest run --coverage" for JS/TS projects.
 
 ---
 
@@ -85,20 +96,29 @@ If coverage data: compute gap = actual_total_% - fail_under.
 If gap > config.coverage.gap_high_severity_threshold (default 22): finding = high severity.
 Always report both numbers.
 
-### tst-011 (sleep() — static)
-Use ast to flag any `time.sleep()` or `asyncio.sleep()` in test function bodies. Severity: critical. No LLM pass needed.
+### tst-011 (sleep() — static, candidate/confirm for JS/TS)
+**Python:** Use ast to flag `time.sleep()` or `asyncio.sleep()` in test function bodies. Severity: critical. No LLM pass.
+**JS/TS (CANDIDATE/CONFIRM — not fire-on-match):** Flag `setTimeout`-as-sync patterns as CANDIDATES.
+Report as: "CANDIDATE — setTimeout-as-sleep detected; LLM confirm required before finding."
+Dispatch LLM for JS/TS candidates; skip-if-not-confirmed.
 
 ### tst-012 (fixture scope — static candidates)
-Parse conftest.py and test files for `@pytest.fixture(scope='session')` or `scope='module'`. Flag as LLM candidates.
+**Python:** Parse conftest.py and test files for `@pytest.fixture(scope='session')` or `scope='module'`. Flag as LLM candidates.
+**JS/TS (CANDIDATE/CONFIRM):** Flag `beforeAll`/`afterAll` with mutable container assignment as candidates.
+Report as: "CANDIDATE — beforeAll mutable state detected; LLM confirm required."
 
-### tst-013 (file organization)
-For each source file in configured paths: check if corresponding test file exists. Low severity.
+### tst-013 (file organization — Python only)
+**Python only.** For each source file: check if corresponding test file exists. Low severity.
+**JS/TS: SKIP.** Rule annotated `skip_on: [typescript, javascript]`. Report "tst-013 skipped: JS/TS uses co-located test convention (*.test.ts), not mirrored tests/ directory. 0 findings — correct behavior."
 
 ### tst-014 (CI config)
-Check .github/workflows/*.yml for pytest/test execution step. Critical if absent.
+Check .github/workflows/*.yml for pytest/vitest/jest/mocha test execution step. Critical if absent.
+A project is compliant if ANY test runner runs on CI on pull_request or push events.
 
-### tst-015 (slow unit tests)
-Parse tests/unit/**/*.py only: flag sqlite3.connect(), requests.get(), httpx.get(), subprocess.run(). Medium severity.
+### tst-015 (slow unit tests — CANDIDATE/CONFIRM for all languages)
+**Python (CANDIDATE/CONFIRM):** Parse tests/unit/**/*.py: flag sqlite3.connect(), requests.*(), httpx.*(), subprocess.run(). Report as CANDIDATE.
+**JS/TS (CANDIDATE/CONFIRM — not fire-on-match):** Parse *.test.ts files (excluding *.e2e.ts): flag fetch(), fs.readFileSync(), child_process.exec/execSync. Report as CANDIDATE. LLM confirm required before finding.
+**STOP: never fire tst-015 JS/TS patterns as confirmed findings without LLM confirmation.** This is the bootstrap_database(tmp_path) false-positive class for JS/TS.
 
 ---
 

@@ -40,3 +40,29 @@ When code-quality firing on a source file, it may cross-reference testing for po
 **Cross-references:**
 - `tst-011` (no sleep() in test bodies) ↔ `cq-019` (no sleep() in production code): same symptom, test vs. production code. Reports note the sibling rule.
 - `tst-009` (critical paths covered) ↔ `cq-016` (trust boundaries): CQ identifies entry points; testing verifies they're covered. Different files, different angles.
+
+## Cross-Language Support
+
+Testing rules run against Python, TypeScript, and JavaScript test files.
+
+**Universal rules** (tst-002/003/004/005/006/007/008/009/014): Framework-independent concepts.
+LLM detection works in any framework. Python AST static pass fires where available;
+JS/TS uses LLM-only detection. File scoping: `test_*.py`/`*_test.py` for Python,
+`*.test.ts`/`*.spec.ts` (and .tsx/.js/.jsx variants) for JS/TS.
+
+**Mechanism rewrites** (tst-011/012/015): Extended to JS/TS equivalents with candidate/confirm
+preserved. tst-011 extends `time.sleep()` → `setTimeout-as-sync`; tst-012 extends
+conftest.py fixture scope → `beforeAll`/`afterAll` mutable state; tst-015 extends
+Python DB/subprocess patterns → `fetch()`/`fs`/`child_process` patterns.
+
+**Coverage rules** (tst-001/010): Per-ecosystem parser. Python reads `coverage.json`
+(coverage.py). JS/TS reads `coverage/coverage-final.json` (vitest/jest, istanbul-compatible).
+Threshold config: Python from `pyproject.toml`/`.coveragerc`; JS/TS from `vitest.config.ts`
+or `jest.config.js/ts`.
+
+**tst-013** (file organization): Python-only. JS/TS co-locates test files by convention
+— this rule skips cleanly on JS/TS with 0 findings.
+
+**Stack detection** for coverage dispatch: the stack detector identifies test frameworks
+(vitest/jest from package.json, pytest from pyproject.toml) to dispatch the right
+coverage parser for tst-001 and tst-010.

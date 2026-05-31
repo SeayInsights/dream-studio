@@ -27,6 +27,11 @@ rules:
     severity: critical
     category: coverage
 
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Per-ecosystem coverage parser. Python: coverage.py (coverage.json). JS/TS: vitest/jest (coverage/coverage-final.json, istanbul-compatible)."
+
     source:
       list: "LIST-4"
       section: "G"
@@ -72,6 +77,8 @@ rules:
       tool:
         name: coverage
         command: "coverage report --format=json"
+        command_python: "coverage report --format=json"
+        command_js: "vitest run --coverage (reads coverage/coverage-final.json)"
         notes: |
           Parse coverage.json; flag source files with 0% line coverage.
 
@@ -96,6 +103,25 @@ rules:
           REAL-DATA PATH (scope check passed): flag source files with 0% coverage.
           Use pyproject.toml coverage.omit list to exclude known legitimate exclusions.
           Fallback if no coverage data: path-scan with reduced confidence.
+
+          FOR JAVASCRIPT/TYPESCRIPT (vitest/jest with coverage-v8 or istanbul):
+          Coverage output: coverage/coverage-final.json (istanbul-compatible per-file format)
+          Key: absolute file path
+          Value: { "statementMap": {...}, "s": {hit counts}, "fnMap": {...}, "f": {...} }
+
+          To find 0%-covered files:
+          - Read coverage/coverage-final.json
+          - For each file entry: if ALL values in "s" (statement hits) are 0 → 0% coverage
+          - Alternatively: if sum(s.values()) == 0 → 0% covered
+
+          Threshold config: vitest.config.ts → test.coverage.thresholds (lines/statements/functions/branches)
+
+          SCOPE CHECK for JS/TS: vitest.config.ts exclude patterns show which files are intentionally
+          excluded (e.g., "e2e/**"). Respect these exclusions.
+
+          FALLBACK MESSAGE if no coverage/coverage-final.json:
+          "tst-001 skipped: no JS/TS coverage data found at coverage/coverage-final.json.
+          Run: npx vitest run --coverage (requires @vitest/coverage-v8 or @vitest/coverage-istanbul)"
         fallback_to_llm: false
         fallback_to_path_scan: true
       llm:
@@ -128,6 +154,14 @@ rules:
     name: "Tests assert behavior, not implementation details"
     severity: high
     category: assertion_quality
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -153,6 +187,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-002 — Tests assert behavior, not implementation details
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: high
           What to look for:
           - Assertions on private attributes (names starting with _)
@@ -192,6 +230,14 @@ rules:
     name: "Tests are deterministic (no non-deterministic dependencies)"
     severity: high
     category: determinism
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -221,11 +267,20 @@ rules:
           - random.random() / random.randint() / random.choice() NOT covered by @patch
           - uuid.uuid4() used in assertion (not creation)
           Report as: "CANDIDATE (high severity) — non-deterministic pattern detected; confirm whether it reaches an assertion."
+
+          For JavaScript/TypeScript (LLM-only — no AST static pass):
+          - Date.now() / new Date() in test body without vi.useFakeTimers() / jest.useFakeTimers()
+          - Math.random() in test body without vi.spyOn(Math, 'random') mock
+          The LLM pass handles JS/TS non-determinism patterns.
       llm:
         prompt_template: |
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-003 — Tests are deterministic
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: high (candidate) → critical if confirmed
 
           The static analysis detected a potentially non-deterministic pattern:
@@ -277,6 +332,14 @@ rules:
     name: "Tests are independent (no shared mutable state)"
     severity: high
     category: isolation
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -300,6 +363,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-004 — Tests are independent (no shared mutable state)
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
 
           The static analysis detected a potential shared-state pattern:
           {static_finding_excerpt}
@@ -344,6 +411,14 @@ rules:
     name: "Tests follow AAA/GWT structure"
     severity: medium
     category: structure
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -361,6 +436,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-005 — Tests follow AAA/GWT structure
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: medium
 
           A well-structured test has three distinct phases:
@@ -400,6 +479,14 @@ rules:
     name: "One logical assertion per test"
     severity: medium
     category: structure
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -423,6 +510,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-006 — One logical assertion per test
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: medium
 
           The static analysis detected {assert_count} assert statements in this test.
@@ -460,6 +551,14 @@ rules:
     name: "Test names describe the behavior being verified"
     severity: medium
     category: naming
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -483,6 +582,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-007 — Test names describe the behavior being verified
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: medium
 
           Test function: {function_name}
@@ -493,6 +596,9 @@ rules:
           - test_user_creation_fails_when_email_is_duplicate (good: condition + expected outcome)
           - test_login (bad: what behavior? what outcome?)
           - test_create_user (bad: just describes the action, not the expected result)
+
+          For vitest/jest: generic names like it('works', ...), test('check', ...), describe('stuff', ...)
+          are equally problematic. Good: it('returns 404 when resource not found', ...).
 
           Return JSON:
           {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_name",
@@ -517,6 +623,14 @@ rules:
     name: "Mocks are at system boundaries, not internal collaborators"
     severity: high
     category: mocking
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -540,6 +654,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-008 — Mocks are at system boundaries, not internal collaborators
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: high
 
           System boundaries (mock these — acceptable):
@@ -585,6 +703,14 @@ rules:
     name: "Critical paths have integration tests"
     severity: critical
     category: coverage
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -599,6 +725,7 @@ rules:
     config_driven: true
     config_key: critical_path_globs
     config_default: ["projections/api/routes/**"]
+    config_default_ts: ["src/app/api/**", "src/pages/api/**"]  # Next.js/Remix API route conventions
 
     detection:
       type: hybrid
@@ -616,6 +743,10 @@ rules:
           You are a test quality auditor checking one specific rule.
 
           Rule: tst-009 — Critical paths have integration tests
+          Applies to: Python (pytest), TypeScript/JavaScript (vitest, jest, mocha).
+          For Python: use pytest patterns. For JS/TS: use vitest/jest equivalents
+          (vi.fn()/jest.fn() instead of MagicMock, beforeEach/afterEach instead of fixtures,
+          describe/it/test instead of class-based test suites).
           Severity: critical
 
           Critical path files (from config): {critical_path_globs}
@@ -648,6 +779,11 @@ rules:
     name: "Coverage enforcement is meaningful (gap detection)"
     severity: high
     category: coverage
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Per-ecosystem threshold config. Python: pyproject.toml fail_under. JS/TS: vitest.config.ts thresholds / jest.config coverageThreshold."
 
     source:
       list: "LIST-4"
@@ -682,6 +818,24 @@ rules:
           - gap > config.coverage.gap_high_severity_threshold (default 22 points)
           The finding IS the gap, not the absolute coverage %.
           Separate informational finding: actual coverage % for awareness.
+
+          FOR JAVASCRIPT/TYPESCRIPT (vitest/jest):
+          Coverage output: coverage/coverage-final.json (see tst-001 for format)
+          Threshold config location:
+          - vitest: vitest.config.ts → defineConfig({ test: { coverage: { thresholds: { lines: N } } } })
+          - jest: jest.config.js/ts → coverageThreshold: { global: { lines: N } }
+
+          Gap calculation: same as Python
+          - actual = computed from coverage-final.json (total lines hit / total lines)
+          - fail_under = threshold from config (e.g., thresholds.lines = 70)
+          - gap = actual - fail_under
+          - Flag high severity if gap > config.coverage.gap_high_severity_threshold (default 22 points)
+
+          Example (DreamySuite): actual=31.5%, threshold=70%, gap=-38.5 points.
+          NOTE: negative gap means coverage is BELOW threshold (the gate is already failing).
+          In that case report: "Coverage is below threshold — gate is already failing; no gap finding
+          needed. Coverage: {actual}%, threshold: {threshold}%."
+          Gap finding only applies when actual > threshold (gate passes but with large headroom).
         fallback_to_llm: false
       llm:
         prompt_template: null
@@ -711,6 +865,11 @@ rules:
     severity: critical
     category: determinism
 
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Python: static AST (no LLM needed). JS/TS: candidate/confirm only — setTimeout may be legitimate timer testing. LLM confirmation required before critical finding."
+
     source:
       list: "LIST-4"
       section: "I"
@@ -720,21 +879,59 @@ rules:
     # Same symptom, different file scope. Both may fire on the same commit.
 
     detection:
-      type: static
+      type: hybrid
       static:
         tool: ast
         config: null
-        fallback_to_llm: false
+        fallback_to_llm: true
         notes: |
           Parse test function bodies with ast. Flag any call to:
           - time.sleep(...)
           - asyncio.sleep(...) used as a synchronization wait (not in async test utility)
           These are deterministically the wrong approach in test code and are always critical.
-          No LLM pass needed — the static pattern is sufficient.
+          No LLM pass needed for Python — the static pattern is sufficient.
+
+          For JavaScript/TypeScript (LLM confirmation required — NOT fire-on-match):
+          Patterns flagged as CANDIDATES (JS/TS static):
+          - await new Promise(resolve => setTimeout(resolve, N)) in test body
+          - new Promise(resolve => setTimeout(resolve, N)) — callback sleep equivalent
+          Flag as: "CANDIDATE — setTimeout-as-sleep pattern detected; confirm it is used as
+          synchronization wait rather than legitimate async coordination."
+          CRITICAL: setTimeout may be legitimate (testing debounce behavior, testing timer-based
+          code). Static pattern alone cannot distinguish. LLM MUST confirm.
       llm:
-        prompt_template: null
-        context_scope: null
-        estimated_tokens: 0
+        prompt_template: |
+          You are a test quality auditor checking one specific rule.
+
+          Rule: tst-011 — No sleep() as synchronization primitive in tests
+          Severity: critical (if confirmed)
+
+          The static analysis detected a potential sleep-as-sync pattern in a JS/TS test:
+          {static_finding_excerpt}
+
+          Is this setTimeout/Promise delay used as a SYNCHRONIZATION WAIT (waiting for async
+          operations to complete) — or as LEGITIMATE timer testing (testing debounce behavior,
+          testing setTimeout-dependent code, testing timer-driven animations)?
+
+          CONFIRMED VIOLATION (synchronization wait — the wrong approach):
+          - await new Promise(resolve => setTimeout(resolve, 500)) waiting for a fetch to finish
+          - setTimeout sleep used because the test writer didn't know how to await properly
+          - Fixed delay to "let the queue drain" instead of proper event-driven waiting
+
+          NOT A VIOLATION (legitimate timer testing):
+          - Testing that a debounce function fires after N ms (the timer IS the thing being tested)
+          - Testing a retry mechanism with a configurable delay
+          - Testing an animation library where timing is the observable behavior
+
+          Return JSON exactly:
+          {"finding": true|false, "confidence": 0.0-1.0,
+           "location": "filename:function_name",
+           "excerpt": "the sleep pattern and context, max 100 chars",
+           "explanation": "one sentence: why this is sync-wait vs legitimate timer testing"}
+
+          Only return finding: true if confidence >= 0.75 AND it is a synchronization wait.
+        context_scope: function
+        estimated_tokens: 350
 
     triggers:
       - "time.sleep() call in a test function body"
@@ -762,6 +959,11 @@ rules:
     severity: high
     category: isolation
 
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      note: "Python: conftest.py fixture scope detection. JS/TS: beforeAll/afterAll mutable state detection. Both use candidate/confirm — LLM confirmation required."
+
     source:
       list: "LIST-4"
       section: "G"
@@ -778,6 +980,15 @@ rules:
           - Fixture assigns to a mutable class attribute
           - Fixture yields a database connection (shared connections cause test-order dependence)
           Exception: The early-isolation pattern in conftest.py (setting env vars at module import time) is NOT a fixture and is NOT flagged.
+
+          For JavaScript/TypeScript (vitest/jest) — CANDIDATE/CONFIRM structure:
+          Parse test files for describe-scoped shared mutable state patterns:
+          - beforeAll(() => { sharedState = [] }) with mutable container (list, dict-equivalent)
+          - beforeAll(() => { db = await createDatabase() }) with shared write-access
+          - let sharedArray = [] or let sharedObj = {} declared in describe() scope, mutated in beforeAll
+          Flag as: "CANDIDATE — beforeAll/describe-scoped mutable state detected; confirm whether
+          tests can modify this shared state and affect each other."
+          NOT A VIOLATION: beforeAll to set up read-only fixtures, beforeEach (function-scoped, fine)
         fallback_to_llm: true
       llm:
         prompt_template: |
@@ -800,6 +1011,11 @@ rules:
           VIOLATION:
           - Returns/yields a list or dict that tests can append to or modify
           - Yields a database connection that tests write to (shared write state)
+
+          For vitest/jest: check if the fixture pattern is:
+          VIOLATION: beforeAll(() => { sharedList = [] }) where tests push to sharedList
+          NOT A VIOLATION: beforeAll that sets up a database populated once and never mutated
+          The rule is about mutable shared state that causes test-order dependence.
 
           Return JSON:
           {"finding": true|false, "confidence": 0.0-1.0,
@@ -825,6 +1041,13 @@ rules:
     name: "Test file organization mirrors source structure"
     severity: low
     category: organization
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+      skip_on:
+        languages: [typescript, javascript]
+        reason: "JS/TS typically co-locates test files (module.test.ts next to module.ts) rather than mirroring to tests/unit/. This convention is correct for JS/TS projects. The mirroring rule is Python-specific (tests/unit/test_module.py pattern)."
+      note: "Python-only rule. On JS/TS projects, test co-location is the convention — this rule skips cleanly with 0 findings."
 
     source:
       list: "LIST-4"
@@ -875,6 +1098,14 @@ rules:
     name: "Tests run in CI before merge"
     severity: critical
     category: ci
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+      test_file_patterns:
+        python: ["test_*.py", "*_test.py"]
+        typescript: ["*.test.ts", "*.test.tsx", "*.spec.ts", "*.spec.tsx"]
+        javascript: ["*.test.js", "*.test.jsx", "*.spec.js"]
+      note: "Universal testing principle — LLM detects in any framework. Python AST static pass only; JS/TS uses LLM-only detection."
 
     source:
       list: "LIST-4"
@@ -894,6 +1125,9 @@ rules:
           takes ~79 min on Windows (subprocess spawn overhead), documented in CLAUDE.md.
           Does NOT OOM (verified 2026-05-29). This is NOT a violation — the full suite runs
           ubuntu-only post-merge in full-ci.yml. Report the known context when evaluating Dream Studio.
+
+          Also check for vitest / jest / mocha execution steps on pull_request events.
+          A project is compliant if any test runner (pytest, vitest, jest, go test) runs on CI.
         fallback_to_llm: false
       llm:
         prompt_template: null
@@ -939,9 +1173,13 @@ rules:
     severity_confirmed: medium           # severity after LLM confirms connection is real/external
     # (medium stays medium when confirmed — a slow unit test is meaningful but not critical)
 
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
+
     applies_to_paths:
-      include: ["tests/unit/**"]
-      exclude: ["tests/integration/**", "tests/evals/**"]
+      include: ["tests/unit/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+      exclude: ["tests/integration/**", "tests/evals/**", "**/*.e2e.ts", "**/*.e2e-spec.ts"]
 
     detection:
       type: hybrid
@@ -956,6 +1194,16 @@ rules:
           the connection is isolated (tmp_path, :memory:, test fixture) or real/external."
           DO NOT report as a confirmed finding — the static pass cannot distinguish
           bootstrap_database(tmp_path) from sqlite3.connect(PRODUCTION_DB).
+
+          For JavaScript/TypeScript (SAME CANDIDATE/CONFIRM STRUCTURE as Python):
+          The static pass finds these patterns but CANNOT confirm whether they are mocked/isolated:
+          - fetch() call in test body — may be mocked with vi.mock('node-fetch') or server.use()
+          - fs.readFileSync() — may be using a temp file fixture
+          - child_process.exec / execSync — may be a test utility wrapper
+          Flag as: "CANDIDATE (medium severity) — JS/TS slow pattern detected; confirm whether
+          the call is mocked/intercepted (MSW handler, vi.mock, jest.mock) or a real external call."
+          CRITICAL: Do NOT fire on match. The bootstrap_database(tmp_path) false-positive class
+          exists in JS/TS too: a fetch() inside a vi.mock() handler is fine. LLM confirms.
         fallback_to_llm: true
       llm:
         prompt_template: |
@@ -980,6 +1228,12 @@ rules:
           - requests.get("https://real-api.com/...") — real HTTP call
           - subprocess.run(["some_external_command"])
           - A hardcoded database path not in a temp directory
+
+          For JavaScript/TypeScript specifically:
+          ISOLATED (fine): fetch() inside vi.mock('node-fetch'), MSW server.use() handler intercept,
+          fs.readFileSync() on a tmp file from beforeEach setup
+          REAL / EXTERNAL (violation): fetch("https://api.example.com") not intercepted by MSW,
+          fs.readFileSync("/etc/config") hardcoded path, child_process.exec of real external command
 
           Return JSON exactly:
           {"finding": true|false, "confidence": 0.0-1.0,

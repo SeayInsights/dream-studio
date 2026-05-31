@@ -81,3 +81,24 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
   runtime cycles are types-deps.
 - `dep-001` (CVE gate) ↔ `pr-security-scan:dependency-audit` (CVE findings): security-scan
   owns the vulnerabilities; types-deps owns whether the gate actually blocks them.
+
+## Cross-Language Support (Phase 1: TypeScript)
+
+**Types-deps Phase 1** extends all non-circular rules to TypeScript. dep-007 (circular imports) remains Python-only (Phase 2 adds TypeScript `import type` exclusion; Phase 3/4 adds Go/Rust).
+
+**Universal rules** (typ-002, typ-004): Same concept, TypeScript syntax equivalents.
+- typ-002: `any` (TypeScript) = `Any` (Python). Same LLM boundary classification.
+- typ-004: Exported functions without `: ReturnType`. Same summary format.
+
+**Portable rules** (typ-003, dep-002): Same detection logic, different patterns.
+- typ-003: `// @ts-ignore` / `// @ts-expect-error` without justification. Skip on Go/Rust.
+- dep-002: package-lock.json/yarn.lock/pnpm-lock.yaml. One lock covers all deps in JS/TS.
+
+**Tool-analog rules** (typ-001, dep-001, dep-003): Same concept, different ecosystem tools.
+- typ-001: tsconfig.json `include`/`exclude` instead of pyrightconfig.json.
+- dep-001: npm audit/yarn audit instead of pip-audit.
+- dep-003: license-checker instead of pip-licenses.
+
+**Stack detection:** `detect_stack().test_framework` identifies the ecosystem. TypeScript detection via tsconfig.json / package.json. Results dispatch to TypeScript-specific detection steps.
+
+**Proving ground:** DreamySuite (builds/dreamysuite) — TypeScript, tsconfig.json, package-lock.json, real CVE-potential dependencies, circular import risk.
