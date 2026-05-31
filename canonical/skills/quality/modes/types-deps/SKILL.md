@@ -102,3 +102,21 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
 **Stack detection:** `detect_stack().test_framework` identifies the ecosystem. TypeScript detection via tsconfig.json / package.json. Results dispatch to TypeScript-specific detection steps.
 
 **Proving ground:** DreamySuite (builds/dreamysuite) — TypeScript, tsconfig.json, package-lock.json, real CVE-potential dependencies, circular import risk.
+
+### Go Support (Phase 3)
+
+**Applies (5 rules):**
+- **typ-001** reframed: "go build/test ./... in CI" instead of "type checker config"
+- **typ-002**: `interface{}`/`any` with Go-specific auto-accept patterns (json.Unmarshal, map[string]interface{}, reflect.ValueOf, fmt variadic)
+- **dep-001**: govulncheck in CI (golang.org/x/vuln — official tool)
+- **dep-002**: go.sum presence + go mod verify + go mod tidy no-op
+- **dep-003**: go-licenses/wwhrd/licensed in CI (not standard — presence check only)
+
+**Skips (3 rules — compiler auto-satisfies):**
+- **typ-004**: Go requires explicit return types syntactically. 100% auto-satisfied. Skip.
+- **dep-007**: Go compiler rejects all circular imports. No escape hatch. Skip.
+- **typ-003**: No type suppression comment syntax in Go. //nolint is a linter pragma. Skip.
+
+**Tooling degradation:** If `go` not in PATH, govulncheck and go mod verify/tidy checks skip gracefully with informational note. Static file inspection (CI YAML, go.sum presence, .go file reads) works without Go installed.
+
+**Proving ground:** github.com/cli/cli
