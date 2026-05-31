@@ -24,9 +24,9 @@ rules:
     severity: high
     category: type_enforcement
     applies_to:
-      languages: [python, typescript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx"]
-      note: "Per-ecosystem type checker config discovery. Python: pyrightconfig.json/mypy.ini. TypeScript: tsconfig.json include/exclude."
+      languages: [python, typescript, golang]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go"]
+      note: "Per-ecosystem type checker config discovery. Python: pyrightconfig.json/mypy.ini. TypeScript: tsconfig.json include/exclude. Go: reframed as 'does CI exercise go build/test ./...?'"
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -77,6 +77,25 @@ rules:
              Report gap only if "exclude" removes source directories from checking.
           5. Report: "TypeScript type checker (tsc) covers X/N source dirs. Uncovered: [list]"
 
+          FOR GOLANG:
+          Go's type checker IS the compiler — all packages must compile before any can run.
+          The question reframes from "type checker config covers source dirs" to
+          "does CI exercise the full module build?"
+
+          1. Detect module root: find go.mod (required for any Go module).
+          2. Scan .github/workflows/*.yml (or Makefile, scripts/) for:
+             - `go build ./...` or `go build <package>` invocations
+             - `go test ./...` invocations (also runs type-checking)
+             - `go vet ./...` invocations
+             If any of these appear, CI exercises the full module type check.
+          3. If NO build/test step found → finding: "Go module has no CI build step.
+             go build ./... must run in CI to guarantee type-correctness across all packages."
+
+          finding_hash: SHA-256("typ-001|go.mod|")
+          Severity: high if no build step; pass if build/test step found.
+
+          TOOLING: Static CI YAML inspection only — no Go tooling required.
+
     triggers:
       - "Type checker config exists but does not include all source directories"
       - "No type checker config found (pyrightconfig.json, mypy.ini, pyproject.toml [tool.mypy])"
@@ -103,9 +122,9 @@ rules:
     severity: high       # candidate severity; confirmed interior-leakage = critical
     category: type_safety
     applies_to:
-      languages: [python, typescript]
-      file_types: [".py", ".ts", ".tsx"]
-      note: "Universal concept. Python: Any keyword. TypeScript: any type (equivalent interior leakage risk). Same LLM boundary classification applies."
+      languages: [python, typescript, golang]
+      file_types: [".py", ".ts", ".tsx", ".go"]
+      note: "Universal concept. Python: Any keyword. TypeScript: any type. Go: interface{}/any (pre/post-1.18). Same LLM boundary classification applies."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -174,6 +193,35 @@ rules:
 
           Remaining: report as "CANDIDATE — `any` at potentially non-boundary site"
 
+          FOR GOLANG:
+          The Go equivalent of Python's Any / TypeScript's any is `interface{}` (pre-Go 1.18)
+          or `any` (Go 1.18+ alias for interface{}). Both represent complete type erasure.
+
+          Stage 1 — find interface{}/any candidates in Go:
+          - Function parameter types of `interface{}` or `any`
+          - Return types of `interface{}` or `any`
+          - Variable declarations with explicit `interface{}` or `any` type annotation
+
+          Stage 2 — auto-accept Go boundary patterns (skip LLM for these):
+          CRITICAL: Go uses interface{} at boundaries FAR MORE FREQUENTLY than TypeScript uses any.
+          The auto-accept list must be comprehensive to avoid mass false-positives.
+          Auto-accept WITHOUT LLM if ANY of:
+          a. Code is inside a json.Unmarshal / json.Marshal call site (JSON boundary)
+          b. Variable type is `map[string]interface{}` or `map[string]any` (idiomatic JSON map)
+          c. Function name contains: Unmarshal, Marshal, Parse, Decode, Encode, Load, From, Read
+          d. Parameter name is: data, payload, raw, response, body, input, result, value, v
+          e. Calling reflect.ValueOf() or reflect.TypeOf() (reflection boundary)
+          f. In a fmt.Fprintf / fmt.Printf / fmt.Sprintf argument position (variadic interface{})
+          g. Function signature has `...interface{}` or `...any` (variadic = boundary pattern)
+          h. Implementing an interface method where the interface defines interface{}/any
+             (e.g., implementing sort.Interface, encoding.BinaryMarshaler, etc.)
+          i. `interface{}` in a type switch (type switch IS the disambiguation)
+
+          Stage 3 — report remaining as CANDIDATE:
+          "CANDIDATE (high) — interface{}/any at potentially non-boundary site; confirm."
+
+          TOOLING: Static grep/AST on .go files. No Go tooling required.
+
         fallback_to_llm: true
 
       llm:
@@ -211,6 +259,14 @@ rules:
           BENIGN BOUNDARY in TS: JSON.parse() return value before validation,
           external API response with no schema, explicit escape hatch at library boundary.
           The verdict logic is identical to Python — is a more specific type knowable here?
+
+          For Go: `interface{}` or `any` is the equivalent of Python's `Any` / TS's `any`.
+          INTERIOR LEAKAGE in Go: parameter typed interface{} when the caller always passes
+          a concrete type (e.g., always *User, always []string), OR return type interface{}
+          when the function always returns one concrete type.
+          BENIGN BOUNDARY in Go: json.Unmarshal target, map[string]interface{} for JSON parsing,
+          reflect.ValueOf argument, variadic ...interface{} in fmt-style functions.
+          The verdict logic is identical: is a more specific type knowable here?
 
           Return JSON exactly:
           {"finding": true|false, "confidence": 0.0-1.0, "location": "filename:function_or_var",
@@ -254,8 +310,8 @@ rules:
       languages: [python, typescript]
       file_types: [".py", ".ts", ".tsx"]
       skip_on:
-        languages: [go, rust]
-        reason: "Go uses //nolint build tags (different mechanism); Rust uses #[allow(...)] attributes (different syntax). Neither maps to the type-ignore justification pattern. Skip cleanly."
+        languages: [go, rust, golang]
+        reason: "Go uses //nolint pragmas (linter directives, not type-checker suppressions). Go's compiler has no inline type suppression syntax — type errors cause build failure with no override. typ-003 skips cleanly on Go with 0 findings."
       note: "Python: # type: ignore. TypeScript: // @ts-ignore / // @ts-expect-error. Same rule: suppression without justification is a hygiene violation."
 
     source:
@@ -323,9 +379,12 @@ rules:
     severity: medium
     category: annotation_coverage
     applies_to:
-      languages: [python, typescript]
+      languages: [python, typescript]  # NOT golang — see skip_on below
       file_types: [".py", ".ts", ".tsx"]
       note: "Universal concept. Python: -> return annotation. TypeScript: explicit return type after function signature. Same AST detection, different syntax."
+      skip_on:
+        languages: [golang]
+        reason: "Go requires explicit return type syntax — function will not compile without one. 100% return type coverage is compiler-enforced; no audit needed."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -426,9 +485,9 @@ rules:
     severity: high       # elevated to critical if actual CVEs currently pass through
     category: cve_enforcement
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
-      note: "Per-ecosystem CVE tool. Python: pip-audit/safety. TypeScript/JS: npm audit/yarn audit. CI config inspection pattern is portable."
+      languages: [python, typescript, javascript, golang]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
+      note: "Per-ecosystem CVE tool. Python: pip-audit/safety. TypeScript/JS: npm audit/yarn audit. Go: govulncheck (golang.org/x/vuln). CI config inspection pattern is portable."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -467,6 +526,24 @@ rules:
           4. If no CVE tool found in CI: report critical "No JS/TS CVE gate configured."
           5. If CVE tool found with continue-on-error: report high (non-blocking gate).
           6. If CVE tool found, blocking: pass on enforcement check.
+
+          FOR GOLANG:
+          1. Check for go.mod (required — confirms this is a Go module).
+          2. Scan .github/workflows/*.yml for steps invoking:
+             govulncheck, nancy (sonatype), snyk (if Go package mode).
+          3. For each found step, check for `continue-on-error: true`.
+          4. If no CVE tool in CI: report critical "No Go CVE gate configured.
+             Recommended: govulncheck (golang.org/x/vuln/cmd/govulncheck)."
+          5. If CVE tool found with continue-on-error: report high (non-blocking gate).
+          6. If blocking: pass on enforcement check.
+
+          TOOLING DEGRADATION:
+          If `govulncheck` is available in PATH: run `govulncheck ./...` for actual CVE count.
+          If NOT available: report enforcement gap at high severity without CVE count.
+          Message: "govulncheck not found — install: go install golang.org/x/vuln/cmd/govulncheck@latest"
+          govulncheck is the official Go CVE scanner (golang.org/x/vuln).
+
+          finding_hash: SHA-256("dep-001|.github/workflows/ci.yml|") — same as TS/Python
         fallback_to_llm: false
       dynamic:
         tool: pip-audit
@@ -484,6 +561,12 @@ rules:
           Parse output for vulnerability count.
           If CVEs present + gate non-blocking: escalate severity to critical.
           If npm audit not available: report enforcement gap at high severity without CVE count.
+
+          FOR GOLANG (if govulncheck available):
+          command: "govulncheck ./..."
+          Parse output: count of VULNERABLE findings in JSON output.
+          If vulns present + gate non-blocking → escalate severity to critical.
+          If not available → degrade to high severity without CVE count.
 
     triggers:
       - "continue-on-error: true on CVE scanner step in CI"
@@ -512,9 +595,9 @@ rules:
     severity: high
     category: dep_reproducibility
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
-      note: "Per-ecosystem lock file. Python: requirements.lock/poetry.lock/Pipfile.lock. TypeScript/JS: package-lock.json/yarn.lock/pnpm-lock.yaml."
+      languages: [python, typescript, javascript, golang]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
+      note: "Per-ecosystem lock file. Python: requirements.lock/poetry.lock/Pipfile.lock. TypeScript/JS: package-lock.json/yarn.lock/pnpm-lock.yaml. Go: go.sum."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -564,6 +647,29 @@ rules:
              - Lock absent: high
              - Lock present but out of sync (package.json newer): high
              - Lock present and in sync: pass
+
+          FOR GOLANG:
+          Go's lock file analog is go.sum. Three checks (all required for full compliance):
+
+          Check 1 — go.sum presence:
+          Find go.sum in same directory as go.mod.
+          If absent: report high "go.sum missing — run 'go mod tidy' to generate."
+
+          Check 2 — go.sum sync (requires Go in PATH):
+          Run: `go mod verify`
+          Exit 0 → all module hashes verified (in sync).
+          Non-zero exit → hash mismatch; report high.
+          DEGRADATION: if `go` not in PATH, skip this check; note "go mod verify skipped — Go not found."
+
+          Check 3 — go mod tidy no-op (requires Go in PATH):
+          Run: `go mod tidy` then check `git status` — if go.sum changed, it was out of sync.
+          If changed: report high "go.sum not up to date — run 'go mod tidy' and commit."
+          DEGRADATION: if `go` not in PATH, skip this check; note "go mod tidy check skipped — Go not found."
+
+          NOTE: Go has ONE lock file (go.sum) covering all deps (prod + dev/test).
+          No separate dev lock needed.
+
+          finding_hash: SHA-256("dep-002|go.sum|") — stable across all scan states
       fallback_to_llm: false
 
     triggers:
@@ -597,9 +703,9 @@ rules:
     severity: high
     category: license_compliance
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json"]
-      note: "Per-ecosystem license tool. Python: pip-licenses/liccheck. TypeScript/JS: license-checker/npm-license-checker. CI integration pattern is portable."
+      languages: [python, typescript, javascript, golang]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".go"]
+      note: "Per-ecosystem license tool. Python: pip-licenses/liccheck. TypeScript/JS: license-checker/npm-license-checker. Go: go-licenses/wwhrd/licensed (not standard — presence check only)."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
@@ -634,6 +740,19 @@ rules:
           4. If NONE found: report "No JS/TS license gate configured."
           5. If found: check that CI step uses --failOn or equivalent (not just --csv output).
              Advisory mode (output only, no fail) is lower severity (medium) than absent.
+
+          FOR GOLANG:
+          Go license tools (not standard ecosystem — check for presence):
+          1. Check CI workflows for: go-licenses, wwhrd, licensed.
+          2. Check Makefile / scripts/ for license check targets.
+          3. Check go.mod/devDependencies for license tool imports.
+          4. If NONE found: report "No Go license gate configured."
+             Note: license tooling is NOT standard in Go CI (unlike npm audit for CVEs).
+             Presence is informational; absence is a gap, not a guarantee of risk.
+
+          TOOLING: Static file inspection only — no Go tooling required.
+
+          finding_hash: SHA-256("dep-003|go.mod|") — stable, keyed to module manifest
       fallback_to_llm: false
 
     triggers:
@@ -668,14 +787,9 @@ rules:
     severity: high       # escalated to critical after LLM confirmation
     category: import_cycles
     applies_to:
-      languages: [python]
-      file_types: [".py"]
-      note: "Phase 1: Python only. Phase 2 adds TypeScript (tsc --traceResolution + import type exclusion). Go/Rust are Phase 3/4."
-
-    applies_to:
       languages: [python, typescript]
-      file_types: [.py, .ts, .tsx]
-      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Same candidate/confirm structure."
+      file_types: [".py", ".ts", ".tsx"]
+      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Go: SKIP — compiler rejects all circular imports, no escape hatch. Phase 3 confirmed skip."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
