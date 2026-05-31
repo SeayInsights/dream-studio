@@ -10,6 +10,12 @@ Three scope modes (same pattern as testing skill):
 | `--full-repo` | All Python source files | Baseline audit, first run |
 | `--sample` | 10 files per top-level source dir | Representative check on large repos |
 
+**Language detection:** Use `detect_stack()` from `control/analysis/stacks/detector.py`.
+- If `python` detected → use Python audit steps below
+- If `typescript`/`javascript` detected → use TypeScript equivalents in each step
+- If both → run both
+**File scoping:** Python: `*.py` (excluding tests/). TypeScript: `*.ts`, `*.tsx` (excluding *.test.ts, *.spec.ts, node_modules/).
+
 **Important:** Config rules (typ-001, dep-001, dep-002, dep-003) always run regardless of
 scope flag. They are project-level findings, not per-file findings. You cannot scope them
 out of an audit — they reflect the project's setup, not individual files.
@@ -25,11 +31,15 @@ Run all four project-level config rules in order:
 2. Find type checker config (pyrightconfig.json → mypy.ini → pyproject.toml).
 3. Compare coverage to source dirs. Report gap as high; absent checker as critical.
 
+**typ-001 TypeScript:** Find tsconfig.json. Check "include"/"exclude" arrays. Compare to src directories containing .ts files. Report uncovered dirs. No tsconfig → critical.
+
 **dep-001 — CVE gate enforcement:**
 1. Scan CI yaml files for CVE tool steps + continue-on-error.
 2. If non-blocking (or absent): run `python -m pip_audit -r <requirements_file> --format json`
    if pip-audit is available.
 3. Set severity from real output (critical if CVEs present; high if clean).
+
+**dep-001 TypeScript/JS:** Scan CI yaml for npm audit/yarn audit steps + continue-on-error. Run `npm audit --json` if available. Report enforcement gaps.
 
 **dep-002 — Lock file completeness:**
 1. Check for production lock file (see lock_file_patterns in config.yml).
@@ -37,17 +47,28 @@ Run all four project-level config rules in order:
 3. Check if requirements files use == pins throughout as alternative.
 4. Report missing locks; note library-vs-application context.
 
+**dep-002 TypeScript/JS:** Check for package-lock.json/yarn.lock/pnpm-lock.yaml. Check sync state (package.json newer than lock → out of sync). No separate dev lock — one lock covers all.
+
 **dep-003 — License gate:**
 1. Check for pip-licenses, liccheck, fossa in requirements and CI.
 2. Check for license config files (.licenserc, liccheck.ini, etc.).
 3. If absent: report high with tool-pointing remediation (no allowlist prescription).
 
-### Step 2 — Determine in-scope Python files
+**dep-003 TypeScript/JS:** Check for license-checker in devDependencies + CI license step with --failOn. No license gate configured → high.
+
+### Step 2 — Determine in-scope files
 
 Apply the scope flag:
+
+**Python:** `*.py` files under source dirs, excluding tests/
 - `--changed`: `git diff --name-only main...HEAD` filtered to `*.py`, excluding tests/
 - `--full-repo`: all `*.py` under source dirs discovered in typ-001 step
 - `--sample`: 10 files per top-level source dir
+
+**TypeScript:** `*.ts`, `*.tsx` files under src/, app/, lib/, components/, hooks/ — excluding `*.test.ts`, `*.spec.ts`, `*.d.ts`, `node_modules/`, `dist/`, `.next/`
+- `--changed`: `git diff --name-only main...HEAD` filtered to `*.ts`, `*.tsx`, applying exclusions above
+- `--full-repo`: all `*.ts`, `*.tsx` under TypeScript source dirs discovered in typ-001 step
+- `--sample`: 10 files per top-level TypeScript source dir
 
 ### Step 3 — Static pass: typ-003, typ-004
 
@@ -56,8 +77,12 @@ Run static checks on all in-scope files simultaneously (no LLM needed):
 **typ-003 (type:ignore hygiene):** Grep for `# type: ignore` patterns. Flag any lacking
 an explanatory comment after the suppression. Report file + line + full comment.
 
+**typ-003 TypeScript:** Grep for `// @ts-ignore` / `// @ts-expect-error` without trailing justification. Skip on Go/Rust (skip_on declared in rule).
+
 **typ-004 (missing return annotations):** AST parse; find public functions without `->`.
 Apply exemptions (dunder methods, @property, @classmethod, test files).
+
+**typ-004 TypeScript:** Find exported functions without return type annotation. Same summary format as Python.
 
 ### Step 4 — Static pass + auto-accept: typ-002 (Any leakage candidates)
 
@@ -66,6 +91,9 @@ Apply exemptions (dunder methods, @property, @classmethod, test files).
    Auto-accepted instances are recorded as "boundary Any — accepted" in the report.
 3. Remaining instances → candidate pool for LLM confirmation.
 4. Report candidate count before sending to LLM.
+
+**typ-002 TypeScript:** Find `any` annotations in .ts/.tsx files. Same auto-accept patterns (boundary param names, JSON parsing context). Remaining → LLM confirmation queue.
+LLM prompt applies to TypeScript with the same boundary classification logic.
 
 ### Step 5 — Static pass + TYPE_CHECKING exclusion: dep-007 (circular import candidates)
 
