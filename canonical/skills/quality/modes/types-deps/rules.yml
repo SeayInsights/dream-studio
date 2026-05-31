@@ -535,27 +535,35 @@ rules:
 
 
   - id: "dep-007"
-    name: "Runtime circular import between Python modules"
+    name: "Runtime circular import between modules"
     severity: high       # escalated to critical after LLM confirmation
     category: import_cycles
+
+    applies_to:
+      languages: [python, typescript]
+      file_types: [.py, .ts, .tsx]
+      note: "Python: if TYPE_CHECKING guard exclusion. TypeScript: import type / type-only import exclusion. Same candidate/confirm structure."
 
     source:
       doc: "canonical/skills/quality/references/types-deps-best-practices.md"
       section: "Section K"
-      item: "No Python runtime circular imports (TYPE_CHECKING-guarded imports are exempt)"
+      item: "No runtime circular imports (TYPE_CHECKING / import-type-guarded imports are exempt)"
 
     # CALIBRATION: candidate/confirm hybrid.
-    # The AST pass MUST clear TYPE_CHECKING-guarded imports before generating candidates.
-    # Without this, ~50% of findings are false positives (TYPE_CHECKING is the standard
-    # Python idiom for breaking cycles at runtime while keeping the type checker informed).
+    # The AST pass MUST clear type-annotation-only imports before generating candidates.
+    #
+    # Python: exclude imports inside `if TYPE_CHECKING:` blocks and function bodies.
+    # TypeScript: exclude `import type { ... }` and `import { type X }` — these are erased
+    #   by the TypeScript compiler and create NO runtime dependency.
+    # Without this pruning, ~50% of findings are false positives.
     #
     # Static pass:
-    #   1. Parse all Python files in scope, build import graph (module → modules it imports)
-    #   2. EXCLUDE from graph edges: imports inside `if TYPE_CHECKING:` blocks
-    #   3. EXCLUDE from graph edges: imports inside function/method bodies (deferred)
+    #   1. Parse all source files, build import graph (module → modules it imports)
+    #   2. EXCLUDE type-annotation-only import edges (see detection.static.notes per language)
+    #   3. EXCLUDE imports inside function/method bodies (deferred, Python only)
     #   4. Run strongly-connected-component / DFS cycle detection on the PRUNED graph
     #   5. Only modules with cycles in the PRUNED graph become candidates
-    #   6. Report as "CANDIDATE — runtime circular import detected after excluding TYPE_CHECKING guards"
+    #   6. Report as "CANDIDATE — runtime circular import detected after excluding type-only guards"
     #
     # LLM confirmation:
     #   The LLM sees only genuinely-ambiguous unguarded cycles. Its job is to confirm:
@@ -569,6 +577,7 @@ rules:
       static:
         tool: ast
         notes: |
+          FOR PYTHON:
           Build import graph from Python AST:
           1. For each source file, parse with ast.parse().
           2. Walk ast.Import and ast.ImportFrom nodes.
@@ -583,17 +592,39 @@ rules:
           5. Use DFS or SCC to find cycles in the pruned graph.
           6. For each cycle: report the cycle path (A → B → C → A) as a candidate.
           7. Do NOT escalate to critical at this stage — that requires LLM confirmation.
+
+          FOR TYPESCRIPT:
+          Build import graph from TypeScript AST:
+          1. For each .ts/.tsx source file, parse import statements.
+          2. SKIP (exclude from graph) any edge where:
+             - Import is `import type { ... } from '...'` (TypeScript type-only import, TS 3.8+)
+             - Import is `import { type X } from '...'` (inline type modifier, TS 4.5+)
+             These are the TypeScript equivalent of Python's `if TYPE_CHECKING:` — they
+             exist only for the type checker and create NO runtime dependency.
+          3. Build directed graph: module_path → set of imported module_paths
+             (resolve path aliases from tsconfig.json paths config; exclude node_modules)
+          4. Use DFS or SCC to find cycles in the pruned graph.
+          5. For each cycle: report the cycle path as a CANDIDATE.
+             Do NOT escalate to critical — LLM confirmation required.
+
+          FINDING HASH for TypeScript cycles:
+          file_path = sorted(all_module_paths_in_cycle) joined with ","
+          code_excerpt = None
+          hash = SHA-256(f"dep-007|{sorted_canonical_cycle_path}|")
+          This ensures the hash is stable regardless of which module is "first" in the cycle.
+          Example: cycle A.ts → B.ts → A.ts → hash = SHA-256("dep-007|A.ts,B.ts|")
         fallback_to_llm: true
 
       llm:
         prompt_template: |
           You are a dependency health auditor checking one specific rule.
 
-          Rule: dep-007 — Runtime circular import between Python modules
+          Rule: dep-007 — Runtime circular import between modules
           Severity: high (candidate) → critical if confirmed as real runtime cycle
 
           The static analysis found a potential circular import cycle AFTER excluding
-          imports inside `if TYPE_CHECKING:` blocks and function bodies.
+          type-annotation-only imports (Python: `if TYPE_CHECKING:` blocks and function
+          bodies; TypeScript: `import type` statements).
 
           Detected cycle:
           {cycle_path}
@@ -601,7 +632,7 @@ rules:
           Relevant import statements from each module in the cycle:
           {static_finding_excerpt}
 
-          Confirm whether this is a REAL RUNTIME CIRCULAR IMPORT:
+          For Python: confirm whether this is a REAL RUNTIME CIRCULAR IMPORT:
           - Does the cycle exist at module load time (when Python executes the import
             statements at the top of each file)?
           - OR is there a structural reason the AST missed that breaks the cycle at runtime
@@ -612,6 +643,23 @@ rules:
           depending on import order. Confirm it is critical.
 
           If it is NOT a real runtime cycle: explain what breaks the cycle at runtime.
+
+          For TypeScript: confirm whether the detected cycle is a REAL RUNTIME CYCLE
+          after excluding `import type` statements.
+
+          A TypeScript `import type` does NOT create a runtime dependency — the TypeScript
+          compiler erases it before emitting JavaScript. Only `import { Value }` (not `type`)
+          creates a runtime dependency.
+
+          REAL RUNTIME CYCLE in TypeScript: A.ts has `import { SomeClass } from './B'`
+          AND B.ts has `import { OtherClass } from './A'` — both are value imports.
+          This creates a circular dependency in the emitted JavaScript.
+
+          NOT A RUNTIME CYCLE: A.ts has `import type { AType } from './B'` AND B.ts has
+          `import { SomeClass } from './A'` — A's import of B is type-only, erased at runtime.
+
+          Check each edge in the cycle: are ALL of them value imports (not type-only)?
+          If any edge is `import type` → the cycle is NOT a runtime cycle.
 
           Return JSON exactly:
           {"finding": true|false, "confidence": 0.0-1.0,
