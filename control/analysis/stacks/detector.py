@@ -131,6 +131,17 @@ def _detect_by_files(path: Path) -> List[StackSignal]:
                 )
             )
 
+    # Check for Go
+    if (path / "go.mod").exists():
+        signals.append(
+            StackSignal(
+                name="go",
+                confidence=0.95,
+                source="file_check",
+                evidence=["go.mod exists"],
+            )
+        )
+
     return signals
 
 
@@ -166,6 +177,10 @@ def _detect_test_framework(path: Path) -> Optional[str]:
     if (path / "pyproject.toml").exists() or (path / "pytest.ini").exists():
         return "pytest"
 
+    # Check for Go (go test is built-in to the toolchain)
+    if (path / "go.mod").exists():
+        return "go"
+
     return None
 
 
@@ -190,7 +205,13 @@ def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
     best_confidence = stack_scores[best_name]
 
     # Framework name mapping
-    framework_names = {"nextjs": "Next.js", "astro": "Astro", "python": "Python", "node": "Node.js"}
+    framework_names = {
+        "nextjs": "Next.js",
+        "astro": "Astro",
+        "python": "Python",
+        "node": "Node.js",
+        "go": "Go",
+    }
 
     return DetectedStack(
         adapter=best_name,
