@@ -63,6 +63,18 @@ def test_db() -> Generator[Path, None, None]:
         """)
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS business_projects (
+                project_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                project_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS pi_components (
                 component_id TEXT PRIMARY KEY,
                 project_id TEXT NOT NULL,
@@ -101,6 +113,18 @@ def test_db() -> Generator[Path, None, None]:
         conn.execute(
             "INSERT INTO reg_projects (project_id, name, path) VALUES (?, ?, ?)",
             ("dream-studio", "Dream Studio", "/builds/dream-studio"),
+        )
+        conn.execute(
+            "INSERT INTO business_projects (project_id, name, status, project_path, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "dream-studio",
+                "Dream Studio",
+                "active",
+                "/builds/dream-studio",
+                "2026-01-01T00:00:00",
+                "2026-01-01T00:00:00",
+            ),
         )
 
         # Insert 10 test components

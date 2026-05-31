@@ -195,7 +195,7 @@ def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
     )
     assert any(
         edge["source"] == "module:analytics_only_ingestion"
-        and edge["target"] == "table:reg_projects"
+        and edge["target"] == "table:business_projects"
         for edge in graph["edges"]
     )
     assert any(

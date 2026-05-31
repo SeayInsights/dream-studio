@@ -190,6 +190,7 @@ def test_register_project_no_marker_default(tmp_path, monkeypatch):
         project_path=repo_dir,
         write_marker=False,
         source_root=tmp_path,
+        dream_studio_home=tmp_path,
     )
 
     assert result["ok"] is True
