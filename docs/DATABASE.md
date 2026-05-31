@@ -250,3 +250,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- reviewed: 2026-05-30, migration 087 skill_id on scan runs + code-quality fan-out. No semantic changes required. -->
 
 <!-- 2026-05-31: reg_projects deleted (migration 084); business_projects is canonical. pi_* tables dropped; project_intelligence and prd_authority updated to read detected_stack/stack_json from business_projects. -->
+
+<!-- 2026-05-31: migration 088 removes dead FK refs to dropped reg_projects from raw_sessions/handoffs/specs/tasks. upsert_project() writes to business_projects. -->
