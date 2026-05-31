@@ -56,13 +56,14 @@ def test_analytics_only_ingestion_writes_current_authority_without_orchestration
         assert result["repo_mutation_required"] is False
         assert repeat["records_written"] == result["records_written"]
 
-        assert _count(conn, "reg_projects") == 1
+        assert (
+            _count(conn, "business_projects") == 1
+        )  # reg_projects → business_projects (migration 084)
         assert _count(conn, "validation_results") == 1
         assert _count(conn, "security_findings") == 1
         assert _count(conn, "token_usage_records") == 1
         assert _count(conn, "ai_usage_operational_records") == 1
-        assert _count(conn, "pi_components") == 2
-        assert _count(conn, "pi_dependencies") == 1
+        # pi_components and pi_dependencies dropped in migration 084 (were empty/broken)
         assert _count(conn, "prd_documents") == 1
         assert _count(conn, "production_readiness_assessment_runs") == 1
         assert _count(conn, "project_health_scorecards") == 1
@@ -211,12 +212,16 @@ def test_ds_analytics_ingest_runs_from_outside_repo_against_rehearsal_home(
     assert dry_payload["dry_run"] is True
     assert dry_payload["records_written"] == {}
     assert execute_payload["execute"] is True
-    assert execute_payload["records_written"]["reg_projects"] == 1
+    assert (
+        execute_payload["records_written"]["business_projects"] == 1
+    )  # reg_projects → business_projects (migration 084)
 
     with _connect(home / "state" / "studio.db") as conn:
         status = analytics_only_profile_status(conn)
         assert status["dashboard_api_available"] is True
-        assert _count(conn, "reg_projects") == 1
+        assert (
+            _count(conn, "business_projects") == 1
+        )  # reg_projects → business_projects (migration 084)
 
 
 def _payload(project_path: Path) -> dict[str, object]:

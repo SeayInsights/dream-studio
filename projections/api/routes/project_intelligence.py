@@ -1112,9 +1112,13 @@ async def list_projects(
 
         # Get total count of distinct projects — business_projects (UUID ids, no path dedup needed)
         project_columns = table_columns(conn, "business_projects")
-        # Analysis columns removed in migration 084; return NULL/0 placeholders for compatibility
-        stack_detected_expr = "NULL AS stack_detected"
-        stack_json_expr = "NULL AS stack_json"
+        # detected_stack + stack_json live on business_projects since migration 085
+        stack_detected_expr = (
+            "p.detected_stack" if "detected_stack" in project_columns else "NULL AS stack_detected"
+        )
+        stack_json_expr = (
+            "p.stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
+        )
         project_type_expr = "NULL AS project_type"
         project_source_expr = "NULL AS project_source"
         status_expr = "p.status AS status" if "status" in project_columns else "NULL AS status"
@@ -1360,8 +1364,10 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
 
         # Get project details — reg_projects deleted in migration 084; use business_projects
         project_columns = table_columns(conn, "business_projects")
-        stack_detected_expr = "NULL AS stack_detected"
-        stack_json_expr = "NULL AS stack_json"
+        stack_detected_expr = (
+            "detected_stack" if "detected_stack" in project_columns else "NULL AS stack_detected"
+        )
+        stack_json_expr = "stack_json" if "stack_json" in project_columns else "NULL AS stack_json"
         project_type_expr = "NULL AS project_type"
         project_source_expr = "NULL AS project_source"
         status_expr = "status AS status" if "status" in project_columns else "NULL AS status"

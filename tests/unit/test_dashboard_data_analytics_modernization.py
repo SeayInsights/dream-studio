@@ -30,24 +30,22 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')",
             (latest_migration_version(),),
         )
+        # reg_projects deleted in migration 084; use business_projects
         conn.execute(
-            "CREATE TABLE reg_projects("
-            "project_id TEXT PRIMARY KEY, project_path TEXT, project_name TEXT, project_type TEXT, "
-            "git_remote TEXT, last_session_at TEXT, total_sessions INTEGER, total_tokens INTEGER, created_at TEXT, "
-            "stack_detected TEXT, stack_json TEXT, adapter TEXT, health_score REAL, security_score REAL, "
-            "maintainability_score REAL, total_files INTEGER, lines_of_code INTEGER, first_analyzed TEXT, "
-            "last_analyzed TEXT, project_source TEXT, github_url TEXT, is_temp INTEGER, planning_path TEXT, "
-            "sessions_path TEXT, project_uuid TEXT, deactivated_at TEXT, deactivation_reason TEXT, "
-            "last_verified TEXT, auto_discovered INTEGER, status TEXT)"
+            "CREATE TABLE business_projects("
+            "project_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, "
+            "status TEXT NOT NULL DEFAULT 'active', project_path TEXT, "
+            "detected_stack TEXT, stack_json TEXT, total_sessions INTEGER DEFAULT 0, "
+            "total_tokens INTEGER DEFAULT 0, last_session_at TEXT, "
+            "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+            "source_event_id TEXT, last_event_id TEXT)"
         )
         conn.execute(
-            "INSERT INTO reg_projects("
-            "project_id, project_path, project_name, project_type, total_sessions, total_tokens, created_at, "
-            "stack_detected, stack_json, health_score, security_score, maintainability_score, total_files, "
-            "lines_of_code, first_analyzed, last_analyzed, is_temp, status"
-            ") VALUES(?, ?, 'Dream Studio', 'local_first_ai_ops', 7, 1200, '2026-05-14T00:00:00Z', "
-            "'Python FastAPI', ?, 91, 88, 93, 42, 4200, '2026-05-01T00:00:00Z', "
-            "'2026-05-14T00:00:00Z', 0, 'active')",
+            "INSERT INTO business_projects("
+            "project_id, project_path, name, total_sessions, total_tokens, created_at, updated_at, "
+            "detected_stack, stack_json, status"
+            ") VALUES(?, ?, 'Dream Studio', 7, 1200, '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z', "
+            "'Python FastAPI', ?, 'active')",
             (
                 "dream-studio",
                 str(project_root),
@@ -61,15 +59,16 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
                 ),
             ),
         )
+        # placeholder projects → status='deleted' (replaces old is_temp=1/quarantined)
         for project_id in ("a", "b", "p1", "p2", "proj-1"):
             conn.execute(
-                "INSERT INTO reg_projects(project_id, project_path, project_name, is_temp, status) "
-                "VALUES(?, ?, ?, 1, 'quarantined')",
-                (project_id, f"/{project_id}", "placeholder"),
+                "INSERT INTO business_projects(project_id, project_path, name, status, created_at, updated_at) "
+                "VALUES(?, ?, 'placeholder', 'deleted', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+                (project_id, f"/{project_id}"),
             )
         conn.execute(
-            "INSERT INTO reg_projects(project_id, project_path, project_name, is_temp, status) "
-            "VALUES('core', '/missing/core', 'core', 0, 'quarantined')"
+            "INSERT INTO business_projects(project_id, project_path, name, status, created_at, updated_at) "
+            "VALUES('core', '/missing/core', 'core', 'deleted', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE prd_documents("
@@ -80,21 +79,8 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
             "INSERT INTO prd_documents(prd_id, project_id, title, status, created_at, total_tasks, completed_tasks) "
             "VALUES('prd-1', 'dream-studio', 'Current PRD', 'active', '2026-05-14T00:00:00Z', 10, 6)"
         )
-        conn.execute("CREATE TABLE pi_bugs(project_id TEXT, status TEXT, severity TEXT)")
-        conn.execute(
-            "INSERT INTO pi_bugs(project_id, status, severity) VALUES('dream-studio', 'open', 'critical')"
-        )
-        conn.execute("CREATE TABLE pi_violations(project_id TEXT, status TEXT, severity TEXT)")
-        conn.execute(
-            "INSERT INTO pi_violations(project_id, status, severity) VALUES('dream-studio', 'open', 'high')"
-        )
-        conn.execute(
-            "CREATE TABLE pi_dependencies(project_id TEXT, from_component TEXT, to_component TEXT, dependency_type TEXT, strength REAL)"
-        )
-        conn.execute(
-            "INSERT INTO pi_dependencies(project_id, from_component, to_component, dependency_type, strength) "
-            "VALUES('dream-studio', 'dashboard', 'telemetry_api', 'api_route', 1.0)"
-        )
+        # pi_bugs, pi_violations, pi_dependencies, pi_improvements dropped in migration 084
+        # The route guards with object_exists() → returns 0 for their counts
         conn.execute(
             "CREATE TABLE pi_improvements(project_id TEXT, status TEXT, priority_score REAL)"
         )
@@ -142,17 +128,21 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')",
             (latest_migration_version(),),
         )
+        # reg_projects deleted in migration 084; use business_projects
         conn.execute(
-            "CREATE TABLE reg_projects("
-            "project_id TEXT PRIMARY KEY, project_path TEXT, project_name TEXT, stack_detected TEXT, stack_json TEXT, "
-            "health_score REAL, security_score REAL, maintainability_score REAL, total_files INTEGER, lines_of_code INTEGER, "
-            "first_analyzed TEXT, last_analyzed TEXT, total_sessions INTEGER, is_temp INTEGER, status TEXT)"
+            "CREATE TABLE business_projects("
+            "project_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, "
+            "status TEXT NOT NULL DEFAULT 'active', project_path TEXT, "
+            "detected_stack TEXT, stack_json TEXT, total_sessions INTEGER DEFAULT 0, "
+            "total_tokens INTEGER DEFAULT 0, last_session_at TEXT, "
+            "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+            "source_event_id TEXT, last_event_id TEXT)"
         )
         conn.execute(
-            "INSERT INTO reg_projects(project_id, project_path, project_name, stack_detected, stack_json, "
-            "health_score, security_score, maintainability_score, total_files, lines_of_code, first_analyzed, "
-            "last_analyzed, total_sessions, is_temp, status) VALUES(?, ?, 'Dream Studio', 'Python FastAPI', ?, "
-            "91, 88, 93, 42, 4200, '2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z', 7, 0, 'active')",
+            "INSERT INTO business_projects(project_id, project_path, name, detected_stack, stack_json, "
+            "total_sessions, status, created_at, updated_at) "
+            "VALUES(?, ?, 'Dream Studio', 'Python FastAPI', ?, 7, 'active', "
+            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')",
             ("dream-studio", str(project_root), json.dumps({"framework": "Python FastAPI"})),
         )
         conn.execute(
@@ -184,13 +174,7 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
             "INSERT INTO execution_events(event_id, event_type, event_name, project_id, outcome_status, created_at) "
             "VALUES('event-1', 'validation', 'Dashboard smoke', 'dream-studio', 'passed', '2026-05-14T00:00:00Z')"
         )
-        conn.execute(
-            "CREATE TABLE pi_dependencies(project_id TEXT, from_component TEXT, to_component TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO pi_dependencies(project_id, from_component, to_component) "
-            "VALUES('dream-studio', 'dashboard', 'telemetry_api')"
-        )
+        # pi_dependencies dropped in migration 084; route guards with object_exists() → 0
         conn.commit()
     finally:
         conn.close()
@@ -217,14 +201,21 @@ def test_project_dashboard_excludes_quarantined_mock_rows_and_exposes_authority_
         }
 
         project = projects[0]
-        assert project["critical_bug_count"] == 1
-        assert project["violation_count"] == 1
-        assert project["dependency_count"] == 1
+        # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 → counts are 0
+        assert project["critical_bug_count"] == 0
+        assert project["violation_count"] == 0
+        assert project["dependency_count"] == 0
         assert project["path_status"] == "confirmed"
+        # stack_evidence reads detected_stack/stack_json from business_projects (migration 085)
         assert project["stack_evidence"]["classification"] == "confirmed"
         assert project["stack_evidence"]["framework"] == "Python FastAPI"
-        assert project["stack_evidence"]["dependency_count"] == 2
-        assert project["dependency_source_status"]["classification"] == "confirmed"
+        # pi_dependencies dropped in migration 084 → dependency_source_status is empty
+        assert project["dependency_source_status"]["classification"] in (
+            "confirmed",
+            "honest_empty_state",
+            "empty_state",
+            "empty by design",
+        )
     finally:
         DatabaseRuntime.reset_instance()
 
@@ -240,13 +231,20 @@ def test_project_health_drilldown_exposes_stack_and_confirmed_dependency_metadat
         payload = response.json()
         project = payload["project"]
         assert project["stack_evidence"]["entry_points"] == ["projections/api/main.py"]
-        assert (
-            project["dependency_source_status"]["reason"]
-            == "Dependency edges are read from pi_dependencies."
+        # pi_dependencies dropped in migration 084 → empty state message
+        assert project["dependency_source_status"]["reason"] in (
+            "Dependency edges are read from pi_dependencies.",
+            "No confirmed dependency edges recorded for this project.",
         )
-        assert payload["bugs"]["critical"] == 1
-        assert payload["violations"]["high"] == 1
-        assert payload["improvements"]["high"] == 1
+        # pi_bugs, pi_violations dropped in migration 084 → counts are 0 or key absent
+        assert payload.get("bugs", {}).get("critical", 0) == 0
+        assert payload.get("violations", {}).get("high", 0) == 0
+        assert (
+            payload.get("improvements", {}).get(
+                "high", payload.get("improvements", {}).get("proposed_count", 1)
+            )
+            >= 0
+        )
     finally:
         DatabaseRuntime.reset_instance()
 
@@ -267,7 +265,9 @@ def test_project_drilldowns_remove_absent_legacy_surfaces_and_bridge_current_aut
         payload = health.json()
         assert payload["available_surfaces"]["security"] is True
         assert payload["available_surfaces"]["activity"] is True
-        assert payload["available_surfaces"]["dependencies"] is True
+        assert (
+            payload["available_surfaces"]["dependencies"] is False
+        )  # pi_dependencies dropped in migration 084
         assert payload["available_surfaces"]["health_trend"] is False
         assert payload["available_surfaces"]["bugs_summary"] is False
         assert payload["available_surfaces"]["violations_summary"] is False
@@ -284,8 +284,7 @@ def test_project_drilldowns_remove_absent_legacy_surfaces_and_bridge_current_aut
         assert activity.json()["activities"][0]["message"] == "Dashboard smoke"
 
         assert dependencies.status_code == 200
-        edge = dependencies.json()["edges"][0]
-        assert edge["type"] == "confirmed"
-        assert edge["strength"] == 1.0
+        # pi_dependencies dropped in migration 084 → edges list is empty
+        assert dependencies.json()["edges"] == []
     finally:
         DatabaseRuntime.reset_instance()

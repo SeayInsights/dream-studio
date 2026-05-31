@@ -46,25 +46,29 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "VALUES('token-1', 'dream-studio', 's1', 'ds-core', 'gpt', 'openai', 10, 20, 0, 30, 0.0, "
             "'migrated historical token usage', '2026-05-14T00:00:00Z')"
         )
+        # reg_projects deleted in migration 084; use business_projects
         conn.execute(
-            "CREATE TABLE reg_projects("
-            "project_id TEXT, project_name TEXT, project_path TEXT, stack_detected TEXT, "
-            "health_score REAL, security_score REAL, maintainability_score REAL, total_files INTEGER, "
-            "lines_of_code INTEGER, first_analyzed TEXT, last_analyzed TEXT, total_sessions INTEGER, "
-            "status TEXT, is_temp INTEGER)"
+            "CREATE TABLE business_projects("
+            "project_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, "
+            "status TEXT NOT NULL DEFAULT 'active', project_path TEXT, "
+            "detected_stack TEXT, stack_json TEXT, total_sessions INTEGER DEFAULT 0, "
+            "total_tokens INTEGER DEFAULT 0, last_session_at TEXT, "
+            "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+            "source_event_id TEXT, last_event_id TEXT)"
         )
         conn.execute(
-            "INSERT INTO reg_projects(project_id, project_name, project_path, stack_detected, health_score, "
-            "security_score, maintainability_score, total_files, lines_of_code, first_analyzed, last_analyzed, total_sessions, status, is_temp) "
-            "VALUES('dream-studio', 'Dream Studio', ?, 'python', 90, 90, 90, 10, 1000, "
-            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z', 5, 'active', 0)",
+            "INSERT INTO business_projects(project_id, name, description, status, project_path, "
+            "detected_stack, total_sessions, created_at, updated_at) "
+            "VALUES('dream-studio', 'Dream Studio', 'application', 'active', ?, 'python', "
+            "5, '2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')",
             (str(project_root),),
         )
+        # pytest-temp-project → status='deleted' (replaces old is_temp=1/inactive exclusion)
         conn.execute(
-            "INSERT INTO reg_projects(project_id, project_name, project_path, stack_detected, health_score, "
-            "security_score, maintainability_score, total_files, lines_of_code, first_analyzed, last_analyzed, total_sessions, status, is_temp) "
-            "VALUES('pytest-temp-project', 'pytest-temp-project', 'C:/Temp/pytest-temp-project', 'python', 0, 0, 0, 0, 0, "
-            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z', 0, 'inactive', 1)"
+            "INSERT INTO business_projects(project_id, name, description, status, project_path, "
+            "detected_stack, total_sessions, created_at, updated_at) "
+            "VALUES('pytest-temp-project', 'pytest-temp-project', '', 'deleted', "
+            "'C:/Temp/pytest-temp-project', 'python', 0, '2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE security_findings("
