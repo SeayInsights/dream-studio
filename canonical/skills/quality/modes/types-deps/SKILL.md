@@ -120,3 +120,11 @@ pyproject.toml. The enforcement gap finding reports *this project's* actual cove
 **Tooling degradation:** If `go` not in PATH, govulncheck and go mod verify/tidy checks skip gracefully with informational note. Static file inspection (CI YAML, go.sum presence, .go file reads) works without Go installed.
 
 **Proving ground:** github.com/cli/cli
+
+### Rust Support (Phase 4)
+
+**Applies (3 rules):** typ-001 (reframed), dep-001 (cargo audit), dep-002 (Cargo.lock + cargo tree --locked; library vs binary severity)
+
+**Skips (5 rules):** typ-002 (no `any` type — language prevents), typ-003 (no suppress mechanism), typ-004 (compiler enforces), dep-003 (no standard tooling), dep-007 (Cargo rejects all circular crate deps)
+
+**Proving ground:** ripgrep (github.com/BurntSushi/ripgrep)

@@ -142,6 +142,17 @@ def _detect_by_files(path: Path) -> List[StackSignal]:
             )
         )
 
+    # Check for Rust
+    if (path / "Cargo.toml").exists():
+        signals.append(
+            StackSignal(
+                name="rust",
+                confidence=0.95,
+                source="file_check",
+                evidence=["Cargo.toml exists"],
+            )
+        )
+
     return signals
 
 
@@ -181,6 +192,10 @@ def _detect_test_framework(path: Path) -> Optional[str]:
     if (path / "go.mod").exists():
         return "go"
 
+    # Check for Rust (cargo test is built-in to the toolchain)
+    if (path / "Cargo.toml").exists():
+        return "cargo"
+
     return None
 
 
@@ -211,6 +226,7 @@ def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
         "python": "Python",
         "node": "Node.js",
         "go": "Go",
+        "rust": "Rust",
     }
 
     return DetectedStack(
