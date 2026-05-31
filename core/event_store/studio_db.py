@@ -1002,12 +1002,46 @@ def upsert_project(
     git_remote: str | None = None,
     db_path: Path | None = None,
 ) -> bool:
-    # reg_projects was deleted in migration 084. Session hooks now resolve
-    # project_id via the .dream-studio-project marker (UUID from business_projects).
-    # This function is retained as a no-op so callers that still reference it
-    # don't throw. Callers in hooks are being removed; this stub covers the
-    # transition period.
-    return True
+    # reg_projects deleted in migration 084. Writes to business_projects instead.
+    # project_type maps to detected_stack; git_remote has no equivalent column (ignored).
+    # INSERT OR IGNORE preserves existing rows, then selectively UPDATE changed fields.
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                "INSERT OR IGNORE INTO business_projects"
+                " (project_id, name, project_path, detected_stack, status, created_at, updated_at)"
+                " VALUES (?, ?, ?, ?, 'active', ?, ?)",
+                (
+                    project_id,
+                    project_name or project_id,
+                    project_path,
+                    project_type,
+                    _NOW(),
+                    _NOW(),
+                ),
+            )
+            # Update mutable fields only when the row already existed
+            c.execute(
+                "UPDATE business_projects SET"
+                " project_path = ?,"
+                " updated_at = ?"
+                " WHERE project_id = ?",
+                (project_path, _NOW(), project_id),
+            )
+            if project_name:
+                c.execute(
+                    "UPDATE business_projects SET name = ? WHERE project_id = ? AND name = ?",
+                    (project_name, project_id, project_id),
+                )
+            if project_type:
+                c.execute(
+                    "UPDATE business_projects SET detected_stack = ? WHERE project_id = ?",
+                    (project_type, project_id),
+                )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
 
 
 def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
@@ -1016,7 +1050,8 @@ def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
         c = _connect(db_path)
         r = c.execute(
             "SELECT project_id, name AS project_name, description, status,"
-            " project_path, total_sessions, total_tokens, last_session_at,"
+            " project_path, detected_stack AS project_type,"
+            " total_sessions, total_tokens, last_session_at,"
             " created_at, updated_at"
             " FROM business_projects WHERE project_id = ?",
             (project_id,),

@@ -52,6 +52,37 @@ def test_db() -> Generator[Path, None, None]:
         conn = studio_db._connect(db_path)
         conn.close()
 
+        # pi_components and pi_dependencies were dropped in migration 084.
+        # Recreate them here so discovery integration tests can exercise the graph system.
+        raw = sqlite3.connect(str(db_path))
+        raw.execute("""
+            CREATE TABLE IF NOT EXISTS pi_components (
+                component_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL,
+                component_type TEXT NOT NULL,
+                lines INTEGER,
+                complexity_score REAL,
+                imports TEXT,
+                docstring TEXT,
+                line_start INTEGER,
+                line_end INTEGER,
+                last_analyzed TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        raw.execute("""
+            CREATE TABLE IF NOT EXISTS pi_dependencies (
+                dependency_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                from_component TEXT NOT NULL,
+                to_component TEXT NOT NULL,
+                dependency_type TEXT DEFAULT 'import'
+            )
+        """)
+        raw.commit()
+        raw.close()
+
         yield db_path
 
     finally:
@@ -260,10 +291,10 @@ def test_component_extraction_to_graph(test_db: Path, test_project: Path):
     """
     project_id = "test_project"
 
-    # Register project
+    # Register project (reg_projects deleted in migration 084; use business_projects)
     with sqlite3.connect(str(test_db)) as conn:
         conn.execute(
-            "INSERT INTO reg_projects (project_id, project_path, project_name, created_at) VALUES (?, ?, ?, datetime('now'))",
+            "INSERT OR IGNORE INTO business_projects (project_id, project_path, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', datetime('now'), datetime('now'))",
             (project_id, str(test_project), "Test Project"),
         )
 
@@ -534,7 +565,7 @@ def test_impact_analysis_flow(test_db: Path):
         # Step 1: Create test graph
         with sqlite3.connect(str(test_db)) as conn:
             conn.execute(
-                "INSERT INTO reg_projects (project_id, project_path, project_name, created_at) VALUES (?, ?, ?, datetime('now'))",
+                "INSERT OR IGNORE INTO business_projects (project_id, project_path, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', datetime('now'), datetime('now'))",
                 (project_id, "/test", "Impact Test"),
             )
 
@@ -639,7 +670,7 @@ def test_api_graph_endpoint_integration(client: TestClient, test_db: Path):
     # Setup database
     with sqlite3.connect(str(test_db)) as conn:
         conn.execute(
-            "INSERT INTO reg_projects (project_id, project_path, project_name, created_at) VALUES (?, ?, ?, datetime('now'))",
+            "INSERT OR IGNORE INTO business_projects (project_id, project_path, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', datetime('now'), datetime('now'))",
             (project_id, "/test", "API Test"),
         )
 
@@ -767,7 +798,7 @@ def test_api_impact_endpoint_integration(client: TestClient, test_db: Path):
     # Setup database with known graph
     with sqlite3.connect(str(test_db)) as conn:
         conn.execute(
-            "INSERT INTO reg_projects (project_id, project_path, project_name, created_at) VALUES (?, ?, ?, datetime('now'))",
+            "INSERT OR IGNORE INTO business_projects (project_id, project_path, name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', datetime('now'), datetime('now'))",
             (project_id, "/test", "Impact Test"),
         )
 

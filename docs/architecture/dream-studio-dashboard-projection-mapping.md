@@ -469,3 +469,5 @@ recommended_next_work_order: none
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-05-31: reg_projects deleted (migration 084); business_projects is canonical. pi_* tables dropped; project_intelligence and prd_authority updated to read detected_stack/stack_json from business_projects. -->
+
+<!-- 2026-05-31: migration 088 removes dead FK refs to dropped reg_projects from raw_sessions/handoffs/specs/tasks. upsert_project() writes to business_projects. -->
