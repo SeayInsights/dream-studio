@@ -1564,9 +1564,12 @@ def _project_row(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | 
     # reg_projects deleted in migration 084; use business_projects.
     if not _table_exists(conn, "business_projects"):
         return None
+    cols = set(c[1] for c in conn.execute("PRAGMA table_info(business_projects)").fetchall())
+    stack_sel = "detected_stack" if "detected_stack" in cols else "NULL AS stack_detected"
+    stack_json_sel = "stack_json" if "stack_json" in cols else "NULL AS stack_json"
     row = conn.execute(
-        "SELECT project_id, name AS project_name, description, status,"
-        " project_path, created_at, updated_at"
+        f"SELECT project_id, name AS project_name, description, status,"
+        f" project_path, created_at, updated_at, {stack_sel}, {stack_json_sel}"
         " FROM business_projects WHERE project_id = ? LIMIT 1",
         (project_id,),
     ).fetchone()

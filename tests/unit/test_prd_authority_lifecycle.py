@@ -287,18 +287,20 @@ def _seed_project(
     project_id: str,
     project_path: str | None = None,
 ) -> None:
+    # reg_projects deleted in migration 084; use business_projects
     conn.execute(
         """
-        INSERT OR REPLACE INTO reg_projects (
-            project_id, project_path, project_name, project_type, created_at,
-            stack_detected, stack_json
-        ) VALUES (?, ?, ?, ?, datetime('now'), ?, ?)
+        INSERT OR IGNORE INTO business_projects (
+            project_id, name, description, status,
+            project_path, detected_stack, stack_json,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, 'active', ?, ?, ?, datetime('now'), datetime('now'))
         """,
         (
             project_id,
-            project_path or str(Path.cwd()),
             "Demo Project",
             "application",
+            project_path or str(Path.cwd()),
             "python",
             '{"dependencies": ["fastapi"], "config_files": ["pyproject.toml"]}',
         ),
