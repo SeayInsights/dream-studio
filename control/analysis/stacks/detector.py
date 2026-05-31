@@ -6,7 +6,7 @@ Combines multiple detection strategies to identify project stack with confidence
 import json
 from pathlib import Path
 from typing import Optional, List
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
