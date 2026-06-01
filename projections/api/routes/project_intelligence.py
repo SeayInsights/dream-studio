@@ -1155,9 +1155,7 @@ async def list_projects(
         )
         # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 — return 0 constants
         security_columns = (
-            table_columns(conn, "findings")
-            if object_exists(conn, "findings")
-            else set()
+            table_columns(conn, "findings") if object_exists(conn, "findings") else set()
         )
         security_open_count_expr = (
             _optional_count_expr(
@@ -1402,9 +1400,7 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         )
         # pi_dependencies dropped in migration 084; 0 is hardcoded in the query
         security_columns = (
-            table_columns(conn, "findings")
-            if object_exists(conn, "findings")
-            else set()
+            table_columns(conn, "findings") if object_exists(conn, "findings") else set()
         )
         security_open_count_expr = (
             "(SELECT COUNT(*) FROM findings WHERE "

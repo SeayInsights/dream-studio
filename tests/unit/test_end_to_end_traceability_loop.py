@@ -213,10 +213,7 @@ def test_end_to_end_traceability_loop_reaches_actual_telemetry_api(
     assert summary_payload["route_status"][0]["handoff_required"] == 0
     assert summary_payload["route_status"][0]["recommended_next_work_order"] == "none"
     assert summary_payload["token_usage"][0]["total_tokens"] == 120
-    assert (
-        summary_payload["findings"][0]["file_path"]
-        == "projections/api/routes/telemetry.py"
-    )
+    assert summary_payload["findings"][0]["file_path"] == "projections/api/routes/telemetry.py"
     assert summary_payload["validation_outcomes"][0]["status"] == "passed"
     assert (
         summary_payload["research_decisions"]["research"][0]["decision_class"]
