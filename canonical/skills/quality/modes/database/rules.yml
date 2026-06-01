@@ -67,8 +67,9 @@ rules:
         reason: "Migration backup/temp tables (CREATE TABLE x_bak AS SELECT) inherit PK from source; standard SQLite table-reconstruction pattern. NOTE: if a business table uses _bak/_temp naming, this suppression silently misses a real missing-PK violation. Avoid those suffixes for business tables."
 
     applies_to:
-      languages: [sql, python]
-      file_types: [".sql", ".py"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal SQL concept. PRIMARY KEY syntax is identical across SQLite, Postgres, and MySQL. Detection reads migration files (*.sql) or ORM schema files."
 
     action:
       audit_mode: report
@@ -110,8 +111,9 @@ rules:
         reason: "Explicit operator acknowledgment"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal SQL concept. FOREIGN KEY / REFERENCES syntax is identical across SQLite, Postgres, and MySQL. Detection reads migration files (*.sql) or ORM schema files."
 
     action:
       audit_mode: report
@@ -153,8 +155,9 @@ rules:
         reason: "NULL is intentional here — operator has documented rationale"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal SQL concept. NOT NULL constraint syntax is identical across SQLite, Postgres, and MySQL. Detection reads migration files (*.sql) or ORM schema files."
 
     action:
       audit_mode: report
@@ -177,7 +180,12 @@ rules:
       static:
         tool: sqlparse
         fallback_to_llm: true
-        notes: "Detect columns named status, state, type, tier, category, role that use TEXT/VARCHAR without a CHECK constraint constraining allowed values."
+        notes: |
+          Detect columns named status, state, type, tier, category, role that use TEXT/VARCHAR without a CHECK constraint constraining allowed values.
+          Detection reads migration files for columns named status, state, type, role without CHECK IN (...).
+          Universal: CHECK constraint syntax identical across SQLite, Postgres, MySQL.
+          Note: Postgres ENUM type is an alternative to CHECK — flag CHECK absence but accept ENUM as equivalent.
+          D1/SQLite: CHECK constraint is the standard approach.
       llm:
         prompt_template: null
         context_scope: full_file
@@ -188,7 +196,7 @@ rules:
       - "Application logic enforces enum values but DB schema has no constraint"
 
     remediation:
-      summary: "Add CHECK constraint: status TEXT CHECK(status IN ('active','inactive','deleted')). Alternatively, use a foreign key to a lookup table."
+      summary: "Add CHECK constraint: status TEXT CHECK(status IN ('active','inactive','deleted')). Alternatively, use a foreign key to a lookup table. In Postgres, a native ENUM type is an acceptable equivalent."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#d-schema-integrity--correctness"
 
     suppressions:
@@ -196,8 +204,9 @@ rules:
         reason: "Open enum — new values added programmatically; CHECK would require migration on each extension"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal SQL concept. CHECK constraint syntax is identical across SQLite, Postgres, and MySQL. Postgres ENUM is accepted as equivalent to CHECK IN (...)."
 
     action:
       audit_mode: report
@@ -264,7 +273,13 @@ rules:
       static:
         tool: sqlparse
         fallback_to_llm: true
-        notes: "Detect timestamp columns using TEXT (common in SQLite) without an explicit UTC convention comment or application-enforced UTC policy. Also detect TIMESTAMP WITHOUT TIME ZONE in Postgres."
+        notes: |
+          Detect timestamp columns using TEXT (common in SQLite) without an explicit UTC convention comment or application-enforced UTC policy. Also detect TIMESTAMP WITHOUT TIME ZONE in Postgres.
+          Engine-specific UTC enforcement:
+          - SQLite/D1: TEXT columns with DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')) or INTEGER epoch
+          - Postgres: TIMESTAMPTZ (WITH TIME ZONE) is the preferred type
+          - MySQL: DATETIME with application-level UTC enforcement (MySQL doesn't enforce timezone at column level)
+          Flag: TEXT timestamps without UTC convention comment; TIMESTAMP WITHOUT TIME ZONE in Postgres
       llm:
         prompt_template: null
         context_scope: full_file
@@ -283,8 +298,9 @@ rules:
         reason: "Local time is intentional here — UTC convention documented elsewhere"
 
     applies_to:
-      languages: [sql, python]
-      file_types: [".sql", ".py"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. Engine-specific UTC enforcement varies: SQLite/D1 use TEXT with strftime, Postgres uses TIMESTAMPTZ, MySQL requires application-level enforcement."
 
     action:
       audit_mode: report
@@ -326,8 +342,9 @@ rules:
         reason: "Table is read-rarely; full scan acceptable; FK index not worth the write overhead"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal SQL concept. CREATE INDEX syntax is identical across SQLite, Postgres, and MySQL. Detection reads migration files (*.sql) or ORM schema files."
 
     action:
       audit_mode: report
@@ -369,8 +386,9 @@ rules:
         reason: "Table expected to stay small; full scan acceptable"
 
     applies_to:
-      languages: [sql, python]
-      file_types: [".sql", ".py"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. Hot query paths exist in all languages. Detection correlates application query patterns with migration index definitions."
 
     action:
       audit_mode: report
@@ -394,7 +412,13 @@ rules:
         tool: semgrep
         fallback_to_llm: true
         availability_note: "semgrep not installed in Dream Studio environment; this rule executes via LLM fallback. Install semgrep for cheaper static execution: pattern for f-string + SQL keyword combination."
-        notes: "Preferred static: semgrep on f-string SQL patterns. Current state: LLM fallback active. Cross-reference with sec-002 (injection risk angle): this rule fires on the design anti-pattern; sec-002 fires on the injection risk. Both may fire on the same code."
+        notes: |
+          Preferred static: semgrep on f-string SQL patterns. Current state: LLM fallback active. Cross-reference with sec-002 (injection risk angle): this rule fires on the design anti-pattern; sec-002 fires on the injection risk. Both may fire on the same code.
+          CROSS-REFERENCE: db-009 owns the QUERY DESIGN angle (f-string SQL is a structural anti-pattern).
+          sec-002 (ds-quality:security) owns the INJECTION RISK angle (exploit surface, severity: critical).
+          Both rules may fire on the same code. db-009 is medium severity (design smell);
+          sec-002 is critical (security risk). Reports note the sibling rule.
+          Do NOT suppress db-009 because sec-002 fired — both angles matter.
       llm:
         prompt_template: null
         context_scope: function
@@ -404,6 +428,8 @@ rules:
       - "f-string used to construct SQL query (f'SELECT ... {user_input}')"
       - "% string formatting with SQL keywords (cursor.execute('SELECT * FROM t WHERE x=%s' % val))"
       - "string concatenation to build SQL: 'SELECT * FROM t WHERE ' + condition"
+      - "Template literal used to construct SQL query in TypeScript/JavaScript"
+      - "fmt.Sprintf() used to construct SQL in Go"
 
     remediation:
       summary: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE x = ?', (val,)) or SQLAlchemy bound parameters. F-string SQL is both an injection risk (see sec-002) and a code quality anti-pattern — string construction makes queries hard to cache, trace, and safely modify."
@@ -422,8 +448,9 @@ rules:
         reason: "Explicit operator acknowledgment — values are hardcoded constants, not user input"
 
     applies_to:
-      languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".js"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal anti-pattern. Applies across all languages with SQL access. Detection looks for string interpolation/concatenation in query construction."
 
     action:
       audit_mode: report
@@ -467,8 +494,9 @@ rules:
         reason: "Intentional — migration runner bootstrap code"
 
     applies_to:
-      languages: [python, sql]
-      file_types: [".py", ".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".sql", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. Schema should always be in version-controlled migration files, not ad-hoc scripts, regardless of language or database backend."
 
     action:
       audit_mode: report
@@ -515,8 +543,9 @@ rules:
       # Follow-up: add inline # db-011-suppress comments to affected migrations (022, 071) instead.
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. Expand-contract migration pattern applies regardless of database backend. Detection reads migration files for destructive DDL operations."
 
     action:
       audit_mode: report
@@ -539,7 +568,14 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Detect SQLAlchemy create_engine() calls without pool_size, max_overflow, pool_timeout parameters. Also detect direct sqlite3.connect() in hot paths without connection reuse."
+        notes: |
+          Detect SQLAlchemy create_engine() calls without pool_size, max_overflow, pool_timeout parameters. Also detect direct sqlite3.connect() in hot paths without connection reuse.
+          ENGINE-SPECIFIC DETECTION:
+          - Python + SQLAlchemy + Postgres/MySQL: flag create_engine() without pool_size, max_overflow, pool_timeout
+          - Python + SQLite: no pool needed (file-based); check for per-request sqlite3.connect() in hot paths
+          - D1/Cloudflare: managed connection pool — no configuration needed, skip this check
+          - Node/TypeScript + pg/mysql2: check for pool configuration in connection options
+          - Node/TypeScript + Prisma: PrismaClient has connection_limit; flag if not configured for production
       llm:
         prompt_template: null
         context_scope: function
@@ -548,9 +584,11 @@ rules:
     triggers:
       - "SQLAlchemy create_engine() without pool_size or pool_timeout"
       - "Database connection created per-request without pooling in a web server context"
+      - "Node.js pg Pool created without explicit max/idleTimeoutMillis configuration"
+      - "Prisma PrismaClient instantiated per-request in a serverless or web context"
 
     remediation:
-      summary: "Configure connection pool: pool_size (default connections), max_overflow (burst connections), pool_timeout (wait time before error), pool_recycle (reconnect interval). For SQLite: use a singleton connection or connection pool manager; avoid per-request sqlite3.connect()."
+      summary: "Configure connection pool: pool_size (default connections), max_overflow (burst connections), pool_timeout (wait time before error), pool_recycle (reconnect interval). For SQLite: use a singleton connection or connection pool manager; avoid per-request sqlite3.connect(). D1 and managed cloud databases handle pooling automatically."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
 
     suppressions:
@@ -558,8 +596,9 @@ rules:
         reason: "Single-process app with controlled concurrency; default pool acceptable"
 
     applies_to:
-      languages: [python]
-      file_types: [".py"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".js", ".go", ".rs"]
+      note: "Engine-specific detection. D1/managed databases skip this check. Detection branches on detected database type from stack detector."
 
     action:
       audit_mode: report
@@ -582,7 +621,15 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Detect absence of statement_timeout in Postgres config/connection, or absence of timeout= parameter in sqlite3.connect() calls in long-running query paths."
+        notes: |
+          Detect absence of statement_timeout in Postgres config/connection, or absence of timeout= parameter in sqlite3.connect() calls in long-running query paths.
+          ENGINE-SPECIFIC DETECTION:
+          - SQLite: `sqlite3.connect(db, timeout=30.0)` — timeout parameter controls statement timeout
+          - Postgres: `SET statement_timeout = '30s'` in connection setup OR in postgresql.conf
+          - MySQL: `SET SESSION max_execution_time = 30000` (milliseconds)
+          - D1/Cloudflare: managed — statement timeouts handled by platform, skip check
+          - Node/TypeScript + pg: `{ query_timeout: 30000 }` in pool config
+          Flag if relevant pattern is absent for the detected database type.
       llm:
         prompt_template: null
         context_scope: config_section
@@ -591,9 +638,11 @@ rules:
     triggers:
       - "Postgres connection without SET statement_timeout"
       - "Long-running query function with no timeout guard"
+      - "sqlite3.connect() call without timeout= parameter in a long-running query path"
+      - "MySQL connection without SET SESSION max_execution_time"
 
     remediation:
-      summary: "Set statement timeouts per connection or per query: Postgres: SET statement_timeout = '30s'; SQLite: sqlite3.connect(db, timeout=30.0). Unbounded queries can exhaust connection pool and block the application."
+      summary: "Set statement timeouts per connection or per query: Postgres: SET statement_timeout = '30s'; SQLite: sqlite3.connect(db, timeout=30.0); MySQL: SET SESSION max_execution_time = 30000. D1 manages timeouts automatically. Unbounded queries can exhaust connection pool and block the application."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#e-query--performance"
 
     suppressions:
@@ -601,8 +650,9 @@ rules:
         reason: "Known long-running query — timeout handled at infrastructure level"
 
     applies_to:
-      languages: [python, sql]
-      file_types: [".py", ".sql", ".cfg", ".ini", ".env"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".sql", ".ts", ".js", ".go", ".rs", ".cfg", ".ini", ".env"]
+      note: "Engine-specific detection. D1/managed databases skip this check. Detection branches on detected database type from stack detector."
 
     action:
       audit_mode: report
@@ -644,8 +694,9 @@ rules:
         reason: "Table bounded by design; OFFSET pagination acceptable at this scale"
 
     applies_to:
-      languages: [sql, python]
-      file_types: [".sql", ".py"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. OFFSET pagination degrades on any SQL engine. Detection looks for LIMIT/OFFSET patterns in query code across all languages."
 
     action:
       audit_mode: report
@@ -687,8 +738,9 @@ rules:
         reason: "Loop is bounded (small N); N+1 is acceptable here"
 
     applies_to:
-      languages: [python, typescript]
-      file_types: [".py", ".ts"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal anti-pattern. N+1 loop + query pattern occurs in all languages. Detection looks for query execution inside iteration loops."
 
     action:
       audit_mode: report
@@ -711,7 +763,14 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Checklist-style: LLM verifies backup config exists in infrastructure config, CI, or documented runbook. Not auto-detectable from source code alone. May require manual verification annotation."
+        notes: |
+          Checklist-style: LLM verifies backup config exists in infrastructure config, CI, or documented runbook. Not auto-detectable from source code alone. May require manual verification annotation.
+          ENGINE-SPECIFIC DETECTION:
+          - SQLite: look for sqlite3.backup() API call or file copy in backup scripts; verify cron/schedule
+          - Postgres/RDS: verify automated snapshot retention policy in IaC (Terraform/CDK)
+          - D1/Cloudflare: automatic daily backups — no configuration needed; report as PASS with note "D1 manages backups automatically"
+          - MongoDB Atlas: automated backup enabled in atlas config
+          If no backup evidence found: report high "No automated backup configured."
       llm:
         prompt_template: null
         context_scope: config_section
@@ -720,9 +779,10 @@ rules:
     triggers:
       - "No backup configuration found in infrastructure config (terraform, docker-compose, cloud config)"
       - "Database used in production context with no backup runbook documented"
+      - "SQLite database with no sqlite3.backup() call or scheduled file copy"
 
     remediation:
-      summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving; managed DB (RDS, Supabase, D1) → enable point-in-time recovery and configure retention. Note: backup encryption is a separate concern owned by ds-quality:security (sec-023 future)."
+      summary: "Configure automated backups: SQLite on-prem → scheduled file copy + WAL archiving via sqlite3.backup(); Postgres/RDS → enable point-in-time recovery, configure retention in IaC; D1 → automatic daily backups managed by platform (no action needed); MongoDB Atlas → enable automated backup. Note: backup encryption is a separate concern owned by ds-quality:security (sec-023 future)."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#f-backups--disaster-recovery"
 
     suppressions:
@@ -730,8 +790,9 @@ rules:
         reason: "Backup configuration documented in ops runbook outside this repo"
 
     applies_to:
-      languages: [yaml, python, sql]
-      file_types: [".yml", ".yaml", ".tf", ".py", ".md"]
+      languages: [python, typescript, javascript, golang, rust, yaml]
+      file_types: [".yml", ".yaml", ".tf", ".py", ".ts", ".js", ".go", ".rs", ".md"]
+      note: "Engine-specific detection. D1 auto-passes with informational note. Detection branches on detected database type from stack detector."
 
     action:
       audit_mode: report
@@ -839,7 +900,15 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Detect DB engine version in requirements.txt, pyproject.toml, Dockerfile, docker-compose.yml, or .python-version. Compare against known EOL dates for SQLite (bundled with Python — generally safe), Postgres, MySQL, MongoDB."
+        notes: |
+          Detect DB engine version in requirements.txt, pyproject.toml, Dockerfile, docker-compose.yml, or .python-version. Compare against known EOL dates for SQLite (bundled with Python — generally safe), Postgres, MySQL, MongoDB.
+          ENGINE-SPECIFIC DETECTION:
+          - SQLite: bundled with Python runtime; check Python version in pyproject.toml/Dockerfile
+          - Postgres: check Dockerfile or docker-compose.yml for image version vs postgres.org EOL schedule
+          - MySQL: check image version vs mysql.com EOL schedule
+          - MongoDB: check image version vs mongodb.com EOL schedule
+          - D1/Cloudflare: managed — version management handled by platform, skip check
+          EOL reference: https://endoflife.date/postgresql, /sqlite, /mysql, /mongodb
       llm:
         prompt_template: null
         context_scope: full_file
@@ -848,9 +917,10 @@ rules:
     triggers:
       - "DB engine version pinned to an EOL release in requirements or Dockerfile"
       - "DB engine image tag using :latest without pinning to a supported version"
+      - "Python version in pyproject.toml or Dockerfile is EOL (implies bundled SQLite version concerns)"
 
     remediation:
-      summary: "Pin to a supported, actively maintained version. For SQLite: use the bundled Python version (kept current). For Postgres/MySQL/MongoDB: check official EOL schedule; upgrade to latest LTS. EOL engines receive no security patches."
+      summary: "Pin to a supported, actively maintained version. For SQLite: use the bundled Python version (kept current). For Postgres/MySQL/MongoDB: check official EOL schedule at https://endoflife.date; upgrade to latest LTS. D1 manages versions automatically. EOL engines receive no security patches."
       guide_ref: "canonical/skills/quality/references/database-best-practices.md#i-vulnerability--patch-management"
 
     suppressions:
@@ -858,8 +928,9 @@ rules:
         reason: "EOL version in use by explicit choice — migration planned"
 
     applies_to:
-      languages: [python, yaml, dockerfile]
-      file_types: [".txt", ".toml", ".yml", ".yaml", "Dockerfile", ".cfg"]
+      languages: [python, typescript, javascript, golang, rust, yaml]
+      file_types: [".txt", ".toml", ".yml", ".yaml", "Dockerfile", ".cfg", ".mod"]
+      note: "Engine-specific detection. D1/managed databases skip this check. Detection branches on detected database type from stack detector."
 
     action:
       audit_mode: report
@@ -907,8 +978,9 @@ rules:
         reason: "PII column placement is intentional — access control documented in schema comments"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. PII schema classification applies regardless of database backend. Detection reads migration files and ORM schema definitions across all languages."
 
     action:
       audit_mode: report
@@ -952,8 +1024,9 @@ rules:
         reason: "Lookup/reference table — immutable rows, audit columns not needed"
 
     applies_to:
-      languages: [sql]
-      file_types: [".sql"]
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Universal concept. created_at/updated_at audit columns apply to all SQL databases. Detection reads migration files across all languages."
 
     action:
       audit_mode: report
@@ -976,7 +1049,10 @@ rules:
       static:
         tool: null
         fallback_to_llm: true
-        notes: "Engine detection: (1) look for 'import sqlite3', '.db' extension in config, PRAGMA statements → SQLite engine. (2) 'from cloudflare:d1' or D1 binding references → D1 engine. Apply engine-specific check. SQLite: verify PRAGMA journal_mode=WAL is set. D1: verify no row-level security assumptions."
+        notes: |
+          Engine detection: (1) look for 'import sqlite3', '.db' extension in config, PRAGMA statements → SQLite engine. (2) 'from cloudflare:d1' or D1 binding references → D1 engine. Apply engine-specific check. SQLite: verify PRAGMA journal_mode=WAL is set. D1: verify no row-level security assumptions.
+          Fire only when SQLite or D1 is detected (via stack detector database_type signal).
+          Skip on Postgres, MySQL, MongoDB, DynamoDB — WAL is SQLite-only.
       llm:
         prompt_template: null
         context_scope: config_section
@@ -996,7 +1072,11 @@ rules:
 
     applies_to:
       languages: [python, typescript, javascript]
-      file_types: [".py", ".ts", ".js", ".sql"]
+      file_types: [".py", ".ts", ".js", ".toml", ".jsonc"]
+      skip_on:
+        languages: [golang, rust]
+        reason: "db-022 is SQLite/D1-specific. Go and Rust projects using Postgres/MySQL/MongoDB do not have WAL mode or D1 eventual consistency concerns. Skip on non-SQLite detected projects."
+      note: "SQLite-specific: WAL mode for concurrent reads. D1-specific: eventual consistency on read replicas. Skips when stack detector database_type is postgres, mysql, mongodb, or dynamodb."
 
     action:
       audit_mode: report

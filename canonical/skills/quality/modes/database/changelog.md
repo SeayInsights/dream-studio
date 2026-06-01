@@ -1,5 +1,14 @@
 # Database Skill Changelog
 
+## Cross-DB Port — 2026-06-01
+
+Cross-database port. All 22 rules extended with universal detection notes.
+14 universal rules: applies across SQLite, Postgres, MySQL (same SQL DDL syntax).
+7 engine-specific rules: per-engine detection notes (connection pool, timeouts, backups, EOL).
+1 skip: db-022 (WAL/D1-specific) — skip on non-SQLite.
+Stack detector: _detect_database_type() added.
+db-009 ↔ sec-002 boundary documented.
+
 ## v1.0.0 — 2026-05-28
 
 **Initial release (WO 18.4.2)**
