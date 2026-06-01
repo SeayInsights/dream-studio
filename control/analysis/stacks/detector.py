@@ -31,6 +31,10 @@ class DetectedStack:
     test_framework: Optional[str] = (
         None  # test framework for coverage parser dispatch (vitest/jest/pytest/mocha)
     )
+    database_type: Optional[str] = (
+        None  # primary database type for database skill dispatch
+        # values: 'sqlite', 'postgres', 'mysql', 'mongodb', 'd1', 'dynamodb', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -72,6 +76,9 @@ def detect_stack(path: Path) -> DetectedStack:
 
     # Augment with test framework for coverage parser dispatch
     result.test_framework = _detect_test_framework(path)
+
+    # Augment with database type for database skill dispatch
+    result.database_type = _detect_database_type(path)
 
     return result
 
@@ -195,6 +202,103 @@ def _detect_test_framework(path: Path) -> Optional[str]:
     # Check for Rust (cargo test is built-in to the toolchain)
     if (path / "Cargo.toml").exists():
         return "cargo"
+
+    return None
+
+
+def _detect_database_type(path: Path) -> Optional[str]:
+    """Detect database type for database skill dispatch.
+
+    Returns the primary database type: 'sqlite', 'postgres', 'mysql',
+    'mongodb', 'd1', 'dynamodb', or None if not detected.
+    """
+    # Check package.json for JS/TS projects
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            content = json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps = {
+                **content.get("dependencies", {}),
+                **content.get("devDependencies", {}),
+            }
+            if "@cloudflare/workers-types" in all_deps or "wrangler" in all_deps:
+                # Check wrangler config for D1 binding
+                for wrangler_file in ["wrangler.toml", "wrangler.jsonc", "wrangler.json"]:
+                    if (path / wrangler_file).exists():
+                        wrangler_text = (path / wrangler_file).read_text(encoding="utf-8")
+                        if "d1_databases" in wrangler_text or "D1Database" in wrangler_text:
+                            return "d1"
+            if any(
+                dep in all_deps
+                for dep in ["pg", "postgres", "@neondatabase/serverless", "postgresql"]
+            ):
+                return "postgres"
+            if any(dep in all_deps for dep in ["mysql", "mysql2", "mariadb"]):
+                return "mysql"
+            if any(
+                dep in all_deps
+                for dep in ["mongoose", "mongodb", "@mongodb/mongodb-client-encryption"]
+            ):
+                return "mongodb"
+            if "@aws-sdk/client-dynamodb" in all_deps or "dynamodb" in all_deps:
+                return "dynamodb"
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check Python project
+    for py_config in ["pyproject.toml", "requirements.txt", "setup.py"]:
+        config_file = path / py_config
+        if config_file.exists():
+            try:
+                content = config_file.read_text(encoding="utf-8")
+                if "psycopg2" in content or "asyncpg" in content or "pg8000" in content:
+                    return "postgres"
+                if "pymysql" in content or "mysql-connector" in content or "aiomysql" in content:
+                    return "mysql"
+                if "pymongo" in content or "motor" in content:
+                    return "mongodb"
+                if "sqlite" in content.lower():
+                    return "sqlite"
+            except OSError:
+                pass
+
+    # Fallback: check for sqlite3 import pattern or .db files
+    for db_file in path.glob("**/*.db"):
+        if "node_modules" not in str(db_file) and ".planning" not in str(db_file):
+            return "sqlite"
+
+    # Check Go project
+    go_mod = path / "go.mod"
+    if go_mod.exists():
+        try:
+            content = go_mod.read_text(encoding="utf-8")
+            if "pgx" in content or "lib/pq" in content or "go-pg" in content:
+                return "postgres"
+            if "go-sql-driver/mysql" in content:
+                return "mysql"
+            if "mongo-driver" in content:
+                return "mongodb"
+            if "mattn/go-sqlite3" in content or "modernc.org/sqlite" in content:
+                return "sqlite"
+        except OSError:
+            pass
+
+    # Check Rust project
+    cargo_toml = path / "Cargo.toml"
+    if cargo_toml.exists():
+        try:
+            content = cargo_toml.read_text(encoding="utf-8")
+            if "sqlx" in content and "postgres" in content:
+                return "postgres"
+            if "sqlx" in content and "sqlite" in content:
+                return "sqlite"
+            if "diesel" in content:
+                # diesel defaults to postgres if not specified
+                return "postgres"
+            if "mongodb" in content:
+                return "mongodb"
+        except OSError:
+            pass
 
     return None
 
