@@ -1,0 +1,7 @@
+{
+  "_comment": "NEGATIVE fixture: 'system' as JSON key, not injection",
+  "environment": "production",
+  "system": "linux",
+  "os_type": "ubuntu-22.04",
+  "kernel_version": "5.15.0"
+}
