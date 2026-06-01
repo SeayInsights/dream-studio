@@ -938,7 +938,7 @@ def _decorate_project_for_dashboard(project: dict[str, Any]) -> dict[str, Any]:
     project["security_package_status"] = {
         "open_findings": _as_int(project.get("security_open_count")),
         "classification": "fresh" if _as_int(project.get("security_open_count")) else "fresh_empty",
-        "source_tables": ["security_findings"],
+        "source_tables": ["findings"],
         "source_package": "security-review-source-47-enterprise-scans.md",
         "derived_view": True,
         "primary_authority": False,
@@ -1003,7 +1003,7 @@ def _project_surface_availability(conn) -> dict[str, bool]:
         "prds": object_exists(conn, "prd_documents"),
         "security": any(
             object_exists(conn, name)
-            for name in ("security_findings", "sec_sarif_findings", "pi_violations")
+            for name in ("findings", "sec_sarif_findings", "pi_violations")
         ),
         "dependencies": object_exists(conn, "pi_dependencies")
         and {"from_component", "to_component"}.issubset(dependency_columns),
@@ -1038,21 +1038,21 @@ def _security_assignment_summary(
     conn: sqlite3.Connection,
     visible_projects: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    if not object_exists(conn, "security_findings"):
+    if not object_exists(conn, "findings"):
         return {
             "classification": "unavailable",
             "unassigned_legacy_finding_count": 0,
             "unassigned_project_ids": [],
             "source_tables": [],
         }
-    if "project_id" not in table_columns(conn, "security_findings"):
+    if "project_id" not in table_columns(conn, "findings"):
         return {
             "classification": "unavailable",
-            "reason": "security_findings has no project_id column in this schema snapshot.",
+            "reason": "findings has no project_id column in this schema snapshot.",
             "mapped_project_alias_count": 0,
             "unassigned_legacy_finding_count": 0,
             "unassigned_project_ids": [],
-            "source_tables": ["security_findings"],
+            "source_tables": ["findings"],
             "derived_view": True,
             "primary_authority": False,
         }
@@ -1061,7 +1061,7 @@ def _security_assignment_summary(
         aliases.update(_security_aliases(str(project.get("project_id") or "")))
     rows = conn.execute("""
         SELECT COALESCE(project_id, '<null>') AS project_id, COUNT(*) AS count
-        FROM security_findings
+        FROM findings
         GROUP BY COALESCE(project_id, '<null>')
         ORDER BY count DESC
         """).fetchall()
@@ -1076,7 +1076,7 @@ def _security_assignment_summary(
         "unassigned_legacy_finding_count": sum(item["count"] for item in unassigned),
         "unassigned_project_ids": unassigned,
         "unassigned_policy": "manual_review_required_or_retention_only; not shown in normal project cards until mapped",
-        "source_tables": ["security_findings"],
+        "source_tables": ["findings"],
         "derived_view": True,
         "primary_authority": False,
     }
@@ -1155,13 +1155,11 @@ async def list_projects(
         )
         # pi_bugs, pi_violations, pi_dependencies dropped in migration 084 — return 0 constants
         security_columns = (
-            table_columns(conn, "security_findings")
-            if object_exists(conn, "security_findings")
-            else set()
+            table_columns(conn, "findings") if object_exists(conn, "findings") else set()
         )
         security_open_count_expr = (
             _optional_count_expr(
-                "security_findings",
+                "findings",
                 "project_id",
                 condition="status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed')",
             ).replace("project_id = p.project_id", _security_alias_expr("p.project_id"))
@@ -1302,7 +1300,7 @@ async def list_projects(
                 "reason": "Default All Projects shows only current legitimate project authority rows; temp, pytest, demo, placeholder, inactive, adapter-worktree, missing-path, and retained legacy rows are excluded from normal operator views.",
                 "source_tables": ["business_projects"]
                 + (["prd_documents"] if object_exists(conn, "prd_documents") else [])
-                + (["security_findings"] if object_exists(conn, "security_findings") else [])
+                + (["findings"] if object_exists(conn, "findings") else [])
                 + (
                     ["dashboard_attention_items"]
                     if object_exists(conn, "dashboard_attention_items")
@@ -1402,12 +1400,10 @@ async def get_project_health(project_id: str) -> Dict[str, Any]:
         )
         # pi_dependencies dropped in migration 084; 0 is hardcoded in the query
         security_columns = (
-            table_columns(conn, "security_findings")
-            if object_exists(conn, "security_findings")
-            else set()
+            table_columns(conn, "findings") if object_exists(conn, "findings") else set()
         )
         security_open_count_expr = (
-            "(SELECT COUNT(*) FROM security_findings WHERE "
+            "(SELECT COUNT(*) FROM findings WHERE "
             f"{_security_alias_expr('business_projects.project_id')} "
             "AND status NOT IN ('resolved', 'mitigated', 'false_positive', 'closed'))"
             if "project_id" in security_columns
@@ -1724,16 +1720,16 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
         conn.close()
 
 
-def _finding_summary(findings: list[dict[str, Any]], open_security_findings: int) -> dict[str, Any]:
+def _finding_summary(findings: list[dict[str, Any]], open_findings: int) -> dict[str, Any]:
     summary: dict[str, int] = {}
     for finding in findings:
         key = f"{finding.get('severity', 'unknown')}:{finding.get('status', 'unknown')}"
         summary[key] = summary.get(key, 0) + 1
-    if open_security_findings:
-        summary["security_open:open"] = int(open_security_findings)
+    if open_findings:
+        summary["security_open:open"] = int(open_findings)
     return {
         "counts": summary,
-        "security_open_findings": open_security_findings,
+        "security_open_findings": open_findings,
         "production_readiness_finding_count": len(findings),
     }
 
@@ -2206,8 +2202,8 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
     try:
         cursor = conn.cursor()
 
-        if object_exists(conn, "security_findings"):
-            finding_columns = table_columns(conn, "security_findings")
+        if object_exists(conn, "findings"):
+            finding_columns = table_columns(conn, "findings")
             if "project_id" not in finding_columns:
                 return {
                     "project_id": project_id,
@@ -2215,8 +2211,8 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                     "count": 0,
                     "source_status": {
                         "classification": "unavailable",
-                        "reason": "security_findings has no project_id column in this schema snapshot.",
-                        "source_tables": ["security_findings"],
+                        "reason": "findings has no project_id column in this schema snapshot.",
+                        "source_tables": ["findings"],
                         "derived_view": True,
                         "primary_authority": False,
                     },
@@ -2250,7 +2246,7 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                 status,
                 {evidence_refs_expr},
                 created_at
-            FROM security_findings
+            FROM findings
             WHERE project_id IN ({placeholders})
               AND COALESCE(status, 'open') NOT IN ('resolved', 'mitigated', 'false_positive')
             ORDER BY
@@ -2301,8 +2297,8 @@ async def get_project_security(project_id: str) -> Dict[str, Any]:
                 },
                 "source_status": {
                     "classification": "fresh",
-                    "reason": "Project security detail is read from current security_findings authority.",
-                    "source_tables": ["security_findings"],
+                    "reason": "Project security detail is read from current findings authority.",
+                    "source_tables": ["findings"],
                     "derived_view": True,
                     "primary_authority": False,
                 },

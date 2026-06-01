@@ -31,7 +31,7 @@ DEFAULT_TABLE_GROUPS: tuple[dict[str, Any], ...] = (
     },
     {
         "group": "security_validation",
-        "tables": ["security_findings", "validation_results"],
+        "tables": ["findings", "validation_results"],
         "retention_class": "retain_until_remediated_and_reviewed",
         "reason": "security and validation records need status-aware review before any retention action.",
     },

@@ -4,7 +4,7 @@ Implements the four steps that precede security scanning:
   1. register_project_for_intake() — register + marker + UUID
   2. detect_and_persist_stack()    — run stack detector, write to business_projects
   3. create_security_scan_run()    — mint scan_id, determine if baseline
-  4. persist_security_findings()   — write findings to security_findings
+  4. persist_security_findings()   — write findings to findings
 
 And the execution dispatch:
   5. run_read_only_security_scan() — invoke ds-quality:security audit safely
@@ -191,7 +191,7 @@ def create_skill_scan_run(
 
     Generic version of create_security_scan_run() that works for any quality skill
     (security, code-quality, types-deps, etc.). All skills share the same
-    security_scan_runs table (differentiated by skill_id) and security_findings
+    scan_runs table (differentiated by skill_id) and findings
     table (differentiated by rule_id prefix: sec-*, cq-*, typ-*, dep-*, etc.).
 
     Determines if this is the baseline scan (first completed scan for this project
@@ -213,7 +213,7 @@ def create_skill_scan_run(
     with _connect(db_path) as conn:
         # Baseline = first completed scan for this (project, skill) pair
         existing_completed = conn.execute(
-            "SELECT scan_id FROM security_scan_runs"
+            "SELECT scan_id FROM scan_runs"
             " WHERE project_id = ? AND skill_id = ? AND status = 'completed'"
             " ORDER BY completed_at DESC LIMIT 1",
             (project_id, skill_id),
@@ -224,7 +224,7 @@ def create_skill_scan_run(
         tool_versions = _collect_tool_versions()
 
         conn.execute(
-            """INSERT INTO security_scan_runs
+            """INSERT INTO scan_runs
                (scan_id, project_id, skill_id, is_baseline, scope, target_path,
                 tool_versions_json, previous_scan_id, status, started_at, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
@@ -276,7 +276,7 @@ def persist_security_findings(
     project_id: str,
     findings: list[dict[str, Any]],
 ) -> int:
-    """Write security findings to security_findings table, keyed to project UUID.
+    """Write security findings to findings table, keyed to project UUID.
 
     Each finding dict must have at minimum:
       rule_id, severity, description
@@ -310,7 +310,7 @@ def persist_security_findings(
             fhash = compute_finding_hash(rule_id, file_path, code_excerpt)
 
             conn.execute(
-                """INSERT OR IGNORE INTO security_findings
+                """INSERT OR IGNORE INTO findings
                    (finding_id, project_id, scan_id, severity, category,
                     rule_id, file_path, start_line, end_line, description,
                     recommendation, finding_hash, normalized_snippet,
@@ -352,7 +352,7 @@ def _complete_scan_run(
     db_path = _require_db()
     with _connect(db_path) as conn:
         conn.execute(
-            """UPDATE security_scan_runs
+            """UPDATE scan_runs
                SET status = 'completed',
                    findings_count = ?,
                    critical_count = ?,
@@ -465,14 +465,14 @@ def get_scan_summary(project_id: str) -> dict[str, Any]:
                 """SELECT scan_id, is_baseline, scope, findings_count,
                           critical_count, high_count, medium_count, low_count,
                           status, started_at, completed_at
-                   FROM security_scan_runs
+                   FROM scan_runs
                    WHERE project_id = ?
                    ORDER BY started_at DESC""",
                 (project_id,),
             ).fetchall()
-            findings = conn.execute(
+            finding_rows = conn.execute(
                 """SELECT rule_id, severity, file_path, start_line, description, status
-                   FROM security_findings
+                   FROM findings
                    WHERE project_id = ?
                    ORDER BY severity DESC, created_at DESC""",
                 (project_id,),
@@ -480,8 +480,8 @@ def get_scan_summary(project_id: str) -> dict[str, Any]:
         return {
             "project_id": project_id,
             "scan_runs": [dict(r) for r in runs],
-            "findings": [dict(f) for f in findings],
-            "finding_count": len(findings),
+            "findings": [dict(f) for f in finding_rows],
+            "finding_count": len(finding_rows),
         }
     except Exception as exc:
         return {"project_id": project_id, "error": str(exc)}

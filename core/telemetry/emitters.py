@@ -530,7 +530,7 @@ def emit_security_finding(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            "SELECT finding_id FROM security_findings WHERE finding_id = ?",
+            "SELECT finding_id FROM findings WHERE finding_id = ?",
             (finding_id,),
         ).fetchone()
         if existing is not None:
@@ -634,7 +634,7 @@ def emit_security_finding(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "security_findings", "dashboard_attention_items"),
+        required_tables=("execution_events", "findings", "dashboard_attention_items"),
     )
 
 
@@ -685,7 +685,7 @@ def emit_security_finding_resolved(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("security_findings",),
+        required_tables=("findings",),
     )
 
 

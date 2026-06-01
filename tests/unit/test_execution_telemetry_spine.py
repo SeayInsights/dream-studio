@@ -17,7 +17,7 @@ from core.telemetry.execution_spine import (
     record_security_finding,
     record_token_usage,
     register_default_modules,
-    security_findings_rollup,
+    findings_rollup,
     token_rollup,
     usage_by_component,
 )
@@ -33,7 +33,7 @@ REQUIRED_TABLES = {
     "hook_invocations",
     "tool_invocations",
     "token_usage_records",
-    "security_findings",
+    "findings",
     "decision_records",
     "research_evidence_records",
     "blocker_resolution_records",
@@ -315,7 +315,7 @@ def test_spine_writes_reads_and_global_analytics(tmp_path: Path) -> None:
             == "preflight"
         )
         assert token_rollup(conn)[0]["total_tokens"] == 175
-        finding = security_findings_rollup(conn)[0]
+        finding = findings_rollup(conn)[0]
         assert finding["file_path"] == "core/telemetry/execution_spine.py"
         assert finding["severity"] == "medium"
         assert (

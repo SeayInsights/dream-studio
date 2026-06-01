@@ -19,7 +19,7 @@ TASK_ATTRIBUTION_SOURCE_TABLES: tuple[str, ...] = (
     "hook_invocations",
     "tool_invocations",
     "validation_results",
-    "security_findings",
+    "findings",
     "production_readiness_control_results",
 )
 

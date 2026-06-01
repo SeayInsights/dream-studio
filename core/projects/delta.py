@@ -69,7 +69,7 @@ def _get_scan_findings(scan_id: str, db_path: Path) -> list[dict[str, Any]]:
             "SELECT finding_id, rule_id, file_path, start_line, end_line,"
             " severity, category, description, recommendation,"
             " finding_hash, normalized_snippet, code_excerpt, enclosing_symbol"
-            " FROM security_findings"
+            " FROM findings"
             " WHERE scan_id = ? AND status != 'resolved'",
             (scan_id,),
         ).fetchall()
@@ -294,7 +294,7 @@ def _persist_adjudications(
 
 
 def persist_scan_delta(delta: ScanDelta, db_path: Path | None = None) -> str:
-    """Write delta summary to security_scan_deltas. Returns delta_id."""
+    """Write delta summary to scan_deltas. Returns delta_id."""
     from core.event_store.studio_db import _connect
     from datetime import datetime, timezone
 
@@ -306,7 +306,7 @@ def persist_scan_delta(delta: ScanDelta, db_path: Path | None = None) -> str:
     try:
         with _connect(db_path) as conn:
             conn.execute(
-                """INSERT OR IGNORE INTO security_scan_deltas
+                """INSERT OR IGNORE INTO scan_deltas
                    (delta_id, project_id, curr_scan_id, prev_scan_id,
                     new_count, fixed_count, persisting_count,
                     pending_adjudication_count, created_at)
@@ -338,7 +338,7 @@ def get_latest_delta(project_id: str, db_path: Path | None = None) -> dict[str, 
     try:
         with _connect(db_path) as conn:
             row = conn.execute(
-                "SELECT * FROM security_scan_deltas"
+                "SELECT * FROM scan_deltas"
                 " WHERE project_id = ?"
                 " ORDER BY created_at DESC LIMIT 1",
                 (project_id,),

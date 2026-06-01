@@ -213,10 +213,7 @@ def test_end_to_end_traceability_loop_reaches_actual_telemetry_api(
     assert summary_payload["route_status"][0]["handoff_required"] == 0
     assert summary_payload["route_status"][0]["recommended_next_work_order"] == "none"
     assert summary_payload["token_usage"][0]["total_tokens"] == 120
-    assert (
-        summary_payload["security_findings"][0]["file_path"]
-        == "projections/api/routes/telemetry.py"
-    )
+    assert summary_payload["findings"][0]["file_path"] == "projections/api/routes/telemetry.py"
     assert summary_payload["validation_outcomes"][0]["status"] == "passed"
     assert (
         summary_payload["research_decisions"]["research"][0]["decision_class"]
@@ -232,7 +229,7 @@ def test_end_to_end_traceability_loop_reaches_actual_telemetry_api(
     assert process_payload["events"]
     assert process_payload["invocations"]["skill"][0]["skill_id"] == "ds-core"
     assert process_payload["tokens"][0]["total_tokens"] == 120
-    assert process_payload["security_findings"][0]["rule_id"] == "TRACEABILITY-SEC-001"
+    assert process_payload["findings"][0]["rule_id"] == "TRACEABILITY-SEC-001"
     assert process_payload["research"][0]["confidence"] == "high"
     assert process_payload["decisions"][0]["decision_type"] == "dashboard.traceability_validation"
 
@@ -254,7 +251,7 @@ def test_end_to_end_traceability_loop_writes_expected_temp_db_tables(tmp_path: P
         "skill_invocations": 1,
         "token_usage_records": 1,
         "validation_results": 1,
-        "security_findings": 1,
+        "findings": 1,
         "workflow_invocations": 1,
         "research_evidence_records": 1,
         "decision_records": 1,

@@ -482,6 +482,29 @@ def main(argv: list[str] | None = None) -> int:
     task_sub.add_parser("active", help="Show the current active task context")
     task_sub.add_parser("clear-active", help="Clear the active task context")
 
+    # analyze subcommand group (brownfield intake)
+    analyze_cmd = subcommands.add_parser(
+        "analyze", help="Analysis commands (brownfield intake, repo scanning)"
+    )
+    analyze_sub = analyze_cmd.add_subparsers(dest="analyze_command", required=True)
+    analyze_intake = analyze_sub.add_parser(
+        "intake", help="Register a brownfield repo for intake scanning"
+    )
+    analyze_intake.add_argument(
+        "target_path",
+        metavar="TARGET_PATH",
+        help="Path to the repository to scan",
+    )
+    analyze_intake.add_argument(
+        "--persistent",
+        action="store_true",
+        default=False,
+        help=(
+            "Write a .dream-studio-project marker file for persistent session attribution "
+            "(skips the interactive prompt)"
+        ),
+    )
+
     # diagnostics subcommand group (TA3)
     diag_cmd = subcommands.add_parser(
         "diagnostics", help="Read or clear the TA3 diagnostic log stream"
@@ -787,6 +810,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_projection_command(args)
         if args.command == "diagnostics":
             return _diagnostics_dispatch(args)
+        if args.command == "analyze":
+            return _analyze_dispatch(args, source_root=source_root, dream_studio_home=home)
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 1
@@ -2492,6 +2517,69 @@ def _diagnostics_dispatch(args: argparse.Namespace) -> int:
 
     print(f"Unknown diagnostics command: {args.diagnostics_command}", file=sys.stderr)
     return 1
+
+
+def _analyze_dispatch(
+    args: argparse.Namespace,
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    if args.analyze_command == "intake":
+        return _analyze_intake(args, source_root=source_root, dream_studio_home=dream_studio_home)
+    print(f"Unknown analyze command: {args.analyze_command}", file=sys.stderr)
+    return 1
+
+
+def _analyze_intake(
+    args: argparse.Namespace,
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Register a brownfield repo for intake scanning.
+
+    Prompts interactively when stdin is a TTY and --persistent is not passed.
+    Non-interactive callers (CI, scripts, pipes) get write_marker=False by default.
+    """
+    from core.projects.intake import register_project_for_intake
+
+    target_path = Path(args.target_path).resolve()
+
+    # Determine write_marker from flag or interactive prompt
+    write_marker: bool = getattr(args, "persistent", False)
+
+    if not write_marker and sys.stdin.isatty():
+        print(
+            "Scan type:\n"
+            "  [1] One-time scan  (default — no marker written, no persistent project)\n"
+            "  [2] Persistent project (write .dream-studio-project marker for session attribution)\n"
+            "Enter 1 or 2 [1]: ",
+            end="",
+            flush=True,
+        )
+        try:
+            choice = sys.stdin.readline().strip()
+        except OSError:
+            choice = ""
+        if choice == "2":
+            write_marker = True
+
+    result = register_project_for_intake(
+        target_path=target_path,
+        write_marker=write_marker,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+
+    if not result.get("ok"):
+        print(json.dumps(result, indent=2), file=sys.stderr)
+        return 1
+
+    project_id = result.get("project_id", "")
+    mode_label = "persistent" if write_marker else "one-time scan"
+    print(f"✓ Project registered: {project_id} ({mode_label})")
+    return 0
 
 
 def _print(payload: dict[str, Any]) -> int:

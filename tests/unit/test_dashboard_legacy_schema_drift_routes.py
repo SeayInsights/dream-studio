@@ -71,12 +71,12 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "'C:/Temp/pytest-temp-project', 'python', 0, '2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
         conn.execute(
-            "CREATE TABLE security_findings("
+            "CREATE TABLE findings("
             "finding_id TEXT, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, start_line INTEGER, "
             "description TEXT, status TEXT, created_at TEXT)"
         )
         conn.execute(
-            "INSERT INTO security_findings(finding_id, scan_id, category, severity, file_path, start_line, description, status, created_at) "
+            "INSERT INTO findings(finding_id, scan_id, category, severity, file_path, start_line, description, status, created_at) "
             "VALUES('finding-1', 'scan-1', 'test', 'high', 'app.py', 12, 'simulated finding', 'open', '2026-05-14T00:00:00Z')"
         )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")

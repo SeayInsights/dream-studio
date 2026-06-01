@@ -512,23 +512,23 @@ def _map_security_finding_event(
                 reason="Security finding event lacks finding_id.",
             )
         ]
-    if _record_exists(active_conn, "security_findings", "finding_id", str(finding_id)):
+    if _record_exists(active_conn, "findings", "finding_id", str(finding_id)):
         return [
             _base_entry(
                 event,
                 taxonomy="security_finding",
-                target_table="security_findings",
+                target_table="findings",
                 target_record_id=str(finding_id),
                 status="skipped_duplicate",
                 confidence=HIGH_CONFIDENCE,
-                reason="Finding already exists in current security_findings authority.",
+                reason="Finding already exists in current findings authority.",
             )
         ]
     return [
         _base_entry(
             event,
             taxonomy="security_finding",
-            target_table="security_findings",
+            target_table="findings",
             target_record_id=str(finding_id),
             status="manual_review_required",
             confidence=0.6,

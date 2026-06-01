@@ -156,7 +156,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "module_id": "security_only",
         "purpose": "Read and classify security findings and 47-control lifecycle status independently.",
-        "owned_tables": ["security_findings", "security_control_results"],
+        "owned_tables": ["findings", "security_control_results"],
         "read_dependencies": ["reg_projects", "validation_results"],
         "write_dependencies": ["security lifecycle gate or explicit normalized import"],
         "emitted_events": ["security_assessment_recorded"],
@@ -211,7 +211,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "read_dependencies": [
             "reg_projects",
             "validation_results",
-            "security_findings",
+            "findings",
             "token_usage_records",
             "project_health_scorecards",
             "project_readiness_scorecards",
@@ -323,7 +323,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "module_id": "external_project",
         "purpose": "Represent imported or observed external projects without mutating them by default.",
         "owned_tables": ["reg_projects", "prd_documents", "pi_components", "pi_dependencies"],
-        "read_dependencies": ["validation_results", "security_findings", "readiness records"],
+        "read_dependencies": ["validation_results", "findings", "readiness records"],
         "write_dependencies": [
             "Dream Studio SQLite authority; external repo writes require explicit approval"
         ],
