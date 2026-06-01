@@ -771,6 +771,12 @@ rules:
       summary: "Add an integration test for this critical path. The test should exercise the full call stack — from the entry point (API call, CLI command) through to the observable side effect or response."
       guide_ref: "canonical/skills/quality/references/testing-best-practices.md#g-testing"
 
+    cross_references:
+      - rule: "cq-016"
+        skill: "ds-quality:code-quality"
+        note: "cq-016 (validate at internal boundaries) explicitly EXCLUDES external entry points — those are handled by sec-003 and implicitly by tst-009. The scope separation is intentional: cq-016 fires on INTERNAL functions missing validation; tst-009 fires when EXTERNAL entry points (the critical_path_globs) have no integration test. Both may reference the same endpoint file, but for different reasons."
+        surface_co_located: false
+
     action:
       build_mode: null    # audit-only; build mode includes integration-test templates
 
