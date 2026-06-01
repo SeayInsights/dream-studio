@@ -12,11 +12,17 @@
 --   source_repo_id = NULL, tainted = 0
 --
 -- on-memory-retrieve.py filters tainted=1 entries before surfacing into prompts.
+--
+-- NOTE: Inline -- comments intentionally on separate lines (not end-of-line)
+-- to ensure the bootstrap runner's split_statements() parses each ALTER correctly.
 
-ALTER TABLE memory_entries ADD COLUMN source_repo_id TEXT;        -- FK to business_projects.project_id
-ALTER TABLE memory_entries ADD COLUMN tainted INTEGER NOT NULL DEFAULT 0;    -- 0=clean, 1=tainted
-ALTER TABLE memory_entries ADD COLUMN taint_reason TEXT;           -- why tainted
-ALTER TABLE memory_entries ADD COLUMN taint_timestamp TEXT;        -- when tainted
+ALTER TABLE memory_entries ADD COLUMN source_repo_id TEXT;
+
+ALTER TABLE memory_entries ADD COLUMN tainted INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE memory_entries ADD COLUMN taint_reason TEXT;
+
+ALTER TABLE memory_entries ADD COLUMN taint_timestamp TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_memory_tainted
 ON memory_entries(tainted, project) WHERE tainted = 1;
