@@ -153,6 +153,90 @@ def _write_findings_log(findings: list[dict], target_path: str, project_id: str 
         pass
 
 
+def _emit_guard_events(
+    findings: list[dict],
+    project_id: str | None,
+    scan_id: str | None,
+    skill_id: str,
+    mode: str,
+) -> None:
+    """Emit guard_events rows to studio.db for each guard action.
+
+    Phase 2: operational telemetry distinct from the scan-time findings table.
+    Findings go to findings (scan-observations); guard_events go here (runtime decisions).
+    """
+    import uuid
+    import datetime
+
+    try:
+        # Resolve studio.db path
+        db_path = Path.home() / ".dream-studio" / "state" / "studio.db"
+        env_path = os.environ.get("DREAM_STUDIO_DB_PATH")
+        if env_path:
+            db_path = Path(env_path)
+        if not db_path.exists():
+            return
+
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_path))
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            for finding in findings:
+                event_id = str(uuid.uuid4())
+                event_type = "guard_finding_logged"
+                status = finding.get("status", "")
+                if "candidate" in status:
+                    event_type = "guard_candidate_logged"
+                details = json.dumps(
+                    {
+                        "matched_text": finding.get("matched_text", "")[:200],
+                        "description": finding.get("description", ""),
+                        "skill_id": skill_id,
+                        "mode": mode,
+                    }
+                )
+                conn.execute(
+                    """INSERT OR IGNORE INTO guard_events
+                       (event_id, event_type, rule_id, severity, source_type, source_id,
+                        project_id, scan_id, action, confidence, details, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        event_id,
+                        event_type,
+                        finding.get("rule_id"),
+                        finding.get("severity"),
+                        "repo_file",
+                        finding.get("file_path"),
+                        project_id,
+                        scan_id,
+                        "logged",
+                        finding.get("risk_weight", finding.get("confidence")),
+                        details,
+                        now,
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass  # Never crash the hook chain
+
+
+try:
+    from guardrails.memory_taint import taint_project_memory as _taint_project_memory
+
+    _TAINT_AVAILABLE = True
+except ImportError:
+    _TAINT_AVAILABLE = False
+
+
+def _taint_memory_entries(project_id: str, taint_reason: str) -> None:
+    """Mark memory_entries sourced from project_id as tainted (delegates to memory_taint)."""
+    if _TAINT_AVAILABLE:
+        _taint_project_memory(project_id, taint_reason)
+
+
 def main() -> None:
     """Scan repo files for prompt injection patterns before skill execution."""
     try:
@@ -241,12 +325,24 @@ def main() -> None:
         )
     # If no findings: silent (don't pollute clean runs with "no issues found" noise)
 
-    # Write to diagnostics log
+    # Write to diagnostics log + emit guard_events (Phase 2)
     if all_static_findings or all_llm_candidates:
         all_to_log = all_static_findings + [
             {**c, "status": "candidate_pending_llm_confirm"} for c in all_llm_candidates
         ]
         _write_findings_log(all_to_log, target_path, project_id)
+
+        # Phase 2: emit guard_events to studio.db (operational telemetry)
+        scan_id = payload.get("scan_id")
+        _emit_guard_events(all_to_log, project_id, scan_id, skill_id, mode)
+
+        # Phase 2: taint memory entries sourced from this repo if CRITICAL findings found
+        if project_id and critical_count > 0:
+            taint_reason = (
+                f"CRITICAL guard finding(s) detected during {skill_id}:{mode} scan: "
+                f"{critical_count} critical, {high_count} high severity patterns found"
+            )
+            _taint_memory_entries(project_id, taint_reason)
 
     # Always continue (advisory mode — never exit non-zero)
 
