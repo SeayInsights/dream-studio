@@ -116,12 +116,12 @@ dependencies = ["fastapi", "pydantic"]
             "'docs/product/dream-studio-prd.md', '2026-05-14T00:00:00Z')"
         )
         conn.execute(
-            "CREATE TABLE security_findings("
+            "CREATE TABLE findings("
             "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
         )
         conn.execute(
-            "INSERT INTO security_findings(finding_id, project_id, severity, category, file_path, start_line, "
+            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
             "description, status, created_at) VALUES('finding-1', 'dream-studio', 'medium', 'ci', "
             "'.github/workflows/ci.yml', 1, 'Real CI finding', 'open', '2026-05-14T00:00:00Z')"
         )
@@ -278,7 +278,7 @@ def test_all_projects_defaults_to_current_local_builds_authority(
         assert project["health_model"]["primary_authority"] is False
         assert project["health_model"]["signals"]["validation_failed_count"] == 1
         assert project["health_score"] == project["health_model"]["score"] / 10
-        assert "security_findings" in payload["source_status"]["source_tables"]
+        assert "findings" in payload["source_status"]["source_tables"]
         assert "dashboard_attention_items" in payload["source_status"]["source_tables"]
         assert "execution_events" in payload["source_status"]["source_tables"]
     finally:
@@ -289,7 +289,7 @@ def test_project_security_uses_high_confidence_legacy_alias(tmp_path: Path, monk
     db_path = _portfolio_db(tmp_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO security_findings(finding_id, project_id, severity, category, file_path, start_line, "
+            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
             "description, status, created_at) VALUES('finding-alias', 'project_dream_studio', 'HIGH', 'legacy', "
             "'core/security/lifecycle.py', 10, 'Legacy mapped finding', 'open', '2026-05-14T00:00:00Z')"
         )

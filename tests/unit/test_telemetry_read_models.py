@@ -372,7 +372,7 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
         > 0
     )
     assert summary["token_cost_intelligence"]["retry_patterns"]["available"] is False
-    assert summary["security_findings"][0]["file_path"] == "core/telemetry/read_models.py"
+    assert summary["findings"][0]["file_path"] == "core/telemetry/read_models.py"
     assert (
         summary["security_remediation_intelligence"]["remediation_candidates"][0]["severity"]
         == "high"
@@ -458,7 +458,7 @@ def test_project_milestone_task_and_process_drilldowns(tmp_path: Path) -> None:
     assert timeline["events"][0]["event_id"] == "event-read-model-test"
     assert timeline["invocations"]["agent"][0]["agent_id"] == "codex"
     assert timeline["validations"][0]["validation_id"] == "validation-read-model-test"
-    assert timeline["security_findings"][0]["start_line"] == 1
+    assert timeline["findings"][0]["start_line"] == 1
     assert timeline["research"][0]["research_id"] == "research-read-model-test"
     assert timeline["decisions"][0]["decision_id"] == "decision-read-model-test"
     assert timeline["blockers"][0]["blocker_id"] == "blocker-read-model-test"
@@ -546,7 +546,7 @@ def test_empty_state_for_missing_or_disabled_module_data(tmp_path: Path) -> None
     assert summary["entity_counts"]["events"] == 0
     assert summary["component_usage"]["agent"] == []
     assert summary["token_usage"] == []
-    assert summary["security_findings"] == []
+    assert summary["findings"] == []
     assert project["events"] == []
     assert project["component_usage"]["tool"] == []
     assert timeline["process_run"] is None

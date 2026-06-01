@@ -391,7 +391,7 @@ def _split_scan_ids(raw: str) -> list[str]:
 def _security_open_finding_count(conn: sqlite3.Connection, *, project_id: str) -> int:
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM security_findings WHERE project_id = ? AND status = 'open'",
+            "SELECT COUNT(*) FROM findings WHERE project_id = ? AND status = 'open'",
             (project_id,),
         ).fetchone()
         return int(row[0] if row else 0)

@@ -58,9 +58,9 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
         "status": "map_in_rehearsal",
     },
     {
-        "source_domain": "security_findings",
-        "target_domain": "security_findings with file/line/severity/status",
-        "target_tables": ["security_findings", "dashboard_attention_items"],
+        "source_domain": "findings",
+        "target_domain": "findings with file/line/severity/status",
+        "target_tables": ["findings", "dashboard_attention_items"],
         "source_evidence": ["security_bridge"],
         "status": "map_in_rehearsal",
     },

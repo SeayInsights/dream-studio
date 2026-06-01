@@ -47,7 +47,7 @@ def test_rehydration_mapping_covers_required_domains() -> None:
         "approvals",
         "decisions",
         "research",
-        "security_findings",
+        "findings",
         "validations_evals",
         "token_usage",
         "skills",

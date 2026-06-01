@@ -12,7 +12,7 @@ def test_audit_export_packet_summarizes_release_without_raw_content() -> None:
         milestones=[{"id": "m1", "status": "complete", "raw_prompt": "private"}],
         validations=[{"id": "v1", "status": "passed"}, {"id": "v2", "status": "failed"}],
         decisions=[{"id": "d1", "decision": "continue"}],
-        security_findings=[{"id": "s1", "status": "open", "secret": "private"}],
+        findings=[{"id": "s1", "status": "open", "secret": "private"}],
         evidence_refs=["meta/audit/report.md"],
     )
 
@@ -23,7 +23,7 @@ def test_audit_export_packet_summarizes_release_without_raw_content() -> None:
     assert packet["executive_summary"]["failed_validation_count"] == 1
     assert packet["executive_summary"]["open_security_finding_count"] == 1
     assert "raw_prompt" not in packet["sections"]["milestones"][0]
-    assert "secret" not in packet["sections"]["security_findings"][0]
+    assert "secret" not in packet["sections"]["findings"][0]
     assert validate_audit_export_packet(packet) == []
 
 

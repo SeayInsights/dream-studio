@@ -87,7 +87,7 @@ async def get_shared_intelligence_status(
                     "source_tables": [
                         "reg_projects",
                         "validation_results",
-                        "security_findings",
+                        "findings",
                         "token_usage_records",
                         "ai_usage_operational_records",
                         "pi_dependencies",
@@ -195,7 +195,7 @@ async def get_shared_intelligence_status(
                 {
                     "surface_id": "security-lifecycle",
                     "api_path": "/api/shared-intelligence/security-lifecycle",
-                    "source_tables": ["security_findings"],
+                    "source_tables": ["findings"],
                 },
                 {
                     "surface_id": "production-readiness",
@@ -283,7 +283,7 @@ async def get_shared_intelligence_status(
             "source_tables": [
                 "reg_projects",
                 "validation_results",
-                "security_findings",
+                "findings",
                 "learning_event_records",
                 "hardening_candidate_records",
                 "adapter_authority_profiles",
