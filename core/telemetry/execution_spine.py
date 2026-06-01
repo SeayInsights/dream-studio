@@ -769,7 +769,8 @@ def token_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         """).fetchall()
 
 
-def security_findings_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def findings_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+
     return conn.execute("""
         SELECT project_id, file_path, severity, COUNT(*) AS finding_count
         FROM findings
