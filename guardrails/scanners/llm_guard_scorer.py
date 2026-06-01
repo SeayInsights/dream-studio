@@ -14,6 +14,13 @@ Scanners:
 Risk scoring:
 - toxicity × 0.35 + bias × 0.25 + (1-relevance) × 0.20 + (1-consistency) × 0.20
 - Recommendations: block (>0.7), warn (>0.3), allow (<0.3)
+
+Known limitations of this stub:
+  - Novel/obfuscated injection (base64 encoded, multi-turn manipulation): NOT detected
+  - Semantic paraphrasing of known patterns: PARTIAL detection only
+  - Multi-step indirect injection across multiple files: NOT detected
+  These gaps require real ML models (e.g., fine-tuned classifier) — out of scope for stubs.
+  Stub detects: known exact phrases, fuzzy keyword patterns, structural markers.
 """
 
 import re
