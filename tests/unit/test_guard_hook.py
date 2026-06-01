@@ -12,12 +12,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
+# REPO_ROOT must be in sys.path before guardrails import
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from guardrails.scanner_utils import (
+import pytest  # noqa: E402
+
+from guardrails.scanner_utils import (  # noqa: E402
     apply_llm_candidate_patterns,
     apply_static_patterns,
     is_suppressed,
