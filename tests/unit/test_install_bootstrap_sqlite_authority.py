@@ -141,8 +141,9 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "estimated_hours REAL, actual_hours REAL, assigned_session TEXT, "
             "commit_sha TEXT, completed_at TEXT, PRIMARY KEY (task_id, spec_id))"
         )
+        # Use security_findings (pre-migration-089 name) so migration 089 can rename it to findings.
         conn.execute(
-            "CREATE TABLE findings("
+            "CREATE TABLE security_findings("
             "finding_id TEXT PRIMARY KEY, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
         )
