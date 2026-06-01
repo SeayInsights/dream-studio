@@ -550,6 +550,12 @@ rules:
       languages: [python, javascript, typescript, go, rust]
       file_types: [".py", ".js", ".ts", ".go", ".rs", ".yaml", ".yml", ".toml"]
 
+    cross_references:
+      - rule: "sec-001"
+        skill: "ds-quality:security"
+        note: "sec-001 is the comprehensive hardcoded-secrets detector (all secret types). sec-011 specializes in encryption keys and key management. If both fire on the same line, sec-011 represents the key-management angle (rotation, KMS) while sec-001 represents the credentials-exposure angle. Both findings are correct — they report on different remediation paths."
+        surface_co_located: true
+
     action:
       audit_mode: report
       build_mode: block
