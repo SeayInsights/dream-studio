@@ -151,12 +151,12 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
             "completed_at TEXT, total_tasks INTEGER, completed_tasks INTEGER)"
         )
         conn.execute(
-            "CREATE TABLE security_findings("
+            "CREATE TABLE findings("
             "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
         )
         conn.execute(
-            "INSERT INTO security_findings(finding_id, project_id, severity, category, file_path, start_line, "
+            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
             "description, status, created_at) VALUES('finding-1', 'dream-studio', 'high', 'guardrail', "
             "'app.py', 42, 'Real finding', 'open', '2026-05-14T00:00:00Z')"
         )
@@ -276,7 +276,7 @@ def test_project_drilldowns_remove_absent_legacy_surfaces_and_bridge_current_aut
         assert "violations_summary" in payload["removed_surfaces"]
 
         assert security.status_code == 200
-        assert security.json()["source_status"]["source_tables"] == ["security_findings"]
+        assert security.json()["source_status"]["source_tables"] == ["findings"]
         assert security.json()["findings"][0]["id"] == "finding-1"
 
         assert activity.status_code == 200

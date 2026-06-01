@@ -25,7 +25,7 @@ def build_audit_export_packet(
     milestones: Sequence[Mapping[str, Any]] = (),
     validations: Sequence[Mapping[str, Any]] = (),
     decisions: Sequence[Mapping[str, Any]] = (),
-    security_findings: Sequence[Mapping[str, Any]] = (),
+    findings: Sequence[Mapping[str, Any]] = (),
     evidence_refs: Sequence[str] = (),
 ) -> dict[str, Any]:
     """Build a portable audit packet from structured summaries only."""
@@ -33,7 +33,7 @@ def build_audit_export_packet(
     safe_milestones = [_strip_forbidden(item) for item in milestones]
     safe_validations = [_strip_forbidden(item) for item in validations]
     safe_decisions = [_strip_forbidden(item) for item in decisions]
-    safe_security = [_strip_forbidden(item) for item in security_findings]
+    safe_security = [_strip_forbidden(item) for item in findings]
     refs = [str(ref).strip() for ref in evidence_refs if str(ref).strip()]
     return {
         "packet_type": "dream_studio_audit_export",
@@ -63,7 +63,7 @@ def build_audit_export_packet(
             "milestones": safe_milestones,
             "validations": safe_validations,
             "decisions": safe_decisions,
-            "security_findings": safe_security,
+            "findings": safe_security,
             "release_evidence": [{"ref": ref} for ref in refs],
         },
         "export_policy": {

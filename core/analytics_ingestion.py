@@ -20,7 +20,7 @@ ANALYTICS_INGESTION_SCHEMA = "dream_studio.analytics_only_ingestion.v1"
 INGESTION_SECTIONS: tuple[str, ...] = (
     "projects",
     "validations",
-    "security_findings",
+    "findings",
     "token_usage",
     "ai_usage",
     "components",
@@ -32,7 +32,7 @@ INGESTION_SECTIONS: tuple[str, ...] = (
 SECTION_TABLES: dict[str, tuple[str, ...]] = {
     "projects": ("business_projects",),
     "validations": ("validation_results",),
-    "security_findings": ("security_findings",),
+    "findings": ("findings",),
     "token_usage": ("token_usage_records",),
     "ai_usage": ("ai_usage_operational_records",),
     "components": ("pi_components",),
@@ -50,7 +50,7 @@ SECTION_TABLES: dict[str, tuple[str, ...]] = {
 TABLE_KEYS: dict[str, str] = {
     "business_projects": "project_id",
     "validation_results": "validation_id",
-    "security_findings": "finding_id",
+    "findings": "finding_id",
     "token_usage_records": "token_usage_id",
     "ai_usage_operational_records": "usage_record_id",
     "pi_components": "component_id",
@@ -174,7 +174,7 @@ def ingest_analytics_payload(
     section_handlers = {
         "projects": _project_rows,
         "validations": _validation_rows,
-        "security_findings": _security_finding_rows,
+        "findings": _security_finding_rows,
         "token_usage": _token_usage_rows,
         "ai_usage": _ai_usage_rows,
         "components": _component_rows,
@@ -336,7 +336,7 @@ def _security_finding_rows(
     finding_id = record.get("finding_id") or _stable_id("security", record)
     return [
         (
-            "security_findings",
+            "findings",
             {
                 "finding_id": finding_id,
                 "project_id": project_id,

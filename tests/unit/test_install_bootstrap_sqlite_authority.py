@@ -142,7 +142,7 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "commit_sha TEXT, completed_at TEXT, PRIMARY KEY (task_id, spec_id))"
         )
         conn.execute(
-            "CREATE TABLE security_findings("
+            "CREATE TABLE findings("
             "finding_id TEXT PRIMARY KEY, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
         )

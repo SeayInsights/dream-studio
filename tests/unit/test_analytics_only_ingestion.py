@@ -60,7 +60,7 @@ def test_analytics_only_ingestion_writes_current_authority_without_orchestration
             _count(conn, "business_projects") == 1
         )  # reg_projects → business_projects (migration 084)
         assert _count(conn, "validation_results") == 1
-        assert _count(conn, "security_findings") == 1
+        assert _count(conn, "findings") == 1
         assert _count(conn, "token_usage_records") == 1
         assert _count(conn, "ai_usage_operational_records") == 1
         # pi_components and pi_dependencies dropped in migration 084 (were empty/broken)
@@ -250,7 +250,7 @@ def _payload(project_path: Path) -> dict[str, object]:
                 "summary": "CI passed",
             }
         ],
-        "security_findings": [
+        "findings": [
             {
                 "finding_id": "finding-1",
                 "project_id": "analytics-project",

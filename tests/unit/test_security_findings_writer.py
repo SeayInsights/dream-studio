@@ -153,7 +153,7 @@ def test_emit_security_finding_duplicate_does_not_emit_spool(patched_db, db_path
 def test_emit_security_finding_spool_failure_does_not_block_sqlite(
     patched_db, db_path: Path
 ) -> None:
-    """If the spool write raises, the finding still lands in security_findings."""
+    """If the spool write raises, the finding still lands in findings."""
     from core.telemetry.emitters import emit_security_finding
 
     with patch("spool.writer.write_event", side_effect=RuntimeError("spool unavailable")):
@@ -168,7 +168,7 @@ def test_emit_security_finding_spool_failure_does_not_block_sqlite(
     assert result.emitted is True  # SQLite write succeeded despite spool failure
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute(
-            "SELECT finding_id FROM security_findings WHERE finding_id = ?",
+            "SELECT finding_id FROM findings WHERE finding_id = ?",
             (result.record_id,),
         ).fetchone()
     assert row is not None
@@ -178,7 +178,7 @@ def test_emit_security_finding_spool_failure_does_not_block_sqlite(
 
 
 def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> None:
-    """resolve_security_finding() returns True and updates status in security_findings."""
+    """resolve_security_finding() returns True and updates status in findings."""
     from core.telemetry.emitters import emit_security_finding
     from core.telemetry.execution_spine import resolve_security_finding
 
@@ -195,7 +195,7 @@ def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> N
     with sqlite3.connect(str(db_path)) as conn:
         updated = resolve_security_finding(conn, finding_id=finding_id, resolution="mitigated")
         status = conn.execute(
-            "SELECT status FROM security_findings WHERE finding_id = ?", (finding_id,)
+            "SELECT status FROM findings WHERE finding_id = ?", (finding_id,)
         ).fetchone()[0]
 
     assert updated is True

@@ -36,10 +36,10 @@ def _security_fallback_findings(
 ) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
 
-    security_columns = table_columns(conn, "security_findings")
+    security_columns = table_columns(conn, "findings")
     if has_columns(
         conn,
-        "security_findings",
+        "findings",
         [
             "finding_id",
             "severity",
@@ -68,7 +68,7 @@ def _security_fallback_findings(
                 description as message,
                 status,
                 created_at
-            FROM security_findings
+            FROM findings
             WHERE 1=1
         """.format(project_id_expr=project_id_expr, tool_expr=tool_expr)
         params: list[Any] = []
@@ -238,7 +238,7 @@ async def list_all_findings(
                 "reason": "Dashboard security findings are read from current compatible security finding tables because the optional summary view does not expose the full dashboard contract.",
                 "source_tables": [
                     name
-                    for name in ("security_findings", "sec_sarif_findings", "vw_security_summary")
+                    for name in ("findings", "sec_sarif_findings", "vw_security_summary")
                     if object_exists(conn, name)
                 ],
                 "retired_view_columns_missing": sorted(
@@ -595,7 +595,7 @@ async def get_security_stats(
 
         findings_by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
         for table, column in (
-            ("security_findings", "severity"),
+            ("findings", "severity"),
             ("sec_sarif_findings", "severity"),
             ("sec_cve_matches", "severity"),
             ("sec_manual_reviews", "risk_level"),
@@ -606,7 +606,7 @@ async def get_security_stats(
 
         # Count by source
         findings_by_source = {
-            "telemetry_security": _count_since(conn, "security_findings", cutoff),
+            "telemetry_security": _count_since(conn, "findings", cutoff),
             "sarif": _count_since(conn, "sec_sarif_findings", cutoff),
             "cve": _count_since(conn, "sec_cve_matches", cutoff),
             "manual_review": _count_since(conn, "sec_manual_reviews", cutoff),
@@ -616,7 +616,7 @@ async def get_security_stats(
         # Count by status (combining different status fields)
         findings_by_status = {}
         for table in (
-            "security_findings",
+            "findings",
             "sec_sarif_findings",
             "sec_cve_matches",
             "sec_manual_reviews",
@@ -645,7 +645,7 @@ async def get_security_stats(
             cve_daily = daily("sec_cve_matches")
             review_daily = daily("sec_manual_reviews")
             hook_daily = daily("sec_hook_checks")
-            telemetry_daily = daily("security_findings")
+            telemetry_daily = daily("findings")
 
             total_daily = sarif_daily + cve_daily + review_daily + hook_daily + telemetry_daily
 
@@ -654,7 +654,7 @@ async def get_security_stats(
         source_tables = [
             name
             for name in (
-                "security_findings",
+                "findings",
                 "sec_sarif_findings",
                 "sec_cve_matches",
                 "sec_manual_reviews",

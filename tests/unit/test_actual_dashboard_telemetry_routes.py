@@ -35,7 +35,7 @@ def test_actual_app_mounts_telemetry_summary_route_with_authority_metadata(
     assert payload["entity_counts"]["projects"] == 1
     assert payload["component_usage"]["skill"][0]["component_id"] == "ds-core"
     assert payload["token_usage"][0]["total_tokens"] == 225
-    assert payload["security_findings"][0]["severity"] == "high"
+    assert payload["findings"][0]["severity"] == "high"
     assert payload["validation_outcomes"][0]["status"] == "passed"
     assert payload["research_decisions"]["decisions"][0]["selected_option"] == "derived_view"
     assert payload["route_explainability"][0]["explainability"]["has_evidence_refs"] is True

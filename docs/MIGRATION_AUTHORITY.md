@@ -235,3 +235,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- 2026-05-31: migration 088 removes dead FK refs to dropped reg_projects from raw_sessions/handoffs/specs/tasks. upsert_project() writes to business_projects. -->
 
 <!-- 2026-05-31: migration 088 fixed (explicit column names, view drop/recreate). ds_memory, discovery_internal updated. -->
+
+<!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->

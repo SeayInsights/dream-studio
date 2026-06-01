@@ -35,7 +35,7 @@ FACT_TABLES: tuple[str, ...] = (
     "token_usage_records",
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
-    "security_findings",
+    "findings",
     "validation_results",
     "research_evidence_records",
     "decision_records",
@@ -184,7 +184,7 @@ def global_telemetry_summary(db_path: Path | str | None = None) -> dict[str, Any
                 "token_usage": _token_rollup(conn),
                 "token_cost_intelligence": _token_cost_intelligence(conn),
                 "ai_usage_accounting": adapter_usage_accounting_summary(conn),
-                "security_findings": _security_rollup(conn),
+                "findings": _security_rollup(conn),
                 "security_remediation_intelligence": _security_remediation_intelligence(conn),
                 "validation_outcomes": _validation_rollup(conn),
                 "validation_outcome_intelligence": _validation_outcome_intelligence(conn),
@@ -247,7 +247,7 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
             "tool_invocations",
             "token_usage_records",
             "validation_results",
-            "security_findings",
+            "findings",
             "research_evidence_records",
             "decision_records",
             "blocker_resolution_records",
@@ -286,8 +286,8 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                 "validations": _scoped_rows(
                     conn, "validation_results", scope, order_by="created_at, validation_id"
                 ),
-                "security_findings": _scoped_rows(
-                    conn, "security_findings", scope, order_by="created_at, finding_id"
+                "findings": _scoped_rows(
+                    conn, "findings", scope, order_by="created_at, finding_id"
                 ),
                 "research": _scoped_rows(
                     conn, "research_evidence_records", scope, order_by="created_at, research_id"
@@ -474,7 +474,7 @@ def component_usage_summary(
                     conn, component_type=component_type, component_id=component_id
                 ),
                 "validations": _validation_rollup(conn),
-                "security_findings": _security_rollup(conn),
+                "findings": _security_rollup(conn),
                 "outcomes": _outcome_rollup(conn),
                 "hardening_intelligence": _component_hardening_intelligence(conn, components),
             },
@@ -545,7 +545,7 @@ def _scoped_summary(
             "ai_usage_accounting": adapter_usage_accounting_summary(
                 conn, project_id=scope.project_id
             ),
-            "security_findings": _security_rollup(conn, scope),
+            "findings": _security_rollup(conn, scope),
             "security_remediation_intelligence": _security_remediation_intelligence(conn, scope),
             "validations": _validation_rollup(conn, scope),
             "validation_outcome_intelligence": _validation_outcome_intelligence(conn, scope),
@@ -847,7 +847,7 @@ def _component_hardening_intelligence(
                     "success_count": usage.get("success_count"),
                     "failure_count": usage.get("failure_count"),
                     "validation_count": _row_count(conn, "validation_results", scope),
-                    "security_finding_count": _row_count(conn, "security_findings", scope),
+                    "security_finding_count": _row_count(conn, "findings", scope),
                     "outcome_count": _row_count(conn, "outcome_records", scope),
                     "token_total": token_total,
                     "dashboard_ready": True,
@@ -1060,7 +1060,7 @@ def _security_rollup(
             severity,
             status,
             COUNT(*) AS finding_count
-        FROM security_findings
+        FROM findings
         {where}
         GROUP BY project_id, file_path, start_line, end_line, severity, status
         ORDER BY finding_count DESC, severity DESC, file_path
@@ -1099,7 +1099,7 @@ def _security_remediation_intelligence(
             evidence_refs_json,
             created_at,
             updated_at
-        FROM security_findings
+        FROM findings
         {where}
         ORDER BY
             CASE severity
@@ -1168,7 +1168,7 @@ def _security_status_counts(
             severity,
             status,
             COUNT(*) AS finding_count
-        FROM security_findings
+        FROM findings
         {where}
         GROUP BY project_id, severity, status
         ORDER BY finding_count DESC, severity, status
@@ -1193,7 +1193,7 @@ def _security_attribution(
             severity,
             status,
             COUNT(*) AS finding_count
-        FROM security_findings
+        FROM findings
         {where}
         GROUP BY project_id, agent_id, skill_id, workflow_id, hook_id, severity, status
         ORDER BY finding_count DESC, severity DESC, agent_id, skill_id, workflow_id, hook_id
@@ -1278,7 +1278,7 @@ def _validation_outcome_intelligence(
                 "milestone_id": validation["milestone_id"],
                 "task_id": validation["task_id"],
                 "process_run_id": validation["process_run_id"],
-                "security_finding_count": _row_count(conn, "security_findings", validation_scope),
+                "security_finding_count": _row_count(conn, "findings", validation_scope),
                 "token_total": token_total,
                 "component_counts": component_counts,
                 "outcomes": outcome_rows,
@@ -1775,7 +1775,7 @@ def _source_tables_for_components(components: Mapping[str, tuple[str, str, str]]
         "execution_events",
         "token_usage_records",
         "validation_results",
-        "security_findings",
+        "findings",
         "outcome_records",
     ]
     tables.extend(table for table, _column, _label in components.values())

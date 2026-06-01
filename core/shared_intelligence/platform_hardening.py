@@ -117,8 +117,8 @@ CONNECTOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "source_type": "sarif",
         "authentication_requirement": "none",
         "read_write_mode": "local_file_read",
-        "supported_records": ["security_findings"],
-        "normalization_targets": ["security_findings"],
+        "supported_records": ["findings"],
+        "normalization_targets": ["findings"],
     },
     {
         "connector_id": "coverage_report",
@@ -144,7 +144,7 @@ CONNECTOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "supported_records": [
             "projects",
             "validations",
-            "security_findings",
+            "findings",
             "token_usage",
             "ai_usage",
         ],
@@ -522,7 +522,7 @@ def ingest_connector_payload(
             source_type=source_type,
         ),
         "validations": payload.get("validations", []),
-        "security_findings": payload.get("security_findings", []),
+        "findings": payload.get("findings", []),
         "token_usage": payload.get("token_usage", []),
         "ai_usage": payload.get("ai_usage", []),
         "components": payload.get("components", []),

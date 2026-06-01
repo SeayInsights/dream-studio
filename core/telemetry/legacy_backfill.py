@@ -46,7 +46,7 @@ BACKFILL_MAPPINGS: tuple[dict[str, Any], ...] = (
     {
         "domain": "security",
         "source_table": "sec_sarif_findings",
-        "target_table": "security_findings",
+        "target_table": "findings",
         "source_time_column": "created_at",
         "target_time_column": "created_at",
         "classification": "legacy source",

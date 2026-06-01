@@ -131,7 +131,7 @@ def _cutover_plan(
                 "approvals",
                 "decisions",
                 "research",
-                "security_findings",
+                "findings",
                 "validations_evals",
                 "token_usage",
                 "skills",

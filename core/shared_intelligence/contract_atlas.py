@@ -1422,7 +1422,7 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
-    tables.add("security_findings")
+    tables.add("findings")
     tables.update(PRD_AUTHORITY_SOURCE_TABLES)
     tables.update(
         {

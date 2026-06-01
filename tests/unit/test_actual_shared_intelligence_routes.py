@@ -142,7 +142,7 @@ def test_actual_app_exposes_security_lifecycle_gate_without_persisting(
     tmp_path: Path, monkeypatch
 ) -> None:
     client, db_path = _client_with_shared_db(tmp_path, monkeypatch)
-    before_findings = _count(db_path, "security_findings")
+    before_findings = _count(db_path, "findings")
 
     response = client.get(
         "/api/shared-intelligence/security-lifecycle",
@@ -153,7 +153,7 @@ def test_actual_app_exposes_security_lifecycle_gate_without_persisting(
         },
     )
 
-    after_findings = _count(db_path, "security_findings")
+    after_findings = _count(db_path, "findings")
     payload = response.json()
     assert response.status_code == 200
     assert before_findings == after_findings
@@ -386,7 +386,7 @@ def test_actual_app_shared_intelligence_status_is_non_authoritative(
 def _seed_shared_intelligence(conn) -> None:
     register_default_adapter_authority_profiles(conn)
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS security_findings("
+        "CREATE TABLE IF NOT EXISTS findings("
         "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, "
         "file_path TEXT, start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
     )

@@ -53,7 +53,7 @@ def _drift_db(tmp_path: Path) -> Path:
         )
         conn.execute("CREATE TABLE validation_results(validation_id TEXT, created_at TEXT)")
         conn.execute(
-            "CREATE TABLE security_findings(finding_id TEXT, severity TEXT, created_at TEXT)"
+            "CREATE TABLE findings(finding_id TEXT, severity TEXT, created_at TEXT)"
         )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
         conn.commit()

@@ -27,8 +27,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Security Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": "security-scanners",
-        "owns_tables": ["security_findings"],
-        "source_tables": ["execution_events", "security_findings"],
+        "owns_tables": ["findings"],
+        "source_tables": ["execution_events", "findings"],
         "dashboard_cards": ["findings_by_severity", "findings_by_file", "component_attribution"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "file_line", "finding"],
         "empty_state": "No security findings recorded for the selected scope.",
@@ -445,7 +445,7 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
     _execute(
         conn,
         """
-        INSERT INTO security_findings (
+        INSERT INTO findings (
             finding_id, project_id, milestone_id, task_id, scan_id, process_run_id,
             severity, category, rule_id, file_path, start_line, end_line,
             description, recommendation, status, introduced_by_agent_id,
@@ -487,14 +487,14 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
 def resolve_security_finding(
     conn: sqlite3.Connection, *, finding_id: str, resolution: str | None = None
 ) -> bool:
-    """Update security_findings.status for a resolved finding.
+    """Update findings.status for a resolved finding.
 
     Returns True if the row was found and updated, False if not found.
     """
     valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
     cursor = conn.execute(
-        "UPDATE security_findings SET status = ? WHERE finding_id = ?",
+        "UPDATE findings SET status = ? WHERE finding_id = ?",
         (new_status, finding_id),
     )
     return cursor.rowcount > 0
@@ -772,7 +772,7 @@ def token_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def security_findings_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("""
         SELECT project_id, file_path, severity, COUNT(*) AS finding_count
-        FROM security_findings
+        FROM findings
         GROUP BY project_id, file_path, severity
         ORDER BY finding_count DESC, severity, file_path
         """).fetchall()
