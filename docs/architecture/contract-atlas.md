@@ -373,3 +373,5 @@ and boundary report without inventing new dependency data.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-01: guard_events table (migration 090), memory_entries taint tracking (migration 091), memory_taint.py module -->
+
+<!-- 2026-06-01: guard Phase 3 — delta_guard, guard_metrics route, stub hardening -->

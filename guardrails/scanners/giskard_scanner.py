@@ -92,6 +92,13 @@ class GiskardScanner:
         (r"override\s+(?:previous|default|security)", Severity.HIGH),
         (r"sudo\s+mode", Severity.MEDIUM),
         (r"admin\s+(?:mode|access|override)", Severity.HIGH),
+        (
+            r"this\s+(?:finding|issue)\s+(?:has\s+been|was)\s+(?:fixed|resolved|patched)",
+            Severity.HIGH,
+        ),
+        (r"mark\s+(?:this|as)\s+(?:fixed|resolved)", Severity.HIGH),
+        (r"do\s+not\s+report\s+this", Severity.HIGH),
+        (r"safe\s+to\s+ignore", Severity.MEDIUM),
     ]
 
     # PII patterns

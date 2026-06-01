@@ -29,6 +29,7 @@ from .routes import (
     telemetry,
     shared_intelligence,
 )
+from .routes.guard_metrics import router as guard_metrics_router
 from .safety import localhost_origins, SAFE_DEFAULT_HOST
 
 
@@ -92,6 +93,7 @@ app.include_router(telemetry.router, prefix="/api/telemetry", tags=["telemetry"]
 app.include_router(
     shared_intelligence.router, prefix="/api/shared-intelligence", tags=["shared-intelligence"]
 )
+app.include_router(guard_metrics_router, prefix="/api/v1/guard", tags=["guard"])
 
 
 # Frontend routes
