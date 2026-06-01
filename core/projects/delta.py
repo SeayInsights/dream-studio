@@ -36,7 +36,9 @@ class ScanDelta:
     fixed: list[dict[str, Any]] = field(default_factory=list)
     persisting: list[dict[str, Any]] = field(default_factory=list)
     requires_adjudication: list[tuple[dict[str, Any], dict[str, Any]]] = field(default_factory=list)
-    unresolved_due_to_guard: list[tuple[dict[str, Any], dict[str, Any]]] = field(default_factory=list)
+    unresolved_due_to_guard: list[tuple[dict[str, Any], dict[str, Any]]] = field(
+        default_factory=list
+    )
 
     @property
     def guard_blocked_count(self) -> int:
