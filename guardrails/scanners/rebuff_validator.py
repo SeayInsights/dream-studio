@@ -81,6 +81,21 @@ class RebuffValidator:
             risk_weight=0.8,
             description="Instruction replacement attempt",
         ),
+        InjectionPattern(
+            pattern=r"mark\s+(?:this|the)\s+(?:as\s+)?(?:fixed|resolved|closed)",
+            risk_weight=0.9,
+            description="Delta output manipulation — mark-as-fixed injection",
+        ),
+        InjectionPattern(
+            pattern=r"this\s+(?:finding|issue|vulnerability)\s+(?:has\s+been|was|is)\s+(?:fixed|resolved)",
+            risk_weight=0.85,
+            description="Delta output manipulation — issue resolved assertion",
+        ),
+        InjectionPattern(
+            pattern=r"do\s+not\s+(?:flag|report|mark|include)\s+this",
+            risk_weight=0.9,
+            description="Output suppression attempt",
+        ),
     ]
 
     # Layer 2: Fuzzy patterns (medium confidence)
@@ -139,6 +154,21 @@ class RebuffValidator:
             pattern=r"%%[A-Z_]+%%|\{\{[A-Z_]+\}\}",
             risk_weight=0.65,
             description="Template injection markers",
+        ),
+        InjectionPattern(
+            pattern=r"show\s+(?:me\s+)?(?:your|the)\s+(?:full\s+)?(?:prompt|instructions?|context|system\s+message)",
+            risk_weight=0.7,
+            description="Prompt/context extraction probe",
+        ),
+        InjectionPattern(
+            pattern=r"what\s+(?:are|were)\s+(?:your|the)\s+(?:original\s+)?instructions?",
+            risk_weight=0.7,
+            description="Instruction extraction probe",
+        ),
+        InjectionPattern(
+            pattern=r"(?:this|the)\s+(?:code|change|commit)\s+is\s+(?:safe|secure|clean)",
+            risk_weight=0.65,
+            description="Safety assertion injection (persuasion)",
         ),
     ]
 
