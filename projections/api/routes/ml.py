@@ -147,26 +147,32 @@ def resolve_operator_input(
     input_path: Optional[str] = None,
     input_package_path: Optional[str] = None,
 ) -> str:
-    """Resolve an explicit operator input path; never auto-discover local state."""
+    """Resolve operator input path; falls back to aggregate_metrics.db if not specified."""
     selected = input_path or input_package_path
-    if not selected:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "ML analytics requires an explicit operator-selected aggregate "
-                "or redacted input path. Live Dream Studio runtime state is not "
-                "auto-discovered."
-            ),
-        )
+    if selected:
+        path = Path(selected).expanduser()
+        if not path.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Input path does not exist: {path}",
+            )
+        return str(path)
+    # Default to aggregate_metrics.db (self-serve mode)
+    try:
+        from core.analytics.aggregate_metrics import aggregate_metrics_db_path
 
-    path = Path(selected).expanduser()
-    if not path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Input path does not exist: {path}",
-        )
-
-    return str(path)
+        agg_path = aggregate_metrics_db_path()
+        if agg_path.exists():
+            return str(agg_path)
+    except Exception:
+        pass
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "ML analytics: no aggregate_metrics.db found. "
+            "Run `ds analyze aggregate` to build it, or provide an explicit input_path."
+        ),
+    )
 
 
 def _read_sql(db_path: str, query: str):
@@ -313,7 +319,7 @@ async def get_forecasts(
         default="sessions", description="Metric to forecast: sessions, tokens, or skills"
     ),
     days: int = Query(default=7, ge=1, le=30, description="Number of days to forecast ahead"),
-    input_path: str = Query(..., description="Explicit aggregate/redacted input path"),
+    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
 ):
     """
     Get time series forecasts for a specific metric.
@@ -374,7 +380,7 @@ async def get_patterns(
         default=None, description="Pattern type filter: sequence, temporal_hour, temporal_day"
     ),
     min_support: int = Query(default=3, ge=1, description="Minimum number of occurrences"),
-    input_path: str = Query(..., description="Explicit aggregate/redacted input path"),
+    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
 ):
     """
     Get detected patterns in skill usage and workflows.
@@ -424,7 +430,7 @@ async def get_patterns(
 async def get_recommendations(
     category: Optional[str] = Query(default=None, description="Category filter"),
     min_impact: int = Query(default=0, ge=0, le=100, description="Minimum impact score (0-100)"),
-    input_path: str = Query(..., description="Explicit aggregate/redacted input path"),
+    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
 ):
     """
     Get ML-generated recommendations for workflow optimization.
@@ -486,7 +492,7 @@ async def get_benchmarks(
         default=None, description="Metric to benchmark: sessions, skills, tokens"
     ),
     period: str = Query(default="30d", description="Period for current metrics (e.g., 7d, 30d)"),
-    input_path: str = Query(..., description="Explicit aggregate/redacted input path"),
+    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
 ):
     """
     Get comparative benchmarks comparing current vs historical performance.
