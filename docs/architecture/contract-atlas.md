@@ -377,3 +377,5 @@ and boundary report without inventing new dependency data.
 <!-- 2026-06-01: guard Phase 3 — delta_guard, guard_metrics route, stub hardening -->
 
 <!-- 2026-06-01: fix migration 089 view-drop-before-rename (vw_approach_patterns/vw_security_summary); fix v38 test fixture findings→security_findings -->
+
+<!-- 2026-06-02: aggregate_metrics.db pipeline + /api/v1/metrics/aggregate + ML routes self-serve -->

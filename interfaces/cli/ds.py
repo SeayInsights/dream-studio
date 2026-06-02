@@ -487,6 +487,10 @@ def main(argv: list[str] | None = None) -> int:
         "analyze", help="Analysis commands (brownfield intake, repo scanning)"
     )
     analyze_sub = analyze_cmd.add_subparsers(dest="analyze_command", required=True)
+    analyze_aggregate = analyze_sub.add_parser(  # noqa: F841
+        "aggregate", help="Run ML metrics aggregation (studio.db → aggregate_metrics.db)"
+    )
+
     analyze_intake = analyze_sub.add_parser(
         "intake", help="Register a brownfield repo for intake scanning"
     )
@@ -2527,8 +2531,18 @@ def _analyze_dispatch(
 ) -> int:
     if args.analyze_command == "intake":
         return _analyze_intake(args, source_root=source_root, dream_studio_home=dream_studio_home)
+    if args.analyze_command == "aggregate":
+        return _analyze_aggregate(args)
     print(f"Unknown analyze command: {args.analyze_command}", file=sys.stderr)
     return 1
+
+
+def _analyze_aggregate(args: argparse.Namespace) -> int:  # noqa: ARG001
+    """Run ML metrics aggregation from studio.db into aggregate_metrics.db."""
+    from core.analytics.aggregate_metrics import run_aggregation
+
+    result = run_aggregation()
+    return _print(result)
 
 
 def _analyze_intake(

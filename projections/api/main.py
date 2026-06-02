@@ -30,6 +30,7 @@ from .routes import (
     shared_intelligence,
 )
 from .routes.guard_metrics import router as guard_metrics_router
+from .routes.aggregate_metrics_route import router as aggregate_metrics_router
 from .safety import localhost_origins, SAFE_DEFAULT_HOST
 
 
@@ -94,6 +95,7 @@ app.include_router(
     shared_intelligence.router, prefix="/api/shared-intelligence", tags=["shared-intelligence"]
 )
 app.include_router(guard_metrics_router, prefix="/api/v1/guard", tags=["guard"])
+app.include_router(aggregate_metrics_router, prefix="/api/v1/metrics", tags=["aggregate-metrics"])
 
 
 # Frontend routes
