@@ -40,6 +40,10 @@ class DetectedStack:
         # values: 'fastapi', 'flask', 'django-rest', 'express', 'fastify', 'hono',
         #         'nextjs-api', 'gin', 'echo', 'chi', 'axum', 'actix', 'rocket', or None
     )
+    frontend_framework: Optional[str] = (
+        None  # primary frontend UI framework for frontend-ux skill dispatch
+        # values: 'nextjs', 'react', 'remix', 'vue', 'svelte', 'angular', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -87,6 +91,9 @@ def detect_stack(path: Path) -> DetectedStack:
 
     # Augment with web framework for backend-api skill dispatch
     result.web_framework = _detect_web_framework(path)
+
+    # Augment with frontend framework for frontend-ux skill dispatch
+    result.frontend_framework = _detect_frontend_framework(path)
 
     return result
 
@@ -383,6 +390,38 @@ def _detect_web_framework(path: Path) -> Optional[str]:
         except OSError:
             pass
 
+    return None
+
+
+def _detect_frontend_framework(path: Path) -> Optional[str]:
+    """Detect the primary frontend UI framework for frontend-ux skill dispatch.
+
+    Phase 1: React/Next.js focus. Phase 2 adds Vue/Svelte/Angular.
+    """
+    # Next.js already detected in main signals; check package.json for React family
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            content = json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps = {
+                **content.get("dependencies", {}),
+                **content.get("devDependencies", {}),
+            }
+            # Check in order of specificity
+            if "@remix-run/react" in all_deps or "remix" in all_deps:
+                return "remix"
+            if "next" in all_deps:
+                return "nextjs"  # Already in main signals, but set here too
+            if "@angular/core" in all_deps:
+                return "angular"
+            if "svelte" in all_deps:
+                return "svelte"
+            if "vue" in all_deps:
+                return "vue"
+            if "react" in all_deps and "react-dom" in all_deps:
+                return "react"
+        except (json.JSONDecodeError, OSError):
+            pass
     return None
 
 
