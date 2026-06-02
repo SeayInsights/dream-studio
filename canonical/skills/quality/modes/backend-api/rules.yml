@@ -1,0 +1,747 @@
+# Backend API Rules
+# Version: 1.0.0
+# Schema version: 1
+#
+# Skill boundary:
+#   backend-api owns: HTTP endpoint quality (validation, errors, auth enforcement, CORS, etc.)
+#   security owns: attack-surface risk from the same patterns
+#   Cross-references documented per rule.
+
+rules:
+
+  - id: "api-001"
+    name: "Request input not validated at HTTP boundary"
+    severity: high
+    category: validation
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal: frameworks differ (Pydantic, Zod, go-validator) but concept identical."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "input-validation"
+      item: "Validate all inputs at HTTP entry points using schema validators"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Framework-specific static patterns:
+          FastAPI: def handler(param) with no type annotation → CANDIDATE
+          Flask: request.args.get() / request.json() without validation call → CANDIDATE
+          Express: req.body.* accessed without schema.parse() / joi.validate() / zod.parse() → CANDIDATE
+          Next.js: searchParams.get() / req.json() used directly in handler → CANDIDATE
+          Gin (Go): c.Param() / c.Query() without binding struct → CANDIDATE
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an API quality auditor checking one rule.
+          Rule: api-001 — Request input not validated at HTTP boundary
+          Applies to: Python, TypeScript/JavaScript, Go, Rust.
+
+          Does this route handler accept request inputs (path params, query params,
+          request body) WITHOUT schema validation?
+
+          NOT a violation if:
+          - Parameters have Pydantic type annotations (FastAPI)
+          - request.json() is followed by schema.parse() or zod/joi/yup validation
+          - Gin handler uses binding struct tags (binding:"required")
+          - Input is a static value (hardcoded, not user-supplied)
+
+          VIOLATION if:
+          - raw request.body used directly in business logic without validation
+          - path params used as-is without type checking
+          - query strings parsed and used without sanitization
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "Route handler accesses request body/params without schema validation"
+      - "FastAPI endpoint lacks Pydantic type annotations"
+      - "Express route uses req.body without validation middleware"
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test fixtures may use raw request bodies"
+      - inline_comment: "# api-001: no validation — internal-only endpoint"
+        reason: "Operator explicitly acknowledges validation is not needed"
+
+    remediation:
+      summary: |
+        Add schema validation at the HTTP boundary. Framework patterns:
+        FastAPI: use Pydantic BaseModel for request bodies and type hints for params.
+        Express: use zod.parse(req.body) or joi.validate(req.body) at the top of the handler.
+        Gin (Go): use binding struct tags and c.ShouldBind(&input).
+        Next.js: parse and validate with zod before using searchParams or req.json().
+      guide_ref: null
+
+    cross_references:
+      - rule: "sec-003"
+        skill: "ds-quality:security"
+        note: "sec-003 fires on injection risk from unvalidated input; api-001 fires on missing schema validation at HTTP boundary. Both may fire on the same handler. api-001 is the quality angle (structure); sec-003 is the security angle (exploitability)."
+        surface_co_located: true
+
+    action:
+      build_mode: warn
+
+
+  - id: "api-002"
+    name: "Error response leaks stack trace or internal details"
+    severity: high
+    category: error_handling
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal: catch/except blocks leaking exception details."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "error-handling"
+      item: "Error responses must not contain stack traces, internal paths, or system details"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Flag except/catch blocks where exception detail is returned in response:
+          Python: except Exception as e: ... return {"error": str(e)} → CANDIDATE
+          TypeScript: catch(err) { res.json({ error: err.message }) } → CANDIDATE
+          Go: http.Error(w, err.Error(), 500) → CANDIDATE
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-002 — Error response leaks internal details.
+
+          Does this error handler return internal details (stack trace, file path,
+          SQL error text, system message) in the HTTP response body?
+
+          NOT a violation if:
+          - Returns only a user-safe message ("An error occurred", "Not found")
+          - Logs the full error but returns only a generic message
+          - Returns a structured error with a safe code+message
+
+          VIOLATION if:
+          - Returns err.message, str(e), or exception.toString() directly
+          - Returns stack trace or traceback in response
+          - Returns database error text or internal path in response
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "catch/except block returns exception message in HTTP response"
+      - "500 handler includes stack trace in response body"
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test handlers may return full errors for debugging"
+      - inline_comment: "# api-002: debug mode"
+        reason: "Operator explicitly accepts error detail in debug/dev mode"
+
+    remediation:
+      summary: |
+        Log the full error internally but return only a safe message to clients.
+        Log: logger.error("Database error: %s", err) or console.error(err)
+        Respond: return {"error": "Internal server error"} or res.status(500).json({error: "Request failed"})
+      guide_ref: null
+
+    cross_references:
+      - rule: "sec-013"
+        skill: "ds-quality:security"
+        note: "sec-013 fires on PII in runtime output; api-002 fires on structural error-response hygiene. Complementary: api-002 is the design quality angle, sec-013 is the data-privacy angle."
+        surface_co_located: false
+
+    action:
+      build_mode: null
+
+
+  - id: "api-003"
+    name: "CSRF protection missing on state-changing routes"
+    severity: high
+    category: csrf
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js"]
+      skip_on:
+        languages: [golang, rust]
+        reason: "Go and Rust API patterns vary widely; CSRF detection is too framework-specific. Defer to security skill sec-004 for these."
+      note: "Universal concept for browser-facing APIs. Skip on Go/Rust where token-based APIs are standard."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "csrf"
+      item: "CSRF tokens or SameSite cookies on state-changing endpoints"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-003 — CSRF protection missing on state-changing routes.
+
+          Does this POST/PUT/PATCH/DELETE route handler validate a CSRF token
+          or rely on SameSite cookie protection?
+
+          NOT a violation if:
+          - Route uses JWT Bearer token in Authorization header (CSRF not needed)
+          - Route checks X-CSRF-Token or similar header
+          - Route is an API endpoint called from JS fetch (SameSite=Strict cookies)
+          - Route is not browser-facing (mobile app, backend-to-backend)
+
+          VIOLATION if:
+          - Browser-facing POST/PUT/DELETE endpoint with session cookies and no CSRF token
+          - Form submission endpoint with no CSRF validation
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "POST/PUT/DELETE route using session cookies without CSRF token validation"
+
+    suppressions:
+      - inline_comment: "# api-003: JWT auth, no CSRF needed"
+        reason: "Bearer token auth prevents CSRF"
+
+    remediation:
+      summary: |
+        For browser-facing forms: add CSRF token middleware (Flask-WTF, csurf, fastapi-csrf-protect).
+        For SPA APIs with JWT Bearer tokens: no CSRF needed — document this.
+      guide_ref: null
+
+    cross_references:
+      - rule: "sec-004"
+        skill: "ds-quality:security"
+        note: "sec-004 owns the CSRF attack-surface risk analysis; api-003 detects CSRF protection at the HTTP layer. api-003 is the detection angle, sec-004 is the exploitability angle."
+        surface_co_located: true
+
+    action:
+      build_mode: null
+
+
+  - id: "api-004"
+    name: "Authentication not enforced on protected routes"
+    severity: critical
+    category: authentication
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal: every framework has some auth pattern."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "authentication"
+      item: "All protected endpoints verify authentication before executing"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Find routes that match "protected" patterns (named user*, profile*, admin*, etc.)
+          or HTTP methods POST/PUT/DELETE without apparent auth decorator/middleware:
+          FastAPI: @app.post("/users/...") without Depends(get_current_user) → CANDIDATE
+          Express: app.post('/profile', ...) without requireAuth middleware → CANDIDATE
+          Next.js: POST/PUT/DELETE route without session check at top → CANDIDATE
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-004 — Authentication not enforced on protected route.
+
+          Does this route handler execute business logic without verifying
+          the caller is authenticated?
+
+          NOT a violation if:
+          - Route is explicitly public (GET /health, GET /public/*)
+          - Auth middleware is registered globally for this prefix
+          - Route calls get_current_user() or requireAuth() at the start
+          - Route is in a protected router group with auth middleware applied
+
+          VIOLATION if:
+          - Route touches user data, modifies state, or returns private data
+            without any authentication check
+          - Auth check is commented out or skipped
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Protected-sounding route with no auth decorator or middleware call"
+      - "FastAPI route modifying user data without Depends(get_current_user)"
+
+    suppressions:
+      - inline_comment: "# api-004: public endpoint"
+        reason: "Operator explicitly marks this as an intentionally public endpoint"
+      - path_glob: "tests/**"
+        reason: "Test endpoints may bypass auth"
+
+    remediation:
+      summary: |
+        Add authentication at the route level:
+        FastAPI: add Depends(get_current_user) or Depends(require_auth) parameter.
+        Express: add requireAuth middleware before the handler.
+        Next.js: check session at the top of the handler function.
+      guide_ref: null
+
+    cross_references:
+      - rule: "sec-015"
+        skill: "ds-quality:security"
+        note: "sec-015 owns session/identity risk; api-004 detects missing authentication at the route level. api-004 is the quality/structural angle, sec-015 is the security risk angle."
+        surface_co_located: true
+
+    action:
+      build_mode: block
+
+
+  - id: "api-005"
+    name: "No rate limiting on high-traffic or auth endpoints"
+    severity: medium
+    category: rate_limiting
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs", ".yaml", ".yml", ".toml"]
+      note: "Universal concept; detection varies by framework and infra layer."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "rate-limiting"
+      item: "Rate limiting configured for authentication and high-traffic endpoints"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-005 — No rate limiting on high-traffic or auth endpoints.
+
+          Does this endpoint (login, signup, search, or any public POST) have
+          rate limiting or throttling configured?
+
+          NOT a violation if:
+          - Framework rate limiter middleware is applied globally or to this route
+          - Nginx/Cloudflare rate limiting is documented in infrastructure config
+          - Endpoint is internal-only (not publicly reachable)
+
+          VIOLATION if:
+          - /login, /signup, /auth endpoints with no rate limit
+          - Search or heavy-computation endpoint with no throttling
+          - No rate limiting middleware visible anywhere in codebase
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Login/auth endpoint with no rate limiting middleware"
+      - "Public API endpoint with no throttling configuration"
+
+    suppressions:
+      - inline_comment: "# api-005: rate limited at infra layer"
+        reason: "Rate limiting handled by Nginx/Cloudflare/API gateway"
+
+    remediation:
+      summary: |
+        Add rate limiting at the route or middleware level:
+        FastAPI: slowapi or fastapi-limiter
+        Express: express-rate-limit
+        Next.js: rate limiting in middleware.ts or via Upstash Redis
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-006"
+    name: "Authorization not checked (auth != authz)"
+    severity: high
+    category: authorization
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal: authentication is not authorization."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "authorization"
+      item: "Verify caller has permission, not just identity"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-006 — Authorization not checked (auth != authz).
+
+          This rule fires when a route authenticates the user but does NOT verify
+          the user has permission to access the requested resource.
+
+          NOT a violation if:
+          - Route checks user.id == resource.owner_id
+          - Route checks user has required role/permission
+          - Resource is public (intentionally accessible to all authenticated users)
+
+          VIOLATION if:
+          - Route calls get_current_user() but then returns resource without checking
+            if the current user owns or has access to that resource
+          - Admin-only endpoint that only checks authentication, not admin role
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Route authenticates user but returns resource without ownership/permission check"
+      - "Admin endpoint with only authentication check"
+
+    suppressions:
+      - inline_comment: "# api-006: any authenticated user can access"
+        reason: "Intentional — resource is accessible to all authenticated users"
+
+    remediation:
+      summary: |
+        After authenticating, check authorization:
+        - Verify resource.owner_id == current_user.id
+        - Check current_user.role in ["admin", "moderator"]
+        - Use permission decorators (@require_permission("write:resource"))
+      guide_ref: null
+
+    cross_references:
+      - rule: "sec-015"
+        skill: "ds-quality:security"
+        note: "sec-015 owns privilege escalation risk; api-006 detects missing authorization at the handler level. Complementary angles."
+        surface_co_located: false
+
+    action:
+      build_mode: null
+
+
+  - id: "api-007"
+    name: "Idempotency not considered for unsafe methods"
+    severity: medium
+    category: idempotency
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js"]
+      note: "Focus on payment/billing/order-like endpoints. Skip Go/Rust where pattern detection is harder."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "idempotency"
+      item: "POST/PUT/DELETE endpoints for financial or critical operations support idempotency keys"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-007 — Idempotency not considered for unsafe methods.
+
+          Does this POST/PUT/DELETE endpoint for financial, order, or payment
+          operations support idempotency keys?
+
+          ONLY applies to: payment, charge, order, purchase, subscription, billing endpoints.
+          Does NOT apply to: profile updates, search, data retrieval, content CRUD.
+
+          NOT a violation if:
+          - Endpoint reads Idempotency-Key header and deduplicates requests
+          - Operation is naturally idempotent (PUT with same data = same result)
+          - Endpoint is not for financial/critical operations
+
+          VIOLATION if:
+          - POST /payments, POST /charges, POST /orders without idempotency support
+          - Double-submission could create duplicate charges or orders
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "Payment/order POST endpoint without idempotency key support"
+
+    suppressions:
+      - inline_comment: "# api-007: idempotency handled by payment provider"
+        reason: "External payment provider handles idempotency"
+
+    remediation:
+      summary: |
+        Add Idempotency-Key header support for payment/order endpoints:
+        - Read Idempotency-Key from request header
+        - Cache response keyed to (Idempotency-Key, user_id)
+        - Return cached response for duplicate requests within a TTL
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-008"
+    name: "List endpoint without pagination"
+    severity: low
+    category: pagination
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal. Static detection possible for list routes."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "pagination"
+      item: "All list endpoints support cursor or offset pagination"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Heuristic: route functions/handlers that return arrays/lists and
+          have no limit, page, cursor, or offset parameters.
+          Python: def list_users() -> List[User] with no pagination params → CANDIDATE
+          Express: app.get('/users', ...) returning User[] with no limit param → CANDIDATE
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-008 — List endpoint without pagination.
+
+          Does this GET endpoint return a potentially large list of items
+          without pagination support?
+
+          NOT a violation if:
+          - Endpoint accepts limit/offset or page/page_size parameters
+          - Endpoint uses cursor-based pagination
+          - Endpoint returns a small, bounded list (e.g., user's own settings,
+            a short enum list)
+
+          VIOLATION if:
+          - Returns SELECT * FROM table results with no LIMIT
+          - Returns all items without any count boundary
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "GET list endpoint returning unbounded result set"
+
+    remediation:
+      summary: |
+        Add pagination parameters: limit/offset or cursor.
+        Set a maximum page size (e.g., max_limit=100).
+        Return total count or next_cursor in response.
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-009"
+    name: "API versioning not declared"
+    severity: low
+    category: versioning
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js"]
+      note: "Low severity. Go/Rust often version differently. Skip if not applicable."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "versioning"
+      item: "API endpoints include version in path or Accept header"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Check route paths: if /api/<something> without /v1/, /v2/ or /api/v<n>/ prefix → flag.
+          This is a heuristic and should be low severity + configurable.
+          Exempt: /api/health, /api/status, /api/webhook (internal/infra endpoints)
+        fallback_to_llm: false
+
+    triggers:
+      - "API route without version prefix in path"
+
+    suppressions:
+      - inline_comment: "# api-009: no versioning intentional"
+        reason: "Project intentionally has no version prefix"
+      - path_glob: "**/api/health*"
+        reason: "Health check endpoints don't need versioning"
+      - path_glob: "**/api/webhook*"
+        reason: "Webhook endpoints don't need versioning"
+
+    remediation:
+      summary: |
+        Add version prefix to API routes: /api/v1/users instead of /api/users.
+        Or use Accept header versioning: Accept: application/vnd.api+json;version=1
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-010"
+    name: "HTTP status codes used incorrectly"
+    severity: medium
+    category: status_codes
+    applies_to:
+      languages: [python, typescript, javascript, golang, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "Universal."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "status-codes"
+      item: "HTTP status codes accurately reflect the response outcome"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-010 — HTTP status codes used incorrectly.
+
+          Does this route handler return incorrect HTTP status codes?
+          Common violations:
+          - 200 returned on error conditions (no error code set)
+          - 500 returned for client errors (should be 400-series)
+          - 404 used for "user not authorized" (should be 403)
+          - 201 not used for resource creation (POST returning 200)
+
+          NOT a violation if:
+          - Status code accurately reflects the outcome
+          - Route is a legacy endpoint where changing codes would break clients
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Error path returns 200 status code"
+      - "Client error returns 500"
+
+    remediation:
+      summary: |
+        Use status codes accurately:
+        200: success with body | 201: resource created | 204: success no body
+        400: bad request | 401: not authenticated | 403: not authorized | 404: not found
+        422: validation error | 429: rate limited | 500: server error
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-011"
+    name: "Response shape inconsistency (no envelope pattern)"
+    severity: low
+    category: response_shape
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js"]
+      note: "Low severity advisory rule."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "response-shape"
+      item: "API responses follow a consistent envelope pattern"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an API quality auditor.
+          Rule: api-011 — Response shape inconsistency.
+
+          Do the API routes in this file return inconsistent response shapes?
+          (e.g., some return {data: ...}, some return the object directly,
+          some return {result: ...})
+
+          NOT a violation if:
+          - All routes in the file follow the same pattern
+          - Project uses a single response wrapper applied globally
+
+          VIOLATION if:
+          - Some routes return {data: obj, status: "ok"} and others return obj directly
+          - Error shapes are inconsistent (some {error: ...}, some {message: ...})
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0, "location": "...",
+            "excerpt": "...", "explanation": "one sentence"}
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "API routes in same file return inconsistent response envelopes"
+
+    remediation:
+      summary: |
+        Standardize response shape across endpoints:
+        Success: {"data": ..., "meta": {...pagination...}}
+        Error: {"error": {"code": "...", "message": "..."}}
+        Apply response helpers or middleware to ensure consistency.
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "api-012"
+    name: "CORS policy overly permissive"
+    severity: high
+    category: cors
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".tsx", ".js", ".json", ".yaml", ".yml", ".toml"]
+      note: "Browser-facing APIs only."
+
+    source:
+      list: "API-BEST-PRACTICES"
+      section: "cors"
+      item: "CORS origin not set to wildcard for credentialed requests"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Regex patterns:
+          allow_origins=["*"] — wildcard with credentials → CRITICAL
+          allow_origins=["*"] — wildcard without credentials → HIGH
+          Access-Control-Allow-Origin: * with Access-Control-Allow-Credentials: true → CRITICAL
+          CORSMiddleware without origin list → HIGH
+        fallback_to_llm: false
+
+    triggers:
+      - "CORS allow_origins=['*'] wildcard origin"
+      - "CORS wildcard with allow_credentials=True"
+
+    suppressions:
+      - inline_comment: "# api-012: public API, wildcard intentional"
+        reason: "This is a public API where any origin is acceptable"
+
+    remediation:
+      summary: |
+        Replace wildcard CORS with explicit origin allowlist:
+        allow_origins=["https://yourapp.com", "https://admin.yourapp.com"]
+        Never combine allow_origins=["*"] with allow_credentials=True.
+      guide_ref: null
+
+    action:
+      build_mode: block
