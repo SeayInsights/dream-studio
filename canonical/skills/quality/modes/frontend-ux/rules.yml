@@ -1,0 +1,780 @@
+# Frontend-UX Rules — Phase 1 (React/Next.js)
+# Version: 1.0.0
+# Schema version: 1
+#
+# Phase 1 scope: React + Next.js (10 rules)
+# Phase 2 scope: ux-008/009/011/014/015 + Vue/Svelte/Angular variants
+#
+# Candidate/confirm required for:
+#   ux-001, ux-002, ux-005 — syntactic vs semantic correctness
+#   These three rules over-flag without LLM confirmation.
+
+rules:
+
+  - id: "ux-001"
+    name: "Image missing alt text or has empty alt"
+    severity: critical
+    category: accessibility
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx", ".ts", ".js"]
+      note: "Universal a11y rule. Detectable on any JSX/HTML. Skip on non-component files."
+
+    source:
+      list: "WCAG-2.2"
+      section: "1.1.1"
+      item: "Non-text Content — all img elements require meaningful alt text"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Regex pass: find all <img elements in JSX/TSX.
+          Flag as CANDIDATE if:
+          - <img> has no alt attribute
+          - alt="" (empty string — decorative use case, needs LLM confirm)
+          - alt={undefined} or alt={null}
+          - alt is a variable that may resolve to empty string
+          Flag as DEFINITIVE (no LLM needed):
+          - alt is missing entirely (not even empty)
+          NOTE: <img alt="" /> is valid for decorative images — LLM must confirm
+          whether this is truly decorative or a content image.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an accessibility auditor checking rule ux-001.
+
+          Rule: ux-001 — Image alt text missing or empty
+          Severity: critical
+
+          Applies to: React/Next.js TSX/JSX components.
+
+          The static analysis found an <img> element with a potentially inadequate alt:
+          {static_finding_excerpt}
+
+          Is the alt text ADEQUATE for accessibility?
+
+          ADEQUATE (do NOT flag):
+          - alt="" when the image is purely decorative (icon behind labeled button, spacer, background)
+          - alt="Photo of {entityName}" describing real content
+          - alt={variableName} where variable name suggests real content
+
+          INADEQUATE (flag as critical):
+          - alt is missing entirely
+          - alt="" when image conveys meaning (product photo, event photo, avatar)
+          - alt="image" / alt="photo" / alt="img" (generic, no description)
+          - alt={filename} like alt="wedding-photo.jpg" (file path is not alt text)
+          - alt is variable that concatenates to empty string
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "<img> element missing alt attribute"
+      - "<img> element with empty, generic, or file-path alt"
+
+    suppressions:
+      - path_glob: "src/lib/effects/**"
+        reason: "Third-party animation components; alt attributes may be intentionally absent for decorative elements"
+      - inline_comment: "// ux-001-suppress: decorative"
+        reason: "Operator confirms image is decorative with no content meaning"
+      - path_glob: "**/*.stories.tsx"
+        reason: "Storybook stories may use placeholder images"
+
+    remediation:
+      summary: |
+        Add meaningful alt text describing the image content:
+        <img src="venue.jpg" alt="Grand ballroom with chandelier lighting" />
+        For decorative images: <img src="divider.png" alt="" role="presentation" />
+      guide_ref: null
+
+    action:
+      build_mode: warn
+
+
+  - id: "ux-002"
+    name: "Form input missing label or accessible name"
+    severity: critical
+    category: accessibility
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal a11y rule for form elements."
+
+    source:
+      list: "WCAG-2.2"
+      section: "1.3.1"
+      item: "Info and Relationships — form inputs must have accessible labels"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Regex pass: find all <input elements in JSX.
+          Flag as CANDIDATE if:
+          - <input> has no id and no aria-label and no aria-labelledby
+          - <input id="x"> but no matching <label htmlFor="x"> in same component
+          - <input type="hidden"> — skip (not user-facing)
+          - <input type="submit"> — skip (uses value attr as label)
+          - <input type="button"> — skip (uses value attr as label)
+          NOTE: <label htmlFor="email"><input id="email"> is CORRECT — must not flag.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an accessibility auditor checking rule ux-002.
+
+          Rule: ux-002 — Form input missing label or accessible name
+          Severity: critical
+
+          The static analysis found an <input> element that may lack an accessible label:
+          {static_finding_excerpt}
+
+          Is the input ACCESSIBLE?
+
+          ACCESSIBLE (do NOT flag):
+          - Input has matching <label htmlFor={id}> (htmlFor matches id)
+          - Input has aria-label attribute with descriptive text
+          - Input has aria-labelledby pointing to a visible label element
+          - Input is type="hidden", type="submit", or type="button" (these don't need visible labels)
+          - Input is wrapped in a <label> element
+
+          NOT ACCESSIBLE (flag as critical):
+          - Input has no id, no aria-label, no aria-labelledby, not inside a <label>
+          - Input has id but no matching <label htmlFor> anywhere in the component
+          - placeholder text is used as the only label (placeholder is not a label substitute)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Input element with no label, aria-label, or aria-labelledby"
+      - "Input id with no matching label htmlFor in component"
+
+    suppressions:
+      - inline_comment: "// ux-002-suppress: visually labeled by context"
+        reason: "Input context provides clear visual label not capturable statically"
+      - path_glob: "src/lib/effects/**"
+        reason: "Animation/effect components; not form inputs"
+
+    remediation:
+      summary: |
+        Associate each input with a label:
+        <label htmlFor="email">Email address</label>
+        <input id="email" type="email" />
+        Or use aria-label: <input type="search" aria-label="Search products" />
+      guide_ref: null
+
+    action:
+      build_mode: warn
+
+
+  - id: "ux-003"
+    name: "Interactive element not keyboard-accessible"
+    severity: high
+    category: accessibility
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal a11y rule. LLM-only — requires understanding interaction model."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "Not applicable to non-frontend languages."
+
+    source:
+      list: "WCAG-2.2"
+      section: "2.1.1"
+      item: "Keyboard — all functionality operable via keyboard"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an accessibility auditor checking rule ux-003.
+
+          Rule: ux-003 — Interactive element not keyboard-accessible
+          Severity: high
+
+          Applies to: React/Next.js TSX/JSX components.
+
+          Does this component contain interactive elements that are NOT keyboard-accessible?
+
+          NOT a violation:
+          - <button>, <a href>, <input>, <select>, <textarea> (native elements, keyboard by default)
+          - <div role="button" tabIndex={0} onKeyDown={...} onClick={...}> (explicit keyboard handling)
+          - Pure display divs with onClick for analytics/tracking (not user-interactive)
+
+          VIOLATION:
+          - <div onClick={fn}> with no role="button" and no tabIndex
+          - <span onClick={fn}> acting as a button with no keyboard equivalent
+          - onClick handler on a non-interactive element with no keyboard alternative
+          - onMouseDown without corresponding onKeyDown for same action
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:element", "excerpt": "the non-keyboard element",
+            "explanation": "one sentence"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "div or span with onClick but no role, tabIndex, or keyboard handler"
+
+    suppressions:
+      - inline_comment: "// ux-003-suppress: presentation only"
+        reason: "Element has onClick for analytics only; not user-interactive"
+      - path_glob: "src/lib/effects/**"
+        reason: "Animation components may use click handlers for visual effects only"
+
+    remediation:
+      summary: |
+        Replace non-semantic click handlers with button elements:
+        <button onClick={fn} className="card-link">Click me</button>
+        Or add keyboard support:
+        <div role="button" tabIndex={0} onClick={fn} onKeyDown={(e) => e.key === 'Enter' && fn()}>
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "ux-004"
+    name: "Focus management missing in modal or overlay"
+    severity: high
+    category: accessibility
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal a11y rule. LLM-only."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "Not applicable to non-frontend languages."
+
+    source:
+      list: "WCAG-2.2"
+      section: "2.4.3"
+      item: "Focus Order — focus must be managed when content appears/disappears"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are an accessibility auditor checking rule ux-004.
+
+          Rule: ux-004 — Focus management missing in modal/overlay
+          Severity: high
+
+          Does this component show/hide modal or overlay content WITHOUT managing focus?
+
+          NOT a violation:
+          - Modal uses `inert` attribute on background content
+          - Focus is explicitly moved to modal on open (useEffect with .focus() call)
+          - Focus is returned to trigger element on close
+          - Using a library that handles focus (e.g., @radix-ui/react-dialog, headlessui)
+          - Not a modal/overlay component
+
+          VIOLATION:
+          - Modal opens (visibility toggled) but focus remains on background elements
+          - No focus trap: user can tab out of modal to background
+          - Modal closes but focus is not returned to the trigger
+          - Overlay with interactive content that doesn't capture focus
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:component", "excerpt": "the modal toggle pattern",
+            "explanation": "one sentence"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: full_file
+        estimated_tokens: 450
+
+    triggers:
+      - "Modal or dialog visibility toggle without focus management"
+
+    suppressions:
+      - inline_comment: "// ux-004-suppress: focus managed by library"
+        reason: "Focus management delegated to a11y-compliant library"
+
+    remediation:
+      summary: |
+        Add focus management to modals:
+        useEffect(() => { if (isOpen) modalRef.current?.focus(); }, [isOpen]);
+        Use inert attribute: <div inert={!isOpen}> for background content.
+        Or use @radix-ui/react-dialog which handles focus automatically.
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "ux-005"
+    name: "ARIA attributes used incorrectly"
+    severity: high
+    category: accessibility
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal a11y rule. Candidate/confirm — semantic mismatch requires LLM."
+
+    source:
+      list: "WCAG-2.2"
+      section: "4.1.2"
+      item: "Name, Role, Value — ARIA attributes must match element semantics"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Regex pass: find all aria-* attributes in JSX.
+          Flag as CANDIDATE if:
+          - aria-expanded on an element that is not a disclosure widget (button, <details>)
+          - aria-pressed on a non-toggle element
+          - aria-hidden on an element with interactive children
+          - role="button" without onClick, tabIndex, onKeyDown
+          - aria-label on non-interactive elements (confuses screen readers)
+          Flag these as candidates for LLM semantic confirmation.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an accessibility auditor checking rule ux-005.
+
+          Rule: ux-005 — ARIA attributes used incorrectly
+          Severity: high
+
+          The static analysis found ARIA attribute usage that may be incorrect:
+          {static_finding_excerpt}
+
+          Is the ARIA usage CORRECT?
+
+          CORRECT (do NOT flag):
+          - aria-expanded={isOpen} on a <button> that controls a collapsible section
+          - aria-pressed on a toggle button where pressed/unpressed states differ
+          - aria-hidden="true" on purely decorative elements
+          - aria-label on an icon button with no visible text
+          - role="status" on live region for screen reader announcements
+
+          INCORRECT (flag):
+          - aria-expanded on a static div that isn't a disclosure
+          - aria-pressed on a non-toggle button (e.g., submit button)
+          - aria-hidden on an element with focused/interactive children
+          - role="button" on element without keyboard support
+          - aria-describedby pointing to non-existent element id
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "the ARIA attribute usage",
+            "explanation": "one sentence"}
+
+          Only return finding: true if confidence >= 0.75.
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "aria-expanded/pressed on non-disclosure element"
+      - "aria-hidden on interactive element"
+      - "role=button without keyboard handling"
+
+    suppressions:
+      - inline_comment: "// ux-005-suppress: intentional ARIA"
+        reason: "ARIA usage is correct but requires context not visible in code"
+
+    remediation:
+      summary: |
+        Match ARIA to element semantics:
+        Toggle buttons: <button aria-pressed={isActive}>Toggle</button>
+        Disclosure: <button aria-expanded={isOpen} aria-controls="panel">Expand</button>
+        Live regions: <div role="status" aria-live="polite">{statusMessage}</div>
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "ux-006"
+    name: "List items in .map() missing key prop"
+    severity: high
+    category: performance
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "React-specific rule. Static detection only."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "React-specific."
+
+    source:
+      list: "REACT-BEST-PRACTICES"
+      section: "lists"
+      item: "Each child in a list should have a unique key prop"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Find .map() calls that return JSX elements without a key prop.
+          Pattern: {items.map((item) => <Component />)} or {items.map(fn)}
+          where the returned JSX has no key= attribute.
+
+          IMPORTANT: key={index} or key={i} — index as key is technically valid
+          but risky for dynamic lists. Flag as HIGH (not critical) with explanation.
+
+          Not flagged:
+          - .map() that doesn't return JSX (purely functional transforms)
+          - key is present but not the first prop (still valid)
+          - Fragment keys: <React.Fragment key={id}>
+        fallback_to_llm: false
+
+    triggers:
+      - ".map() returning JSX component without key prop"
+      - "key={index} — index used as key (risky for dynamic lists)"
+
+    suppressions:
+      - inline_comment: "// ux-006-suppress: static list"
+        reason: "List is static and never reordered; index key is stable"
+
+    remediation:
+      summary: |
+        Add a stable unique key from your data:
+        {items.map((item) => <Card key={item.id} {...item} />)}
+        Avoid using array index: key={i} causes rendering bugs when list order changes.
+      guide_ref: null
+
+    action:
+      build_mode: warn
+
+
+  - id: "ux-007"
+    name: "Oversized component with low abstraction"
+    severity: medium
+    category: component_design
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal concept. AST LOC count + LLM judge."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "Not applicable to non-React components."
+
+    source:
+      list: "REACT-BEST-PRACTICES"
+      section: "component-design"
+      item: "Components should be focused, single-concern, and extractable"
+
+    detection:
+      type: hybrid
+      static:
+        tool: ast
+        notes: |
+          Count LOC for each React component function (FunctionDeclaration or
+          const X = () => that returns JSX).
+          Flag as CANDIDATE if:
+          - Component function > 200 lines
+          - Component function > 150 lines AND multiple useEffect/useState calls
+          Report: "CANDIDATE (medium) — large component; confirm whether abstraction is needed."
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a React code quality auditor.
+
+          Rule: ux-007 — Oversized component with low abstraction
+          Severity: medium
+
+          The static analysis found a large React component:
+          {static_finding_excerpt}
+          ({line_count} lines)
+
+          Does this component need decomposition?
+
+          NOT a violation:
+          - Component is large but handles ONE clearly scoped concern (e.g., a complex form with all its fields)
+          - Component is large but already uses clear sub-components for different sections
+          - Size is due to complex but inherently unified UI (e.g., a drag-and-drop canvas)
+
+          VIOLATION:
+          - Component handles multiple distinct concerns (form + data fetching + modal management)
+          - Repeated patterns that could be extracted into smaller components
+          - Multiple unrelated state variables that could live in child components
+          - JSX with > 3 levels of nesting where sections could be extracted
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:component", "excerpt": "component name + LOC",
+            "explanation": "one sentence: why decomposition is or isn't needed"}
+
+          Only return finding: true if confidence >= 0.70.
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Component function > 200 lines with multiple unrelated concerns"
+
+    suppressions:
+      - inline_comment: "// ux-007-suppress: intentionally large"
+        reason: "Component complexity is inherent and not decomposable"
+
+    remediation:
+      summary: |
+        Extract distinct sections into sub-components:
+        - Data fetching → custom hook (useDataFetch)
+        - Modal → separate <Modal> component
+        - Form section → <FormSection> with its own state
+        - Repeated UI patterns → shared component
+      guide_ref: null
+
+    cross_references:
+      - rule: "cq-002"
+        skill: "ds-quality:code-quality"
+        note: "cq-002 fires on long functions universally; ux-007 fires on oversized React components specifically for reuse and single-concern design. Dual-angle: cq-002 is the structural quality angle; ux-007 is the component design angle."
+        surface_co_located: true
+
+    action:
+      build_mode: null
+
+
+  - id: "ux-010"
+    name: "Hardcoded user-facing strings (i18n gap)"
+    severity: medium
+    category: component_design
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx"]
+      note: "Universal rule — applies to any JSX-based framework."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "Not applicable to non-frontend languages."
+
+    source:
+      list: "I18N-BEST-PRACTICES"
+      section: "strings"
+      item: "User-facing strings should use i18n functions rather than hardcoded literals"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Regex pass: find string literals in JSX return expressions.
+          Pattern: JSX containing "String literal" content (not in attributes/props)
+
+          Flag as CANDIDATE if:
+          - String literal appears as direct JSX text content (not inside {})
+          - String literal inside {} that looks user-facing (sentence-case, words)
+
+          NOT flagged (too many false positives):
+          - CSS class names ("block block-hero")
+          - HTML entities ("&apos;", "&#10038;")
+          - aria attributes
+          - URL strings, data-* attributes
+          - Single characters, emoji, symbols
+          - Test/development labels
+
+          Report as: "CANDIDATE — user-facing string literal; confirm i18n needed"
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a frontend code quality auditor.
+
+          Rule: ux-010 — Hardcoded user-facing string (i18n gap)
+          Severity: medium
+
+          The static analysis found string literals in JSX:
+          {static_finding_excerpt}
+
+          Are these strings USER-FACING and should be internationalized?
+
+          USER-FACING (flag — these should be in i18n):
+          - Button labels: "Sign in", "Submit", "Cancel"
+          - UI text: "Welcome back", "Loading...", "No results found"
+          - Error messages: "Invalid email or password"
+          - Navigation labels: "Home", "Settings"
+          - Instructional text: "Enter your email address"
+
+          NOT user-facing (do NOT flag):
+          - CSS/Tailwind class names
+          - aria-label values that are technical (role descriptions)
+          - Data attributes, query params
+          - Technical IDs and keys
+          - Comment strings
+          - Component/block type names (internal)
+
+          NOTE: Flag even if no i18n framework is installed — this is a gap to surface,
+          not an error to block. The finding is advisory ("consider i18n").
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "the string literal",
+            "explanation": "one sentence"}
+
+          Only return finding: true if confidence >= 0.70.
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "User-facing string literal in JSX (button label, UI text, error message)"
+
+    suppressions:
+      - inline_comment: "// ux-010-suppress: not i18n target"
+        reason: "String is technical/internal, not user-visible"
+      - path_glob: "src/lib/effects/**"
+        reason: "Effect component strings are component API not UI copy"
+
+    remediation:
+      summary: |
+        Wrap user-facing strings in an i18n function:
+        import { t } from '@/lib/i18n';
+        <button>{t('auth.sign_in')}</button>
+        Or use a translation hook: const { t } = useTranslation();
+        If no i18n framework is installed, this finding surfaces a gap for future internationalization.
+      guide_ref: null
+
+    action:
+      build_mode: null
+
+
+  - id: "ux-012"
+    name: "Missing dependency in useEffect array"
+    severity: high
+    category: react_hooks
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx", ".ts", ".js"]
+      note: "React-specific. AST detection."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "React-specific."
+
+    source:
+      list: "REACT-BEST-PRACTICES"
+      section: "hooks"
+      item: "useEffect dependency array must include all reactive values used inside"
+
+    detection:
+      type: static
+      static:
+        tool: ast
+        notes: |
+          Parse useEffect calls:
+          1. Find useEffect(() => { ... }, [deps])
+          2. Extract variables referenced in the effect body that are:
+             - Component props or state
+             - Variables declared outside the effect
+             - NOT: stable references (useState setters, useRef.current, constants)
+          3. Compare with dependency array
+          4. If external variable referenced in body is absent from deps → FIRE
+
+          Patterns that ARE violations:
+          - const [name, setName] = useState(); useEffect(() => { fn(name); }, [])
+          - const { userId } = props; useEffect(() => { fetch(userId); }, [])
+
+          Patterns that are NOT violations:
+          - Stable refs: useEffect(() => { ref.current = x; }, []) — ref is stable
+          - setState functions: useEffect(() => { setCount(c => c+1); }, []) — setter is stable
+          - Constants defined outside component
+          - useEffect with no dependency array (runs every render — intentional)
+
+          Flag severity: HIGH (stale data causes subtle bugs)
+        fallback_to_llm: false
+
+    triggers:
+      - "Variable from outer scope used in useEffect but absent from dependency array"
+
+    suppressions:
+      - inline_comment: "// ux-012-suppress: intentional"
+        reason: "Effect intentionally does not re-run on this dependency"
+
+    remediation:
+      summary: |
+        Add missing dependencies to the array:
+        useEffect(() => { fn(name, userId); }, [name, userId]);
+        If an effect should run only once, extract the stable reference or use useRef.
+        If adding deps causes infinite loops, restructure: move the effect trigger outside,
+        or use useCallback/useMemo to stabilize the dependency.
+      guide_ref: null
+
+    action:
+      build_mode: warn
+
+
+  - id: "ux-013"
+    name: "Stale closure in callback or event handler"
+    severity: high
+    category: react_hooks
+
+    applies_to:
+      languages: [typescript, javascript]
+      file_types: [".tsx", ".jsx", ".ts", ".js"]
+      note: "React-specific. LLM-only."
+      skip_on:
+        languages: [golang, python, rust]
+        reason: "React-specific."
+
+    source:
+      list: "REACT-BEST-PRACTICES"
+      section: "hooks"
+      item: "Callbacks that capture state/props should use useCallback with deps or refs"
+
+    detection:
+      type: llm
+      llm:
+        prompt_template: |
+          You are a React code quality auditor.
+
+          Rule: ux-013 — Stale closure in callback or event handler
+          Severity: high
+
+          Does this component have callbacks or event handlers that capture state/props
+          from the outer scope but are not properly stabilized?
+
+          NOT a violation:
+          - Callback uses useCallback with correct dependencies
+          - Callback is recreated on every render (valid if not used as prop/dep)
+          - Callback only accesses stable refs (useRef.current)
+          - Callback is defined with arrow function inside JSX event (inline)
+          - State accessed via ref pattern: const valueRef = useRef(value); (stable read)
+
+          VIOLATION:
+          - Event handler function (not useCallback) passed as prop captures state/props
+            that change, causing child components to see stale values
+          - Callback inside a useEffect that captures state not in its dependency array
+          - Handler registered with addEventListener (not React) that captures stale state
+          - Form submit handler that reads state which may have changed by submission time
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:function", "excerpt": "the stale callback pattern",
+            "explanation": "one sentence"}
+
+          Only return finding: true if confidence >= 0.80.
+        context_scope: full_file
+        estimated_tokens: 450
+
+    triggers:
+      - "Non-memoized callback capturing changing state/props passed to child or used as effect dep"
+
+    suppressions:
+      - inline_comment: "// ux-013-suppress: acceptable stale read"
+        reason: "Stale value is intentional here (e.g., snapshot at submit time)"
+
+    remediation:
+      summary: |
+        Use useCallback with dependencies:
+        const handleClick = useCallback(() => { console.log(name); }, [name]);
+        Or use the ref pattern for values you read but don't watch:
+        const nameRef = useRef(name); useEffect(() => { nameRef.current = name; });
+        const handleClick = () => console.log(nameRef.current); // always fresh
+      guide_ref: null
+
+    action:
+      build_mode: null
