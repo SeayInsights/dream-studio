@@ -252,3 +252,5 @@ N2 in the ledger marks removal of the `canonical_events` swallow as intentionall
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
 
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
+
+<!-- 2026-06-02: aggregate_metrics.db tables (finding_rollups, rule_fire_rates, baseline_trends, guard_calibration, pattern_catalog, recommendation_outcomes) registered in _PYTHON_OWNED_TABLES. Separate DB from studio.db; no migration file required. -->
