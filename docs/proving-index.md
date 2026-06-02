@@ -93,6 +93,16 @@ Last updated: 2026-06-02
 
 ---
 
+## Ops (ds-quality:ops)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| Python (service) | ✓ | dream-studio-clean | PR #146 description | 2026-06-02 | ops-001 FIRE: print() in main.py:173, spool/ingestor.py, dispatcher.py; ops-007 FIRE: config validated lazily in projections/config/settings.py; ops-011 FIRE: urllib fallback path in dispatcher.py lacks timeout; ops-012 FIRE: single-stage Dockerfile (no multi-stage); ops-005/006/008/010/013 PASS; ops-013 SILENT (no k8s manifests) |
+| TypeScript/Node.js | DECLARED | — | rules.yml only | — | Declared in applies_to; no external TS proving run |
+| Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no Go proving run |
+
+---
+
 ## Legend
 
 | Symbol | Meaning |
