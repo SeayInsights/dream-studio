@@ -319,7 +319,9 @@ async def get_forecasts(
         default="sessions", description="Metric to forecast: sessions, tokens, or skills"
     ),
     days: int = Query(default=7, ge=1, le=30, description="Number of days to forecast ahead"),
-    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
+    input_path: Optional[str] = Query(
+        None, description="Path to SQLite input (defaults to aggregate_metrics.db)"
+    ),
 ):
     """
     Get time series forecasts for a specific metric.
@@ -380,7 +382,9 @@ async def get_patterns(
         default=None, description="Pattern type filter: sequence, temporal_hour, temporal_day"
     ),
     min_support: int = Query(default=3, ge=1, description="Minimum number of occurrences"),
-    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
+    input_path: Optional[str] = Query(
+        None, description="Path to SQLite input (defaults to aggregate_metrics.db)"
+    ),
 ):
     """
     Get detected patterns in skill usage and workflows.
@@ -430,7 +434,9 @@ async def get_patterns(
 async def get_recommendations(
     category: Optional[str] = Query(default=None, description="Category filter"),
     min_impact: int = Query(default=0, ge=0, le=100, description="Minimum impact score (0-100)"),
-    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
+    input_path: Optional[str] = Query(
+        None, description="Path to SQLite input (defaults to aggregate_metrics.db)"
+    ),
 ):
     """
     Get ML-generated recommendations for workflow optimization.
@@ -492,7 +498,9 @@ async def get_benchmarks(
         default=None, description="Metric to benchmark: sessions, skills, tokens"
     ),
     period: str = Query(default="30d", description="Period for current metrics (e.g., 7d, 30d)"),
-    input_path: Optional[str] = Query(None, description="Path to SQLite input (defaults to aggregate_metrics.db)"),
+    input_path: Optional[str] = Query(
+        None, description="Path to SQLite input (defaults to aggregate_metrics.db)"
+    ),
 ):
     """
     Get comparative benchmarks comparing current vs historical performance.
