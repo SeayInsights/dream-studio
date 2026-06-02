@@ -44,6 +44,14 @@ class DetectedStack:
         None  # primary frontend UI framework for frontend-ux skill dispatch
         # values: 'nextjs', 'react', 'remix', 'vue', 'svelte', 'angular', or None
     )
+    monorepo_type: Optional[str] = (
+        None  # monorepo tooling for architecture skill dispatch
+        # values: 'npm-workspaces', 'pnpm', 'yarn-workspaces', 'cargo', 'gradle', 'lerna', or None
+    )
+    architecture_framework: Optional[str] = (
+        None  # explicit architecture framework for architecture skill calibration
+        # values: 'nestjs', 'spring', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -94,6 +102,10 @@ def detect_stack(path: Path) -> DetectedStack:
 
     # Augment with frontend framework for frontend-ux skill dispatch
     result.frontend_framework = _detect_frontend_framework(path)
+
+    # Augment with monorepo type and architecture framework for architecture skill dispatch
+    result.monorepo_type = _detect_monorepo_structure(path)
+    result.architecture_framework = _detect_architecture_framework(path)
 
     return result
 
@@ -422,6 +434,100 @@ def _detect_frontend_framework(path: Path) -> Optional[str]:
                 return "react"
         except (json.JSONDecodeError, OSError):
             pass
+    return None
+
+
+def _detect_monorepo_structure(path: Path) -> Optional[str]:
+    """Detect monorepo tooling for architecture skill dispatch.
+
+    Returns: 'npm-workspaces', 'pnpm', 'yarn-workspaces', 'cargo', 'gradle', 'lerna', or None.
+    """
+    # pnpm: pnpm-workspace.yaml
+    if (path / "pnpm-workspace.yaml").exists() or (path / "pnpm-workspace.yml").exists():
+        return "pnpm"
+
+    # Lerna: lerna.json
+    if (path / "lerna.json").exists():
+        return "lerna"
+
+    # npm/yarn workspaces: package.json with "workspaces" field
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            content = json.loads(pkg_json.read_text(encoding="utf-8"))
+            if "workspaces" in content:
+                # Distinguish yarn vs npm workspaces by lock file
+                if (path / "yarn.lock").exists():
+                    return "yarn-workspaces"
+                return "npm-workspaces"
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Cargo workspace: Cargo.toml with [workspace] section
+    cargo_toml = path / "Cargo.toml"
+    if cargo_toml.exists():
+        try:
+            content = cargo_toml.read_text(encoding="utf-8")
+            if "[workspace]" in content:
+                return "cargo"
+        except OSError:
+            pass
+
+    # Gradle multi-project: settings.gradle or settings.gradle.kts with include()
+    for settings_file in ["settings.gradle", "settings.gradle.kts"]:
+        settings_path = path / settings_file
+        if settings_path.exists():
+            try:
+                content = settings_path.read_text(encoding="utf-8")
+                if "include(" in content or 'include "' in content:
+                    return "gradle"
+            except OSError:
+                pass
+
+    return None
+
+
+def _detect_architecture_framework(path: Path) -> Optional[str]:
+    """Detect explicit architecture frameworks for architecture skill calibration.
+
+    Returns: 'nestjs', 'spring', or None.
+    NestJS and Spring impose their own layer structures; the skill uses these
+    to inform layer_map defaults.
+    """
+    # NestJS: @nestjs/* in package.json deps + nest-cli.json
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            content = json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps = {
+                **content.get("dependencies", {}),
+                **content.get("devDependencies", {}),
+            }
+            if any(dep.startswith("@nestjs/") for dep in all_deps):
+                return "nestjs"
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Spring Boot: pom.xml with spring-boot or Gradle with org.springframework.boot
+    pom_xml = path / "pom.xml"
+    if pom_xml.exists():
+        try:
+            content = pom_xml.read_text(encoding="utf-8")
+            if "spring-boot" in content or "springframework" in content:
+                return "spring"
+        except OSError:
+            pass
+
+    for gradle_file in ["build.gradle", "build.gradle.kts"]:
+        gradle_path = path / gradle_file
+        if gradle_path.exists():
+            try:
+                content = gradle_path.read_text(encoding="utf-8")
+                if "org.springframework.boot" in content or "spring-boot" in content:
+                    return "spring"
+            except OSError:
+                pass
+
     return None
 
 
