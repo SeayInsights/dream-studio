@@ -1,0 +1,876 @@
+# Architecture Rules — Phase 1
+# Version: 1.0.0
+# Schema version: 1
+#
+# Phase 1 scope: 13 rules (arch-001–006, arch-009–015)
+# Phase 2 scope: 2 rules (arch-007, arch-008) — graph-builder dependency
+#
+# DEFERRED RULES — documented here so future readers know the full scope:
+#
+#   arch-007: Module-level circular dependency (DEFERRED Phase 2)
+#     Rationale: Requires full import graph + SCC algorithm (Tarjan/Kosaraju).
+#     dep-007 (types-deps skill) already covers DIRECT import-level cycles.
+#     arch-007 covers TRANSITIVE paths that dep-007 cannot see (A→B guarded, B→C guarded,
+#     C→A guarded — cycle invisible to per-file TYPE_CHECKING exclusion).
+#     Implement when canonical/skills/quality/shared/dependency_graph.py exists.
+#
+#   arch-008: High afferent coupling (DEFERRED Phase 2)
+#     Rationale: Requires in-degree computation on full import graph.
+#     Implement alongside arch-007 using the same graph builder.
+#     afferent_coupling_threshold in config.yml is reserved for Phase 2.
+#
+# Stack-aware threshold rules (read from config.yml at audit time):
+#   arch-001, arch-002, arch-003, arch-009
+#   Projects override via architecture_config.yml at repo root.
+#   All other rules fire regardless of stack and do not use thresholds.
+
+rules:
+
+  # ─── Category 1: God Objects / Modules ────────────────────────────────────
+
+  - id: "arch-001"
+    name: "God class — too many methods or LOC"
+    severity: high
+    category: god_object
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal structural rule. Threshold from config.yml (god_class_loc, max_method_count). Skip generated code and framework base classes."
+
+    source:
+      list: "Clean Architecture"
+      section: "Chapter 7"
+      item: "Single Responsibility Principle — a class should have only one reason to change"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          AST-based detection per language:
+            Python: ast.ClassDef — compute LOC span (end_lineno - lineno) + count public methods
+                    (method names not starting with _)
+            TypeScript/JavaScript: ClassDeclaration — LOC span + MethodDefinition count
+            Go: struct TypeSpec + associated *ast.FuncDecl with matching receiver
+            Rust: struct definition + impl block method count
+
+          Thresholds from config.yml (stack-aware):
+            god_class_loc: frontend=300, backend=500, library=200, default=400
+            max_method_count: frontend=12, backend=25, library=8, default=15
+
+          Flag as CANDIDATE if LOC >= threshold OR method count >= threshold.
+          LLM confirm to exclude: Django Model, SQLAlchemy Base, generated ORM classes.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-001.
+
+          Rule: arch-001 — God class: too many methods or LOC
+          Severity: high
+
+          Static analysis flagged this class:
+          {static_finding_excerpt}
+
+          File: {file_path}
+          Class: {class_name}
+          LOC span: {loc_count} (threshold: {threshold})
+          Public method count: {method_count}
+          Stack family: {stack_family}
+
+          Is this a genuine god class violation?
+
+          NOT a violation (do NOT flag):
+          - Framework base classes by design (Django Model, SQLAlchemy Base, React.Component)
+          - Generated code (ORM models, protobuf, thrift stubs)
+          - Thin orchestrator where all methods delegate to sub-components
+          - Data transfer objects or config classes with many simple fields
+
+          IS a violation (flag as high):
+          - Class mixes unrelated concerns (auth + caching + notifications + logging)
+          - Class spans multiple business domains (user auth + billing + reporting)
+          - Removing 5+ methods would not break any cohesive use case
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the mixed concerns",
+            "suggested_split": "optional: two or more classes to extract"}
+        context_scope: class
+        estimated_tokens: 500
+
+    triggers:
+      - "Class LOC exceeds stack-appropriate threshold"
+      - "Class method count exceeds stack-appropriate threshold"
+
+    suppressions:
+      - "# arch-001: ignore"
+      - "# noqa: arch-001"
+      - "// arch-001: ignore"
+
+    remediation: |
+      Extract responsibilities into separate classes. Each class has one reason to change.
+      Python: split into domain-specific classes; use composition.
+      TypeScript: extract services or custom hooks.
+      Go: separate struct types with focused methods.
+
+    cross_references:
+      - rule_id: "cq-002"
+        skill: "code-quality"
+        relationship: "dual_angle"
+        note: "cq-002 measures individual function LOC (≤50 lines). arch-001 measures class aggregate (LOC + method count). A class where all functions pass cq-002 can still fail arch-001 (20 methods × 50 lines = 1000 LOC total)."
+        surface_co_located: true
+      - rule_id: "ux-007"
+        skill: "frontend-ux"
+        relationship: "dual_angle"
+        note: "ux-007 flags oversized React components via reuse heuristic (LLM judges intent). arch-001 flags via LOC/method count (structural). Same component, different audit axes."
+        surface_co_located: false
+
+    action: "report"
+
+  - id: "arch-002"
+    name: "God module — imports too many external packages"
+    severity: medium
+    category: god_object
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["__init__.py", "index.ts", "index.js", "index.tsx"]
+      note: "Universal coupling rule. Threshold from config.yml (max_import_count). Skip barrel/re-export files."
+
+    source:
+      list: "Coupling and Cohesion"
+      section: "Refactoring — Martin Fowler"
+      item: "A module that imports many external packages is tightly coupled and fragile to change"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Count distinct external import targets per file (top-level package names only):
+            Python: ast.Import (top-level name) + ast.ImportFrom (module.split('.')[0] if not relative)
+            TypeScript/JavaScript: ImportDeclaration — non-relative specifiers only (not starting with ./)
+            Go: import spec — distinct package import paths
+            Rust: use declarations — distinct external crate paths (not crate::)
+
+          Skip re-export files: __init__.py, index.ts/tsx/js barrel files.
+          Skip test files: files in tests/, __tests__/, spec/ directories.
+
+          Threshold from config.yml (max_import_count):
+            frontend=8, backend=15, library=5, default=10
+
+          DEFINITIVE (no LLM) if import count > threshold × 1.5.
+          No LLM confirmation for this rule (import count is unambiguous).
+        fallback_to_llm: false
+
+    triggers:
+      - "Module imports more external packages than stack-appropriate threshold"
+
+    suppressions:
+      - "# arch-002: ignore"
+      - "# noqa: arch-002"
+      - "// arch-002: ignore"
+
+    remediation: |
+      Reduce external dependencies:
+      - Introduce a facade that wraps 3–5 related dependencies into one interface
+      - Group imports by domain; if they split into clusters, the module may be two modules
+      - Use dependency injection to reduce direct compile-time coupling
+
+    action: "report"
+
+  - id: "arch-003"
+    name: "Deeply nested module hierarchy"
+    severity: medium
+    category: god_object
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal hierarchy rule. Counts directory depth from project source root. Threshold from config.yml (max_nesting_depth). Skip generated, test, and vendor directories."
+
+    source:
+      list: "Clean Architecture — Package Principles"
+      section: "Package Cohesion"
+      item: "Deep hierarchies obscure real structure; prefer flat or 2–3 level hierarchies"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Calculate directory depth relative to project source root (src/, app/, or repo root).
+          Each directory segment between source root and the file adds 1 to depth.
+
+          Skip on:
+          - tests/, __tests__/, spec/ directories
+          - generated/, .generated/, dist/, build/, out/ directories
+          - node_modules/, .venv/, vendor/, target/ directories
+
+          Threshold from config.yml (max_nesting_depth):
+            frontend=3, backend=4, library=2, default=3
+        fallback_to_llm: false
+
+    triggers:
+      - "Module path depth exceeds stack-appropriate threshold"
+
+    suppressions:
+      - "# arch-003: ignore"
+      - "// arch-003: ignore"
+
+    remediation: |
+      Flatten the hierarchy. Move files up when intermediate directories provide no semantic grouping.
+      If depth is required by a framework convention, suppress for that subtree.
+
+    action: "report"
+
+  # ─── Category 2: Dependency Direction / Layering ─────────────────────────
+
+  - id: "arch-004"
+    name: "Layer inversion — lower layer imports higher layer"
+    severity: critical
+    category: layering
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: |
+        Universal layering rule. Requires layer_map in config.yml.
+        Phase 1: heuristic detection (layer name in import path).
+        Phase 2 upgrade: full dependency graph + topological sort.
+        Skips when no layer_map is configured or file is in a test directory.
+
+    source:
+      list: "Clean Architecture"
+      section: "Chapter 5 — The Dependency Rule"
+      item: "Source code dependencies can only point inward — inner layers must not depend on outer layers"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Phase 1 heuristic — layer-name detection in import paths:
+
+          1. Read layer_map from config.yml → ordered list of (name, rank).
+          2. For each file, determine its layer by matching layer name against its path segments.
+          3. For each import in the file, determine the imported layer by matching against path segments.
+          4. Violation when: importing_layer_rank < imported_layer_rank
+             (lower rank = more central; central layer importing outer layer = violation)
+
+          Example (dream-studio layer_map):
+            control=0, core=1, projections=2, interfaces=3, canonical=4
+            core/domain/user.py (rank 1) imports interfaces.api.routes.users (rank 3)
+            → 1 < 3 → violation: central domain depends on adapter layer
+
+          Skip when:
+          - No layer_map configured in config.yml
+          - File is in test directory
+          - File or import path matches no layer names (cannot classify layer)
+          - File is in the outermost layer (nothing more outer to import from)
+
+          NOTE: arch-004 Phase 1 uses heuristic (layer name in path). A Phase 2 upgrade will
+          build the full import graph for stronger guarantees. Current findings are conservative
+          (only fires when both source and target layers are identifiable by name).
+        fallback_to_llm: false
+
+    triggers:
+      - "Module in central layer imports module in outer/peripheral layer"
+
+    suppressions:
+      - "# arch-004: ignore"
+      - "// arch-004: ignore"
+
+    remediation: |
+      Invert the dependency:
+      1. Define an interface/protocol in the inner layer
+      2. Implement the interface in the outer layer
+      3. Inner layer depends on the abstraction; outer layer provides the implementation
+      This is the Dependency Inversion Principle at the architectural level.
+
+    action: "report"
+
+  - id: "arch-005"
+    name: "Cross-layer internal access — uses private internals of another module"
+    severity: high
+    category: layering
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal layering rule. Detects _private and __private access across module boundaries. LLM confirms to avoid false-positives on same-module access."
+
+    source:
+      list: "Clean Architecture"
+      section: "Chapter 8 — Component Principles"
+      item: "Depend on public APIs, never on internal details of another component"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Static pass: flag as CANDIDATE when:
+          Python: import path contains ._private or .__private (name starting with _)
+                  across module boundary (not the current module)
+          TypeScript/JS: import from path containing /_private, /_internal, or /internal segment
+          Go: accessing unexported identifier from a different package (static approximation via naming)
+          Rust: accessing pub(crate) items from outside the crate (approximation)
+
+          Key exclusion: __init__.py importing from its own sub-modules is not a violation.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-005.
+
+          Rule: arch-005 — Cross-layer internal access
+          Severity: high
+
+          A module is accessing what appears to be an internal detail of another module:
+          {static_finding_excerpt}
+
+          File: {file_path}
+          Import or access: {import_or_access}
+
+          Is this a genuine arch-005 violation?
+
+          NOT a violation (do NOT flag):
+          - Access within the same module or package
+          - Test files accessing their own module's internals under test
+          - The "internal" name is actually a public API with a misleading name
+          - Python __init__.py importing from its own sub-modules (standard package pattern)
+
+          IS a violation (flag as high):
+          - Module A imports module_b._internal_helper across a layer boundary
+          - Module A imports from a path containing /_private/ or /_internal/
+          - Module A bypasses a module's public API to access implementation details
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Import path contains _private or _internal segment"
+      - "Access to _underscore attribute across module boundary"
+
+    suppressions:
+      - "# arch-005: ignore"
+      - "# noqa: arch-005"
+      - "// arch-005: ignore"
+
+    remediation: |
+      Use the module's public API. If the needed functionality is not public,
+      promote it or reconsider whether the coupling is correct.
+
+    action: "report"
+
+  - id: "arch-006"
+    name: "Infrastructure type leaking into domain"
+    severity: high
+    category: layering
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal domain purity rule. LLM-only. Applies only to files identified as domain entities or domain services (by name or directory convention)."
+
+    source:
+      list: "Domain-Driven Design — Eric Evans"
+      section: "Chapter 4 — Isolating the Domain"
+      item: "Infrastructure concerns must not appear in domain entities"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-006.
+
+          Rule: arch-006 — Infrastructure type leaking into domain
+          Severity: high
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Does this domain entity or domain service contain infrastructure dependencies?
+
+          Infrastructure indicators (flag as high):
+          - Database client/session as a field: SQLAlchemy Session, pg.Client, Redis, DynamoDB
+          - HTTP client as a field: requests.Session, axios, fetch, httpx.Client
+          - Config with deployment details: DATABASE_URL, API_KEY, SECRET_KEY as fields
+          - Raw SQL queries inside a domain entity method
+          - Message broker client as field: Kafka, RabbitMQ, SQS
+          - Direct import of ORM model class into a domain entity
+
+          NOT a violation:
+          - Repository interface/protocol defined in domain (accepts infra via DI)
+          - Domain service that receives a repository as constructor argument (correct DI)
+          - Value objects and domain events (no infra at all — these are clean)
+          - Application services coordinating domain + infra (live outside pure domain)
+
+          Only flag files that are clearly domain entities or core domain services.
+          Skip application services, repositories, and infrastructure modules.
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the leaked type",
+            "suggestion": "how to remove the infrastructure dependency"}
+        context_scope: file
+        estimated_tokens: 600
+
+    triggers:
+      - "Domain entity contains database client or HTTP client field"
+      - "Domain entity imports infrastructure module directly"
+
+    suppressions:
+      - "# arch-006: ignore"
+      - "# noqa: arch-006"
+      - "// arch-006: ignore"
+
+    remediation: |
+      Remove infrastructure from domain:
+      1. Define an interface/protocol in the domain (e.g., UserRepository)
+      2. Implement the interface in the infrastructure layer
+      3. Inject the interface into the domain service via constructor DI
+
+    action: "report"
+
+  # arch-007 DEFERRED — see header comment above
+  # arch-008 DEFERRED — see header comment above
+
+  # ─── Category 3: Coupling / Cohesion ──────────────────────────────────────
+
+  - id: "arch-009"
+    name: "High efferent coupling — module depends on too many others"
+    severity: medium
+    category: coupling
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["__init__.py", "index.ts", "index.js", "index.tsx"]
+      note: |
+        Universal coupling rule. Threshold from config.yml (efferent_coupling_threshold).
+        Counts ALL import targets (external + internal), unlike arch-002 which counts
+        external packages only. Skip barrel files and test files.
+
+    source:
+      list: "Metrics of OO Design — Robert Martin"
+      section: "Efferent Coupling (Ce)"
+      item: "Ce = number of classes/modules outside a component that this component depends on"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Count distinct import targets per file (both external and internal modules):
+            Python: ast.Import + ast.ImportFrom (all, including relative)
+            TypeScript/JavaScript: all ImportDeclaration sources (both relative and external)
+            Go: all import spec paths
+            Rust: all use declaration paths
+
+          Skip: barrel files (__init__.py, index.ts/js), test files.
+
+          Threshold from config.yml (efferent_coupling_threshold):
+            service=12, utility=5, default=8
+        fallback_to_llm: false
+
+    triggers:
+      - "Module depends on more modules than efferent coupling threshold"
+
+    suppressions:
+      - "# arch-009: ignore"
+      - "# noqa: arch-009"
+      - "// arch-009: ignore"
+
+    remediation: |
+      Reduce dependencies:
+      - Introduce a facade to bundle related dependencies into one interface
+      - Extract a sub-module to handle a cluster of related functionality
+      - Consider if high efferent coupling indicates a cohesion issue (arch-010)
+
+    action: "report"
+
+  - id: "arch-010"
+    name: "Low cohesion — module contains unrelated concerns"
+    severity: medium
+    category: coupling
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal cohesion rule. LLM-only. Particularly effective on files named utils, helpers, common, misc."
+
+    source:
+      list: "Clean Architecture"
+      section: "Chapter 13 — Component Cohesion"
+      item: "The Common Closure Principle — gather things that change for the same reasons"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-010.
+
+          Rule: arch-010 — Low cohesion: module contains unrelated concerns
+          Severity: medium
+
+          File: {file_path}
+          Public API (functions, classes, exports):
+          {public_api_excerpt}
+
+          Does this module have low cohesion?
+
+          LOW COHESION (flag as medium) — exports span 3+ distinct domains:
+          - user auth + billing calculation + PDF generation in one module
+          - database access + HTTP client + config parsing in one utility file
+          - A file named "utils.py" or "helpers.ts" with 10+ unrelated functions
+
+          NOT a violation:
+          - Module handles one clear responsibility (all exports relate to the same concept)
+          - Application service coordinating 2–3 related domain operations (coordination is its job)
+          - Test helpers file (intentionally multi-purpose for setup)
+          - Framework integration files (e.g., Django views.py groups views by resource)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the unrelated concerns",
+            "suggested_split": "optional: how to split this module"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "Module exports span multiple unrelated domains"
+      - "Utility or helpers file accumulating unrelated functions"
+
+    suppressions:
+      - "# arch-010: ignore"
+      - "# noqa: arch-010"
+      - "// arch-010: ignore"
+
+    remediation: |
+      Split by responsibility. Each module has one reason to change.
+      If the module is named "utils", "helpers", or "misc" — treat it as a cohesion red flag.
+
+    action: "report"
+
+  # ─── Category 4: Abstraction Quality ──────────────────────────────────────
+
+  - id: "arch-011"
+    name: "Premature abstraction — interface or abstract class with one implementation"
+    severity: medium
+    category: abstraction
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: |
+        Universal abstraction quality rule. AST-based.
+        Threshold: fires when concrete implementation count < premature_abstraction_implementer_min
+        (default: 2). Use # arch-011: extension-point to suppress for intentional plugin points.
+
+    source:
+      list: "YAGNI — You Aren't Gonna Need It"
+      section: "Extreme Programming Practices"
+      item: "Don't add abstraction before there are at least two concrete use cases for it"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          AST-based detection:
+          1. Find all abstractions:
+             Python: classes inheriting abc.ABC, using @abstractmethod, or Protocol subclasses
+             TypeScript: interface declarations + abstract class declarations
+             Go: interface type declarations with methods
+             Rust: trait definitions with required methods
+
+          2. Count concrete implementations across the project:
+             Python: classes that inherit from the abstract class (non-abstract subclasses)
+             TypeScript: `implements InterfaceName` or non-abstract `extends AbstractClass`
+             Go: types where all interface methods are implemented (structural typing)
+             Rust: `impl TraitName for ConcreteType` count
+
+          3. Flag if count < premature_abstraction_implementer_min (default: 2 from config.yml).
+
+          Skip on:
+          - Abstractions with suppression comment `# arch-011: extension-point`
+          - Names containing Mock, Fake, Stub (test doubles are exempt)
+          - Framework base classes (Django Model, SQLAlchemy Base)
+        fallback_to_llm: false
+
+    triggers:
+      - "Interface or abstract class with fewer concrete implementations than minimum"
+
+    suppressions:
+      - "# arch-011: ignore"
+      - "# arch-011: extension-point  (intentional extension point — suppresses finding)"
+      - "// arch-011: ignore"
+      - "// arch-011: extension-point"
+
+    remediation: |
+      Remove the abstraction until a second implementation is needed.
+      Adding the abstraction later (when needed) costs less than maintaining an unnecessary
+      layer of indirection. If the abstraction is an intentional plugin point,
+      suppress with `# arch-011: extension-point`.
+
+    action: "report"
+
+  - id: "arch-012"
+    name: "Missing abstraction — same coupling pattern repeated 3 or more times"
+    severity: medium
+    category: abstraction
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal rule. LLM-only. Context scope is directory — the LLM sees multiple related files to identify patterns."
+
+    source:
+      list: "The Pragmatic Programmer"
+      section: "DRY — Don't Repeat Yourself"
+      item: "If a pattern appears 3 times, it needs a name and an abstraction"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-012.
+
+          Rule: arch-012 — Missing abstraction: same pattern repeated 3+ times
+          Severity: medium
+
+          Files to inspect (related files in the same module/directory):
+          {file_excerpts}
+
+          Is there a missing abstraction (Rule of Three)?
+
+          MISSING ABSTRACTION (flag as medium):
+          - Same fetch → validate → cache → return pattern in 3+ places without shared base
+          - Same try/catch + logging + retry pattern in 3+ service methods
+          - Same DTO construction (DB model → API response) in 3+ handlers
+          - Same permission check at 4+ endpoint handlers without shared decorator/middleware
+
+          NOT a violation:
+          - Two similar patterns (rule of three: first=write, second=duplicate, third=abstract)
+          - Patterns differing in significant ways (each branch has unique logic)
+          - Framework boilerplate that should not be abstracted (e.g., FastAPI route decorator)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "locations": ["filename:line", ...], "excerpt": "...",
+            "explanation": "one sentence naming the repeated pattern",
+            "suggested_abstraction": "name and type of abstraction to extract"}
+        context_scope: directory
+        estimated_tokens: 800
+
+    triggers:
+      - "Same structural pattern repeated 3+ times without shared abstraction"
+
+    suppressions:
+      - "# arch-012: ignore"
+      - "// arch-012: ignore"
+
+    remediation: |
+      Name the pattern and extract an abstraction:
+      Python: decorator, mixin, or base class
+      TypeScript: higher-order function, middleware, or base class
+      Go: functional options pattern or interface
+      Rust: trait with default implementations
+
+    action: "report"
+
+  - id: "arch-013"
+    name: "Dead generality — generic parameter or config never varied"
+    severity: medium
+    category: abstraction
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal rule. LLM-only. Detects speculative generality — abstractions that exist but are never actually used with variation."
+
+    source:
+      list: "Refactoring — Martin Fowler"
+      section: "Chapter 12"
+      item: "Speculative Generality — YAGNI for abstraction parameters"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-013.
+
+          Rule: arch-013 — Dead generality: generic parameter or config never varied
+          Severity: medium
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Is there dead generality (speculative abstraction)?
+
+          DEAD GENERALITY (flag as medium):
+          - Generic class Container[T] where T is always instantiated with the same concrete type
+          - Function with flag parameter `mode: str = "default"` always called without the flag
+          - Config class with field `backend: str = "sqlite"` never set to anything else
+          - Abstract factory where only one concrete factory is ever created
+          - Type parameters always the same at every call site in the project
+
+          NOT a violation:
+          - Generic types actually used with 2+ distinct type parameters
+          - Config fields that differ between environments (dev vs prod)
+          - Optional parameters occasionally varied by callers
+          - Test code that exercises edge cases (tests may intentionally vary the parameter)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the unused generality",
+            "suggestion": "how to remove the unnecessary abstraction"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "Generic parameter never varies across all call sites"
+      - "Config option with default value never overridden"
+
+    suppressions:
+      - "# arch-013: ignore"
+      - "// arch-013: ignore"
+
+    remediation: |
+      Remove the unused generality. Make the concrete type/value the only implementation.
+      If added "for future use" — remove it now. YAGNI.
+
+    action: "report"
+
+  - id: "arch-014"
+    name: "Shotgun surgery — one concept change requires edits in 5 or more modules"
+    severity: high
+    category: abstraction
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal coupling quality rule. LLM-only. Context scope is directory — the LLM sees multiple related files to assess change multiplier."
+
+    source:
+      list: "Refactoring — Martin Fowler"
+      section: "Chapter 3 — Bad Smells in Code"
+      item: "Shotgun Surgery: a single change requires many small changes in many different places"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-014.
+
+          Rule: arch-014 — Shotgun surgery: one change requires edits across 5+ modules
+          Severity: high
+
+          Related modules that handle the same concept:
+          {file_excerpts}
+
+          Is there a shotgun surgery smell?
+
+          SHOTGUN SURGERY (flag as high):
+          - Adding a field to a core entity requires: model + migration + serializer + validator +
+            test fixture + API response + dashboard — 5+ files for one logical change
+          - Renaming a core concept requires changes in 10+ files
+          - Adding a new status to an enum requires updates everywhere that switches on it
+          - Each new API endpoint requires identical boilerplate across routing, auth, validation,
+            serialization, testing — no abstraction reduces the fan-out
+
+          NOT a violation:
+          - Normal multi-layer changes (model + migration + API + test is standard for new features)
+          - Configuration changes that naturally touch many files
+          - 2–3 file changes per concept (acceptable coupling)
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "locations": ["filename:line", ...], "excerpt": "...",
+            "explanation": "one sentence naming the concept that triggers shotgun surgery",
+            "suggestion": "abstraction that would localize the change"}
+        context_scope: directory
+        estimated_tokens: 800
+
+    triggers:
+      - "Adding or changing a single concept requires changes in 5+ modules"
+
+    suppressions:
+      - "# arch-014: ignore"
+      - "// arch-014: ignore"
+
+    remediation: |
+      Centralize the concept so each logical change touches one place:
+      - Introduce a registry or factory that owns the concept
+      - Use polymorphism to eliminate switch-on-type patterns
+      - Open/Closed Principle: extend by adding, not by modifying N places
+
+    action: "report"
+
+  - id: "arch-015"
+    name: "Feature envy — module accesses another module's data more than its own"
+    severity: medium
+    category: abstraction
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal coupling quality rule. LLM-only."
+
+    source:
+      list: "Refactoring — Martin Fowler"
+      section: "Chapter 3 — Bad Smells in Code"
+      item: "Feature Envy: a function seems more interested in a class other than the one it is in"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an architecture auditor checking rule arch-015.
+
+          Rule: arch-015 — Feature envy: module accesses another module's data more than its own
+          Severity: medium
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Is there feature envy?
+
+          FEATURE ENVY (flag as medium):
+          - A method in class A calls 5+ methods on class B for every 1 method on class A
+          - A function imports another module's data structures and manipulates them directly
+            instead of calling a method on that module
+          - Pattern: module_b.field1, module_b.field2, module_b.calculate() all in module A
+            with little use of module A's own data
+
+          NOT a violation:
+          - Data transfer objects legitimately accessed from multiple modules
+          - Coordinators/application services (their job is to orchestrate other modules)
+          - Simple property access 1–2 levels deep (getter pattern is fine)
+          - Builder or factory patterns constructing objects for other modules
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the envied module",
+            "suggestion": "move the logic to the envied module or extract a method there"}
+        context_scope: class
+        estimated_tokens: 500
+
+    triggers:
+      - "Function primarily operates on another module's data rather than its own"
+
+    suppressions:
+      - "# arch-015: ignore"
+      - "# noqa: arch-015"
+      - "// arch-015: ignore"
+
+    remediation: |
+      Move the method to the module it envies, or introduce a method on the envied module
+      that encapsulates the repeated access. The function should live where its data lives.
+
+    action: "report"
