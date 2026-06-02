@@ -1,0 +1,899 @@
+# Ops Rules — Phase 1
+# Version: 1.0.0
+# Schema version: 1
+#
+# Phase 1 scope: 13 rules (ops-001–013)
+#
+# DEFERRED RULES — owned by existing skills; documented here to prevent duplication:
+#
+#   Rate limiting:
+#     → sec-016 (security skill): rate limiting and brute-force protection
+#     → api-005 (backend-api skill): rate limiting on high-traffic/auth endpoints
+#     Both fire from different angles; a third ops rule would produce duplicate findings.
+#
+#   Backup strategy:
+#     → db-016 (database skill): automated backups enabled and scheduled
+#     → db-017 (database skill): backup restore tested, not just configured
+#     → db-018 (database skill): RTO and RPO documented
+#     Database skill owns the full backup triad.
+#
+#   CVE / dependency vulnerability gate:
+#     → dep-001 (types-deps skill): CVE gate is non-blocking (continue-on-error)
+#     Types-deps skill owns dependency vulnerability scanning.
+#
+# CROSS-REFERENCES (dual-angle, NOT duplicates):
+#   ops-003 ↔ sec-013: PII in log statements (ops, logging angle) vs PII in any runtime
+#     output including error responses, cache keys (sec, data-privacy angle).
+#     Different detection surfaces — ops-003 scopes to log.*() call sites only.
+#
+#   ops-010 ↔ sec-001: Secrets in deployment artifacts (ops, build/deploy gate) vs
+#     secrets in source code/git history (sec, commit gate).
+#     Different gates, different failure modes — both can fire without duplication.
+#
+# Conditional rules (skip when context absent):
+#   is_service=False: ops-005, ops-006, ops-008 auto-skip (CLI tools, libraries)
+#   has_dockerfile=False: ops-012 auto-skips
+#   has_k8s_manifest=False AND has_docker_compose=False: ops-013 auto-skips
+
+rules:
+
+  # ─── Category 1: Logging Discipline ───────────────────────────────────────
+
+  - id: "ops-001"
+    name: "Unstructured logging — print or console.log in production service code"
+    severity: high
+    category: logging
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["tests/", "__tests__/", "spec/", "scripts/", "tools/", "examples/"]
+      note: |
+        Universal rule. Skip test files, standalone scripts, and examples.
+        Production service code should use a structured logging library, not print/console.
+
+    source:
+      list: "12-Factor App"
+      section: "XI. Logs"
+      item: "Treat logs as event streams — structured, queryable, not raw text"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Static pass per language:
+            Python: AST scan for print() calls + check for structlog/logging import absence.
+              Flag as CANDIDATE if: file imports no 'logging' or 'structlog' AND contains print()
+              Flag as DEFINITIVE if: service entrypoint (main.py, app.py, __main__.py) uses print()
+            TypeScript/JS: scan for console.log(, console.warn(, console.error( without
+              winston/pino/bunyan/loglevel import in the file
+            Go: fmt.Println( or fmt.Printf( in non-main packages without log/slog import
+            Rust: println!( in non-test code without log/tracing import
+
+          Skip: test helpers, migration scripts, one-off CLI tools in scripts/
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-001.
+
+          Rule: ops-001 — Unstructured logging
+          Severity: high
+
+          File: {file_path}
+          This file uses print()/console.log() without a structured logging library:
+          {static_finding_excerpt}
+
+          Is this a genuine ops-001 violation?
+
+          NOT a violation (do NOT flag):
+          - Migration scripts, one-off data tools, standalone CLI utilities
+          - Test fixtures or test helper utilities
+          - Code that is clearly not part of the service runtime (setup.py, build scripts)
+          - A structured logger IS imported but print() is used for a specific reason
+
+          IS a violation (flag as high):
+          - Service route handlers, background workers, or daemon code using print()
+          - Business logic modules emitting debug output via print() instead of logger
+          - Application startup code logging configuration via print() instead of structured logger
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "print() in production service code without structured logging library"
+      - "console.log() in service code without logging library import"
+
+    suppressions:
+      - "# ops-001: ignore"
+      - "# noqa: ops-001"
+      - "// ops-001: ignore"
+
+    remediation: |
+      Replace print() with a structured logger:
+      Python: import structlog; logger = structlog.get_logger(); logger.info("message", key=value)
+      TypeScript: import pino from 'pino'; const logger = pino(); logger.info({key: value}, "message")
+      Go: import "log/slog"; slog.Info("message", "key", value)
+
+    action: "report"
+
+  - id: "ops-002"
+    name: "Log level misuse — debug logging active in production configuration"
+    severity: medium
+    category: logging
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".js", ".go", ".rs", ".toml", ".yaml", ".yml", ".env", ".env.example"]
+      note: "Universal rule. Checks both code-level log calls and configuration files."
+
+    source:
+      list: "12-Factor App"
+      section: "XI. Logs"
+      item: "Log level should be configurable per environment; DEBUG must not be the production default"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-002.
+
+          Rule: ops-002 — Log level misuse
+          Severity: medium
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Is there log level misuse?
+
+          LOG LEVEL VIOLATIONS (flag as medium):
+          - `logging.basicConfig(level=logging.DEBUG)` in production entrypoint (not test setup)
+          - Logger configured at DEBUG level in a config file with no environment override
+          - `LOG_LEVEL=DEBUG` hardcoded in .env.example or docker-compose.yml as the "default"
+          - log.SetLevel(log.DebugLevel) without an environment variable guard in production code
+
+          NOT a violation:
+          - DEBUG level set conditionally: `if os.environ.get("DEBUG") == "1"`
+          - DEBUG level in test fixtures, test setup, or development-only files
+          - A config that reads LOG_LEVEL from an environment variable (even if default is DEBUG in dev)
+          - Production config that defaults to INFO, WARN, or ERROR
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "DEBUG log level hardcoded for production without environment variable guard"
+
+    suppressions:
+      - "# ops-002: ignore"
+      - "// ops-002: ignore"
+
+    remediation: |
+      Externalize log level to environment variable:
+      Python: logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
+      Node: const level = process.env.LOG_LEVEL || "info"
+      Go: slog.SetLogLoggerLevel(slog.LevelInfo) // default INFO; override via env
+
+    action: "report"
+
+  - id: "ops-003"
+    name: "PII in log statements — personally identifiable data emitted to logs"
+    severity: critical
+    category: logging
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: |
+        Universal rule. Narrower scope than sec-013: ops-003 checks ONLY log call sites.
+        sec-013 checks any runtime output (logs, errors, HTTP responses, cache keys).
+        CROSS-REFERENCE: ops-003 ↔ sec-013 (dual-angle, not duplicate).
+        Both may fire on the same code; each provides a distinct rationale.
+
+    source:
+      list: "GDPR Article 5"
+      section: "Data minimisation"
+      item: "Personal data shall be adequate, relevant and limited to what is necessary"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Flag as CANDIDATE: log.*() calls (logger.info, log.warn, slog.Info, etc.)
+          containing variables whose names suggest PII:
+            - email, password, ssn, social_security, dob, date_of_birth
+            - phone, phone_number, mobile, credit_card, card_number, cvv
+            - ip_address, user_ip (if IP considered PII in jurisdiction)
+            - name, full_name, first_name, last_name (only flag if combined with other PII)
+            - token, auth_token, api_key, secret, bearer (secrets in logs)
+
+          Python: ast.Call where func is log.*/logger.* and args contain PII variable names
+          TypeScript/JS: function calls to console.*/log.*/logger.* with PII arg names
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-003.
+
+          Rule: ops-003 — PII in log statements
+          Severity: critical
+
+          This log statement may emit personally identifiable data:
+          {static_finding_excerpt}
+
+          File: {file_path}
+
+          Is this a genuine ops-003 violation?
+
+          NOT a violation (do NOT flag):
+          - Logging an opaque ID (user_id, session_id UUID — not email/name/SSN)
+          - Logging a hash of the PII (email_hash, hashed_ip)
+          - Test fixtures that explicitly log fake/mock PII data for test purposes
+          - Audit log modules that intentionally record identity for compliance (separate audit trail)
+
+          IS a violation (flag as critical):
+          - Logging user email, phone, SSN, date of birth, credit card number
+          - Logging authentication tokens, API keys, passwords (even partially)
+          - Logging full name + any other identifier that would PII-identify a person
+          - IP addresses in jurisdictions where they are considered personal data
+
+          Note: ops-003 is narrower than sec-013 — this rule fires only on LOG CALL SITES.
+          If the PII leaks through an HTTP response or error message, sec-013 covers that.
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "Log call site emits email, phone, SSN, credentials, or other PII"
+
+    suppressions:
+      - "# ops-003: ignore"
+      - "# noqa: ops-003"
+      - "// ops-003: ignore"
+
+    remediation: |
+      Remove PII from log statements:
+      - Log the opaque ID (user_id) instead of the identifier (email)
+      - Hash sensitive values before logging: hashlib.sha256(email.encode()).hexdigest()[:8]
+      - Use log context masking: structlog.bind(user_id=user.id)  # bind ID, not email
+
+    cross_references:
+      - rule_id: "sec-013"
+        skill: "security"
+        relationship: "dual_angle"
+        note: "sec-013 owns PII in any runtime output (logs, errors, HTTP responses, cache keys). ops-003 narrows to log call sites only, enabling logging-specific remediation. Both may fire on the same log statement with distinct rationale: sec-013 = data privacy failure; ops-003 = logging discipline failure."
+        surface_co_located: true
+
+    action: "report"
+
+  - id: "ops-004"
+    name: "Missing correlation ID — request context not propagated through logs"
+    severity: medium
+    category: logging
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Conditional rule. Applies to services with multiple components or async operations. LLM-only — requires semantic judgment about request flow."
+
+    source:
+      list: "OpenTelemetry Specification"
+      section: "Context Propagation"
+      item: "Every service request must carry a correlation/trace ID that propagates through all log entries for that request"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-004.
+
+          Rule: ops-004 — Missing correlation ID propagation
+          Severity: medium
+
+          File: {file_path}
+          Route handler or worker code:
+          {file_excerpt}
+
+          Does this service propagate correlation IDs through request context?
+
+          NOT a violation (do NOT flag):
+          - Request handlers bind a request_id, trace_id, or correlation_id to the log context
+          - OpenTelemetry or similar tracing library is active and adds trace context automatically
+          - Each log entry in the request flow includes a consistent request identifier
+          - The code is a CLI tool or batch job (not a long-running service)
+
+          IS a violation (flag as medium):
+          - Route handlers process requests with no request_id, trace_id, or correlation header
+          - Log statements throughout the handler have no shared identifier to correlate them
+          - Async operations (background tasks, queued jobs) log with no identifier connecting them to the originating request
+          - Multiple service calls within a request chain have no propagated trace context
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "Request handler logs without correlation ID binding"
+      - "Async operations log without connecting to originating request trace"
+
+    suppressions:
+      - "# ops-004: ignore"
+      - "// ops-004: ignore"
+
+    remediation: |
+      Add correlation ID propagation:
+      Python + structlog: logger.bind(request_id=request_id).info("processing request")
+      FastAPI: request.state.request_id = str(uuid4()); structlog.contextvars.bind_contextvars(request_id=...)
+      Express: res.locals.requestId = req.headers['x-request-id'] || uuid()
+      Go: ctx = context.WithValue(ctx, "trace_id", traceID); slog.InfoContext(ctx, "processing")
+
+    action: "report"
+
+  # ─── Category 2: Health & Monitoring ──────────────────────────────────────
+
+  - id: "ops-005"
+    name: "Missing /health or /ready endpoint"
+    severity: high
+    category: health_monitoring
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["is_service=False"]
+      note: "Conditional: skip for CLI tools, libraries, batch jobs. Checks the entire service router for a health endpoint."
+
+    source:
+      list: "12-Factor App / Kubernetes Best Practices"
+      section: "Health Checks"
+      item: "Every service must expose a health endpoint for load balancers and orchestrators"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan all route/handler files in the service for any of:
+          Python/FastAPI: @router.get("/health"), @router.get("/ready"), @router.get("/healthz"), @router.get("/readyz")
+          Express/Fastify: app.get("/health", ...) or router.get("/health", ...)
+          Go: http.HandleFunc("/health", ...) or r.GET("/health", ...)
+
+          Also check app.py/main.py for route inclusion patterns.
+
+          Flag as FIRE if no health-like route found in any route file after scanning the full app.
+          Flag as PASS if found anywhere in the service routing.
+
+          Note: a route at /api/v1/health is also acceptable — match any path ending in /health, /ready, /healthz, /readyz.
+        fallback_to_llm: false
+
+    triggers:
+      - "No /health, /ready, /healthz, or /readyz route found in service routing"
+
+    suppressions:
+      - "# ops-005: ignore"
+      - "// ops-005: ignore"
+
+    remediation: |
+      Add a minimal health endpoint:
+      FastAPI: @router.get("/health") async def health(): return {"status": "ok"}
+      Express: app.get("/health", (req, res) => res.json({status: "ok"}))
+      Go: http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
+
+      For readiness (dependencies-aware): check DB connectivity, cache reachability, and return 503 if unavailable.
+
+    action: "report"
+
+  - id: "ops-006"
+    name: "Missing metrics instrumentation"
+    severity: medium
+    category: health_monitoring
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".toml"]
+      skip_on: ["is_service=False"]
+      note: "Conditional: skip for CLI tools, libraries. Checks for metrics library import or /metrics endpoint."
+
+    source:
+      list: "Site Reliability Engineering"
+      section: "Chapter 6 — Monitoring Distributed Systems"
+      item: "Every service should expose the Four Golden Signals: latency, traffic, errors, saturation"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Flag as PASS if any of the following are found:
+          - prometheus_client import in any service file
+          - opentelemetry import in any service file
+          - statsd import in any service file
+          - @router.get("/metrics") or equivalent /metrics route
+          - prom-client (Node.js), pino-prometheus, fastify-metrics in package.json
+          - github.com/prometheus/client_golang in go.mod
+
+          Flag as FIRE if none of the above are found in the service.
+
+          Note: a /metrics route that returns custom JSON (not Prometheus format) is borderline
+          — flag as CANDIDATE for LLM to confirm whether it's genuine instrumentation.
+        fallback_to_llm: false
+
+    triggers:
+      - "No metrics library (prometheus, opentelemetry, statsd) and no /metrics endpoint detected"
+
+    suppressions:
+      - "# ops-006: ignore"
+      - "// ops-006: ignore"
+
+    remediation: |
+      Add basic instrumentation:
+      Python: pip install prometheus-client; from prometheus_client import Counter, Histogram
+      Node.js: npm install prom-client; import client from 'prom-client'; client.collectDefaultMetrics()
+      Go: go get github.com/prometheus/client_golang; http.Handle("/metrics", promhttp.Handler())
+
+    action: "report"
+
+  # ─── Category 3: Configuration ────────────────────────────────────────────
+
+  - id: "ops-007"
+    name: "Missing config validation at startup — env vars read lazily in request handlers"
+    severity: high
+    category: configuration
+
+    applies_to:
+      languages: [python, typescript, javascript, go]
+      file_types: [".py", ".ts", ".js", ".go"]
+      note: "Universal rule. Catches services that fail silently at request time instead of failing fast at startup."
+
+    source:
+      list: "12-Factor App"
+      section: "III. Config"
+      item: "Strictly separate config from code — fail at startup if config is absent, not at request time"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-007.
+
+          Rule: ops-007 — Missing config validation at startup
+          Severity: high
+
+          File: {file_path}
+          Configuration loading code:
+          {file_excerpt}
+
+          Is configuration validated at startup or read lazily?
+
+          STARTUP VALIDATION PRESENT (do NOT flag):
+          - pydantic BaseSettings class instantiated at module-level (validates on import)
+          - All required env vars read at module top level: DATABASE_URL = os.environ["DATABASE_URL"]
+          - zod.parse() or similar schema validation at application bootstrap
+          - Go: viper.BindEnv + viper.Unmarshal at app init, not inside handlers
+          - A startup check function that reads and validates all required env vars before server starts
+
+          LAZY READING — IS A VIOLATION (flag as high):
+          - os.environ.get("DATABASE_URL") called inside a route handler function on every request
+          - process.env.SECRET_KEY accessed inside middleware or route logic on each call
+          - config values read from env on-demand in business logic without startup validation
+          - Missing required env var would only surface as an error on first request, not at startup
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "Required configuration accessed lazily inside request handlers instead of validated at startup"
+
+    suppressions:
+      - "# ops-007: ignore"
+      - "// ops-007: ignore"
+
+    remediation: |
+      Validate config at startup:
+      Python: class Settings(BaseSettings): DATABASE_URL: str  # pydantic validates at import
+      Node.js: const config = z.object({ DATABASE_URL: z.string() }).parse(process.env)  # at startup
+      Go: if err := viper.Unmarshal(&cfg); err != nil { log.Fatal(err) }  // in main()
+
+    action: "report"
+
+  # ─── Category 4: Graceful Shutdown & Recovery ─────────────────────────────
+
+  - id: "ops-008"
+    name: "Missing SIGTERM handler — service exits abruptly without graceful shutdown"
+    severity: high
+    category: shutdown
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".js", ".go", ".rs"]
+      skip_on: ["is_service=False"]
+      note: "Conditional: skip for CLI tools, libraries, and scripts. Applies to long-running services and daemons."
+
+    source:
+      list: "Kubernetes: Container Lifecycle"
+      section: "Graceful Termination"
+      item: "Containers must handle SIGTERM and complete in-flight work before exiting"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan service entrypoint files (main.py, app.py, server.py, __main__.py, main.ts, index.ts, main.go):
+            Python: look for signal.signal(signal.SIGTERM, ...) or asyncio shutdown hooks
+            Node.js: look for process.on('SIGTERM', ...) or process.on('SIGINT', ...)
+            Go: look for signal.Notify(c, os.Interrupt, syscall.SIGTERM) or equivalent
+
+          Note: some frameworks (uvicorn, gunicorn, fastify) handle SIGTERM internally.
+          Flag as CANDIDATE if no explicit signal handler AND framework is non-obvious.
+          Flag as DEFINITIVE FIRE if bare script with no SIGTERM handling and no framework.
+
+          Do NOT flag: tools that wrap uvicorn/gunicorn (they handle SIGTERM); k8s preStop hooks
+          configured in the manifest.
+        fallback_to_llm: false
+
+    triggers:
+      - "Service entrypoint has no SIGTERM handler and no framework with built-in graceful shutdown"
+
+    suppressions:
+      - "# ops-008: ignore"
+      - "// ops-008: ignore"
+
+    remediation: |
+      Add graceful shutdown:
+      Python/asyncio: asyncio.run(app.lifespan) with on_shutdown handler
+      Python/threading: signal.signal(signal.SIGTERM, lambda s,f: shutdown_event.set())
+      Node.js: process.on('SIGTERM', async () => { await server.close(); process.exit(0) })
+      Go: signal.Notify(quit, syscall.SIGTERM); <-quit; server.Shutdown(ctx)
+
+    action: "report"
+
+  - id: "ops-009"
+    name: "Missing retry with backoff on transient failures"
+    severity: medium
+    category: recovery
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: "Universal rule. Applies to network calls, database connections, and external service integrations."
+
+    source:
+      list: "Microservices Patterns — Chris Richardson"
+      section: "Chapter 3 — Interprocess Communication"
+      item: "Services should retry transient failures with exponential backoff and jitter"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-009.
+
+          Rule: ops-009 — Missing retry with backoff
+          Severity: medium
+
+          File: {file_path}
+          External call code:
+          {file_excerpt}
+
+          Does this code retry transient failures with backoff?
+
+          RETRY PRESENT (do NOT flag):
+          - tenacity @retry decorator on the function
+          - backoff @backoff.on_exception decorator
+          - Manual retry loop: for attempt in range(max_retries): ... time.sleep(2**attempt)
+          - axios-retry, got with retry options, or similar library configured
+          - Go: github.com/avast/retry-go or manual exponential backoff loop
+
+          NO RETRY — IS A VIOLATION (flag as medium):
+          - Single HTTP call to external service with no retry on 5xx or network error
+          - Database connection established once with no reconnection on transient failure
+          - Message queue consumer with no retry on processing failure
+          - A bare try/except that catches network errors but just logs and continues (no retry)
+
+          Only flag code paths that call EXTERNAL services (HTTP, database, queue, cache).
+          Do not flag internal in-process calls.
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: function
+        estimated_tokens: 500
+
+    triggers:
+      - "External service call without retry on transient failure"
+
+    suppressions:
+      - "# ops-009: ignore"
+      - "# noqa: ops-009"
+      - "// ops-009: ignore"
+
+    remediation: |
+      Add retry with exponential backoff:
+      Python: @tenacity.retry(wait=tenacity.wait_exponential(min=1, max=10), stop=tenacity.stop_after_attempt(3))
+      Node.js: import axiosRetry from 'axios-retry'; axiosRetry(axios, {retries: 3, retryDelay: axiosRetry.exponentialDelay})
+      Go: err = retry.Do(func() error { return callExternalService() }, retry.Attempts(3), retry.Delay(time.Second))
+
+    action: "report"
+
+  # ─── Category 5: Deployment Artifacts ─────────────────────────────────────
+
+  - id: "ops-010"
+    name: "Secrets in deployment artifacts — credentials embedded in Dockerfile or compose"
+    severity: critical
+    category: deployment
+
+    applies_to:
+      languages: []
+      file_types: ["Dockerfile", "Dockerfile.*", "docker-compose.yml", "docker-compose.yaml", ".env.example"]
+      note: |
+        Deployment artifact rule. Checks Dockerfile ARG/ENV for secrets and docker-compose
+        environment sections.
+        CROSS-REFERENCE: ops-010 ↔ sec-001 (dual-angle, not duplicate).
+        sec-001 owns secrets in source code/git. ops-010 owns secrets in deployment artifacts.
+        Both gate different surfaces; both should be checked without duplication.
+
+    source:
+      list: "OWASP Docker Security Cheat Sheet"
+      section: "Secrets Management"
+      item: "Never pass secrets via Dockerfile ARG or ENV — they are visible in layer history"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are an operational quality auditor checking rule ops-010.
+
+          Rule: ops-010 — Secrets in deployment artifacts
+          Severity: critical
+
+          File: {file_path}
+          Contents:
+          {file_excerpt}
+
+          Does this deployment artifact embed secrets?
+
+          SECRETS EMBEDDED (flag as critical):
+          - Dockerfile: ENV PASSWORD=abc123, ARG API_KEY=sk-..., ARG DB_PASSWORD=...
+          - docker-compose environment section: PASSWORD: mysecret (literal value, not ${VAR})
+          - .env.example file with real credentials (not placeholder values like "your-password-here")
+          - Dockerfile COPY with a file that contains credentials
+
+          NOT a violation:
+          - ENV KEY=${ENV_VAR} (reads from runtime environment — correct pattern)
+          - ARG BUILD_ARG (build arg with no value — value supplied at build time via --build-arg)
+          - docker-compose environment: PASSWORD: ${DB_PASSWORD} (reads from host env)
+          - .env.example with placeholder values: "your-api-key-here", "CHANGE_ME"
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "Dockerfile or compose file contains literal secret value"
+
+    suppressions:
+      - "# ops-010: ignore"
+
+    cross_references:
+      - rule_id: "sec-001"
+        skill: "security"
+        relationship: "dual_angle"
+        note: "sec-001 owns secrets in source code and git history (commit gate). ops-010 owns secrets in deployment artifacts (build/deploy gate). Different surfaces — both can fire on the same project without duplication."
+        surface_co_located: false
+
+    remediation: |
+      Remove secrets from deployment artifacts:
+      Dockerfile: use ENV KEY=${ENV_VAR} (runtime env) or Docker BuildKit --secret for build-time secrets
+      docker-compose: use ${VARIABLE} syntax + .env file outside source control
+      Never commit .env files; commit only .env.example with placeholder values
+
+    action: "report"
+
+  - id: "ops-011"
+    name: "Missing timeout on external HTTP calls"
+    severity: high
+    category: recovery
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      note: |
+        Universal rule. Checks HTTP client calls for timeout parameter.
+        Database connection timeouts are covered by db-013 (database skill).
+        ops-011 owns HTTP + non-DB external calls.
+
+    source:
+      list: "Release It! — Michael Nygard"
+      section: "Chapter 5 — Stability Patterns"
+      item: "Every integration point must have a timeout — unconstrained external calls cause cascading failures"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Flag as CANDIDATE: HTTP client calls without timeout parameter
+            Python: requests.get(url) — no timeout= kwarg
+                    httpx.get(url) — no timeout= kwarg
+                    aiohttp.ClientSession.get(url) — no timeout= kwarg
+            TypeScript/JS: fetch(url) — no AbortSignal timeout
+                           axios.get(url) — no timeout option
+            Go: http.Get(url) — using default http.Client with no Timeout set
+            Rust: reqwest::get(url) — no timeout configured
+
+          Flag as PASS:
+            Python: requests.get(url, timeout=30)
+            Python: httpx.get(url, timeout=httpx.Timeout(30.0))
+            TS/JS: fetch(url, { signal: AbortSignal.timeout(5000) })
+            Go: client := &http.Client{Timeout: 30 * time.Second}; client.Get(url)
+
+          Do NOT flag: requests to localhost/127.0.0.1 (internal calls, lower risk).
+          Do NOT flag: database connections (covered by db-013).
+        fallback_to_llm: false
+
+    triggers:
+      - "HTTP client call without timeout parameter"
+
+    suppressions:
+      - "# ops-011: ignore"
+      - "# noqa: ops-011"
+      - "// ops-011: ignore"
+
+    remediation: |
+      Add timeout to all external HTTP calls:
+      Python/requests: requests.get(url, timeout=30)  # 30 seconds
+      Python/httpx: httpx.get(url, timeout=30.0)
+      Node.js/fetch: fetch(url, { signal: AbortSignal.timeout(5000) })
+      Node.js/axios: axios.get(url, { timeout: 5000 })
+      Go: client := &http.Client{Timeout: 30 * time.Second}
+
+    action: "report"
+
+  - id: "ops-012"
+    name: "Dockerfile quality — single-stage build, runs as root, or unpinned base image"
+    severity: high
+    category: deployment
+
+    applies_to:
+      languages: []
+      file_types: ["Dockerfile", "Dockerfile.*"]
+      skip_on: ["has_dockerfile=False"]
+      note: "Conditional: skip when no Dockerfile exists. Checks build stages, USER instruction, and base image tag."
+
+    source:
+      list: "Docker Best Practices"
+      section: "Security and Optimization"
+      item: "Use multi-stage builds to minimize image size; run as non-root; pin base image versions"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Parse Dockerfile text:
+
+          1. Multi-stage check: count FROM instructions.
+             FIRE if exactly one FROM (single-stage build).
+             Note: a single FROM with a very minimal base (alpine, scratch, distroless) is borderline
+             — flag as CANDIDATE. Multi-stage with builder + runtime is compliant.
+
+          2. Non-root check: look for USER instruction.
+             FIRE if no USER instruction (runs as root by default).
+             PASS if USER instruction appears after the final COPY/RUN block.
+
+          3. Base image pin check: check if base image uses :latest tag or is unpinned.
+             FIRE if FROM python:latest, FROM node:latest, etc.
+             CANDIDATE if FROM python:3.12-slim (no patch version — borderline).
+             PASS if FROM python:3.12.4-slim or FROM python@sha256:...
+
+          4. Layer cleanup check: if RUN apt-get install appears, check for rm -rf /var/lib/apt/lists/*.
+             FIRE if apt-get install without cleanup in same layer.
+             PASS if cleanup present.
+
+          Report separate findings per violation type (multi-stage, root, base-image, cleanup).
+        fallback_to_llm: false
+
+    triggers:
+      - "Dockerfile uses single-stage build"
+      - "Dockerfile has no USER instruction (runs as root)"
+      - "Dockerfile base image uses :latest tag"
+      - "Dockerfile apt-get install without layer cleanup"
+
+    suppressions:
+      - "# ops-012: ignore"
+
+    remediation: |
+      Multi-stage build pattern:
+        FROM python:3.12-slim AS builder
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+
+        FROM python:3.12-slim
+        RUN adduser --disabled-password --gecos '' appuser
+        USER appuser
+        COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
+        CMD ["python", "app.py"]
+
+    action: "report"
+
+  - id: "ops-013"
+    name: "k8s resource limits missing or liveness/readiness probes absent"
+    severity: medium
+    category: deployment
+
+    applies_to:
+      languages: []
+      file_types: [".yaml", ".yml"]
+      skip_on: ["has_k8s_manifest=False"]
+      note: "Conditional: skip when no k8s manifests found. Checks Deployment/StatefulSet manifests for resource limits and probes."
+
+    source:
+      list: "Kubernetes Best Practices"
+      section: "Resource Management"
+      item: "Every container must define resource requests/limits and liveness/readiness probes"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Parse YAML files that contain `apiVersion: apps/v1` + `kind: Deployment` or `StatefulSet`:
+
+          1. Resources check: look for `resources.limits` and `resources.requests` under containers.
+             FIRE if either is missing from any container spec.
+
+          2. Liveness probe check: look for `livenessProbe` under container spec.
+             FIRE if absent.
+
+          3. Readiness probe check: look for `readinessProbe` under container spec.
+             FIRE if absent.
+
+          Report separate findings per violation type.
+
+          Skip: Jobs, CronJobs (resource limits optional), init containers (probes not applicable).
+        fallback_to_llm: false
+
+    triggers:
+      - "k8s Deployment container missing resource limits/requests"
+      - "k8s Deployment container missing livenessProbe"
+      - "k8s Deployment container missing readinessProbe"
+
+    suppressions:
+      - "# ops-013: ignore"
+
+    remediation: |
+      Add resource limits and probes:
+        containers:
+          - name: api
+            image: myapp:1.2.3
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "500m"
+            livenessProbe:
+              httpGet:
+                path: /health
+                port: 8080
+              initialDelaySeconds: 10
+              periodSeconds: 30
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 10
+
+    action: "report"

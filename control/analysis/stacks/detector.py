@@ -52,6 +52,14 @@ class DetectedStack:
         None  # explicit architecture framework for architecture skill calibration
         # values: 'nestjs', 'spring', or None
     )
+    has_dockerfile: bool = False  # ops skill: Dockerfile present → ops-012 applies
+    has_docker_compose: bool = False  # ops skill: docker-compose present → ops-013 resource check
+    has_k8s_manifest: bool = False  # ops skill: k8s YAML present → ops-013 applies
+    is_service: bool = False  # ops skill: True for web services; False for CLI tools and libraries
+    deployment_type: Optional[str] = (
+        None  # ops skill deployment context
+        # values: 'container', 'serverless', 'cli', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -106,6 +114,14 @@ def detect_stack(path: Path) -> DetectedStack:
     # Augment with monorepo type and architecture framework for architecture skill dispatch
     result.monorepo_type = _detect_monorepo_structure(path)
     result.architecture_framework = _detect_architecture_framework(path)
+
+    # Augment with ops deployment context for ops skill dispatch
+    ops_context = _detect_ops_context(path)
+    result.has_dockerfile = ops_context["has_dockerfile"]
+    result.has_docker_compose = ops_context["has_docker_compose"]
+    result.has_k8s_manifest = ops_context["has_k8s_manifest"]
+    result.is_service = ops_context["is_service"]
+    result.deployment_type = ops_context["deployment_type"]
 
     return result
 
@@ -529,6 +545,74 @@ def _detect_architecture_framework(path: Path) -> Optional[str]:
                 pass
 
     return None
+
+
+def _detect_ops_context(path: Path) -> dict:
+    """Detect operational deployment context for ops skill dispatch.
+
+    Returns dict with keys: has_dockerfile, has_docker_compose, has_k8s_manifest,
+    is_service, deployment_type.
+    """
+    has_dockerfile = (path / "Dockerfile").exists() or any(path.glob("Dockerfile.*"))
+    has_docker_compose = (path / "docker-compose.yml").exists() or (
+        path / "docker-compose.yaml"
+    ).exists()
+
+    # k8s: look for YAML files with apiVersion: apps/v1 pattern
+    has_k8s_manifest = False
+    for k8s_dir in ["k8s", "kubernetes", "deploy", "infra"]:
+        if (path / k8s_dir).exists():
+            has_k8s_manifest = True
+            break
+    if not has_k8s_manifest:
+        for yaml_file in list(path.glob("*.yaml")) + list(path.glob("*.yml")):
+            try:
+                content = yaml_file.read_text(encoding="utf-8", errors="ignore")
+                if "apiVersion: apps/v1" in content or "kind: Deployment" in content:
+                    has_k8s_manifest = True
+                    break
+            except OSError:
+                pass
+
+    # Service heuristic: has web_framework OR has_dockerfile
+    # CLI heuristic: has no web_framework AND no Dockerfile AND has CLI entrypoint markers
+    is_service = has_dockerfile
+    # Refine: if pyproject.toml or setup.py without web framework, likely library/CLI
+    for py_config in ["pyproject.toml", "setup.py"]:
+        config_path = path / py_config
+        if config_path.exists():
+            try:
+                content = config_path.read_text(encoding="utf-8", errors="ignore")
+                if any(fw in content.lower() for fw in ["fastapi", "flask", "django", "starlette"]):
+                    is_service = True
+                    break
+            except OSError:
+                pass
+
+    # Serverless: Cloudflare Workers / Vercel / AWS Lambda markers
+    is_serverless = (
+        (path / "wrangler.toml").exists()
+        or (path / "wrangler.jsonc").exists()
+        or (path / "vercel.json").exists()
+        or (path / "serverless.yml").exists()
+    )
+
+    if is_serverless:
+        deployment_type = "serverless"
+    elif has_dockerfile:
+        deployment_type = "container"
+    elif not is_service:
+        deployment_type = "cli"
+    else:
+        deployment_type = None
+
+    return {
+        "has_dockerfile": has_dockerfile,
+        "has_docker_compose": has_docker_compose,
+        "has_k8s_manifest": has_k8s_manifest,
+        "is_service": is_service,
+        "deployment_type": deployment_type,
+    }
 
 
 def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
