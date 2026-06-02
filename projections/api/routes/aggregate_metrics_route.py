@@ -6,7 +6,6 @@ per project — what no existing route does today.
 
 from __future__ import annotations
 
-import sqlite3
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Query
@@ -15,16 +14,17 @@ router = APIRouter()
 
 
 def _aggregate_db_conn():
-    """Connect to aggregate_metrics.db."""
+    """Connect to aggregate_metrics.db via the approved helper."""
     try:
-        from core.analytics.aggregate_metrics import aggregate_metrics_db_path
+        from core.analytics.aggregate_metrics import (
+            _connect_aggregate,
+            aggregate_metrics_db_path,
+        )
 
         path = aggregate_metrics_db_path()
         if not path.exists():
             return None
-        conn = sqlite3.connect(str(path))
-        conn.row_factory = sqlite3.Row
-        return conn
+        return _connect_aggregate(path)
     except Exception:
         return None
 
@@ -93,10 +93,9 @@ async def get_aggregate_metrics(
         # Last aggregated
         last_aggregated = None
         try:
-            from core.analytics.aggregate_metrics import aggregate_metrics_db_path as _agg_path
+            from core.analytics.aggregate_metrics import _connect_aggregate
 
-            mc = sqlite3.connect(str(_agg_path()))
-            mc.row_factory = sqlite3.Row
+            mc = _connect_aggregate()
             meta_row = mc.execute(
                 "SELECT value FROM _aggregate_meta WHERE key = 'last_aggregated_at'"
             ).fetchone()
