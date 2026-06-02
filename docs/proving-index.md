@@ -4,7 +4,7 @@ Proves which skill × ecosystem combinations have been validated with real findi
 on real external repositories. "Proven" means: a PR was opened with actual findings
 pasted from running the audit on that repo, not just declaring support in rules.yml.
 
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 ---
 
@@ -59,6 +59,37 @@ Last updated: 2026-06-01
 | Postgres | PARTIAL | Fixture only | PR #134 description | 2026-06-01 | Postgres fixture proves db-022 skips on non-SQLite; no real Postgres repo run |
 | MySQL | DECLARED | — | rules.yml only | — | Declared in applies_to; no proving run |
 | MongoDB | DECLARED | — | rules.yml only | — | Declared in applies_to; no proving run |
+
+---
+
+## Backend-API (ds-quality:backend-api)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| Python (FastAPI) | ✓ | dream-studio-clean + fastapi-template | PR #142 description | 2026-06-01 | 12 rules; api-001 FIRE (no Pydantic on /api/v1/ml/recommend); api-003 FIRE (no rate limiting); api-009 PASS (JWT in projections/api/); api-007 FIRE (password-recovery/{email} exposes user existence on 404) |
+| Node.js (Express) | ✓ | hagopj13/node-express-boilerplate | PR #142 description | 2026-06-01 | api-001 FIRE (paginate query params not validated); api-002 FIRE (CORS *); api-003 FIRE (no rate limit on /auth/login); api-007 PASS (uniform error handler) |
+| Go (Gin/Chi/Echo) | DECLARED | — | rules.yml only | — | Declared in applies_to; no external Go proving run |
+| Rust (Axum/Actix) | DECLARED | — | rules.yml only | — | Declared in applies_to; no external Rust proving run |
+
+---
+
+## Frontend-UX (ds-quality:frontend-ux)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| React/Next.js | ✓ | DreamySuite | PR #144 description | 2026-06-02 | ux-006 FIRE: StoryTimelineBlock.tsx:90 key={i} index as key; ux-007 FIRE: RegistryCards.tsx (537 LOC), ScheduleTimeline.tsx (542 LOC), ContentCardBlock.tsx (347 LOC); ux-010 FIRE: HomeHeroBlock.tsx hardcoded strings; ux-002 PASS: LoginForm.tsx correct htmlFor/id matching |
+| Vue/Svelte/Angular | DECLARED | — | rules.yml Phase 2 | — | Phase 2 scope; 10 universal rules apply; hooks rules skip |
+
+---
+
+## Architecture (ds-quality:architecture)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| Python (backend) | ✓ | dream-studio-clean | PR #145 description | 2026-06-02 | arch-001 FIRE: core/projections/framework.py ProjectionEngine (22 methods, >400 LOC); arch-004 FIRE ×2: core/design_briefs/mutations.py:37 + core/health/status.py:22 core imports interfaces; arch-009 FIRE: projections/api/routes/shared_intelligence.py (31 import targets) |
+| TypeScript/Next.js (frontend) | ✓ | DreamySuite | PR #145 description | 2026-06-02 | arch-001 FIRE (frontend threshold 300): ContentCardBlock.tsx (372L), RegistryBlock.tsx (323L), VenueMapBlock.tsx (312L) — all SILENT at backend threshold (500) → calibration proven; arch-003 FIRE: editor-v2/inspector/editors/ (depth 8 > threshold 3); arch-002 FIRE: RegistryBlock.tsx (9 external imports > frontend threshold 8) |
+| Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no Go proving run |
+| Rust | DECLARED | — | rules.yml only | — | Declared in applies_to; no Rust proving run |
 
 ---
 
