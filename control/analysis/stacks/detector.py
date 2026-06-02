@@ -35,6 +35,11 @@ class DetectedStack:
         None  # primary database type for database skill dispatch
         # values: 'sqlite', 'postgres', 'mysql', 'mongodb', 'd1', 'dynamodb', or None
     )
+    web_framework: Optional[str] = (
+        None  # primary web/API framework for backend-api skill dispatch
+        # values: 'fastapi', 'flask', 'django-rest', 'express', 'fastify', 'hono',
+        #         'nextjs-api', 'gin', 'echo', 'chi', 'axum', 'actix', 'rocket', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -79,6 +84,9 @@ def detect_stack(path: Path) -> DetectedStack:
 
     # Augment with database type for database skill dispatch
     result.database_type = _detect_database_type(path)
+
+    # Augment with web framework for backend-api skill dispatch
+    result.web_framework = _detect_web_framework(path)
 
     return result
 
@@ -297,6 +305,81 @@ def _detect_database_type(path: Path) -> Optional[str]:
                 return "postgres"
             if "mongodb" in content:
                 return "mongodb"
+        except OSError:
+            pass
+
+    return None
+
+
+def _detect_web_framework(path: Path) -> Optional[str]:
+    """Detect the primary web/API framework for backend-api skill dispatch."""
+    # Check package.json for JS/TS projects
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            content = json.loads(pkg_json.read_text(encoding="utf-8"))
+            all_deps = {
+                **content.get("dependencies", {}),
+                **content.get("devDependencies", {}),
+            }
+            # Next.js already detected in main signals, but check for API routes
+            if "next" in all_deps:
+                # Check if it actually has API routes
+                api_dir = path / "src" / "app" / "api"
+                pages_api = path / "pages" / "api"
+                if api_dir.exists() or pages_api.exists():
+                    return "nextjs-api"
+            if "fastify" in all_deps:
+                return "fastify"
+            if "hono" in all_deps:
+                return "hono"
+            if "express" in all_deps:
+                return "express"
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Check Python project
+    for py_config in ["pyproject.toml", "requirements.txt", "setup.py"]:
+        config_file = path / py_config
+        if config_file.exists():
+            try:
+                content = config_file.read_text(encoding="utf-8")
+                if "fastapi" in content.lower():
+                    return "fastapi"
+                if "django" in content.lower() and (
+                    "rest_framework" in content.lower() or "djangorestframework" in content.lower()
+                ):
+                    return "django-rest"
+                if "flask" in content.lower():
+                    return "flask"
+            except OSError:
+                pass
+
+    # Check Go project
+    go_mod = path / "go.mod"
+    if go_mod.exists():
+        try:
+            content = go_mod.read_text(encoding="utf-8")
+            if "gin-gonic/gin" in content:
+                return "gin"
+            if "labstack/echo" in content:
+                return "echo"
+            if "go-chi/chi" in content:
+                return "chi"
+        except OSError:
+            pass
+
+    # Check Rust project
+    cargo_toml = path / "Cargo.toml"
+    if cargo_toml.exists():
+        try:
+            content = cargo_toml.read_text(encoding="utf-8")
+            if "axum" in content:
+                return "axum"
+            if "actix-web" in content:
+                return "actix"
+            if "rocket" in content:
+                return "rocket"
         except OSError:
             pass
 
