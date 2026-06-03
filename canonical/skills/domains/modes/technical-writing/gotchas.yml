@@ -1,0 +1,43 @@
+# Technical-writing skill — captured gotchas
+# Source: verbatim from technical-writer agent (promoted 2026-06-03)
+
+gotchas:
+  - id: tw-g1
+    title: Markdown lint pass ≠ code examples work
+    description: >
+      Docs that pass markdown lint do not mean code examples run. Use doc-testing
+      tooling (doctest, mdBook) in CI to actually execute code examples.
+    severity: high
+    category: testing
+
+  - id: tw-g2
+    title: Screenshots drift silently after UI changes
+    description: >
+      Minimize screenshots; tie screenshot refresh to release CI when unavoidable.
+      Prefer code + text over screenshots for maintainability.
+    severity: medium
+    category: maintainability
+
+  - id: tw-g3
+    title: I18n is expensive to retrofit
+    description: >
+      Decide on a translation strategy and avoid idioms and culture-specific references
+      from day one. Retrofitting i18n after docs are written is costly.
+    severity: medium
+    category: i18n
+
+  - id: tw-g4
+    title: Renaming a heading breaks all anchor links
+    description: >
+      Use explicit anchor IDs and a broken link checker. Auto-generated slugs from
+      heading text change when the heading text changes, breaking all inbound links.
+    severity: high
+    category: links
+
+  - id: tw-g5
+    title: Versioned doc sites often index only the latest version
+    description: >
+      Test search results across all supported major versions, not just the latest.
+      Users on older supported versions may see no results for valid queries.
+    severity: medium
+    category: search

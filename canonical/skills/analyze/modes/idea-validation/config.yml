@@ -1,0 +1,12 @@
+invocation:
+  type: subagent-target
+  wrapper_agent: idea-validator
+  dispatch_path: ~/.claude/agents/idea-validator.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: Standard idea evaluation framework (fatal flaw hunt, assumption inventory, market reality check)
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null
