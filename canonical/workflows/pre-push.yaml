@@ -51,8 +51,11 @@ gates:
   - id: docs-drift
     description: >
       Contract docs drift gate. Detects when docs and code references have
-      drifted apart.
+      drifted apart. Uses DREAM_STUDIO_BASE_REF=origin/main to match CI
+      behavior — local gate now catches the same drift CI catches.
     command: [py, interfaces/cli/contract_docs_drift_gate.py]
+    env:
+      DREAM_STUDIO_BASE_REF: origin/main
     fail_hint: "Reconcile docs vs code, or update the drift baseline."
 
   - id: migration-risk
