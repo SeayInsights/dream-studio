@@ -1098,7 +1098,6 @@ async def run_workflow_pattern_analysis(
         conn.close()
 
 
-
 # ── Friction signals read API (Phase 19.2) ────────────────────────────────
 # Consumer contract for 19.3 Gap Classifier:
 #   GET /api/v1/intelligence/friction-signals → list unclassified signals

@@ -26,11 +26,7 @@ from typing import Any
 import pytest
 
 MIGRATION_SQL = (
-    Path(__file__).parents[2]
-    / "core"
-    / "event_store"
-    / "migrations"
-    / "096_friction_signals.sql"
+    Path(__file__).parents[2] / "core" / "event_store" / "migrations" / "096_friction_signals.sql"
 ).read_text(encoding="utf-8")
 
 # Findings schema needs the base findings table for ALTER TABLE statements.
@@ -105,6 +101,7 @@ def m096_conn(base_conn):
 @pytest.fixture
 def harvester(m096_conn):
     from projections.core.analyzers.friction_signals import FrictionSignalHarvester
+
     return FrictionSignalHarvester(m096_conn, session_id="test-session-001")
 
 
@@ -116,8 +113,9 @@ def _sid() -> str:
     return str(uuid.uuid4())
 
 
-def _insert_dismissed_finding(conn, *, skill_id: str, rule_id: str, scan_id: str,
-                               days_ago: int = 5) -> str:
+def _insert_dismissed_finding(
+    conn, *, skill_id: str, rule_id: str, scan_id: str, days_ago: int = 5
+) -> str:
     fid = _fid()
     ts = f"datetime('now', '-{days_ago} days')"
     conn.execute(
@@ -130,9 +128,16 @@ def _insert_dismissed_finding(conn, *, skill_id: str, rule_id: str, scan_id: str
     return fid
 
 
-def _insert_scan_run(conn, *, scan_id: str, skill_id: str, project_id: str = "proj-1",
-                     status: str = "completed", findings_count: int = 1,
-                     completed_days_ago: int = 10) -> None:
+def _insert_scan_run(
+    conn,
+    *,
+    scan_id: str,
+    skill_id: str,
+    project_id: str = "proj-1",
+    status: str = "completed",
+    findings_count: int = 1,
+    completed_days_ago: int = 10,
+) -> None:
     ts = f"datetime('now', '-{completed_days_ago} days')"
     conn.execute(
         f"INSERT INTO scan_runs (scan_id, project_id, skill_id, status, findings_count, "
@@ -143,8 +148,9 @@ def _insert_scan_run(conn, *, scan_id: str, skill_id: str, project_id: str = "pr
     conn.commit()
 
 
-def _insert_open_finding(conn, *, finding_id: str, scan_id: str, skill_id: str,
-                          days_ago: int = 15) -> None:
+def _insert_open_finding(
+    conn, *, finding_id: str, scan_id: str, skill_id: str, days_ago: int = 15
+) -> None:
     ts = f"datetime('now', '-{days_ago} days')"
     conn.execute(
         f"INSERT INTO findings (finding_id, scan_id, status, introduced_by_skill_id, created_at) "
@@ -154,8 +160,9 @@ def _insert_open_finding(conn, *, finding_id: str, scan_id: str, skill_id: str,
     conn.commit()
 
 
-def _insert_pattern(conn, *, pattern_id: str, skill_a: str, confidence: float,
-                    co_count: int = 3) -> None:
+def _insert_pattern(
+    conn, *, pattern_id: str, skill_a: str, confidence: float, co_count: int = 3
+) -> None:
     conn.execute(
         "INSERT INTO ds_workflow_pattern_signals "
         "(pattern_id, skill_a, confidence_score, co_occurrence_count, last_observed_at) "
@@ -252,10 +259,12 @@ class TestDismissedFindingDetection:
     def test_fires_when_threshold_met(self, harvester, m096_conn):
         """≥2 dismissed findings across ≥2 distinct scans → signal fires."""
         scan_a, scan_b = _sid(), _sid()
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:security",
-                                  rule_id="SEC-001", scan_id=scan_a)
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:security",
-                                  rule_id="SEC-001", scan_id=scan_b)
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:security", rule_id="SEC-001", scan_id=scan_a
+        )
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:security", rule_id="SEC-001", scan_id=scan_b
+        )
         result = harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='dismissed_finding'"
@@ -264,8 +273,9 @@ class TestDismissedFindingDetection:
 
     def test_silent_below_occurrence_threshold(self, harvester, m096_conn):
         """1 dismissed finding → no signal (below threshold)."""
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:code-quality",
-                                  rule_id="CQ-001", scan_id=_sid())
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:code-quality", rule_id="CQ-001", scan_id=_sid()
+        )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='dismissed_finding' "
@@ -276,10 +286,12 @@ class TestDismissedFindingDetection:
     def test_silent_single_scan_two_findings(self, harvester, m096_conn):
         """2 dismissed findings from the same scan → no signal (source_cnt < threshold)."""
         same_scan = _sid()
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:database",
-                                  rule_id="DB-001", scan_id=same_scan)
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:database",
-                                  rule_id="DB-001", scan_id=same_scan)
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:database", rule_id="DB-001", scan_id=same_scan
+        )
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:database", rule_id="DB-001", scan_id=same_scan
+        )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='dismissed_finding' "
@@ -297,10 +309,16 @@ class TestPartialCompletionDetection:
         for _ in range(2):
             sid = _sid()
             fid = _fid()
-            _insert_scan_run(m096_conn, scan_id=sid, skill_id="ds-quality:security",
-                              findings_count=1, completed_days_ago=15)
-            _insert_open_finding(m096_conn, finding_id=fid, scan_id=sid,
-                                  skill_id="ds-quality:security", days_ago=15)
+            _insert_scan_run(
+                m096_conn,
+                scan_id=sid,
+                skill_id="ds-quality:security",
+                findings_count=1,
+                completed_days_ago=15,
+            )
+            _insert_open_finding(
+                m096_conn, finding_id=fid, scan_id=sid, skill_id="ds-quality:security", days_ago=15
+            )
         result = harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='partial_completion'"
@@ -310,10 +328,20 @@ class TestPartialCompletionDetection:
     def test_silent_single_scan(self, harvester, m096_conn):
         """1 ignored scan → no signal."""
         sid = _sid()
-        _insert_scan_run(m096_conn, scan_id=sid, skill_id="ds-quality:frontend-ux",
-                          findings_count=1, completed_days_ago=15)
-        _insert_open_finding(m096_conn, finding_id=_fid(), scan_id=sid,
-                              skill_id="ds-quality:frontend-ux", days_ago=15)
+        _insert_scan_run(
+            m096_conn,
+            scan_id=sid,
+            skill_id="ds-quality:frontend-ux",
+            findings_count=1,
+            completed_days_ago=15,
+        )
+        _insert_open_finding(
+            m096_conn,
+            finding_id=_fid(),
+            scan_id=sid,
+            skill_id="ds-quality:frontend-ux",
+            days_ago=15,
+        )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='partial_completion' "
@@ -326,10 +354,16 @@ class TestPartialCompletionDetection:
         for _ in range(2):
             sid = _sid()
             fid = _fid()
-            _insert_scan_run(m096_conn, scan_id=sid, skill_id="ds-quality:ops",
-                              findings_count=1, completed_days_ago=2)
-            _insert_open_finding(m096_conn, finding_id=fid, scan_id=sid,
-                                  skill_id="ds-quality:ops", days_ago=2)
+            _insert_scan_run(
+                m096_conn,
+                scan_id=sid,
+                skill_id="ds-quality:ops",
+                findings_count=1,
+                completed_days_ago=2,
+            )
+            _insert_open_finding(
+                m096_conn, finding_id=fid, scan_id=sid, skill_id="ds-quality:ops", days_ago=2
+            )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='partial_completion' "
@@ -344,8 +378,13 @@ class TestPartialCompletionDetection:
 class TestPatternGapDetection:
     def test_fires_when_low_confidence_pattern(self, harvester, m096_conn):
         """Low-confidence pattern with ≥2 co-occurrences → signal fires."""
-        _insert_pattern(m096_conn, pattern_id="pat-001",
-                         skill_a="ds-quality:security", confidence=0.3, co_count=3)
+        _insert_pattern(
+            m096_conn,
+            pattern_id="pat-001",
+            skill_a="ds-quality:security",
+            confidence=0.3,
+            co_count=3,
+        )
         result = harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='pattern_gap'"
@@ -354,8 +393,13 @@ class TestPatternGapDetection:
 
     def test_silent_high_confidence_pattern(self, harvester, m096_conn):
         """High-confidence pattern → not a friction signal."""
-        _insert_pattern(m096_conn, pattern_id="pat-002",
-                         skill_a="ds-quality:code-quality", confidence=0.9, co_count=5)
+        _insert_pattern(
+            m096_conn,
+            pattern_id="pat-002",
+            skill_a="ds-quality:code-quality",
+            confidence=0.9,
+            co_count=5,
+        )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='pattern_gap' "
@@ -365,8 +409,13 @@ class TestPatternGapDetection:
 
     def test_silent_low_occurrence_count(self, harvester, m096_conn):
         """Low confidence but only 1 co-occurrence → below threshold, no signal."""
-        _insert_pattern(m096_conn, pattern_id="pat-003",
-                         skill_a="ds-quality:database", confidence=0.2, co_count=1)
+        _insert_pattern(
+            m096_conn,
+            pattern_id="pat-003",
+            skill_a="ds-quality:database",
+            confidence=0.2,
+            co_count=1,
+        )
         harvester.harvest()
         rows = m096_conn.execute(
             "SELECT * FROM ds_friction_signals WHERE signal_type='pattern_gap' "
@@ -383,10 +432,12 @@ class TestHarvesterIdempotency:
         """Running the harvester twice produces the same rows, no duplicates."""
         # Plant data that will fire a dismissed_finding signal
         scan_a, scan_b = _sid(), _sid()
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:testing",
-                                  rule_id="TST-001", scan_id=scan_a)
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:testing",
-                                  rule_id="TST-001", scan_id=scan_b)
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:testing", rule_id="TST-001", scan_id=scan_a
+        )
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:testing", rule_id="TST-001", scan_id=scan_b
+        )
 
         result1 = harvester.harvest()
         count_after_first = m096_conn.execute(
@@ -402,8 +453,9 @@ class TestHarvesterIdempotency:
             f"Second run added rows: {count_after_first} → {count_after_second}. "
             f"Idempotency broken. run1={result1.to_dict()} run2={result2.to_dict()}"
         )
-        assert result2.signals_skipped > 0 or result2.signals_written == 0, \
-            "Second run should skip or write zero signals"
+        assert (
+            result2.signals_skipped > 0 or result2.signals_written == 0
+        ), "Second run should skip or write zero signals"
 
     def test_bucket_key_unique_prevents_dupes(self, m096_conn):
         """INSERT OR IGNORE on same bucket_key writes only the first row."""
@@ -440,10 +492,12 @@ class TestConsumerContract:
     def test_unclassified_query_returns_new_signals(self, harvester, m096_conn):
         """SELECT ... WHERE classified_as IS NULL returns newly harvested signals."""
         scan_a, scan_b = _sid(), _sid()
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:pre-launch",
-                                  rule_id="PL-001", scan_id=scan_a)
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:pre-launch",
-                                  rule_id="PL-001", scan_id=scan_b)
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:pre-launch", rule_id="PL-001", scan_id=scan_a
+        )
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:pre-launch", rule_id="PL-001", scan_id=scan_b
+        )
         harvester.harvest()
 
         unclassified = m096_conn.execute(
@@ -476,10 +530,12 @@ class TestConsumerContract:
     def test_get_unclassified_helper(self, harvester, m096_conn):
         """FrictionSignalHarvester.get_unclassified() returns the 19.3 view."""
         scan_a, scan_b = _sid(), _sid()
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:backend-api",
-                                  rule_id="API-001", scan_id=scan_a)
-        _insert_dismissed_finding(m096_conn, skill_id="ds-quality:backend-api",
-                                  rule_id="API-001", scan_id=scan_b)
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:backend-api", rule_id="API-001", scan_id=scan_a
+        )
+        _insert_dismissed_finding(
+            m096_conn, skill_id="ds-quality:backend-api", rule_id="API-001", scan_id=scan_b
+        )
         harvester.harvest()
 
         unclassified = harvester.get_unclassified()
@@ -487,8 +543,13 @@ class TestConsumerContract:
 
     def test_get_unclassified_filter_by_type(self, harvester, m096_conn):
         """get_unclassified(signal_type=...) filters correctly."""
-        _insert_pattern(m096_conn, pattern_id="pat-filter-001",
-                         skill_a="ds-quality:architecture", confidence=0.1, co_count=3)
+        _insert_pattern(
+            m096_conn,
+            pattern_id="pat-filter-001",
+            skill_a="ds-quality:architecture",
+            confidence=0.1,
+            co_count=3,
+        )
         harvester.harvest()
 
         pattern_gaps = harvester.get_unclassified(signal_type="pattern_gap")
@@ -506,8 +567,10 @@ class TestSessionEndHookNonBlocking:
 
         class _BrokenConn:
             row_factory = None
+
             def execute(self, *a, **kw):
                 raise RuntimeError("DB exploded")
+
             def commit(self):
                 pass
 
@@ -528,9 +591,10 @@ class TestSessionEndHookNonBlocking:
             i for i, ln in enumerate(lines) if "FrictionSignalHarvester" in ln and "import" in ln
         )
         # Scan backwards for a try: statement within 10 lines
-        context = lines[max(0, hook_line - 5): hook_line + 2]
-        assert any("try:" in ln for ln in context), \
-            f"FrictionSignalHarvester import not inside a try block. Context: {context}"
+        context = lines[max(0, hook_line - 5) : hook_line + 2]
+        assert any(
+            "try:" in ln for ln in context
+        ), f"FrictionSignalHarvester import not inside a try block. Context: {context}"
 
 
 # ── Local-first: no network calls ─────────────────────────────────────────
@@ -540,6 +604,7 @@ class TestLocalFirst:
     def test_no_outbound_network_imports(self):
         """Harvester module imports no network or HTTP libraries."""
         import projections.core.analyzers.friction_signals as mod
+
         source = inspect.getsource(mod)
         forbidden = ["urllib", "requests", "httpx", "aiohttp", "socket."]
         for lib in forbidden:

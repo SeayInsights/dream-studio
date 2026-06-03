@@ -100,9 +100,7 @@ class FrictionSignalHarvester:
 
     # ── Detectors ──────────────────────────────────────────────────────────
 
-    def _detect_dismissed_findings(
-        self, project_id: str | None
-    ) -> list[dict[str, Any]]:
+    def _detect_dismissed_findings(self, project_id: str | None) -> list[dict[str, Any]]:
         """Findings dismissed by operator — skill produces too many false positives.
 
         Threshold: ≥2 dismissed findings for the same (introduced_by_skill_id, rule_id)
@@ -154,9 +152,7 @@ class FrictionSignalHarvester:
             )
         return signals
 
-    def _detect_partial_completions(
-        self, project_id: str | None
-    ) -> list[dict[str, Any]]:
+    def _detect_partial_completions(self, project_id: str | None) -> list[dict[str, Any]]:
         """Scans completed with findings that were never engaged with.
 
         A finding is 'ignored' when it is still open, not dismissed,
@@ -211,9 +207,7 @@ class FrictionSignalHarvester:
             )
         return signals
 
-    def _detect_pattern_gaps(
-        self, project_id: str | None
-    ) -> list[dict[str, Any]]:
+    def _detect_pattern_gaps(self, project_id: str | None) -> list[dict[str, Any]]:
         """Low-confidence workflow patterns — skill usage is inconsistent.
 
         Reads ds_workflow_pattern_signals WHERE confidence_score < LOW_CONFIDENCE_CEILING
@@ -228,9 +222,7 @@ class FrictionSignalHarvester:
             params = [project_id] + params
 
         try:
-            self.conn.execute(
-                "SELECT 1 FROM ds_workflow_pattern_signals LIMIT 1"
-            )
+            self.conn.execute("SELECT 1 FROM ds_workflow_pattern_signals LIMIT 1")
         except sqlite3.OperationalError:
             logger.debug("ds_workflow_pattern_signals not available — skipping pattern_gap")
             return []
@@ -303,9 +295,7 @@ class FrictionSignalHarvester:
                 ),
             )
             self.conn.commit()
-            return self.conn.execute(
-                "SELECT changes()"
-            ).fetchone()[0] > 0
+            return self.conn.execute("SELECT changes()").fetchone()[0] > 0
         except Exception as exc:
             logger.warning(
                 "Failed to write friction signal (type=%s skill=%s): %s",
