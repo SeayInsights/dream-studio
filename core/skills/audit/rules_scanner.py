@@ -389,7 +389,7 @@ def _check_ops(scope_path: Path, files: list[Path]) -> list[dict[str, Any]]:
                 # requests.post/get/put without timeout=
                 if re.search(r"requests\.(get|post|put|delete)\s*\(", line):
                     # Check same line and next line for timeout
-                    window = content.splitlines()[i : i + 3]
+                    window = content.splitlines()[i:i + 3]
                     if not any("timeout" in ln for ln in window):
                         findings.append(
                             {

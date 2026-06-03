@@ -396,8 +396,6 @@ class SkillDispatcher:
             scan_database,
             scan_security,
         )
-        from core.skills.audit.rules_scanner import RulesScanner
-
         scope_path = Path(scope_path)
         context: dict[str, Any] = {
             "scope_path": str(scope_path),
