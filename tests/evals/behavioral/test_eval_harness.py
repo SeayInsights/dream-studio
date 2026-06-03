@@ -214,9 +214,10 @@ class TestEvalRunner:
         assert (
             result.match_result.negative_violations
         ), "Negative check should fire when code.generated event is present"
+        # Event score must be < 1.0 due to negative violation penalty
         assert (
-            result.composite_score < result.match_result.score
-        ), "Composite score should be lower than event score when negative violations present"
+            result.event_score < 1.0
+        ), f"Event score should be < 1.0 when negative violation fires, got {result.event_score}"
 
     def test_run_all_returns_5_results(self):
         runner = EvalRunner(evals_dir=EVALS_DIR)
@@ -377,13 +378,15 @@ class TestRegressionDetection:
         ), "Baseline should update after explicit update_baseline() call"
 
 
-# ── Opus judge structure tests (non-API) ──────────────────────────────────
+# ── Judge structure tests ──────────────────────────────────────────────────
 
 
 class TestJudgeStructure:
-    def test_judge_skips_when_no_api_key(self, monkeypatch):
-        """Judge must skip gracefully when ANTHROPIC_API_KEY not set."""
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    def test_judge_skips_when_claude_not_available(self, monkeypatch):
+        """Judge must skip gracefully when claude CLI is not available."""
+        import shutil
+
+        monkeypatch.setattr(shutil, "which", lambda _: None)
         from core.eval.judge import grade_behavior
 
         case = EvalCase(
@@ -431,10 +434,12 @@ class TestJudgeStructure:
         assert tokens > 0
 
 
-# ── Live judge tests (require API key) ────────────────────────────────────
+# ── Live judge tests (Claude Code — no API key required) ──────────────────
+
+HAS_CLAUDE = bool(__import__("shutil").which("claude"))
 
 
-@pytest.mark.skipif(not HAS_API_KEY, reason="Requires ANTHROPIC_API_KEY for live judge")
+@pytest.mark.skipif(not HAS_CLAUDE, reason="Requires claude CLI for live judge")
 class TestLiveJudge:
     def test_judge_scores_correct_behavior_highly(self):
         """A transcript that clearly exhibits expected behavior should score >= 0.75."""
