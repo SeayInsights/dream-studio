@@ -92,6 +92,40 @@ release_doc_paths:
     - "docs/release-notes.md"
     - "RELEASE.md"
 
+# Launch escalation map — defines which findings become LAUNCH_BLOCKED vs LAUNCH_WARNING
+# per service_type. Read by SkillDispatcher.launch() (18.8.x).
+#
+# blocked_rules: finding.rule_id in this list → LAUNCH_BLOCKED regardless of audit severity
+# warning_rules: finding.rule_id in this list → LAUNCH_WARNING (surfaced, not blocking)
+# silent_rules: finding.rule_id in this list → excluded from launch verdict entirely
+# blocked_severities: any finding with severity in this list → LAUNCH_BLOCKED (cross-skill)
+#
+# Rules not listed anywhere: inherit audit verdict (most pass silently at launch time)
+launch_escalation:
+  consumer:
+    blocked_rules: [pl-001, pl-002, pl-011, pl-012, pl-016]
+    warning_rules: [pl-003, pl-007, pl-008, pl-013, pl-014, pl-015, pl-017, pl-018, pl-019]
+    silent_rules: []
+    blocked_severities: [critical]
+
+  developer-tool:
+    blocked_rules: [pl-009, pl-010]
+    warning_rules: [pl-007, pl-008, pl-011, pl-012, pl-017]
+    silent_rules: [pl-001, pl-002, pl-003, pl-004, pl-005, pl-006]
+    blocked_severities: [critical]
+
+  internal-service:
+    blocked_rules: [pl-009, pl-010, pl-011, pl-012]
+    warning_rules: [pl-001, pl-002, pl-007, pl-008, pl-013, pl-014, pl-015, pl-017]
+    silent_rules: []
+    blocked_severities: [critical]
+
+  library:
+    blocked_rules: [pl-009, pl-010]
+    warning_rules: [pl-007, pl-008, pl-017]
+    silent_rules: [pl-001, pl-002, pl-003, pl-004, pl-005, pl-011, pl-012, pl-013, pl-014]
+    blocked_severities: [critical]
+
 # Security/privacy sign-off paths
 signoff_paths:
   security_review:

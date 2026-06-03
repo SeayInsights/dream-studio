@@ -371,6 +371,7 @@ class SkillDispatcher:
         skill_filter: list[str] | None = None,
         language_filter: list[str] | None = None,
         severity_threshold: str | None = None,
+        _extra_context: dict | None = None,
     ) -> "AuditResult":
         """Run full-project audit across all quality skills.
 
@@ -402,6 +403,8 @@ class SkillDispatcher:
             "scope_path": str(scope_path),
             "language_filter": language_filter,
         }
+        if _extra_context:
+            context.update(_extra_context)
 
         # Default skill list — pre-launch excluded by default (launch-specific)
         default_skills = [
@@ -562,6 +565,151 @@ class SkillDispatcher:
         )
 
         return result
+
+    # ── .launch() ──────────────────────────────────────────────────────────
+
+    @classmethod
+    def launch(
+        cls,
+        scope_path: Path,
+        service_type: str | None = None,
+    ) -> "LaunchResult":
+        """Run launch-gate audit — .audit() + service-type-aware escalation.
+
+        Reads escalation map from pre-launch skill config.yml (source of truth).
+        Returns LAUNCH_READY / LAUNCH_WARNING / LAUNCH_BLOCKED verdict.
+
+        Args:
+            scope_path: Absolute path to repository root.
+            service_type: Explicit override: 'consumer' | 'developer-tool' |
+                'internal-service' | 'library'. None = auto-infer.
+
+        Returns:
+            LaunchResult with verdict, service_type, full audit_result,
+            blocking and warning finding lists, and human-readable summary.
+        """
+        import yaml
+
+        scope_path = Path(scope_path)
+        start = time.monotonic()
+
+        # ── 1. Resolve service_type ────────────────────────────────────────
+        if service_type is None:
+            from core.skills.audit.rules_scanner import _infer_service_type
+
+            service_type = _infer_service_type(scope_path)
+
+        # ── 2. Load escalation map from pre-launch config.yml ─────────────
+        _SKILL_MODES = Path(__file__).parents[2] / "canonical" / "skills" / "quality" / "modes"
+        config_path = _SKILL_MODES / "pre-launch" / "config.yml"
+        escalation: dict = {}
+        try:
+            cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            escalation = cfg.get("launch_escalation", {}).get(service_type, {})
+        except Exception as exc:
+            logger.warning("Could not load launch escalation config: %s", exc)
+
+        blocked_rules: set[str] = set(escalation.get("blocked_rules", []))
+        warning_rules: set[str] = set(escalation.get("warning_rules", []))
+        silent_rules: set[str] = set(escalation.get("silent_rules", []))
+        blocked_severities: set[str] = set(escalation.get("blocked_severities", ["critical"]))
+
+        # ── 3. Run full audit — pass service_type override so pre-launch scanner uses it
+        audit_result = cls.audit(
+            scope_path,
+            _extra_context={"service_type_override": service_type},
+        )
+
+        # ── 4. Apply escalation to produce launch verdict ─────────────────
+        blocking: list[AuditFinding] = []
+        warning: list[AuditFinding] = []
+
+        for finding in audit_result.findings:
+            rule_id = finding.rule_id
+            severity = finding.severity
+
+            # Silent rules are excluded from launch verdict
+            if rule_id in silent_rules:
+                continue
+
+            # Blocked by explicit rule list or severity
+            if rule_id in blocked_rules or severity in blocked_severities:
+                blocking.append(finding)
+            elif rule_id in warning_rules:
+                warning.append(finding)
+            # else: audit-level pass — doesn't affect launch verdict
+
+        # ── 5. Determine verdict ───────────────────────────────────────────
+        if blocking:
+            verdict = "LAUNCH_BLOCKED"
+        elif warning:
+            verdict = "LAUNCH_WARNING"
+        else:
+            verdict = "LAUNCH_READY"
+
+        elapsed = time.monotonic() - start
+
+        # ── 6. Build summary ───────────────────────────────────────────────
+        summary_lines = [
+            f"Launch Gate — {scope_path.name} (service_type: {service_type})",
+            f"Verdict: {verdict}",
+        ]
+        if blocking:
+            summary_lines.append(f"\nBlocking ({len(blocking)}):")
+            for f in blocking[:10]:
+                summary_lines.append(f"  [{f.rule_id}] {f.skill_id}: {f.explanation[:60]}")
+            if len(blocking) > 10:
+                summary_lines.append(f"  ... and {len(blocking) - 10} more")
+        if warning:
+            summary_lines.append(f"\nWarnings ({len(warning)}):")
+            for f in warning[:5]:
+                summary_lines.append(f"  [{f.rule_id}] {f.skill_id}: {f.explanation[:60]}")
+
+        logger.info(
+            "launch: scope=%s service_type=%s verdict=%s blocking=%d warnings=%d elapsed=%.1fs",
+            scope_path.name,
+            service_type,
+            verdict,
+            len(blocking),
+            len(warning),
+            elapsed,
+        )
+
+        return LaunchResult(
+            verdict=verdict,
+            service_type=service_type,
+            audit_result=audit_result,
+            blocking_findings=blocking,
+            warning_findings=warning,
+            launch_summary="\n".join(summary_lines),
+            elapsed_seconds=elapsed,
+            tokens_consumed=audit_result.total_tokens_estimated,
+        )
+
+
+# ── LaunchResult dataclass ────────────────────────────────────────────────
+
+
+@dataclass
+class LaunchResult:
+    """Result of a .launch() dispatch call."""
+
+    verdict: str  # "LAUNCH_READY" | "LAUNCH_WARNING" | "LAUNCH_BLOCKED"
+    service_type: str
+    audit_result: "AuditResult"
+    blocking_findings: list[AuditFinding] = field(default_factory=list)
+    warning_findings: list[AuditFinding] = field(default_factory=list)
+    launch_summary: str = ""
+    elapsed_seconds: float = 0.0
+    tokens_consumed: int = 0
+
+    @property
+    def is_ready(self) -> bool:
+        return self.verdict == "LAUNCH_READY"
+
+    @property
+    def is_blocked(self) -> bool:
+        return self.verdict == "LAUNCH_BLOCKED"
 
 
 def _meets_threshold(severity: str, threshold: str) -> bool:

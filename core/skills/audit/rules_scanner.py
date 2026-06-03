@@ -178,7 +178,7 @@ class RulesScanner:
         result.files_scanned = len(files)
 
         # Skill-specific scanners for known important rules
-        skill_findings = _run_skill_specific_checks(self.skill_id, scope_path, files)
+        skill_findings = _run_skill_specific_checks(self.skill_id, scope_path, files, context)
         result.findings.extend(skill_findings)
 
         # Generic rules.yml scanner for remaining rules
@@ -230,7 +230,7 @@ class RulesScanner:
 
 
 def _run_skill_specific_checks(
-    skill_id: str, scope_path: Path, files: list[Path]
+    skill_id: str, scope_path: Path, files: list[Path], context: dict | None = None
 ) -> list[dict[str, Any]]:
     """Run hand-coded important checks for specific skills."""
     if skill_id == "architecture":
@@ -238,7 +238,7 @@ def _run_skill_specific_checks(
     elif skill_id == "ops":
         return _check_ops(scope_path, files)
     elif skill_id == "pre-launch":
-        return _check_pre_launch(scope_path)
+        return _check_pre_launch(scope_path, context)
     elif skill_id == "testing":
         return _check_testing(scope_path, files)
     elif skill_id == "types-deps":
@@ -443,12 +443,15 @@ def _check_ops(scope_path: Path, files: list[Path]) -> list[dict[str, Any]]:
     return findings
 
 
-def _check_pre_launch(scope_path: Path) -> list[dict[str, Any]]:
+def _check_pre_launch(scope_path: Path, context: dict | None = None) -> list[dict[str, Any]]:
     """Key pre-launch checks: legal docs, CHANGELOG, semver tags, runbook, rollback."""
     findings: list[dict[str, Any]] = []
 
-    # Detect service type using the pre-launch logic
-    service_type = _infer_service_type(scope_path)
+    # Use override from context (set by .launch() with explicit service_type) or infer
+    if context and context.get("service_type_override"):
+        service_type = context["service_type_override"]
+    else:
+        service_type = _infer_service_type(scope_path)
 
     # pl-001/002: legal docs (consumer only)
     if service_type == "consumer":
