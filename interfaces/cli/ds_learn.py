@@ -156,6 +156,116 @@ def _print_summary(confirmed: int, skipped: int, deferred: int) -> None:
     )
 
 
+def cmd_expand(args) -> int:
+    """Compile personalization extensions from dismissal evidence (19.4a)."""
+    from core.expansion.personalization import PersonalizationCompiler
+    from core.config.database import get_connection
+
+    db_path = getattr(args, "db_path", None)
+    extension_id = getattr(args, "extension_id", None)
+    compile_all = getattr(args, "all", False)
+    batch = getattr(args, "batch", False)
+
+    conn = get_connection() if db_path is None else __import__("sqlite3").connect(str(db_path))
+    conn.row_factory = __import__("sqlite3").Row
+    compiler = PersonalizationCompiler(conn)
+
+    try:
+        pending = compiler.get_pending_compilation()
+    finally:
+        conn.close()
+
+    if not pending:
+        print("No personalization extensions pending compilation.")
+        return 0
+
+    if batch:
+        import json as _json
+
+        print(_json.dumps(pending, indent=2))
+        return 0
+
+    # Filter to one extension if specified
+    if extension_id:
+        pending = [p for p in pending if p["extension_id"] == extension_id]
+        if not pending:
+            print(f"Extension {extension_id!r} not found or not eligible.", file=sys.stderr)
+            return 1
+
+    total = len(pending)
+    print(f"\nds learn expand — {total} extension(s) pending compilation\n")
+    accepted = rejected = failed = 0
+
+    for i, item in enumerate(pending, 1):
+        print(f"\n[{i}/{total}] Extension: {item['extension_id'][:8]}…")
+        print(f"  Skill:    {item['skill_id']}")
+        print(f"  Rule:     {item.get('rule_id') or 'N/A'}")
+        print(f"  Reason:   {item.get('classification_reason') or '?'}")
+        print(f"  Actions:  c=compile+accept  r=reject  q=quit")
+
+        while True:
+            try:
+                choice = input("  > ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                choice = "q"
+
+            if choice in ("c", "compile", "accept"):
+                conn2 = (
+                    get_connection()
+                    if db_path is None
+                    else __import__("sqlite3").connect(str(db_path))
+                )
+                conn2.row_factory = __import__("sqlite3").Row
+                try:
+                    result = PersonalizationCompiler(conn2).compile_one(item["extension_id"])
+                finally:
+                    conn2.close()
+                if result.success:
+                    import json as _json
+
+                    print(f"  ✓ Compiled ({len(result.finding_ids_cited)} findings cited)")
+                    print(f"    Content preview: {_json.dumps(result.content)[:120]}…")
+                    accepted += 1
+                else:
+                    print(f"  ✗ Compilation failed: {result.error}", file=sys.stderr)
+                    if result.signal_deferred:
+                        print("    (signal returned to deferred state)")
+                    failed += 1
+                break
+            elif choice in ("r", "reject"):
+                conn3 = (
+                    get_connection()
+                    if db_path is None
+                    else __import__("sqlite3").connect(str(db_path))
+                )
+                conn3.row_factory = __import__("sqlite3").Row
+                try:
+                    conn3.execute(
+                        "DELETE FROM ds_user_extensions WHERE extension_id = ?",
+                        (item["extension_id"],),
+                    )
+                    conn3.execute(
+                        "UPDATE ds_friction_signals SET extension_id = NULL WHERE extension_id = ?",
+                        (item["extension_id"],),
+                    )
+                    conn3.commit()
+                finally:
+                    conn3.close()
+                print("  → Rejected (extension row removed)")
+                rejected += 1
+                break
+            elif choice in ("q", "quit"):
+                print(f"\nStopped. {i - 1} processed.")
+                print(f"Summary: {accepted} compiled, {rejected} rejected, {failed} failed.")
+                return 0
+            else:
+                print("  Invalid. Use: c=compile+accept  r=reject  q=quit")
+
+    print(f"\nAll {total} extensions processed.")
+    print(f"Summary: {accepted} compiled, {rejected} rejected, {failed} failed.")
+    return 0
+
+
 def add_learn_subcommand(subparsers) -> None:
     """Register the 'learn' subcommand group with ds CLI."""
     learn_parser = subparsers.add_parser(
@@ -169,21 +279,28 @@ def add_learn_subcommand(subparsers) -> None:
         "review",
         help="Review pending classified friction signals",
     )
-    review_parser.add_argument(
-        "--limit",
-        type=int,
-        default=50,
-        help="Maximum signals to show (default: 50)",
-    )
-    review_parser.add_argument(
-        "--batch",
-        action="store_true",
-        help="Batch mode: print JSON, no interaction",
-    )
+    review_parser.add_argument("--limit", type=int, default=50)
+    review_parser.add_argument("--batch", action="store_true")
     review_parser.set_defaults(func=cmd_review)
+
+    # ds learn expand (19.4a — personalization only)
+    expand_parser = learn_sub.add_parser(
+        "expand",
+        help="Compile personalization extensions from dismissal evidence (19.4a)",
+    )
+    expand_parser.add_argument(
+        "extension_id",
+        nargs="?",
+        help="Compile a specific extension by ID (default: show all pending)",
+    )
+    expand_parser.add_argument("--all", action="store_true", help="Compile all pending")
+    expand_parser.add_argument("--batch", action="store_true", help="JSON output, no interaction")
+    expand_parser.set_defaults(func=cmd_expand)
+
     learn_parser.set_defaults(func=_learn_help)
 
 
 def _learn_help(args) -> int:
     print("Usage: ds learn review [--limit N] [--batch]")
+    print("       ds learn expand [extension_id] [--all] [--batch]")
     return 0
