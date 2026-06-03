@@ -254,3 +254,5 @@ N2 in the ledger marks removal of the `canonical_events` swallow as intentionall
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-02: aggregate_metrics.db tables (finding_rollups, rule_fire_rates, baseline_trends, guard_calibration, pattern_catalog, recommendation_outcomes) registered in _PYTHON_OWNED_TABLES. Separate DB from studio.db; no migration file required. -->
+
+<!-- 2026-06-03: core/skills/build/database.py added to _SELF_SCAN_EXCLUDE. File contains SQL pattern descriptions as string literals (detection rule text for build-mode auditor), not actual DDL. False-positive table names 'without' and 'block' extracted by staleness guard regex. -->

@@ -70,6 +70,10 @@ _SELF_SCAN_EXCLUDE: frozenset[str] = frozenset(
     {
         "core/config/schema_coherence.py",
         "tests/unit/test_schema_coherence_audit.py",
+        # Build-mode auditor contains SQL pattern descriptions in string literals
+        # (e.g., "CREATE TABLE without PRIMARY KEY → BLOCK") — these are detection
+        # rule text, not actual DDL; would produce false-positive table names.
+        "core/skills/build/database.py",
     }
 )
 
