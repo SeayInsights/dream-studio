@@ -38,9 +38,6 @@ regex>=2024.9.11
 python-pptx>=0.6.21
 openpyxl>=3.1.0
 
-# Behavioral eval harness — Opus judge + Claude API session execution (18.8.3)
-anthropic>=0.50.0
-
 # Optional: tiktoken (for precise token counting in adapter builds)
 # tiktoken>=0.5
 # Optional: APScheduler (for report scheduler - recommended)
