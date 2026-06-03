@@ -156,26 +156,47 @@ def _print_summary(confirmed: int, skipped: int, deferred: int) -> None:
     )
 
 
-def cmd_expand(args) -> int:
-    """Compile personalization extensions from dismissal evidence (19.4a)."""
+def _get_compiler(classified_as: str, conn):
+    """Return the appropriate compiler for the classification type."""
+    if classified_as == "capability":
+        from core.expansion.capability import CapabilityCompiler
+
+        return CapabilityCompiler(conn)
     from core.expansion.personalization import PersonalizationCompiler
+
+    return PersonalizationCompiler(conn)
+
+
+def cmd_expand(args) -> int:
+    """Compile extensions from evidence — personalization (19.4a) and capability (19.4b)."""
+    from core.expansion.personalization import PersonalizationCompiler
+    from core.expansion.capability import CapabilityCompiler
     from core.config.database import get_connection
 
     db_path = getattr(args, "db_path", None)
     extension_id = getattr(args, "extension_id", None)
     batch = getattr(args, "batch", False)
+    show_events = getattr(args, "show_events", False)
 
     conn = get_connection() if db_path is None else __import__("sqlite3").connect(str(db_path))
     conn.row_factory = __import__("sqlite3").Row
-    compiler = PersonalizationCompiler(conn)
 
     try:
-        pending = compiler.get_pending_compilation()
+        p_pending = PersonalizationCompiler(conn).get_pending_compilation()
+        c_pending = CapabilityCompiler(conn).get_pending_compilation()
     finally:
         conn.close()
 
+    # Tag each item with its type so the CLI can route to the right compiler
+    for item in p_pending:
+        item["_compiler_type"] = "personalization"
+    for item in c_pending:
+        item["_compiler_type"] = "capability"
+
+    pending = p_pending + c_pending
+
     if not pending:
-        print("No personalization extensions pending compilation.")
+        print("No extensions pending compilation.")
         return 0
 
     if batch:
@@ -196,11 +217,15 @@ def cmd_expand(args) -> int:
     accepted = rejected = failed = 0
 
     for i, item in enumerate(pending, 1):
-        print(f"\n[{i}/{total}] Extension: {item['extension_id'][:8]}…")
+        compiler_type = item.get("_compiler_type", "personalization")
+        print(f"\n[{i}/{total}] Extension: {item['extension_id'][:8]}…  [{compiler_type}]")
         print(f"  Skill:    {item['skill_id']}")
         print(f"  Rule:     {item.get('rule_id') or 'N/A'}")
         print(f"  Reason:   {item.get('classification_reason') or '?'}")
-        print("  Actions:  c=compile+accept  r=reject  q=quit")
+        actions = "c=compile+accept  r=reject  q=quit"
+        if compiler_type == "capability" and show_events:
+            actions += "  (--show-events active)"
+        print(f"  Actions:  {actions}")
 
         while True:
             try:
@@ -216,13 +241,21 @@ def cmd_expand(args) -> int:
                 )
                 conn2.row_factory = __import__("sqlite3").Row
                 try:
-                    result = PersonalizationCompiler(conn2).compile_one(item["extension_id"])
+                    compiler_inst = _get_compiler(compiler_type, conn2)
+                    result = compiler_inst.compile_one(item["extension_id"])
                 finally:
                     conn2.close()
                 if result.success:
                     import json as _json
 
-                    print(f"  ✓ Compiled ({len(result.finding_ids_cited)} findings cited)")
+                    cited = getattr(result, "finding_ids_cited", None) or getattr(
+                        result, "event_ids_cited", []
+                    )
+                    tokens = getattr(result, "tokens_estimated", 0)
+                    cited_label = "findings" if compiler_type == "personalization" else "events"
+                    print(
+                        f"  ✓ Compiled ({len(cited)} {cited_label} cited{', ~' + str(tokens) + ' tokens' if tokens else ''})"
+                    )
                     print(f"    Content preview: {_json.dumps(result.content)[:120]}…")
                     accepted += 1
                 else:
@@ -294,6 +327,12 @@ def add_learn_subcommand(subparsers) -> None:
     )
     expand_parser.add_argument("--all", action="store_true", help="Compile all pending")
     expand_parser.add_argument("--batch", action="store_true", help="JSON output, no interaction")
+    expand_parser.add_argument(
+        "--show-events",
+        action="store_true",
+        dest="show_events",
+        help="Show cited event IDs for capability proposals",
+    )
     expand_parser.set_defaults(func=cmd_expand)
 
     learn_parser.set_defaults(func=_learn_help)
