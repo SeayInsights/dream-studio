@@ -159,7 +159,6 @@ class WorkflowPatternAnalyzer:
         self, project_id: str | None, min_occ: int, min_conf: float
     ) -> list[dict[str, Any]]:
         """Skills A and B almost always appear together in the same session."""
-        proj_filter = "AND es.project_id = ?" if project_id else ""
         params: list[Any] = [min_occ]
         if project_id:
             # Insert before min_occ in params list
