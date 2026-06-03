@@ -60,6 +60,10 @@ class DetectedStack:
         None  # ops skill deployment context
         # values: 'container', 'serverless', 'cli', or None
     )
+    has_pii_schema: bool = False  # db-compliance skill: PII-suggestive columns detected in schema
+    has_privacy_policy: bool = False  # db-compliance skill: privacy policy doc present in repo
+    compliance_hints: Optional[list] = None  # db-compliance skill: detected compliance signals
+    # values: ['gdpr', 'hipaa', 'ccpa', 'coppa'] or [] or None
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -122,6 +126,12 @@ def detect_stack(path: Path) -> DetectedStack:
     result.has_k8s_manifest = ops_context["has_k8s_manifest"]
     result.is_service = ops_context["is_service"]
     result.deployment_type = ops_context["deployment_type"]
+
+    # Augment with compliance context for database-compliance skill dispatch
+    compliance_context = _detect_compliance_context(path)
+    result.has_pii_schema = compliance_context["has_pii_schema"]
+    result.has_privacy_policy = compliance_context["has_privacy_policy"]
+    result.compliance_hints = compliance_context["compliance_hints"]
 
     return result
 
@@ -612,6 +622,90 @@ def _detect_ops_context(path: Path) -> dict:
         "has_k8s_manifest": has_k8s_manifest,
         "is_service": is_service,
         "deployment_type": deployment_type,
+    }
+
+
+def _detect_compliance_context(path: Path) -> dict:
+    """Detect compliance-relevant context for database-compliance skill dispatch.
+
+    Returns dict with keys: has_pii_schema, has_privacy_policy, compliance_hints.
+    """
+    # PII schema: scan SQL migration files for PII-suggestive column names
+    pii_signals = [
+        "email",
+        "phone",
+        "name",
+        "ssn",
+        "dob",
+        "date_of_birth",
+        "address",
+        "credit_card",
+        "passport",
+        "national_id",
+        "medical_record",
+        "biometric",
+        "ip_address",
+    ]
+    has_pii_schema = False
+    for sql_file in list(path.glob("**/migrations/*.sql")) + list(path.glob("**/*.sql")):
+        if "node_modules" in str(sql_file) or ".venv" in str(sql_file):
+            continue
+        try:
+            content = sql_file.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(sig in content for sig in pii_signals):
+                has_pii_schema = True
+                break
+        except OSError:
+            pass
+
+    # Also check TypeScript/JS schema files (Prisma, Drizzle, TypeORM)
+    if not has_pii_schema:
+        for ts_file in list(path.glob("**/*.prisma")) + list(path.glob("**/schema.ts")):
+            if "node_modules" in str(ts_file):
+                continue
+            try:
+                content = ts_file.read_text(encoding="utf-8", errors="ignore").lower()
+                if any(sig in content for sig in pii_signals):
+                    has_pii_schema = True
+                    break
+            except OSError:
+                pass
+
+    # Privacy policy document
+    has_privacy_policy = any(
+        [
+            (path / "PRIVACY.md").exists(),
+            (path / "PRIVACY_POLICY.md").exists(),
+            (path / "privacy-policy.md").exists(),
+            (path / "docs" / "privacy.md").exists(),
+            (path / "docs" / "privacy-policy.md").exists(),
+            (path / "legal").is_dir(),
+        ]
+    )
+
+    # Compliance hints from code, config, or package files
+    hints: list = []
+    hint_files = list(path.glob("*.toml")) + list(path.glob("*.json")) + list(path.glob("*.md"))
+    for hf in hint_files[:20]:  # cap scan to avoid very large repos
+        if "node_modules" in str(hf) or ".venv" in str(hf):
+            continue
+        try:
+            content = hf.read_text(encoding="utf-8", errors="ignore").lower()
+            if "gdpr" in content and "gdpr" not in hints:
+                hints.append("gdpr")
+            if "hipaa" in content and "hipaa" not in hints:
+                hints.append("hipaa")
+            if "ccpa" in content and "ccpa" not in hints:
+                hints.append("ccpa")
+            if "coppa" in content and "coppa" not in hints:
+                hints.append("coppa")
+        except OSError:
+            pass
+
+    return {
+        "has_pii_schema": has_pii_schema,
+        "has_privacy_policy": has_privacy_policy,
+        "compliance_hints": hints,
     }
 
 
