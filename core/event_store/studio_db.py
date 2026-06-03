@@ -1232,6 +1232,21 @@ def end_session(
                 },
                 session_id=session_id,
             )
+
+        # Session-end friction signal harvest (Phase 19.2).
+        # Non-blocking: session close completes regardless of harvester outcome.
+        try:
+            from projections.core.analyzers.friction_signals import FrictionSignalHarvester
+
+            _hconn = get_connection()
+            try:
+                harvester = FrictionSignalHarvester(_hconn, session_id=session_id)
+                harvester.harvest()
+            finally:
+                _hconn.close()
+        except Exception:
+            pass
+
         return True
     except Exception as e:
         _reraise_if_busy(e)

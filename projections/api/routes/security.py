@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 import tempfile
 import json
 
@@ -10,6 +11,48 @@ from core.config.database import get_connection
 from projections.api.routes.sqlite_schema import has_columns, object_exists, table_columns
 
 router = APIRouter()
+
+
+# ── Dismiss endpoint (Phase 19.2) ─────────────────────────────────────────
+
+
+class DismissRequest(BaseModel):
+    reason: str
+
+
+@router.post("/findings/{finding_id}/dismiss")
+async def dismiss_finding(finding_id: str, body: DismissRequest) -> Dict[str, Any]:
+    """Mark a finding as dismissed by the operator.
+
+    Sets findings.dismissed_at and findings.dismissed_reason.
+    These columns feed the dismissed_finding friction signal detector.
+    Idempotent: dismissing an already-dismissed finding updates reason + timestamp.
+    """
+    with get_connection() as conn:
+        if not has_columns(conn, "findings", ["dismissed_at", "dismissed_reason"]):
+            raise HTTPException(
+                status_code=503,
+                detail="Migration 096 not applied — dismissed_at column missing",
+            )
+        row = conn.execute(
+            "SELECT finding_id FROM findings WHERE finding_id = ?", (finding_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Finding {finding_id!r} not found")
+
+        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        conn.execute(
+            "UPDATE findings SET dismissed_at = ?, dismissed_reason = ? WHERE finding_id = ?",
+            (now, body.reason, finding_id),
+        )
+        conn.commit()
+
+    return {
+        "finding_id": finding_id,
+        "dismissed_at": now,
+        "dismissed_reason": body.reason,
+        "status": "dismissed",
+    }
 
 
 def _security_empty(filters: dict[str, Any]) -> Dict[str, Any]:

@@ -219,10 +219,14 @@ class TestEvalRunner:
             result.event_score < 1.0
         ), f"Event score should be < 1.0 when negative violation fires, got {result.event_score}"
 
-    def test_run_all_returns_5_results(self):
+    def test_run_all_returns_all_results(self):
         runner = EvalRunner(evals_dir=EVALS_DIR)
         results = runner.run_all()
-        assert len(results) == 5
+        expected = len(load_eval_cases(EVALS_DIR))
+        assert len(results) == expected, (
+            f"run_all() returned {len(results)} results but {expected} eval cases exist. "
+            "Update the evals/ directory count when adding new eval cases."
+        )
 
     def test_run_all_by_skill_filter(self):
         runner = EvalRunner(evals_dir=EVALS_DIR)

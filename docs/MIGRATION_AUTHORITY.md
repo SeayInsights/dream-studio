@@ -249,3 +249,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- 2026-06-03: migration 094 ds_eval_baselines label column — pre_phase_19 named baseline snapshot -->
 
 <!-- 2026-06-03: migration 095 ds_user_extensions + ds_friction_signals (Phase 19.1 unified extensions schema) -->
+
+<!-- 2026-06-03: migration 096 ds_friction_signals + findings.dismissed_at (Phase 19.2 Friction Signal Harvester) — passive session-end capture; idempotent via bucket_key UNIQUE -->

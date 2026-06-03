@@ -483,3 +483,5 @@ recommended_next_work_order: none
 <!-- 2026-06-02: quality skill modes registered in packs.yaml (backend-api, frontend-ux, architecture, ops); aggregate_metrics_route.py uses _connect_aggregate() via approved helper -->
 
 <!-- 2026-06-03: workflow pattern detection API routes added to intelligence route (18.8.4) -->
+
+<!-- 2026-06-03: Phase 19.2 adds POST /api/v1/findings/{id}/dismiss, GET /api/v1/intelligence/friction-signals, GET /api/v1/intelligence/friction-signals/{id} — all route to existing projections/api/routes/security.py and intelligence.py; no new router; no dashboard surface change -->

@@ -108,8 +108,24 @@ def run_gate(
             exit_code=-1,
             duration_seconds=duration,
             fail_hint=f"Gate timed out after {timeout_seconds}s.",
-            stdout_tail=_tail(exc.stdout.decode("utf-8", errors="replace") if exc.stdout else ""),
-            stderr_tail=_tail(exc.stderr.decode("utf-8", errors="replace") if exc.stderr else ""),
+            stdout_tail=_tail(
+                (
+                    exc.stdout.decode("utf-8", errors="replace")
+                    if isinstance(exc.stdout, bytes)
+                    else exc.stdout
+                )
+                if exc.stdout
+                else ""
+            ),
+            stderr_tail=_tail(
+                (
+                    exc.stderr.decode("utf-8", errors="replace")
+                    if isinstance(exc.stderr, bytes)
+                    else exc.stderr
+                )
+                if exc.stderr
+                else ""
+            ),
         )
     except FileNotFoundError as exc:
         duration = time.monotonic() - start
