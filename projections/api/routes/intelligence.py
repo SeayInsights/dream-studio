@@ -1022,8 +1022,7 @@ async def get_workflow_patterns(
             "include_suppressed": include_suppressed,
             "min_confidence": min_confidence,
             "phase19_eligible": sum(
-                1 for p in patterns
-                if p["confidence_score"] >= 0.8 and not p["suppressed"]
+                1 for p in patterns if p["confidence_score"] >= 0.8 and not p["suppressed"]
             ),
         }
     except Exception as e:
@@ -1086,7 +1085,9 @@ async def run_workflow_pattern_analysis(
             "project_id": project_id,
             "patterns_by_type": {
                 "always_paired": sum(1 for s in signals if s["pattern_type"] == "always_paired"),
-                "post_completion": sum(1 for s in signals if s["pattern_type"] == "post_completion"),
+                "post_completion": sum(
+                    1 for s in signals if s["pattern_type"] == "post_completion"
+                ),
                 "pre_close": sum(1 for s in signals if s["pattern_type"] == "pre_close"),
             },
             "high_confidence": sum(1 for s in signals if s["confidence_score"] >= 0.8),
