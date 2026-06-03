@@ -379,3 +379,5 @@ and boundary report without inventing new dependency data.
 <!-- 2026-06-01: fix migration 089 view-drop-before-rename (vw_approach_patterns/vw_security_summary); fix v38 test fixture findings→security_findings -->
 
 <!-- 2026-06-02: aggregate_metrics.db pipeline + /api/v1/metrics/aggregate + ML routes self-serve -->
+
+<!-- 2026-06-03: Phase 19.2 friction signal harvester: migration 096 (ds_friction_signals + findings.dismissed_at/reason), FrictionSignalHarvester analyzer, session-end hook, dismiss endpoint, friction-signals read API. No contract atlas topology change. -->
