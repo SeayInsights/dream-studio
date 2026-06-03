@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 from typing import Any
@@ -33,8 +34,9 @@ logger = logging.getLogger(__name__)
 # sessions that also used Claude Code
 JUDGE_MODEL_FLAG = ["--model", "claude-opus-4-8"]
 
-# Subprocess timeout in seconds
-JUDGE_TIMEOUT = 90
+# Subprocess timeout in seconds. 30s is sufficient for typical claude -p responses
+# and keeps the full eval suite well under the 600s pre-push gate timeout (8 evals × 30s = 240s).
+JUDGE_TIMEOUT = int(os.environ.get("DREAM_STUDIO_JUDGE_TIMEOUT", "30"))
 
 # Tight judge prompt — designed for < 0.05 score variance across identical runs
 JUDGE_PROMPT_TEMPLATE = """You are evaluating whether an AI assistant followed expected behavior in a session.
