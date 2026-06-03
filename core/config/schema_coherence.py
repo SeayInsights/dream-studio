@@ -48,6 +48,14 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # IF NOT EXISTS (idempotent). Listed here so the staleness guard does not
     # flag retrieval.py as an unregistered call site on FTS5-absent systems.
     "memory_fts": "core/memory/retrieval.py:78 (dual-owned; migration 079 also creates it)",
+    # aggregate_metrics.db tables — separate database at state_dir()/aggregate_metrics.db.
+    # Not in studio.db; no migration file. Created by ensure_aggregate_schema() in PR #143.
+    "finding_rollups": "core/analytics/aggregate_metrics.py:47",
+    "rule_fire_rates": "core/analytics/aggregate_metrics.py:60",
+    "baseline_trends": "core/analytics/aggregate_metrics.py:73",
+    "guard_calibration": "core/analytics/aggregate_metrics.py:86",
+    "pattern_catalog": "core/analytics/aggregate_metrics.py:97",
+    "recommendation_outcomes": "core/analytics/aggregate_metrics.py:107",
 }
 
 # Dual-owned tables — both Python and a migration create them with IF NOT EXISTS.
