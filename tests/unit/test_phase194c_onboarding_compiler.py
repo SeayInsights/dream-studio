@@ -275,13 +275,6 @@ class TestNoDiskWrites:
         import core.expansion.onboarding as mod
 
         source = inspect.getsource(mod)
-        forbidden_writes = [
-            "write_text(",
-            "write_bytes(",
-            ".mkdir(",
-            "open(",
-            ".write(",  # open() with 'w' mode
-        ]
         # Check for write-mode open specifically, not read-mode
         import re
 
