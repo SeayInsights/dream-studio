@@ -1,0 +1,28 @@
+{
+  "eval_id": "eval_06_promoted_devops_dispatch",
+  "version": "1.0.0",
+  "description": "Validates that promoted devops-engineer subagent correctly loads its SKILL.md and returns content from it. Tests the agent-as-wrapper pattern: wrapper (19 lines) points to ds-domains:devops skill, skill content loads correctly.",
+  "skill_id": "ds-domains",
+  "input_prompt": "use devops-engineer to explain how to set up OIDC federation between GitHub Actions and AWS",
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "devops-engineer"
+    }
+  ],
+  "expected_behavior": "Claude invokes the devops-engineer subagent which loads SKILL.md from ds-domains:devops skill. Response includes the OIDC federation pattern: short-lived tokens via GitHub OIDC provider, no static credentials, aws-actions/configure-aws-credentials v4+ mentioned.",
+  "negative_checks": [
+    "Claude does not say the skill file is unavailable",
+    "Claude does not return a generic answer without specifics about OIDC or aws-actions"
+  ],
+  "scoring": {
+    "event_weight": 0.7,
+    "behavior_weight": 0.3,
+    "minimum_pass_score": 0.75
+  },
+  "fixture_events": [
+    {"event_type": "skill.invoked", "skill_id": "devops-engineer", "trace": {"skill_id": "devops-engineer"}}
+  ],
+  "fixture_transcript": "User: use devops-engineer to explain how to set up OIDC federation between GitHub Actions and AWS\n\nClaude: [Loaded: ~/.claude/skills/ds-domains/modes/devops/SKILL.md]\n\nFor GitHub Actions + AWS OIDC federation, use the OIDC federation pattern:\n\n**Pattern:** Request short-lived tokens via GitHub OIDC provider to AWS. No static credentials stored in secrets — the token expires with the workflow run.\n\n1. Add a permissions block to the workflow: `id-token: write` (required for OIDC)\n2. Use `aws-actions/configure-aws-credentials v4+` action with `role-to-assume`\n3. Create an IAM role with a trust policy for the GitHub OIDC provider (`token.actions.githubusercontent.com`)\n\nKey gotcha: Use `aws-actions/configure-aws-credentials` v4+ for latest STS session tag support. Earlier versions may not support all OIDC features."
+}

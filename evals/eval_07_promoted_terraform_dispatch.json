@@ -1,0 +1,28 @@
+{
+  "eval_id": "eval_07_promoted_terraform_dispatch",
+  "version": "1.0.0",
+  "description": "Validates that promoted terraform-architect subagent correctly loads SKILL.md and returns content. Tests that 108-line agent content is reachable after promotion to ds-domains:terraform skill.",
+  "skill_id": "ds-domains",
+  "input_prompt": "use terraform-architect to explain the risks of using count vs for_each for resource collections",
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "terraform-architect"
+    }
+  ],
+  "expected_behavior": "Claude invokes the terraform-architect subagent which loads SKILL.md from ds-domains:terraform. Response explains that count indexes are positional — removing an item shifts all higher items, triggering destroy+recreate — while for_each keys are stable strings.",
+  "negative_checks": [
+    "Claude does not confuse Terraform with Ansible or CloudFormation",
+    "Claude does not give a generic IaC answer without Terraform-specific count vs for_each details"
+  ],
+  "scoring": {
+    "event_weight": 0.7,
+    "behavior_weight": 0.3,
+    "minimum_pass_score": 0.75
+  },
+  "fixture_events": [
+    {"event_type": "skill.invoked", "skill_id": "terraform-architect", "trace": {"skill_id": "terraform-architect"}}
+  ],
+  "fixture_transcript": "User: use terraform-architect to explain the risks of using count vs for_each for resource collections\n\nClaude: [Loaded: ~/.claude/skills/ds-domains/modes/terraform/SKILL.md]\n\n**count vs for_each — the core risk:**\n\n`count` uses positional indexes. If you have 3 resources (`aws_instance.server[0]`, `[1]`, `[2]`) and remove the middle one, Terraform shifts `[2]` to `[1]` — triggering a **destroy+recreate** of the resource you wanted to keep. For production databases, this means unintended destruction.\n\n`for_each` keys are stable strings. Removing `servers[\"web\"]` only destroys that specific resource; `servers[\"db\"]` is untouched.\n\n**The rule:** Use `for_each` for any mutable collection where items might be added or removed over time. Reserve `count` only for truly fixed-size sets where ordering never changes."
+}
