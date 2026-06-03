@@ -1096,3 +1096,84 @@ async def run_workflow_pattern_analysis(
         raise HTTPException(status_code=500, detail=f"Pattern analysis failed: {str(e)}")
     finally:
         conn.close()
+
+
+
+# ── Friction signals read API (Phase 19.2) ────────────────────────────────
+# Consumer contract for 19.3 Gap Classifier:
+#   GET /api/v1/intelligence/friction-signals → list unclassified signals
+#   GET /api/v1/intelligence/friction-signals?signal_type=<type> → filter
+#   GET /api/v1/intelligence/friction-signals/{signal_id} → single signal
+
+
+def _friction_table_missing(conn: sqlite3.Connection) -> bool:
+    try:
+        conn.execute("SELECT 1 FROM ds_friction_signals LIMIT 1")
+        return False
+    except sqlite3.OperationalError:
+        return True
+
+
+@router.get("/friction-signals")
+async def list_friction_signals(
+    signal_type: str | None = None,
+    classified: bool = False,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """List friction signals. Default: unclassified only (19.3 consumer view).
+
+    Query params:
+      signal_type — filter to one signal type (dismissed_finding, partial_completion, pattern_gap)
+      classified  — if true, include already-classified signals
+      limit       — max rows (default 100)
+    """
+    conn = get_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        if _friction_table_missing(conn):
+            return {"signals": [], "count": 0, "note": "Migration 096 not yet applied"}
+
+        params: List[Any] = []
+        conditions: List[str] = []
+
+        if not classified:
+            conditions.append("classified_as IS NULL")
+        if signal_type:
+            conditions.append("signal_type = ?")
+            params.append(signal_type)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        params.append(limit)
+
+        rows = conn.execute(
+            f"SELECT * FROM ds_friction_signals {where} ORDER BY created_at LIMIT ?",
+            params,
+        ).fetchall()
+        signals = [dict(r) for r in rows]
+        return {"signals": signals, "count": len(signals)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Friction signals query failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.get("/friction-signals/{signal_id}")
+async def get_friction_signal(signal_id: str) -> Dict[str, Any]:
+    """Retrieve a single friction signal by ID."""
+    conn = get_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        if _friction_table_missing(conn):
+            raise HTTPException(status_code=503, detail="Migration 096 not yet applied")
+        row = conn.execute(
+            "SELECT * FROM ds_friction_signals WHERE signal_id = ?", (signal_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Signal {signal_id!r} not found")
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
