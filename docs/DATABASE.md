@@ -262,3 +262,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- 2026-06-01: fix migration 089 view-drop-before-rename (vw_approach_patterns/vw_security_summary); fix v38 test fixture findings→security_findings -->
 
 <!-- 2026-06-03: migration 092 adds ds_eval_baselines table for behavioral eval harness (18.8.3) -->
+
+<!-- 2026-06-03: migration 093 ds_workflow_pattern_signals — workflow pattern detection for Phase 19 -->
