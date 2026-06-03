@@ -1,0 +1,104 @@
+# Pre-Launch Skill — Configuration
+# Version: 1.0.0
+#
+# Project override: create pre_launch_config.yml at project root
+#
+#   service_type: consumer       # overrides auto-detection
+#   launch_tier_threshold: T1    # only block on T1; show T2 as warnings
+#   skip_categories: [legal]     # skip entire category if docs managed externally
+#
+# service_type values:
+#   consumer        — public-facing service with user accounts or guest data
+#                     pl-001/002 (ToS, Privacy) fire at T1
+#   internal-service — private API, no public consumers
+#                     pl-001/002 fire at T2 (advisory)
+#   developer-tool  — CLI tool, SDK, or developer framework
+#                     pl-001/002 SILENT
+#   library         — code library with no runtime service
+#                     pl-001/002 SILENT; only release docs apply (pl-007-010)
+
+version: "1.0"
+
+# Default service type — overridden by detection or project config
+service_type: consumer
+
+# Minimum launch threshold — controls exit code behavior
+# T1: exit 1 when any T1 finding (default, recommended)
+# T2: exit 1 when any T1 or T2 finding (stricter)
+launch_tier_threshold: T1
+
+# Legal document paths — where to look for legal docs (checked in order)
+legal_doc_paths:
+  terms_of_service:
+    - "TERMS.md"
+    - "TERMS_OF_SERVICE.md"
+    - "TOS.md"
+    - "docs/legal/terms.md"
+    - "docs/legal/terms-of-service.md"
+    - "legal/terms.md"
+  privacy_policy:
+    - "PRIVACY.md"
+    - "PRIVACY_POLICY.md"
+    - "docs/legal/privacy.md"
+    - "docs/legal/privacy-policy.md"
+    - "legal/privacy.md"
+  cookie_notice:
+    - "COOKIE_NOTICE.md"
+    - "COOKIE_POLICY.md"
+    - "docs/legal/cookies.md"
+    - "legal/cookies.md"
+  accessibility_statement:
+    - "ACCESSIBILITY.md"
+    - "docs/legal/accessibility.md"
+    - "docs/accessibility-statement.md"
+  gdpr_dpa:
+    - "DPA.md"
+    - "docs/legal/dpa.md"
+    - "legal/data-processing-agreement.md"
+
+# Operational doc paths
+ops_doc_paths:
+  runbook:
+    - "RUNBOOK.md"
+    - "DEPLOYMENT.md"
+    - "docs/runbook.md"
+    - "docs/operations/deployment.md"
+    - "docs/deployment.md"
+  rollback:
+    - "ROLLBACK.md"
+    - "docs/rollback.md"
+    - "docs/operations/rollback.md"
+  on_call:
+    - "ONCALL.md"
+    - "ON_CALL.md"
+    - "docs/on-call.md"
+    - "docs/operations/on-call.md"
+    - ".github/CODEOWNERS"
+  smoke_tests:
+    - "SMOKE_TESTS.md"
+    - "docs/smoke-tests.md"
+    - "docs/testing/smoke.md"
+    - "tests/smoke/"
+    - "e2e/"
+
+# Release documentation paths
+release_doc_paths:
+  changelog:
+    - "CHANGELOG.md"
+    - "CHANGES.md"
+    - "HISTORY.md"
+  release_notes:
+    - "RELEASE_NOTES.md"
+    - "docs/release-notes.md"
+    - "RELEASE.md"
+
+# Security/privacy sign-off paths
+signoff_paths:
+  security_review:
+    - ".planning/audits/security-signoff.md"
+    - "docs/security-review.md"
+    - "SECURITY_REVIEW.md"
+  privacy_review:
+    - "docs/privacy-impact-assessment.md"
+    - "PIA.md"
+    - ".planning/audits/privacy-review.md"
