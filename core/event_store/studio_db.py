@@ -1262,6 +1262,22 @@ def end_session(
         except Exception:
             pass
 
+        # Session-end retroactive validation (Phase 19.5).
+        # Increments past_wo_count for experimental extensions whose skills ran
+        # this session; triggers full validation when count crosses 5.
+        # Non-blocking: session close completes regardless of validation outcome.
+        try:
+            from core.expansion.validation import RetroactiveValidator
+
+            _vconn = get_connection()
+            try:
+                validator = RetroactiveValidator(_vconn)
+                validator.increment_for_session(session_id=session_id)
+            finally:
+                _vconn.close()
+        except Exception:
+            pass
+
         return True
     except Exception as e:
         _reraise_if_busy(e)

@@ -306,6 +306,71 @@ def cmd_expand(args) -> int:
     return 0
 
 
+def cmd_validate(args) -> int:
+    """Retroactive validation for compiled extensions (19.5)."""
+    from core.expansion.validation import RetroactiveValidator
+    from core.config.database import get_connection
+
+    db_path = getattr(args, "db_path", None)
+    extension_id = getattr(args, "extension_id", None)
+    all_proposed = getattr(args, "all_proposed", False)
+    force = getattr(args, "force", False)
+
+    conn = get_connection() if db_path is None else __import__("sqlite3").connect(str(db_path))
+    conn.row_factory = __import__("sqlite3").Row
+    validator = RetroactiveValidator(conn, db_path=db_path)
+
+    try:
+        if extension_id:
+            results = [validator.validate(extension_id, force=force)]
+        elif all_proposed:
+            results = validator.validate_all_proposed()
+        else:
+            # List pending without running
+            rows = conn.execute(
+                "SELECT extension_id, skill_id, status, past_wo_count, "
+                "current_eval_score, baseline_eval_score FROM ds_user_extensions "
+                "WHERE status IN ('proposed', 'experimental') "
+                "AND (content IS NOT NULL AND content != '' AND content != '{}') "
+                "ORDER BY created_at"
+            ).fetchall()
+            if not rows:
+                print("No extensions pending validation.")
+                return 0
+            print(f"\n{len(rows)} extension(s) available for validation:\n")
+            for r in rows:
+                score_info = ""
+                if r["current_eval_score"] is not None:
+                    score_info = f" | score={r['current_eval_score']:.3f}"
+                print(
+                    f"  {r['extension_id'][:8]}… {r['skill_id']} "
+                    f"[{r['status']}] N={r['past_wo_count']}{score_info}"
+                )
+            print("\nRun: ds learn validate <id> OR ds learn validate --all-proposed")
+            return 0
+    finally:
+        conn.close()
+
+    # Report results
+    for result in results:
+        if not result.success:
+            print(f"  ✗ {result.extension_id[:8]}… FAILED: {result.error}", file=sys.stderr)
+            continue
+        symbol = "✓" if result.verdict == "active" else "⚠"
+        score_str = (
+            f"  score={result.current_eval_score:.3f}"
+            if result.current_eval_score is not None
+            else ""
+        )
+        tokens_str = f" (~{result.tokens_estimated} tokens)" if result.tokens_estimated > 0 else ""
+        print(
+            f"  {symbol} {result.extension_id[:8]}… "
+            f"→ {result.verdict}{score_str}  N={result.past_wo_count}"
+            f"{tokens_str}\n    {result.verdict_reason}"
+        )
+    return 0
+
+
 def add_learn_subcommand(subparsers) -> None:
     """Register the 'learn' subcommand group with ds CLI."""
     learn_parser = subparsers.add_parser(
@@ -343,10 +408,34 @@ def add_learn_subcommand(subparsers) -> None:
     )
     expand_parser.set_defaults(func=cmd_expand)
 
+    # ds learn validate (19.5 — retroactive validation)
+    validate_parser = learn_sub.add_parser(
+        "validate",
+        help="Retroactive validation for compiled extensions (Decision 6)",
+    )
+    validate_parser.add_argument(
+        "extension_id",
+        nargs="?",
+        help="Validate a specific extension (default: list pending)",
+    )
+    validate_parser.add_argument(
+        "--all-proposed",
+        action="store_true",
+        dest="all_proposed",
+        help="Validate all proposed/experimental extensions with sufficient WO history",
+    )
+    validate_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Override the N≥5 minimum (requires explicit confirmation)",
+    )
+    validate_parser.set_defaults(func=cmd_validate)
+
     learn_parser.set_defaults(func=_learn_help)
 
 
 def _learn_help(args) -> int:
     print("Usage: ds learn review [--limit N] [--batch]")
     print("       ds learn expand [extension_id] [--all] [--batch]")
+    print("       ds learn validate [extension_id] [--all-proposed] [--force]")
     return 0

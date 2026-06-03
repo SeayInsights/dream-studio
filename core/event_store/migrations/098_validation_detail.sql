@@ -1,0 +1,21 @@
+-- Migration 098: Add validation_detail JSON column to ds_user_extensions (Phase 19.5)
+--
+-- Adds audit-trail storage for retroactive validation results. The Decision 6
+-- gate uses the existing four columns (baseline_eval_score, current_eval_score,
+-- past_wo_count, last_validated_at). This column stores the full evidence:
+-- which WOs were sampled, per-case scores, verdict reason.
+--
+-- Format: JSON or NULL
+-- {
+--   "validated_at": "2026-06-03T14:00:00",
+--   "scan_ids_sampled": ["scan-1", "scan-2"],
+--   "verdict": "active|experimental|experimental_with_warning|skip_onboarding",
+--   "verdict_reason": "N=7, score=0.87 >= baseline*0.95=0.81",
+--   "classification_path": "personalization|capability|onboarding",
+--   "eval_cases_scored": [
+--     {"eval_id": "eval_01", "baseline": 0.85, "current": 0.82}
+--   ],
+--   "force_override": false
+-- }
+
+ALTER TABLE ds_user_extensions ADD COLUMN validation_detail TEXT;
