@@ -206,3 +206,66 @@ canonical/skills/
         metadata.yml
         SKILL.md
 ```
+
+---
+
+## Agent-as-Wrapper Pattern (18.9 Full Rollout)
+
+All domain-expert agents follow the **agent-as-wrapper** pattern established in WO 18.4.2b
+and rolled out to all 9 agents in WO 18.9.
+
+### Why
+
+Prior to 18.9, agents were bare markdown files with patterns, gotchas, and commands -- but
+no skill directory, no metadata, no tier, and no JIT enrichment hooks. Functionally they were
+subagent-target skills in agent clothing. The promotion:
+
+1. Moves content into the skill directory (token attribution, tier graduation, Phase 19 enrichment)
+2. Reduces the agent file to a ~20-line wrapper
+3. Closes the structural inconsistency -- every agent now participates in skill infrastructure
+
+### Wrapper format (<=25 lines)
+
+```markdown
+---
+name: <agent-name>
+description: <one-line description>
+---
+
+You are a <domain> subagent. Your full [content] is in:
+
+  ~/.claude/skills/<pack>/modes/<mode>/SKILL.md
+
+Read it completely before responding.
+[1-2 key principles or diagnostic shortcuts]
+If the skill file is unavailable, fall back to [community standard].
+```
+
+### Corresponding skill directory
+
+Each wrapper agent has a `canonical/skills/<pack>/modes/<mode>/` directory with the
+5-file minimum (subagent-target pattern):
+
+| File | Contents |
+|------|---------|
+| SKILL.md | Verbatim content from original agent (frontmatter removed) |
+| metadata.yml | status: jit-pending, origin: promoted-from-agent |
+| gotchas.yml | Structured gotchas extracted from agent content |
+| config.yml | invocation.type: subagent-target |
+| changelog.md | First entry: "Promoted from agent (WO 18.9)" |
+
+### Current agent inventory (post-18.9)
+
+| Agent | Skill |
+|-------|-------|
+| accessibility-expert (18.4.2b) | quality:accessibility |
+| devops-engineer | domains:devops |
+| kubernetes-expert | domains:kubernetes |
+| research-analyst | analyze:research |
+| idea-validator | analyze:idea-validation |
+| technical-writer | domains:technical-writing |
+| terraform-architect | domains:terraform |
+| mobile-developer | domains:mobile |
+| data-engineer | domains:data-engineering |
+
+See `docs/architecture/AGENTS.md` for the full architecture rationale and boundary conventions.
