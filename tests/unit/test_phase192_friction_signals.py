@@ -592,7 +592,7 @@ class TestSessionEndHookNonBlocking:
         )
         # Scan backwards for a try: statement within 10 lines
         start = max(0, hook_line - 5)
-        context = lines[start : hook_line + 2]
+        context = lines[start : hook_line + 2]  # noqa: E203
         assert any(
             "try:" in ln for ln in context
         ), f"FrictionSignalHarvester import not inside a try block. Context: {context}"
