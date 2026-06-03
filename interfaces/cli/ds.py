@@ -247,6 +247,11 @@ def main(argv: list[str] | None = None) -> int:
 
     add_workflow_subcommand(subcommands)
 
+    # learn subcommand group (Phase 19.3)
+    from interfaces.cli.ds_learn import add_learn_subcommand
+
+    add_learn_subcommand(subcommands)
+
     # memory subcommand group (Slice 5d)
     from interfaces.cli.ds_memory import add_memory_subcommand
 
@@ -795,6 +800,11 @@ def main(argv: list[str] | None = None) -> int:
             if hasattr(args, "func"):
                 return args.func(args)
             print("Usage: ds workflow <subcommand>", file=sys.stderr)
+            return 1
+        if args.command == "learn":
+            if hasattr(args, "func"):
+                return args.func(args)
+            print("Usage: ds learn review [--limit N] [--batch]", file=sys.stderr)
             return 1
         if args.command == "integrate":
             return _integrate_dispatch(args, source_root=source_root, dream_studio_home=home)

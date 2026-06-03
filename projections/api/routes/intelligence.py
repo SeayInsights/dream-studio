@@ -1176,3 +1176,57 @@ async def get_friction_signal(signal_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+
+# -- Friction signal classifications read API (Phase 19.3) ------------------
+
+
+@router.get("/friction-signals/classifications")
+async def get_friction_classifications(
+    classified_as: str | None = None,
+    min_confidence: float = 0.0,
+    limit: int = 100,
+) -> Dict[str, Any]:
+    """Classified signals grouped by classification type.
+
+    Query params:
+      classified_as   - filter to capability | personalization | onboarding
+      min_confidence  - minimum classification_confidence (default 0.0)
+      limit           - max rows (default 100)
+    """
+    conn = get_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("SELECT 1 FROM ds_friction_signals LIMIT 1")
+        except sqlite3.OperationalError:
+            return {"signals": [], "by_type": {}, "count": 0}
+
+        params: List[Any] = [min_confidence]
+        conditions = [
+            "classified_as IS NOT NULL",
+            "classification_confidence >= ?",
+            "(classification_skipped IS NULL OR classification_skipped = 0)",
+        ]
+        if classified_as:
+            conditions.append("classified_as = ?")
+            params.append(classified_as)
+        params.append(limit)
+
+        where = "WHERE " + " AND ".join(conditions)
+        rows = conn.execute(
+            f"SELECT * FROM ds_friction_signals {where} ORDER BY classification_confidence DESC LIMIT ?",
+            params,
+        ).fetchall()
+
+        signals = [dict(r) for r in rows]
+        by_type: Dict[str, int] = {}
+        for s in signals:
+            t = s.get("classified_as") or "unclassified"
+            by_type[t] = by_type.get(t, 0) + 1
+
+        return {"signals": signals, "by_type": by_type, "count": len(signals)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Classifications query failed: {str(e)}")
+    finally:
+        conn.close()
