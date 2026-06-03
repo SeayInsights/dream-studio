@@ -441,17 +441,16 @@ class SkillDispatcher:
                 return skill, [], str(exc)
 
         def _run_rules_skill(skill: str) -> tuple[str, object, str | None]:
-            from core.skills.audit.rules_scanner import SkillScanResult
+            from core.skills.audit.rules_scanner import RulesScanner as _RS
+            from core.skills.audit.rules_scanner import SkillScanResult as _SSR
 
             try:
-                scanner = RulesScanner(skill)
+                scanner = _RS(skill)
                 scan_result = scanner.scan(scope_path, context)
                 return skill, scan_result, scan_result.error
             except Exception as exc:
                 logger.warning("audit skill %s (rules) failed: %s", skill, exc)
-                from core.skills.audit.rules_scanner import SkillScanResult
-
-                err_result = SkillScanResult(skill_id=skill, error=str(exc))
+                err_result = _SSR(skill_id=skill, error=str(exc))
                 return skill, err_result, str(exc)
 
         # ── Parallel execution ────────────────────────────────────────────
