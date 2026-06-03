@@ -87,6 +87,10 @@ def run_gate(
             fail_hint="Gate has no `command:` defined in manifest.",
         )
 
+    # Merge gate-level env overrides into the current process environment.
+    gate_env = gate.get("env") or {}
+    run_env = {**__import__("os").environ, **{str(k): str(v) for k, v in gate_env.items()}}
+
     start = time.monotonic()
     try:
         completed = subprocess.run(
@@ -95,6 +99,7 @@ def run_gate(
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            env=run_env,
         )
         duration = time.monotonic() - start
         exit_code = completed.returncode
