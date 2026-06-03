@@ -163,7 +163,6 @@ def cmd_expand(args) -> int:
 
     db_path = getattr(args, "db_path", None)
     extension_id = getattr(args, "extension_id", None)
-    compile_all = getattr(args, "all", False)
     batch = getattr(args, "batch", False)
 
     conn = get_connection() if db_path is None else __import__("sqlite3").connect(str(db_path))
@@ -201,7 +200,7 @@ def cmd_expand(args) -> int:
         print(f"  Skill:    {item['skill_id']}")
         print(f"  Rule:     {item.get('rule_id') or 'N/A'}")
         print(f"  Reason:   {item.get('classification_reason') or '?'}")
-        print(f"  Actions:  c=compile+accept  r=reject  q=quit")
+        print("  Actions:  c=compile+accept  r=reject  q=quit")
 
         while True:
             try:
