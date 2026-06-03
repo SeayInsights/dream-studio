@@ -113,6 +113,15 @@ Last updated: 2026-06-03
 
 ---
 
+## Pre-Launch (ds-quality:pre-launch)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| TypeScript (consumer) | ✓ | DreamySuite | PR #150 description | 2026-06-03 | pl-001 FIRE T1: no ToS; pl-002 FIRE T1: no Privacy Policy (consumer+PII); pl-011 FIRE T1: no runbook; pl-012 FIRE T1: no rollback; pl-007 PASS: CHANGELOG current |
+| Python (developer-tool) | NEGATIVE PROOF | dream-studio-clean | PR #150 description | 2026-06-03 | pl-001/002 SILENT (developer-tool type — correct, not broken); pl-009 FIRE T1: non-semver tags (ph-X.Y.Z format); pl-011 FIRE T2 (warning only, not blocking for dev tool); pl-007 PASS |
+
+---
+
 ## Legend
 
 | Symbol | Meaning |

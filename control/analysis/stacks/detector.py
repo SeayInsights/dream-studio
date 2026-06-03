@@ -64,6 +64,20 @@ class DetectedStack:
     has_privacy_policy: bool = False  # db-compliance skill: privacy policy doc present in repo
     compliance_hints: Optional[list] = None  # db-compliance skill: detected compliance signals
     # values: ['gdpr', 'hipaa', 'ccpa', 'coppa'] or [] or None
+    service_type: Optional[str] = (
+        None  # pre-launch skill: service type for rule calibration
+        # values: 'consumer', 'developer-tool', 'internal-service', 'library', or None
+    )
+    has_changelog: bool = False  # pre-launch skill: CHANGELOG.md or CHANGES.md present
+    has_runbook: bool = False  # pre-launch skill: deployment runbook present
+    changelog_convention: Optional[str] = (
+        None  # pre-launch skill: detected changelog format
+        # values: 'keep-a-changelog', 'conventional', 'custom', or None
+    )
+    release_tooling: Optional[str] = (
+        None  # pre-launch skill: release automation detected
+        # values: 'semantic-release', 'standard-version', 'release-it', 'manual', or None
+    )
 
 
 def detect_stack(path: Path) -> DetectedStack:
@@ -132,6 +146,14 @@ def detect_stack(path: Path) -> DetectedStack:
     result.has_pii_schema = compliance_context["has_pii_schema"]
     result.has_privacy_policy = compliance_context["has_privacy_policy"]
     result.compliance_hints = compliance_context["compliance_hints"]
+
+    # Augment with release context for pre-launch skill dispatch
+    release_context = _detect_release_context(path)
+    result.service_type = release_context["service_type"]
+    result.has_changelog = release_context["has_changelog"]
+    result.has_runbook = release_context["has_runbook"]
+    result.changelog_convention = release_context["changelog_convention"]
+    result.release_tooling = release_context["release_tooling"]
 
     return result
 
@@ -707,6 +729,167 @@ def _detect_compliance_context(path: Path) -> dict:
         "has_privacy_policy": has_privacy_policy,
         "compliance_hints": hints,
     }
+
+
+def _detect_release_context(path: Path) -> dict:
+    """Detect release management context for pre-launch skill dispatch.
+
+    Returns dict with keys: service_type, has_changelog, has_runbook,
+    changelog_convention, release_tooling.
+    """
+    # has_changelog: common changelog file names
+    changelog_names = ["CHANGELOG.md", "CHANGES.md", "HISTORY.md", "CHANGELOG.rst"]
+    has_changelog = any((path / name).exists() for name in changelog_names)
+
+    # changelog_convention: detect Keep a Changelog vs conventional commits
+    changelog_convention = None
+    for name in changelog_names:
+        clog = path / name
+        if clog.exists():
+            try:
+                content = clog.read_text(encoding="utf-8", errors="ignore")[:2000]
+                if "## [Unreleased]" in content or "## [" in content:
+                    changelog_convention = "keep-a-changelog"
+                elif "### feat" in content or "### fix" in content or "### chore" in content:
+                    changelog_convention = "conventional"
+                else:
+                    changelog_convention = "custom"
+            except OSError:
+                pass
+            break
+
+    # has_runbook: deployment/runbook documentation
+    runbook_paths = [
+        "RUNBOOK.md",
+        "DEPLOYMENT.md",
+        "docs/runbook.md",
+        "docs/deployment.md",
+        "docs/operations/deployment.md",
+    ]
+    has_runbook = any((path / p).exists() for p in runbook_paths)
+
+    # release_tooling: detect automated release tools
+    release_tooling = None
+    for config_name in [".releaserc.json", ".releaserc.yaml", ".releaserc.yml"]:
+        if (path / config_name).exists():
+            release_tooling = "semantic-release"
+            break
+    if release_tooling is None:
+        pkg_json = path / "package.json"
+        if pkg_json.exists():
+            try:
+                content = pkg_json.read_text(encoding="utf-8", errors="ignore")
+                if "@semantic-release" in content or '"semantic-release"' in content:
+                    release_tooling = "semantic-release"
+                elif "standard-version" in content:
+                    release_tooling = "standard-version"
+                elif "release-it" in content:
+                    release_tooling = "release-it"
+            except OSError:
+                pass
+    if release_tooling is None and (has_changelog or has_runbook):
+        release_tooling = "manual"
+
+    # service_type inference
+    # consumer: has PII schema + auth patterns + public-facing web UI
+    # developer-tool: has CLI entry points + no public user accounts
+    # internal-service: has API but no public consumer surface
+    # library: pure code artifact
+    service_type = _infer_service_type(path)
+
+    return {
+        "service_type": service_type,
+        "has_changelog": has_changelog,
+        "has_runbook": has_runbook,
+        "changelog_convention": changelog_convention,
+        "release_tooling": release_tooling,
+    }
+
+
+def _infer_service_type(path: Path) -> Optional[str]:
+    """Infer service type for pre-launch rule calibration.
+
+    Inference priority:
+    1. Explicit override in pre_launch_config.yml
+    2. Library signals (no main service entry, pure code package)
+    3. Developer-tool signals (CLI + no public consumer UI)
+    4. Consumer signals (user accounts + PII + public web)
+    5. Internal-service (API but no public consumer surface)
+    """
+    # 1. Check project-level override
+    for config_name in ["pre_launch_config.yml", "pre_launch_config.yaml"]:
+        config_path = path / config_name
+        if config_path.exists():
+            try:
+                content = config_path.read_text(encoding="utf-8", errors="ignore")
+                for st in ["consumer", "developer-tool", "internal-service", "library"]:
+                    if f"service_type: {st}" in content:
+                        return st
+            except OSError:
+                pass
+
+    # 2. Library signals: setup.py/pyproject + no main app + no web framework
+    is_library = False
+    for lib_signal in ["setup.py", "setup.cfg"]:
+        if (path / lib_signal).exists():
+            is_library = True
+    if (path / "pyproject.toml").exists():
+        try:
+            content = (path / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
+            if "[tool.poetry]" in content or "[project]" in content:
+                if "fastapi" not in content.lower() and "flask" not in content.lower():
+                    is_library = True
+        except OSError:
+            pass
+
+    # 3. Developer-tool signals: has CLI entry point, no public UI
+    has_cli = False
+    for cli_signal in ["interfaces/cli", "cmd/", "bin/", "src/cli"]:
+        if (path / cli_signal).exists():
+            has_cli = True
+    if (path / "pyproject.toml").exists():
+        try:
+            content = (path / "pyproject.toml").read_text(encoding="utf-8", errors="ignore")
+            if "scripts" in content.lower() or "console_scripts" in content.lower():
+                has_cli = True
+        except OSError:
+            pass
+
+    # Check for public-facing web UI (consumer signal)
+    has_web_ui = any(
+        [
+            (path / "src" / "app").exists(),
+            (path / "src" / "pages").exists(),
+            (path / "pages").exists(),
+            (path / "app").exists() and (path / "app" / "page.tsx").exists(),
+            (path / "next.config.js").exists(),
+            (path / "next.config.ts").exists(),
+        ]
+    )
+
+    # Check for PII/user data signals (consumer signal)
+    pii_signals = ["email", "phone", "users", "contacts", "guests", "customers"]
+    has_user_data = False
+    for sql_file in list(path.glob("**/migrations/*.sql"))[:10]:
+        try:
+            content = sql_file.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(sig in content for sig in pii_signals):
+                has_user_data = True
+                break
+        except OSError:
+            pass
+
+    # Decide
+    if is_library and not has_web_ui and not has_user_data:
+        return "library"
+    if has_cli and not has_web_ui and not has_user_data:
+        return "developer-tool"
+    if has_web_ui or has_user_data:
+        return "consumer"
+    if (path / "pyproject.toml").exists() or (path / "requirements.txt").exists():
+        # Python project with no strong consumer signals → developer-tool default
+        return "developer-tool"
+    return "internal-service"
 
 
 def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
