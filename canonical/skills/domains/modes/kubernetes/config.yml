@@ -1,0 +1,13 @@
+# Kubernetes skill — runtime configuration
+invocation:
+  type: subagent-target
+  wrapper_agent: kubernetes-expert
+  dispatch_path: ~/.claude/agents/kubernetes-expert.md
+
+behavior:
+  graceful_degradation: true     # kubectl / helm may not be installed
+  fallback_standard: Kubernetes official documentation
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null

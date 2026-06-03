@@ -27,14 +27,14 @@ packs:
   analyze:
     description: Multi-perspective analysis engine
     skill: analyze
-    # repo and intelligence added — Flag 1 fix
-    modes: [multi, domain-re, repo, intelligence]
+    # repo and intelligence added — Flag 1 fix; research added — 18.9 Tier 1 promotion
+    modes: [multi, domain-re, repo, intelligence, research]
 
   domains:
     description: Stack-specific and domain builders
     skill: domains
-    # fullstack and website added — Flag 1 fix
-    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website]
+    # fullstack and website added — Flag 1 fix; devops and kubernetes added — 18.9 Tier 1 promotion
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes]
     agents: [game, client]
     hooks: [on-game-validate]
     rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]

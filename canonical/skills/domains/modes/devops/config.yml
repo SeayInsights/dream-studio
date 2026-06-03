@@ -1,0 +1,15 @@
+# DevOps skill — runtime configuration
+# Invoked via subagent dispatch (Task tool).
+
+invocation:
+  type: subagent-target
+  wrapper_agent: devops-engineer
+  dispatch_path: ~/.claude/agents/devops-engineer.md
+
+behavior:
+  graceful_degradation: true     # gh CLI / docker may not be installed
+  fallback_standard: GitHub Actions documentation and Docker best practices
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null
