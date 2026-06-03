@@ -93,10 +93,12 @@ class TestDeterministicMatcher:
         assert "skill.invoked" in result.missing_events[0]
 
     def test_negative_event_present_reduces_score(self):
-        case = self._make_case([
-            ExpectedEvent(event_type="skill.invoked", must_appear=True),
-            ExpectedEvent(event_type="code.generated", must_appear=False),
-        ])
+        case = self._make_case(
+            [
+                ExpectedEvent(event_type="skill.invoked", must_appear=True),
+                ExpectedEvent(event_type="code.generated", must_appear=False),
+            ]
+        )
         events = [
             {"event_type": "skill.invoked"},
             {"event_type": "code.generated"},
@@ -106,34 +108,44 @@ class TestDeterministicMatcher:
         assert "code.generated" in result.negative_violations[0]
 
     def test_negative_event_absent_does_not_reduce_score(self):
-        case = self._make_case([
-            ExpectedEvent(event_type="skill.invoked", must_appear=True),
-            ExpectedEvent(event_type="code.generated", must_appear=False),
-        ])
+        case = self._make_case(
+            [
+                ExpectedEvent(event_type="skill.invoked", must_appear=True),
+                ExpectedEvent(event_type="code.generated", must_appear=False),
+            ]
+        )
         events = [{"event_type": "skill.invoked"}]
         result = match_events(case, events)
         assert result.score == 1.0
         assert not result.negative_violations
 
     def test_skill_id_filter_matches_correctly(self):
-        case = self._make_case([
-            ExpectedEvent(event_type="skill.invoked", skill_id="ds-project:resume", must_appear=True)
-        ])
+        case = self._make_case(
+            [
+                ExpectedEvent(
+                    event_type="skill.invoked", skill_id="ds-project:resume", must_appear=True
+                )
+            ]
+        )
         events_wrong_skill = [{"event_type": "skill.invoked", "trace": {"skill_id": "ds-quality"}}]
-        events_right_skill = [{"event_type": "skill.invoked", "trace": {"skill_id": "ds-project:resume"}}]
+        events_right_skill = [
+            {"event_type": "skill.invoked", "trace": {"skill_id": "ds-project:resume"}}
+        ]
         result_wrong = match_events(case, events_wrong_skill)
         result_right = match_events(case, events_right_skill)
         assert result_wrong.score == 0.0
         assert result_right.score == 1.0
 
     def test_out_of_order_event_gives_partial_credit(self):
-        case = self._make_case([
-            ExpectedEvent(
-                event_type="skill.invoked",
-                must_appear=True,
-                max_sequence_position=1,
-            )
-        ])
+        case = self._make_case(
+            [
+                ExpectedEvent(
+                    event_type="skill.invoked",
+                    must_appear=True,
+                    max_sequence_position=1,
+                )
+            ]
+        )
         events = [
             {"event_type": "context.loaded"},
             {"event_type": "context.loaded"},
@@ -145,10 +157,12 @@ class TestDeterministicMatcher:
 
     def test_determinism_same_input_same_output(self):
         """Identical inputs must produce identical scores — this is the determinism proof."""
-        case = self._make_case([
-            ExpectedEvent(event_type="skill.invoked", must_appear=True),
-            ExpectedEvent(event_type="code.generated", must_appear=False),
-        ])
+        case = self._make_case(
+            [
+                ExpectedEvent(event_type="skill.invoked", must_appear=True),
+                ExpectedEvent(event_type="code.generated", must_appear=False),
+            ]
+        )
         events = [{"event_type": "skill.invoked"}, {"event_type": "skill.completed"}]
 
         scores = [match_events(case, events).score for _ in range(10)]
@@ -183,9 +197,9 @@ class TestEvalRunner:
         path = EVALS_DIR / "eval_04_negative_check_no_direct_code.json"
         case = EvalCase.from_json(path)
         result = runner.run_case(case)
-        assert not result.match_result.negative_violations, (
-            f"Negative check should not fire: {result.match_result.negative_violations}"
-        )
+        assert (
+            not result.match_result.negative_violations
+        ), f"Negative check should not fire: {result.match_result.negative_violations}"
 
     def test_negative_check_fails_when_forbidden_event_present(self):
         """If we inject a code.generated event, eval_04 negative check must fire."""
@@ -197,12 +211,12 @@ class TestEvalRunner:
 
         runner = EvalRunner(evals_dir=EVALS_DIR)
         result = runner.run_case(case)
-        assert result.match_result.negative_violations, (
-            "Negative check should fire when code.generated event is present"
-        )
-        assert result.composite_score < result.match_result.score, (
-            "Composite score should be lower than event score when negative violations present"
-        )
+        assert (
+            result.match_result.negative_violations
+        ), "Negative check should fire when code.generated event is present"
+        assert (
+            result.composite_score < result.match_result.score
+        ), "Composite score should be lower than event score when negative violations present"
 
     def test_run_all_returns_5_results(self):
         runner = EvalRunner(evals_dir=EVALS_DIR)
@@ -351,16 +365,16 @@ class TestRegressionDetection:
         # Regression run — baseline should NOT auto-update
         save_run_result("update_test", "1.0.0", 0.70, False, db_path=db)
         baseline_after_regression = load_baseline("update_test", "1.0.0", db_path=db)
-        assert abs(baseline_after_regression["baseline_score"] - 0.90) < 0.001, (
-            "Baseline must NOT auto-update on regression"
-        )
+        assert (
+            abs(baseline_after_regression["baseline_score"] - 0.90) < 0.001
+        ), "Baseline must NOT auto-update on regression"
 
         # Explicit update — now baseline should change
         update_baseline("update_test", "1.0.0", 0.70, db_path=db)
         baseline_after_update = load_baseline("update_test", "1.0.0", db_path=db)
-        assert abs(baseline_after_update["baseline_score"] - 0.70) < 0.001, (
-            "Baseline should update after explicit update_baseline() call"
-        )
+        assert (
+            abs(baseline_after_update["baseline_score"] - 0.70) < 0.001
+        ), "Baseline should update after explicit update_baseline() call"
 
 
 # ── Opus judge structure tests (non-API) ──────────────────────────────────
@@ -438,7 +452,9 @@ class TestLiveJudge:
         result = grade_behavior(case, transcript)
         assert result.score is not None
         assert not result.skipped
-        assert result.score >= 0.5, f"Expected score >= 0.5 for correct behavior, got {result.score}"
+        assert (
+            result.score >= 0.5
+        ), f"Expected score >= 0.5 for correct behavior, got {result.score}"
 
     def test_judge_scores_wrong_behavior_low(self):
         """A transcript that ignores expected behavior should score < 0.5."""
