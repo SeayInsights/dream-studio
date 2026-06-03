@@ -1,0 +1,30 @@
+{
+  "eval_id": "eval_01_event_sequence_skill_dispatch",
+  "version": "1.0.0",
+  "description": "Natural language routing should invoke ds-project:resume skill. Tests deterministic event matcher.",
+  "skill_id": "ds-project",
+  "input_prompt": "what should I work on next?",
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "ds-project:resume",
+      "max_sequence_position": 3
+    }
+  ],
+  "expected_behavior": "Claude invokes the ds-project:resume skill and presents the next work order with context",
+  "negative_checks": [
+    "Claude does not start writing code before checking project state"
+  ],
+  "scoring": {
+    "event_weight": 0.7,
+    "behavior_weight": 0.3,
+    "minimum_pass_score": 0.75
+  },
+  "fixture_events": [
+    {"event_type": "session.start", "skill_id": null},
+    {"event_type": "skill.invoked", "skill_id": "ds-project:resume", "trace": {"skill_id": "ds-project:resume"}},
+    {"event_type": "skill.completed", "skill_id": "ds-project:resume"}
+  ],
+  "fixture_transcript": "User: what should I work on next?\n\nClaude: I'll check your current project state using the resume skill.\n\n[Invoked: ds-project:resume]\n\nBased on your project state, the next work order is WO-123: Add authentication to the API. The design brief is locked and all prerequisites are met. Ready to start?"
+}
