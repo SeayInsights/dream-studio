@@ -1,0 +1,67 @@
+# Data-engineering skill — captured gotchas
+# Source: verbatim from data-engineer agent (promoted 2026-06-03)
+
+gotchas:
+  - id: de-g1
+    title: Incremental models need a lookback window for late-arriving data
+    description: >
+      Use a 3-day lookback window, not max(date) exact match. Late mobile events
+      and CDC replication can arrive days after the original event timestamp.
+    severity: high
+    category: dbt-incremental
+
+  - id: de-g2
+    title: BigQuery slot contention at top of hour
+    description: >
+      Stagger batch schedules away from top-of-hour. Use reservations to isolate
+      batch from interactive query slots.
+    severity: medium
+    category: bigquery
+
+  - id: de-g3
+    title: Snowflake auto-suspend kills long queries
+    description: >
+      Set auto_suspend >= 300s for dbt warehouses. Use a dedicated warehouse for
+      batch vs. interactive workloads.
+    severity: high
+    category: snowflake
+
+  - id: de-g4
+    title: dbt compile validates Jinja only — not warehouse SQL
+    description: >
+      Compile validates Jinja and ref resolution. Runtime SQL failures (type mismatches,
+      permissions, warehouse syntax) only surface on dbt run. Always run, not just compile.
+    severity: medium
+    category: dbt
+
+  - id: de-g5
+    title: Mixing source() and ref() breaks lineage graphs
+    description: >
+      Raw tables must only be accessed via source() in staging. All downstream models
+      use ref(). Mixing the two breaks dbt lineage graphs and causes unexpected behavior.
+    severity: high
+    category: dbt-lineage
+
+  - id: de-g6
+    title: Airflow task_id must be unique when programmatically generated
+    description: >
+      Include the loop variable in the task_id: task_id=f"run_dbt_{table_name}".
+      Shared prefixes cause DuplicateTaskIdFound at parse time.
+    severity: high
+    category: airflow
+
+  - id: de-g7
+    title: Dagster partition backfills can flood the warehouse
+    description: >
+      Full partition backfills (2 years daily = 730 runs) can exhaust warehouse capacity.
+      Set concurrency limits and validate cost on a small partition range first.
+    severity: high
+    category: dagster
+
+  - id: de-g8
+    title: ref() cannot be used inside seed files or dbt_project.yml vars
+    description: >
+      Use source() for raw tables and ref() only inside .sql model files.
+      Attempting ref() in seeds causes parse errors.
+    severity: medium
+    category: dbt
