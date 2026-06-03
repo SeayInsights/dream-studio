@@ -591,7 +591,8 @@ class TestSessionEndHookNonBlocking:
             i for i, ln in enumerate(lines) if "FrictionSignalHarvester" in ln and "import" in ln
         )
         # Scan backwards for a try: statement within 10 lines
-        context = lines[max(0, hook_line - 5) : hook_line + 2]
+        start = max(0, hook_line - 5)
+        context = lines[start : hook_line + 2]
         assert any(
             "try:" in ln for ln in context
         ), f"FrictionSignalHarvester import not inside a try block. Context: {context}"

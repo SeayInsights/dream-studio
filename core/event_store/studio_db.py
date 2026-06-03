@@ -1,11 +1,8 @@
 """SQLite analytics backend for dream-studio (WAL, migrations, retry, CLI)."""
 
 from __future__ import annotations
-import logging
 import sys
 import argparse, functools, hashlib, json, re, sqlite3, sys, time
-
-logger = logging.getLogger(__name__)
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -1240,17 +1237,15 @@ def end_session(
         # Non-blocking: session close completes regardless of harvester outcome.
         try:
             from projections.core.analyzers.friction_signals import FrictionSignalHarvester
-            import sqlite3 as _sqlite3
 
-            _harvest_path = db_path or _default_db_path()
-            _hconn = _sqlite3.connect(str(_harvest_path))
+            _hconn = get_connection()
             try:
                 harvester = FrictionSignalHarvester(_hconn, session_id=session_id)
                 harvester.harvest()
             finally:
                 _hconn.close()
-        except Exception as _harvest_exc:
-            logger.debug("Friction harvest skipped: %s", _harvest_exc)
+        except Exception:
+            pass
 
         return True
     except Exception as e:
