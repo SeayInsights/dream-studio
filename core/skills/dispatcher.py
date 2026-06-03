@@ -176,12 +176,15 @@ class SkillDispatcher:
         try:
             if skill == "code-quality":
                 from core.skills.build.code_quality import audit_generated_python
+
                 return audit_generated_python(code_artifact, context)
             elif skill == "security":
                 from core.skills.build.security import audit_generated_python
+
                 return audit_generated_python(code_artifact, context)
             elif skill == "database":
                 from core.skills.build.database import audit_generated_sql_or_python
+
                 return audit_generated_sql_or_python(code_artifact, context)
             else:
                 logger.debug("No build-mode auditor for skill %s in Phase 1", skill)
