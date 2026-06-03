@@ -43,7 +43,6 @@ def audit_generated_sql_or_python(
     """
     findings: list[dict[str, Any]] = []
     lines = code_block.splitlines()
-    trigger = context.get("trigger", "generic").lower()
 
     for i, line in enumerate(lines):
         stripped = line.strip()
