@@ -162,15 +162,20 @@ def _get_compiler(classified_as: str, conn):
         from core.expansion.capability import CapabilityCompiler
 
         return CapabilityCompiler(conn)
+    if classified_as == "onboarding":
+        from core.expansion.onboarding import OnboardingCompiler
+
+        return OnboardingCompiler(conn)
     from core.expansion.personalization import PersonalizationCompiler
 
     return PersonalizationCompiler(conn)
 
 
 def cmd_expand(args) -> int:
-    """Compile extensions from evidence — personalization (19.4a) and capability (19.4b)."""
+    """Compile extensions — personalization (19.4a), capability (19.4b), onboarding (19.4c)."""
     from core.expansion.personalization import PersonalizationCompiler
     from core.expansion.capability import CapabilityCompiler
+    from core.expansion.onboarding import OnboardingCompiler
     from core.config.database import get_connection
 
     db_path = getattr(args, "db_path", None)
@@ -184,6 +189,7 @@ def cmd_expand(args) -> int:
     try:
         p_pending = PersonalizationCompiler(conn).get_pending_compilation()
         c_pending = CapabilityCompiler(conn).get_pending_compilation()
+        o_pending = OnboardingCompiler(conn).get_pending_compilation()
     finally:
         conn.close()
 
@@ -192,8 +198,10 @@ def cmd_expand(args) -> int:
         item["_compiler_type"] = "personalization"
     for item in c_pending:
         item["_compiler_type"] = "capability"
+    for item in o_pending:
+        item["_compiler_type"] = "onboarding"
 
-    pending = p_pending + c_pending
+    pending = p_pending + c_pending + o_pending
 
     if not pending:
         print("No extensions pending compilation.")
