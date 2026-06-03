@@ -481,3 +481,5 @@ recommended_next_work_order: none
 <!-- 2026-06-02: aggregate_metrics.db pipeline + /api/v1/metrics/aggregate + ML routes self-serve -->
 
 <!-- 2026-06-02: quality skill modes registered in packs.yaml (backend-api, frontend-ux, architecture, ops); aggregate_metrics_route.py uses _connect_aggregate() via approved helper -->
+
+<!-- 2026-06-03: workflow pattern detection API routes added to intelligence route (18.8.4) -->
