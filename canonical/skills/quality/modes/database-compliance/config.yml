@@ -1,0 +1,50 @@
+# Database Compliance Skill — Configuration
+# Version: 1.0.0
+#
+# Default: GDPR. Fires all 12 Phase 1 rules (11 GDPR + 1 GDPR baseline).
+# dbc-012 (HIPAA BAA documentation) fires only when 'hipaa' is in compliance_frameworks.
+#
+# Project override — create database_compliance_config.yml at project root:
+#
+#   compliance_frameworks: [gdpr, hipaa]   # adds HIPAA-specific rules
+#   jurisdiction: us-healthcare            # informs remediation advice
+#
+# Or CCPA-focused:
+#
+#   compliance_frameworks: [gdpr, ccpa]
+#   jurisdiction: us-ca
+#
+# Keys not specified inherit from this file.
+#
+# How multi-framework activation works:
+#   - All rules tagged regulations: [gdpr] fire when 'gdpr' is active (default)
+#   - Rules tagged regulations: [hipaa] ONLY fire when 'hipaa' is in compliance_frameworks
+#   - Rules tagged regulations: [gdpr, ccpa] fire when either 'gdpr' OR 'ccpa' is active
+#   - The opt-in produces net-new findings (HIPAA rules check different things than GDPR rules)
+
+version: "1.0"
+
+# Default compliance regime
+compliance_frameworks: [gdpr]
+
+# Jurisdiction informs remediation text (EU vs US vs global)
+# eu | us-ca | us-healthcare | global
+jurisdiction: eu
+
+# PII detection sensitivity: how aggressively to scan column names for PII signals
+# strict: flag email, phone, name, ssn, dob, address, ip_address, user_id variants
+# moderate: flag email, phone, ssn, dob, credit_card
+# relaxed: flag ssn, credit_card, dob only
+pii_sensitivity: strict
+
+# Minimum PII column count to trigger full audit (prevents noise on tiny schemas)
+pii_column_threshold: 1
+
+# Retention period defaults per data class (informational — used in remediation advice)
+# Projects should document their own periods in schema comments or privacy policy
+default_retention_periods:
+  marketing_contact: "2 years"
+  transaction_record: "7 years"  # financial regulation minimum
+  audit_log: "7 years"
+  user_account: "user-lifetime + 30 days post-deletion"
+  session_data: "90 days"

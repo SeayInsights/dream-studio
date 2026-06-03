@@ -4,7 +4,7 @@ Proves which skill × ecosystem combinations have been validated with real findi
 on real external repositories. "Proven" means: a PR was opened with actual findings
 pasted from running the audit on that repo, not just declaring support in rules.yml.
 
-Last updated: 2026-06-02
+Last updated: 2026-06-03
 
 ---
 
@@ -99,6 +99,16 @@ Last updated: 2026-06-02
 |-----------|---------|--------------|---------------|------|---------|
 | Python (service) | ✓ | dream-studio-clean | PR #146 description | 2026-06-02 | ops-001 FIRE: print() in main.py:173, spool/ingestor.py, dispatcher.py; ops-007 FIRE: config validated lazily in projections/config/settings.py; ops-011 FIRE: urllib fallback path in dispatcher.py lacks timeout; ops-012 FIRE: single-stage Dockerfile (no multi-stage); ops-005/006/008/010/013 PASS; ops-013 SILENT (no k8s manifests) |
 | TypeScript/Node.js | DECLARED | — | rules.yml only | — | Declared in applies_to; no external TS proving run |
+| Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no Go proving run |
+
+---
+
+## Database Compliance (ds-quality:database-compliance)
+
+| Ecosystem | Proven? | Proving Repo | PR / Evidence | Date | Summary |
+|-----------|---------|--------------|---------------|------|---------|
+| TypeScript/D1 (Next.js) | ✓ | DreamySuite | PR #149 description | 2026-06-03 | dbc-001 FIRE: contact table (name/email/phone) no classification annotations; dbc-005 FIRE: no automated purge/TTL for guest data; dbc-009 FIRE: no consent table or consent columns; dbc-011 FIRE: address/gift fields disproportionate to RSVP purpose; dbc-006 PASS: DELETE /guests/:id exists; dbc-007 PASS: ON DELETE CASCADE on site FK |
+| Python | NEGATIVE PROOF | dream-studio-clean | PR #149 description | 2026-06-03 | 0 findings confirmed — has_pii_schema=False (event store has no PII columns); validates auto-skip on operator data |
 | Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no Go proving run |
 
 ---
