@@ -18,7 +18,10 @@ import pytest
 
 MIGRATION_SQL = (
     Path(__file__).parents[2]
-    / "core" / "event_store" / "migrations" / "095_unified_extensions_schema.sql"
+    / "core"
+    / "event_store"
+    / "migrations"
+    / "095_unified_extensions_schema.sql"
 ).read_text(encoding="utf-8")
 
 
@@ -72,21 +75,34 @@ class TestSchemaStructure:
     def test_all_15_columns_present(self, ext_conn):
         cols = {r[1] for r in ext_conn.execute("PRAGMA table_info(ds_user_extensions)")}
         expected = {
-            "extension_id", "skill_id", "extension_type", "content",
-            "source_signal", "compiled_from", "status", "created_at",
-            "last_validated_at", "baseline_eval_score", "current_eval_score",
-            "past_wo_count", "user_confirmed_at", "user_confirmed_by",
+            "extension_id",
+            "skill_id",
+            "extension_type",
+            "content",
+            "source_signal",
+            "compiled_from",
+            "status",
+            "created_at",
+            "last_validated_at",
+            "baseline_eval_score",
+            "current_eval_score",
+            "past_wo_count",
+            "user_confirmed_at",
+            "user_confirmed_by",
             "suppressed_reason",
         }
         assert expected == cols, f"Missing: {expected - cols}, Extra: {cols - expected}"
 
     def test_extension_id_is_primary_key(self, ext_conn):
-        pk_cols = [r[1] for r in ext_conn.execute("PRAGMA table_info(ds_user_extensions)") if r[5] == 1]
+        pk_cols = [
+            r[1] for r in ext_conn.execute("PRAGMA table_info(ds_user_extensions)") if r[5] == 1
+        ]
         assert pk_cols == ["extension_id"]
 
     def test_three_indexes_created(self, ext_conn):
         idx = {
-            r[0] for r in ext_conn.execute(
+            r[0]
+            for r in ext_conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='ds_user_extensions'"
             )
             if not r[0].startswith("sqlite_auto")
@@ -131,7 +147,14 @@ class TestCheckConstraints:
             _insert_ext(ext_conn, status="invalid_status")
 
     def test_valid_statuses_accepted(self, ext_conn):
-        for status in ("proposed", "experimental", "active", "suppressed", "rejected", "deprecated"):
+        for status in (
+            "proposed",
+            "experimental",
+            "active",
+            "suppressed",
+            "rejected",
+            "deprecated",
+        ):
             _insert_ext(ext_conn, status=status)
         count = ext_conn.execute("SELECT COUNT(*) FROM ds_user_extensions").fetchone()[0]
         assert count == 6
@@ -142,8 +165,12 @@ class TestCheckConstraints:
 
     def test_valid_extension_types_accepted(self, ext_conn):
         for etype in (
-            "example", "gap_filler", "threshold_override",
-            "option_override", "mode_addition", "trigger_alias"
+            "example",
+            "gap_filler",
+            "threshold_override",
+            "option_override",
+            "mode_addition",
+            "trigger_alias",
         ):
             _insert_ext(ext_conn, extension_type=etype)
         count = ext_conn.execute("SELECT COUNT(*) FROM ds_user_extensions").fetchone()[0]
