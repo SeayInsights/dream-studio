@@ -153,9 +153,7 @@ def get_all_baselines(db_path: Path | None = None) -> list[dict[str, Any]]:
     """Return all eval baselines for the report command."""
     try:
         conn = _get_conn(db_path)
-        rows = conn.execute(
-            "SELECT * FROM ds_eval_baselines ORDER BY eval_id, version"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM ds_eval_baselines ORDER BY eval_id, version").fetchall()
         conn.close()
         return [dict(r) for r in rows]
     except sqlite3.OperationalError:

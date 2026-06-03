@@ -75,7 +75,9 @@ def grade_behavior(
     """
     if not case.expected_behavior:
         # No behavior to grade — perfect score by default
-        return JudgeResult(score=1.0, rationale="No expected behavior specified — auto-pass", model_used="none")
+        return JudgeResult(
+            score=1.0, rationale="No expected behavior specified — auto-pass", model_used="none"
+        )
 
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not key:

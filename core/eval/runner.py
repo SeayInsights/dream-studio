@@ -141,8 +141,12 @@ class EvalRunner:
                 event_score=0.0,
                 behavior_score=0.0,
                 match_result=MatchResult(
-                    score=0.0, matched_required=0, total_required=0,
-                    negative_violations=[], missing_events=[], out_of_order=[]
+                    score=0.0,
+                    matched_required=0,
+                    total_required=0,
+                    negative_violations=[],
+                    missing_events=[],
+                    out_of_order=[],
                 ),
                 judge_result=JudgeResult(score=None, rationale=str(exc), skipped=True),
                 error=str(exc),
@@ -165,7 +169,10 @@ class EvalRunner:
         regressions = sum(1 for r in results if r.regression_flagged)
         logger.info(
             "Eval suite complete: %d/%d passed, %d regressions, %d tokens estimated",
-            passed, len(results), regressions, total_tokens,
+            passed,
+            len(results),
+            regressions,
+            total_tokens,
         )
         return results
 
@@ -203,9 +210,7 @@ def format_results_report(results: list[EvalResult]) -> str:
     for result in results:
         status = "✓" if result.passed else "✗"
         reg = " [REGRESSION]" if result.regression_flagged else ""
-        lines.append(
-            f"  {status} {result.eval_id} — {result.score_display}{reg}"
-        )
+        lines.append(f"  {status} {result.eval_id} — {result.score_display}{reg}")
         if not result.passed:
             mr = result.match_result
             if mr.missing_events:

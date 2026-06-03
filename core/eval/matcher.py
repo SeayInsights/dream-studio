@@ -57,12 +57,17 @@ def match_events(case: EvalCase, captured_events: list[dict[str, Any]]) -> Match
     for i, expected in enumerate(required_events):
         found_idx = _find_event(expected, captured_events)
         if found_idx is None:
-            missing.append(f"{expected.event_type}" + (f"[{expected.skill_id}]" if expected.skill_id else ""))
+            missing.append(
+                f"{expected.event_type}" + (f"[{expected.skill_id}]" if expected.skill_id else "")
+            )
             # 0 credit for missing required event
         else:
             matched += 1
             # Check sequence position
-            if expected.max_sequence_position is not None and found_idx > expected.max_sequence_position:
+            if (
+                expected.max_sequence_position is not None
+                and found_idx > expected.max_sequence_position
+            ):
                 out_of_order.append(
                     f"{expected.event_type} at position {found_idx} (expected within {expected.max_sequence_position})"
                 )
@@ -79,7 +84,8 @@ def match_events(case: EvalCase, captured_events: list[dict[str, Any]]) -> Match
         found_idx = _find_event(forbidden, captured_events)
         if found_idx is not None:
             violations.append(
-                f"{forbidden.event_type}" + (f"[{forbidden.skill_id}]" if forbidden.skill_id else "")
+                f"{forbidden.event_type}"
+                + (f"[{forbidden.skill_id}]" if forbidden.skill_id else "")
             )
 
     # Negative violations reduce the score
