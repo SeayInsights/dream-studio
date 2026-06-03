@@ -264,3 +264,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- 2026-06-03: migration 092 adds ds_eval_baselines table for behavioral eval harness (18.8.3) -->
 
 <!-- 2026-06-03: migration 093 ds_workflow_pattern_signals — workflow pattern detection for Phase 19 -->
+
+<!-- 2026-06-03: migration 094 adds label column to ds_eval_baselines for pre-Phase-19 baseline capture (18.10) -->
