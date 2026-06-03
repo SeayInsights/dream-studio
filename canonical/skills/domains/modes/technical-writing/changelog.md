@@ -1,0 +1,17 @@
+# Technical-Writing Skill Changelog
+
+## v1.0.0 — 2026-06-03
+
+**Promoted from agent to skill (WO 18.9 Tier 2-3)**
+
+Content transferred verbatim from `canonical/agents/technical-writer.md` (121 lines).
+No content changes — relocation only, per JIT policy: enrich after first real usage.
+
+Files created:
+- SKILL.md — patterns, anti-patterns, gotchas, Diataxis decision tree, style guide, review checklist, tools
+- metadata.yml — skill metadata, jit-pending status
+- gotchas.yml — 5 gotchas from agent file, structured with severity/category
+- config.yml — invocation type (subagent-target), graceful degradation flag
+- changelog.md — this file
+
+Agent file reduced to thin wrapper (~20 lines).
