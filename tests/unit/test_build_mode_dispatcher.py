@@ -21,7 +21,6 @@ from core.skills.build.code_quality import audit_generated_python as cq_audit
 from core.skills.build.security import audit_generated_python as sec_audit
 from core.skills.build.database import audit_generated_sql_or_python as db_audit
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 CLEAN_PYTHON = '''
@@ -31,45 +30,45 @@ def calculate_total(items: list, tax_rate: float) -> float:
     return subtotal * (1 + tax_rate)
 '''
 
-SQL_INJECTION_PYTHON = '''
+SQL_INJECTION_PYTHON = """
 def get_user(email: str):
     conn.execute(f"SELECT * FROM users WHERE email='{email}'")
-'''
+"""
 
-HARDCODED_SECRET = '''
+HARDCODED_SECRET = """
 API_KEY = "sk-abc123def456"
 client = openai.Client(api_key=API_KEY)
-'''
+"""
 
-WEAK_HASH_PYTHON = '''
+WEAK_HASH_PYTHON = """
 import hashlib
 
 def store_password(password: str):
     return hashlib.md5(password.encode()).hexdigest()
-'''
+"""
 
-BARE_EXCEPT_PYTHON = '''
+BARE_EXCEPT_PYTHON = """
 def process():
     try:
         do_work()
     except:
         pass
-'''
+"""
 
-SILENT_EXCEPT_PYTHON = '''
+SILENT_EXCEPT_PYTHON = """
 def process():
     try:
         do_work()
     except Exception:
         pass
-'''
+"""
 
-WILDCARD_IMPORT_PYTHON = '''
+WILDCARD_IMPORT_PYTHON = """
 from os.path import *
 from datetime import *
-'''
+"""
 
-CLEAN_SQL = '''
+CLEAN_SQL = """
 CREATE TABLE orders (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
@@ -77,35 +76,36 @@ CREATE TABLE orders (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-'''
+"""
 
-SQL_INJECTION_SQL = '''
+SQL_INJECTION_SQL = """
 def get_user(email):
     query = f"SELECT * FROM users WHERE email='{email}'"
     return db.execute(query)
-'''
+"""
 
-CREATE_TABLE_NO_PK = '''
+CREATE_TABLE_NO_PK = """
 CREATE TABLE events (
     event_type TEXT NOT NULL,
     payload TEXT,
     created_at TEXT
 );
-'''
+"""
 
-DROP_NO_COMMENT = '''
+DROP_NO_COMMENT = """
 DROP TABLE legacy_users;
-'''
+"""
 
-MONEY_AS_FLOAT = '''
+MONEY_AS_FLOAT = """
 CREATE TABLE products (
     id TEXT PRIMARY KEY,
     price REAL NOT NULL
 );
-'''
+"""
 
 
 # ── code_quality auditor tests ─────────────────────────────────────────────
+
 
 class TestCodeQualityAuditor:
 
@@ -126,13 +126,13 @@ class TestCodeQualityAuditor:
         assert cq006[0]["tier"] == TIER_T1
 
     def test_bare_except_without_pass_fires_cq015(self):
-        code = '''
+        code = """
 def f():
     try:
         x()
     except:
         raise
-'''
+"""
         findings = cq_audit(code, {})
         rule_ids = [f["rule_id"] for f in findings]
         assert "cq-015" in rule_ids
@@ -156,6 +156,7 @@ def f():
 
 
 # ── security auditor tests ─────────────────────────────────────────────────
+
 
 class TestSecurityAuditor:
 
@@ -205,6 +206,7 @@ class TestSecurityAuditor:
 
 # ── database auditor tests ─────────────────────────────────────────────────
 
+
 class TestDatabaseAuditor:
 
     def test_clean_sql_no_t1_findings(self):
@@ -239,6 +241,7 @@ class TestDatabaseAuditor:
 
 
 # ── SkillDispatcher.build() integration tests ─────────────────────────────
+
 
 class TestSkillDispatcherBuild:
 
@@ -284,18 +287,22 @@ class TestSkillDispatcherBuild:
         assert hashes1 == hashes2, "Finding hashes should be stable on rescan"
 
     def test_static_pass_completes_under_2s_on_200_loc(self):
-        code = "\n".join([
-            "def process_item(item, config, db, cache, logger):",
-            "    result = {}",
-        ] + [f"    result['key_{i}'] = item.get('field_{i}', None)" for i in range(95)] + [
-            "    return result",
-        ])
+        code = "\n".join(
+            [
+                "def process_item(item, config, db, cache, logger):",
+                "    result = {}",
+            ]
+            + [f"    result['key_{i}'] = item.get('field_{i}', None)" for i in range(95)]
+            + [
+                "    return result",
+            ]
+        )
         start = time.monotonic()
         SkillDispatcher.build(code, "python", {})
         elapsed = time.monotonic() - start
-        assert elapsed < BUILD_TIMEOUT_SECONDS, (
-            f"Static pass took {elapsed:.2f}s (limit: {BUILD_TIMEOUT_SECONDS}s)"
-        )
+        assert (
+            elapsed < BUILD_TIMEOUT_SECONDS
+        ), f"Static pass took {elapsed:.2f}s (limit: {BUILD_TIMEOUT_SECONDS}s)"
 
     def test_timeout_raises_build_timeout_error(self):
         """Verify BuildTimeoutError is raised when timeout is exceeded."""
