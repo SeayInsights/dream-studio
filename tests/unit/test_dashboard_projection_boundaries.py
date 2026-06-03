@@ -165,6 +165,9 @@ def test_projection_api_direct_writes_stay_named_and_noncanonical():
     allowed_route_writes = {
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
         ("projections/api/routes/discovery_research.py", "DELETE FROM", "research_cache"),
+        # Phase 19.2: dismiss endpoint sets findings.dismissed_at + dismissed_reason.
+        # findings is telemetry (not canonical state) so this write is intentional.
+        ("projections/api/routes/security.py", "UPDATE", "findings"),
     }
     route_writes = set(_sql_writes_under(REPO_ROOT / "projections" / "api" / "routes"))
 
