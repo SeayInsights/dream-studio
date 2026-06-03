@@ -1,0 +1,35 @@
+{
+  "eval_id": "eval_03_mixed_events_and_behavior",
+  "version": "1.0.0",
+  "description": "Work order close should emit gate-check events AND explain failures clearly. Tests 70/30 weighting. Human-graded spot-check case.",
+  "skill_id": "ds-workorder",
+  "input_prompt": "close work order: finish the current work order",
+  "expected_events": [
+    {
+      "event_type": "cli.command",
+      "must_appear": true,
+      "payload_contains": {"command_pattern": "work-order close"}
+    },
+    {
+      "event_type": "gate.check",
+      "must_appear": true,
+      "max_sequence_position": 5
+    }
+  ],
+  "expected_behavior": "Claude runs the work order close command, gate checks fire, and if gates fail Claude explains which gates failed and what action is needed to fix them.",
+  "negative_checks": [
+    "Claude does not close the work order without running gate checks",
+    "Claude does not say 'I'll close it for you' without verifying gates passed"
+  ],
+  "scoring": {
+    "event_weight": 0.7,
+    "behavior_weight": 0.3,
+    "minimum_pass_score": 0.75
+  },
+  "fixture_events": [
+    {"event_type": "cli.command", "payload": {"command_pattern": "work-order close", "command": "ds work-order close wo-abc123"}},
+    {"event_type": "gate.check", "payload": {"gate": "all_tests_pass", "result": "fail"}},
+    {"event_type": "gate.check", "payload": {"gate": "api_contract_exists", "result": "pass"}}
+  ],
+  "fixture_transcript": "User: close work order: finish the current work order\n\nClaude: I'll close work order WO-abc123 now.\n\n[Running: ds work-order close wo-abc123]\n\nGate check results:\n✓ api_contract_exists — PASS\n✗ all_tests_pass — FAIL\n\nWork order cannot be closed. The 'all_tests_pass' gate failed. To fix:\n1. Run: py -m pytest tests/unit/ -x to see failing tests\n2. Fix the failing tests\n3. Then re-run the close command\n\nAlternatively, if you believe the test failures are pre-existing and unrelated to this WO, you can request operator approval to force-close."
+}
