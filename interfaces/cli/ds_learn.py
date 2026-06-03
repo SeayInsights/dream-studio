@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 
 def _format_signal(sig: dict, index: int, total: int) -> str:
