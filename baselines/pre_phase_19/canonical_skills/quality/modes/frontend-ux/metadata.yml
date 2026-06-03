@@ -1,0 +1,17 @@
+skill_id: frontend-ux
+skill_name: Frontend UX Quality
+pack: quality
+mode: frontend-ux
+skill_description: |
+  Audits React/Next.js components for accessibility (a11y), performance patterns,
+  component design quality, and React hooks correctness.
+supports_brownfield: true
+phase: 1
+frameworks_supported_phase1:
+  - nextjs
+  - react
+frameworks_supported_phase2:
+  - remix
+  - vue
+  - svelte
+  - angular

@@ -1,0 +1,75 @@
+# Required fields
+name: testing
+version: 1.0.0
+pack: quality
+created_at: 2026-05-29
+updated_at: 2026-05-29
+
+# Evolution tracking
+origin: new
+parent_skills: []
+generation: 0
+created_by: human
+
+# Quality & Health
+# status: jit-pending — functional, no real-world usage data yet.
+# First audit on Dream Studio will update quality_metrics with measured values.
+status: jit-pending
+health: active
+tested_with_models: [sonnet]
+tested_with_hosts: [claude-code]
+
+# Performance metrics — populated from 18.5.1 first real audit
+# Static pass estimated; LLM semantic pass pending measurement
+quality_metrics:
+  times_used: 0
+  success_rate: null                   # no runs yet
+  avg_token_usage: null                # pending first audit
+  avg_execution_time_seconds: null     # pending first audit
+  last_success: null
+  last_failure: null
+
+# Failure patterns — populated from real usage via ds-quality:learn
+common_failures: []
+
+# Dependencies
+dependencies:
+  core_modules:
+    - git                            # ds-core/git.md — used for --changed scope
+  tools_required: []
+  tools_optional:
+    - pytest                         # INSTALLED — for running/collecting tests (used for context only; skill does NOT run tests)
+    - coverage                       # INSTALLED (coverage.py) — used for tst-001 and tst-010
+    - ast                            # Python stdlib — always available; used for static analysis
+  env_vars_required: []
+  files_required:
+    - canonical/skills/quality/references/testing-best-practices.md  # rule source G + I
+    - pyproject.toml                 # coverage config, pytest config
+  calls_skills: []
+
+# Compatibility
+compatibility:
+  min_context_window: 100000
+  works_best_with: sonnet
+  works_with: [sonnet, opus]
+  platforms: [windows, macos, linux]
+
+# Discovery
+tags: [testing, coverage, determinism, isolation, audit, pytest, fixtures, assertions, test-quality]
+category: quality
+triggers:
+  - "audit:"
+  - "testing audit:"
+  - "check tests:"
+  - "test audit:"
+  - "build:testing"
+  - "generate tests:"
+  - "write tests:"
+description: >
+  Test quality enforcement — audits test files against 15 rules covering coverage
+  existence (via coverage.py), determinism, isolation, structure (AAA), assertion
+  quality, naming, mocking location, and CI gate presence. Two modes: audit (static
+  + LLM semantic pass with --changed/--full-repo/--sample scope) and build (test
+  generation guidance). Skill boundary with ds-quality:code-quality: this skill
+  owns test file quality; code-quality owns production code testability.
+  Token budgets are estimates; first audit will update with measured values.

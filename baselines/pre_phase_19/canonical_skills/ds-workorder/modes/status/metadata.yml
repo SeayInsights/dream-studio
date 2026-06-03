@@ -1,0 +1,5 @@
+triggers:
+  - "work order status:"
+  - "show tasks:"
+
+estimated_tokens: 500

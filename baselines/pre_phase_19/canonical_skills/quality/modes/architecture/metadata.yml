@@ -1,0 +1,24 @@
+skill_id: architecture
+skill_name: Architecture Quality
+pack: quality
+mode: architecture
+skill_description: |
+  Audits codebase for architectural quality: god objects, layer violations,
+  coupling/cohesion issues, and abstraction quality. Stack-aware thresholds
+  via config.yml; projects override defaults per layer_map and stack family.
+supports_brownfield: true
+phase: 1
+languages_supported_phase1:
+  - python
+  - typescript
+  - javascript
+  - go
+  - rust
+languages_supported_phase2:
+  - java
+  - csharp
+rules_phase1: 13
+rules_phase2: 2
+deferred_rules:
+  - arch-007  # module-level circular deps — requires graph SCC builder
+  - arch-008  # high afferent coupling — requires graph in-degree analysis
