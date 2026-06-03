@@ -27,8 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -122,7 +121,7 @@ class RetroactiveValidator:
         """
         try:
             # Find skills that ran recently (as a proxy for "this session")
-            skill_rows = self.conn.execute(f"""
+            skill_rows = self.conn.execute("""
                 SELECT DISTINCT skill_id FROM scan_runs
                 WHERE skill_id IS NOT NULL
                   AND created_at >= datetime('now', '-1 days')
@@ -290,8 +289,6 @@ class PersonalizationValidator:
         # Compute alignment from dismissal history
         alignment = self._compute_alignment(skill_id, rule_id)
         current_score = self._alignment_to_score(alignment)
-
-        scan_ids = self._sample_scan_ids(skill_id)
 
         verdict, reason = apply_decision_6(current_score, baseline, n, force=force)
 
