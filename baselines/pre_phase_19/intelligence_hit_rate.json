@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-06-03T16:10:30.920839+00:00",
+  "window_days": 30,
+  "methodology": "Counts canonical_events matching intelligence/pattern/insight/surfacing event types in past 30 days, as a fraction of total events in that window",
+  "total_events_30d": 6530,
+  "intelligence_events_by_type": [],
+  "intelligence_event_count": 0,
+  "hit_rate_pct": 0.0,
+  "note": "18.4.4 intelligence surfacing integration - hit rate measures proportion of session events that result in intelligence being surfaced to operator"
+}
