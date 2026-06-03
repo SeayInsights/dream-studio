@@ -697,8 +697,8 @@ class TestLocalFirst:
         assert result.success
         # tokens_estimated > 0 because prompt + response are non-empty
         assert result.tokens_estimated > 0, (
-            f"tokens_estimated must be > 0 after compilation. "
-            f"Per roadmap exit criterion: token cost must be reported."
+            "tokens_estimated must be > 0 after compilation. "
+            "Per roadmap exit criterion: token cost must be reported."
         )
         # Project monthly cost: ~5 proposals/week × result.tokens_estimated × 4.3 weeks
         monthly_est = 5 * result.tokens_estimated * 4
