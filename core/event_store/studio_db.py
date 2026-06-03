@@ -1247,6 +1247,21 @@ def end_session(
         except Exception:
             pass
 
+        # Session-end gap classification (Phase 19.3).
+        # Runs after harvester; classifies newly-captured signals.
+        # Non-blocking: session close completes regardless of classifier outcome.
+        try:
+            from projections.core.analyzers.gap_classifier import GapClassifier
+
+            _gconn = get_connection()
+            try:
+                classifier = GapClassifier(_gconn, session_id=session_id)
+                classifier.classify_all()
+            finally:
+                _gconn.close()
+        except Exception:
+            pass
+
         return True
     except Exception as e:
         _reraise_if_busy(e)
