@@ -565,7 +565,7 @@ class TestCliTierGating:
             )
             from interfaces.cli.ds_learn import cmd_disambiguate
 
-            result = cmd_disambiguate(args)
+            cmd_disambiguate(args)
 
         row = conn.execute(
             "SELECT status FROM ds_user_extensions WHERE extension_id = ?", (ext_id,)
