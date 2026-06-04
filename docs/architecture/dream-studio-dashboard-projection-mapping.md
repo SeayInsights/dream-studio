@@ -486,3 +486,4 @@ recommended_next_work_order: none
 
 <!-- 2026-06-03: Phase 19.2 adds POST /api/v1/findings/{id}/dismiss, GET /api/v1/intelligence/friction-signals, GET /api/v1/intelligence/friction-signals/{id} — all route to existing projections/api/routes/security.py and intelligence.py; no new router; no dashboard surface change -->
 <!-- 2026-06-03: Phase 19.3 adds GET /api/v1/intelligence/friction-signals/classifications endpoint; gap_classifier.py writes classification results to ds_friction_signals; ds learn review CLI creates ds_user_extensions rows -->
+<!-- 2026-06-04: Phase 19.9 adds Adaptation tab (4 panels: Personalization Timeline, Patterns Awaiting Review, Extension Health, Experimental Extensions) and /api/v1/intelligence/extensions/* endpoints. Extensions API registered in main.py; no new router prefix. -->
