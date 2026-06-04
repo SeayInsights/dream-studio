@@ -600,10 +600,6 @@ class TestSessionSnapshotIsolation:
 
 
 class TestCacheInvalidationCompleteness:
-    def _invalidation_call_count(self) -> int:
-        """Count calls to ExtensionLoader.invalidate_cache."""
-        return ExtensionLoader._version
-
     def test_ds_learn_validate_invalidates_cache(self, ext_db, full_db_conn):
         """ds learn validate triggers cache invalidation."""
         from core.expansion.loader import ExtensionLoader
