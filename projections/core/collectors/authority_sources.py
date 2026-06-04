@@ -11,8 +11,41 @@ import sqlite3
 
 
 def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
-    """Return a dashboard-safe skill usage subquery from skill_invocations."""
+    """Return a dashboard-safe skill usage subquery.
 
+    Reads from canonical_events WHERE event_type='skill.invoked' — the
+    authoritative source with real skill names (e.g. 'core:plan', 'core:build').
+    Falls back to skill_invocations if canonical_events is unavailable.
+
+    The legacy skill_invocations table (1 row, skill_id='unknown') is NOT used
+    as the primary source because it predates the canonical event spine.
+    """
+    # Prefer canonical_events — authoritative, contains real skill identifiers
+    try:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM canonical_events WHERE event_type='skill.invoked'"
+        ).fetchone()[0]
+        if count > 0:
+            return """
+                SELECT
+                    json_extract(trace, '$.skill_specifier') AS skill_name,
+                    created_at AS invoked_at,
+                    1 AS success,
+                    NULL AS execution_time_s,
+                    NULL AS model,
+                    NULL AS input_tokens,
+                    NULL AS output_tokens,
+                    event_id,
+                    json_extract(trace, '$.project_id') AS project_id,
+                    NULL AS session_id
+                FROM canonical_events
+                WHERE event_type = 'skill.invoked'
+                  AND json_extract(trace, '$.skill_specifier') IS NOT NULL
+            """
+    except Exception:
+        pass
+
+    # Fallback: legacy skill_invocations (may return 'unknown' skill names)
     required = {"skill_id", "status", "created_at", "metadata_json"}
     if not _has_columns(conn, "skill_invocations", required):
         return None
