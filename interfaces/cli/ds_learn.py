@@ -438,7 +438,7 @@ def cmd_disambiguate(args) -> int:
             )
             conn.commit()
             ext["content"] = _json.dumps(content)
-            print(f"  Description updated.")
+            print("  Description updated.")
 
         # Run the check
         collision = check_extension_description(ext, conn=conn)
@@ -518,11 +518,11 @@ def cmd_disambiguate(args) -> int:
             return 0
 
         # No action flags — just show the status
-        print(f"  Actions:")
+        print("  Actions:")
         if collision.status == "warning":
-            print(f"    --accept-warning     accept the warning and activate")
-        print(f'    --rewrite "..."       update description and re-check')
-        print(f'    --force "reason"      force-activate with audit trail')
+            print("    --accept-warning     accept the warning and activate")
+        print('    --rewrite "..."       update description and re-check')
+        print('    --force "reason"      force-activate with audit trail')
         return 1
 
     finally:
