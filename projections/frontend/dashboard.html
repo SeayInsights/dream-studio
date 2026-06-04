@@ -753,6 +753,11 @@
                     <span class="nav-mark">LR</span>
                     <span>Learning</span>
                 </div>
+                <div class="sidebar-item" id="adaptation-nav-item" onclick="navigate('adaptation')">
+                    <span class="nav-mark" style="background:#6366f1;color:#fff;">AD</span>
+                    <span>Adaptation</span>
+                    <span id="adaptation-badge" class="ml-auto hidden text-xs font-bold bg-indigo-600 text-white rounded-full px-1.5 py-0.5"></span>
+                </div>
             </div>
         </div>
 
@@ -1863,6 +1868,87 @@
                 <div id="learning-insights" class="space-y-3">
                     <!-- Insights will be populated here -->
                     <div class="text-center text-gray-500 py-8">Loading learning insights...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Adaptation Tab (Phase 19.9) -->
+        <div id="adaptation" class="tab-content">
+            <!-- Summary header -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-bold text-gray-900 mb-1">Adaptation</h2>
+                <p class="text-sm text-gray-500 mb-4">Changes Dream Studio is applying to your builds based on patterns it has noticed.</p>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="adaptation-summary-stats">
+                    <div class="border border-gray-200 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-500">Active Changes</div>
+                        <div id="ad-active-count" class="text-2xl font-bold text-indigo-600">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-500">Awaiting More Data</div>
+                        <div id="ad-experimental-count" class="text-2xl font-bold text-yellow-500">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-500">Things Noticed</div>
+                        <div id="ad-signals-total" class="text-2xl font-bold text-blue-600">--</div>
+                    </div>
+                    <div class="border border-gray-200 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-500">Awaiting Review</div>
+                        <div id="ad-pending-review" class="text-2xl font-bold text-orange-500">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                <!-- Panel 1: Personalization Timeline (Changes Applied to Your Builds) -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Changes Applied to Your Builds</h3>
+                    <p class="text-xs text-gray-400 mb-4">Personalization extensions currently active. Revert any change instantly.</p>
+                    <div id="ad-personalization-list" class="space-y-3">
+                        <div class="text-center text-gray-400 py-6 text-sm">
+                            No personalization changes yet.<br>Dream Studio will notice patterns as you work.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel 2: Patterns Awaiting Review -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Things Dream Studio Has Noticed</h3>
+                    <p class="text-xs text-gray-400 mb-4">Patterns worth reviewing. Use <code class="text-indigo-600">ds learn review</code> to act on them.</p>
+                    <div id="ad-patterns-list" class="space-y-3">
+                        <div class="text-center text-gray-400 py-6 text-sm">No patterns noticed yet.</div>
+                    </div>
+                </div>
+
+                <!-- Panel 3: Extension Health -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">How Your Customizations Are Performing</h3>
+                    <p class="text-xs text-gray-400 mb-4">Active extensions benchmarked against the pre-Phase 19 baseline.</p>
+                    <div id="ad-health-list" class="space-y-2">
+                        <div class="text-center text-gray-400 py-6 text-sm">No active extensions yet.</div>
+                    </div>
+                </div>
+
+                <!-- Panel 4: Experimental Extensions -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Awaiting More Data</h3>
+                    <p class="text-xs text-gray-400 mb-4">Extensions that need 5 work orders before auto-promotion. Revert or force-activate from CLI.</p>
+                    <div id="ad-experimental-list" class="space-y-3">
+                        <div class="text-center text-gray-400 py-6 text-sm">No extensions awaiting data.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revert confirmation modal -->
+            <div id="ad-revert-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center">
+                <div class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                    <h4 class="text-base font-semibold text-gray-900 mb-2">Revert this change?</h4>
+                    <p id="ad-revert-description" class="text-sm text-gray-600 mb-4"></p>
+                    <input id="ad-revert-reason" type="text" placeholder="Optional reason" class="w-full border rounded px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    <div class="flex gap-3 justify-end">
+                        <button onclick="closeRevertModal()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                        <button onclick="confirmRevert()" class="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Revert Change</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -4088,7 +4174,198 @@
     navigate = function(tabName) {
         _navigateWithC7(tabName);
         if (tabName === 'memory-surface') loadMemorySurface();
+        if (tabName === 'adaptation') loadAdaptationPanels();
     };
+
+    // ── Phase 19.9 Adaptation Tab ─────────────────────────────────────────
+
+    let _revertExtId = null;
+
+    function loadAdaptationPanels() {
+        loadAdaptationSummary();
+        loadPersonalizationTimeline();
+        loadPatternsAwaitingReview();
+        loadExtensionHealth();
+        loadExperimentalExtensions();
+    }
+
+    async function loadAdaptationSummary() {
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions/summary');
+            if (!r.ok) return;
+            const d = await r.json();
+            document.getElementById('ad-active-count').textContent = d.extensions?.active ?? 0;
+            document.getElementById('ad-experimental-count').textContent = d.extensions?.experimental ?? 0;
+            document.getElementById('ad-signals-total').textContent = d.friction_signals?.total ?? 0;
+            document.getElementById('ad-pending-review').textContent = d.friction_signals?.pending_review ?? 0;
+            // Badge on nav item
+            const pending = (d.friction_signals?.pending_review ?? 0) + (d.extensions?.proposed ?? 0);
+            const badge = document.getElementById('adaptation-badge');
+            if (badge && pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
+        } catch(e) { /* tables not ready */ }
+    }
+
+    async function loadPersonalizationTimeline() {
+        const el = document.getElementById('ad-personalization-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions?status=active&limit=20');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const personal = (d.extensions || []).filter(e => ['threshold_override','option_override'].includes(e.extension_type));
+            if (!personal.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No personalization changes yet.<br>Dream Studio will notice patterns as you work.</div>';
+                return;
+            }
+            el.innerHTML = personal.map(e => `
+                <div class="border border-gray-100 rounded-lg p-3 flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-800 truncate">${escHtml(e.skill_id || '')}</div>
+                        <div class="text-xs text-gray-500">${escHtml(e.type_label || e.extension_type)} &bull; N=${e.past_wo_count ?? 0} WOs</div>
+                        <div class="text-xs text-indigo-600 mt-0.5" id="effect-${escHtml(e.extension_id||'')}">Loading effect...</div>
+                    </div>
+                    <button onclick="openRevertModal('${escHtml(e.extension_id||'')}','${escHtml(e.skill_id||'')} ${escHtml(e.type_label||'')}')"
+                        class="flex-shrink-0 text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 hover:bg-red-50">Revert</button>
+                </div>
+            `).join('');
+            // Load effect counts
+            personal.forEach(e => { loadEffectSummary(e.extension_id); });
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadEffectSummary(extId) {
+        try {
+            const r = await fetch(`/api/v1/intelligence/extensions/${extId}/effect-summary`);
+            if (!r.ok) return;
+            const d = await r.json();
+            const el = document.getElementById(`effect-${extId}`);
+            if (el) el.textContent = d.tracked ? d.description : 'Active — effects not yet tracked';
+        } catch(e) {}
+    }
+
+    async function loadPatternsAwaitingReview() {
+        const el = document.getElementById('ad-patterns-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/friction-signals/classifications?limit=10');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const sigs = d.signals || [];
+            const pending = sigs.filter(s => !s.extension_id);
+            if (!pending.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No patterns pending review.</div>';
+                return;
+            }
+            const typeLabel = t => ({'dismissed_finding':'Dismissed finding','partial_completion':'Ignored output','pattern_gap':'Unstable pattern'}[t] || t);
+            const classLabel = c => ({'capability':'capability gap','personalization':'personal preference','onboarding':'onboarding gap'}[c] || c);
+            el.innerHTML = pending.slice(0,8).map(s => `
+                <div class="border border-gray-100 rounded p-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-xs font-medium text-gray-700">${escHtml(typeLabel(s.signal_type||''))}</span>
+                            <span class="ml-2 text-xs text-indigo-500">${escHtml(s.classified_as ? classLabel(s.classified_as) : 'pending')}</span>
+                        </div>
+                        <span class="text-xs text-gray-400">${escHtml(s.skill_id||'')}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">${escHtml(s.classification_reason||'')}</div>
+                </div>
+            `).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadExtensionHealth() {
+        const el = document.getElementById('ad-health-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions/health');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            const all = [...(d.improving||[]), ...(d.steady||[]), ...(d.degrading||[]), ...(d.untracked||[])];
+            if (!all.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No active extensions yet.</div>';
+                return;
+            }
+            const tierBadge = t => ({
+                improving: '<span class="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">↑ improving</span>',
+                steady:    '<span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">= steady</span>',
+                degrading: '<span class="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">↓ degrading</span>',
+                untracked: '<span class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-500">active</span>',
+            }[t] || '');
+            el.innerHTML = all.slice(0,8).map(e => `
+                <div class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                    <div>
+                        <span class="text-sm text-gray-800">${escHtml(e.skill_id||'')}</span>
+                        <span class="ml-1 text-xs text-gray-400">${escHtml(e.type_label||'')}</span>
+                    </div>
+                    ${tierBadge(e.health_tier)}
+                </div>
+            `).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    async function loadExperimentalExtensions() {
+        const el = document.getElementById('ad-experimental-list');
+        try {
+            const r = await fetch('/api/v1/intelligence/extensions?status=experimental&limit=10');
+            if (!r.ok) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Unable to load.</div>'; return; }
+            const d = await r.json();
+            if (!d.extensions?.length) {
+                el.innerHTML = '<div class="text-center text-gray-400 py-6 text-sm">No extensions awaiting data.</div>';
+                return;
+            }
+            el.innerHTML = d.extensions.map(e => {
+                const n = e.past_wo_count ?? 0;
+                const pct = Math.min(100, Math.round(n / 5 * 100));
+                const vd = e.validation_summary || {};
+                const blocking = vd.verdict_reason || (n < 5 ? `${n}/5 work orders` : 'score below threshold');
+                return `
+                    <div class="border border-gray-100 rounded-lg p-3">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="text-sm font-medium text-gray-800">${escHtml(e.skill_id||'')}</div>
+                                <div class="text-xs text-gray-400">${escHtml(e.type_label||'')} &bull; ${escHtml(blocking)}</div>
+                            </div>
+                            <span class="text-xs text-yellow-600 font-medium">${n}/5 WOs</span>
+                        </div>
+                        <div class="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-400 rounded-full transition-all" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch(err) { el.innerHTML = '<div class="text-gray-400 text-sm py-4 text-center">Data unavailable.</div>'; }
+    }
+
+    function openRevertModal(extId, description) {
+        _revertExtId = extId;
+        document.getElementById('ad-revert-description').textContent =
+            `Revert "${description}"? This will remove the change from your next build.`;
+        document.getElementById('ad-revert-reason').value = '';
+        document.getElementById('ad-revert-modal').classList.remove('hidden');
+    }
+
+    function closeRevertModal() {
+        document.getElementById('ad-revert-modal').classList.add('hidden');
+        _revertExtId = null;
+    }
+
+    async function confirmRevert() {
+        if (!_revertExtId) return;
+        const reason = document.getElementById('ad-revert-reason').value;
+        try {
+            const r = await fetch(`/api/v1/intelligence/extensions/${_revertExtId}/revert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason }),
+            });
+            if (r.ok) {
+                closeRevertModal();
+                loadPersonalizationTimeline();
+                loadAdaptationSummary();
+            }
+        } catch(e) { alert('Revert failed. Please try again.'); }
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 
     // Add hooks script
 
