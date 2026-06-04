@@ -215,19 +215,10 @@ class TestThresholdBehavior:
         from core.expansion.disambiguation import check_extension_description
         from unittest.mock import patch
 
-        # Make almost identical descriptions: 9/10 words in common
-        desc_a = "detect security vulnerabilities common attack patterns code review issues"
-        desc_b = "detect security vulnerabilities common attack patterns code review problems"
-        # intersection = {detect, security, vulnerabilities, common, attack, patterns, code, review} = 8
-        # union = {detect, security, vulnerabilities, common, attack, patterns, code, review, issues, problems} = 10
-        # jaccard = 8/10 = 0.8 — exactly warning; let me increase overlap
-        desc_a2 = "a b c d e f g h i j"
-        desc_b2 = "a b c d e f g h i k"
-        # intersection = 9, union = 11, jaccard = 9/11 ≈ 0.82 — warning not critical
-        # Let's use 9/10 overlap: a b c d e f g h i j vs a b c d e f g h i j  (identical = 1.0)
+        # A = {a-i} = 9 words; B = {a-i, extra} = 10 words
+        # intersection = 9; union = 10; jaccard = 0.9 → critical
         desc_a3 = "a b c d e f g h i"
         desc_b3 = "a b c d e f g h i extra"
-        # intersection = {a-i} = 9; union = {a-i, extra} = 10; jaccard = 0.9 → critical
         ext = self._ext(desc_a3)
         with patch(
             "core.expansion.disambiguation.load_canonical_descriptions",
