@@ -94,6 +94,10 @@ class RetroactiveValidator:
             result = OnboardingValidator(self.conn).validate(ext)
 
         if result.success:
+            # Phase 19.6: run disambiguation check after validation passes.
+            # Only applies when verdict is 'active' — warning/experimental skip the check.
+            if result.verdict == "active":
+                result = self._check_disambiguation(ext, result)
             self._persist_verdict(extension_id, result)
         return result
 
@@ -164,6 +168,52 @@ class RetroactiveValidator:
         except Exception as exc:
             logger.debug("increment_for_session failed (non-blocking): %s", exc)
 
+    def _check_disambiguation(
+        self, ext: dict[str, Any], result: "ValidationResult"
+    ) -> "ValidationResult":
+        """Phase 19.6: run description collision check after validation passes.
+
+        If collision found, reverts verdict from 'active' to 'experimental' and
+        adds collision_check to the validation detail. Non-blocking — exceptions
+        result in the original result being returned unchanged.
+        """
+        try:
+            from core.expansion.disambiguation import (
+                check_extension_description,
+                WARNING_THRESHOLD,
+                CRITICAL_THRESHOLD,
+            )
+
+            collision = check_extension_description(ext, conn=self.conn)
+            if collision.status == "clean":
+                return result
+
+            # Collision found — revert to experimental
+            result.verdict = "experimental"
+            result.verdict_reason = collision.verdict_reason
+
+            # Store collision details in validation_detail (will be written in _persist_verdict)
+            result._collision_check = {  # type: ignore[attr-defined]
+                "status": collision.status,
+                "candidate_description": collision.candidate_description,
+                "top_collision": {
+                    "compared_id": (
+                        collision.collisions[0].compared_id if collision.collisions else ""
+                    ),
+                    "similarity_score": (
+                        collision.collisions[0].similarity_score if collision.collisions else 0.0
+                    ),
+                },
+                "warning_threshold": WARNING_THRESHOLD,
+                "critical_threshold": CRITICAL_THRESHOLD,
+                "accepted": False,
+                "force_reason": "",
+            }
+        except Exception as exc:
+            logger.debug("Disambiguation check failed (non-blocking): %s", exc)
+
+        return result
+
     # ── Internal helpers ──────────────────────────────────────────────────
 
     def _load_extension(self, extension_id: str) -> dict[str, Any] | None:
@@ -191,17 +241,18 @@ class RetroactiveValidator:
         return row["classified_as"] if row else None
 
     def _persist_verdict(self, extension_id: str, result: ValidationResult) -> None:
-        detail = json.dumps(
-            {
-                "validated_at": _now_iso(),
-                "verdict": result.verdict,
-                "verdict_reason": result.verdict_reason,
-                "classification_path": (
-                    "personalization" if isinstance(result, ValidationResult) else "unknown"
-                ),
-                "force_override": False,
-            }
-        )
+        detail_dict: dict[str, Any] = {
+            "validated_at": _now_iso(),
+            "verdict": result.verdict,
+            "verdict_reason": result.verdict_reason,
+            "classification_path": "personalization",
+            "force_override": False,
+        }
+        # Phase 19.6: include collision_check if present
+        collision_check = getattr(result, "_collision_check", None)
+        if collision_check:
+            detail_dict["collision_check"] = collision_check
+        detail = json.dumps(detail_dict)
         try:
             self.conn.execute(
                 """
