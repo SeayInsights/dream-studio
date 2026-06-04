@@ -197,8 +197,12 @@ class RetroactiveValidator:
                 "status": collision.status,
                 "candidate_description": collision.candidate_description,
                 "top_collision": {
-                    "compared_id": collision.collisions[0].compared_id if collision.collisions else "",
-                    "similarity_score": collision.collisions[0].similarity_score if collision.collisions else 0.0,
+                    "compared_id": (
+                        collision.collisions[0].compared_id if collision.collisions else ""
+                    ),
+                    "similarity_score": (
+                        collision.collisions[0].similarity_score if collision.collisions else 0.0
+                    ),
                 },
                 "warning_threshold": WARNING_THRESHOLD,
                 "critical_threshold": CRITICAL_THRESHOLD,
