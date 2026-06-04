@@ -148,6 +148,7 @@ def cmd_review(args) -> int:
     if acted + skipped + deferred > 0:
         try:
             from core.expansion.loader import ExtensionLoader
+
             ExtensionLoader.invalidate_cache()
         except Exception:
             pass
@@ -313,6 +314,7 @@ def cmd_expand(args) -> int:
     if accepted + rejected > 0:
         try:
             from core.expansion.loader import ExtensionLoader
+
             ExtensionLoader.invalidate_cache()
         except Exception:
             pass
@@ -372,6 +374,7 @@ def cmd_validate(args) -> int:
     # (extension statuses may have changed to 'active')
     try:
         from core.expansion.loader import ExtensionLoader
+
         ExtensionLoader.invalidate_cache()
     except Exception:
         pass

@@ -383,8 +383,7 @@ def compile_pack(
                 mode_name = content.get("mode_name", f"ext_{ext_id[:8]}")
                 description = content.get("description", "")
                 pack["extension_additions"][f"modes/{mode_name}/SKILL.md"] = (
-                    f"# {mode_name}\n\n{description}\n\n"
-                    f"*Generated from extension {ext_id[:8]}*"
+                    f"# {mode_name}\n\n{description}\n\n" f"*Generated from extension {ext_id[:8]}*"
                 )
 
             pack["applied_extensions"].append(ext_id)
@@ -399,6 +398,7 @@ def compile_pack(
 
     except Exception as exc:
         import logging as _logging
+
         _logging.getLogger(__name__).warning("Extension merge failed (non-blocking): %s", exc)
 
     return pack

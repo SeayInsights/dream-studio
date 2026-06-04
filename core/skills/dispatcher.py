@@ -461,6 +461,7 @@ class SkillDispatcher:
         # Mid-audit state changes don't affect the running audit (session isolation).
         try:
             from core.expansion.loader import ExtensionLoader
+
             _ext_snapshot = ExtensionLoader().snapshot(skills)
         except Exception:
             _ext_snapshot = {}
@@ -499,6 +500,7 @@ class SkillDispatcher:
                     if _ext_snapshot.get(skill_id):
                         try:
                             from core.expansion.loader import apply_personalization_overrides
+
                             raw_findings = apply_personalization_overrides(
                                 raw_findings, _ext_snapshot[skill_id]
                             )
@@ -529,6 +531,7 @@ class SkillDispatcher:
                     if _ext_snapshot.get(skill_id):
                         try:
                             from core.expansion.loader import apply_personalization_overrides
+
                             scan_res.findings = apply_personalization_overrides(
                                 scan_res.findings, _ext_snapshot[skill_id]
                             )
