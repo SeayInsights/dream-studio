@@ -295,8 +295,17 @@ def _build_claude_md(
     return _ENFORCEMENT_BLOCK + "\n" + projection
 
 
-def compile_pack(canonical_root: Path | None = None) -> dict[str, Any]:
+def compile_pack(
+    canonical_root: Path | None = None,
+    db_path: Path | None = None,
+    include_experimental: bool = False,
+) -> dict[str, Any]:
     """Read canonical/ and produce the Claude Code integration pack.
+
+    Phase 19.7: also merges active ds_user_extensions into the pack.
+    - capability (gap_filler, mode_addition): baked into compiled files
+    - onboarding (onboarding_doc): collected in 'onboarding_docs' field for
+      provisioner to write to docs/operator-guides/
 
     Returns a deterministic dict:
     {
@@ -306,6 +315,14 @@ def compile_pack(canonical_root: Path | None = None) -> dict[str, Any]:
             "skills/ds-bootstrap/SKILL.md": "<content>",
         },
         "settings_hooks": [...],  # hook entries for settings.json merge
+        "extension_additions": {  # Phase 19.7 — from active capability extensions
+            "rules/<skill>/<rule_id>": "<rule description>",  # new rules baked in
+            "modes/<mode_name>/SKILL.md": "<mode content>",  # new modes
+        },
+        "onboarding_docs": [  # Phase 19.7 — for provisioner disk write
+            {"path": "docs/operator-guides/...", "content": "..."},
+        ],
+        "applied_extensions": [<extension_id>, ...],  # audit trail
     }
 
     Raises FileNotFoundError if canonical/skills/ds-bootstrap/SKILL.md is missing.
@@ -326,7 +343,7 @@ def compile_pack(canonical_root: Path | None = None) -> dict[str, Any]:
 
     hooks_template = _load_hooks_template()
 
-    return {
+    pack: dict[str, Any] = {
         "tool": "claude_code",
         "canonical_root": str(root),
         "files": {
@@ -334,7 +351,57 @@ def compile_pack(canonical_root: Path | None = None) -> dict[str, Any]:
             "CLAUDE.md": claude_md_content,
         },
         "settings_hooks": hooks_template,
+        "extension_additions": {},
+        "onboarding_docs": [],
+        "applied_extensions": [],
     }
+
+    # Phase 19.7: merge active extensions (capability + onboarding).
+    # Canonical files are NOT modified — all output goes to pack dicts.
+    try:
+        from core.expansion.loader import ExtensionLoader, check_mode_collisions
+
+        loader = ExtensionLoader(db_path=db_path)
+        cap_exts = loader.get_capability_extensions()
+        onb_exts = loader.get_onboarding_extensions()
+
+        # Check for mode name collisions before merging
+        check_mode_collisions(cap_exts)
+
+        for ext in cap_exts:
+            content = json.loads(ext.get("content") or "{}")
+            ext_type = content.get("extension_type")
+            skill_id = ext.get("skill_id", "unknown")
+            ext_id = ext.get("extension_id", "")
+
+            if ext_type == "gap_filler":
+                rule_id = content.get("rule_id") or f"ext_{ext_id[:8]}"
+                description = content.get("description", "")
+                pack["extension_additions"][f"rules/{skill_id}/{rule_id}"] = description
+
+            elif ext_type == "mode_addition":
+                mode_name = content.get("mode_name", f"ext_{ext_id[:8]}")
+                description = content.get("description", "")
+                pack["extension_additions"][f"modes/{mode_name}/SKILL.md"] = (
+                    f"# {mode_name}\n\n{description}\n\n" f"*Generated from extension {ext_id[:8]}*"
+                )
+
+            pack["applied_extensions"].append(ext_id)
+
+        for ext in onb_exts:
+            content = json.loads(ext.get("content") or "{}")
+            doc_path = content.get("doc_path_suggestion", "")
+            markdown = content.get("markdown_content", "")
+            if doc_path and markdown:
+                pack["onboarding_docs"].append({"path": doc_path, "content": markdown})
+                pack["applied_extensions"].append(ext.get("extension_id", ""))
+
+    except Exception as exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning("Extension merge failed (non-blocking): %s", exc)
+
+    return pack
 
 
 def _load_hooks_template() -> list[dict[str, Any]]:

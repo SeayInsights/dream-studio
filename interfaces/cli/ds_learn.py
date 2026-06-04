@@ -144,6 +144,15 @@ def cmd_review(args) -> int:
             else:
                 print("  Invalid choice. Use: c=confirm  s=skip  d=defer  q=quit")
 
+    # Phase 19.7: confirm/skip/defer all change extension state
+    if acted + skipped + deferred > 0:
+        try:
+            from core.expansion.loader import ExtensionLoader
+
+            ExtensionLoader.invalidate_cache()
+        except Exception:
+            pass
+
     print(f"\nAll {total} signals reviewed.")
     _print_summary(acted, skipped, deferred)
     return 0
@@ -301,6 +310,15 @@ def cmd_expand(args) -> int:
             else:
                 print("  Invalid. Use: c=compile+accept  r=reject  q=quit")
 
+    # Phase 19.7: invalidate cache after any accept/reject (extension state changed)
+    if accepted + rejected > 0:
+        try:
+            from core.expansion.loader import ExtensionLoader
+
+            ExtensionLoader.invalidate_cache()
+        except Exception:
+            pass
+
     print(f"\nAll {total} extensions processed.")
     print(f"Summary: {accepted} compiled, {rejected} rejected, {failed} failed.")
     return 0
@@ -352,6 +370,15 @@ def cmd_validate(args) -> int:
         conn.close()
 
     # Report results
+    # Phase 19.7: invalidate ExtensionLoader cache after validation
+    # (extension statuses may have changed to 'active')
+    try:
+        from core.expansion.loader import ExtensionLoader
+
+        ExtensionLoader.invalidate_cache()
+    except Exception:
+        pass
+
     for result in results:
         if not result.success:
             print(f"  ✗ {result.extension_id[:8]}… FAILED: {result.error}", file=sys.stderr)

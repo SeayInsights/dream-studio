@@ -456,6 +456,16 @@ class SkillDispatcher:
                 return skill, err_result, str(exc)
 
         # ── Parallel execution ────────────────────────────────────────────
+        # Phase 19.7: snapshot active personalization overrides at dispatch start.
+        # Snapshot is taken BEFORE spawning threads so all threads use the same set.
+        # Mid-audit state changes don't affect the running audit (session isolation).
+        try:
+            from core.expansion.loader import ExtensionLoader
+
+            _ext_snapshot = ExtensionLoader().snapshot(skills)
+        except Exception:
+            _ext_snapshot = {}
+
         futures: dict[concurrent.futures.Future, str] = {}
         max_workers = min(len(skills), 8)
 
@@ -486,6 +496,16 @@ class SkillDispatcher:
                 if skill_id in _PYTHON_NATIVE:
                     # skill_data is list[dict]
                     raw_findings: list[dict] = skill_data  # type: ignore[assignment]
+                    # Phase 19.7: apply personalization overrides from snapshot
+                    if _ext_snapshot.get(skill_id):
+                        try:
+                            from core.expansion.loader import apply_personalization_overrides
+
+                            raw_findings = apply_personalization_overrides(
+                                raw_findings, _ext_snapshot[skill_id]
+                            )
+                        except Exception:
+                            pass
                     for raw in raw_findings:
                         sev = raw.get("severity", "medium")
                         if severity_threshold and not _meets_threshold(sev, severity_threshold):
@@ -507,6 +527,16 @@ class SkillDispatcher:
                     from core.skills.audit.rules_scanner import SkillScanResult
 
                     scan_res: SkillScanResult = skill_data  # type: ignore[assignment]
+                    # Phase 19.7: apply personalization overrides from snapshot
+                    if _ext_snapshot.get(skill_id):
+                        try:
+                            from core.expansion.loader import apply_personalization_overrides
+
+                            scan_res.findings = apply_personalization_overrides(
+                                scan_res.findings, _ext_snapshot[skill_id]
+                            )
+                        except Exception:
+                            pass
                     for raw in scan_res.findings:
                         sev = raw.get("severity", "medium")
                         if severity_threshold and not _meets_threshold(sev, severity_threshold):
