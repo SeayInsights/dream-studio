@@ -2357,6 +2357,37 @@
 </div>
 
 
+<!-- Previously-invisible tables panel (WO-A Fix #5) — appended to Hooks tab above -->
+<div id="hooks-invisible-tables" class="mt-6 space-y-4" style="display:none;">
+
+    <!-- Tool Activity -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-base font-semibold text-gray-900 mb-1">Tool Activity
+            <span class="ml-2 text-xs font-normal text-gray-400" id="tool-activity-count"></span>
+        </h3>
+        <p class="text-xs text-gray-400 mb-3">Every tool Claude used — previously invisible. Data from <code>tool_invocations</code>.</p>
+        <div id="tool-activity-list" class="text-sm text-gray-600">Loading…</div>
+    </div>
+
+    <!-- Validation Failures -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-base font-semibold text-gray-900 mb-1">Event Validation Failures
+            <span class="ml-2 text-xs font-normal text-gray-400" id="validation-failures-count"></span>
+        </h3>
+        <p class="text-xs text-gray-400 mb-3">Events rejected by the validation pipeline — previously invisible. Data from <code>validation_failures</code>.</p>
+        <div id="validation-failures-list" class="text-sm text-gray-600">Loading…</div>
+    </div>
+
+    <!-- Raw Events -->
+    <div class="bg-white rounded-lg shadow p-5">
+        <h3 class="text-base font-semibold text-gray-900 mb-1">Raw Event Stream
+            <span class="ml-2 text-xs font-normal text-gray-400" id="raw-events-count"></span>
+        </h3>
+        <p class="text-xs text-gray-400 mb-3">Raw Claude Code events before canonical processing — previously invisible. Data from <code>raw_claude_code_events</code>.</p>
+        <div id="raw-events-list" class="text-sm text-gray-600">Loading…</div>
+    </div>
+</div>
+
 <!-- Security Tab -->
         <div id="security" class="tab-content">
             <!-- Summary Cards -->
@@ -4064,12 +4095,22 @@
             document.getElementById('attr-coverage-pct').textContent = fully.toFixed(1) + '%';
 
             const el = document.getElementById('attr-coverage-pct');
+            el.classList.remove('text-green-600', 'text-yellow-600', 'text-red-600');
             if (fully >= 90) el.classList.add('text-green-600');
             else if (fully >= 70) el.classList.add('text-yellow-600');
             else el.classList.add('text-red-600');
 
-            document.getElementById('attr-coverage-status').textContent =
-                d.below_threshold ? '⚠ Below 90% threshold' : '✓ Above threshold';
+            // Honest status: if 0%, show investigative note rather than "loading"
+            if (fully === 0 && (d.total_events || 0) > 0) {
+                document.getElementById('attr-coverage-status').textContent =
+                    '⚠ 0% attributed — token write-path under investigation (WO-B)';
+            } else if ((d.total_events || 0) === 0) {
+                document.getElementById('attr-coverage-status').textContent =
+                    'No token events recorded yet';
+            } else {
+                document.getElementById('attr-coverage-status').textContent =
+                    d.below_threshold ? '⚠ Below 90% threshold' : '✓ Above threshold';
+            }
 
             document.getElementById('attr-bar-full').style.width = fully + '%';
             document.getElementById('attr-bar-partial').style.width = partial + '%';
@@ -4084,6 +4125,7 @@
             document.getElementById('attr-total-lbl').textContent = d.total_events || 0;
         } catch (e) {
             document.getElementById('attr-coverage-status').textContent = 'Error: ' + e.message;
+            document.getElementById('attr-coverage-pct').textContent = '--';
         }
     }
 
@@ -4175,7 +4217,74 @@
         _navigateWithC7(tabName);
         if (tabName === 'memory-surface') loadMemorySurface();
         if (tabName === 'adaptation') loadAdaptationPanels();
+        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionOrphans(); }
+        if (tabName === 'hooks') loadInvisibleTables();
     };
+
+    // ── Fix #5: Surface previously-invisible tables on Hooks tab ─────────────
+
+    let _invisibleTablesLoaded = false;
+
+    async function loadInvisibleTables() {
+        if (_invisibleTablesLoaded) return;
+        const container = document.getElementById('hooks-invisible-tables');
+        if (container) container.style.display = 'block';
+        _invisibleTablesLoaded = true;
+        await Promise.all([loadToolActivity(), loadValidationFailures(), loadRawEvents()]);
+    }
+
+    async function loadToolActivity() {
+        const el = document.getElementById('tool-activity-list');
+        const cntEl = document.getElementById('tool-activity-count');
+        try {
+            const r = await fetch('/api/v1/hooks/tool-activity?limit=30');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            const top = Object.entries(d.top_tools || {}).sort((a,b)=>b[1]-a[1]).slice(0,8);
+            if (!d.invocations?.length) { el.textContent = 'No records'; return; }
+            el.innerHTML = '<div class="grid grid-cols-2 gap-2 mb-3">' +
+                top.map(([t,c])=>`<div class="flex justify-between text-xs py-1 border-b border-gray-50"><span>${escHtml(t)}</span><span class="font-mono text-indigo-600">${c}</span></div>`).join('') +
+                '</div><div class="text-xs text-gray-400">Recent: ' +
+                d.invocations.slice(0,3).map(i=>`${escHtml(i.tool_id||'?')} (${escHtml(i.status||'?')})`).join(', ') + '</div>';
+        } catch { el.textContent = 'Error loading tool activity'; }
+    }
+
+    async function loadValidationFailures() {
+        const el = document.getElementById('validation-failures-list');
+        const cntEl = document.getElementById('validation-failures-count');
+        try {
+            const r = await fetch('/api/v1/hooks/validation-failures?limit=20');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            if (!d.failures?.length) { el.textContent = 'No validation failures'; return; }
+            const top = Object.entries(d.by_event_type || {}).sort((a,b)=>b[1]-a[1]);
+            el.innerHTML = '<div class="text-xs text-gray-500 mb-2">By event type: ' +
+                top.map(([t,c])=>`${escHtml(t)} (${c})`).join(', ') +
+                '</div><div class="text-xs text-gray-400">Most recent: ' +
+                escHtml(d.failures[0]?.event_type||'?') + ' at ' +
+                escHtml((d.failures[0]?.attempted_at||'').slice(0,19)) + '</div>';
+        } catch { el.textContent = 'Error loading validation failures'; }
+    }
+
+    async function loadRawEvents() {
+        const el = document.getElementById('raw-events-list');
+        const cntEl = document.getElementById('raw-events-count');
+        try {
+            const r = await fetch('/api/v1/hooks/raw-events?limit=20');
+            if (!r.ok) { el.textContent = 'Unavailable'; return; }
+            const d = await r.json();
+            if (cntEl) cntEl.textContent = `${d.count.toLocaleString()} total`;
+            if (!d.events?.length) { el.textContent = 'No raw events'; return; }
+            const top = Object.entries(d.by_event_type || {}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+            el.innerHTML = '<div class="text-xs text-gray-500 mb-2">Top types: ' +
+                top.map(([t,c])=>`${escHtml(t)} (${c})`).join(', ') +
+                '</div><div class="text-xs text-gray-400">Most recent: ' +
+                escHtml(d.events[0]?.event_type||'?') + ' at ' +
+                escHtml((d.events[0]?.received_at||'').slice(0,19)) + '</div>';
+        } catch { el.textContent = 'Error loading raw events'; }
+    }
 
     // ── Phase 19.9 Adaptation Tab ─────────────────────────────────────────
 
@@ -9669,22 +9778,23 @@ if (document.readyState === 'loading') {
         }
 
         function updateSecuritySummary(stats) {
-            // Total findings
-            const total = (stats.total_sarif || 0) + (stats.total_cve || 0) +
-                         (stats.total_manual || 0) + (stats.total_hook_checks || 0);
+            // Total findings — sum all sources from findings_by_source
+            // API returns: { telemetry_security, sarif, cve, manual_review, hook_check }
+            const src = stats.findings_by_source || {};
+            const total = Object.values(src).reduce((a, b) => a + (b || 0), 0);
             document.getElementById('security-total-findings').textContent = total.toLocaleString();
 
-            // Critical count
-            const critical = stats.by_severity?.critical || 0;
+            // Severity — API returns findings_by_severity not by_severity
+            const sev = stats.findings_by_severity || stats.by_severity || {};
+            const critical = sev.critical || 0;
             document.getElementById('security-critical-count').textContent = critical.toLocaleString();
-
-            // High count
-            const high = stats.by_severity?.high || 0;
+            const high = sev.high || 0;
             document.getElementById('security-high-count').textContent = high.toLocaleString();
 
-            // Mitigation rate
-            const open = stats.by_status?.open || 0;
-            const mitigated = stats.by_status?.mitigated || 0;
+            // Mitigation rate — API returns findings_by_status not by_status
+            const st = stats.findings_by_status || stats.by_status || {};
+            const open = st.open || 0;
+            const mitigated = st.mitigated || 0;
             const totalStatus = open + mitigated;
             const rate = totalStatus > 0 ? ((mitigated / totalStatus) * 100).toFixed(1) : 0;
             document.getElementById('security-mitigation-rate').textContent = `${rate}%`;
@@ -9699,7 +9809,7 @@ if (document.readyState === 'loading') {
                 charts.securitySeverity.destroy();
             }
 
-            const severityData = stats.by_severity || {};
+            const severityData = stats.findings_by_severity || stats.by_severity || {};
             const labels = ['Critical', 'High', 'Medium', 'Low', 'Info'];
             const data = [
                 severityData.critical || 0,

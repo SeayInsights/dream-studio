@@ -1156,29 +1156,10 @@ async def list_friction_signals(
         conn.close()
 
 
-@router.get("/friction-signals/{signal_id}")
-async def get_friction_signal(signal_id: str) -> Dict[str, Any]:
-    """Retrieve a single friction signal by ID."""
-    conn = get_connection()
-    try:
-        conn.row_factory = sqlite3.Row
-        if _friction_table_missing(conn):
-            raise HTTPException(status_code=503, detail="Migration 096 not yet applied")
-        row = conn.execute(
-            "SELECT * FROM ds_friction_signals WHERE signal_id = ?", (signal_id,)
-        ).fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail=f"Signal {signal_id!r} not found")
-        return dict(row)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
-
-
 # -- Friction signal classifications read API (Phase 19.3) ------------------
+# IMPORTANT: This route MUST be defined before /friction-signals/{signal_id}.
+# FastAPI matches routes in order — the parameterized route would swallow
+# GET /friction-signals/classifications if it came first.
 
 
 @router.get("/friction-signals/classifications")
@@ -1228,5 +1209,27 @@ async def get_friction_classifications(
         return {"signals": signals, "by_type": by_type, "count": len(signals)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Classifications query failed: {str(e)}")
+    finally:
+        conn.close()
+
+
+@router.get("/friction-signals/{signal_id}")
+async def get_friction_signal(signal_id: str) -> Dict[str, Any]:
+    """Retrieve a single friction signal by ID."""
+    conn = get_connection()
+    try:
+        conn.row_factory = sqlite3.Row
+        if _friction_table_missing(conn):
+            raise HTTPException(status_code=503, detail="Migration 096 not yet applied")
+        row = conn.execute(
+            "SELECT * FROM ds_friction_signals WHERE signal_id = ?", (signal_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Signal {signal_id!r} not found")
+        return dict(row)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()

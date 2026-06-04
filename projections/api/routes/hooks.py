@@ -557,3 +557,99 @@ async def list_hook_anomalies() -> Dict[str, Any]:
     Returns an empty result set.
     """
     return {"anomalies": [], "count": 0}
+
+
+# ── Previously-invisible table surfaces (Dashboard Wiring Fix WO-A) ─────────
+# These three tables had substantial data but no dashboard surface.
+# These endpoints make them visible to the operator.
+
+
+@router.get("/hooks/tool-activity")
+async def list_tool_activity(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
+    """Tool invocation telemetry — every tool Claude used.
+
+    Previously invisible: 3,026+ rows in tool_invocations with no dashboard surface.
+    Shows tool_id, status, metadata, and project context per invocation.
+    """
+    conn = get_connection()
+    try:
+        conn.row_factory = __import__("sqlite3").Row
+        if not object_exists(conn, "tool_invocations"):
+            return {"invocations": [], "count": 0, "top_tools": {}}
+        rows = conn.execute(
+            "SELECT tool_id, status, project_id, created_at, metadata_json "
+            "FROM tool_invocations ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        invocations = [dict(r) for r in rows]
+        # Top tools by frequency
+        top = {}
+        for r in invocations:
+            t = r.get("tool_id") or "unknown"
+            top[t] = top.get(t, 0) + 1
+        total = conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0]
+        return {"invocations": invocations, "count": total, "top_tools": top}
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
+    finally:
+        conn.close()
+
+
+@router.get("/hooks/validation-failures")
+async def list_validation_failures(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
+    """Event validation failures — events that failed schema/constraint validation.
+
+    Previously invisible: 443+ rows in validation_failures with no dashboard surface.
+    These are events that were rejected by the validation pipeline.
+    """
+    conn = get_connection()
+    try:
+        conn.row_factory = __import__("sqlite3").Row
+        if not object_exists(conn, "validation_failures"):
+            return {"failures": [], "count": 0, "by_event_type": {}}
+        rows = conn.execute(
+            "SELECT event_id, event_type, errors, attempted_at "
+            "FROM validation_failures ORDER BY attempted_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        failures = [dict(r) for r in rows]
+        by_type = {}
+        for r in failures:
+            t = r.get("event_type") or "unknown"
+            by_type[t] = by_type.get(t, 0) + 1
+        total = conn.execute("SELECT COUNT(*) FROM validation_failures").fetchone()[0]
+        return {"failures": failures, "count": total, "by_event_type": by_type}
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
+    finally:
+        conn.close()
+
+
+@router.get("/hooks/raw-events")
+async def list_raw_events(limit: int = Query(default=30, le=100)) -> Dict[str, Any]:
+    """Raw canonical events from the Claude Code event ingestor.
+
+    Previously invisible: 6,500+ rows in raw_claude_code_events with no surface.
+    Shows the raw event stream before it's processed into canonical_events.
+    """
+    conn = get_connection()
+    try:
+        conn.row_factory = __import__("sqlite3").Row
+        if not object_exists(conn, "raw_claude_code_events"):
+            return {"events": [], "count": 0, "by_event_type": {}}
+        rows = conn.execute(
+            "SELECT event_id, event_type, received_at, session_id, project_id "
+            "FROM raw_claude_code_events ORDER BY received_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        events = [dict(r) for r in rows]
+        by_type = {}
+        for r in events:
+            t = r.get("event_type") or "unknown"
+            by_type[t] = by_type.get(t, 0) + 1
+        total = conn.execute("SELECT COUNT(*) FROM raw_claude_code_events").fetchone()[0]
+        return {"events": events, "count": total, "by_event_type": by_type}
+    except Exception as ex:
+        raise HTTPException(status_code=500, detail=str(ex))
+    finally:
+        conn.close()
