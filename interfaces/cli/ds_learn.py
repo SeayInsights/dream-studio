@@ -398,6 +398,137 @@ def cmd_validate(args) -> int:
     return 0
 
 
+def cmd_disambiguate(args) -> int:
+    """Resolve description collisions for extensions blocked by 19.6 gate."""
+    from core.expansion.disambiguation import (
+        check_extension_description,
+        CRITICAL_THRESHOLD,
+        WARNING_THRESHOLD,
+    )
+    from core.config.database import get_connection
+
+    db_path = getattr(args, "db_path", None)
+    extension_id = args.extension_id
+    rewrite = getattr(args, "rewrite", None)
+    accept_warning = getattr(args, "accept_warning", False)
+    force_reason = getattr(args, "force", None)
+
+    conn = get_connection() if db_path is None else __import__("sqlite3").connect(str(db_path))
+    conn.row_factory = __import__("sqlite3").Row
+
+    try:
+        row = conn.execute(
+            "SELECT * FROM ds_user_extensions WHERE extension_id = ?", (extension_id,)
+        ).fetchone()
+        if row is None:
+            print(f"Extension {extension_id!r} not found.", file=sys.stderr)
+            return 1
+
+        ext = dict(row)
+
+        # Handle --rewrite: update description and re-run check
+        if rewrite:
+            import json as _json
+
+            content = _json.loads(ext.get("content") or "{}")
+            content["description"] = rewrite
+            conn.execute(
+                "UPDATE ds_user_extensions SET content = ? WHERE extension_id = ?",
+                (_json.dumps(content), extension_id),
+            )
+            conn.commit()
+            ext["content"] = _json.dumps(content)
+            print(f"  Description updated.")
+
+        # Run the check
+        collision = check_extension_description(ext, conn=conn)
+
+        if collision.status == "clean":
+            print(f"  ✓ No collision detected (worst score below {WARNING_THRESHOLD}).")
+            print(f"    Run 'ds learn validate {extension_id[:8]}' to complete activation.")
+            return 0
+
+        # Show collision details
+        print(f"\n  ⚠ Collision detected: {collision.status.upper()}")
+        print(f"  Candidate: {collision.candidate_description!r}")
+        if collision.collisions:
+            top = collision.collisions[0]
+            print(f"  Collides with: {top.compared_id!r} (similarity: {top.similarity_score:.2f})")
+            print(f"  Existing:  {top.compared_description!r}")
+        print()
+
+        # Handle --accept-warning (only for warning tier)
+        if accept_warning:
+            if collision.status == "critical":
+                print(
+                    f"  ✗ --accept-warning rejected: collision is CRITICAL (score ≥ {CRITICAL_THRESHOLD}). "
+                    f'Use --force "<reason>" instead.',
+                    file=sys.stderr,
+                )
+                return 1
+            # Accept warning — promote to active with audit trail
+            import json as _j
+
+            detail_raw = ext.get("validation_detail")
+            detail = _j.loads(detail_raw) if detail_raw else {}
+            if "collision_check" in detail:
+                detail["collision_check"]["accepted"] = True
+            detail["verdict"] = "active"
+            score = collision.collisions[0].similarity_score if collision.collisions else 0.0
+            detail["verdict_reason"] = f"collision warning accepted by operator (score={score:.2f})"
+            conn.execute(
+                "UPDATE ds_user_extensions SET status='active', validation_detail=? WHERE extension_id=?",
+                (_j.dumps(detail), extension_id),
+            )
+            conn.commit()
+            print(f"  ✓ Warning accepted. Extension {extension_id[:8]}… → active")
+            # Invalidate cache
+            try:
+                from core.expansion.loader import ExtensionLoader
+
+                ExtensionLoader.invalidate_cache()
+            except Exception:
+                pass
+            return 0
+
+        # Handle --force (accepted for any tier)
+        if force_reason:
+            import json as _j
+
+            detail_raw = ext.get("validation_detail")
+            detail = _j.loads(detail_raw) if detail_raw else {}
+            if "collision_check" in detail:
+                detail["collision_check"]["accepted"] = True
+                detail["collision_check"]["force_reason"] = force_reason
+            detail["verdict"] = "active"
+            detail["verdict_reason"] = f"collision force-overridden: {force_reason}"
+            conn.execute(
+                "UPDATE ds_user_extensions SET status='active', validation_detail=? WHERE extension_id=?",
+                (_j.dumps(detail), extension_id),
+            )
+            conn.commit()
+            print(f"  ✓ Force override accepted. Extension {extension_id[:8]}… → active")
+            print(f"    Reason logged: {force_reason!r}")
+            try:
+                from core.expansion.loader import ExtensionLoader
+
+                ExtensionLoader.invalidate_cache()
+            except Exception:
+                pass
+            return 0
+
+        # No action flags — just show the status
+        print(f"  Actions:")
+        if collision.status == "warning":
+            print(f"    --accept-warning     accept the warning and activate")
+        print(f'    --rewrite "..."       update description and re-check')
+        print(f'    --force "reason"      force-activate with audit trail')
+        return 1
+
+    finally:
+        conn.close()
+
+
 def add_learn_subcommand(subparsers) -> None:
     """Register the 'learn' subcommand group with ds CLI."""
     learn_parser = subparsers.add_parser(
@@ -458,6 +589,30 @@ def add_learn_subcommand(subparsers) -> None:
     )
     validate_parser.set_defaults(func=cmd_validate)
 
+    # ds learn disambiguate (19.6 — description collision resolution)
+    disambig_parser = learn_sub.add_parser(
+        "disambiguate",
+        help="Resolve description collisions for blocked extensions (19.6)",
+    )
+    disambig_parser.add_argument("extension_id", help="Extension to disambiguate")
+    disambig_parser.add_argument(
+        "--rewrite",
+        metavar="DESCRIPTION",
+        help="New description to use; re-runs collision check after update",
+    )
+    disambig_parser.add_argument(
+        "--accept-warning",
+        action="store_true",
+        dest="accept_warning",
+        help="Accept a warning-tier collision (0.70-0.85 similarity) and activate",
+    )
+    disambig_parser.add_argument(
+        "--force",
+        metavar="REASON",
+        help="Force-activate despite critical collision (≥0.85); requires a reason",
+    )
+    disambig_parser.set_defaults(func=cmd_disambiguate)
+
     learn_parser.set_defaults(func=_learn_help)
 
 
@@ -465,4 +620,7 @@ def _learn_help(args) -> int:
     print("Usage: ds learn review [--limit N] [--batch]")
     print("       ds learn expand [extension_id] [--all] [--batch]")
     print("       ds learn validate [extension_id] [--all-proposed] [--force]")
+    print(
+        "       ds learn disambiguate <extension_id> [--rewrite DESC] [--accept-warning] [--force REASON]"
+    )
     return 0
