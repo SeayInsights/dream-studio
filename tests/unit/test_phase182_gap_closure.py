@@ -226,4 +226,4 @@ class TestDashboardFilesystemCompliance:
                 in_handler = False
                 handler_name = ""
 
-        assert not violations, f"rglob found in handler function bodies:\n" + "\n".join(violations)
+        assert not violations, "rglob found in handler function bodies:\n" + "\n".join(violations)
