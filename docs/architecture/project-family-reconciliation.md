@@ -97,7 +97,7 @@ The v2 architecture (`.planning/data-model-v2.md` Commitment 3) mandates `busine
 
 | Table | Reader file | Purpose |
 |-------|------------|---------|
-| All project_* tables | `core/shared_intelligence/prd_authority.py` | `project_prd_authority_summary()`, `context_packet_prd_authority()` |
+| All project_* tables | `core/shared_intelligence/prd_authority.py` | `project_prd_authority_summary()` |
 | All project_* tables | `projections/api/routes/shared_intelligence.py` | API surface for PRD authority summary |
 | `project_health_scorecards`, `project_readiness_scorecards` | `core/analytics_ingestion.py` | SECTION_TABLES constant — analytics ingestion framework |
 
