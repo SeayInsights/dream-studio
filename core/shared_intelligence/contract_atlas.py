@@ -1432,8 +1432,6 @@ def _source_tables() -> list[str]:
             "production_readiness_assessment_runs",
             "production_readiness_control_results",
             "production_readiness_findings",
-            "project_health_scorecards",
-            "project_readiness_scorecards",
             "reg_projects",
             "release_readiness_records",
             "validation_results",
