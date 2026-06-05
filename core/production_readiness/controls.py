@@ -662,7 +662,6 @@ def production_readiness_dashboard_summary(
             "production_readiness_control_results",
             "production_readiness_findings",
             "production_readiness_remediation_work_orders",
-            "project_readiness_scorecards",
             "release_readiness_records",
             "compliance_review_flags",
         ],
@@ -931,6 +930,8 @@ def _compliance_flags(control_results: list[dict[str, Any]]) -> list[dict[str, A
 
 
 def _record_scorecards(conn: sqlite3.Connection, gate: dict[str, Any], created_at: str) -> None:
+    if not _table_exists(conn, "project_readiness_scorecards"):
+        return
     for table, prefix, score_key, score_column in (
         (
             "project_readiness_scorecards",
