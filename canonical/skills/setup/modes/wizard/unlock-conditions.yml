@@ -176,33 +176,6 @@ unlock_triggers:
       • multi — multi-perspective analysis
       • domain-re — real estate domain analysis
 
-  # Career pack — unlocks when user mentions job search, career
-  - pack: career
-    patterns:
-      - "career"
-      - "job search"
-      - "find job"
-      - "apply"
-      - "resume"
-      - "cover letter"
-      - "offer"
-      - "evaluate offer"
-    modes_unlocked:
-      - ops
-      - scan
-      - evaluate
-      - apply
-      - track
-      - pdf
-    unlock_message: |
-      Career pack unlocked!
-      • ops — job search operations
-      • scan — find roles
-      • evaluate — assess offers
-      • apply — cover letters, tailored resumes
-      • track — pipeline tracking
-      • pdf — resume generation
-
   # Workflow pack — unlocks when user mentions workflow orchestration
   - pack: workflow
     patterns:

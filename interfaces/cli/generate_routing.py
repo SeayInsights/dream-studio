@@ -28,8 +28,7 @@ PACK_TO_SECTION: dict[str, str] = {
     "core": "Build Pipeline (sequential: think → plan → build → review → verify → ship)",
     "quality": "Quality & Learning",
     "meta": "Session Management",
-    "career": "Analysis & Career",
-    "analyze": "Analysis & Career",
+    "analyze": "Analysis",
 }
 
 # Skills that belong to named sections regardless of pack value
@@ -58,7 +57,7 @@ SECTION_ORDER = [
     "Security Pack",
     "Visual & Design",
     "Domain Builders",
-    "Analysis & Career",
+    "Analysis",
     "Session Management",
 ]
 

@@ -21,7 +21,7 @@ if str(REPO_ROOT) not in sys.path:
 USER_DATA_DIRNAME = ".dream-studio"
 STATE_DIRNAME = "state"
 DB_FILENAME = "studio.db"
-HOOK_PACKS = ("core", "quality", "career", "analyze", "domains", "meta")
+HOOK_PACKS = ("core", "quality", "analyze", "domains", "meta")
 
 BLOCKED_NEWER_THAN_CODE_GUIDANCE = [
     "Use a Dream Studio checkout containing migrations greater than or equal to the DB schema version.",

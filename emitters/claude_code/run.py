@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-PACKS = ("core", "quality", "career", "analyze", "domains", "meta", "security")
+PACKS = ("core", "quality", "analyze", "domains", "meta", "security")
 
 
 def _enforcement_check() -> str | None:

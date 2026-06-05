@@ -85,7 +85,6 @@ Rules:
 _PACK_DISPLAY_NAMES: dict[str, str] = {
     "core": "Build lifecycle",
     "quality": "Code quality",
-    "career": "Career pipeline",
     "analyze": "Analysis engine",
     "domains": "Domain builders",
     "meta": "Workflow orchestration",
