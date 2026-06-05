@@ -54,7 +54,6 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["module_contracts"]["schema"] == "dream_studio.module_contracts.v1"
     assert {module["module_id"] for module in atlas["module_contracts"]["contracts"]} >= {
         "core",
-        "career_ops",
         "analytics_only",
         "security_only",
         "token_only",
@@ -92,9 +91,8 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     assert atlas["installed_runtime_model"]["productization_surface"]["installer"].startswith(
         "ds install"
     )
-    assert atlas["installed_module_profiles"]["profile_count"] == 10
-    assert atlas["career_ops_module"]["private_by_default"] is True
-    assert atlas["career_ops_module"]["public_export_excluded"] is True
+    assert atlas["installed_module_profiles"]["profile_count"] == 9
+    assert "career_ops_module" not in atlas
     assert atlas["task_attribution_model"]["validation_status"] == "pass"
     assert atlas["task_attribution_model"]["policy"]["token_cost_precision_not_inferred"] is True
     assert atlas["capability_center"]["validation_status"] == "pass"
@@ -268,8 +266,7 @@ def test_contract_atlas_public_export_is_sanitized(tmp_path: Path, monkeypatch) 
     assert validate_contract_atlas(atlas) == []
     assert atlas["export_scope"] == "public"
     assert atlas["sanitized_public_export"] is True
-    assert atlas["career_ops_module"]["public_export_excluded"] is True
-    assert "profile_count" not in atlas["career_ops_module"]
+    assert "career_ops_module" not in atlas
     assert str(tmp_path) not in payload
     assert all(
         "local_user_surface" not in contract for contract in atlas["adapter_projection_contracts"]

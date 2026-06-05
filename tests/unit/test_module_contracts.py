@@ -29,7 +29,6 @@ def test_major_module_contracts_cover_required_boundaries() -> None:
     assert set(contracts) == set(MODULE_CONTRACT_IDS)
     assert {
         "core",
-        "career_ops",
         "telemetry",
         "dashboard",
         "security_only",
@@ -66,12 +65,6 @@ def test_independent_runtime_profiles_keep_optional_dependencies_optional() -> N
     profiles = module_profile_map()
 
     assert validate_module_profiles() == []
-    career = profiles["career_ops_only"]
-    assert career["hooks_required"] is False
-    assert career["agents_required"] is False
-    assert career["docker_required"] is False
-    assert "public_exports" in career["excludes"]
-
     analytics = profiles["analytics_only"]
     assert analytics["hooks_required"] is False
     assert analytics["agents_required"] is False
@@ -162,9 +155,8 @@ def test_shared_intelligence_route_exposes_module_contracts() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["schema"] == "dream_studio.module_contracts.v1"
-    assert payload["contract_count"] == 16
+    assert payload["contract_count"] == 15
     assert payload["db_write_authorized"] is False
-    assert any(contract["module_id"] == "career_ops" for contract in payload["contracts"])
     assert any(contract["module_id"] == "token_only" for contract in payload["contracts"])
     assert any(surface["surface_id"] == "module-contracts" for surface in status.json()["surfaces"])
 

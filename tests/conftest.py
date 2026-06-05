@@ -76,7 +76,7 @@ _HOOKS_DIR = _PLUGIN_ROOT / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
-_PACK_NAMES = ("core", "quality", "career", "analyze", "domains", "meta")
+_PACK_NAMES = ("core", "quality", "analyze", "domains", "meta")
 
 
 def _find_handler(name: str) -> Path:

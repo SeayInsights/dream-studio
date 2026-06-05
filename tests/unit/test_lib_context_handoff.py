@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from control.context.handoff import (  # noqa: E402
     active_files,
-    checkpoint_career_ops,
     draft_handoff_lesson,
     git,
     git_context,
@@ -98,38 +96,6 @@ def test_write_recap_no_handoff_path(tmp_path, monkeypatch):
     assert len(sessions) == 1
 
 
-# ── checkpoint_career_ops ──────────────────────────────────────────────
-
-
-def test_checkpoint_career_ops_no_file(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    result = checkpoint_career_ops("sess-1")
-    assert result is None
-
-
-def test_checkpoint_career_ops_in_progress(tmp_path, monkeypatch):
-    monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    cp_dir = tmp_path / ".dream-studio" / "career-ops"
-    cp_dir.mkdir(parents=True)
-    (cp_dir / "checkpoint.json").write_text(
-        json.dumps({"status": "in_progress", "last_action": "apply", "mode": "batch"}),
-        encoding="utf-8",
-    )
-    result = checkpoint_career_ops("sess-1")
-    assert result is not None
-    assert "Career-Ops" in result
-
-
-def test_checkpoint_career_ops_completed_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    cp_dir = tmp_path / ".dream-studio" / "career-ops"
-    cp_dir.mkdir(parents=True)
-    (cp_dir / "checkpoint.json").write_text(json.dumps({"status": "completed"}), encoding="utf-8")
-    result = checkpoint_career_ops("sess-1")
-    assert result is None
-
-
 # ── draft_handoff_lesson ───────────────────────────────────────────────
 
 
@@ -183,17 +149,6 @@ def test_active_files_parses_status_lines(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", lambda *a, **kw: mock_proc)
     result = active_files(tmp_path)
     assert ("modified", "modified.py") in result
-
-
-# ── checkpoint_career_ops outer exception (lines 95-96) ───────────────────
-
-
-def test_checkpoint_career_ops_corrupt_json_returns_none(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    cp_dir = tmp_path / ".dream-studio" / "career-ops"
-    cp_dir.mkdir(parents=True)
-    (cp_dir / "checkpoint.json").write_text("CORRUPT", encoding="utf-8")
-    assert checkpoint_career_ops("sess-err") is None
 
 
 # ── write_handoff: mkdir failure (lines 105-107) ──────────────────────────

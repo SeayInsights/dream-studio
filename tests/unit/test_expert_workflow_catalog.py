@@ -7,9 +7,6 @@ from core.shared_intelligence.adapter_alignment import register_default_adapter_
 from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
 from core.shared_intelligence.contract_atlas import build_contract_atlas
 from core.shared_intelligence.expert_workflows import (
-    APPLICATION_AUTOMATION_BOUNDARIES,
-    CAREER_PRESERVED_BEHAVIORS,
-    CAREER_SPECIALIZED_SKILLS,
     DESIGN_SPECIALIZED_SKILLS,
     REQUIRED_WORKFLOW_IDS,
     expert_workflow_catalog,
@@ -24,13 +21,12 @@ def test_expert_workflow_catalog_covers_required_workflows_and_overlap_decisions
     assert {workflow["workflow_id"] for workflow in catalog["workflows"]} == set(
         REQUIRED_WORKFLOW_IDS
     )
-    assert catalog["workflow_count"] == 11
+    assert catalog["workflow_count"] == 10
     assert catalog["db_write_authorized"] is False
     assert catalog["no_duplicate_skill_policy"].startswith("strengthen or map existing")
     decisions = {row["workflow_id"]: row["decision"] for row in catalog["overlap_matrix"]}
     assert decisions["root_cause_debugging_workflow"] == "keep_existing"
     assert decisions["frontend_design_excellence_workflow"] == "split_existing"
-    assert decisions["career_strategy_and_portfolio_ops_workflow"] == "strengthen_existing"
     assert "create_new" not in catalog["overlap_decision_counts"]
 
 
@@ -67,23 +63,6 @@ def test_design_workflow_uses_specialized_lenses_without_new_monolith() -> None:
     } <= score_ids
 
 
-def test_career_workflow_preserves_application_automation_boundaries() -> None:
-    catalog = expert_workflow_catalog()
-    workflow = _workflow("career_strategy_and_portfolio_ops_workflow")
-
-    assert set(catalog["career_preserved_behaviors"]) == set(CAREER_PRESERVED_BEHAVIORS)
-    assert set(catalog["application_automation_boundaries"]) == set(
-        APPLICATION_AUTOMATION_BOUNDARIES
-    )
-    assert set(workflow["specialized_skills"]) == set(CAREER_SPECIALIZED_SKILLS)
-    assert "no_account_creation" in catalog["career_preserved_behaviors"]
-    assert (
-        "do_not_submit_without_explicit_approval_or_policy"
-        in catalog["application_automation_boundaries"]
-    )
-    assert "private by default" in workflow["privacy_publication_boundary"]
-
-
 def test_score_rubrics_are_evidence_backed_and_honest_when_missing() -> None:
     for workflow in expert_workflow_catalog()["workflows"]:
         assert workflow["scoring_rubric"]
@@ -106,7 +85,7 @@ def test_contract_atlas_exposes_expert_workflow_system(tmp_path: Path, monkeypat
         _write_projection_files(repo_root, projection_report)
         atlas = build_contract_atlas(conn, repo_root=repo_root, project_id="dream-studio")
 
-    assert atlas["expert_workflow_system"]["workflow_count"] == 11
+    assert atlas["expert_workflow_system"]["workflow_count"] == 10
     assert atlas["expert_workflow_system"]["validation_status"] == "pass"
     assert any(
         item["area"] == "expert_workflow_system" and item["status"] == "validated"

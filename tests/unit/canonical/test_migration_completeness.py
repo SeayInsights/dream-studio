@@ -23,24 +23,6 @@ def test_workflows_in_canonical():
     assert (CANONICAL / "workflows").is_dir(), "canonical/workflows/ missing after migration"
 
 
-def test_career_stays_in_skills():
-    assert (
-        REPO_ROOT / "skills" / "career"
-    ).is_dir(), "skills/career/ must not be moved — has external dependency"
-
-
-def test_career_skill_md_has_dependency_notice():
-    skill_md = REPO_ROOT / "skills" / "career" / "SKILL.md"
-    assert skill_md.is_file(), "skills/career/SKILL.md missing"
-    content = skill_md.read_text(encoding="utf-8")
-    assert (
-        "EXTERNAL DEPENDENCY NOTICE" in content
-    ), "skills/career/SKILL.md missing dependency notice"
-    assert (
-        "career_studio_path" in content
-    ), "skills/career/SKILL.md notice must mention career_studio_path"
-
-
 def test_old_skill_packs_removed_from_skills():
     for pack in MOVED_SKILL_PACKS:
         old_path = REPO_ROOT / "skills" / pack

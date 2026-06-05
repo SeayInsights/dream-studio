@@ -47,7 +47,7 @@ def create_sample_report():
                 "metrics": {
                     "total_sessions": 156,
                     "avg_duration_minutes": 42.5,
-                    "by_project": {"dream-studio": 89, "dreamysuite": 45, "career-studio": 22},
+                    "by_project": {"dream-studio": 89, "dreamysuite": 45},
                 },
             },
         ],
