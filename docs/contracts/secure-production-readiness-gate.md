@@ -19,8 +19,6 @@ SQLite authority records are additive and live in:
 - `production_readiness_findings`
 - `production_readiness_remediation_work_orders`
 - `production_readiness_skill_control_mappings`
-- `project_health_scorecards`
-- `project_readiness_scorecards`
 - `release_readiness_records`
 - `compliance_review_flags`
 
@@ -206,3 +204,4 @@ unavailable until a targeted or full applicable review supplies evidence.
 
 <!-- 2026-06-03: Phase 19.2 adds findings.dismissed_at + dismissed_reason (migration 096 ALTER TABLE); dismiss endpoint at POST /api/v1/findings/{id}/dismiss; no production readiness gate change — dismissal tracking is additive instrumentation -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+<!-- 2026-06-05: Phase 18.6.2 — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Both tables had 0 rows. Removed from authority table list. _record_scorecards() guarded in controls.py. -->

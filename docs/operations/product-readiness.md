@@ -274,3 +274,4 @@ not treat a PRD draft as proof of production readiness.
 
 <!-- 2026-06-03: Phase 19.2 friction signal harvester: passive session-end capture only; no product readiness gate change; dismissed findings feed 19.3 Gap Classifier -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+<!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->

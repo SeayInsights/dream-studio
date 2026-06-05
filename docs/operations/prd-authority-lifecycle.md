@@ -12,17 +12,15 @@ authority.
 SQLite is the durable authority for PRD lifecycle state. Files are optional
 exports.
 
-Primary tables:
+Primary tables (as of Phase 18.6.2 — see reconciliation doc for drop history):
 
-- `project_intake_records`
-- `project_intake_questions`
-- `project_assumption_records`
 - `prd_version_records`
-- `project_milestone_records`
-- `project_work_order_authority_records`
-- `project_change_order_records`
 - `prd_amendment_records`
 - `prd_route_reconciliation_records`
+
+Dropped in migration 099 (Phase 18.6.2 — all had 0 rows, no production callers):
+`project_intake_records`, `project_intake_questions`, `project_assumption_records`,
+`project_milestone_records`, `project_work_order_authority_records`, `project_change_order_records`
 
 Legacy `prd_documents` remains a compatibility list surface. It is not enough
 by itself to express version lineage, change orders, milestone impact, or route
@@ -131,12 +129,11 @@ pending questions, assumptions, milestones, active Work Orders, change-order
 history, pending change orders, route reconciliation status, planned-vs-actual
 summary, and next safe action.
 
-Context packets include current PRD version, current milestone, active Work
-Order, assumptions, known unknowns, relevant change orders,
-security/readiness constraints, evidence refs, allowed scope, validation
-expectations, and stop gates. Packets must not include unrelated project
-history, full private operational history, career data, secrets, or raw local
-evidence unless explicitly scoped.
+Context packets include adapter alignment, model provider registry, authority
+context, learning summaries, and resume instructions. The `prd_project_authority`
+key was removed in Phase 18.6.2 (Audit 1 confirmed stop_gates and
+forbidden_context were never enforced at runtime; PRD-specific fields were always
+empty with 0 rows in the backing tables).
 
 ## Autonomous Continuation
 
@@ -158,3 +155,4 @@ approval boundaries.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+<!-- 2026-06-05: Phase 18.6.2 — 6 project_* authority tables dropped (migration 099; 0 rows each). prd_project_authority removed from context packets. Writers (record_project_intake etc.) and their helpers deleted from prd_authority.py. Remaining authority: prd_version_records, prd_amendment_records, prd_route_reconciliation_records. -->
