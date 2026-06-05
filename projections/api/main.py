@@ -14,7 +14,6 @@ from .routes import (
     exports,
     realtime,
     alerts,
-    ml,
     schedules,
     analytics,
     project_intelligence,
@@ -80,7 +79,6 @@ app.include_router(exports.router, prefix="/api/v1/export", tags=["export"])
 app.include_router(schedules.router, prefix="/api/v1/schedules", tags=["schedules"])
 app.include_router(realtime.router, prefix="/api/v1", tags=["realtime"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
-app.include_router(ml.router, prefix="/api/v1/ml", tags=["ml"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(project_intelligence.router, prefix="/api/v1/projects", tags=["projects"])
 app.include_router(prd.router, tags=["prd"])
