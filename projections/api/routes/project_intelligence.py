@@ -1574,10 +1574,27 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
         production_readiness = production_readiness_dashboard_summary(conn, project_id=project_id)
         security_controls = health_payload["project"]["security_lifecycle_status"]
         dependency_graph = await get_project_dependencies(project_id, limit=200)
-        repo_stack = _repo_stack_evidence(health_payload["project"])
+        # Phase 18.2 compliance: filesystem scan removed from critical popup path.
+        # Stack framework data comes from business_projects.stack_json (L3, instant).
+        # Detailed filesystem scan deferred — will surface via on-demand endpoint in a
+        # future WO with proper event emission and L3 write-back.
+        repo_stack = {
+            "classification": "deferred",
+            "reason": (
+                "Detailed filesystem scan not on popup critical path. "
+                "Framework data from business_projects.stack_json."
+            ),
+            "source_refs": [],
+            "inferred_dependency_edges": [],
+            "inferred_dependency_count": 0,
+            "derived_view": True,
+            "primary_authority": False,
+        }
+        # Use L3 stack evidence (from business_projects) for module_runtime_fit
+        # instead of the filesystem-derived repo_stack.
         module_fit = _module_runtime_fit(
             health_payload["project"],
-            repo_stack,
+            health_payload["project"].get("stack_evidence") or repo_stack,
             dependency_graph,
         )
         validation_state = _recent_validation_state(conn, project_id)
