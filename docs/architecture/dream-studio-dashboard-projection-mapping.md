@@ -7,12 +7,6 @@ Authority role: dashboard projection mapping
 <!-- TA5-followup review 2026-05-22: canonical_token_metrics now resolves project_name
      from ds_projects (batch lookup). SessionCollector.collect() maps NULL outcome keys
      to "unknown" before returning. Both changes affect dashboard_runtime domain. -->
-<!-- 18.1.14b bring-back 2026-05-25: ML analytics routes (projections/api/routes/ml.py)
-     replaced 402 stubs with real FastAPI implementations. ML projection endpoints now
-     expose forecast, pattern, recommendation, benchmark, and train surfaces. These are
-     derived analytics projections — not primary authority. Added to dashboard_runtime
-     projection domain coverage. -->
-
 ## Purpose
 
 This document defines dashboard-ready projections for Dream Studio's structured
@@ -473,7 +467,7 @@ recommended_next_work_order: none
 
 <!-- 2026-06-01: guard Phase 3 — delta_guard, guard_metrics route, stub hardening -->
 
-<!-- 2026-06-02: aggregate_metrics.db pipeline + /api/v1/metrics/aggregate + ML routes self-serve -->
+<!-- 2026-06-02: aggregate_metrics.db pipeline + /api/v1/metrics/aggregate -->
 
 <!-- 2026-06-02: quality skill modes registered in packs.yaml (backend-api, frontend-ux, architecture, ops); aggregate_metrics_route.py uses _connect_aggregate() via approved helper -->
 
@@ -486,3 +480,4 @@ recommended_next_work_order: none
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Career appeared in the body: removed the `/api/shared-intelligence/career-ops` projection paragraph and renamed its heading from "Capability And Career Projections" to "Capability Projections"; dropped the "career privacy boundaries, application automation rules" clause from the expert-workflow projection bullet. The scoped-agent "private career data unless explicitly scoped" exclusion (privacy policy, not module) was left intact. -->
+<!-- 2026-06-05: Wave 3 ML subsystem removal — projections/ml/ (8 modules), /api/v1/ml/* routes, dashboard recommendation apply/dismiss handlers removed. ML section deleted from this mapping. -->
