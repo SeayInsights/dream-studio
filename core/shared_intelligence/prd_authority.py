@@ -262,7 +262,6 @@ def build_project_intake_plan(
     }
 
 
-
 def project_prd_authority_summary(
     conn: sqlite3.Connection,
     *,
@@ -387,8 +386,6 @@ def project_details_prd_authority(conn: sqlite3.Connection, project_id: str) -> 
     }
 
 
-
-
 def validate_prd_authority_summary(summary: Mapping[str, Any]) -> list[str]:
     """Validate the dashboard read model for release-gate coverage."""
 
@@ -403,8 +400,6 @@ def validate_prd_authority_summary(summary: Mapping[str, Any]) -> list[str]:
     if "prd_version_records" not in summary.get("source_tables", []):
         errors.append("prd_version_records source table missing")
     return errors
-
-
 
 
 def _include_question(mode: str, criticality: str, already_answered: bool) -> bool:
@@ -505,8 +500,6 @@ def _project_classification(description: str) -> dict[str, str]:
         "security_classification": security,
         "readiness_classification": readiness,
     }
-
-
 
 
 def _current_prd_rows(
@@ -706,8 +699,6 @@ def _next_safe_action(
     if active:
         return f"Prepare or execute Work Order for milestone: {active[0]['milestone_name']}."
     return "Route reconciliation or closeout review is the next safe action."
-
-
 
 
 def _empty_summary(project_id: str | None, missing: Sequence[str]) -> dict[str, Any]:
