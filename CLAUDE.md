@@ -155,6 +155,10 @@ Use `ds-core ship` (full quality gate) when user says "ship it", before major re
 - Never add Co-Authored-By attribution to git commits.
 - One logical change per commit. Commit messages should explain why, not what.
 
+## Cleanup Work Discipline
+
+When executing cleanup work (dropping tables, removing dead code, deleting modules or tests), read `docs/operations/cleanup-discipline.md` before starting. The short version: test failures and gate failures during removal are signals that the removal is incomplete or the consumer needs updating — not reasons to put removed code back. `--no-verify` is not a workflow. Pre-flight findings are hypotheses to verify, not facts to act on blindly.
+
 ## Code History And Impact Guardrail
 - Before source edits, inspect relevant git history, module purpose, architecture boundaries, tests, validation expectations, and related routes, read models, SQLite boundaries, telemetry, dashboard surfaces, hooks, skills, workflows, and adapter projections.
 - Classify touched files as product source, generated artifact, test fixture, local state, external target, or private evidence before mutating them.
