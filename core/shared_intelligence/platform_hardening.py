@@ -42,7 +42,6 @@ EVALUATED_WORKFLOWS: tuple[str, ...] = (
     "data_modeling_authority_workflow",
     "api_integration_design_workflow",
     "product_demo_and_case_study_workflow",
-    "career_strategy_and_portfolio_ops_workflow",
     "security_readiness_workflow",
 )
 
@@ -743,7 +742,7 @@ def validate_platform_hardening_summary(conn: sqlite3.Connection) -> list[str]:
     missing = sorted(set(PLATFORM_HARDENING_TABLES) - tables)
     if missing:
         errors.append(f"missing platform hardening tables: {missing}")
-    if len(EVALUATED_WORKFLOWS) < 12:
+    if len(EVALUATED_WORKFLOWS) < 11:
         errors.append("representative workflow evaluation set is incomplete")
     policy_actions = {item["action"] for item in POLICY_ACTIONS}
     for required in (

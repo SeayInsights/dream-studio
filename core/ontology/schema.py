@@ -211,7 +211,7 @@ class SkillSpec:
     pack: str
     skill: str
     modes: FrozenSet[str]
-    domain: str  # "core", "quality", "security", "analysis", "career", "domain"
+    domain: str  # "core", "quality", "security", "analysis", "domain"
 
 
 SKILL_TAXONOMY: List[SkillSpec] = [
@@ -236,12 +236,6 @@ SKILL_TAXONOMY: List[SkillSpec] = [
         "security",
     ),
     SkillSpec("analyze", "ds-analyze", frozenset({"multi", "domain-re", "repo"}), "analysis"),
-    SkillSpec(
-        "career",
-        "ds-career",
-        frozenset({"ops", "scan", "evaluate", "apply", "track", "pdf"}),
-        "career",
-    ),
     SkillSpec(
         "domains",
         "ds-domains",

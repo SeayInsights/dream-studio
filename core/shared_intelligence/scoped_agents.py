@@ -12,8 +12,6 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
-from core.career_ops import career_ops_status
-
 SCOPED_AGENT_SCHEMA = "dream_studio.scoped_agents.v1"
 
 FORBIDDEN_CONTEXT_BY_DEFAULT: tuple[str, ...] = (
@@ -60,30 +58,6 @@ DEFAULT_SCOPED_AGENTS: tuple[dict[str, Any], ...] = (
         "risk_level": "low",
         "max_context_budget": 7000,
         "allowed_data_classes": ["product_source", "public_docs"],
-    },
-    {
-        "agent_id": "career_application_assistant",
-        "agent_name": "Career Application Assistant",
-        "purpose": "Assist with private opt-in career application tracking and field mapping.",
-        "allowed_tools": ["private_dashboard_read", "browser_automation_when_approved"],
-        "read_scope": ["career_profile_scoped_fields", "selected_job_opportunity"],
-        "write_scope": ["career_application_records", "career_application_events"],
-        "data_sensitivity_scope": ["career_private", "sensitive_when_explicitly_scoped"],
-        "required_context": ["application_id", "allowed_fields", "submission_policy"],
-        "output_contract": {
-            "filled": "list",
-            "skipped": "list",
-            "operator_input_required": "list",
-        },
-        "validation_requirements": [
-            "no_account_creation",
-            "no_captcha_bypass",
-            "no_unapproved_submit",
-        ],
-        "approval_boundaries": ["career_ops_enabled", "operator_approval_before_submission"],
-        "risk_level": "high",
-        "max_context_budget": 6000,
-        "allowed_data_classes": ["career_private"],
     },
     {
         "agent_id": "github_repo_intake_reviewer",
@@ -151,17 +125,10 @@ def scoped_context_packet(
     if agent_id not in agents:
         raise ValueError(f"unknown scoped agent: {agent_id}")
     agent = agents[agent_id]
-    requested = set(requested_data_classes or [])
-    career_status = career_ops_status(conn)
-    career_allowed = (
-        "career_private" in requested
-        and career_scope_approved
-        and career_status["enabled"]
-        and "career_private" in agent.get("allowed_data_classes", [])
-    )
+    # Career Ops has been removed; career data is never enabled and is always
+    # excluded. The career_scope_approved parameter is retained for API/packet
+    # shape compatibility but no longer grants any access.
     excluded = list(FORBIDDEN_CONTEXT_BY_DEFAULT)
-    if career_allowed:
-        excluded = [item for item in excluded if item != "career_private_data_without_scope"]
     included_context = {
         "task_summary": task_summary,
         "project_id": project_id,
@@ -170,7 +137,7 @@ def scoped_context_packet(
         "read_scope": agent.get("read_scope", []),
         "write_scope": agent.get("write_scope", []),
         "allowed_tools": agent.get("allowed_tools", []),
-        "career_private_scope": "included" if career_allowed else "excluded",
+        "career_private_scope": "excluded",
     }
     return {
         "schema": "dream_studio.scoped_agent_context_packet.v1",

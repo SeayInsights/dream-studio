@@ -105,7 +105,6 @@ def _infer_skills(phase: str, topic: str) -> list[str]:
         "mcp": ["ds-domains"],
         "dashboard": ["ds-domains"],
         "powerbi": ["ds-domains"],
-        "career": ["ds-career"],
         "analyze": ["ds-analyze"],
         "workflow": ["ds-workflow"],
     }

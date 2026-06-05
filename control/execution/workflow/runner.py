@@ -76,11 +76,6 @@ _BARE_TO_PACK: dict[str, str] = {
     "dashboard-dev": "ds-domains",
     "client-work": "ds-domains",
     "design": "ds-domains",
-    # ds-career
-    "evaluate": "ds-career",
-    "apply": "ds-career",
-    "track": "ds-career",
-    "pdf": "ds-career",
     # ds-project
     "scope": "ds-project",
     "resume": "ds-project",
