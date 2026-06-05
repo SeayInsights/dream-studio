@@ -1033,7 +1033,7 @@ def project_prd_authority_summary(
     """Return dashboard-ready PRD lifecycle authority."""
 
     missing = _missing_source_tables(conn)
-    if "prd_version_records" in missing:
+    if missing:
         return _empty_summary(project_id, missing)
     where, params = _project_where(project_id)
     prds = _current_prd_rows(conn, where, params, limit=limit)
