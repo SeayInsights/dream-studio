@@ -163,6 +163,58 @@ schema-complete for its callers — not to restore the deleted function.
 
 ---
 
+## Execution Workflows
+
+Three concrete tooling patterns from the Phase 18.6.2 gate friction investigation
+(`.planning/specs/pre-push-gate-cleanup-friction.md`). Each comes from a real failure.
+
+### Pushing a cleanup PR with a migration
+
+Use the Bash tool with the inline env var form:
+
+```bash
+MIGRATION_RISK_ACKNOWLEDGED=1 git push -u origin <branch>
+```
+
+Do NOT use PowerShell for this. PowerShell env var isolation means setting
+`$env:MIGRATION_RISK_ACKNOWLEDGED = "1"` in one command and running `git push` as a
+separate command does not propagate the var to the git hook subprocess. The gate blocks.
+The shortcut becomes `--no-verify`, which bypasses every quality gate, not just the
+migration-risk escalation.
+
+General rule: use the Bash tool — not PowerShell — for any `git push` that depends on an
+environment variable reaching the hook process.
+
+### Committing docs alongside code
+
+The docs-drift gate uses `git diff origin/main...HEAD`, not the working tree. Uncommitted
+doc updates are invisible to it. Running the gate before committing docs produces false
+failures; adding doc files to the working tree and re-running still produces false failures.
+
+Before running the docs-drift gate: commit the doc updates. Verify the full blocking domain
+list first with:
+
+```powershell
+$env:DREAM_STUDIO_BASE_REF = "origin/main"; py interfaces/cli/contract_docs_drift_gate.py
+```
+
+This shows every domain that needs a companion doc in the same changeset, so you can front-
+load all the doc updates in one commit rather than iterating gate-fail → update → re-run.
+
+### Formatting after bulk deletion
+
+Bulk line-range deletions — PowerShell `Set-Content`, agent edits, any mechanical removal
+of large contiguous blocks — frequently leave inconsistent blank lines that fail
+`format-check`. Black's "Python 3.12 cannot parse code formatted for Python 3.14" warning
+is a cosmetic side effect of missing `target-version` configuration; it does not cause
+failures by itself.
+
+Run `py -m black <file>` immediately after any bulk deletion, before committing. Do not
+wait for the gate to catch it — the gate adds a full test-suite run (~7 min) between the
+format failure and the re-run.
+
+---
+
 ## Behaviors During Cleanup Work
 
 ### When a test fails after a deletion
@@ -175,9 +227,13 @@ schema-complete for its callers — not to restore the deleted function.
 Do not use `@pytest.mark.skip` to defer the decision. Skip is a temporary marker for tests
 that should be re-enabled; it is not a parking lot for dead code.
 
-Exception: during multi-step cleanup across multiple commits on a branch, `@pytest.mark.skip`
-is acceptable as an intermediate state if the test's function will be removed in a later
-commit in the same branch. It must be deleted (not unskipped) in that later commit.
+Exception: `@pytest.mark.skip` is acceptable as an intermediate state only when the
+following are all true: (1) the test's function is being removed in a specific later commit
+on the same branch, (2) that later commit is already planned and scoped in the WO, and (3)
+the test will be deleted — not unskipped — in that commit before the PR opens.
+
+If you cannot point to the specific later commit where the test gets deleted, delete it now.
+"I'll handle it later" without a concrete plan is a skip-as-parking-lot.
 
 ### When a gate fires
 
@@ -223,10 +279,27 @@ it.
 that delivers operator value. If it is: add the key and document why it belongs. If it
 isn't: remove the caller along with the rest of the cleanup.
 
-*From Phase 18.6.2:* When atlas-leak failed with `KeyError: 'lifecycle_counts'`, the
-correct action was to add the key to `_empty_summary()` because contract_atlas.py is a
-live gate used in CI and install rehearsal. The atlas EARNS its place. The key addition
-was valid. The analysis that confirmed this was necessary before acting on it.
+*From Phase 18.6.2 — the key is the order, not the outcome:*
+
+When atlas-leak failed with `KeyError: 'lifecycle_counts'`, the runner's first instinct
+was to add the missing key to `_empty_summary()` and move on. That instinct is the
+anti-pattern when taken alone.
+
+What made the key addition correct was a verification step that came first: tracing the
+caller chain for `contract_atlas.py`. That investigation confirmed the atlas is called by:
+(1) the `atlas-leak` CI/CD gate on every PR, (2) `ds install --rehearsal` on every new
+install, and (3) a live API endpoint served by the dashboard. The atlas covers ~46 sections
+of which only 1 (`prd_authority_lifecycle`) touched the dropped tables. The other 45 read
+from stable sources. The atlas earns its place.
+
+If that investigation had found the atlas vestigial — called only by tests, never by CI or
+the dashboard — then adding the key would have been exactly the mistake this anti-pattern
+names. The correct action would have been to remove `contract_atlas.py`'s access to
+`prd_authority` and let the section return empty, not to satisfy a vestigial caller.
+
+The lesson is the order: verify the caller chain before adding any key to pass a gate. The
+outcome (key added, caller removed) follows from that verification. Acting on instinct
+without the verification step is the anti-pattern.
 
 ---
 
@@ -292,7 +365,7 @@ written at that time.
 Every cleanup WO prompt should include:
 
 ```
-Cleanup discipline: .planning/cleanup-discipline.md applies to this WO.
+Cleanup discipline: docs/operations/cleanup-discipline.md applies to this WO.
 - Test failures = signal to classify, not blockers to fix by reverting
 - Gate failures = understood and addressed properly, not bypassed
 - Pre-flight findings = hypotheses, verify each caller before deleting
