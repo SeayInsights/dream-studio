@@ -28,10 +28,6 @@ from core.shared_intelligence.adapter_staleness import (
     adapter_staleness_report,
     validate_adapter_staleness_report,
 )
-from core.shared_intelligence.agent_independence import (
-    agent_model_independence_validation,
-    validate_agent_model_independence_report,
-)
 from core.shared_intelligence.capability_routing import (
     capability_route_summary,
     recommend_capability_route,
@@ -69,10 +65,6 @@ from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
     model_provider_registry_policy,
     model_provider_registry_summary,
-)
-from core.shared_intelligence.multi_agent_demo import (
-    multi_agent_shared_intelligence_demo_packet,
-    validate_multi_agent_shared_intelligence_demo_packet,
 )
 from core.shared_intelligence.promotion_policy import (
     learning_promotion_decision,
