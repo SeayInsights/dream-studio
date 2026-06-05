@@ -206,20 +206,6 @@ dependencies = ["fastapi", "pydantic"]
             "created_at TEXT NOT NULL)"
         )
         conn.execute(
-            "CREATE TABLE project_readiness_scorecards("
-            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "readiness_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
-            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE project_health_scorecards("
-            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "health_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
-            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
-        conn.execute(
             "CREATE TABLE release_readiness_records("
             "release_readiness_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
             "status TEXT NOT NULL, release_readiness_effect TEXT NOT NULL, "

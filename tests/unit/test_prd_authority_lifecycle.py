@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
@@ -29,7 +30,13 @@ from core.shared_intelligence.prd_authority import (
 )
 from projections.api.main import app
 
+_SKIP_REASON = (
+    "project_* tables dropped in migration 099 (Phase 18.6.2). "
+    "These tests exercise writers/readers against the dropped tables."
+)
 
+
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_new_project_intake_creates_adaptive_prd_authority(tmp_path: Path) -> None:
     description = (
         "Build a local dashboard app for operators. It stores SQLite data, uses AI "
@@ -99,6 +106,20 @@ def test_standard_intake_does_not_overask_when_description_answers_groups() -> N
     assert detailed["assumptions"]
 
 
+def test_prd_authority_summary_returns_empty_when_project_tables_absent(tmp_path: Path) -> None:
+    """Guard: project_prd_authority_summary returns empty state when project_* tables are dropped."""
+    with _connect(_db(tmp_path)) as conn:
+        _seed_project(conn, project_id="demo-project")
+        summary = project_prd_authority_summary(conn, project_id="demo-project")
+
+    assert summary["prd_count"] == 0
+    assert summary["current_milestones"] == []
+    assert summary["active_work_orders"] == []
+    assert summary["source_status"]["status"] == "unavailable"
+    assert summary["empty_state"] == "PRD lifecycle authority tables are unavailable."
+
+
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_in_flight_project_without_prd_formalizes_from_evidence_without_files(
     tmp_path: Path,
 ) -> None:
@@ -125,6 +146,7 @@ def test_in_flight_project_without_prd_formalizes_from_evidence_without_files(
     assert str(readme) in summary["current_prds"][0]["source_refs"]
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_existing_draft_prd_is_classified_needs_update(tmp_path: Path) -> None:
     with _connect(_db(tmp_path)) as conn:
         _seed_project(conn, project_id="draft-project")
@@ -143,6 +165,7 @@ def test_existing_draft_prd_is_classified_needs_update(tmp_path: Path) -> None:
     assert result["operator_review_required"] is True
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_material_change_request_creates_change_order_and_preserves_prd_lineage(
     tmp_path: Path,
 ) -> None:
@@ -167,6 +190,7 @@ def test_material_change_request_creates_change_order_and_preserves_prd_lineage(
     assert summary["current_prds"][0]["version_number"] == 1
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_route_reconciliation_records_planned_vs_actual_closeout(
     tmp_path: Path,
 ) -> None:
@@ -193,6 +217,7 @@ def test_route_reconciliation_records_planned_vs_actual_closeout(
     assert summary["route_reconciliations"][0]["current_next_action"] == "Run validation milestone."
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_context_packets_include_prd_milestone_change_order_authority(
     tmp_path: Path,
 ) -> None:
@@ -224,6 +249,7 @@ def test_context_packets_include_prd_milestone_change_order_authority(
     assert packet["prd_project_authority"]["forbidden_context"]
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_dashboard_project_details_and_shared_routes_expose_prd_authority(
     tmp_path: Path,
     monkeypatch,
@@ -255,6 +281,7 @@ def test_dashboard_project_details_and_shared_routes_expose_prd_authority(
     )
 
 
+@pytest.mark.skip(reason=_SKIP_REASON)
 def test_contract_atlas_reflects_prd_authority_model(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     repo_root = tmp_path / "repo"
