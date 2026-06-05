@@ -40,8 +40,6 @@ SECTION_TABLES: dict[str, tuple[str, ...]] = {
     "prds": ("prd_documents",),
     "readiness_assessments": (
         "production_readiness_assessment_runs",
-        "project_health_scorecards",
-        "project_readiness_scorecards",
         "production_readiness_control_results",
         "production_readiness_findings",
     ),
@@ -57,8 +55,6 @@ TABLE_KEYS: dict[str, str] = {
     "pi_dependencies": "dependency_id",
     "prd_documents": "prd_id",
     "production_readiness_assessment_runs": "assessment_id",
-    "project_health_scorecards": "scorecard_id",
-    "project_readiness_scorecards": "scorecard_id",
     "production_readiness_control_results": "result_id",
     "production_readiness_findings": "finding_id",
 }
@@ -620,38 +616,6 @@ def _readiness_rows(
                 "missing_evidence_json": _json(missing),
                 "blocking_factors_json": _json(blockers),
                 "source_refs_json": _json(_merged_refs(record, source_refs, key="source_refs")),
-                "created_at": record.get("created_at") or ingested_at,
-            },
-        ),
-        (
-            "project_health_scorecards",
-            {
-                "scorecard_id": record.get("health_scorecard_id")
-                or _stable_id("health-scorecard", record),
-                "project_id": project_id,
-                "assessment_id": assessment_id,
-                "health_score": health,
-                "confidence": confidence,
-                "status": health_status,
-                "missing_evidence_json": _json(missing),
-                "blocking_factors_json": _json(blockers),
-                "evidence_refs_json": _json(_merged_refs(record, evidence_refs)),
-                "created_at": record.get("created_at") or ingested_at,
-            },
-        ),
-        (
-            "project_readiness_scorecards",
-            {
-                "scorecard_id": record.get("readiness_scorecard_id")
-                or _stable_id("readiness-scorecard", record),
-                "project_id": project_id,
-                "assessment_id": assessment_id,
-                "readiness_score": readiness,
-                "confidence": confidence,
-                "status": readiness_status,
-                "missing_evidence_json": _json(missing),
-                "blocking_factors_json": _json(blockers),
-                "evidence_refs_json": _json(_merged_refs(record, evidence_refs)),
                 "created_at": record.get("created_at") or ingested_at,
             },
         ),
