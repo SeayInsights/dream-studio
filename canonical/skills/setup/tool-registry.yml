@@ -43,7 +43,6 @@ tools:
       - ds-core (web research, web.md content extraction, site mapping)
       - ds-domains (web scraping for client work, competitive research)
       - ds-security (DAST site crawling and findings extraction)
-      - ds-career (job portal scraping via firecrawl_search)
     docs_url: "https://github.com/mendableai/firecrawl-mcp-server"
 
   playwright:

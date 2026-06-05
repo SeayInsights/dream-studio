@@ -32,7 +32,7 @@ pytestmark = pytest.mark.runtime_reliability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-CANONICAL_PACKS = ["core", "quality", "career", "analyze", "domains", "meta"]
+CANONICAL_PACKS = ["core", "quality", "analyze", "domains", "meta"]
 
 
 # ── 1. Hook infrastructure files exist ─────────────────────────────────────

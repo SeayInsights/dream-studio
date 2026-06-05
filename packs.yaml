@@ -16,14 +16,6 @@ packs:
     hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
     rules: [structure/architecture.md, structure/fsc.md]
 
-  career:
-    # DEFERRED: depends on external career_studio_path
-    # system not included in this repo. Do not invoke
-    # career: keywords until this dependency is resolved.
-    description: Job search and career pipeline management
-    skill: career
-    modes: [ops, scan, evaluate, apply, track, pdf]
-
   analyze:
     description: Multi-perspective analysis engine
     skill: analyze

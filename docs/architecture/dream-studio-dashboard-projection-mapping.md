@@ -193,8 +193,8 @@ The projection may display:
   policy.
 - Expert workflow status from the Contract Atlas `expert_workflow_system`
   section and the full `/api/shared-intelligence/expert-workflows` catalog,
-  including overlap decisions, evidence-backed scoring rubrics, career privacy
-  boundaries, application automation rules, and existing skill/workflow owners.
+  including overlap decisions, evidence-backed scoring rubrics, and existing
+  skill/workflow owners.
 - PRD lifecycle status from the Contract Atlas `prd_authority_lifecycle`
   section and `/api/shared-intelligence/prd-authority`, including current PRD
   version, lifecycle status, confidence, milestone authority, Work Order
@@ -333,12 +333,7 @@ Missing sections stay honest empty states. It must not require hooks, agents,
 workflows, Claude, Codex, Docker, repo mutation, or full orchestration to render
 analytics-only views.
 
-## Capability And Career Projections
-
-`/api/shared-intelligence/career-ops` is a private dashboard module. It shows
-whether Career Ops is enabled, profile/application/evidence/scorecard counts,
-application automation boundaries, and evidence-backed or unavailable
-scorecards. It does not expose career records in public exports.
+## Capability Projections
 
 `/api/shared-intelligence/capability-center` displays skills, workflows,
 agents, controls, evaluations, and hardening candidates from authority-backed
@@ -490,3 +485,4 @@ recommended_next_work_order: none
 <!-- 2026-06-04: WO-A dashboard wiring fixes — skill_usage_sql now reads canonical_events; security KPI fields corrected; adaptation route ordering fixed; 3 new hooks endpoints for tool_invocations/validation_failures/raw_claude_code_events; token attribution honest state; no new router -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Career appeared in the body: removed the `/api/shared-intelligence/career-ops` projection paragraph and renamed its heading from "Capability And Career Projections" to "Capability Projections"; dropped the "career privacy boundaries, application automation rules" clause from the expert-workflow projection bullet. The scoped-agent "private career data unless explicitly scoped" exclusion (privacy policy, not module) was left intact. -->

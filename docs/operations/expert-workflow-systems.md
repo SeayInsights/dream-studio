@@ -5,16 +5,15 @@ Lifecycle status: foundation_active
 Dream Studio expert workflows formalize how existing skills, workflows,
 readiness gates, dashboard views, and Contract Atlas signals cooperate. The
 catalog is repo-backed and deterministic. It does not create a competing skill
-database, execute work, write SQLite by itself, or replace existing career,
-debugging, design, quality, documentation, or fullstack skills.
+database, execute work, write SQLite by itself, or replace existing debugging,
+design, quality, documentation, or fullstack skills.
 
 ## Authority Boundary
 
 Current implementation:
 
 - `core/shared_intelligence/expert_workflows.py` declares the expert workflow
-  catalog, overlap matrix, scoring rubrics, career privacy boundaries, and
-  application automation rules.
+  catalog, overlap matrix, and scoring rubrics.
 - `/api/shared-intelligence/expert-workflows` exposes the catalog as a derived
   dashboard-consumable view.
 - Contract Atlas exposes an `expert_workflow_system` summary, maturity
@@ -59,7 +58,6 @@ current expert catalog mostly strengthens existing owners:
 | `data_modeling_authority_workflow` | `core:sqlite_authority` | `strengthen_existing` |
 | `api_integration_design_workflow` | `domains:fullstack/spec+integrate` | `strengthen_existing` |
 | `product_demo_and_case_study_workflow` | `docs:portfolio_case_study` | `strengthen_existing` |
-| `career_strategy_and_portfolio_ops_workflow` | `career:ops` | `strengthen_existing` |
 
 ## Workflow Contracts
 
@@ -121,43 +119,6 @@ Evidence can include screenshots, routes, components, CSS, tokens, accessibility
 checks, responsive checks, and implementation feasibility notes. Screenshots and
 design artifacts that expose private data must be sanitized before publication.
 
-## Career And Portfolio Boundary
-
-The career workflow preserves existing career functionality:
-
-- interactive resume/profile questions;
-- private local profile storage;
-- tailored resumes;
-- tailored cover letters;
-- LinkedIn/profile positioning;
-- job-description tailoring;
-- Playwright field filling when configured;
-- reusable application field profiles;
-- job/application tracking;
-- no account creation;
-- operator approval before submission.
-
-Career claims must be evidence-backed. Missing claims are marked
-`needs_evidence`, `estimate_candidate`, or `operator_confirmation_required`.
-Dream Studio must not invent titles, metrics, compensation, employer details,
-deployment outcomes, business impact, or adoption claims.
-
-Application automation boundaries:
-
-- do not create accounts;
-- do not bypass CAPTCHAs;
-- do not misrepresent the operator;
-- do not submit applications without explicit approval or an approved
-  per-application submission policy;
-- pause on ambiguous questions;
-- store sensitive personal fields only in approved private storage;
-- do not print secrets or private identifiers unnecessarily;
-- record what was filled, skipped, and needs operator input.
-
-Career data, compensation strategy, application materials, browser traces, and
-private portfolio notes are private by default. Public case studies, resumes,
-portfolio pages, or social content require sanitization and operator approval.
-
 ## Capability Center Integration
 
 Expert workflow definitions feed Capability Center as workflow capability
@@ -166,10 +127,6 @@ validation requirements, hardening candidates, and task-attributed outcomes,
 but it does not create a parallel workflow system or authorize execution.
 Missing invocation/evaluation or attribution evidence stays `unavailable`
 instead of becoming a fake success rate.
-
-Career-related expert workflows map into the optional private Career Ops
-module. Career data remains local/private authority and is excluded from public
-exports by default.
 
 ## Validation
 
@@ -181,9 +138,8 @@ The expert workflow system is validated by:
 - release gate checks.
 
 The validation proves the overlap matrix exists, existing owners are mapped
-instead of duplicated, scoring rubrics require evidence, design specializations
-are declared, career automation behavior is preserved, and application
-automation boundaries are explicit.
+instead of duplicated, scoring rubrics require evidence, and design
+specializations are declared.
 ## Platform Hardening Refresh
 
 The skill evaluation harness gives expert workflows a measurable promotion path: golden fixtures, expected-output contracts, rubric scores, pass/warn/fail/manual-review states, promotion thresholds, rollback thresholds, and known limitations. A workflow should not be marked improved unless an evaluation run records evidence in current authority.
@@ -202,3 +158,5 @@ authority.
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the `career_strategy_and_portfolio_ops_workflow` overlap-matrix row, the entire "Career And Portfolio Boundary" section, the Career-Ops-module mapping paragraph under Capability Center Integration, and career clauses from the intro, authority-boundary, and validation lists; the surrounding skill/workflow catalog text stays intact. -->

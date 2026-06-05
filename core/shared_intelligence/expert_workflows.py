@@ -40,7 +40,6 @@ REQUIRED_WORKFLOW_IDS = frozenset(
         "data_modeling_authority_workflow",
         "api_integration_design_workflow",
         "product_demo_and_case_study_workflow",
-        "career_strategy_and_portfolio_ops_workflow",
     }
 )
 
@@ -55,55 +54,6 @@ DESIGN_SPECIALIZED_SKILLS = (
     "data_visualization_review",
     "implementation_feasibility_review",
     "design_to_code_contract",
-)
-
-CAREER_SPECIALIZED_SKILLS = (
-    "professional_positioning_strategy",
-    "resume_and_linkedin_tailoring",
-    "role_targeting_and_market_research",
-    "compensation_and_remote_strategy",
-    "portfolio_artifact_planning",
-    "case_study_generation",
-    "executive_storytelling",
-    "interview_preparation",
-    "architecture_whiteboard_preparation",
-    "recruiter_and_hiring_manager_messaging",
-    "consulting_offer_positioning",
-    "personal_brand_content_strategy",
-    "social_content_generation_support",
-    "application_pipeline_tracking",
-    "proof_metrics_and_evidence_packaging",
-    "application_form_field_mapping",
-    "application_browser_automation",
-    "job_description_fit_analysis",
-    "career_gap_analysis",
-    "offer_negotiation_preparation",
-)
-
-CAREER_PATHS = (
-    "ai_operations_platform_lead",
-    "ai_governance_platform_lead",
-    "data_platform_architect",
-    "power_platform_solution_architect",
-    "bi_data_engineering_lead",
-    "automation_platform_consultant",
-    "internal_ai_transformation_lead",
-    "productized_side_business_portfolio_founder",
-    "consulting_fractional_automation_ai_platform",
-)
-
-CAREER_PRESERVED_BEHAVIORS = (
-    "interactive_resume_profile_questions",
-    "local_private_profile_storage",
-    "tailored_resumes",
-    "tailored_cover_letters",
-    "linkedin_profile_positioning",
-    "job_description_tailoring",
-    "playwright_field_fill_when_configured",
-    "reusable_application_field_profiles",
-    "job_application_pipeline_tracking",
-    "no_account_creation",
-    "operator_approval_before_submission",
 )
 
 APPLICATION_AUTOMATION_BOUNDARIES = (
@@ -153,10 +103,7 @@ def expert_workflow_catalog(*, project_id: str | None = None) -> dict[str, Any]:
         "overlap_decision_counts": dict(sorted(decision_counts.items())),
         "specialized_skill_families": {
             "frontend_design_excellence_workflow": list(DESIGN_SPECIALIZED_SKILLS),
-            "career_strategy_and_portfolio_ops_workflow": list(CAREER_SPECIALIZED_SKILLS),
         },
-        "career_paths": list(CAREER_PATHS),
-        "career_preserved_behaviors": list(CAREER_PRESERVED_BEHAVIORS),
         "application_automation_boundaries": list(APPLICATION_AUTOMATION_BOUNDARIES),
         "authority_write_targets": list(AUTHORITY_WRITE_TARGETS),
         "sqlite_authority_mode": (
@@ -240,19 +187,6 @@ def validate_expert_workflow_catalog(catalog: Mapping[str, Any] | None = None) -
     missing_design = sorted(set(DESIGN_SPECIALIZED_SKILLS) - design_skills)
     if missing_design:
         errors.append(f"missing design specialized skills: {missing_design}")
-    career_skills = set(
-        payload.get("specialized_skill_families", {}).get(
-            "career_strategy_and_portfolio_ops_workflow", []
-        )
-    )
-    missing_career = sorted(set(CAREER_SPECIALIZED_SKILLS) - career_skills)
-    if missing_career:
-        errors.append(f"missing career specialized skills: {missing_career}")
-    missing_behaviors = sorted(
-        set(CAREER_PRESERVED_BEHAVIORS) - set(payload.get("career_preserved_behaviors", []))
-    )
-    if missing_behaviors:
-        errors.append(f"career preserved behaviors missing: {missing_behaviors}")
     missing_boundaries = sorted(
         set(APPLICATION_AUTOMATION_BOUNDARIES)
         - set(payload.get("application_automation_boundaries", []))
@@ -390,67 +324,6 @@ _WORKFLOW_BASES: dict[str, dict[str, Any]] = {
             "validation_requirement": "catalog test plus API readiness representative check",
             "rollback_supersession_plan": "Revert catalog mapping; fullstack skill remains unchanged.",
             "dashboard_project_health_impact": "API findings can affect readiness/release blockers.",
-        },
-    },
-    "career_strategy_and_portfolio_ops_workflow": {
-        "workflow_owner": "career:ops",
-        "skill_owner": "ds-career",
-        "purpose": "Turn private career evidence into role strategy, portfolio material, and safe application operations.",
-        "when_to_run": [
-            "career planning",
-            "resume tailoring",
-            "job fit analysis",
-            "application operations",
-        ],
-        "when_not_to_run": [
-            "public publication without sanitization approval",
-            "account creation or CAPTCHA bypass",
-        ],
-        "input_contract": [
-            "operator-approved career profile",
-            "job description or target path",
-            "evidence refs",
-            "privacy boundary",
-        ],
-        "output_contract": [
-            "role strategy",
-            "evidence-backed resume/profile material",
-            "application tracking record",
-            "operator-confirmation flags",
-        ],
-        "scores": (
-            "target_role_readiness",
-            "portfolio_readiness",
-            "resume_evidence_strength",
-            "application_readiness",
-        ),
-        "evidence_requirements": [
-            "operator-provided profile data",
-            "project evidence refs",
-            "job description/source refs when market facts are used",
-        ],
-        "validation_requirements": [
-            "no invented claims",
-            "submission approval boundary",
-            "private career data boundary",
-        ],
-        "dashboard_visibility": "Private career/portfolio surfaces only; public dashboard requires sanitization.",
-        "contract_atlas_impact": "expert_workflow_system.career_strategy_and_portfolio_ops",
-        "privacy_boundary": "Career data, compensation strategy, application history, and browser traces are private by default.",
-        "existing_owners": [
-            "skills/career/SKILL.md",
-            "skills/career/modes/apply/SKILL.md",
-            "skills/career/modes/track/SKILL.md",
-            "skills/career/modes/pdf/SKILL.md",
-        ],
-        "specialized_skills": list(CAREER_SPECIALIZED_SKILLS),
-        "overlap_status": {
-            "decision": "strengthen_existing",
-            "overlap_reason": "Career modes already own resume, application, and tracking behavior.",
-            "evidence": ["skills/career/SKILL.md", "skills/career/modes/apply/SKILL.md"],
-            "validation_requirement": "career preservation and automation-boundary catalog tests",
-            "rollback_supersession_plan": "Revert catalog mapping; existing career modes continue operating.",
-            "dashboard_project_health_impact": "Career outputs do not affect project health unless explicitly linked to public portfolio readiness.",
         },
     },
     "code_quality_architecture_workflow": {

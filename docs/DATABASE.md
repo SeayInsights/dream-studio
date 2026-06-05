@@ -24,14 +24,9 @@ Dream Studio's SQLite authority covers:
 - secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
 - release/cutover evidence summaries where safe.
 
-Current Career Ops, Capability Center, scoped-agent, and GitHub repo intake
+Current Capability Center, scoped-agent, and GitHub repo intake
 authority lives in migration 044:
 
-- `career_profiles` and related `career_*` tables for opt-in private career
-  profiles, fields, role targets, resume/cover-letter variants, portfolio
-  artifacts, case studies, job opportunities, applications, application events,
-  field mappings, browser automation runs, interview stories, evidence refs,
-  and scorecards;
 - `capability_center_records` for optional persisted capability metadata, with
   dashboard summaries also reading current invocation and hardening records;
 - `agent_registry_records`, `agent_context_scope_policies`,
@@ -274,3 +269,6 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- 2026-06-03: migration 098 adds validation_detail TEXT column to ds_user_extensions (Phase 19.5 Retroactive Validation audit trail) -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- Last reviewed 2026-06-05 — Phase 18.6.2 (migration 099): DROP TABLE for 8 project_* tables and DROP VIEW for vw_project_readiness_latest. All 8 tables had 0 rows and no FK dependencies. Tables dropped: project_readiness_scorecards, project_health_scorecards, project_intake_records, project_intake_questions, project_assumption_records, project_milestone_records, project_work_order_authority_records, project_change_order_records. prd_version_records, prd_amendment_records, prd_route_reconciliation_records, and prd_documents remain. No new tables added. Guards added to 5 code paths (prd_authority.py, analytics_ingestion.py, controls.py, contract_atlas.py, module_contracts.py) before drop. -->
+<!-- 2026-06-05: Wave 2 career annihilation — migration 100 DROP TABLE IF EXISTS for 15 career_* tables (all 0 rows, no views, no incoming FK deps): career_application_events, career_application_field_mappings, career_applications, career_browser_automation_runs, career_case_studies, career_cover_letter_versions, career_evidence_refs, career_interview_story_bank, career_job_opportunities, career_portfolio_artifacts, career_profile_fields, career_profiles, career_resume_versions, career_role_targets, career_scorecards. Creating migration 044 remains immutable history; the capability_center, scoped_agents, and github_repo_intake tables it created are NOT touched. No new tables added. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100, drop-only, 0 rows, IF EXISTS, no view/FK deps; migration 044 stays immutable), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Body edit: removed the `career_profiles`/`career_*` tables bullet and dropped "Career Ops" from the "authority lives in migration 044" lead-in (the other three modules still live there); the "Career data is private by default and excluded from public exports" sentence stays as a privacy-class statement. -->

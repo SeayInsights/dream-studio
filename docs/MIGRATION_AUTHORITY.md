@@ -105,11 +105,14 @@ existing resolved SQLite path and must not create schema, run migrations,
 backfill records, or treat dashboard output as authority.
 
 Migration `044_career_capability_agent_github_authority.sql` is additive. It
-creates private opt-in Career Ops tables, Capability Center records, scoped
+created Capability Center records, scoped
 agent registry/context/result tables, and GitHub repo intake evaluation tables.
-It does not enable Career Ops by default, publish career data, inspect external
-repositories, copy code, add dependencies, fork/vendor repositories, submit job
-applications, or authorize agent execution.
+It does not publish private data, inspect external
+repositories, copy code, add dependencies, fork/vendor repositories, or
+authorize agent execution. The 15 opt-in `career_*` tables it originally created
+were never activated and were dropped by migration 100 (Wave 2 career
+annihilation); the capability_center, scoped_agents, and github_repo_intake
+tables it created are not touched, and 044 itself remains immutable history.
 
 Migration `045_task_attribution_authority.sql` is additive. It creates
 `task_attribution_records` so meaningful AI/adapter execution units can be
@@ -255,3 +258,7 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- 2026-06-03: migration 098 validation_detail column on ds_user_extensions (Phase 19.5) — ALTER TABLE only -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- Last reviewed 2026-06-05 — Phase 18.6.2 (migration 099): DROP TABLE/VIEW-only migration. 8 tables and 1 view dropped (all 0 rows, no FK deps). This migration breaks the CREATE TABLE migrations 040 and 047 forward — those migrations remain immutable. The drop is reversible only by re-applying 040 and 047 on a new DB; existing data would not be recovered (none to lose). IF EXISTS clauses on all DROPs prevent errors on already-clean databases. Drop order: view first (vw_project_readiness_latest depends on project_readiness_scorecards), then tables in arbitrary order. No additive DDL in this migration. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — migration 100 (100_drop_career_family.sql) is a DROP TABLE-only migration. 15 career_* tables dropped (all 0 rows on live-DB verification, no views reference them, no incoming FK deps): career_application_events, career_application_field_mappings, career_applications, career_browser_automation_runs, career_case_studies, career_cover_letter_versions, career_evidence_refs, career_interview_story_bank, career_job_opportunities, career_portfolio_artifacts, career_profile_fields, career_profiles, career_resume_versions, career_role_targets, career_scorecards. IF EXISTS clauses on all DROPs prevent errors on already-clean databases. No inter-table FKs among career_* tables, so drop order is arbitrary. This migration breaks the CREATE TABLE migration 044 forward — 044 remains immutable history; the capability_center, scoped_agents, and github_repo_intake tables 044 created are NOT touched. No additive DDL. Body edit in this doc: the migration-044 paragraph now records that its career_* tables were dropped by 100 (044 description otherwise unchanged) and drops the live-feature "Career Ops" framing. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. See the migration-100 review note above for drop-only details; the migration-044 body paragraph was updated to reflect the drop. -->

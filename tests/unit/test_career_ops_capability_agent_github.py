@@ -4,11 +4,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from core.career_ops import (
-    PUBLIC_EXPORT_EXCLUSIONS,
-    career_ops_dashboard_summary,
-    record_career_profile,
-)
 from core.config.database import DB_PATH_ENV, DatabaseRuntime
 from core.event_store.studio_db import _connect
 from core.shared_intelligence.capability_center import (
@@ -31,33 +26,6 @@ from core.shared_intelligence.scoped_agents import (
 from projections.api.main import app
 
 
-def test_career_ops_is_private_opt_in_and_scores_are_honest(tmp_path: Path) -> None:
-    with _connect(_db(tmp_path)) as conn:
-        disabled = career_ops_dashboard_summary(conn)
-
-        assert disabled["enabled"] is False
-        assert disabled["private_by_default"] is True
-        assert "career_profiles" in disabled["source_tables"]
-        assert "career_applications" in PUBLIC_EXPORT_EXCLUSIONS
-        assert disabled["sections"]["profile_completeness"]["status"] == "unavailable"
-
-        record_career_profile(
-            conn,
-            profile_id="profile-1",
-            owner_label="Operator",
-            enabled=True,
-            headline="Private profile",
-        )
-        enabled = career_ops_dashboard_summary(conn)
-
-    assert enabled["enabled"] is True
-    assert enabled["editable_when_enabled"] is True
-    assert enabled["career_data_in_public_exports"] is False
-    scorecards = enabled["sections"]["scorecards"]["items"]
-    assert scorecards
-    assert all(item["status"] == "unavailable" for item in scorecards)
-
-
 def test_capability_center_and_scoped_agents_are_authority_backed(tmp_path: Path) -> None:
     with _connect(_db(tmp_path)) as conn:
         registry = scoped_agent_registry(conn)
@@ -68,7 +36,6 @@ def test_capability_center_and_scoped_agents_are_authority_backed(tmp_path: Path
             task_summary="Implement bounded source change",
             project_id="dream-studio",
             requested_data_classes=["career_private"],
-            career_scope_approved=True,
         )
 
     assert validate_scoped_agent_registry(registry) == []
@@ -76,27 +43,13 @@ def test_capability_center_and_scoped_agents_are_authority_backed(tmp_path: Path
     assert registry["agent_is_authority"] is False
     assert registry["dream_studio_remains_canonical"] is True
     assert summary["sections"]["agents"]["count"] >= 1
-    assert summary["sections"]["workflows"]["count"] == 11
+    assert summary["sections"]["workflows"]["count"] == 10
     assert summary["sections"]["controls"]["count"] > 47
     assert packet["execution_authorized"] is False
     assert "full_conversation_history" in packet["excluded_context"]
+    # Career Ops has been removed; career data is always excluded from packets.
     assert "career_private_data_without_scope" in packet["excluded_context"]
-
-
-def test_scoped_agent_can_include_career_data_only_when_enabled_and_scoped(tmp_path: Path) -> None:
-    with _connect(_db(tmp_path)) as conn:
-        record_career_profile(conn, profile_id="career-enabled", enabled=True)
-        packet = scoped_context_packet(
-            conn,
-            agent_id="career_application_assistant",
-            task_summary="Map selected application fields",
-            requested_data_classes=["career_private"],
-            career_scope_approved=True,
-        )
-
-    assert packet["included_context"]["career_private_scope"] == "included"
-    assert "career_private_data_without_scope" not in packet["excluded_context"]
-    assert packet["agent_is_authority"] is False
+    assert packet["included_context"]["career_private_scope"] == "excluded"
 
 
 def test_github_repo_intake_routes_unclear_license_and_security_review(tmp_path: Path) -> None:
@@ -156,13 +109,11 @@ def test_contract_atlas_and_public_export_include_private_boundaries(tmp_path: P
         )
 
     assert validate_contract_atlas(atlas) == []
-    assert atlas["career_ops_module"]["private_by_default"] is True
-    assert atlas["career_ops_module"]["public_export_excluded"] is True
+    assert "career_ops_module" not in atlas
+    assert "career_ops_module" not in public
     assert atlas["capability_center"]["validation_status"] == "pass"
     assert atlas["scoped_agent_execution"]["agent_is_authority"] is False
     assert atlas["github_repo_intake"]["copy_code_allowed_without_approval"] is False
-    assert public["career_ops_module"]["public_export_excluded"] is True
-    assert "profile_count" not in public["career_ops_module"]
 
 
 def test_shared_intelligence_routes_expose_new_private_surfaces(
@@ -176,7 +127,6 @@ def test_shared_intelligence_routes_expose_new_private_surfaces(
 
     client = TestClient(app)
     for path in (
-        "/api/shared-intelligence/career-ops",
         "/api/shared-intelligence/capability-center",
         "/api/shared-intelligence/agents/registry",
         "/api/shared-intelligence/agents/context-packet",

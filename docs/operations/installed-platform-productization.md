@@ -138,13 +138,11 @@ Installed Dream Studio exposes `/api/shared-intelligence/expert-workflows` as a
 read-only catalog for expert workflow contracts. This lets dashboard, adapter,
 and context-packet consumers discover intentional implementation, code quality,
 debugging, performance, design, SEO/content, documentation, data modeling, API,
-case-study, and career/portfolio workflow expectations without executing a
+and case-study workflow expectations without executing a
 skill or relying on the current working directory.
 
-The surface is not a career automation runner and does not publish private
-career data. Career/application operations still require the existing career
-skill modes, configured private storage, Playwright boundaries when used, and
-operator approval before any submission.
+The surface is a read-only catalog. It does not execute skills, mutate SQLite,
+or replace the existing skill/workflow owners.
 
 ## Analytics-Only Ingestion
 
@@ -317,10 +315,6 @@ or command detail remains explicit rather than inferred.
 
 ## Private Capability Modules
 
-Productized installs may include `career_ops_only` as an opt-in private module.
-It stores career and application records in local SQLite authority only after
-explicit enablement and excludes them from public exports by default.
-
 Shared-intelligence and full profiles expose Capability Center, scoped-agent
 registry/context previews, and GitHub repo intake summaries. These are
 read-only platform surfaces unless a separate approved command records
@@ -378,3 +372,5 @@ the source repo.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped `career/portfolio` from the expert-workflow-surface catalog list and replaced the career-automation-runner caveat with a generic read-only-catalog caveat; removed the `career_ops_only` opt-in private module paragraph under "Private Capability Modules" (the scoped-agent privacy sentence stays). -->

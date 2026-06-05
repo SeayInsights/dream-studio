@@ -202,13 +202,6 @@ unavailable files or commands, uncertain validation, and
 `manual_review_required` outcomes should remain visible instead of being
 filled with guesses.
 
-## Career Ops Is Disabled
-
-This is expected unless the operator explicitly enables the private module.
-Career profiles, resumes, applications, browser automation evidence, and
-career scorecards should not appear in public exports or demo packets. If they
-do, treat it as a publication-boundary bug.
-
 ## Scoped Agent Context Looks Too Small
 
 This is expected. Scoped agents receive only task-required context. They should
@@ -284,3 +277,5 @@ authority before continuing implementation.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the "Career Ops Is Disabled" troubleshooting section (module no longer exists); the "career-private data" exclusion in "Scoped Agent Context Looks Too Small" stays as a deny-by-default privacy class. -->

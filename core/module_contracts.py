@@ -16,7 +16,6 @@ MODULE_CONTRACT_SCHEMA = "dream_studio.module_contracts.v1"
 
 MODULE_CONTRACT_IDS: tuple[str, ...] = (
     "core",
-    "career_ops",
     "telemetry",
     "dashboard",
     "security_only",
@@ -34,47 +33,6 @@ MODULE_CONTRACT_IDS: tuple[str, ...] = (
 )
 
 MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
-    {
-        "module_id": "career_ops",
-        "purpose": "Persist private opt-in career profile, application, evidence, and scorecard authority.",
-        "owned_tables": [
-            "career_profiles",
-            "career_profile_fields",
-            "career_role_targets",
-            "career_resume_versions",
-            "career_cover_letter_versions",
-            "career_portfolio_artifacts",
-            "career_case_studies",
-            "career_job_opportunities",
-            "career_applications",
-            "career_application_events",
-            "career_application_field_mappings",
-            "career_browser_automation_runs",
-            "career_interview_story_bank",
-            "career_evidence_refs",
-            "career_scorecards",
-        ],
-        "read_dependencies": ["local SQLite authority only when opt-in enabled"],
-        "write_dependencies": [
-            "explicit Career Ops profile/application commands or private dashboard edits"
-        ],
-        "emitted_events": ["career_profile_updated", "career_application_event_recorded"],
-        "api_routes": ["/api/shared-intelligence/career-ops"],
-        "dashboard_surfaces": ["Private Career Ops"],
-        "cli_commands": ["ds status", "ds modules"],
-        "required_modules": ["core"],
-        "optional_modules": ["dashboard", "shared_intelligence"],
-        "disabled_module_behavior": "Career data is absent from public exports and dashboard shows opt-in disabled.",
-        "empty_state_behavior": "No private career records exist until the operator enables Career Ops.",
-        "install_runtime_profile_membership": ["career_ops_only", "full"],
-        "security_readiness_impact": "Private career data adds strict publication/privacy boundaries.",
-        "contract_atlas_maturity_level": "tested_only",
-        "validation_tests": [
-            "tests/unit/test_career_ops_capability_agent_github.py",
-            "tests/unit/test_module_contracts.py",
-        ],
-        "privacy_policy": "private_by_default_no_public_export_without_redacted_operator_approval",
-    },
     {
         "module_id": "core",
         "purpose": "Bootstrap source/state paths, SQLite, runtime config, and global commands.",
@@ -358,7 +316,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "dashboard_surfaces": ["Capability Center"],
         "cli_commands": ["ds contract-atlas"],
         "required_modules": ["core", "shared_intelligence"],
-        "optional_modules": ["dashboard", "career_ops"],
+        "optional_modules": ["dashboard"],
         "disabled_module_behavior": "Dashboard sections show unavailable with reasons when no records exist.",
         "empty_state_behavior": "No skill, workflow, agent, control, or hardening evidence has been recorded.",
         "install_runtime_profile_membership": ["shared_intelligence_only", "full"],
@@ -378,7 +336,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
             "workflow_agent_skill_mappings",
             "agent_result_records",
         ],
-        "read_dependencies": ["agent_invocations", "career_profiles only when scoped and enabled"],
+        "read_dependencies": ["agent_invocations"],
         "write_dependencies": ["agent registry/setup commands and normalized agent results"],
         "emitted_events": ["agent_context_packet_generated", "agent_result_normalized"],
         "api_routes": [
@@ -388,7 +346,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "dashboard_surfaces": ["Capability Center Agents"],
         "cli_commands": ["ds context-packet"],
         "required_modules": ["core", "shared_intelligence"],
-        "optional_modules": ["career_ops", "adapter_router"],
+        "optional_modules": ["adapter_router"],
         "disabled_module_behavior": "Agents remain unavailable for execution; context policy can still be inspected.",
         "empty_state_behavior": "Default scoped agent declarations are visible without recorded invocations.",
         "install_runtime_profile_membership": ["shared_intelligence_only", "full"],

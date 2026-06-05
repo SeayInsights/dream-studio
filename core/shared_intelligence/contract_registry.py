@@ -374,11 +374,9 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_name": "Expert Skills And Workflow System",
         "source_patterns": [
             "core/shared_intelligence/expert_workflows.py",
-            # skills/**: narrowed from all of skills/ to the career skill specifically (O1).
-            # The expert workflow system uses career skills; skills/templates/** and utility
-            # scripts are not expert-workflow-system relevant. canonical/skills/** (DS packs)
-            # is a different path and is NOT matched by this pattern.
-            "skills/career/**",
+            # skills/career/** removed (Wave 2): the career skill pack was deleted along with
+            # the career_ops telemetry layer. canonical/skills/** (DS packs) is a different
+            # path and is NOT matched here.
             # workflows/**: removed (O1). This pattern was BROKEN — workflow YAMLs live at
             # canonical/workflows/ but "workflows/**" does NOT match "canonical/workflows/**"
             # (fnmatch prefix mismatch). The pattern matched zero files. Also: the 24 canonical
@@ -456,9 +454,8 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
     },
     {
         "domain_id": "career_capability_agent_github_intake",
-        "domain_name": "Career Ops, Capability Center, Scoped Agents, And GitHub Repo Intake",
+        "domain_name": "Capability Center, Scoped Agents, And GitHub Repo Intake",
         "source_patterns": [
-            "core/career_ops.py",
             "core/shared_intelligence/capability_center.py",
             "core/shared_intelligence/scoped_agents.py",
             "core/shared_intelligence/github_repo_intake.py",
@@ -468,7 +465,6 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
-            "docs/operations/career-ops-capability-center.md",
             "docs/operations/github-repo-intake-evaluation.md",
             "docs/architecture/contract-atlas.md",
         ],
@@ -480,7 +476,6 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/PUBLICATION_BOUNDARY.md",
         ],
         "required_doc_refs": [
-            "docs/operations/career-ops-capability-center.md",
             "docs/operations/github-repo-intake-evaluation.md",
             "docs/architecture/contract-atlas.md",
             "docs/README.md",

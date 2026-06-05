@@ -33,7 +33,8 @@ jobs:
         run: |
           # Get list of changed files in this PR
           git fetch origin ${{ github.base_ref }}
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep 'skills/.*SKILL\.md$' || true)
+          # --diff-filter=d excludes deleted files — the validator can only open files that exist
+          CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD | grep 'skills/.*SKILL\.md$' || true)
 
           if [ -z "$CHANGED_FILES" ]; then
             echo "No SKILL.md files changed"

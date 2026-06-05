@@ -156,3 +156,5 @@ approval boundaries.
 
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- 2026-06-05: Phase 18.6.2 — 6 project_* authority tables dropped (migration 099; 0 rows each). prd_project_authority removed from context packets. Writers (record_project_intake etc.) and their helpers deleted from prd_authority.py. Remaining authority: prd_version_records, prd_amendment_records, prd_route_reconciliation_records. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Career did not appear in this doc's body; no semantic change required beyond this stamp. -->

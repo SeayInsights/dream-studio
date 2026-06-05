@@ -15,7 +15,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from core.analytics_ingestion import analytics_only_profile_status
-from core.career_ops import career_ops_dashboard_summary
 from core.config.database import get_connection
 from core.installed_runtime import adapter_router_status
 from core.module_contracts import module_contracts
@@ -212,15 +211,6 @@ async def get_shared_intelligence_status(
                     "source_tables": [],
                 },
                 {
-                    "surface_id": "career-ops",
-                    "api_path": "/api/shared-intelligence/career-ops",
-                    "source_tables": [
-                        "career_profiles",
-                        "career_applications",
-                        "career_scorecards",
-                    ],
-                },
-                {
                     "surface_id": "capability-center",
                     "api_path": "/api/shared-intelligence/capability-center",
                     "source_tables": [
@@ -295,9 +285,6 @@ async def get_shared_intelligence_status(
                 "ai_usage_operational_records",
                 "token_usage_records",
                 "task_attribution_records",
-                "career_profiles",
-                "career_applications",
-                "career_scorecards",
                 "capability_center_records",
                 "agent_registry_records",
                 "github_repo_evaluations",
@@ -341,13 +328,6 @@ async def get_expert_workflow_catalog(
     """Return expert workflow definitions, overlap decisions, and rubrics."""
 
     return _dashboard_response(expert_workflow_catalog(project_id=project_id))
-
-
-@router.get("/career-ops")
-async def get_career_ops_status() -> dict[str, Any]:
-    """Return private opt-in Career Ops status and dashboard summary."""
-
-    return _with_connection(career_ops_dashboard_summary)
 
 
 @router.get("/capability-center")

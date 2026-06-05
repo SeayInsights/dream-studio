@@ -67,27 +67,20 @@ non-authoritative infrastructure.
 Dream Studio expert workflows map existing skills into evaluated reusable
 workflow contracts for intentional implementation, code quality, debugging,
 performance, frontend design, SEO/content, documentation, data modeling, API
-integration, product demos/case studies, and career/portfolio operations. The
+integration, and product demos/case studies. The
 catalog lives in `core.shared_intelligence.expert_workflows` and is exposed at
 `/api/shared-intelligence/expert-workflows`.
 
 The workflow system strengthens existing owners instead of creating duplicate
-skills. Career and application automation remain private by default and retain
-the no-account-creation, no-CAPTCHA-bypass, no-misrepresentation, and
-operator-approval-before-submit boundaries.
+skills.
 
-## Career Ops And Capability Center
-
-Career Ops is an opt-in private module backed by local SQLite authority. It can
-store career profiles, role targets, resume/cover-letter variants, portfolio
-artifacts, case studies, job opportunities, application records, browser
-automation evidence, and evidence-backed scorecards. Career data is excluded
-from public exports and demo packets by default.
+## Capability Center
 
 Capability Center exposes derived views for skills, workflows, agents,
 controls, evaluations, and hardening candidates. Scoped agents are treated as
 workers rather than authority and receive only the context required for their
-task. See [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md).
+task. Career data remains a deny-by-default private data class that scoped
+agents do not receive unless explicitly enabled and scoped.
 
 ## GitHub Repo Intake
 
@@ -159,7 +152,6 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 - [Long-Run Multisession Operational Validation](operations/long-run-multisession-operational-validation.md)
 - [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
 - [Expert Workflow Systems](operations/expert-workflow-systems.md)
-- [Career Ops, Capability Center, And Scoped Agents](operations/career-ops-capability-center.md)
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
 - [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
 - [PRD Authority Lifecycle](operations/prd-authority-lifecycle.md)
@@ -185,3 +177,5 @@ When in doubt, keep generated operational history local. Public examples should 
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped `career/portfolio operations` from the Expert Workflows list and the Career-and-application-automation paragraph; replaced the "Career Ops And Capability Center" section with "Capability Center" (career retained only as a deny-by-default private data class for scoped agents); removed the index link to the deleted career-ops-capability-center.md doc. -->

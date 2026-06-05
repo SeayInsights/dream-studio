@@ -124,13 +124,12 @@ doc, and any schema/workflow docs required by the drift report.
 
 Expert workflow changes are release-gate relevant. If code changes affect
 `core.shared_intelligence.expert_workflows`, shared-intelligence expert
-workflow routes, skill/workflow overlap decisions, scoring rubrics, or
-career/application automation boundaries, the same change set must refresh the
+workflow routes, skill/workflow overlap decisions, or scoring rubrics, the same
+change set must refresh the
 expert workflow operations doc, Contract Atlas doc, docs index, and any
 dashboard/readiness docs required by the drift report. Tests should prove the
-overlap matrix exists, existing skills are mapped instead of duplicated,
-scoring remains evidence-backed, and private career automation boundaries are
-preserved.
+overlap matrix exists, existing skills are mapped instead of duplicated, and
+scoring remains evidence-backed.
 
 Task attribution changes are release-gate relevant. If code changes affect
 `task_attribution_records`, `core.shared_intelligence.task_attribution`,
@@ -210,8 +209,8 @@ docs index. Tests should prove that external projects remain paused unless
 selected, Docker stays optional, live SQLite guards stay intact, and closeout
 routes to an explicit operator decision before public release.
 
-Career Ops, Capability Center, scoped-agent, and GitHub repo intake changes are
-release-gate relevant. If code changes affect private career authority,
+Capability Center, scoped-agent, and GitHub repo intake changes are
+release-gate relevant. If code changes affect
 capability/evaluation read models, agent context scoping, or external GitHub
 repo adoption policy, the same change set must refresh database docs, Contract
 Atlas docs, dashboard mapping, publication boundary docs, and the docs index.
@@ -263,3 +262,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/application automation boundaries" and "private career automation boundaries are preserved" from the expert-workflow drift-gate paragraph; removed "Career Ops" from the capability/agent/intake drift-gate paragraph heading and dropped "private career authority" while keeping the "private career data is excluded from public exports" privacy-class assertion. -->

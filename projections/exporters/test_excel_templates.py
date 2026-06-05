@@ -65,7 +65,6 @@ def create_sample_report_data(days: int = 30) -> dict:
                         {"skill_name": "ds-security", "invocations": 45, "success_rate": 0.88},
                         {"skill_name": "ds-domains", "invocations": 38, "success_rate": 0.90},
                         {"skill_name": "ds-analyze", "invocations": 32, "success_rate": 0.94},
-                        {"skill_name": "ds-career", "invocations": 28, "success_rate": 0.91},
                         {"skill_name": "simplify", "invocations": 24, "success_rate": 0.89},
                         {"skill_name": "graphify", "invocations": 20, "success_rate": 0.93},
                         {"skill_name": "huashu-design", "invocations": 18, "success_rate": 0.87},

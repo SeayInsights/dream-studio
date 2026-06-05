@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from core.analytics_ingestion import analytics_only_profile_status
-from core.career_ops import career_ops_dashboard_summary
 from core.installed_runtime import installed_runtime_model
 from core.module_contracts import module_contracts, validate_module_contracts
 from core.module_profiles import module_profiles, validate_module_profiles
@@ -139,7 +138,6 @@ def build_contract_atlas(
     github_cicd_profile = _github_cicd_profile(root)
     expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
     expert_workflow_errors = validate_expert_workflow_catalog(expert_workflows)
-    career_ops = career_ops_dashboard_summary(conn)
     capability_center = capability_center_summary(
         conn,
         project_id=effective_project_id,
@@ -235,24 +233,12 @@ def build_contract_atlas(
             "workflow_count": expert_workflows["workflow_count"],
             "overlap_decision_counts": expert_workflows["overlap_decision_counts"],
             "no_duplicate_skill_policy": expert_workflows["no_duplicate_skill_policy"],
-            "career_preserved_behavior_count": len(expert_workflows["career_preserved_behaviors"]),
             "application_automation_boundaries": expert_workflows[
                 "application_automation_boundaries"
             ],
             "authority_write_targets": expert_workflows["authority_write_targets"],
             "validation_status": "pass" if not expert_workflow_errors else "attention_required",
             "validation_errors": expert_workflow_errors,
-        },
-        "career_ops_module": {
-            "enabled": career_ops["enabled"],
-            "opt_in_required": career_ops["opt_in_required"],
-            "private_by_default": career_ops["private_by_default"],
-            "schema_status": career_ops["schema_status"],
-            "profile_count": career_ops.get("profile_count", 0),
-            "active_profile_count": career_ops.get("active_profile_count", 0),
-            "public_export_excluded": True,
-            "application_automation_boundaries": career_ops["application_automation_boundaries"],
-            "source_tables": career_ops["source_tables"],
         },
         "capability_center": {
             "source_status": capability_center["source_status"],
@@ -336,7 +322,6 @@ def build_contract_atlas(
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
             expert_workflow_errors=expert_workflow_errors,
-            career_ops=career_ops,
             capability_center=capability_center,
             capability_center_errors=capability_center_errors,
             scoped_agents=scoped_agents,
@@ -357,7 +342,6 @@ def build_contract_atlas(
             analytics_only_status=analytics_only_status,
             github_cicd_profile=github_cicd_profile,
             expert_workflows=expert_workflows,
-            career_ops=career_ops,
             capability_center=capability_center,
             scoped_agents=scoped_agents,
             github_repo_intake=github_repo_intake,
@@ -403,13 +387,6 @@ def sanitize_contract_atlas_for_public_export(atlas: Mapping[str, Any]) -> dict[
     sanitized["export_scope"] = "public"
     sanitized["sanitized_public_export"] = True
     sanitized["repo_root"] = "<sanitized-local-path>"
-    if "career_ops_module" in sanitized:
-        sanitized["career_ops_module"] = {
-            "opt_in_required": True,
-            "private_by_default": True,
-            "public_export_excluded": True,
-            "policy": "career data is private local authority and excluded from public exports by default",
-        }
     for contract in sanitized.get("adapter_projection_contracts", []):
         contract.pop("local_user_surface", None)
         local_hook = contract.get("local_hook_surface")
@@ -457,7 +434,6 @@ def validate_contract_atlas(atlas: Mapping[str, Any]) -> list[str]:
         "prd_authority_lifecycle",
         "github_cicd_profile",
         "expert_workflow_system",
-        "career_ops_module",
         "capability_center",
         "scoped_agent_execution",
         "github_repo_intake",
@@ -757,7 +733,6 @@ def _maturity_scorecard(
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
     expert_workflow_errors: list[str],
-    career_ops: Mapping[str, Any],
     capability_center: Mapping[str, Any],
     capability_center_errors: list[str],
     scoped_agents: Mapping[str, Any],
@@ -896,14 +871,6 @@ def _maturity_scorecard(
             "error_count": len(expert_workflow_errors),
         },
         {
-            "area": "career_ops",
-            "status": career_ops.get("schema_status"),
-            "enabled": career_ops.get("enabled"),
-            "opt_in_required": career_ops.get("opt_in_required"),
-            "private_by_default": career_ops.get("private_by_default"),
-            "public_export_excluded": True,
-        },
-        {
             "area": "capability_center",
             "status": "validated" if not capability_center_errors else "contract_errors_present",
             "section_ids": sorted(capability_center.get("sections", {})),
@@ -947,7 +914,6 @@ def _confirmed_dependency_graph(
     analytics_only_status: Mapping[str, Any],
     github_cicd_profile: Mapping[str, Any],
     expert_workflows: Mapping[str, Any],
-    career_ops: Mapping[str, Any],
     capability_center: Mapping[str, Any],
     scoped_agents: Mapping[str, Any],
     github_repo_intake: Mapping[str, Any],
@@ -1192,23 +1158,6 @@ def _confirmed_dependency_graph(
                 "core.shared_intelligence.expert_workflows.overlap_matrix",
             )
 
-    add_node("module:career_ops", "module", "Career Ops")
-    add_edge(
-        "module:career_ops",
-        "layer:sqlite_authority",
-        "persists_private_authority_to",
-        "core.career_ops.CAREER_OPS_TABLES",
-    )
-    for table in career_ops.get("source_tables", []):
-        table_id = f"table:{table}"
-        add_node(table_id, "sqlite_table", str(table))
-        add_edge(
-            "module:career_ops",
-            table_id,
-            "owns_private_authority",
-            "core.career_ops.CAREER_OPS_TABLES",
-        )
-
     add_node("module:capability_center", "module", "Capability Center")
     for section_id in capability_center.get("sections", {}):
         section_node = f"dashboard-section:capability-center:{section_id}"
@@ -1435,21 +1384,6 @@ def _source_tables() -> list[str]:
             "reg_projects",
             "release_readiness_records",
             "validation_results",
-            "career_profiles",
-            "career_profile_fields",
-            "career_role_targets",
-            "career_resume_versions",
-            "career_cover_letter_versions",
-            "career_portfolio_artifacts",
-            "career_case_studies",
-            "career_job_opportunities",
-            "career_applications",
-            "career_application_events",
-            "career_application_field_mappings",
-            "career_browser_automation_runs",
-            "career_interview_story_bank",
-            "career_evidence_refs",
-            "career_scorecards",
             "capability_center_records",
             "agent_registry_records",
             "agent_context_scope_policies",

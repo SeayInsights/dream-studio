@@ -29,7 +29,6 @@ def create_sample_report():
                         {"name": "ds-quality", "count": 70, "success_rate": 0.95},
                         {"name": "ds-domains", "count": 50, "success_rate": 0.94},
                         {"name": "ds-security", "count": 30, "success_rate": 0.98},
-                        {"name": "ds-career", "count": 20, "success_rate": 0.96},
                     ],
                 },
             },

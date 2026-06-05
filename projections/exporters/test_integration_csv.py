@@ -59,7 +59,7 @@ def create_realistic_report():
             {
                 "title": "Session Analytics",
                 "metrics": {
-                    "by_project": {"dream-studio": 89, "dreamysuite": 45, "career-studio": 22},
+                    "by_project": {"dream-studio": 89, "dreamysuite": 45},
                     "day_of_week": {
                         "Monday": 25,
                         "Tuesday": 30,

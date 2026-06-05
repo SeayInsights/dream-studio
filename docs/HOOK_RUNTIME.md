@@ -39,7 +39,7 @@ Phase 5.4A — Hook Runtime Reliability audit and classification.
 Claude Code event (e.g., UserPromptSubmit)
   → hooks/hooks.json registers command
   → hooks/run.py <dispatcher-name>
-  → run.py searches: runtime/hooks/{core,quality,career,analyze,domains,meta}/
+  → run.py searches: runtime/hooks/{core,quality,analyze,domains,meta}/
   → finds dispatcher (e.g., on-prompt-dispatch.py)
   → dispatcher imports sub-handlers via dispatch_tracking.run_handlers()
   → each sub-handler's main() called sequentially with shared stdin payload
@@ -183,3 +183,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
 
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the deleted `career` subdirectory from the `runtime/hooks/{...}/` dispatcher-search path list; no other career content in this doc. -->

@@ -74,30 +74,6 @@ def active_files(cwd: Path) -> list[tuple[str, str]]:
     return result
 
 
-def checkpoint_career_ops(session_id: str | None) -> str | None:
-    """If career-ops has an in-progress checkpoint, preserve it in the handoff."""
-    try:
-        cp = paths.user_data_dir() / "career-ops" / "checkpoint.json"
-        if not cp.exists():
-            return None
-        data = json.loads(cp.read_text(encoding="utf-8"))
-        if data.get("status") in ("in_progress", "partial"):
-            data["handoff_session"] = session_id
-            data["handoff_reason"] = "context_threshold"
-            cp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-            return (
-                f"\n## Career-Ops State\n"
-                f"- **Action:** {data.get('last_action', 'unknown')}\n"
-                f"- **Mode:** {data.get('mode', 'unknown')}\n"
-                f"- **Status:** {data.get('status')}\n"
-                f"- **Checkpoint:** `~/.dream-studio/career-ops/checkpoint.json`\n"
-                f"- Resume with: read checkpoint → continue from pending items\n"
-            )
-        return None
-    except Exception:
-        return None
-
-
 def write_handoff(
     cwd: Path, kb: float, session_id: str | None, is_pct: bool = False
 ) -> Path | None:
@@ -127,8 +103,6 @@ def write_handoff(
         "\n".join(f"- `{p}`: {ln}" for ln, p in files) if files else "- (working tree clean)"
     )
 
-    career_section = checkpoint_career_ops(session_id) or ""
-
     handoff = (
         f"# Handoff: {branch}\n"
         f"Date: {date_str}\n\n"
@@ -137,8 +111,7 @@ def write_handoff(
         f"- **Last commit:** {last_commit}\n"
         f"- **Context:** ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else HANDOFF_KB}{'%' if is_pct else ' KB'})\n\n"
         f"## Active files\n"
-        f"{files_lines}\n"
-        f"{career_section}\n"
+        f"{files_lines}\n\n"
         f"## Next action\n"
         f"Continue work on branch `{branch}`. Check git log for recent task context.\n"
     )

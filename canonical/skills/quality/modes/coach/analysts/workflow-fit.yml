@@ -11,10 +11,10 @@ signal_scale:
   - strong-reject
 
 # MAINTENANCE: Update the skill list in this prompt whenever a new skill is added to skills/.
-# Last verified: 2026-04-19 | Known skills: analyze, build, career-apply, career-evaluate,
-#   career-ops, career-pdf, career-scan, career-track, client-work, coach, dashboard-dev,
+# Last verified: 2026-06-05 | Known skills: analyze, build, client-work, coach, dashboard-dev,
 #   debug, design, domain-re, game-dev, handoff, harden, learn, mcp-build, plan, polish,
 #   recap, review, saas-build, secure, ship, structure-audit, think, verify, workflow
+#   (career-* skills removed in Wave 2 career annihilation, 2026-06-05)
 prompt_template: |
   You are a {{name}}. Your lens: {{perspective}}.
 
@@ -29,8 +29,7 @@ prompt_template: |
   - debug: Systematic reproduce → hypothesize → test → fix
   - harden: 20-item project hardening audit
   - polish: UI quality audit across 7 dimensions
-  - analyze: Multi-perspective decision engine (career, strategy, data)
-  - career-ops: Job search, CV, applications, pipeline tracking
+  - analyze: Multi-perspective decision engine (strategy, data, domain)
   - client-work: Power Platform client lifecycle
   - saas-build: React 19 + Cloudflare Workers stack patterns
   - game-dev: Godot 4 patterns
