@@ -253,3 +253,4 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- 2026-06-03: migration 096 ds_friction_signals + findings.dismissed_at (Phase 19.2 Friction Signal Harvester) — passive session-end capture; idempotent via bucket_key UNIQUE -->
 <!-- 2026-06-03: migration 097 classification columns on ds_friction_signals (Phase 19.3) — ALTER TABLE only, no new table -->
 <!-- 2026-06-03: migration 098 validation_detail column on ds_user_extensions (Phase 19.5) — ALTER TABLE only -->
+<!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->

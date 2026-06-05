@@ -273,3 +273,4 @@ not treat a PRD draft as proof of production readiness.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-03: Phase 19.2 friction signal harvester: passive session-end capture only; no product readiness gate change; dismissed findings feed 19.3 Gap Classifier -->
+<!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
