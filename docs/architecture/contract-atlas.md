@@ -382,3 +382,4 @@ and boundary report without inventing new dependency data.
 
 <!-- 2026-06-03: Phase 19.2 friction signal harvester: migration 096 (ds_friction_signals + findings.dismissed_at/reason), FrictionSignalHarvester analyzer, session-end hook, dismiss endpoint, friction-signals read API. No contract atlas topology change. -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+<!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->

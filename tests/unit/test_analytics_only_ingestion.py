@@ -66,8 +66,6 @@ def test_analytics_only_ingestion_writes_current_authority_without_orchestration
         # pi_components and pi_dependencies dropped in migration 084 (were empty/broken)
         assert _count(conn, "prd_documents") == 1
         assert _count(conn, "production_readiness_assessment_runs") == 1
-        assert _count(conn, "project_health_scorecards") == 1
-        assert _count(conn, "project_readiness_scorecards") == 1
 
         token = conn.execute("SELECT * FROM token_usage_records").fetchone()
         usage = conn.execute("SELECT * FROM ai_usage_operational_records").fetchone()

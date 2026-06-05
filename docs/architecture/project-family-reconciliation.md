@@ -93,15 +93,16 @@ The v2 architecture (`.planning/data-model-v2.md` Commitment 3) mandates `busine
 | `project_health_scorecards` | Production readiness module (stubs) | INSERT (stubbed) | Writer exists but not wired |
 | `project_readiness_scorecards` | Production readiness module (stubs) | INSERT (stubbed) | Writer exists but not wired |
 
-**Active readers:**
+**Active readers (post Phase 18.6.2):**
 
 | Table | Reader file | Purpose |
 |-------|------------|---------|
-| All project_* tables | `core/shared_intelligence/prd_authority.py` | `project_prd_authority_summary()`, `context_packet_prd_authority()` |
-| All project_* tables | `projections/api/routes/shared_intelligence.py` | API surface for PRD authority summary |
-| `project_health_scorecards`, `project_readiness_scorecards` | `core/analytics_ingestion.py` | SECTION_TABLES constant — analytics ingestion framework |
+| `prd_version_records` (and other staying prd_* tables) | `core/shared_intelligence/prd_authority.py` | `project_prd_authority_summary()` — guarded; returns empty state when project_* tables absent |
 
-**Key finding:** `prd_authority.py` is 1,250+ lines with `PRD_AUTHORITY_SOURCE_TABLES` listing all `project_*` tables. This is not dead code — it is a fully-designed PRD lifecycle authority module with intake, assumption tracking, change order, milestone authority, and work order authority logic. It has never been invoked in production. The 0-row state reflects a code path that was built speculatively for `ds-project scope` but never activated.
+`context_packet_prd_authority()` removed in Phase 18.6.2 (vestigial chain — tables 0 rows, stop_gates/forbidden_context never enforced).
+`core/analytics_ingestion.py` SECTION_TABLES references to `project_health_scorecards` / `project_readiness_scorecards` removed in Phase 18.6.2.
+
+**Status as of Phase 18.6.2 (migration 099):** All 8 project_* tables dropped. Writers removed from prd_authority.py. prd_authority.py reduced from 1,250+ lines to ~716 lines. See `.planning/specs/prd-authority-harvest-preflight.md` and `.planning/specs/contract-atlas-prd-authority-removal-preflight.md` for the full investigation.
 
 ---
 
@@ -335,4 +336,6 @@ source_refs_json, evidence_refs_json, supersedes_work_order_id, superseded_by_wo
 ---
 
 *End of Phase 18.1.6 — Project Entity Family Reconciliation*  
-*Decision committed 2026-05-22 | Migration executes in Phases 18.4 and 18.6*
+*Decision committed 2026-05-22 | Migration executed Phase 18.6.2 (migration 099, 2026-06-05)*
+
+<!-- 2026-06-05: Phase 18.6.2 complete. All 8 project_* tables dropped (migration 099 — 0 rows each, no FK deps). prd_authority.py writers and helpers deleted (-1158 lines). context_packet_prd_authority() removed. Audit trail: .planning/specs/prd-authority-harvest-preflight.md, context-packets-production-value-preflight.md, agent-independence-and-enforcement-plan.md. -->

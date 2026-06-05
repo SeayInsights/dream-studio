@@ -213,8 +213,6 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
             "validation_results",
             "findings",
             "token_usage_records",
-            "project_health_scorecards",
-            "project_readiness_scorecards",
         ],
         "write_dependencies": ["explicit ds analytics-ingest --execute only"],
         "emitted_events": ["analytics_payload_ingested"],

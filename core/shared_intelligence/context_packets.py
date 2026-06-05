@@ -15,7 +15,6 @@ from core.shared_intelligence.authority import (
     require_shared_intelligence_tables,
 )
 from core.shared_intelligence.model_registry import model_provider_registry_summary
-from core.shared_intelligence.prd_authority import context_packet_prd_authority
 from core.shared_intelligence.read_models import (
     component_learning_health,
     learning_event_summary,
@@ -64,12 +63,6 @@ def generate_shared_context_packet(
         milestone_id=milestone_id,
         task_id=task_id,
     )
-    prd_project_authority = context_packet_prd_authority(
-        conn,
-        project_id=project_id,
-        milestone_id=milestone_id,
-        task_id=task_id,
-    )
     payload = {
         "packet_schema": "dream_studio.shared_context.v2",
         "packet_id": packet_id,
@@ -92,7 +85,6 @@ def generate_shared_context_packet(
         "adapter_alignment": adapter_alignment_summary(conn),
         "model_provider_registry": model_provider_registry_summary(conn),
         "authority_context": authority_context,
-        "prd_project_authority": prd_project_authority,
         "learning_event_summary": learning_summary,
         "component_learning_health": component_health,
         "learning_promotion_queue": promotion_queue,

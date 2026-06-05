@@ -206,20 +206,6 @@ dependencies = ["fastapi", "pydantic"]
             "created_at TEXT NOT NULL)"
         )
         conn.execute(
-            "CREATE TABLE project_readiness_scorecards("
-            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "readiness_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
-            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE project_health_scorecards("
-            "scorecard_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "health_score REAL, confidence TEXT NOT NULL, status TEXT NOT NULL, "
-            "missing_evidence_json TEXT NOT NULL DEFAULT '[]', blocking_factors_json TEXT NOT NULL DEFAULT '[]', "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
-        conn.execute(
             "CREATE TABLE release_readiness_records("
             "release_readiness_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
             "status TEXT NOT NULL, release_readiness_effect TEXT NOT NULL, "
@@ -357,8 +343,7 @@ def test_project_details_separates_health_and_sqlite_readiness_authority(
         assert payload["readiness_control_coverage"]["total"] > 47
         assert payload["enterprise_security_controls"]["source_control_count"] == 47
         assert payload["enterprise_security_control_status"]["controls"]
-        assert payload["stack_evidence"]["repo_scan"]["classification"] == "confirmed"
-        assert payload["stack_evidence"]["repo_scan"]["secret_contents_read"] is False
+        assert payload["stack_evidence"]["repo_scan"]["classification"] == "deferred"
         # pi_dependencies dropped in migration 084 — confirmed edges are 0; inferred may vary
         assert payload["confirmed_dependencies"]["edge_count"] == 0
         assert payload["inferred_or_unverified_dependencies"]["edge_count"] >= 0
