@@ -129,16 +129,9 @@ Expert workflow access is read-only by default. Adapters may read
 `/api/shared-intelligence/expert-workflows` or a context packet summary to
 understand the intentional implementation, code quality, debugging,
 performance, frontend design, SEO/content, documentation, data modeling, API
-integration, case-study, and career/portfolio workflow contracts. Results must
+integration, and case-study workflow contracts. Results must
 normalize back into Dream Studio authority records when execution is approved.
-The route does not replace existing skills, publish private career data, fill
-applications, or authorize browser automation.
-
-Career Ops follows the same authority boundary. Adapter outputs may help draft
-private career material only after the module is enabled and scoped; career
-profiles, application records, generated materials, and browser automation
-evidence persist in local SQLite authority and stay out of public exports by
-default.
+The route does not replace existing skills or authorize browser automation.
 
 Capability Center and scoped-agent routes are adapter-readable projections.
 They explain which skills, workflows, agents, controls, evaluations, and
@@ -267,3 +260,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/portfolio" from the expert-workflow contract list, removed the career/application/browser-automation caveats and the "Career Ops follows the same authority boundary" paragraph; the PRD-lifecycle "career data" exclusion stays as a deny-by-default privacy class. -->

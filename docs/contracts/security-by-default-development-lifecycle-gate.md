@@ -87,18 +87,18 @@ non-execution boundary.
 
 The expert workflow route is also non-executing. Security reviewers may use
 `/api/shared-intelligence/expert-workflows` to see whether implementation,
-debugging, design, documentation, API, data modeling, or career/application
+debugging, design, documentation, API, or data modeling
 workflows require security/readiness evidence, but the route does not run
-scans, inspect secrets, fill application forms, submit applications, mutate
+scans, inspect secrets, mutate
 SQLite, or change 47-control applicability.
 
-Career Ops, Capability Center, scoped-agent, and GitHub repo intake routes are
-also non-executing security-relevant surfaces. Career Ops adds private data and
-publication/privacy controls. Scoped agents add context-minimization and
-permission-boundary checks. GitHub repo intake adds license, security,
-supply-chain, dependency, attribution, and overlap review before third-party
-adoption. These routes do not inspect secrets, execute agents, submit
-applications, mutate external projects, copy code, or add dependencies.
+Capability Center, scoped-agent, and GitHub repo intake routes are
+also non-executing security-relevant surfaces. Scoped agents add
+context-minimization and permission-boundary checks, including treating career
+data as a deny-by-default private data class. GitHub repo intake adds license,
+security, supply-chain, dependency, attribution, and overlap review before
+third-party adoption. These routes do not inspect secrets, execute agents,
+mutate external projects, copy code, or add dependencies.
 
 ## Project Portfolio Hydration
 
@@ -168,7 +168,7 @@ full applicable review according to the lifecycle policy before authority is
 marked current.
 ## Platform Hardening Refresh
 
-The policy/permission engine is a supporting control-plane surface for the security-by-default lifecycle gate. High-risk actions such as secret access, destructive cleanup, external mutation, push/deploy, Docker execution, package changes, and career submission are denied or deferred by default and must record evidence, approval, rollback, and dashboard attention requirements.
+The policy/permission engine is a supporting control-plane surface for the security-by-default lifecycle gate. High-risk actions such as secret access, destructive cleanup, external mutation, push/deploy, Docker execution, and package changes are denied or deferred by default and must record evidence, approval, rollback, and dashboard attention requirements.
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
 
@@ -180,3 +180,5 @@ The policy/permission engine is a supporting control-plane surface for the secur
 
 <!-- 2026-06-03: Phase 19.2 adds findings.dismissed_at + dismissed_reason (migration 096 ALTER TABLE); dismiss endpoint POST /findings/{id}/dismiss; no lifecycle gate bypass — dismissed findings are tracked, not suppressed -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/application" + application-form/submission clauses from the expert-workflow paragraph, removed "Career Ops" from the non-executing-surfaces list and its dedicated sentence (folding career-data-deny-by-default into the scoped-agent description), and removed "career submission" from the policy/permission-engine high-risk action list (the action existed only via the removed career module). -->

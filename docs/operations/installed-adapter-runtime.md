@@ -135,9 +135,8 @@ GET request.
 
 It also exposes `/api/shared-intelligence/expert-workflows`. This is a
 read-only installed surface for expert workflow definitions, overlap decisions,
-evidence-backed scoring rubrics, career privacy boundaries, and application
-automation rules. It does not execute skills, fill applications, publish
-career artifacts, mutate SQLite, or replace the existing skill/workflow owners.
+and evidence-backed scoring rubrics. It does not execute skills, mutate SQLite,
+or replace the existing skill/workflow owners.
 
 Supported adapter access modes:
 
@@ -173,7 +172,6 @@ any container execution.
 Installed profiles are declared in `core.module_profiles`:
 
 - `core`
-- `career_ops_only`
 - `analytics_only`
 - `security_only`
 - `token_only`
@@ -188,7 +186,7 @@ requirements, agent/workflow requirements, Claude/Codex requirements, Docker
 requirements, expected dashboard/API behavior, and honest empty states.
 
 Module boundaries are separately declared in `core.module_contracts` for:
-`core`, `career_ops`, `telemetry`, `dashboard`, `security_only`, `token_only`,
+`core`, `telemetry`, `dashboard`, `security_only`, `token_only`,
 `analytics_only`, `shared_intelligence`, `adapter_router`,
 `adapter_projection`, `external_project`, `capability_center`,
 `scoped_agents`, `github_repo_intake`, `docker_optional`, and `full`.
@@ -213,11 +211,6 @@ adapter, skill/workflow, file, command, validation, outcome, rework, and
 security/readiness impact facts when recorded, while preserving `unknown` or
 `unavailable` values for unobserved model/provider, file, command, token, or
 cost details.
-
-`career_ops_only` is private and opt-in. It exposes private Career Ops status
-and dashboard routes without requiring hooks, agents, workflows, Claude, Codex,
-or Docker. Career data stays in local SQLite authority and is excluded from
-public exports by default.
 
 `shared_intelligence_only` includes Capability Center, scoped-agent registry
 views, and GitHub repo intake read models. These surfaces are read-only unless a
@@ -326,3 +319,5 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the `career_ops_only` module profile bullet and its dedicated paragraph, dropped `career_ops` from the `core.module_contracts` boundary list, and stripped career/application clauses from the expert-workflows route description; module-profile and adapter-access text around them stays complete. -->

@@ -25,7 +25,7 @@ boundary.
 | Production readiness gate | `core.production_readiness` plus additive SQLite readiness tables | `/api/shared-intelligence/production-readiness`, Project Details, Contract Atlas, release readiness | repo docs/code plus SQLite authority records | Required for readiness policy/schema changes |
 | AI usage accounting | `ai_adapter_accounting_profiles`, `ai_usage_operational_records`, `token_usage_records` | `ds router`, `ds adapters`, token/model analytics, Contract Atlas, context packets | SQLite plus derived views | Required for billing-mode or cost-visibility changes |
 | Analytics-only ingestion | `core.analytics_ingestion` normalized payload contract | `ds analytics-ingest`, `/api/shared-intelligence/analytics-only`, All Projects, Project Details, metrics/security/readiness APIs | explicit SQLite imports plus derived views | Required for analytics import contract changes |
-| Expert workflows | `core.shared_intelligence.expert_workflows` | `/api/shared-intelligence/expert-workflows`, Contract Atlas, Project Details/dashboard attention when executed | repo catalog plus existing SQLite authority targets | Required for skill/workflow overlap or career automation boundary changes |
+| Expert workflows | `core.shared_intelligence.expert_workflows` | `/api/shared-intelligence/expert-workflows`, Contract Atlas, Project Details/dashboard attention when executed | repo catalog plus existing SQLite authority targets | Required for skill/workflow overlap changes |
 | GitHub CI/CD profile | `runtime/config/release-gates/dream-studio.json` plus `core.release.github_pr_cicd_gate` | Contract Atlas, release gate packet, GitHub workflows | repo source/config | Required for workflow or merge-policy changes |
 | External project validation | `core.projects.external_validation` | All Projects, Project Details, Work Order plans | repo source plus SQLite/evidence refs | Required for target access or policy changes |
 | Docker module profiles | `core.telemetry.docker_profiles` | module registry, Contract Atlas, runtime status | repo source/config | Required for Docker execution or profile changes |
@@ -121,15 +121,10 @@ skills/workflows, files, commands, validation, outcome, rework, and
 security/readiness impact, but they must keep unknown or unavailable values
 explicit and must not infer token or cost precision.
 
-Career Ops configuration is private and disabled until explicitly enabled. It
-may store career and application records only in approved local SQLite
-authority; it must not leak into public exports, team rollups, sanitized demo
-packets, or repo docs as data.
-
 Capability Center and scoped-agent configuration are authority-backed read
 models and policies. Agents receive only task-required context, never full
 conversation history, secrets, all Work Orders, all memories, raw local
-evidence, or unrelated private data by default.
+evidence, career data, or unrelated private data by default.
 
 GitHub repo intake configuration is an evaluation workflow, not an adoption
 approval. It may record evidence-backed decisions, but it does not fetch,
@@ -196,3 +191,5 @@ The independent configuration model now includes platform-hardening configuratio
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "or career automation boundary changes" from the expert-workflows config-source row and removed the "Career Ops configuration" paragraph; career is retained as a deny-by-default item in the scoped-agent context-exclusion list. -->

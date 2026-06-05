@@ -7,7 +7,7 @@ The sequence is implemented as a single authority-backed read model over current
 ## Milestones
 
 - `skill_evaluation_harness`: versioned skill/workflow evaluations with golden fixtures, expected-output contracts, rubric scores, promotion criteria, rollback criteria, and failure pattern tracking.
-- `policy_permission_engine_maturation`: reusable policy decisions for read-only work, repo mutation, live SQLite writes, external project work, cleanup, push/deploy actions, adapter execution, browser automation, career submission, secrets, Docker, and dependency changes.
+- `policy_permission_engine_maturation`: reusable policy decisions for read-only work, repo mutation, live SQLite writes, external project work, cleanup, push/deploy actions, adapter execution, browser automation, secrets, Docker, and dependency changes.
 - `engineering_connector_ingestion_framework`: read-only connectors for GitHub, CI reports, JUnit, SARIF, coverage, package manifests, CSV/JSON imports, AI usage exports, and evidence packets that normalize into current SQLite authority.
 - `privacy_redaction_and_secret_boundary_maturation`: visibility modes and redaction profiles for private operation, team/client-safe packets, and public sanitized exports.
 - `local_watch_and_scheduled_validation_runtime`: opt-in local watchers for dashboard health, release gate, adapter staleness, Contract Atlas freshness, docs drift, project registry, security/readiness, and backup/restore health.
@@ -123,3 +123,5 @@ file sprawl, expose private project history, or authorize execution.
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed "career submission" from the `policy_permission_engine_maturation` high-risk action list (that action existed only via the removed career module); the policy/permission engine and all other hardening milestones are otherwise unchanged. -->

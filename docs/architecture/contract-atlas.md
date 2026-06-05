@@ -224,17 +224,14 @@ not need the full atlas.
 
 The atlas also exposes `expert_workflow_system`, a derived section backed by
 `core.shared_intelligence.expert_workflows`. It summarizes the expert workflow
-catalog, overlap decisions, no-duplicate-skill policy, career/application
-automation boundaries, and authority write targets. Confirmed dependency graph
+catalog, overlap decisions, no-duplicate-skill policy, and authority write
+targets. Confirmed dependency graph
 edges map each expert workflow back to existing skill/workflow owners rather
 than inventing a parallel skill system. The full catalog is available at
 `/api/shared-intelligence/expert-workflows`.
 
 The atlas now also exposes:
 
-- `career_ops_module`, an opt-in private module summary that reports schema
-  readiness and automation boundaries while excluding career data from public
-  exports;
 - `capability_center`, a derived skills/workflows/agents/controls/evaluations
   surface backed by authority tables and repo contracts;
 - `scoped_agent_execution`, which declares agents as scoped workers and records
@@ -309,9 +306,8 @@ exports must be sanitized and must not include private runtime state, local
 evidence paths, secrets, raw telemetry, backups, or operator-local config
 contents.
 
-Career Ops rows and private application/career evidence are excluded from
-public Contract Atlas exports by default. Public exports may retain only the
-policy statement that Career Ops is private and opt-in. GitHub repo intake
+Career data remains a deny-by-default private data class and is excluded from
+public Contract Atlas exports. GitHub repo intake
 evidence remains private until a sanitized adoption note is explicitly approved.
 
 ## Visual Layer
@@ -375,6 +371,8 @@ and boundary report without inventing new dependency data.
 <!-- 2026-06-01: guard_events table (migration 090), memory_entries taint tracking (migration 091), memory_taint.py module -->
 
 <!-- 2026-06-01: guard Phase 3 — delta_guard, guard_metrics route, stub hardening -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the `career_ops_module` atlas-section bullet and the `career/application automation boundaries` clause from the expert_workflow_system summary; rewrote the export-boundary paragraph to state career data is a deny-by-default private data class (the removed Career Ops module is no longer named). -->
 
 <!-- 2026-06-01: fix migration 089 view-drop-before-rename (vw_approach_patterns/vw_security_summary); fix v38 test fixture findings→security_findings -->
 

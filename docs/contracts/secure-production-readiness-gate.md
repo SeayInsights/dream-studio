@@ -69,10 +69,10 @@ Expert workflow catalog status contributes to readiness when process quality is
 in scope. The readiness gate can treat
 `/api/shared-intelligence/expert-workflows` as evidence that implementation,
 quality, debugging, performance, design, SEO/content, documentation, data/API,
-case-study, and career/portfolio workflows have owners, input/output
+and case-study workflows have owners, input/output
 contracts, evidence requirements, validation requirements, scoring rubrics, and
-privacy boundaries. The catalog does not execute workflows, create findings,
-publish career artifacts, fill applications, or write SQLite.
+privacy boundaries. The catalog does not execute workflows, create findings, or
+write SQLite.
 
 ## Skill And Control Overlap
 
@@ -166,12 +166,10 @@ security/readiness impact. Unknown model/provider, unavailable file/command
 data, and manual-review outcomes remain confidence or missing-evidence inputs,
 not fake pass/fail or cost signals.
 
-## Career, Scoped Agent, And Repo Intake Readiness
+## Scoped Agent And Repo Intake Readiness
 
-Production readiness treats Career Ops as private operational capability, not
-public product evidence. Career scorecards must be evidence-backed or
-unavailable, and public/demo outputs must exclude career data unless redacted
-and approved.
+Public/demo outputs must exclude private career data unless redacted and
+approved; career remains a deny-by-default private data class.
 
 Scoped agents affect readiness through context minimization, permission
 boundaries, output contracts, validation requirements, and result normalization.
@@ -205,3 +203,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- 2026-06-03: Phase 19.2 adds findings.dismissed_at + dismissed_reason (migration 096 ALTER TABLE); dismiss endpoint at POST /api/v1/findings/{id}/dismiss; no production readiness gate change — dismissal tracking is additive instrumentation -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- 2026-06-05: Phase 18.6.2 — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Both tables had 0 rows. Removed from authority table list. _record_scorecards() guarded in controls.py. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/portfolio" + "publish career artifacts, fill applications" from the expert-workflow readiness paragraph; renamed "## Career, Scoped Agent, And Repo Intake Readiness" to "## Scoped Agent And Repo Intake Readiness" and replaced the Career-Ops module readiness text with a career-as-private-data-class exclusion; scoped-agent and repo-intake readiness paragraphs unchanged. -->

@@ -76,10 +76,10 @@ That route is a derived release-readiness signal only. It must not create
 findings, run scans, inspect secrets, or replace profile-pack evidence.
 
 Security reviewers may use `/api/shared-intelligence/expert-workflows` to map
-implementation, debugging, design, documentation, API, data modeling, SEO, and
-career/application workflow outputs to existing skill owners and evidence
-requirements. The route is a catalog, not a scanner or browser automation
-surface. It must not inspect secrets, submit applications, or create findings.
+implementation, debugging, design, documentation, API, data modeling, and SEO
+workflow outputs to existing skill owners and evidence
+requirements. The route is a catalog, not a scanner. It must not inspect
+secrets or create findings.
 
 Project Details can display normalized security findings, 47-control
 applicability, and module/profile fit together with stack evidence. That view is
@@ -335,12 +335,7 @@ impact linkage, and no fake model/provider, file, command, validation, outcome,
 token, or cost precision. Imported or untracked adapter work must remain
 classified as such until high-confidence Dream Studio authority exists.
 
-## Career, Capability, Agent, And GitHub Intake Review Profile
-
-Career Ops changes must include privacy, publication-boundary, local-storage,
-browser-automation, and evidence-backed-claim checks. Application automation
-must preserve no account creation, no CAPTCHA bypass, no misrepresentation, and
-no submission without approval.
+## Capability, Agent, And GitHub Intake Review Profile
 
 Scoped-agent changes must include context-minimization checks: no full
 conversation history, secrets, all Work Orders, all memories, unrelated
@@ -371,3 +366,5 @@ controls instead of creating a competing PRD-specific security system.
 
 <!-- 2026-06-03: Phase 19.2 dismiss endpoint (POST /api/v1/findings/{id}/dismiss) feeds dismissed_finding friction signals; security-review-profile pack contract unchanged — no new scan rules, only operator dismissal tracking -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/application" + application-submission/browser-automation clauses from the expert-workflow mapping paragraph; renamed "## Career, Capability, Agent, And GitHub Intake Review Profile" to "## Capability, Agent, And GitHub Intake Review Profile" and removed the Career Ops review-profile paragraph; the scoped-agent "private career data by default" exclusion stays as a privacy class. -->

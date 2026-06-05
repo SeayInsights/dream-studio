@@ -91,11 +91,10 @@ state mutation.
 
 Expert workflow maturity is part of readiness evidence when a change touches
 implementation process, code quality, debugging, performance, design,
-SEO/content, documentation, data modeling, API integration, case studies, or
-career/portfolio operations. The expert workflow catalog can inform readiness
+SEO/content, documentation, data modeling, API integration, or case studies.
+The expert workflow catalog can inform readiness
 and dashboard attention, but it is read-only: it does not execute skills,
-publish private career artifacts, fill applications, mutate SQLite, or create a
-parallel skill authority.
+mutate SQLite, or create a parallel skill authority.
 
 Contract Atlas lifecycle freshness is also part of release/publication
 readiness evidence. `ds contract-atlas-refresh` and
@@ -160,10 +159,8 @@ or full orchestration to display current analytics.
 
 ## Private Capability Readiness
 
-Career Ops readiness is private and opt-in. A release-ready state requires
-career records to stay local/private, public exports to exclude career data by
-default, application automation boundaries to be explicit, and scorecards to be
-evidence-backed or honestly unavailable.
+Career remains a deny-by-default private data class: a release-ready state
+requires public exports to exclude career data by default.
 
 Capability Center readiness requires skills, workflows, agents, controls,
 evaluations, and hardening candidates to read from Dream Studio authority or
@@ -275,3 +272,5 @@ not treat a PRD draft as proof of production readiness.
 <!-- 2026-06-03: Phase 19.2 friction signal harvester: passive session-end capture only; no product readiness gate change; dismissed findings feed 19.3 Gap Classifier -->
 <!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
 <!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/portfolio operations" + "publish private career artifacts, fill applications" from the expert-workflow readiness paragraph; replaced the "Career Ops readiness is private and opt-in" paragraph under "Private Capability Readiness" with a career-as-private-data-class export-exclusion statement; Capability Center readiness paragraph unchanged. -->

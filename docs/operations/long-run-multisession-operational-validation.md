@@ -18,7 +18,6 @@ The closeout model requires evidence for:
 - Contract Atlas/docs drift check
 - security/readiness classification
 - expert workflow catalog and overlap check
-- Career Ops private-boundary check
 - Capability Center and scoped-agent context check
 - GitHub repo intake workflow check
 - adapter/router status check
@@ -43,7 +42,7 @@ The validation report blocks when it sees:
 - evidence file sprawl
 - dashboard authority drift
 - expert workflow overlap decisions creating duplicate skill systems
-- private Career Ops data leaking into public exports
+- private career data leaking into public exports
 - scoped agents receiving full conversation history, secrets, all Work Orders,
   all memories, or unrelated private data by default
 - GitHub repo intake skipping license/security/overlap review before adoption
@@ -123,3 +122,5 @@ Long-run validation should include the platform-hardening summary, policy previe
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the "Career Ops private-boundary check" validation-cycle bullet (module gone); reworded the boundary-check risk "private Career Ops data leaking into public exports" to "private career data leaking into public exports" so it reads as a privacy-class check, not a module check. -->
