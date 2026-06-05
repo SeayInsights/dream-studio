@@ -115,7 +115,9 @@ class SessionCollector:
             """,
                 (cutoff_date,),
             )
-            by_project = {row["project_id"]: row["count"] for row in cursor.fetchall()}
+            by_project = {
+                (row["project_id"] or "unknown"): row["count"] for row in cursor.fetchall()
+            }
 
             # Timeline (daily)
             cursor.execute(

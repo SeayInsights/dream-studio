@@ -272,3 +272,4 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- 2026-06-03: migration 096 creates ds_friction_signals (3 signal types: dismissed_finding, partial_completion, pattern_gap) + alters findings table to add dismissed_at/dismissed_reason columns (Phase 19.2 Friction Signal Harvester) -->
 <!-- 2026-06-03: migration 097 adds classification_confidence, classification_reason, classification_skipped to ds_friction_signals (Phase 19.3 Gap Classifier) -->
 <!-- 2026-06-03: migration 098 adds validation_detail TEXT column to ds_user_extensions (Phase 19.5 Retroactive Validation audit trail) -->
+<!-- 2026-06-05: phase-18-2 gap closure + popup refactor — no schema change, no migration; _repo_stack_evidence() removed from /details critical path; session_collector NULL project_id fix -->
