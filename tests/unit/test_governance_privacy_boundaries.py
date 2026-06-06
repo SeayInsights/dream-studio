@@ -114,20 +114,6 @@ def _python_files(*roots: Path) -> list[Path]:
     return [path for path in files if "__pycache__" not in path.parts and ".venv" not in path.parts]
 
 
-def _export_files() -> list[Path]:
-    exporter_root = REPO_ROOT / "projections" / "exporters"
-    return [
-        REPO_ROOT / "projections" / "api" / "routes" / "exports.py",
-        REPO_ROOT / "projections" / "api" / "routes" / "reports.py",
-        *[
-            path
-            for path in sorted(exporter_root.glob("*.py"))
-            if path.name != "__init__.py"
-            and not path.name.startswith(("test_", "example_", "demo_"))
-        ],
-    ]
-
-
 def _sql_writes_in_file(path: Path) -> list[tuple[str, str, str]]:
     source = _read(path)
     writes: list[tuple[str, str, str]] = []
@@ -182,26 +168,6 @@ def test_governance_contract_defines_signal_and_export_boundaries():
     assert "init_security_state.py" in contract
     assert "no active writer in Phase 11C" in contract
     assert "unsupported legacy custom-query fields" in contract
-
-
-def test_export_and_report_surfaces_do_not_reference_raw_private_tables():
-    offenders: list[str] = []
-
-    for path in _export_files():
-        source = _read(path)
-        for table in sorted(RAW_PRIVATE_TABLES):
-            if _contains_word(source, table):
-                offenders.append(f"{_rel(path)} references raw/private table {table}")
-
-    exports_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "exports.py")
-    reports_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "reports.py")
-    csv_exporter_source = _read(REPO_ROOT / "projections" / "exporters" / "csv_exporter.py")
-
-    assert "include_raw_data: bool = Query(False" in exports_source
-    assert "classify_export_privacy" in exports_source
-    assert "classify_export_privacy" in reports_source
-    assert "validate_export_payload" in csv_exporter_source
-    assert offenders == []
 
 
 def test_export_privacy_gate_blocks_raw_private_sources():

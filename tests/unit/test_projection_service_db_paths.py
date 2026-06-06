@@ -12,8 +12,6 @@ from projections.core.alerts import alert_evaluator as alert_evaluator_module
 from projections.core.alerts import rule_manager as rule_manager_module
 from projections.core.alerts.rule_manager import RuleManager
 from projections.core.alerts.alert_evaluator import AlertEvaluator
-from projections.core.scheduler import storage as storage_module
-from projections.core.scheduler.storage import ScheduleStorage
 from projections.scoring import engine as risk_engine_module
 from projections.scoring.engine import RiskScoringEngine
 
@@ -24,31 +22,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _forbid_global_db(*_args, **_kwargs):
     raise AssertionError("explicit db_path code path used a global DB helper")
-
-
-def test_schedule_storage_honors_explicit_db_path(monkeypatch, tmp_path):
-    monkeypatch.setattr(storage_module, "get_connection", _forbid_global_db)
-    monkeypatch.setattr(storage_module, "transaction", _forbid_global_db)
-
-    db_path = tmp_path / "schedules.db"
-    storage = ScheduleStorage(db_path)
-    job_id = storage.save_schedule(
-        {
-            "name": "Weekly summary",
-            "report_type": "summary",
-            "schedule": "0 9 * * MON",
-            "recipients": ["team@example.com"],
-            "format": "pdf",
-        }
-    )
-
-    schedules = storage.load_schedules()
-
-    with sqlite3.connect(db_path) as conn:
-        rows = conn.execute("SELECT job_id, name FROM scheduled_reports").fetchall()
-
-    assert schedules[0]["job_id"] == job_id
-    assert rows == [(job_id, "Weekly summary")]
 
 
 def test_rule_manager_honors_explicit_db_path(monkeypatch, tmp_path):

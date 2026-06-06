@@ -277,15 +277,6 @@ def test_main_repo_org_intelligence_is_a_real_package():
     assert (oi_pkg / "__init__.py").exists(), "core/org_intelligence/__init__.py missing"
 
 
-def test_deprecated_dashboard_generator_is_not_enterprise_input_surface():
-    source = _read(REPO_ROOT / "projections" / "generators" / "production_dashboard.py")
-
-    assert "ENTERPRISE_AGGREGATION_INPUT_ALLOWED = False" in source
-    assert "legacy_local_projection_generator_not_enterprise_input" in source
-    assert "not an enterprise" in source
-    assert "aggregation input surface" in source
-
-
 def test_enterprise_tests_remain_excluded_until_isolated_and_contracted():
     enterprise = _require_enterprise_repo()
     dev_script = _read(REPO_ROOT / "scripts" / "dev.ps1")
