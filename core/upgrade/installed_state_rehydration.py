@@ -80,8 +80,8 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     },
     {
         "source_domain": "skills",
-        "target_domain": "skill_invocations and telemetry entity registry",
-        "target_tables": ["skill_invocations", "telemetry_entity_registry"],
+        "target_domain": "skill_invocations",
+        "target_tables": ["skill_invocations"],
         "source_evidence": ["integration_matrix"],
         "status": "map_in_rehearsal",
     },

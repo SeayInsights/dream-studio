@@ -70,7 +70,7 @@ Before adding or changing an adapter, verify:
 
 - The adapter's canonical role is named: normalizer, execution adapter, discovery adapter, governance ingestion adapter, or projection/service adapter.
 - The owning core interface is named for every persistence side effect.
-- Direct writes to `canonical_events`, `activity_log`, `execution_nodes`, `decision_log`, `memory_entries`, `risk_register`, or other canonical tables are absent from `interfaces/adapters`.
+- Direct writes to `canonical_events`, `activity_log`, `execution_nodes`, `decision_log`, `memory_entries`, or other canonical tables are absent from `interfaces/adapters`.
 - Vendor SDK imports are absent from core import paths unless a future contract explicitly makes the package optional and lazy.
 - The adapter can be replaced without migrating canonical local state.
 - Metadata says which tool/model/provider produced evidence without claiming architecture authority.

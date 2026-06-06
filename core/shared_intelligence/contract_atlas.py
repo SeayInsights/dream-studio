@@ -1183,7 +1183,7 @@ def _confirmed_dependency_graph(
         "module:scoped_agent_execution",
         "layer:sqlite_authority",
         "normalizes_results_to",
-        "agent_result_records and invocation/result authority tables",
+        "invocation/result authority tables",
     )
 
     add_node("module:github_repo_intake", "module", "GitHub Repo Intake")
@@ -1384,11 +1384,8 @@ def _source_tables() -> list[str]:
             "reg_projects",
             "release_readiness_records",
             "validation_results",
-            "capability_center_records",
             "agent_registry_records",
             "agent_context_scope_policies",
-            "workflow_agent_skill_mappings",
-            "agent_result_records",
             "github_repo_evaluations",
             "github_repo_license_findings",
             "github_repo_security_findings",

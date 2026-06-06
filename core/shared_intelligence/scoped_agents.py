@@ -102,8 +102,6 @@ def scoped_agent_registry(conn: sqlite3.Connection | None = None) -> dict[str, A
         "source_tables": [
             "agent_registry_records",
             "agent_context_scope_policies",
-            "workflow_agent_skill_mappings",
-            "agent_result_records",
             "agent_invocations",
         ],
     }
@@ -155,7 +153,6 @@ def scoped_context_packet(
         "max_context_budget": agent.get("max_context_budget"),
         "forbidden_context_by_default": list(FORBIDDEN_CONTEXT_BY_DEFAULT),
         "result_normalization_targets": [
-            "agent_result_records",
             "agent_invocations",
             "decision_records",
             "validation_results",
@@ -182,7 +179,6 @@ def normalize_agent_result(
         "result_status": result_status,
         "agent_is_authority": False,
         "normalized_target_tables": [
-            "agent_result_records",
             "agent_invocations",
             "decision_records",
             "validation_results",

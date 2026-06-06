@@ -63,7 +63,6 @@ class TestActivityIdNullable:
         "sec_sarif_findings",
         "sec_manual_reviews",
         "sec_cve_matches",
-        "sec_hook_checks",
         "adapter_executions",
     ]
 

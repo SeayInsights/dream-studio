@@ -182,7 +182,6 @@ def test_telemetry_modules_do_not_mutate_authoritative_state_tables_directly():
         "decision_log",
         "decision_event_link",
         "memory_entries",
-        "risk_register",
         "guardrail_decisions",
     ]
     offenders: list[str] = []

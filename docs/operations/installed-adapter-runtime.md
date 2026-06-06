@@ -321,3 +321,5 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
 
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the `career_ops_only` module profile bullet and its dedicated paragraph, dropped `career_ops` from the `core.module_contracts` boundary list, and stripped career/application clauses from the expert-workflows route description; module-profile and adapter-access text around them stays complete. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). installed-state rehydration mapping no longer names dropped telemetry_entity_registry. No semantic change required. -->

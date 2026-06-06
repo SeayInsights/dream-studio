@@ -185,34 +185,6 @@ def _execute(conn: sqlite3.Connection, sql: str, values: Mapping[str, Any]) -> N
     conn.execute(sql, dict(values))
 
 
-def register_default_modules(conn: sqlite3.Connection) -> None:
-    """Insert dashboard module declarations if they are not already present."""
-
-    for module in DASHBOARD_MODULES:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO telemetry_module_registry (
-                module_id, module_name, module_type, enabled, execution_mode,
-                docker_profile, owns_tables_json, emits_event_types_json,
-                dashboard_cards_json, health_status
-            ) VALUES (
-                :module_id, :module_name, :module_type, 1, 'local',
-                :docker_profile, :owns_tables_json, :emits_event_types_json,
-                :dashboard_cards_json, 'declared'
-            )
-            """,
-            {
-                "module_id": module["module_id"],
-                "module_name": module["module_name"],
-                "module_type": module["module_type"],
-                "docker_profile": module["docker_profile"],
-                "owns_tables_json": _json(module["owns_tables"], []),
-                "emits_event_types_json": _json(module["source_tables"], []),
-                "dashboard_cards_json": _json(module["dashboard_cards"], []),
-            },
-        )
-
-
 def record_process_run(conn: sqlite3.Connection, **values: Any) -> None:
     _execute(
         conn,

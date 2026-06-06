@@ -72,7 +72,6 @@ CANONICAL_STATE_TABLES = {
     "memory_entries",
     "hook_executions",
     "adapter_executions",
-    "risk_register",
     "guardrail_decisions",
 }
 

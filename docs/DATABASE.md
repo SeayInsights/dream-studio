@@ -27,11 +27,12 @@ Dream Studio's SQLite authority covers:
 Current Capability Center, scoped-agent, and GitHub repo intake
 authority lives in migration 044:
 
-- `capability_center_records` for optional persisted capability metadata, with
-  dashboard summaries also reading current invocation and hardening records;
-- `agent_registry_records`, `agent_context_scope_policies`,
-  `workflow_agent_skill_mappings`, and `agent_result_records` for scoped worker
-  declarations and normalized results;
+- `agent_registry_records` and `agent_context_scope_policies` for scoped worker
+  declarations; dashboard summaries also read current invocation and hardening
+  records. (Wave 6 / migration 101 dropped the 0-row `capability_center_records`,
+  `workflow_agent_skill_mappings`, and `agent_result_records` tables 044 created;
+  Capability Center now reports an empty state and normalized agent results route
+  to `agent_invocations`/`decision_records`/`validation_results`/`artifact_records`.)
 - `github_repo_*` tables for evidence-backed repository evaluations, license,
   security, dependency, integration, pattern, adoption, and attribution records.
 
@@ -274,3 +275,6 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100, drop-only, 0 rows, IF EXISTS, no view/FK deps; migration 044 stays immutable), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Body edit: removed the `career_profiles`/`career_*` tables bullet and dropped "Career Ops" from the "authority lives in migration 044" lead-in (the other three modules still live there); the "Career data is private by default and excluded from public exports" sentence stays as a privacy-class statement. -->
 
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
+
+
+<!-- 2026-06-06: Wave 6 verified-dead table drops — migration 101 (101_drop_verified_dead_tables.sql) is a DROP TABLE-only migration. 13 tables dropped, all 0 rows on per-table verification with no live code readers/writers, no view deps, and FK-safe child-before-parent order (IF EXISTS on every DROP): automation_checkpoints, automation_log, risk_mitigations, risk_register, telemetry_entity_registry, telemetry_module_registry, reg_repo_research_links, agent_result_records, capability_center_records, dashboard_authority_reconciliation_records, guardrail_rules_audit, sec_hook_checks, workflow_agent_skill_mappings. The audit's ~38-candidate list was reduced to 13 after per-table verification found live paths on 18; the 7 prd_* cluster tables are deferred (view/FK web with kept tables). Creating migrations (005/007/020/021/027/028/037/039/044) remain immutable history. Body edit: the migration-044 paragraph now records that capability_center_records, workflow_agent_skill_mappings, and agent_result_records were dropped (Capability Center reports empty state; normalized agent results route to agent_invocations/decision_records/validation_results/artifact_records). No additive DDL; no policy or publication boundary change. -->

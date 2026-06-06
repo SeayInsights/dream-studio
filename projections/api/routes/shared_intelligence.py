@@ -157,7 +157,6 @@ async def get_shared_intelligence_status(
                     "api_path": "/api/shared-intelligence/contract-atlas",
                     "source_tables": [
                         "adapter_authority_profiles",
-                        "telemetry_module_registry",
                         "execution_events",
                     ],
                 },
@@ -214,7 +213,6 @@ async def get_shared_intelligence_status(
                     "surface_id": "capability-center",
                     "api_path": "/api/shared-intelligence/capability-center",
                     "source_tables": [
-                        "capability_center_records",
                         "skill_invocations",
                         "workflow_invocations",
                         "agent_invocations",
@@ -227,8 +225,6 @@ async def get_shared_intelligence_status(
                     "source_tables": [
                         "agent_registry_records",
                         "agent_context_scope_policies",
-                        "workflow_agent_skill_mappings",
-                        "agent_result_records",
                     ],
                 },
                 {
@@ -285,7 +281,6 @@ async def get_shared_intelligence_status(
                 "ai_usage_operational_records",
                 "token_usage_records",
                 "task_attribution_records",
-                "capability_center_records",
                 "agent_registry_records",
                 "github_repo_evaluations",
                 "skill_evaluation_runs",

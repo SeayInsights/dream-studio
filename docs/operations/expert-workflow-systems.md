@@ -160,3 +160,5 @@ authority.
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the `career_strategy_and_portfolio_ops_workflow` overlap-matrix row, the entire "Career And Portfolio Boundary" section, the Career-Ops-module mapping paragraph under Capability Center Integration, and career clauses from the intro, authority-boundary, and validation lists; the surrounding skill/workflow catalog text stays intact. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). dropped workflow_agent_skill_mappings was 0-row metadata only; expert workflow system unchanged. No semantic change required. -->
