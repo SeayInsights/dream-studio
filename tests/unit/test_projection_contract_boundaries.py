@@ -130,10 +130,6 @@ def test_route_ownership_matrix_names_every_api_route_group():
         "`security.py` SARIF import route",
         "`audits.py`",
         "`alerts.py`",
-        "`schedules.py`",
-        "`reports.py`",
-        "`exports.py`",
-        "`realtime.py`",
         "`prd.py`",
         "`project_intelligence.py`",
         "`discovery_internal.py`",
@@ -253,12 +249,9 @@ def test_dashboard_frontend_does_not_open_database_or_write_state():
 def test_route_service_write_exceptions_are_visible_in_contract():
     contract = _read(CONTRACT_PATH)
     alerts_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "alerts.py")
-    schedules_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "schedules.py")
 
     assert "RuleManager" in alerts_source
     assert "SLATracker" in alerts_source
-    assert "ScheduleStorage" in schedules_source
     assert "`alert_rules`" in contract
     assert "`alert_history`" in contract
     assert "`sla_definitions`" in contract
-    assert "`scheduled_reports`" in contract

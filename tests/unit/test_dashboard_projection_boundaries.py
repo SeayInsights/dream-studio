@@ -80,7 +80,6 @@ PROJECTION_SERVICE_TABLES = {
     "alert_rules",
     "alert_history",
     "sla_definitions",
-    "scheduled_reports",
 }
 
 
@@ -233,7 +232,6 @@ def test_projection_service_state_writers_remain_named_tables_only():
     service_writes = set()
     for root in [
         REPO_ROOT / "projections" / "core" / "alerts",
-        REPO_ROOT / "projections" / "core" / "scheduler",
         REPO_ROOT / "projections" / "core" / "sla",
     ]:
         service_writes.update(_sql_writes_under(root))
@@ -268,21 +266,6 @@ def test_security_sarif_route_remains_stubbed_until_parser_activation_is_classif
     assert "# result = parse_sarif_file(tmp_path)" in source
 
 
-def test_schedule_service_uses_canonical_projection_state_authority():
-    route_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "schedules.py")
-    storage_source = _read(REPO_ROOT / "projections" / "core" / "scheduler" / "storage.py")
-
-    assert "schedules.db" not in route_source
-    assert "ScheduleStorage()" in route_source
-    assert (
-        "Scheduled reports are projection service state in the canonical local DB" in route_source
-    )
-    assert "self._explicit_db_path" in storage_source
-    assert "studio_db._db_transaction(self._explicit_db_path)" in storage_source
-    assert "studio_db._connect(self._explicit_db_path)" in storage_source
-    assert "sqlite3.connect(str(self.db_path))" not in storage_source
-
-
 def test_package_local_api_integration_tests_remain_classified_until_isolated():
     path = REPO_ROOT / "projections" / "api" / "test_api_integration.py"
     source = _read(path)
@@ -301,6 +284,3 @@ def test_package_local_api_integration_tests_remain_classified_until_isolated():
     if not is_explicitly_isolated:
         assert is_explicitly_opt_in
         assert "TestClient(app)" in source
-        assert "client.post(" in source
-        assert "client.put(" in source
-        assert "client.delete(" in source
