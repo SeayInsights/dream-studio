@@ -17,12 +17,10 @@ Dream Studio governance signals are local operational evidence. They make securi
 
 | Surface | Owner | Classification | Rule |
 | --- | --- | --- | --- |
-| `risk_register`, `risk_mitigations` | Reserved local governance owner, no active writer in Phase 11C | Local governance state | Local-only until an explicit writer is named. Do not add writers without a future contract update. |
 | `audit_runs` | `projections.api.routes.audits` | Named local governance API write exception | May record audit runs; does not own workflow/execution state. |
 | `guardrail_decisions` | `guardrails.evaluator` | Local guardrail decision audit | May write guardrail decisions and emit approved guardrail/decision lineage. |
-| `guardrail_rules_audit` | Reserved local governance diagnostic owner, no active writer in Phase 11C | Governance diagnostic state | Rule audit evidence only. Do not add writers without a future contract update. |
 | `sec_sarif_findings` | SARIF parser/security routes | Local security evidence | Scanner evidence only; never workflow authority. |
-| `sec_cve_matches`, `sec_manual_reviews`, `sec_hook_checks` | Reserved local security evidence owners, no active writer in Phase 11C | Local security evidence | Scanner/manual/hook evidence only. Do not add writers without a future contract update. |
+| `sec_cve_matches`, `sec_manual_reviews` | Reserved local security evidence owners, no active writer in Phase 11C | Local security evidence | Scanner/manual evidence only. Do not add writers without a future contract update. |
 | `activity_log` security/governance entries | Legacy operational hub | Named legacy evidence surface | Compatibility evidence only; canonical event authority stays with `canonical_events`. |
 | `validation_failures` | Event store validation path | Diagnostic rejected payload evidence | Local-only/private by default. |
 
@@ -47,7 +45,7 @@ Dream Studio governance signals are local operational evidence. They make securi
 ## Scanner And Guardrail Rules
 
 - SARIF, CVE, manual review, hook security, prompt injection, LLM guard, and Giskard-style scanner outputs are evidence.
-- Scanner/parsing/scoring code may write only named security evidence tables or named legacy evidence surfaces: `sec_sarif_findings`, `sec_cve_matches`, `sec_manual_reviews`, `sec_hook_checks`, and `activity_log`.
+- Scanner/parsing/scoring code may write only named security evidence tables or named legacy evidence surfaces: `sec_sarif_findings`, `sec_cve_matches`, `sec_manual_reviews`, and `activity_log`.
 - Scanner/parsing/scoring code must not write canonical workflow, orchestration, execution, memory, or event tables.
 - Guardrail evaluation may emit approved guardrail events, emit decision lineage through `core.decisions`, and write `guardrail_decisions`.
 - Guardrail trigger matching against `activity_log` is a legacy compatibility surface aligned to supported fields: `activity_id`, `activity_type`, `stream_id`, `stream_type`, `event_data`, and `severity`. Named trigger fields map onto those columns; unsupported legacy custom-query fields such as `event_type`, `event_id`, `metadata`, and `tool_name` fail closed.

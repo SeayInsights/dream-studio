@@ -264,3 +264,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
 
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/application automation boundaries" and "private career automation boundaries are preserved" from the expert-workflow drift-gate paragraph; removed "Career Ops" from the capability/agent/intake drift-gate paragraph heading and dropped "private career authority" while keeping the "private career data is excluded from public exports" privacy-class assertion. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->

@@ -21,8 +21,11 @@ The core tables are:
 
 - `execution_events`
 - `process_runs`
-- `telemetry_module_registry`
-- `telemetry_entity_registry`
+
+(`telemetry_module_registry` and `telemetry_entity_registry` were declared in
+the original spine but never carried live data; both were dropped 0-row in Wave 6
+/ migration 101. Module declarations are now served in-memory by
+`dashboard_module_declarations()`.)
 
 Each module fact table links back to project, milestone, task, process run, and
 event where applicable. This keeps the system modular without losing global

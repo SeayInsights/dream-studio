@@ -159,3 +159,5 @@ approval boundaries.
 
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Career did not appear in this doc's body; no semantic change required beyond this stamp. -->
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). prd_* cluster deferred (not dropped); only shared-intelligence source_tables metadata adjacent to the prd-authority surface changed. No semantic change required. -->

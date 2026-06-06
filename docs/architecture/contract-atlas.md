@@ -383,3 +383,5 @@ and boundary report without inventing new dependency data.
 <!-- 2026-06-05: Phase 18.6.2 reviewed — project_health_scorecards and project_readiness_scorecards dropped (migration 099). Contract Atlas, dashboard mapping, and product readiness docs are not affected; production_readiness_assessment_runs and related tables remain. -->
 
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). contract-atlas _source_tables() set + scoped-agent edge label no longer name the dropped capability_center_records/workflow_agent_skill_mappings/agent_result_records; surface source_tables lists updated. No claim-boundary change. -->
