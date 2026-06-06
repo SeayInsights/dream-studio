@@ -250,19 +250,11 @@ def test_projection_service_state_writers_remain_named_tables_only():
         assert f"`{table}`" in contract
 
 
-def test_security_sarif_route_remains_stubbed_until_parser_activation_is_classified():
+def test_security_sarif_parser_is_active():
     source = _read(REPO_ROOT / "projections" / "api" / "routes" / "security.py")
-    active_parser_calls = [
-        line.strip()
-        for line in source.splitlines()
-        if "parse_sarif_file" in line and not line.lstrip().startswith("#")
-    ]
-
-    assert active_parser_calls == [
-        "and calls parse_sarif_file() to process the results.",
-    ]
-    assert "# from projections.parsers.sarif_parser import parse_sarif_file" in source
-    assert "# result = parse_sarif_file(tmp_path)" in source
+    assert "from projections.parsers.sarif_parser import parse_sarif_file" in source
+    assert "parse_sarif_file(tmp_path)" in source
+    assert "SARIF parser not yet implemented" not in source
 
 
 def test_package_local_api_integration_tests_remain_classified_until_isolated():

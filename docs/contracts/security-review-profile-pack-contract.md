@@ -371,3 +371,5 @@ controls instead of creating a competing PRD-specific security system.
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-B broken surfaces. projections/api/routes/security.py change (SARIF parser activation) does not modify any review profile pack, scan catalog, or profile-pack contract shape. No semantic change required. -->
