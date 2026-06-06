@@ -27,7 +27,6 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 | GitHub adapter | `core/execution/github_adapter.py` | gh CLI wrapper (subprocess) |
 | CI collector | `core/execution/ci_collector.py` | Test/CI signal collector |
 | Tracking hook | `control/execution/workflow/tracking.py` | Hook context extraction |
-| Learning | `control/execution/workflow/learning.py` | Historical performance tracking |
 
 Hook launchers are part of the workflow/runtime boundary because workflow and
 skill events can be routed through adapter hook surfaces. On Windows,
@@ -183,6 +182,8 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: on-context-threshold.py hook updated (see HOOK_RUNTIME.md for details). No workflow YAML, engine, state, validator, gate, or retry contract change. -->
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-06-06, WO-C orphan rot sweep. control/execution/workflow/learning.py deleted (zero importers confirmed). Removed its row from Runtime Integration table. sibling tracking.py is live and retained. No workflow YAML, engine, state, validator, gate, or retry contract change. -->
 
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 

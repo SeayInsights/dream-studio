@@ -376,3 +376,5 @@ the source repo.
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped `career/portfolio` from the expert-workflow-surface catalog list and replaced the career-automation-runner caveat with a generic read-only-catalog caveat; removed the `career_ops_only` opt-in private module paragraph under "Private Capability Modules" (the scoped-agent privacy sentence stays). -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-C orphan rot sweep. core/module_contracts.py: removed dead test file reference from 3 module validation_tests lists. No module profile, install runtime, or productization behavior change. No semantic change required. -->

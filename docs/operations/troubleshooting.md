@@ -281,3 +281,5 @@ authority before continuing implementation.
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed the "Career Ops Is Disabled" troubleshooting section (module no longer exists); the "career-private data" exclusion in "Scoped Agent Context Looks Too Small" stays as a deny-by-default privacy class. -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-C orphan rot sweep. core/module_contracts.py: removed dead test file reference from 3 module validation_tests lists. No troubleshooting guidance affected. No semantic change required. -->

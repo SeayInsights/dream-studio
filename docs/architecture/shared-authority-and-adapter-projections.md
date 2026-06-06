@@ -264,3 +264,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped "career/portfolio" from the expert-workflow contract list, removed the career/application/browser-automation caveats and the "Career Ops follows the same authority boundary" paragraph; the PRD-lifecycle "career data" exclusion stays as a deny-by-default privacy class. -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-C orphan rot sweep. core/module_contracts.py: removed dead test file reference from 3 module validation_tests lists. No shared authority boundary or adapter projection contract change. No semantic change required. -->
