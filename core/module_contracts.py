@@ -323,7 +323,6 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "security_readiness_impact": "Capability evaluations and hardening candidates inform maturity/readiness.",
         "contract_atlas_maturity_level": "tested_only",
         "validation_tests": [
-            "tests/unit/test_career_ops_capability_agent_github.py",
             "tests/unit/test_module_contracts.py",
         ],
     },
@@ -351,7 +350,6 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "security_readiness_impact": "Context minimization and approval boundaries reduce agent execution risk.",
         "contract_atlas_maturity_level": "tested_only",
         "validation_tests": [
-            "tests/unit/test_career_ops_capability_agent_github.py",
             "tests/unit/test_module_contracts.py",
         ],
     },
@@ -386,7 +384,6 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "security_readiness_impact": "License/security/dependency review gates dependency and code adoption.",
         "contract_atlas_maturity_level": "tested_only",
         "validation_tests": [
-            "tests/unit/test_career_ops_capability_agent_github.py",
             "tests/unit/test_module_contracts.py",
         ],
     },
