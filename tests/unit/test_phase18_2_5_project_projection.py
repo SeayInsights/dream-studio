@@ -446,3 +446,24 @@ def test_unknown_event_type_skips(tmp_db):
     evt = _mk_project_event("project.archived")
     result = _call_handle(proj, evt, tmp_db)
     assert result == 0
+
+
+def test_single_event_produces_exactly_one_row(tmp_db):
+    """Regression: one project.created event must produce exactly 1 row, not 3.
+
+    Bug4 context: INSERT OR IGNORE + UPDATE pattern. Both statements touch the
+    same row — they must NOT produce duplicates or triplicates.
+    """
+    proj = _setup_projection(tmp_db)
+    evt = _mk_project_event("project.created", name="Solo", status="active")
+    _call_handle(proj, evt, tmp_db)
+
+    conn = sqlite3.connect(str(tmp_db))
+    count = conn.execute(
+        "SELECT COUNT(*) FROM business_projects WHERE project_id = ?", (_PROJECT_ID,)
+    ).fetchone()[0]
+    total = conn.execute("SELECT COUNT(*) FROM business_projects").fetchone()[0]
+    conn.close()
+
+    assert count == 1, f"Expected 1 row for project_id, got {count}"
+    assert total == 1, f"Expected 1 total row in business_projects, got {total}"

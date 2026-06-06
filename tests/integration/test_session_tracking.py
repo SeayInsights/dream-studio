@@ -81,21 +81,63 @@ def test_session_start_sentinel_prevents_double_fire(isolated_home, monkeypatch,
 
 
 def test_session_end_calls_end_session(isolated_home, monkeypatch, handler):
-    """main() calls end_session with the session_id from the Stop payload."""
+    """main() calls end_session with session_id and outcome from the Stop payload."""
     mod = handler("on-session-end")
     calls: list[tuple] = []
     monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
     monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
     monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
 
-    payload = {"session_id": "stop-session-xyz"}
+    payload = {"session_id": "stop-session-xyz", "stop_reason": "end_turn"}
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
 
     mod.main()
 
     assert len(calls) == 1
-    args, _kwargs = calls[0]
+    args, kwargs = calls[0]
     assert args[0] == "stop-session-xyz"
+    assert kwargs.get("outcome") == "end_turn"
+
+
+def test_session_end_default_outcome_when_no_stop_reason(isolated_home, monkeypatch, handler):
+    """outcome defaults to 'end_turn' when stop_reason absent from payload."""
+    mod = handler("on-session-end")
+    calls: list[tuple] = []
+    monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
+    monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
+
+    payload = {"session_id": "stop-session-no-reason"}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    mod.main()
+
+    assert len(calls) == 1
+    _, kwargs = calls[0]
+    assert kwargs.get("outcome") == "end_turn"
+
+
+def test_session_end_output_tokens_reads_completion_tokens(isolated_home, monkeypatch, handler):
+    """output_tokens reads completion_tokens field, not prompt_tokens (copy-paste regression)."""
+    mod = handler("on-session-end")
+    calls: list[tuple] = []
+    monkeypatch.setattr(mod, "end_session", lambda *a, **kw: calls.append((a, kw)) or True)
+    monkeypatch.setattr(mod, "has_sentinel", lambda k: False)
+    monkeypatch.setattr(mod, "set_sentinel", lambda k, c: None)
+
+    payload = {
+        "session_id": "stop-session-tokens",
+        "prompt_tokens": 100,
+        "completion_tokens": 42,
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+
+    mod.main()
+
+    assert len(calls) == 1
+    _, kwargs = calls[0]
+    assert kwargs.get("input_tokens") == 100
+    assert kwargs.get("output_tokens") == 42
 
 
 def test_session_end_sentinel_prevents_double_fire(isolated_home, monkeypatch, handler):
@@ -139,21 +181,24 @@ def test_session_end_graceful_without_session_id(isolated_home, monkeypatch, han
     assert calls == []
 
 
-# ── T008: on-skill-metrics token usage ───────────────────────────────────
+# ── T008: on-skill-metrics skill usage ───────────────────────────────────
 
 
-def test_skill_metrics_inserts_token_usage(isolated_home, monkeypatch, handler):
-    """on-skill-metrics calls insert_token_usage with the granular display name.
+def test_skill_metrics_writes_skill_usage(isolated_home, monkeypatch, handler):
+    """on-skill-metrics calls write_skill_usage with the granular display name.
 
     The display name strips the 'ds:' prefix and appends the mode,
     so 'ds-core' with args='think' becomes 'core:think'.
+
+    Bug2 regression: insert_token_usage must NOT be called — raw_token_usage
+    writes are retired (path b). Token data goes via v2 token_usage_records.
     """
     mod = handler("on-skill-metrics")
-    tu_calls: list[dict] = []
+    wu_calls: list[tuple] = []
     monkeypatch.setattr(
         mod,
-        "insert_token_usage",
-        lambda **kw: tu_calls.append(kw) or True,
+        "write_skill_usage",
+        lambda *a: wu_calls.append(a),
     )
 
     payload = {
@@ -164,9 +209,9 @@ def test_skill_metrics_inserts_token_usage(isolated_home, monkeypatch, handler):
 
     mod.main()
 
-    assert len(tu_calls) == 1
-    call = tu_calls[0]
-    assert call["session_id"] == "metrics-session"
-    assert call["skill_name"] == "core:think"
-    assert call["input_tokens"] == 0
-    assert call["output_tokens"] == 0
+    assert len(wu_calls) == 1
+    _state_dir, display_name, mode, session_id, _model = wu_calls[0]
+    assert display_name == "core:think"
+    assert mode == "think"
+    assert session_id == "metrics-session"
+    assert not hasattr(mod, "insert_token_usage"), "insert_token_usage must not be imported"

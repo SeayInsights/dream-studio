@@ -174,6 +174,21 @@ class TestHookDispatchChainE2E:
         assert "on-skill-metrics" in names
         assert "on-skill-complete" in names
 
+    def test_post_tool_use_skill_snake_case_routes_all_three_handlers(self, dispatch_env):
+        """Real Claude Code payload uses tool_name (snake_case) — must route identically to toolName."""
+        names, code = _run(
+            "PostToolUse",
+            {
+                "tool_name": "Skill",
+                "tool_input": {"skill": "ds-core", "args": "build"},
+                "session_id": "e2e-test-snake",
+            },
+        )
+        assert code == 0
+        assert "on-tool-activity" in names
+        assert "on-skill-metrics" in names
+        assert "on-skill-complete" in names
+
     # ── PostToolUse — Edit ────────────────────────────────────────────────────
 
     def test_post_tool_use_edit_routes_tool_activity_and_edit_dispatch(self, dispatch_env):

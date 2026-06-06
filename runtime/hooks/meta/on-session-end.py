@@ -47,10 +47,13 @@ def main() -> None:
         return
 
     input_tokens = payload.get("prompt_tokens") if "prompt_tokens" in payload else None
-    output_tokens = payload.get("completion_tokens") if "prompt_tokens" in payload else None
+    output_tokens = payload.get("completion_tokens") if "completion_tokens" in payload else None
+    outcome = payload.get("stop_reason") or "end_turn"
 
     try:
-        end_session(session_id, input_tokens=input_tokens, output_tokens=output_tokens)
+        end_session(
+            session_id, outcome=outcome, input_tokens=input_tokens, output_tokens=output_tokens
+        )
     except Exception:
         pass
 

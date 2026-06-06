@@ -3,10 +3,11 @@
 
 Input contract:
   argv[1]: event name (UserPromptSubmit | Stop | PostToolUse | PostCompact)
-  stdin:   JSON payload; PostToolUse payloads must include toolName field
+  stdin:   JSON payload; PostToolUse payloads include tool_name (snake_case,
+           as sent by Claude Code) or toolName (camelCase, accepted for compat)
 
 Routes to handler scripts in runtime/hooks/{pack}/ based on event name and
-toolName. Always exits 0.
+tool_name. Always exits 0.
 
 Tool-specific emitters normalize their native payload into this contract
 before calling this dispatcher. This module contains no tool-specific logic.
@@ -77,7 +78,7 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         payload = {}
 
-    tool_name: str = payload.get("toolName", "")
+    tool_name: str = payload.get("tool_name", payload.get("toolName", ""))
 
     try:
         plugin_root = _get_plugin_root()

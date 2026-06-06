@@ -36,7 +36,6 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "research_evidence_records",
                 "decision_records",
                 "raw_sessions",
-                "raw_token_usage",
                 "raw_skill_telemetry",
                 "raw_workflow_runs",
                 "hook_executions",
