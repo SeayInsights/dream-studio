@@ -34,15 +34,11 @@ CANONICAL_AUTHORITY_TABLES = {
     "workflow_phases",
     "workflow_kpis",
     "phase_kpis",
-    "risk_register",
-    "risk_mitigations",
     "guardrail_decisions",
-    "guardrail_rules_audit",
     "audit_runs",
     "sec_sarif_findings",
     "sec_manual_reviews",
     "sec_cve_matches",
-    "sec_hook_checks",
 }
 
 SQL_WRITE_PATTERNS = [

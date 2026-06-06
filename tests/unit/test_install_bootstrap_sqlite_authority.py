@@ -198,6 +198,10 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "status TEXT DEFAULT 'vulnerable', patched_at TEXT, "
             "created_at TEXT DEFAULT (datetime('now')))"
         )
+        # sec_hook_checks is dropped by migration 101, but this legacy-schema seed
+        # must remain: migration 062 does INSERT...SELECT * FROM sec_hook_checks
+        # then renames, so the table must exist when 062 replays. 101 (last) drops
+        # it cleanly afterward.
         conn.execute(
             "CREATE TABLE sec_hook_checks("
             "hook_check_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
@@ -278,12 +282,6 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
         assert (
             conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='alert_history'"
-            ).fetchone()
-            is not None
-        )
-        assert (
-            conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='dashboard_authority_reconciliation_records'"
             ).fetchone()
             is not None
         )

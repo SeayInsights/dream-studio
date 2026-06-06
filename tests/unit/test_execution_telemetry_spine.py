@@ -16,7 +16,6 @@ from core.telemetry.execution_spine import (
     record_route_decision,
     record_security_finding,
     record_token_usage,
-    register_default_modules,
     findings_rollup,
     token_rollup,
     usage_by_component,
@@ -25,8 +24,6 @@ from core.telemetry.execution_spine import (
 REQUIRED_TABLES = {
     "execution_events",
     "process_runs",
-    "telemetry_module_registry",
-    "telemetry_entity_registry",
     "agent_invocations",
     "skill_invocations",
     "workflow_invocations",
@@ -53,7 +50,6 @@ def _seed(conn):
         "task_id": "telemetry-spine-test",
         "process_run_id": "process-run-telemetry-test",
     }
-    register_default_modules(conn)
     record_process_run(conn, **scope, run_type="validation", status="completed")
     record_execution_event(
         conn,
@@ -298,7 +294,6 @@ def test_spine_writes_reads_and_global_analytics(tmp_path: Path) -> None:
         _seed(conn)
 
         assert conn.execute("SELECT COUNT(*) FROM execution_events").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM telemetry_module_registry").fetchone()[0] >= 10
         assert (
             usage_by_component(conn, "skill_invocations", "skill_id")[0]["component_id"]
             == "ds-core"

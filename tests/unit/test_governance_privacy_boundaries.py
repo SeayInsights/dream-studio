@@ -76,7 +76,6 @@ SCANNER_EVIDENCE_TABLES = {
     "sec_sarif_findings",
     "sec_cve_matches",
     "sec_manual_reviews",
-    "sec_hook_checks",
 }
 
 AUTHORITY_RESIDUE_TOKENS = {
