@@ -302,7 +302,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "module_id": "capability_center",
         "purpose": "Show skills, workflows, agents, controls, evaluations, and hardening candidates from authority.",
-        "owned_tables": ["capability_center_records"],
+        "owned_tables": [],
         "read_dependencies": [
             "skill_invocations",
             "workflow_invocations",
@@ -333,8 +333,6 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "owned_tables": [
             "agent_registry_records",
             "agent_context_scope_policies",
-            "workflow_agent_skill_mappings",
-            "agent_result_records",
         ],
         "read_dependencies": ["agent_invocations"],
         "write_dependencies": ["agent registry/setup commands and normalized agent results"],

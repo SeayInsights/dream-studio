@@ -62,10 +62,6 @@ def main():
         ),
         ("skill_telemetry", "SELECT * FROM skill_telemetry ORDER BY timestamp DESC LIMIT 100"),
         ("hook_findings", "SELECT * FROM hook_findings WHERE severity = 'high' LIMIT 50"),
-        (
-            "automation_checkpoints",
-            "SELECT * FROM automation_checkpoints ORDER BY created_at DESC LIMIT 50",
-        ),
         ("token_usage", "SELECT SUM(total_tokens) FROM token_usage"),
     ]
 
