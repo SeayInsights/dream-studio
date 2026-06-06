@@ -152,16 +152,17 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
             "docs/architecture/contract-atlas.md",
             "--changed-file",
             "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            # Wave 7: dashboard_runtime's required anchor swapped to the product contract doc.
+            "--changed-file",
+            "docs/contracts/dashboard-projection-model-contract.md",
             "--changed-file",
             "docs/README.md",
             "--changed-file",
             "README.md",
             "--changed-file",
             "docs/operations/lint-format-baseline-policy.md",
-            "--changed-file",
-            "docs/operations/task-attribution-and-outcomes.md",
-            "--changed-file",
-            "docs/operations/prd-authority-lifecycle.md",
+            # Wave 7: task-attribution-and-outcomes.md + prd-authority-lifecycle.md moved to
+            # .planning/docs/ (internal) — dropped from this simulated changeset.
             "--changed-file",
             "docs/DATABASE.md",
             "--changed-file",
@@ -188,14 +189,12 @@ def test_contract_atlas_lifecycle_gate_runs_without_live_home_or_db() -> None:
             "docs/operations/installed-platform-productization.md",
             "--changed-file",
             "docs/operations/platform-hardening-sequence.md",
-            "--changed-file",
-            "docs/operations/long-run-multisession-operational-validation.md",
+            # Wave 7: long-run-multisession-operational-validation.md + independent-configuration-
+            # model.md moved to .planning/docs/ (internal) — dropped from this simulated changeset.
             "--changed-file",
             "docs/operations/troubleshooting.md",
             "--changed-file",
             "docs/architecture/shared-authority-and-adapter-projections.md",
-            "--changed-file",
-            "docs/operations/independent-configuration-model.md",
             "--changed-file",
             "docs/operations/external-project-validation-pipeline.md",
             "--changed-file",

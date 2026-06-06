@@ -41,7 +41,7 @@ def test_contract_docs_drift_blocks_source_change_without_required_docs() -> Non
     blocking = report["blocking_domains"][0]
     assert blocking["domain_id"] == "contract_atlas"
     assert "docs/architecture/contract-atlas.md" in blocking["missing_required_doc_refs"]
-    assert "docs/README.md" in blocking["missing_required_doc_refs"]
+    # docs/README.md assertion removed (Wave 7): README ungated from contract_atlas (O1 precedent).
     assert blocking["docs_update_required"] is True
     assert blocking["contract_atlas_update_required"] is True
 

@@ -104,8 +104,8 @@ read models, and token/model analytics.
 Task attribution extends this by showing which AI/adapter did meaningful work,
 which skills/workflows were used, what files and commands were recorded, what
 validation ran, what outcome occurred, whether rework was needed, and what
-security/readiness impact resulted. See
-[AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md).
+security/readiness impact resulted. (The detailed attribution-table authority
+note moved to internal planning docs in Wave 7.)
 
 ## PRD Authority Lifecycle
 
@@ -114,7 +114,8 @@ adaptive intake, explicit assumptions and unknowns, PRD versions, milestones,
 Work Order authority, Project Change Orders, and planned-vs-actual route
 reconciliation. Project Details and context packets expose the current PRD
 version and next safe action so adapters can continue without relying on prior
-chat memory. See [PRD Authority Lifecycle](operations/prd-authority-lifecycle.md).
+chat memory. (The detailed PRD-lifecycle authority note moved to internal
+planning docs in Wave 7.)
 
 ## Platform Hardening
 
@@ -134,7 +135,6 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 
 - [Local Runtime](operations/local-runtime.md)
 - [Work Orders](operations/work-orders.md)
-- [Independent Configuration Model](operations/independent-configuration-model.md)
 - [Adapter Workspace Hygiene](operations/adapter-workspace-hygiene.md)
 - [Installed Adapter Runtime](operations/installed-adapter-runtime.md)
 - [Installed Platform Productization](operations/installed-platform-productization.md) -
@@ -149,14 +149,16 @@ manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
 - [Windows Development Commands](operations/windows-dev-commands.md)
 - [Docker Clean Room](operations/docker-clean-room.md)
 - [Docker Module Profiles](operations/docker-module-profiles.md)
-- [Long-Run Multisession Operational Validation](operations/long-run-multisession-operational-validation.md)
 - [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
 - [Expert Workflow Systems](operations/expert-workflow-systems.md)
 - [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
-- [AI/Adapter Task Attribution And Outcomes](operations/task-attribution-and-outcomes.md)
-- [PRD Authority Lifecycle](operations/prd-authority-lifecycle.md)
 - [Platform Hardening Sequence](operations/platform-hardening-sequence.md)
 - [Sanitized Demo Readiness Packet](demo/sanitized/README.md)
+
+<!-- Wave 7: task-attribution-and-outcomes.md, prd-authority-lifecycle.md,
+     long-run-multisession-operational-validation.md, and independent-configuration-model.md
+     were ungated and moved to internal planning docs (.planning/docs/). -->
+
 
 ## Publication Rule
 
