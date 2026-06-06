@@ -7,9 +7,6 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
-import threading
-import urllib.request
-import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.config import paths  # noqa: E402
@@ -256,48 +253,6 @@ def _reraise_if_busy(e: Exception) -> None:
     """Re-raise SQLITE_BUSY so the retry decorator can handle it."""
     if isinstance(e, sqlite3.OperationalError) and "database is locked" in str(e):
         raise
-
-
-def _broadcast_hook_execution(
-    hook_name: str, status: str, duration_ms: Optional[int], timestamp: str, is_anomaly: bool
-) -> None:
-    """
-    Broadcast hook execution event to WebSocket clients via API endpoint.
-    Runs in background thread to avoid blocking hook execution.
-    """
-
-    def _send_broadcast():
-        try:
-            payload = {
-                "hook_name": hook_name,
-                "status": status,
-                "duration_ms": duration_ms or 0,
-                "timestamp": timestamp,
-                "is_anomaly": is_anomaly,
-            }
-
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                "http://localhost:8000/api/v1/broadcast/hook-execution",
-                data=data,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-
-            with urllib.request.urlopen(req, timeout=1) as response:
-                if response.status != 200:
-                    # Log error but don't fail the hook
-                    pass
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-            # Silently fail - WebSocket broadcast is best-effort
-            pass
-        except Exception:
-            # Catch all other exceptions to prevent hook failures
-            pass
-
-    # Run broadcast in background thread (fire-and-forget)
-    thread = threading.Thread(target=_send_broadcast, daemon=True)
-    thread.start()
 
 
 # ── Workflow functions ──────────────────────────────────────────────────────
@@ -2520,18 +2475,6 @@ def insert_hook_execution(
                     cpu_time_ms,
                     memory_mb,
                 ),  # type: ignore[arg-type]
-            )
-
-            # 3. is_anomaly: activity_log retired (TA0c) — anomaly detection not migrated
-            is_anomaly = False
-
-            # 4. Broadcast hook execution to WebSocket clients (fire-and-forget)
-            _broadcast_hook_execution(
-                hook_name=hook_name,
-                status=status,
-                duration_ms=duration_ms,
-                timestamp=started_at,
-                is_anomaly=is_anomaly,
             )
 
             return activity_id

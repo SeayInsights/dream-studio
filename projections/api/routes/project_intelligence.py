@@ -5,13 +5,11 @@ import json
 import logging
 import sqlite3
 import tomllib
-import uuid
 from collections import Counter
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from ..websocket.connection_manager import ConnectionManager
 from core.config.database import get_connection
 from core.module_contracts import module_contract_map
 from core.module_profiles import module_profile_map
@@ -24,9 +22,6 @@ from projections.api.routes.sqlite_schema import object_exists, table_columns
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Global connection manager instance for project intelligence subscriptions
-pi_connection_manager = ConnectionManager()
 
 SAFE_STACK_FILE_NAMES = {
     "pyproject.toml",
@@ -1917,198 +1912,6 @@ async def get_analysis_run(run_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
-
-
-# ── WebSocket Endpoints ──────────────────────────────────────────────────────
-
-
-@router.websocket("/ws/project-health/{project_id}")
-async def websocket_project_health(websocket: WebSocket, project_id: str):
-    """
-    WebSocket endpoint for real-time project health updates.
-
-    Clients subscribe to a specific project and receive updates when:
-    - Analysis runs complete
-    - Health score changes
-    - New violations/bugs detected
-    - Improvements implemented
-
-    Message protocol:
-    - Server sends: {"type": "health_update", "data": {...}}
-    """
-    client_id = str(uuid.uuid4())
-
-    try:
-        # Connect the client
-        await pi_connection_manager.connect(client_id, websocket)
-
-        # Subscribe to project health updates
-        pi_connection_manager.subscribe(client_id, [f"project_health_{project_id}"])
-
-        # Send welcome message
-        await websocket.send_json(
-            {
-                "type": "connected",
-                "client_id": client_id,
-                "project_id": project_id,
-                "message": f"Subscribed to health updates for project {project_id}",
-            }
-        )
-
-        # Send current health data immediately
-        # reg_projects deleted in migration 084; analysis scores are NULL until rebuilt
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-            query = """
-            SELECT NULL AS health_score, NULL AS security_score,
-                   NULL AS maintainability_score, NULL AS last_analyzed
-            FROM business_projects
-            WHERE project_id = ?
-            """
-            row = cursor.execute(query, (project_id,)).fetchone()
-
-            if row:
-                await websocket.send_json({"type": "health_update", "data": dict(row)})
-        finally:
-            conn.close()
-
-        # Keep connection alive and handle incoming messages
-        while True:
-            try:
-                message = await websocket.receive_json()
-                # Echo back for now (could add commands later)
-                await websocket.send_json({"type": "ack", "message": message})
-            except ValueError as e:
-                logger.error(f"Invalid JSON from client {client_id}: {e}")
-                await websocket.send_json({"type": "error", "message": "Invalid JSON format"})
-
-    except WebSocketDisconnect:
-        logger.info(f"Client {client_id} disconnected from project health stream")
-
-    except Exception as e:
-        logger.error(f"WebSocket error for client {client_id}: {e}")
-
-    finally:
-        pi_connection_manager.disconnect(client_id)
-
-
-@router.websocket("/ws/analysis-progress/{run_id}")
-async def websocket_analysis_progress(websocket: WebSocket, run_id: str):
-    """
-    WebSocket endpoint for real-time analysis progress updates.
-
-    Streams progress updates during an analysis run:
-    - Phase completions (discovery, research, audit, bugs, synthesis)
-    - Partial findings counts
-    - ETA updates
-
-    Message protocol:
-    - Server sends: {"type": "progress_update", "phase": "...", "percent": ..., "data": {...}}
-    """
-    client_id = str(uuid.uuid4())
-
-    try:
-        # Connect the client
-        await pi_connection_manager.connect(client_id, websocket)
-
-        # Subscribe to analysis progress
-        pi_connection_manager.subscribe(client_id, [f"analysis_progress_{run_id}"])
-
-        # Send welcome message
-        await websocket.send_json(
-            {
-                "type": "connected",
-                "client_id": client_id,
-                "run_id": run_id,
-                "message": f"Subscribed to progress updates for analysis run {run_id}",
-            }
-        )
-
-        # Send current progress immediately
-        conn = get_db_connection()
-        try:
-            cursor = conn.cursor()
-            query = """
-            SELECT
-                discovery_completed,
-                research_completed,
-                audit_completed,
-                bug_analysis_completed,
-                synthesis_completed,
-                status
-            FROM pi_analysis_runs
-            WHERE run_id = ?
-            """
-            row = cursor.execute(query, (run_id,)).fetchone()
-
-            if row:
-                data = dict(row)
-                phases = [
-                    data["discovery_completed"],
-                    data["research_completed"],
-                    data["audit_completed"],
-                    data["bug_analysis_completed"],
-                    data["synthesis_completed"],
-                ]
-                progress = (sum(1 for p in phases if p) / len(phases)) * 100
-
-                await websocket.send_json(
-                    {"type": "progress_update", "percent": progress, "data": data}
-                )
-        finally:
-            conn.close()
-
-        # Keep connection alive
-        while True:
-            try:
-                message = await websocket.receive_json()
-                await websocket.send_json({"type": "ack", "message": message})
-            except ValueError as e:
-                logger.error(f"Invalid JSON from client {client_id}: {e}")
-                await websocket.send_json({"type": "error", "message": "Invalid JSON format"})
-
-    except WebSocketDisconnect:
-        logger.info(f"Client {client_id} disconnected from analysis progress stream")
-
-    except Exception as e:
-        logger.error(f"WebSocket error for client {client_id}: {e}")
-
-    finally:
-        pi_connection_manager.disconnect(client_id)
-
-
-# ── Helper function for broadcasting updates ─────────────────────────────────
-
-
-async def broadcast_health_update(project_id: str, data: Dict[str, Any]):
-    """
-    Broadcast health update to all subscribers of a project.
-
-    Called by the analysis engine when a run completes.
-    """
-    await pi_connection_manager.send_to_subscribers(
-        f"project_health_{project_id}",
-        {"type": "health_update", "project_id": project_id, "data": data},
-    )
-
-
-async def broadcast_progress_update(run_id: str, phase: str, percent: float, data: Dict[str, Any]):
-    """
-    Broadcast progress update to all subscribers of an analysis run.
-
-    Called by the analysis engine during phase completions.
-    """
-    await pi_connection_manager.send_to_subscribers(
-        f"analysis_progress_{run_id}",
-        {
-            "type": "progress_update",
-            "run_id": run_id,
-            "phase": phase,
-            "percent": percent,
-            "data": data,
-        },
-    )
 
 
 @router.get("/{project_id}/prds")
