@@ -260,29 +260,21 @@ def test_enterprise_outputs_do_not_write_canonical_authority_tables():
     assert offenders == []
 
 
-def test_main_repo_ml_and_org_intelligence_are_real_packages():
-    """Verify bring-back complete: real packages exist, stubs removed, ML routes are live."""
-    # Stubs must be gone
+def test_main_repo_org_intelligence_is_a_real_package():
+    """Verify org_intelligence bring-back complete: real package exists, stub removed.
+
+    The projections/ml subsystem was removed in Wave 3 (2026-06-05); its
+    package/route assertions were dropped here. org_intelligence is unaffected.
+    """
+    # Stub must be gone
     assert not (
         REPO_ROOT / "core" / "org_intelligence.py"
     ).exists(), "stub core/org_intelligence.py must be deleted after bring-back"
-    assert not (
-        REPO_ROOT / "projections" / "ml.py"
-    ).exists(), "stub projections/ml.py must be deleted after bring-back"
 
-    # Real packages must exist
+    # Real package must exist
     oi_pkg = REPO_ROOT / "core" / "org_intelligence"
     assert oi_pkg.is_dir(), "core/org_intelligence must be a package directory"
     assert (oi_pkg / "__init__.py").exists(), "core/org_intelligence/__init__.py missing"
-
-    ml_pkg = REPO_ROOT / "projections" / "ml"
-    assert ml_pkg.is_dir(), "projections/ml must be a package directory"
-    assert (ml_pkg / "__init__.py").exists(), "projections/ml/__init__.py missing"
-
-    # ML routes must be real implementations, not 402 stubs
-    ml_routes = _read(REPO_ROOT / "projections" / "api" / "routes" / "ml.py")
-    assert "status_code=402" not in ml_routes, "ML routes must not return 402 after bring-back"
-    assert "enterprise_feature_required" not in ml_routes
 
 
 def test_deprecated_dashboard_generator_is_not_enterprise_input_surface():

@@ -58,11 +58,6 @@ ALLOWED_DASHBOARD_WRITES = [
         "alert service state",
     ),
     (re.compile(r"^/api/v1/security/sarif/import$"), {"POST"}, "SARIF governance ingestion"),
-    (
-        re.compile(r"^/api/v1/ml/recommendations/\$\{id\}/(?:apply|dismiss)$"),
-        {"POST"},
-        "ML advisory placeholder",
-    ),
 ]
 
 CANONICAL_STATE_TABLES = {
@@ -147,8 +142,6 @@ def test_dashboard_write_like_calls_stay_on_named_api_exceptions():
 
     assert write_calls == [
         ("projections/frontend/dashboard.html", "POST", "/api/v1/alerts/rules"),
-        ("projections/frontend/dashboard.html", "POST", "/api/v1/ml/recommendations/${id}/apply"),
-        ("projections/frontend/dashboard.html", "POST", "/api/v1/ml/recommendations/${id}/dismiss"),
         ("projections/frontend/dashboard.html", "POST", "/api/v1/security/sarif/import"),
         ("projections/frontend/dashboard.html", "PUT", "/api/v1/alerts/rules/${ruleId}"),
     ]
