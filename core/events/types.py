@@ -102,7 +102,8 @@ class EventType:
     AUDIT_IMPROVEMENTS_CLEARED = "audit.improvements_cleared"
     AUDIT_IMPROVEMENT_FOUND = "audit.improvement_found"
 
-    # Wave events (Wave 1.5: execution/workflow/wave_executor.py)
+    # Wave events (emitter wave_executor.py removed in cleanup Wave 5b;
+    # types retained — event registry is additive-only and history may hold them)
     WAVE_STARTED = "wave.started"
     WAVE_COMPLETED = "wave.completed"
     WAVE_FAILED = "wave.failed"

@@ -118,8 +118,6 @@ class TestEngineModulesExist:
         "control/execution/workflow/cost.py",
         "control/execution/workflow/registry.py",
         "control/execution/workflow/tracking.py",
-        "control/execution/workflow/wave_executor.py",
-        "control/execution/workflow/wave_executor_enhanced.py",
     ]
 
     @pytest.mark.parametrize("relpath", REQUIRED_MODULES)
