@@ -66,6 +66,39 @@ Each domain declares:
 - public/private export boundary;
 - freshness policy.
 
+### Wave 7 required-doc-ref friction-prune (2026-06-06)
+
+Wave 7 narrowed the `required_doc_refs` couplings to remove the multi-domain
+stamp fan-out that produced content-free review stamps (the PR #176 pattern).
+This was a continuation of the established O1/O2 evidence-based pruning, not a
+new policy. Approximately 18 `required_doc_refs` entries were removed across ten
+domains:
+
+- `docs/architecture/contract-atlas.md` is now required only by its home
+  Contract Atlas domain (was fanned out to seven domains). It remains a
+  `contract_refs`/`docs_refs` reference elsewhere.
+- `docs/architecture/dream-studio-dashboard-projection-mapping.md` is no longer a
+  required ref in any domain. The Dashboard runtime domain's required anchor was
+  swapped to the product-facing `docs/contracts/dashboard-projection-model-contract.md`
+  (already a contract ref). The mapping doc stays repo-tracked (it is cited as
+  evidence in `core/shared_intelligence/maturity_ledger.py`) and remains a
+  non-blocking `contract_refs`/`docs_refs` entry.
+- `docs/README.md` was removed from all required sets (O1 README precedent:
+  README accuracy is a release-boundary judgment, not a per-PR mechanical
+  coupling).
+- `docs/PUBLICATION_BOUNDARY.md` and `docs/operations/lint-format-baseline-policy.md`
+  are kept gated only in the Release gate and publication boundary domain.
+
+Wave 7 also ungated the List A build-process docs from their domains. Four of
+them were moved to internal planning docs and are no longer repo-tracked:
+`task-attribution-and-outcomes.md`, `prd-authority-lifecycle.md`,
+`long-run-multisession-operational-validation.md`, and
+`independent-configuration-model.md`. Three List A docs that were code-coupled
+stayed repo-tracked but were ungated from `required_doc_refs`:
+`product-readiness.md` (Phase 14B baseline test + `scripts/dev.ps1` target),
+`platform-hardening-sequence.md`, and the dashboard mapping doc (both cited as
+maturity-ledger evidence).
+
 ## Maturity Ledger
 
 The atlas includes a current maturity ledger for major Dream Studio areas. Each
