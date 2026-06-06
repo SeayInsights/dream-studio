@@ -174,3 +174,5 @@ Static checks for this contract should verify:
 - security projection fields are complete;
 - sample projection data remains non-executing and not target-specific;
 - no dashboard UI, API, runtime builder, DB/event/schema, target repo, scan execution, Docker, TORII/cloud/org/global/enterprise, dependency, or lockfile authority is introduced.
+
+<!-- reviewed: 2026-06-06, WO-B broken surfaces. projections/api/routes/security.py: wired parse_sarif_file() into POST /security/sarif/import (uncommented import + call, removed stub). The endpoint was already listed in ALLOWED_DASHBOARD_WRITES and validated by test_dashboard_write_like_calls_stay_on_named_api_exceptions. No projection contract shape change; no new dashboard authority introduced. -->

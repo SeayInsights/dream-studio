@@ -185,3 +185,5 @@ The policy/permission engine is a supporting control-plane surface for the secur
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). dropped sec_hook_checks was 0-row and had no live writer; security lifecycle gate unchanged. No semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-B broken surfaces. projections/api/routes/security.py: wired parse_sarif_file() into POST /security/sarif/import. No security lifecycle gate policy change; parser was already a classified in-repo implementation (projections/parsers/sarif_parser.py). No new security controls added or removed. Activation satisfies the T007 stub note and removes a live endpoint returning false "not yet implemented" errors. -->
