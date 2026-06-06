@@ -69,8 +69,11 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         ],
         "required_doc_refs": [
             "docs/architecture/contract-atlas.md",
-            "docs/README.md",
-            "docs/operations/lint-format-baseline-policy.md",
+            # docs/README.md removed (Wave 7): O1 README precedent — README accuracy is a
+            # release-boundary judgment, not a per-PR mechanical coupling. Stays in docs_refs.
+            # docs/operations/lint-format-baseline-policy.md removed (Wave 7): kept gated in
+            # release_publication_gate where it belongs; the contract_atlas coupling was a
+            # stamp-trap. Stays in docs_refs.
         ],
         "release_blocking": True,
         "freshness_policy": "source_changes_require_same_change_set_contract_or_docs_refresh",
@@ -96,7 +99,8 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/architecture/shared-authority-and-adapter-projections.md",
         ],
         "docs_refs": [
-            "docs/operations/independent-configuration-model.md",
+            # docs/operations/independent-configuration-model.md removed (Wave 7): doc moved to
+            # internal planning docs (.planning/docs/) — a deleted file must not be referenced.
             PRD_DOC,
             "README.md",
         ],
@@ -119,7 +123,8 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
-            "docs/operations/task-attribution-and-outcomes.md",
+            # docs/operations/task-attribution-and-outcomes.md removed (Wave 7): doc moved to
+            # internal planning docs (.planning/docs/) — a deleted file must not be referenced.
             "docs/architecture/contract-atlas.md",
             "docs/architecture/dream-studio-dashboard-projection-mapping.md",
         ],
@@ -131,11 +136,15 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/README.md",
         ],
         "required_doc_refs": [
-            "docs/operations/task-attribution-and-outcomes.md",
+            # docs/operations/task-attribution-and-outcomes.md removed (Wave 7): List A ungating
+            # — doc moved to internal planning docs. Domain keeps DATABASE + MIGRATION_AUTHORITY.
             "docs/DATABASE.md",
             "docs/MIGRATION_AUTHORITY.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            # docs/architecture/contract-atlas.md removed (Wave 7): friction-prune fan-out — kept
+            # gated only in its home contract_atlas domain. Stays in contract_refs.
+            # docs/architecture/dream-studio-dashboard-projection-mapping.md removed (Wave 7):
+            # friction-prune fan-out. Doc stays in docs/ (code-coupled in maturity_ledger.py);
+            # remains in contract_refs as a non-blocking reference.
         ],
         "release_blocking": True,
         "freshness_policy": "attribution_schema_or_read_model_changes_require_dashboard_and_database_docs_refresh",
@@ -152,7 +161,8 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
-            "docs/operations/prd-authority-lifecycle.md",
+            # docs/operations/prd-authority-lifecycle.md removed (Wave 7): doc moved to internal
+            # planning docs (.planning/docs/) — a deleted file must not be referenced.
             "docs/architecture/contract-atlas.md",
             "docs/architecture/dream-studio-dashboard-projection-mapping.md",
         ],
@@ -164,11 +174,13 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/architecture/shared-authority-and-adapter-projections.md",
         ],
         "required_doc_refs": [
-            "docs/operations/prd-authority-lifecycle.md",
+            # docs/operations/prd-authority-lifecycle.md removed (Wave 7): List A ungating — doc
+            # moved to internal planning docs. Domain keeps DATABASE + MIGRATION_AUTHORITY.
             "docs/DATABASE.md",
             "docs/MIGRATION_AUTHORITY.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            # docs/architecture/contract-atlas.md removed (Wave 7): friction-prune fan-out.
+            # docs/architecture/dream-studio-dashboard-projection-mapping.md removed (Wave 7):
+            # friction-prune fan-out. Doc stays in docs/ (code-coupled); remains in contract_refs.
         ],
         "release_blocking": True,
         "freshness_policy": "prd_lifecycle_or_route_authority_changes_require_database_dashboard_context_packet_docs_refresh",
@@ -226,24 +238,29 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "contract_refs": [
             "docs/operations/installed-adapter-runtime.md",
             "docs/operations/installed-platform-productization.md",
-            "docs/operations/long-run-multisession-operational-validation.md",
+            # docs/operations/long-run-multisession-operational-validation.md removed (Wave 7):
+            # doc moved to internal planning docs (.planning/docs/).
             "docs/operations/troubleshooting.md",
             "docs/architecture/shared-authority-and-adapter-projections.md",
         ],
         "docs_refs": [
-            "docs/operations/independent-configuration-model.md",
+            # docs/operations/independent-configuration-model.md removed (Wave 7): doc moved to
+            # internal planning docs (.planning/docs/).
             "docs/operations/installed-platform-productization.md",
-            "docs/operations/long-run-multisession-operational-validation.md",
+            # docs/operations/long-run-multisession-operational-validation.md removed (Wave 7):
+            # doc moved to internal planning docs (.planning/docs/).
             "docs/operations/troubleshooting.md",
             "docs/README.md",
         ],
         "required_doc_refs": [
             "docs/operations/installed-adapter-runtime.md",
             "docs/operations/installed-platform-productization.md",
-            "docs/operations/long-run-multisession-operational-validation.md",
+            # docs/operations/long-run-multisession-operational-validation.md removed (Wave 7):
+            # List A ungating — doc moved to internal planning docs.
             "docs/operations/troubleshooting.md",
             "docs/architecture/shared-authority-and-adapter-projections.md",
-            "docs/operations/independent-configuration-model.md",
+            # docs/operations/independent-configuration-model.md removed (Wave 7): List A
+            # ungating — doc moved to internal planning docs.
         ],
         "release_blocking": True,
         "freshness_policy": "installed_runtime_or_router_changes_require_runtime_docs_refresh",
@@ -267,7 +284,12 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             PRD_DOC,
         ],
         "required_doc_refs": [
-            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            # Anchor swapped (Wave 7): friction-prune moved the gate anchor off
+            # dream-studio-dashboard-projection-mapping.md (a build-process map kept in
+            # contract_refs as a non-blocking reference) onto the PRODUCT contract doc, which was
+            # already in contract_refs. The mapping doc stays in docs/ (code-coupled in
+            # maturity_ledger.py).
+            "docs/contracts/dashboard-projection-model-contract.md",
         ],
         "release_blocking": True,
         "freshness_policy": "dashboard_contract_changes_require_projection_mapping_refresh",
@@ -303,7 +325,10 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "required_doc_refs": [
             "docs/contracts/security-by-default-development-lifecycle-gate.md",
             "docs/contracts/security-review-profile-pack-contract.md",
-            "docs/operations/product-readiness.md",
+            # docs/operations/product-readiness.md removed from required (Wave 7): List A ungating
+            # — domain keeps its product contract docs. Doc stays in docs/ (NOT moved): code-coupled
+            # to the Phase 14B baseline test (tests/unit/test_product_readiness_baseline.py) and
+            # scripts/dev.ps1 product-readiness target. Remains a non-blocking docs_refs entry.
         ],
         "release_blocking": True,
         "freshness_policy": "security_lifecycle_changes_require_control_mapping_and_readiness_docs_refresh",
@@ -334,9 +359,12 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         ],
         "required_doc_refs": [
             "docs/contracts/secure-production-readiness-gate.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
-            "docs/operations/product-readiness.md",
+            # docs/architecture/contract-atlas.md removed from required (Wave 7): friction-prune
+            # fan-out. Stays in docs_refs.
+            # docs/architecture/dream-studio-dashboard-projection-mapping.md removed from required
+            # (Wave 7): friction-prune fan-out. Doc stays in docs/ (code-coupled); non-blocking ref.
+            # docs/operations/product-readiness.md removed from required (Wave 7): List A ungating —
+            # domain keeps its readiness-gate contract doc. Doc stays in docs/ (code-coupled).
         ],
         "release_blocking": True,
         "freshness_policy": "production_readiness_control_or_sqlite_changes_require_readiness_docs_refresh",
@@ -398,8 +426,9 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         ],
         "required_doc_refs": [
             "docs/operations/expert-workflow-systems.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/README.md",
+            # docs/architecture/contract-atlas.md removed (Wave 7): friction-prune fan-out — kept
+            # gated only in its home contract_atlas domain. Stays in contract_refs.
+            # docs/README.md removed (Wave 7): O1 README precedent. Stays in docs_refs.
         ],
         "release_blocking": True,
         "freshness_policy": "expert_skill_or_workflow_changes_require_overlap_matrix_and_docs_refresh",
@@ -477,9 +506,10 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         ],
         "required_doc_refs": [
             "docs/operations/github-repo-intake-evaluation.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/README.md",
-            "docs/PUBLICATION_BOUNDARY.md",
+            # docs/architecture/contract-atlas.md removed (Wave 7): friction-prune fan-out.
+            # docs/README.md removed (Wave 7): O1 README precedent.
+            # docs/PUBLICATION_BOUNDARY.md removed (Wave 7): kept gated in release_publication_gate
+            # where it belongs. Stays in docs_refs.
         ],
         "release_blocking": True,
         "freshness_policy": (
@@ -503,6 +533,9 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "projections/api/routes/shared_intelligence.py",
         ],
         "contract_refs": [
+            # docs/operations/platform-hardening-sequence.md removed from required (Wave 7): List A
+            # ungating. Doc stays in docs/ (NOT moved): code-coupled as evidence in
+            # maturity_ledger.py (platform_hardening_sequence area). Remains a non-blocking ref.
             "docs/operations/platform-hardening-sequence.md",
             "docs/architecture/contract-atlas.md",
             "docs/architecture/dream-studio-dashboard-projection-mapping.md",
@@ -515,15 +548,18 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
             "docs/MIGRATION_AUTHORITY.md",
             "docs/PUBLICATION_BOUNDARY.md",
             "docs/operations/installed-platform-productization.md",
-            "docs/operations/task-attribution-and-outcomes.md",
+            # docs/operations/task-attribution-and-outcomes.md removed (Wave 7): doc moved to
+            # internal planning docs (.planning/docs/) — a deleted file must not be referenced.
         ],
         "required_doc_refs": [
-            "docs/operations/platform-hardening-sequence.md",
+            # docs/operations/platform-hardening-sequence.md removed from required (Wave 7): List A
+            # ungating — domain keeps DATABASE + MIGRATION_AUTHORITY. Doc stays (code-coupled).
             "docs/DATABASE.md",
             "docs/MIGRATION_AUTHORITY.md",
-            "docs/PUBLICATION_BOUNDARY.md",
-            "docs/architecture/contract-atlas.md",
-            "docs/architecture/dream-studio-dashboard-projection-mapping.md",
+            # docs/PUBLICATION_BOUNDARY.md removed (Wave 7): kept gated in release_publication_gate.
+            # docs/architecture/contract-atlas.md removed (Wave 7): friction-prune fan-out.
+            # docs/architecture/dream-studio-dashboard-projection-mapping.md removed (Wave 7):
+            # friction-prune fan-out. Doc stays in docs/ (code-coupled); non-blocking ref.
         ],
         "release_blocking": True,
         "freshness_policy": "platform_hardening_authority_or_surface_changes_require_policy_privacy_installer_demo_docs_refresh",
