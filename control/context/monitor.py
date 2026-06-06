@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core.config import paths  # noqa: E402
 
 MILESTONE_BOOST = 10
-COMPACT_COOLDOWN_TURNS = 2
 
 
 def read_bridge_pct(session_id: str | None) -> float | None:
@@ -99,21 +98,39 @@ def projects_dir_for_cwd(cwd: Path) -> Path:
     return Path.home() / ".claude" / "projects" / slug
 
 
+def kb_baseline(projects: Path, session_id: str | None) -> float:
+    """Read the post-compact KB baseline (JSONL size recorded at the last /compact).
+
+    The session JSONL is append-only and survives /compact, so its raw size reflects
+    the entire session history, not the live context window. Subtracting this baseline
+    makes the KB fallback measure growth *since the last compact*.
+    """
+    try:
+        base = sentinel(projects, session_id, "kb-baseline")
+        if base.exists():
+            return float(base.read_text(encoding="utf-8").strip())
+    except Exception:
+        pass
+    return 0.0
+
+
 def session_kb(projects: Path, session_id: str | None) -> float:
-    """Get current session KB from JSONL file size."""
+    """Get current session context KB: JSONL size minus the post-compact baseline."""
     try:
         if session_id:
             p = projects / f"{session_id}.jsonl"
-            return p.stat().st_size / 1024 if p.exists() else 0.0
-        if not projects.exists():
-            return 0.0
-        files = list(projects.glob("*.jsonl"))
-        if not files:
-            return 0.0
-        current = max(files, key=lambda f: f.stat().st_mtime)
-        if time.time() - current.stat().st_mtime > 3600:
-            return 0.0
-        return current.stat().st_size / 1024
+            raw = p.stat().st_size / 1024 if p.exists() else 0.0
+        else:
+            if not projects.exists():
+                return 0.0
+            files = list(projects.glob("*.jsonl"))
+            if not files:
+                return 0.0
+            current = max(files, key=lambda f: f.stat().st_mtime)
+            if time.time() - current.stat().st_mtime > 3600:
+                return 0.0
+            raw = current.stat().st_size / 1024
+        return max(0.0, raw - kb_baseline(projects, session_id))
     except Exception:
         return 0.0
 
@@ -131,54 +148,22 @@ def milestone_boost() -> int:
         return 0
 
 
-def handle_compact_cooldown(projects: Path, session_id: str | None, is_compact_cmd: bool) -> bool:
-    """Manage post-/compact suppression. Returns True if this turn should be suppressed."""
-    cd_sentinel = sentinel(projects, session_id, "compact-cooldown")
-    if is_compact_cmd:
-        try:
-            cd_sentinel.parent.mkdir(parents=True, exist_ok=True)
-            cd_sentinel.write_text(str(COMPACT_COOLDOWN_TURNS))
-            sentinel(projects, session_id, "compact-msg").unlink(missing_ok=True)
-            sentinel(projects, session_id, "warn-pct").unlink(missing_ok=True)
-            bp = Path(tempfile.gettempdir()) / f"claude-ctx-{session_id or 'unknown'}.json"
-            bp.write_text(
-                json.dumps(
-                    {
-                        "session_id": session_id or "",
-                        "used_pct": 0.0,
-                        "raw_pct": 0.0,
-                        "remaining_percentage": 100.0,
-                        "timestamp": int(time.time()),
-                        "post_compact": True,
-                    }
-                )
-            )
-        except Exception:
-            pass
-        return True
-    if cd_sentinel.exists():
-        try:
-            count = int(cd_sentinel.read_text(encoding="utf-8").strip())
-            if count > 1:
-                cd_sentinel.write_text(str(count - 1))
-            else:
-                cd_sentinel.unlink(missing_ok=True)
-            return True
-        except Exception:
-            pass
-    return False
+def handle_urgent_reminder(projects: Path, session_id: str | None, label: str) -> None:
+    """Strong chat reminder when context is urgent — does NOT block the prompt.
 
-
-def handle_urgent_block(projects: Path, session_id: str | None, label: str) -> None:
-    """Block prompt when context is urgent."""
-    compact_sentinel = sentinel(projects, session_id, "compact")
+    Fires once per session (gated by the urgent-msg sentinel, cleared on /compact) so it
+    does not repeat every turn. Blocking was removed: a stale measurement must never be
+    able to hard-stop the operator's prompt.
+    """
+    msg_sentinel = sentinel(projects, session_id, "urgent-msg")
+    if msg_sentinel.exists():
+        return
     try:
-        compact_sentinel.parent.mkdir(parents=True, exist_ok=True)
-        compact_sentinel.write_text(label)
+        msg_sentinel.parent.mkdir(parents=True, exist_ok=True)
+        msg_sentinel.write_text(label)
     except Exception:
         pass
-    msg = f"Context auto-blocked at {label} — run /compact to continue."
-    print(json.dumps({"continue": False, "stopReason": msg}), flush=True)
+    print(f"\n[dream-studio] Context at {label} — urgent; run /compact now.\n", flush=True)
 
 
 def handle_handoff(

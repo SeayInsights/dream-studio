@@ -35,6 +35,7 @@ from core.config import paths  # noqa: E402
 from core.utils.compact_utils import (  # noqa: E402
     clear_sentinels,
     projects_dir,
+    record_kb_baseline,
     reset_context_bridge,
 )
 
@@ -56,7 +57,12 @@ def main() -> None:
         reset_context_bridge(session_id)
 
     # Clear sentinels so warnings fire fresh as context grows
-    clear_sentinels(projects_dir(cwd), session_id)
+    projects = projects_dir(cwd)
+    clear_sentinels(projects, session_id)
+
+    # Record the current JSONL size as the KB baseline so the size-based fallback measures
+    # growth since this compact, not the whole append-only session log.
+    record_kb_baseline(projects, session_id)
 
     print(
         json.dumps({"status": "ok", "hook": "on-post-compact", "reset": True}),

@@ -36,7 +36,9 @@ logger = logging.getLogger(__name__)
 DECISION_6_N_THRESHOLD = 5
 DECISION_6_SCORE_TOLERANCE = 0.95
 SCAN_WINDOW_DAYS = 90
-DEFAULT_BASELINE = 0.85  # Conservative default when no skill-specific baseline exists
+# AVG(baseline_score) from ds_eval_baselines WHERE label='pre_phase_19' — 8 entries, 2026-06-03
+# Recaptured after WO-A telemetry write-path fixes (Bug1-4); live reads from DB take precedence.
+DEFAULT_BASELINE = 0.89
 
 
 @dataclass

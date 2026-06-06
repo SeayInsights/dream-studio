@@ -2,7 +2,9 @@
 Context threshold handler.
 
 Monitors session JSONL size and context_window.used_percentage.
-Blocks prompts at urgent threshold, prints growing warning in warn band.
+Prints an urgent /compact reminder at the urgent threshold (never blocks the prompt) and
+a growing warning in the warn band. The KB fallback subtracts a post-compact baseline so a
+large append-only JSONL does not read as urgent after a /compact.
 Uses control.context.monitor for all threshold logic.
 Never calls sys.exit() inside main() — all early exits are returns.
 """
@@ -97,13 +99,9 @@ def main() -> None:
 
     projects = monitor.projects_dir_for_cwd(cwd)
 
-    # Compact sentinel: already blocked once — clear it and allow this prompt through.
-    compact_sentinel = monitor.sentinel(projects, session_id, "compact")
-    if compact_sentinel.exists():
-        compact_sentinel.unlink(missing_ok=True)
-        return
-
     # Determine context level: bridge pct (accurate) with JSONL size as fallback.
+    # The KB fallback subtracts a post-compact baseline (see monitor.session_kb) so a
+    # large append-only JSONL no longer reads as "urgent" after a /compact.
     bridge_pct = monitor.read_bridge_pct(session_id)
     using_pct = bridge_pct is not None
 
@@ -119,7 +117,7 @@ def main() -> None:
         return
 
     if band == "urgent":
-        monitor.handle_urgent_block(projects, session_id, label)
+        monitor.handle_urgent_reminder(projects, session_id, label)
     elif band in ("handoff", "compact"):
         monitor.handle_compact_warning(projects, session_id, label)
     elif band == "warn":

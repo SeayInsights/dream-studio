@@ -20,14 +20,6 @@ BACKFILL_MAPPINGS: tuple[dict[str, Any], ...] = (
         "classification": "missing because telemetry is not backfilled",
     },
     {
-        "domain": "tokens",
-        "source_table": "raw_token_usage",
-        "target_table": "token_usage_records",
-        "source_time_column": "recorded_at",
-        "target_time_column": "created_at",
-        "classification": "missing because telemetry is not backfilled",
-    },
-    {
         "domain": "workflows",
         "source_table": "raw_workflow_runs",
         "target_table": "workflow_invocations",

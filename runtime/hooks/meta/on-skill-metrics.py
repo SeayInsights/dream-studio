@@ -30,7 +30,6 @@ if str(_PLUGIN_ROOT / "hooks") not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
 
 from control.execution.models.selector import get_model_for_skill
-from core.event_store.studio_db import insert_token_usage
 from control.skills.metrics import build_display_name, write_skill_usage
 
 
@@ -61,20 +60,6 @@ def main() -> None:
         payload.get("session_id", ""),
         model,
     )
-    try:
-        from core.sdlc.cwd_resolver import resolve_project_from_cwd  # noqa: E402
-
-        ctx = resolve_project_from_cwd()
-        insert_token_usage(
-            session_id=payload.get("session_id", ""),
-            project_id=ctx.project_id if ctx is not None else None,
-            skill_name=display_name,
-            input_tokens=0,
-            output_tokens=0,
-            model=model,
-        )
-    except Exception:
-        pass
 
 
 if __name__ == "__main__":

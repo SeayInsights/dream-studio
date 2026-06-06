@@ -22,7 +22,8 @@ def test_no_jsonl_is_noop(isolated_home, monkeypatch, handler):
     mod.main()  # no crash, no output needed
 
 
-def test_urgent_blocks_prompt(isolated_home, monkeypatch, capsys, handler):
+def test_urgent_reminds_not_blocks(isolated_home, monkeypatch, capsys, handler):
+    """Urgent context emits a /compact reminder but never hard-blocks the prompt."""
     projects = isolated_home / "projects"
     monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
     _write_jsonl(projects, "s1", kb=5000)
@@ -31,28 +32,33 @@ def test_urgent_blocks_prompt(isolated_home, monkeypatch, capsys, handler):
     mod = handler("on-context-threshold")
     mod.main()
 
-    out = capsys.readouterr().out.strip()
-    result = json.loads(out)
-    assert result["continue"] is False
-    assert "auto-blocked" in result["stopReason"]
-    # sentinel should exist so the next prompt passes through
-    assert (projects / ".compact-sentinel-s1").exists()
+    out = capsys.readouterr().out
+    assert "urgent" in out  # reminder fired
+    assert "continue" not in out  # NOT a {"continue": false} block
+    # once-per-session sentinel, no block sentinel
+    assert (projects / ".urgent-msg-sentinel-s1").exists()
+    assert not (projects / ".compact-sentinel-s1").exists()
 
 
-def test_sentinel_clears_and_passes(isolated_home, monkeypatch, handler):
+def test_kb_baseline_suppresses_after_compact(isolated_home, monkeypatch, capsys, handler):
+    """A post-compact KB baseline makes the size fallback measure growth since /compact,
+    so a large append-only JSONL no longer reads as urgent."""
     projects = isolated_home / "projects"
     monkeypatch.setenv("CLAUDE_PROJECTS_DIR", str(projects))
     _write_jsonl(projects, "s2", kb=5000)
-    sentinel = projects / ".compact-sentinel-s2"
-    sentinel.parent.mkdir(parents=True, exist_ok=True)
-    sentinel.write_text("5000")
+    # on-post-compact recorded the full size as the baseline → net growth ~0
+    baseline = projects / ".kb-baseline-sentinel-s2"
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text("5000")
 
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "s2"})))
     mod = handler("on-context-threshold")
     mod.main()
 
-    # sentinel is consumed, no stopReason printed
-    assert not sentinel.exists()
+    # band is "ok" → no reminder, no block
+    out = capsys.readouterr().out
+    assert "urgent" not in out
+    assert "continue" not in out
 
 
 def test_warn_band_prints_growing(isolated_home, monkeypatch, capsys, handler):

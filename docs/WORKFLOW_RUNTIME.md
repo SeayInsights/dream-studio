@@ -190,3 +190,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. No career content in this doc; no semantic change required. -->
 
 <!-- 2026-06-06: Wave 5b legacy module removal — wave_executor.py and wave_executor_enhanced.py deleted (zero importers; Audit 3 confirmed). Removed their two rows from the Runtime Integration table. wave.* event types retained (additive-only registry). -->
+
+<!-- 2026-06-06: WO-A telemetry write-path honesty fixes. runtime/hooks/meta/* changes (on-session-end.py, on-skill-metrics.py, on-context-threshold.py, on-post-compact.py) and runtime/dispatch/hooks.py (tool_name snake_case fix). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->

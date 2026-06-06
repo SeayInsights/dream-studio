@@ -57,9 +57,28 @@ def reset_context_bridge(session_id: str) -> None:
         pass
 
 
+def record_kb_baseline(projects: Path, session_id: str | None) -> None:
+    """Record the current session JSONL size (KB) as the post-compact baseline.
+
+    The JSONL is append-only and is not truncated by /compact, so its raw size keeps
+    reflecting the whole session. monitor.session_kb subtracts this baseline so the KB
+    fallback measures only growth since the last compact.
+    """
+    if not session_id:
+        return
+    try:
+        p = projects / f"{session_id}.jsonl"
+        kb = p.stat().st_size / 1024 if p.exists() else 0.0
+        base = sentinel_path(projects, session_id, "kb-baseline")
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_text(str(kb), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def clear_sentinels(projects: Path, session_id: str | None) -> None:
     """Clear sentinel files so warnings can fire fresh."""
-    labels = ("handoff", "compact", "compact-msg", "compact-cooldown", "warn-pct")
+    labels = ("handoff", "compact", "compact-msg", "compact-cooldown", "warn-pct", "urgent-msg")
     for label in labels:
         try:
             sentinel_path(projects, session_id, label).unlink(missing_ok=True)
