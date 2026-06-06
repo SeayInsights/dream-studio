@@ -208,3 +208,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- 2026-06-06: Wave 4+5 ghost-surface removal reviewed — realtime websocket layer (stream/metrics, connection_manager, broadcast feeder, 2 project_intelligence ghost websockets), export/report/schedule routes + projections/exporters + scheduler/reports backends, and deprecated production_dashboard.py removed (-18,865 lines, no schema change). This doc did not describe the removed surfaces; no semantic change required. -->
 
 <!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->
+
+<!-- reviewed: 2026-06-06, WO-B broken surfaces. docs/contracts/security-by-default-development-lifecycle-gate.md was touched with a review note (SARIF parser activation). No production readiness gate policy change; no readiness control, migration, or versioning file touched. No semantic change required. -->
