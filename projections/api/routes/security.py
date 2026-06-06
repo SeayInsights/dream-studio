@@ -9,6 +9,7 @@ import json
 
 from core.config.database import get_connection
 from projections.api.routes.sqlite_schema import has_columns, object_exists, table_columns
+from projections.parsers.sarif_parser import parse_sarif_file
 
 router = APIRouter()
 
@@ -758,17 +759,8 @@ async def import_sarif_file(
             tmp.write(contents)
             tmp_path = tmp.name
 
-        # TODO: Call parse_sarif_file() from sarif_parser.py (will be implemented in T007)
-        # For now, stub the response
-        # from projections.parsers.sarif_parser import parse_sarif_file
-        # result = parse_sarif_file(tmp_path)
-
-        # Stub response for now
-        result = {
-            "imported": 0,
-            "skipped": 0,
-            "errors": ["SARIF parser not yet implemented (task T007)"],
-        }
+        imported = parse_sarif_file(tmp_path)
+        result = {"imported": imported, "skipped": 0, "errors": []}
 
         # Clean up temp file
         import os
