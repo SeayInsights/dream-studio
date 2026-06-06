@@ -19,8 +19,6 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 
 | Component | Path | Role |
 |-----------|------|------|
-| Wave executor | `control/execution/workflow/wave_executor.py` | Parallel wave dispatch |
-| Enhanced executor | `control/execution/workflow/wave_executor_enhanced.py` | Graph-integrated execution |
 | Execution graph | `core/execution/graph.py` | Persistent DAG (project → phase → wave → task) |
 | Workflow integration | `core/execution/workflow_integration.py` | Workflow-to-graph bridge |
 | Context compiler | `core/execution/context_compiler.py` | Smart context assembly (70-85% token savings) |
@@ -189,3 +187,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. No career content in this doc; no semantic change required. -->
+
+<!-- 2026-06-06: Wave 5b legacy module removal — wave_executor.py and wave_executor_enhanced.py deleted (zero importers; Audit 3 confirmed). Removed their two rows from the Runtime Integration table. wave.* event types retained (additive-only registry). -->

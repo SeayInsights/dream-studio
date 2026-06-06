@@ -40,11 +40,6 @@ from core.shared_intelligence.context_packets import (
     generate_shared_context_packet,
     shared_context_packet_policy,
 )
-from core.shared_intelligence.convergence import (
-    adapter_surface_classification,
-    independent_configuration_matrix,
-    legacy_source_classification,
-)
 from core.shared_intelligence.dashboard_views import (
     learning_hardening_dashboard_view,
     validate_learning_hardening_dashboard_view,
@@ -115,9 +110,6 @@ __all__ = [
     "validate_capability_center_summary",
     "generate_shared_context_packet",
     "shared_context_packet_policy",
-    "adapter_surface_classification",
-    "independent_configuration_matrix",
-    "legacy_source_classification",
     "learning_hardening_dashboard_view",
     "validate_learning_hardening_dashboard_view",
     "cross_model_learning_feedback",
