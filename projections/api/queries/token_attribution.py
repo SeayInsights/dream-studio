@@ -313,6 +313,7 @@ def canonical_token_metrics(days: int) -> dict:
 
         input_total = 0
         output_total = 0
+        cache_read_total = 0
         total_cost = 0.0
         by_project: dict[str, dict] = {}
         by_model: dict[str, dict] = {}
@@ -332,6 +333,7 @@ def canonical_token_metrics(days: int) -> dict:
             cost = compute_cost(model, inp, out, cc, cr)
             input_total += inp
             output_total += out
+            cache_read_total += cr
             total_cost += cost
 
             if project_id:
@@ -390,7 +392,7 @@ def canonical_token_metrics(days: int) -> dict:
         "output_tokens": output_total,
         "total_input_tokens": input_total,
         "total_output_tokens": output_total,
-        "cache_hits": 0,
+        "cache_hits": cache_read_total,
         "total_cost_usd": round(total_cost, 6) if total > 0 else None,
         "cost_status": "reportable" if total > 0 else "unknown",
         "cost_visibility": "reportable" if total > 0 else "unavailable",

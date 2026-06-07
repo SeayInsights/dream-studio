@@ -548,7 +548,21 @@ async def get_token_intelligence() -> Dict[str, Any]:
                 }
             )
 
-        # TODO: Add prompt caching tracking when cache_read_tokens column is added to schema
+        # Prompt caching wins: surface when cache_read_tokens shows active reuse.
+        cache_query = f"""
+            SELECT SUM(cache_read_tokens) as total_cache_reads
+            FROM ({token_sql}) token_usage
+            WHERE recorded_at > datetime('now', '-30 days')
+        """
+        cache_row = cursor.execute(cache_query).fetchone()
+        total_cache_reads = int(cache_row["total_cache_reads"] or 0) if cache_row else 0
+        if total_cache_reads > 0:
+            wins.append(
+                {
+                    "icon": "⚡",
+                    "message": f"Prompt caching active — {total_cache_reads:,} cache-read tokens saved in 30 days",
+                }
+            )
 
         return {
             "attention_needed": attention_needed,

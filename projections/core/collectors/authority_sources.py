@@ -95,6 +95,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
     usage_source_expr = _column_or_literal(columns, "usage_source", "'local_telemetry'")
     cost_source_expr = _column_or_literal(columns, "cost_source", "'unknown'")
     confidence_expr = _column_or_literal(columns, "accounting_confidence", "'medium'")
+    cache_read_expr = _column_or_literal(columns, "cache_read_tokens", "0")
     return """
         SELECT
             token_usage_id AS id,
@@ -115,7 +116,8 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
             {cost_visibility_expr} AS cost_visibility,
             {usage_source_expr} AS usage_source,
             {cost_source_expr} AS cost_source,
-            {confidence_expr} AS accounting_confidence
+            {confidence_expr} AS accounting_confidence,
+            {cache_read_expr} AS cache_read_tokens
         FROM token_usage_records
     """.format(
         adapter_expr=adapter_expr,
@@ -126,6 +128,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
         usage_source_expr=usage_source_expr,
         cost_source_expr=cost_source_expr,
         confidence_expr=confidence_expr,
+        cache_read_expr=cache_read_expr,
     )
 
 
