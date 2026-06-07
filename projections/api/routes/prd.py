@@ -147,5 +147,3 @@ async def get_prd(prd_id: str) -> dict[str, Any]:
     }
 
     return {"prd": prd, "tasks": tasks, "stats": stats}
-
-

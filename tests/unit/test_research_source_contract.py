@@ -404,7 +404,6 @@ def test_tool_detail_lookup_reads_catalog_metadata_only(tmp_path):
     assert missing is None
 
 
-
 def test_research_artifacts_expose_compatibility_classification_fields():
     from control.research import web
 

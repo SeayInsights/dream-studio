@@ -52,7 +52,6 @@ class GraphResponse(BaseModel):
     edge_count: int = Field(description="Total number of edges")
 
 
-
 # ── Helper Functions ──────────────────────────────────────────────────────────
 
 from core.config.database import get_connection
@@ -70,7 +69,6 @@ def verify_project_exists(project_id: str) -> None:
             raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
     finally:
         conn.close()
-
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────────────
@@ -130,5 +128,3 @@ async def get_dependency_graph(
     except Exception as e:
         logger.error(f"Error building graph for project {project_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to build dependency graph: {str(e)}")
-
-

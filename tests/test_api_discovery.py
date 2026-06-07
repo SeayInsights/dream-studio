@@ -622,5 +622,3 @@ def test_graph_endpoint_500_error(client, test_db, monkeypatch):
 
         assert response.status_code == 500
         assert "Failed to build dependency graph" in response.json()["detail"]
-
-
