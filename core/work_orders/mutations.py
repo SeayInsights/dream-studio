@@ -417,6 +417,13 @@ def create_work_order(
     except Exception:
         pass
 
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "work_order_id": work_order_id,
@@ -485,6 +492,13 @@ def create_task(
                 },
             ).to_dict()
         )
+    except Exception:
+        pass
+
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
     except Exception:
         pass
 

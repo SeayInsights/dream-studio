@@ -81,6 +81,13 @@ def create_milestone(
     except Exception:
         pass
 
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "milestone_id": milestone_id,

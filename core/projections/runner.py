@@ -83,6 +83,19 @@ class ProjectionRunner:
         self._spine_projections.append(projection)
         return self
 
+    # ── Synchronous tick (Pattern C emit-then-tick) ───────────────────────────
+
+    def tick(self) -> List[ProjectionResult]:
+        """Run one synchronous projection cycle without daemon overhead.
+
+        Does not require write_pid() or _install_signal_handlers(). Safe to call
+        from SDLC creators or any non-daemon context after emitting a canonical
+        event (emit-then-tick Pattern C). Returns the projection results.
+        """
+        results = self._engine.run_cycle()
+        self._fold_spine_projections()
+        return results
+
     # ── Main daemon loop ──────────────────────────────────────────────────────
 
     def run(self) -> None:
@@ -337,6 +350,45 @@ class ProjectionRunner:
             self._total_events,
             self._total_errors,
         )
+
+
+# ── Pattern C sync tick (used by SDLC creators) ───────────────────────────────
+
+
+def sync_tick() -> None:
+    """Ingest pending spool events and run one SDLC projection cycle.
+
+    Called by SDLC creators immediately after spool.writer.write_event() to
+    guarantee the emitted row is queryable on return (Pattern C emit-then-tick).
+    Steps:
+      1. spool.ingestor.ingest()  — flush spool files into canonical events tables
+      2. ProjectionEngine.run_cycle() — project canonical events into read-model tables
+
+    Never raises — both steps are wrapped in try/except so a transient failure
+    (DB lock, import error) degrades gracefully: the daemon will pick up the
+    event on its next 5-second cycle.
+    """
+    try:
+        from spool.ingestor import ingest as _ingest
+
+        _ingest()
+    except Exception:
+        logger.debug("sync_tick: spool ingest failed (non-fatal)", exc_info=True)
+
+    try:
+        from core.projections.milestone_projection import MilestoneProjection
+        from core.projections.project_projection import ProjectProjection
+        from core.projections.task_projection import TaskProjection
+        from core.projections.work_order_projection import WorkOrderProjection
+
+        runner = ProjectionRunner()
+        runner.register(WorkOrderProjection())
+        runner.register(TaskProjection())
+        runner.register(MilestoneProjection())
+        runner.register(ProjectProjection())
+        runner.tick()
+    except Exception:
+        logger.debug("sync_tick: projection cycle failed (non-fatal)", exc_info=True)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
