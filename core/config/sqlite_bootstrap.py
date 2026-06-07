@@ -113,18 +113,30 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
                     continue
                 if "no such module" in msg:
                     continue
+                # fts_gotchas / ds_documents / canonical_events: narrowed from broad
+                # substring-match to statement-type-aware (WO-I, P5.5). Pattern mirrors the
+                # memory_entries S3b fix (O7). CREATE INDEX and CREATE TRIGGER on an absent
+                # table are M2-class casualties — silently swallowing them marks the migration
+                # applied while leaving schema objects permanently missing (e.g. migration 050's
+                # idx_ds_documents_source_path on an absent ds_documents). Data/DDL-modification
+                # statements (INSERT, UPDATE, ALTER TABLE, DROP) on an absent table remain
+                # graceful degradation — no permanent schema object is lost.
+                # canonical_events note: migrations 052-064 reference it before migration 083
+                # (which creates it). All pre-083 references are data statements (ALTER TABLE,
+                # UPDATE, INSERT), so narrowing has no practical effect there — but the explicit
+                # guard prevents any future CREATE INDEX on canonical_events from being silently
+                # swallowed before migration 083 runs.
                 if "no such table" in msg and (
-                    "fts_gotchas" in msg
-                    or "ds_documents" in msg
-                    # canonical_events: migrations 052-064 reference this table but run BEFORE
-                    # migration 083 (which creates it) in the migration sequence. On fresh installs
-                    # those older migrations fail with "no such table: canonical_events" and are
-                    # swallowed here. This is intentional graceful degradation — not stale.
-                    # Migration 083 (18.4.6-followup-1) makes canonical_events migration-owned;
-                    # this swallow remains necessary for the pre-083 references.
-                    or "canonical_events" in msg
+                    "fts_gotchas" in msg or "ds_documents" in msg or "canonical_events" in msg
                 ):
-                    continue
+                    stmt_upper = stmt.strip().upper()
+                    if not (
+                        stmt_upper.startswith("CREATE INDEX")
+                        or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                        or stmt_upper.startswith("CREATE TRIGGER")
+                    ):
+                        continue
+                    # CREATE INDEX and CREATE TRIGGER fall through to raise.
                 # memory_entries: narrowed from substring-match to statement-type-aware (O7,
                 # 18.4-consolidation-followup-3). CREATE INDEX and CREATE TRIGGER on an absent
                 # memory_entries are M2 casualties — the migration intends to create a schema
