@@ -110,3 +110,5 @@ forbids host writes by default.
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-05: Wave 2 reviewed — validate-skills.yml CI workflow fixed to exclude deleted SKILL.md files (--diff-filter=d). No release-gate or publication policy change; no semantic change required in this doc. -->
+
+<!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No docker module profile change; deleted routes were internal only with no Docker boundary impact. -->

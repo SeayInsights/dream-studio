@@ -105,3 +105,5 @@ Static validation checks that:
 <!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
 
 <!-- 2026-06-05: Wave 2 reviewed — validate-skills.yml CI workflow fixed to exclude deleted SKILL.md files (--diff-filter=d). No release-gate or publication policy change; no semantic change required in this doc. -->
+
+<!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No external project validation pipeline change; deleted routes were internal only. -->

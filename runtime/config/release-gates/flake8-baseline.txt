@@ -360,11 +360,7 @@ interfaces/cli/verify_tool_registry.py:5:1: F401 'sqlite3' imported but unused
 projections/api/models/insights.py:5:1: F401 'datetime.datetime' imported but unused
 projections/api/routes/audits.py:270:13: F841 local variable 'cursor' is assigned to but never used
 projections/api/routes/audits.py:4:1: F401 'typing.List' imported but unused
-projections/api/routes/discovery_external.py:132:43: E203 whitespace before ':'
-projections/api/routes/discovery_internal.py:11:1: F401 'typing.Any' imported but unused
-projections/api/routes/discovery_internal.py:138:1: E402 module level import not at top of file
-projections/api/routes/discovery_research.py:81:5: F401 'datetime.datetime' imported but unused
-projections/api/routes/discovery_research.py:81:5: F401 'datetime.timezone' imported but unused
+projections/api/routes/discovery_internal.py:58:1: E402 module level import not at top of file
 projections/api/routes/exports.py:18:1: F401 'fastapi.responses.StreamingResponse' imported but unused
 projections/api/routes/exports.py:24:1: F401 'io' imported but unused
 projections/api/routes/hooks.py:3:1: F401 'datetime.datetime' imported but unused

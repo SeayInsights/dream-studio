@@ -47,10 +47,7 @@ SQL_WRITE_PATTERNS = [
     ),
 ]
 
-RESEARCH_ROUTE_FILES = [
-    REPO_ROOT / "projections" / "api" / "routes" / "discovery_research.py",
-    REPO_ROOT / "projections" / "api" / "routes" / "discovery_external.py",
-]
+RESEARCH_ROUTE_FILES: list = []
 
 CANONICAL_AUTHORITY_TABLES = {
     "canonical_events",
@@ -199,12 +196,6 @@ def test_research_api_routes_do_not_emit_unclassified_canonical_events():
 
     assert offenders == []
 
-    discovery_research = _read(
-        REPO_ROOT / "projections" / "api" / "routes" / "discovery_research.py"
-    )
-    assert "web_research.save_to_cache(" in discovery_research
-    assert "emit_events=False" in discovery_research
-
     web_source = _read(REPO_ROOT / "control" / "research" / "web.py")
     assert "emit_events: bool = True" in web_source
     assert "emit_events: Emit canonical research cache events when True" in web_source
@@ -215,9 +206,7 @@ def test_research_routes_do_not_write_workflow_or_execution_authority_tables():
     for path in RESEARCH_ROUTE_FILES:
         writes.extend(_sql_writes_in_file(path))
 
-    assert sorted(writes) == [
-        ("projections/api/routes/discovery_research.py", "DELETE FROM", "research_cache"),
-    ]
+    assert sorted(writes) == []
 
     offenders = [
         f"{rel_path}: {operation} {table}"
@@ -413,10 +402,6 @@ def test_tool_detail_lookup_reads_catalog_metadata_only(tmp_path):
     assert detail.tags == ["web", "mcp"]
     assert detail.confidence_score == 0.91
     assert missing is None
-
-    route_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "discovery_external.py")
-    assert "tool_search.get_tool_by_id(tool_id)" in route_source
-    assert "subprocess" not in route_source
 
 
 def test_research_artifacts_expose_compatibility_classification_fields():
