@@ -155,7 +155,6 @@ def test_dashboard_write_like_calls_stay_on_named_api_exceptions():
 def test_projection_api_direct_writes_stay_named_and_noncanonical():
     allowed_route_writes = {
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
-        ("projections/api/routes/discovery_research.py", "DELETE FROM", "research_cache"),
         # Phase 19.2: dismiss endpoint sets findings.dismissed_at + dismissed_reason.
         # findings is telemetry (not canonical state) so this write is intentional.
         ("projections/api/routes/security.py", "UPDATE", "findings"),
@@ -210,10 +209,7 @@ def test_projection_api_event_emission_stays_absent_or_classified():
         for path in _python_files(REPO_ROOT / "projections" / "api" / "routes")
         if "from control.research import web as web_research" in _read(path)
     ]
-    assert indirect_research_users == ["projections/api/routes/discovery_research.py"]
-
-    discovery_source = _read(REPO_ROOT / "projections" / "api" / "routes" / "discovery_research.py")
-    assert "emit_events=False" in discovery_source
+    assert indirect_research_users == []
 
     research_source = _read(REPO_ROOT / "control" / "research" / "web.py")
     assert "emit_events: bool = True" in research_source

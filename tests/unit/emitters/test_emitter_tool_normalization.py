@@ -279,7 +279,6 @@ def test_runtime_model_metadata_defaults_are_provider_neutral():
 def test_discovery_provider_names_remain_catalog_metadata_only():
     files = [
         REPO_ROOT / "control" / "research" / "tools.py",
-        REPO_ROOT / "projections" / "api" / "routes" / "discovery_external.py",
     ]
     offenders: list[str] = []
 
@@ -294,11 +293,9 @@ def test_discovery_provider_names_remain_catalog_metadata_only():
                 offenders.append(f"{_rel(path)} contains external call token {token}")
 
     tool_source = _read(files[0])
-    route_source = _read(files[1])
 
     assert "class ToolMatch" in tool_source
     assert "tool_registry" in tool_source
-    assert "tool_registry" in route_source
     assert offenders == []
 
 

@@ -133,8 +133,6 @@ def test_route_ownership_matrix_names_every_api_route_group():
         "`prd.py`",
         "`project_intelligence.py`",
         "`discovery_internal.py`",
-        "`discovery_external.py`",
-        "`discovery_research.py`",
         "`frontend.py`",
         "`ml.py`",
     ]:
@@ -188,7 +186,6 @@ def test_api_route_direct_sql_writes_stay_explicitly_classified():
 
     assert writes == [
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
-        ("projections/api/routes/discovery_research.py", "DELETE FROM", "research_cache"),
     ]
 
 

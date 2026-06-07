@@ -142,7 +142,6 @@ def test_projection_api_route_write_exceptions_stay_explicit():
 
     assert sorted(writes) == [
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
-        ("projections/api/routes/discovery_research.py", "DELETE FROM", "research_cache"),
     ]
 
 
