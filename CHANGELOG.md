@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## fix(wo-u) — Context-threshold hook: version-gate + dispatch consolidation (2026-06-07)
+
+### Fixed
+- `ds update` version-gate now detects canonical hook source drift without a version bump; `_canonical_hook_drift()` compares `runtime/hooks/meta/*.py` hashes against the installed manifest and triggers re-projection when they differ
+- Dual-scope reinstall: running `ds update` from a project-scoped directory now also updates the user-global `~/.claude` surface in one command
+- Dispatch consolidation: project-scope installs strip hook event registrations from `.claude/settings.json`; only the user-global `~/.claude/settings.json` registers hooks, eliminating double-firing of every hook event
+- Both projection trees (`~/.claude/hooks/` and `<repo>/.claude/hooks/`) now carry the WO-A canonical fixes: `handle_urgent_reminder`, `record_kb_baseline`, `completion_tokens` guard, `tool_name` snake_case fix, `insert_token_usage` removal
+
 ## fix(ci) — Linux CI failure repair batch 2 (2026-05-27)
 
 ### Fixed
