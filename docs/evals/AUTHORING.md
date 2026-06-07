@@ -1,13 +1,13 @@
 # Behavioral Eval Authoring Guide
 
-**18.8.3 — Behavioral Eval Harness**
+**18.8.3 — Behavioral Eval Harness (WO-N2: deterministic scoring)**
 
-This guide explains how to write a behavioral eval case for Dream Studio. Behavioral evals test *session-level correctness* — did Claude follow the skill's instructions correctly? They are not unit tests and not static rule detection.
+Behavioral evals test session-level correctness: did Claude follow the skill's instructions? Scoring is 100% deterministic — event pattern matching against expected event sequences. No live Claude sessions, no LLM judge.
 
 ## Quick Start
 
 1. Create a JSON file in `evals/` following `schemas/behavioral_eval.schema.json`.
-2. Give it a stable snake_case `eval_id` (no spaces, lowercase, underscore-separated).
+2. Give it a stable snake_case `eval_id` (lowercase, underscore-separated).
 3. Run with: `ds eval run --eval-id <your_eval_id>`
 
 ## Schema Reference
@@ -21,19 +21,15 @@ This guide explains how to write a behavioral eval case for Dream Studio. Behavi
   "input_prompt": "The user message that starts the session.",
   "fixture_events": [...],
   "expected_events": [...],
-  "expected_behavior": "1-2 sentences describing expected session outcome.",
-  "negative_checks": ["Claude must not do X"],
-  "event_weight": 0.7,
-  "behavior_weight": 0.3,
+  "notes": "Optional: human-readable description of expected behavior. Not scored.",
+  "event_weight": 1.0,
   "minimum_score": 0.75
 }
 ```
 
 Full schema: `schemas/behavioral_eval.schema.json`.
 
-## The Two Scoring Halves
-
-### Event score (70% weight — deterministic)
+## Event Scoring (100% weight — deterministic)
 
 List events that must appear or must NOT appear in the session event log.
 
@@ -45,32 +41,27 @@ List events that must appear or must NOT appear in the session event log.
 ```
 
 Rules:
-- `must_appear: true` — event must be present. Missing → score 0 for that check.
-- `must_appear: false` — event must NOT be present (negative check). Present → score penalty.
-- `skill_id` is optional; if set, the event must also match on `trace.skill_id`.
-- `max_sequence_position` (optional int) — if set, event must appear at or before that index.
+- `must_appear: true` — event must be present. Missing → 0 credit for that check.
+- `must_appear: false` — negative check: event must NOT appear. Present → -0.2 score penalty.
+- `skill_id` (optional) — event must also match on `trace.skill_id` or `skill_id` field.
+- `max_sequence_position` (optional int) — event must appear at or before this 0-based index. Late → 0.5 partial credit instead of 1.0.
+- `payload_contains` (optional object) — event payload must contain these key/value pairs.
 
-**Prefer event checks over behavior text checks.** Events are deterministic; behavior text is probabilistic.
+## Scoring Model
 
-### Behavior score (30% weight — LLM-judged)
+| Component | Weight | Type |
+|-----------|--------|------|
+| Event score | 100% | Deterministic — events present/absent |
+| Pass threshold | 0.75 (default) | Event score ≥ this value → passed |
 
-`expected_behavior` is 1-2 sentences graded by an Opus judge.
-
-```json
-"expected_behavior": "Claude invokes the resume skill and presents the active work order."
-```
-
-**Keep it short.** Opus judge reliability drops as behavior text grows. One clear assertion beats three ambiguous ones.
-
-`negative_checks` is a list of plain-English assertions that must NOT be true:
-
-```json
-"negative_checks": ["Claude must not start writing code before checking project state"]
-```
+Score formula:
+- `base_score = credits / total_required_events`
+- `credits`: 1.0 per matched required event; 0.5 if event present but out of sequence
+- `final_score = max(0.0, base_score - 0.2 × negative_violations)`
 
 ## Fixture Events (for unit tests)
 
-`fixture_events` is a list of pre-seeded events injected into the runner without a live session. Use this for fast, deterministic local tests.
+`fixture_events` is a list of pre-seeded events used instead of a live session. Required for deterministic local testing.
 
 ```json
 "fixture_events": [
@@ -79,25 +70,16 @@ Rules:
 ]
 ```
 
-When `fixture_events` is provided, the runner uses them directly. This lets `ds eval run` work without a live Claude session.
+When `fixture_events` is provided, the runner matches against them directly. No subprocess, no network, no API key required.
 
-## Scoring Model
-
-| Component | Weight | Type |
-|-----------|--------|------|
-| Event score | 70% (default) | Deterministic — events present/absent |
-| Behavior score | 30% (default) | LLM-judged (Opus) — transcript matches description |
-| Composite | 100% | Weighted sum |
-| Pass threshold | 0.75 (default) | Composite score ≥ this value → passed |
-
-The runner executes each eval case with its `fixture_events`. For live sessions, it captures events from `canonical_events`/`ai_canonical_events` post-session.
+When `fixture_events` is null, the runner reads events from `business_canonical_events` / `ai_canonical_events` for a recorded live session.
 
 ## Regression Detection
 
 Each eval run is compared against the stored baseline in `ds_eval_baselines`.
 
 - Score drops > 10% vs baseline → flagged as regression.
-- Baseline does NOT auto-update on regression — use `ds eval baseline` to print current baselines, then `core.eval.baseline.update_baseline()` for an explicit update.
+- Baseline does NOT auto-update on regression — use `ds eval baseline` to view current baselines, then `core.eval.baseline.update_baseline()` for an explicit update.
 
 ## Naming Convention
 
@@ -110,20 +92,13 @@ eval_NN_short_description.json
 
 Examples: `eval_01_event_sequence_skill_dispatch.json`, `eval_09_resume_after_break.json`.
 
-## CI Integration
-
-Two-tier CI:
-- **PR push** — quick suite (evals 01–05) via `ds eval run --all` on the quick subset.
-- **PR merge** — full suite (all evals) runs in the post-merge `full-ci.yml` workflow.
-
-A regression > 5% vs baseline in the full suite blocks a future PR from merging.
-
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Long `expected_behavior` text | Keep to 1-2 assertions; split complex behavior into multiple evals |
-| Only behavior checks, no events | Always add at least 1 expected event (deterministic anchor) |
-| `must_appear: false` on every event | Negative checks are expensive; use only for genuinely forbidden behaviors |
-| Same `eval_id` as an existing file | Choose a unique ID; two files with the same `eval_id` cause test failures |
-| Skipping `fixture_events` | Without fixture events, the unit tests can't run the eval deterministically |
+| Using `notes` as a scoring signal | `notes` is documentation only; add `expected_events` for what you want scored |
+| No `fixture_events` | Without fixtures, unit tests cannot run the eval deterministically |
+| Negative checks on every event | Use `must_appear: false` only for genuinely forbidden behaviors |
+| Same `eval_id` as an existing file | Two files with the same `eval_id` cause test failures |
+| `event_weight` not 1.0 | Always set `event_weight: 1.0`; scoring is 100% events |
+| Omitting `minimum_score` | Default is 0.75; override only if the eval intentionally allows more failure |

@@ -1,9 +1,24 @@
 {
   "eval_id": "eval_04_negative_check_no_direct_code",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Resume skill should NOT start writing code immediately. Tests negative event/behavior checks.",
   "skill_id": "ds-project",
   "input_prompt": "let's build the authentication feature",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-project:resume",
+      "trace": {
+        "skill_id": "ds-project:resume"
+      }
+    },
+    {
+      "event_type": "context.loaded",
+      "payload": {
+        "context_file": "context.md"
+      }
+    }
+  ],
   "expected_events": [
     {
       "event_type": "skill.invoked",
@@ -15,19 +30,7 @@
       "must_appear": false
     }
   ],
-  "expected_behavior": "Claude checks the current project state before doing any building. Claude does not start writing code until work order context and design brief are loaded.",
-  "negative_checks": [
-    "Claude does not write any code in the response",
-    "Claude does not skip checking the project state"
-  ],
-  "scoring": {
-    "event_weight": 0.7,
-    "behavior_weight": 0.3,
-    "minimum_pass_score": 0.75
-  },
-  "fixture_events": [
-    {"event_type": "skill.invoked", "skill_id": "ds-project:resume", "trace": {"skill_id": "ds-project:resume"}},
-    {"event_type": "context.loaded", "payload": {"context_file": "context.md"}}
-  ],
-  "fixture_transcript": "User: let's build the authentication feature\n\nClaude: Before diving into building, let me check the current project state to understand what work order we're on and what context we have.\n\n[Invoked: ds-project:resume]\n\nBased on the project state:\n- Active project: DreamySuite\n- Current WO: WO-042 — Add JWT Authentication\n- Design brief: LOCKED ✓\n- Previous context: Available (context.md loaded)\n\nI'm ready to start building. The work order scope is: JWT token middleware for the API routes. Should I proceed with the implementation plan?"
+  "notes": "Claude checks the current project state before doing any building. Claude does not start writing code until work order context and design brief are loaded.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
 }

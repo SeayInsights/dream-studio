@@ -1,9 +1,22 @@
 {
   "eval_id": "eval_02_behavior_text_quality_response",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Security skill should produce structured quality findings, not generic responses. Tests Opus judge integration.",
   "skill_id": "ds-quality",
   "input_prompt": "audit: check the codebase for security issues",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-quality",
+      "trace": {
+        "skill_id": "ds-quality"
+      }
+    },
+    {
+      "event_type": "skill.completed",
+      "skill_id": "ds-quality"
+    }
+  ],
   "expected_events": [
     {
       "event_type": "skill.invoked",
@@ -11,19 +24,7 @@
       "skill_id": "ds-quality"
     }
   ],
-  "expected_behavior": "Claude invokes the security audit skill and presents findings with rule IDs, severity levels, and specific file locations. Response is structured, not generic.",
-  "negative_checks": [
-    "Claude does not say 'I cannot audit code' or refuse the request",
-    "Claude does not provide findings without specific file paths or line numbers"
-  ],
-  "scoring": {
-    "event_weight": 0.5,
-    "behavior_weight": 0.5,
-    "minimum_pass_score": 0.75
-  },
-  "fixture_events": [
-    {"event_type": "skill.invoked", "skill_id": "ds-quality", "trace": {"skill_id": "ds-quality"}},
-    {"event_type": "skill.completed", "skill_id": "ds-quality"}
-  ],
-  "fixture_transcript": "User: audit: check the codebase for security issues\n\nClaude: Running security audit on the codebase.\n\n[Invoked: ds-quality:security]\n\nSecurity Audit Results:\n\n🔴 sec-002 [CRITICAL] SQL Injection — core/analytics/aggregate_metrics.py:147\n  Found: f-string with SQL keywords and variable interpolation\n  Fix: Use parameterized queries: cursor.execute(sql, (param,))\n\n⚠️ sec-013 [HIGH] PII in logs — projections/api/routes/shared_intelligence.py:203  \n  Found: logger.info() with email variable\n  Fix: Log opaque user_id instead of email\n\n✓ 2 critical/high findings. Run ds-quality security audit for full report."
+  "notes": "Claude invokes the security audit skill and presents findings with rule IDs, severity levels, and specific file locations. Response is structured, not generic.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
 }

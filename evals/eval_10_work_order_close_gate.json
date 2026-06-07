@@ -1,7 +1,7 @@
 {
   "eval_id": "eval_10_work_order_close_gate",
-  "version": "1.0.0",
-  "description": "When a work order close fails a gate, Claude must surface the failure clearly and invoke the correct remediation skill.",
+  "version": "2.0.0",
+  "description": "When a work order close fails a gate, Claude must surface the failure clearly.",
   "skill_id": "ds-workorder",
   "input_prompt": "close work order: all tasks done, ship it",
   "fixture_events": [
@@ -14,9 +14,7 @@
     {"event_type": "gate.failed", "must_appear": true},
     {"event_type": "code.generated", "must_appear": false}
   ],
-  "expected_behavior": "Claude reports the gate failure and tells the operator which action to take to resolve it.",
-  "negative_checks": ["Claude must not force-close the work order without resolving the gate"],
-  "event_weight": 0.7,
-  "behavior_weight": 0.3,
+  "notes": "Claude reports the gate failure and tells the operator which action to take to resolve it. Must not force-close.",
+  "event_weight": 1.0,
   "minimum_score": 0.75
 }
