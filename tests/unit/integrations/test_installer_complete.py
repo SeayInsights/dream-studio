@@ -1091,3 +1091,63 @@ def test_first_run_guide_contains_config_json_step():
     assert (
         "director_name" in _FIRST_RUN_GUIDE_TEXT
     ), "_FIRST_RUN_GUIDE_TEXT missing director_name field reference"
+
+
+# ── Dispatch consolidation (WO-U) ─────────────────────────────────────────────
+
+
+def test_purge_all_hook_registrations_removes_hooks_key():
+    """purge_all_hook_registrations must strip the hooks section entirely."""
+    from integrations.targets.claude_code.settings_merge import purge_all_hook_registrations
+
+    settings = {
+        "hooks": {
+            "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "py run.py UPS"}]}],
+            "Stop": [{"hooks": [{"type": "command", "command": "py run.py Stop"}]}],
+        },
+        "statusLine": {"type": "command", "command": "py statusline.py"},
+        "env": {"MY_VAR": "1"},
+    }
+    result = purge_all_hook_registrations(settings)
+    assert "hooks" not in result, "hooks key must be removed for project scope"
+    assert result["statusLine"] == settings["statusLine"], "statusLine must be preserved"
+    assert result["env"] == settings["env"], "other keys must be preserved"
+
+
+def test_purge_all_hook_registrations_is_idempotent():
+    """Calling purge_all_hook_registrations twice must produce the same result."""
+    from integrations.targets.claude_code.settings_merge import purge_all_hook_registrations
+
+    settings = {
+        "hooks": {"UserPromptSubmit": []},
+        "statusLine": {"type": "command", "command": "x"},
+    }
+    once = purge_all_hook_registrations(settings)
+    twice = purge_all_hook_registrations(once)
+    assert once == twice
+
+
+def test_project_scope_install_writes_no_hook_registrations(config_root, canonical_root, ds_home):
+    """Project-scope install must leave settings.json with no hooks section (dispatch consolidation)."""
+    installer = ClaudeCodeInstaller(
+        config_root, "project", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    settings_path = config_root / "settings.json"
+    assert settings_path.exists(), "settings.json must be written"
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "hooks" not in settings, (
+        "Project-scope settings.json must not contain hook registrations — "
+        "user-global ~/.claude/settings.json is the single dispatch surface"
+    )
+    assert "statusLine" in settings, "statusLine must still be written in project scope"
+
+
+def test_user_scope_install_writes_hook_registrations(config_root, canonical_root, ds_home):
+    """User-scope install must keep hook registrations in settings.json."""
+    installer = ClaudeCodeInstaller(
+        config_root, "user", canonical_root=canonical_root, ds_home=ds_home
+    )
+    installer.install("execute")
+    settings = json.loads((config_root / "settings.json").read_text(encoding="utf-8"))
+    assert "hooks" in settings, "User-scope settings.json must contain hook registrations"

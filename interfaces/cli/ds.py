@@ -1213,6 +1213,44 @@ def _doctor_status(
     )
 
 
+def _canonical_hook_drift(source_root: Path, manifest: dict) -> list[str]:
+    """Return names of hook meta files whose canonical source has changed since last install.
+
+    The manifest records content_hash = hash(canonical_source) at install time.
+    If the canonical source has since been updated (e.g. a bug fix without a version bump),
+    the hashes differ and re-projection is required.  Returns an empty list when everything
+    matches (no reinstall needed).
+    """
+    from integrations.manifest import compute_hash
+
+    # Index manifest by filename for hook meta files (ignore duplicates — first match wins)
+    meta_hashes: dict[str, str] = {}
+    for entry in manifest.get("files", []):
+        if entry.get("operation") == "skip":
+            continue
+        p = entry.get("path", "")
+        # Match installed hook meta handlers in either projection tree
+        if "hooks" in p and "meta" in p and p.endswith(".py") and "__init__" not in p:
+            name = Path(p).name
+            if name not in meta_hashes:
+                meta_hashes[name] = entry.get("content_hash", "")
+
+    meta_src = source_root / "runtime" / "hooks" / "meta"
+    if not meta_src.is_dir():
+        return []
+
+    drift: list[str] = []
+    for handler in sorted(meta_src.glob("*.py")):
+        if handler.name == "__init__.py":
+            continue
+        recorded = meta_hashes.get(handler.name, "")
+        if not recorded:
+            continue
+        if compute_hash(handler.read_text(encoding="utf-8")) != recorded:
+            drift.append(handler.name)
+    return drift
+
+
 def _update_command(
     *, source_root: Path, dream_studio_home: Path | None, dry_run: bool = False
 ) -> int:
@@ -1245,8 +1283,17 @@ def _update_command(
     )
 
     if installed_version == repo_version:
-        _print({"ok": True, "status": "already_current", "version": repo_version})
-        return 0
+        # Version stamp matches, but check whether canonical hook source has drifted
+        # from what the manifest recorded at the last install.  A hook code change
+        # without a version bump (e.g. WO-A) must still trigger re-projection.
+        from integrations.manifest import compute_hash, read_manifest
+
+        manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
+        if manifest and _canonical_hook_drift(source_root, manifest):
+            pass  # fall through to reinstall
+        else:
+            _print({"ok": True, "status": "already_current", "version": repo_version})
+            return 0
 
     if dry_run:
         _print(
@@ -1278,6 +1325,20 @@ def _update_command(
         )
         install_result = installer.install("execute")
         install_ok = bool(install_result.get("ok", True))
+
+        # When running from a project-scope dir, also update the user-global surface so
+        # both projection trees stay in sync.  The project-scope tree has no hook registrations
+        # (dispatch consolidation); the user-global tree is the single dispatch surface.
+        if install_ok and detected.scope == "project":
+            user_installer = ClaudeCodeInstaller(
+                Path.home() / ".claude",
+                "user",
+                canonical_root=canonical_root,
+                ds_home=ds_home,
+            )
+            user_result = user_installer.install("execute")
+            if not user_result.get("ok", True):
+                install_result["user_scope_warning"] = user_result
     except Exception as exc:  # noqa: BLE001 — surface the install failure to operator
         install_result = {"ok": False, "error": str(exc), "error_type": type(exc).__name__}
         install_ok = False

@@ -381,3 +381,128 @@ def test_update_execute_install_failure_returns_1_without_bumping_version(tmp_pa
     assert (ds_home / "state" / "installed-version").read_text(encoding="utf-8").strip() == (
         "2026-01-01"
     )
+
+
+# ── Version-gate drift detection (WO-U) ───────────────────────────────────────
+
+
+def _make_manifest(files: list[dict]) -> dict:
+    return {"schema_version": "ds.integration.manifest.v1", "files": files}
+
+
+def test_canonical_hook_drift_returns_empty_when_no_meta_dir(tmp_path):
+    """_canonical_hook_drift returns [] when source_root has no runtime/hooks/meta dir."""
+    from interfaces.cli.ds import _canonical_hook_drift
+
+    manifest = _make_manifest([])
+    assert _canonical_hook_drift(tmp_path, manifest) == []
+
+
+def test_canonical_hook_drift_returns_empty_when_hashes_match(tmp_path):
+    """_canonical_hook_drift returns [] when canonical hash matches manifest."""
+    from interfaces.cli.ds import _canonical_hook_drift
+    from integrations.manifest import compute_hash
+
+    meta_dir = tmp_path / "runtime" / "hooks" / "meta"
+    meta_dir.mkdir(parents=True)
+    handler = meta_dir / "on-context-threshold.py"
+    handler.write_text("# canonical content\n", encoding="utf-8")
+    h = compute_hash("# canonical content\n")
+
+    manifest = _make_manifest(
+        [
+            {
+                "path": str(
+                    tmp_path
+                    / ".claude"
+                    / "hooks"
+                    / "runtime"
+                    / "hooks"
+                    / "meta"
+                    / "on-context-threshold.py"
+                ),
+                "content_hash": h,
+                "operation": "create",
+            }
+        ]
+    )
+    assert _canonical_hook_drift(tmp_path, manifest) == []
+
+
+def test_canonical_hook_drift_returns_filename_when_hash_differs(tmp_path):
+    """_canonical_hook_drift returns the filename when canonical source has changed."""
+    from interfaces.cli.ds import _canonical_hook_drift
+    from integrations.manifest import compute_hash
+
+    meta_dir = tmp_path / "runtime" / "hooks" / "meta"
+    meta_dir.mkdir(parents=True)
+    handler = meta_dir / "on-context-threshold.py"
+    handler.write_text("# NEW canonical content\n", encoding="utf-8")
+    old_hash = compute_hash("# OLD canonical content\n")
+
+    manifest = _make_manifest(
+        [
+            {
+                "path": str(
+                    tmp_path
+                    / ".claude"
+                    / "hooks"
+                    / "runtime"
+                    / "hooks"
+                    / "meta"
+                    / "on-context-threshold.py"
+                ),
+                "content_hash": old_hash,
+                "operation": "create",
+            }
+        ]
+    )
+    drift = _canonical_hook_drift(tmp_path, manifest)
+    assert drift == ["on-context-threshold.py"]
+
+
+def test_update_falls_through_on_version_match_with_hook_drift(tmp_path, capsys):
+    """ds update must reinstall when version matches but canonical hooks have drifted."""
+    from interfaces.cli.ds import _update_command
+    from integrations.manifest import compute_hash, write_manifest
+    from unittest.mock import MagicMock, patch
+
+    version = "2026-05-17"
+    (tmp_path / "VERSION").write_text(version + "\n", encoding="utf-8")
+    ds_home = tmp_path / ".dream-studio"
+    (ds_home / "state").mkdir(parents=True, exist_ok=True)
+    (ds_home / "state" / "installed-version").write_text(version + "\n", encoding="utf-8")
+
+    # Create a canonical hook meta file that differs from the manifest hash
+    meta_dir = tmp_path / "runtime" / "hooks" / "meta"
+    meta_dir.mkdir(parents=True)
+    handler = meta_dir / "on-context-threshold.py"
+    handler.write_text("# NEW fix\n", encoding="utf-8")
+    installed_path = str(
+        tmp_path / ".claude" / "hooks" / "runtime" / "hooks" / "meta" / "on-context-threshold.py"
+    )
+    old_hash = compute_hash("# OLD code with bug\n")
+    write_manifest(
+        "claude_code",
+        _make_manifest([{"path": installed_path, "content_hash": old_hash, "operation": "create"}]),
+        ds_home=ds_home,
+    )
+
+    with (
+        patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_paths,
+        patch("integrations.detector.detect_claude_code") as mock_detect,
+        patch("integrations.installer.claude_code.ClaudeCodeInstaller.install") as mock_install,
+    ):
+        mock_rt = MagicMock()
+        mock_rt.dream_studio_home = ds_home
+        mock_paths.return_value = mock_rt
+        mock_detect.return_value = MagicMock(config_root=tmp_path / ".claude", scope="user")
+        mock_install.return_value = {"ok": True, "files_written": 0}
+
+        result = _update_command(source_root=tmp_path, dream_studio_home=ds_home)
+
+    assert mock_install.called, "installer must be called when canonical hook has drifted"
+    captured = capsys.readouterr()
+    output = json.loads(captured.out.strip())
+    assert output["status"] == "updated"
+    assert result == 0

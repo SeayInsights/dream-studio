@@ -231,6 +231,20 @@ def purge_read_posttooluse_matcher(settings: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def purge_all_hook_registrations(settings: dict[str, Any]) -> dict[str, Any]:
+    """Remove the entire hooks section from a settings dict.
+
+    Used for project-scope installs: hook event registrations belong only in the
+    user-global ~/.claude/settings.json.  The project-scope .claude/settings.json
+    must not register a second copy of runtime hooks or each event fires twice.
+    """
+    import copy as _copy
+
+    result = _copy.deepcopy(settings)
+    result.pop("hooks", None)
+    return result
+
+
 def load_settings(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}

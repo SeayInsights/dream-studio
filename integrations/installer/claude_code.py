@@ -33,6 +33,7 @@ from integrations.targets.claude_code.settings_merge import (
     dedup_hooks_by_normalized_command,
     load_settings,
     merge_settings,
+    purge_all_hook_registrations,
     purge_legacy_hooks,
     purge_read_posttooluse_matcher,
     settings_to_json,
@@ -526,12 +527,22 @@ class ClaudeCodeInstaller(InstallerBase):
         merged, _purged = purge_legacy_hooks(merged)
         merged = dedup_hooks_by_normalized_command(merged)
         merged = purge_read_posttooluse_matcher(merged)
+        if self.scope == "project":
+            # Project-scope settings must not register hook events — the user-global
+            # ~/.claude/settings.json is the single dispatch surface.  Registering hooks
+            # in both settings files causes every event to fire twice.
+            merged = purge_all_hook_registrations(merged)
         # Always write the Python statusLine command to migrate from old bash wrapper
         merged["statusLine"] = {
             "type": "command",
             "command": _interpolate_statusline_cmd(hooks_dir),
         }
         merged_content = settings_to_json(merged)
+        reason = (
+            "Remove hook registrations from project-scope settings (single dispatch surface: user-global)"
+            if self.scope == "project"
+            else "Append DS spool emitter hooks (UserPromptSubmit, Stop, PostCompact, PostToolUse)"
+        )
         ops.append(
             FileOp(
                 target=settings_target,
@@ -539,7 +550,7 @@ class ClaudeCodeInstaller(InstallerBase):
                 backup_required=True,
                 source_hash=compute_hash(merged_content),
                 source_content=merged_content,
-                reason="Append DS spool emitter hooks (UserPromptSubmit, Stop, PostCompact, PostToolUse)",
+                reason=reason,
                 safety_notes=(
                     "Additive only — never removes existing hooks. " f"Skipped: {skip_reasons}"
                     if skip_reasons
