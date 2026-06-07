@@ -175,3 +175,110 @@ def test_format_report_renders_pass_and_fail() -> None:
     assert "hint: run black" in out
     assert "some error" in out
     assert "Overall: FAIL" in out
+
+
+# ── Advisory tier (AD-3) ──────────────────────────────────────────────────────
+
+
+def test_advisory_gate_does_not_block_overall_pass(tmp_path: Path) -> None:
+    """An advisory gate failure must not set overall_passed=False."""
+    manifest = tmp_path / "m.yaml"
+    _write_manifest(
+        manifest,
+        [
+            {"id": "blocking-pass", "command": [sys.executable, "-c", "pass"], "tier": "blocking"},
+            {
+                "id": "advisory-fail",
+                "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+                "tier": "advisory",
+                "warn_hint": "hygiene signal only",
+            },
+        ],
+    )
+    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path, emit_events=False)
+    assert report.overall_passed is True, "Advisory gate failure must not block overall pass"
+    assert len(report.gates) == 2
+    assert report.advisory_warnings[0].gate_id == "advisory-fail"
+    assert report.failed_gates == []
+
+
+def test_advisory_gate_continues_after_blocking_fail(tmp_path: Path) -> None:
+    """Advisory gates continue running even after a blocking gate failure (stop only applies to blocking)."""
+    manifest = tmp_path / "m.yaml"
+    _write_manifest(
+        manifest,
+        [
+            {
+                "id": "blocking-fail",
+                "command": [sys.executable, "-c", "import sys; sys.exit(1)"],
+                "tier": "blocking",
+            },
+            {
+                "id": "advisory-after",
+                "command": [sys.executable, "-c", "pass"],
+                "tier": "advisory",
+            },
+        ],
+    )
+    # With stop_on_first_failure=True, the blocking fail should stop the run
+    report = run_pre_push_gates(manifest_path=manifest, repo_root=tmp_path, emit_events=False)
+    assert report.overall_passed is False
+    # Only the blocking gate ran — stop_on_first_failure kicked in
+    assert len(report.gates) == 1
+    assert report.gates[0].gate_id == "blocking-fail"
+
+
+def test_format_report_renders_warn_for_advisory() -> None:
+    from core.gates.pre_push import GateResult
+
+    report = PrePushReport(
+        overall_passed=True,
+        gates=[
+            GateResult(gate_id="g1", passed=True, exit_code=0, duration_seconds=0.5),
+            GateResult(
+                gate_id="docs-drift",
+                passed=False,
+                exit_code=1,
+                duration_seconds=0.3,
+                tier="advisory",
+                warn_hint="update docs when convenient",
+            ),
+        ],
+    )
+    out = format_report(report)
+    assert "[PASS] g1" in out
+    assert "[WARN] docs-drift" in out
+    assert "advisory: update docs when convenient" in out
+    assert "Overall: PASS" in out
+    assert "advisory warning" in out
+    assert "[FAIL]" not in out
+
+
+def test_gate_result_is_advisory_property() -> None:
+    from core.gates.pre_push import GateResult
+
+    blocking = GateResult(gate_id="x", passed=True, exit_code=0, duration_seconds=0.0)
+    advisory = GateResult(
+        gate_id="y", passed=False, exit_code=1, duration_seconds=0.0, tier="advisory"
+    )
+    assert blocking.is_advisory is False
+    assert advisory.is_advisory is True
+
+
+def test_pre_push_report_advisory_warnings_and_failed_gates() -> None:
+    from core.gates.pre_push import GateResult
+
+    report = PrePushReport(
+        overall_passed=True,
+        gates=[
+            GateResult(gate_id="b-pass", passed=True, exit_code=0, duration_seconds=0.0),
+            GateResult(
+                gate_id="b-fail", passed=False, exit_code=1, duration_seconds=0.0, tier="blocking"
+            ),
+            GateResult(
+                gate_id="a-fail", passed=False, exit_code=1, duration_seconds=0.0, tier="advisory"
+            ),
+        ],
+    )
+    assert [g.gate_id for g in report.failed_gates] == ["b-fail"]
+    assert [g.gate_id for g in report.advisory_warnings] == ["a-fail"]

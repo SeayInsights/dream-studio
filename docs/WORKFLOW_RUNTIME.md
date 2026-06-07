@@ -192,3 +192,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- 2026-06-06: Wave 5b legacy module removal — wave_executor.py and wave_executor_enhanced.py deleted (zero importers; Audit 3 confirmed). Removed their two rows from the Runtime Integration table. wave.* event types retained (additive-only registry). -->
 
 <!-- 2026-06-06: WO-A telemetry write-path honesty fixes. runtime/hooks/meta/* changes (on-session-end.py, on-skill-metrics.py, on-context-threshold.py, on-post-compact.py) and runtime/dispatch/hooks.py (tool_name snake_case fix). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
+
+<!-- Last reviewed 2026-06-07 — WO-O (feat/wo-o-two-tier-gates): pre-push.yaml updated to v2 with advisory tier field. Gate runner and test file updated. No change to hook runtime behavior or workflow execution model — only gate classification metadata added. -->

@@ -1,16 +1,25 @@
 name: pre-push
 description: >
   Pre-push gates that block `git push` on regressions in formatting, lint
-  baseline, source-skill integrity, evals, contract atlas leakage, and docs
-  drift. Invoked by hooks/git/pre-push.
-version: 1
+  baseline, source-skill integrity, evals, and contract atlas leakage.
+  Advisory gates surface hygiene signals without blocking push.
+  Invoked by hooks/git/pre-push.
+version: 2
 on_failure: stop
 
+# Gate tiers (AD-3 two-tier model):
+#   tier: blocking  — gate failure blocks push (default)
+#   tier: advisory  — gate failure surfaces a warning but does not block push
+#
+# Classification rule: correctness / safety / authority-integrity → blocking
+#                      hygiene / drift / informational              → advisory
+#
 # Each gate is run via subprocess by core/gates/pre_push.py.
 # Exit code 0 = pass, non-zero = fail. cwd is the repo root.
 # Order matters — cheapest gates first so a failure halts the slow ones.
 gates:
   - id: format-check
+    tier: blocking
     description: >
       `py -m black --check .` must report zero would-reformat files. Prevents
       the recurring formatting-CI failure that broke PRs #23-#27.
@@ -18,6 +27,7 @@ gates:
     fail_hint: "Run `py -m black .` to fix formatting, then re-push."
 
   - id: lint-check
+    tier: blocking
     description: >
       The flake8 baseline must show status=pass with no new findings beyond the
       pinned baseline file.
@@ -25,6 +35,7 @@ gates:
     fail_hint: "Fix new lint findings; do not bypass the baseline."
 
   - id: skill-sync
+    tier: blocking
     description: >
       Source-level enforcement-block regression check (A4/A5 invariant) — the
       `_ENFORCEMENT_BLOCK` constant must contain zero `py -m interfaces.cli.ds`
@@ -35,6 +46,7 @@ gates:
       Restore the function-call form per A4/A5.
 
   - id: test-suite
+    tier: blocking
     description: >
       Targeted eval suite (tests/evals/) must pass. Scoped to evals (not the
       full test suite) to stay OOM-safe per the established testing policy.
@@ -42,23 +54,26 @@ gates:
     fail_hint: "Eval failures block push — fix the failing eval before retry."
 
   - id: atlas-leak
+    tier: blocking
     description: >
       Contract atlas lifecycle gate. Detects PRD/contract leakage into
-      unauthorized projection surfaces.
+      unauthorized projection surfaces. Authority-integrity check — blocking.
     command: [py, interfaces/cli/contract_atlas_lifecycle_gate.py]
     fail_hint: "Atlas leak — see contract-atlas docs for resolution."
 
   - id: docs-drift
+    tier: advisory
     description: >
       Contract docs drift gate. Detects when docs and code references have
-      drifted apart. Uses DREAM_STUDIO_BASE_REF=origin/main to match CI
-      behavior — local gate now catches the same drift CI catches.
+      drifted apart. Hygiene signal — advisory only (AD-3 Item 28 stamp-trap).
+      Uses DREAM_STUDIO_BASE_REF=origin/main to match CI behavior.
     command: [py, interfaces/cli/contract_docs_drift_gate.py]
     env:
       DREAM_STUDIO_BASE_REF: origin/main
-    fail_hint: "Reconcile docs vs code, or update the drift baseline."
+    warn_hint: "Docs drift detected — update docs or log a gotcha, but push is not blocked."
 
   - id: migration-risk
+    tier: blocking
     description: >
       Migration risk classifier. Detects SQL/migration-file changes and
       requires explicit matrix-watch confirmation before merge. Migration

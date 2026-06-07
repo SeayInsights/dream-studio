@@ -32,9 +32,15 @@ class GateResult:
     passed: bool
     exit_code: int
     duration_seconds: float
+    tier: str = "blocking"  # "blocking" or "advisory" (AD-3 two-tier model)
     fail_hint: str = ""
+    warn_hint: str = ""
     stdout_tail: str = ""
     stderr_tail: str = ""
+
+    @property
+    def is_advisory(self) -> bool:
+        return self.tier == "advisory"
 
 
 @dataclass
@@ -44,7 +50,13 @@ class PrePushReport:
 
     @property
     def failed_gates(self) -> list[GateResult]:
-        return [g for g in self.gates if not g.passed]
+        """Gates that failed AND are blocking (advisory failures are warnings, not failures)."""
+        return [g for g in self.gates if not g.passed and not g.is_advisory]
+
+    @property
+    def advisory_warnings(self) -> list[GateResult]:
+        """Advisory gates that failed (surfaced but do not block overall pass)."""
+        return [g for g in self.gates if not g.passed and g.is_advisory]
 
 
 def load_manifest(manifest_path: Path | None = None) -> dict[str, Any]:
@@ -77,6 +89,7 @@ def run_gate(
 ) -> GateResult:
     """Run a single gate as a subprocess and return its result."""
     gate_id = str(gate.get("id") or "<unnamed>")
+    tier = str(gate.get("tier") or "blocking")
     command = gate.get("command") or []
     if not command:
         return GateResult(
@@ -84,6 +97,7 @@ def run_gate(
             passed=False,
             exit_code=-1,
             duration_seconds=0.0,
+            tier=tier,
             fail_hint="Gate has no `command:` defined in manifest.",
         )
 
@@ -147,7 +161,9 @@ def run_gate(
         passed=exit_code == 0,
         exit_code=exit_code,
         duration_seconds=duration,
+        tier=tier,
         fail_hint=str(gate.get("fail_hint") or ""),
+        warn_hint=str(gate.get("warn_hint") or ""),
         stdout_tail=_tail(stdout),
         stderr_tail=_tail(stderr),
     )
@@ -221,11 +237,15 @@ def run_pre_push_gates(
         result = run_gate(gate, repo_root=root)
         report.gates.append(result)
         if not result.passed:
-            report.overall_passed = False
-            if emit_events:
-                emit_gate_failure_event(result)
-            if stop_on_first_failure:
-                break
+            if result.is_advisory:
+                # Advisory failures surface as warnings but never block push.
+                pass
+            else:
+                report.overall_passed = False
+                if emit_events:
+                    emit_gate_failure_event(result)
+                if stop_on_first_failure:
+                    break
     return report
 
 
@@ -233,11 +253,17 @@ def format_report(report: PrePushReport) -> str:
     """Render the report as a human-readable string for the pre-push hook."""
     lines: list[str] = []
     for gate in report.gates:
-        status = "PASS" if gate.passed else "FAIL"
+        if gate.passed:
+            status = "PASS"
+        elif gate.is_advisory:
+            status = "WARN"
+        else:
+            status = "FAIL"
         lines.append(f"[{status}] {gate.gate_id} ({gate.duration_seconds:.1f}s)")
         if not gate.passed:
-            if gate.fail_hint:
-                lines.append(f"   hint: {gate.fail_hint}")
+            hint = gate.warn_hint if gate.is_advisory else gate.fail_hint
+            if hint:
+                lines.append(f"   {'advisory' if gate.is_advisory else 'hint'}: {hint}")
             if gate.stderr_tail:
                 lines.append("   stderr tail:")
                 lines.extend(f"     {line}" for line in gate.stderr_tail.splitlines())
@@ -246,6 +272,8 @@ def format_report(report: PrePushReport) -> str:
                 lines.extend(f"     {line}" for line in gate.stdout_tail.splitlines())
     lines.append("")
     lines.append("Overall: " + ("PASS" if report.overall_passed else "FAIL"))
+    if report.advisory_warnings:
+        lines.append(f"  ({len(report.advisory_warnings)} advisory warning(s) — push not blocked)")
     return "\n".join(lines)
 
 
