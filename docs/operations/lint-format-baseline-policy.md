@@ -199,6 +199,8 @@ change set must run `python interfaces\cli\repo_publication_readiness.py
 --strict`, refresh the public publication evidence when intentional, and keep
 private operational history out of tracked source.
 
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated (702 → 531 entries, 171 dead entries removed after WO-C/D/F deletions). No change to lint policy or publication boundary behavior. -->
+
 External-project, Docker-boundary, long-run validation, and final
 productization closeout changes are release-gate relevant. If code changes
 affect paused external target intake, target selection gates, Docker profile

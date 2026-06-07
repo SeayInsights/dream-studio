@@ -157,6 +157,8 @@ command (`python interfaces/cli/repo_publication_readiness.py --strict`) checks
 README/PRD product framing as part of its validation; that's the automated signal.
 README accuracy for specific feature/change cycles is reviewed by the operator
 exercising judgment about product-level communication, not by an automated gate
+
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated against current tree after WO-C/D/F dead-code removal. No change to publication boundary, privacy classification, or sanitized export behavior. -->
 that fires on every baseline cleanup.
 
 <!-- Last reviewed 2026-05-20 — public sanitized Contract Atlas export refresh hardened against POSIX absolute paths in core/shared_intelligence/contract_atlas.py; no policy change required here. -->

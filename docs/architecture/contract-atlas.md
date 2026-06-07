@@ -332,6 +332,8 @@ so changes to publication checks, history privacy classification, sanitized
 exports, README/PRD alignment, or Apache-2.0 references require same-change-set
 docs refresh and publication evidence review.
 
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: contract_registry.py workflow_and_hooks source_pattern fix (workflows/** → canonical/workflows/**); no semantic change to contract atlas structure or domain boundaries. -->
+
 ## Export Boundary
 
 The private atlas may include local repo paths and local surface status. Public
