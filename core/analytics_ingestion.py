@@ -25,7 +25,6 @@ INGESTION_SECTIONS: tuple[str, ...] = (
     "ai_usage",
     "components",
     "dependencies",
-    "prds",
     "readiness_assessments",
 )
 
@@ -37,7 +36,6 @@ SECTION_TABLES: dict[str, tuple[str, ...]] = {
     "ai_usage": ("ai_usage_operational_records",),
     "components": ("pi_components",),
     "dependencies": ("pi_dependencies",),
-    "prds": ("prd_documents",),
     "readiness_assessments": (
         "production_readiness_assessment_runs",
         "production_readiness_control_results",
@@ -53,7 +51,6 @@ TABLE_KEYS: dict[str, str] = {
     "ai_usage_operational_records": "usage_record_id",
     "pi_components": "component_id",
     "pi_dependencies": "dependency_id",
-    "prd_documents": "prd_id",
     "production_readiness_assessment_runs": "assessment_id",
     "production_readiness_control_results": "result_id",
     "production_readiness_findings": "finding_id",
@@ -65,7 +62,6 @@ ANALYTICS_ONLY_CAPABILITIES: tuple[str, ...] = (
     "security_finding_import",
     "token_usage_import",
     "operational_ai_usage_import",
-    "dependency_stack_prd_import",
     "readiness_scorecard_import",
     "dashboard_api_read_models",
     "honest_empty_states",
@@ -175,7 +171,6 @@ def ingest_analytics_payload(
         "ai_usage": _ai_usage_rows,
         "components": _component_rows,
         "dependencies": _dependency_rows,
-        "prds": _prd_rows,
         "readiness_assessments": _readiness_rows,
     }
 
@@ -535,34 +530,6 @@ def _component_rows(
                 "imports": record.get("imports"),
                 "imported_by": record.get("imported_by"),
                 "last_analyzed": record.get("last_analyzed") or ingested_at,
-            },
-        )
-    ]
-
-
-def _prd_rows(
-    record: dict[str, Any],
-    *,
-    source_refs: list[str],
-    evidence_refs: list[str],
-    ingested_at: str,
-) -> list[tuple[str, dict[str, Any]]]:
-    project_id = _required(record, "project_id")
-    prd_id = record.get("prd_id") or _stable_id("prd", record)
-    return [
-        (
-            "prd_documents",
-            {
-                "prd_id": prd_id,
-                "title": record.get("title") or f"{project_id} PRD",
-                "file_path": record.get("file_path") or f"sqlite://prd_documents/{prd_id}",
-                "status": record.get("status") or "draft_generated",
-                "project_id": project_id,
-                "created_at": record.get("created_at") or ingested_at,
-                "approved_at": record.get("approved_at"),
-                "completed_at": record.get("completed_at"),
-                "total_tasks": _int(record.get("total_tasks"), 0),
-                "completed_tasks": _int(record.get("completed_tasks"), 0),
             },
         )
     ]

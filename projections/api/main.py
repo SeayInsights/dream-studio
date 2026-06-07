@@ -13,7 +13,6 @@ from .routes import (
     alerts,
     analytics,
     project_intelligence,
-    prd,
     discovery_internal,
     hooks,
     security,
@@ -71,7 +70,7 @@ app.include_router(insights.router, prefix="/api/v1/insights", tags=["insights"]
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(project_intelligence.router, prefix="/api/v1/projects", tags=["projects"])
-app.include_router(prd.router, tags=["prd"])
+
 app.include_router(discovery_internal.router, prefix="/api/discovery/internal", tags=["discovery"])
 app.include_router(hooks.router, prefix="/api/v1", tags=["hooks"])
 app.include_router(security.router, prefix="/api/v1", tags=["security"])

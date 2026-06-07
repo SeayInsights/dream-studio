@@ -107,15 +107,6 @@ dependencies = ["fastapi", "pydantic"]
             (str(demo_root),),
         )
         conn.execute(
-            "CREATE TABLE prd_documents("
-            "prd_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, status TEXT, file_path TEXT, created_at TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO prd_documents(prd_id, project_id, title, status, file_path, created_at) "
-            "VALUES('dream-studio-current', 'dream-studio', 'Dream Studio PRD', 'in-progress', "
-            "'docs/product/dream-studio-prd.md', '2026-05-14T00:00:00Z')"
-        )
-        conn.execute(
             "CREATE TABLE findings("
             "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, file_path TEXT, "
             "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"

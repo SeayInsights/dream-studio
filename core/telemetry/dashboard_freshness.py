@@ -40,7 +40,6 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "raw_workflow_runs",
                 "hook_executions",
                 "reg_projects",
-                "prd_documents",
                 "vw_security_summary",
                 "sec_sarif_findings",
                 "alert_rules",
@@ -232,23 +231,6 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
             _latest_any(conn, ["reg_projects"], "last_analyzed", "created_at"),
         ),
         _section(
-            "prd_list",
-            "/api/prd/list",
-            (
-                "fresh"
-                if _exists(conn, "prd_documents") and counts["prd_documents"]
-                else (
-                    "empty by design"
-                    if _exists(conn, "prd_documents")
-                    else "missing because live DB schema is behind repo migrations"
-                )
-            ),
-            "PRD dashboard reads prd_documents authority.",
-            ["prd_documents"],
-            counts["prd_documents"],
-            _latest(conn, "prd_documents", "created_at"),
-        ),
-        _section(
             "security_dashboard",
             "/api/v1/security/findings",
             (
@@ -386,7 +368,6 @@ def _schema_drift(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     required = {
         "raw_sessions": ["started_at", "project_id", "outcome", "ended_at"],
         "token_usage_records": ["input_tokens", "output_tokens", "created_at"],
-        "prd_documents": ["prd_id", "title", "status", "created_at"],
         "vw_security_summary": ["source_type", "finding_id", "tool", "created_at"],
         "hook_executions": ["hook_exec_id", "hook_name", "started_at", "status"],
         "alert_rules": [
