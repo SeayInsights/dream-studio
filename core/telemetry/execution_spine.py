@@ -68,8 +68,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Agent Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": "agent-workers",
-        "owns_tables": ["agent_invocations"],
-        "source_tables": ["execution_events", "agent_invocations"],
+        "owns_tables": ["execution_events"],
+        "source_tables": ["execution_events"],
         "dashboard_cards": ["agent_usage", "agent_outcomes"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "agent"],
         "empty_state": "No agent invocations recorded for the selected scope.",
@@ -79,8 +79,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Skill Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": None,
-        "owns_tables": ["skill_invocations"],
-        "source_tables": ["execution_events", "skill_invocations"],
+        "owns_tables": ["execution_events"],
+        "source_tables": ["execution_events"],
         "dashboard_cards": ["skill_usage", "skill_outcomes"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "skill"],
         "empty_state": "No skill invocations recorded for the selected scope.",
@@ -90,8 +90,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Workflow Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": "workflow-workers",
-        "owns_tables": ["workflow_invocations"],
-        "source_tables": ["execution_events", "workflow_invocations", "outcome_records"],
+        "owns_tables": ["execution_events"],
+        "source_tables": ["execution_events", "outcome_records"],
         "dashboard_cards": ["workflow_usage", "workflow_success_failure"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "workflow", "outcome"],
         "empty_state": "No workflow invocations recorded for the selected scope.",
@@ -101,8 +101,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Hook Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": None,
-        "owns_tables": ["hook_invocations"],
-        "source_tables": ["execution_events", "hook_invocations"],
+        "owns_tables": ["execution_events"],
+        "source_tables": ["execution_events"],
         "dashboard_cards": ["hook_firing_counts", "risk_prevention_counts"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "hook"],
         "empty_state": "No hook invocations recorded for the selected scope.",
@@ -235,8 +235,9 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
             INSERT OR IGNORE INTO execution_events (
                 event_id, event_type, event_name, project_id, milestone_id, task_id,
                 process_run_id, actor_type, actor_id, agent_id, skill_id, workflow_id,
-                hook_id, tool_id, model_id, source_refs_json, evidence_refs_json, outcome_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                hook_id, tool_id, model_id, source_refs_json, evidence_refs_json,
+                outcome_status, parent_event_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 values["event_id"],
@@ -257,6 +258,7 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
                 json.dumps(source_refs, sort_keys=True),
                 json.dumps(evidence_refs, sort_keys=True),
                 values.get("outcome_status"),
+                values.get("parent_event_id"),
             ),
         )
     except Exception:  # noqa: BLE001

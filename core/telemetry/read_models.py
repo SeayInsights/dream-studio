@@ -27,11 +27,6 @@ CORE_TABLES: tuple[str, ...] = (
 )
 
 FACT_TABLES: tuple[str, ...] = (
-    "agent_invocations",
-    "skill_invocations",
-    "workflow_invocations",
-    "hook_invocations",
-    "tool_invocations",
     "token_usage_records",
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
@@ -46,11 +41,11 @@ FACT_TABLES: tuple[str, ...] = (
 )
 
 COMPONENT_TABLES: Mapping[str, tuple[str, str, str]] = {
-    "agent": ("agent_invocations", "agent_id", "Agent Analytics"),
-    "skill": ("skill_invocations", "skill_id", "Skill Analytics"),
-    "workflow": ("workflow_invocations", "workflow_id", "Workflow Analytics"),
-    "hook": ("hook_invocations", "hook_id", "Hook Analytics"),
-    "tool": ("tool_invocations", "tool_id", "Tool Analytics"),
+    "agent": ("execution_events", "agent_id", "Agent Analytics"),
+    "skill": ("execution_events", "skill_id", "Skill Analytics"),
+    "workflow": ("execution_events", "workflow_id", "Workflow Analytics"),
+    "hook": ("execution_events", "hook_id", "Hook Analytics"),
+    "tool": ("execution_events", "tool_id", "Tool Analytics"),
 }
 
 MODULE_SEGMENTS: Mapping[str, tuple[str, ...]] = {
@@ -114,7 +109,7 @@ def dashboard_module_read_models() -> list[dict[str, Any]]:
             "module_name": "Tool Analytics",
             "module_type": "dashboard_projection",
             "enabled": True,
-            "source_tables": ["execution_events", "tool_invocations"],
+            "source_tables": ["execution_events"],
             "required_core_tables": list(CORE_TABLES),
             "optional_tables": [],
             "empty_state": "No tool invocations recorded for the selected scope.",
@@ -240,11 +235,6 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
         source_tables = [
             "execution_events",
             "process_runs",
-            "agent_invocations",
-            "skill_invocations",
-            "workflow_invocations",
-            "hook_invocations",
-            "tool_invocations",
             "token_usage_records",
             "validation_results",
             "findings",
@@ -275,10 +265,14 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                     (process_run_id,),
                 ),
                 "invocations": {
-                    component: _scoped_rows(
-                        conn, table, scope, order_by="created_at, invocation_id"
+                    component: _rows(
+                        conn,
+                        f"SELECT * FROM execution_events "
+                        f"WHERE process_run_id = ? AND {column} IS NOT NULL "
+                        f"ORDER BY created_at, event_id",
+                        (process_run_id,),
                     )
-                    for component, (table, _column, _label) in COMPONENT_TABLES.items()
+                    for component, (_table, column, _label) in COMPONENT_TABLES.items()
                 },
                 "tokens": _scoped_rows(
                     conn, "token_usage_records", scope, order_by="created_at, token_usage_id"
@@ -323,9 +317,8 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
     with _connect(db_path) as conn:
         _require_tables(conn, (*CORE_TABLES, *FACT_TABLES))
         source_tables = [
-            "workflow_invocations",
-            "process_runs",
             "execution_events",
+            "process_runs",
             "validation_results",
             "outcome_records",
             "token_usage_records",
@@ -333,9 +326,10 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
         invocations = _rows(
             conn,
             """
-            SELECT * FROM workflow_invocations
+            SELECT * FROM execution_events
             WHERE workflow_id = ?
-            ORDER BY created_at, invocation_id
+              AND event_type = 'workflow.invocation_recorded'
+            ORDER BY created_at, event_id
             """,
             (workflow_id,),
         )
@@ -652,6 +646,11 @@ def _component_usage(
     where, params = _where_scope(scope)
     if component_id:
         where, params = _add_condition(where, params, f"{component_column} = ?", component_id)
+    # execution_events uses outcome_status; retain status fallback for legacy tables
+    status_col = "outcome_status" if table == "execution_events" else "status"
+    # exclude rows where the component ID is unset (execution_events holds all event types)
+    not_null = f"{component_column} IS NOT NULL"
+    where = f"{where} AND {not_null}" if where else f"WHERE {not_null}"
     return _rows(
         conn,
         f"""
@@ -665,8 +664,8 @@ def _component_usage(
             COUNT(DISTINCT project_id) AS project_count,
             COUNT(DISTINCT milestone_id) AS milestone_count,
             COUNT(DISTINCT task_id) AS task_count,
-            SUM(CASE WHEN status IN ('completed', 'passed', 'recorded') THEN 1 ELSE 0 END) AS success_count,
-            SUM(CASE WHEN status IN ('failed', 'error') THEN 1 ELSE 0 END) AS failure_count
+            SUM(CASE WHEN {status_col} IN ('completed', 'passed', 'recorded') THEN 1 ELSE 0 END) AS success_count,
+            SUM(CASE WHEN {status_col} IN ('failed', 'error') THEN 1 ELSE 0 END) AS failure_count
         FROM {table}
         {where}
         GROUP BY project_id, milestone_id, task_id, process_run_id, {component_column}

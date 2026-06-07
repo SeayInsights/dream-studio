@@ -15,7 +15,6 @@ from core.config.database import get_db_path
 from core.telemetry.execution_spine import (
     record_dashboard_attention,
     record_execution_event,
-    record_invocation,
     record_route_decision,
     record_research_evidence,
     record_security_finding,
@@ -191,8 +190,6 @@ def emit_hook_tool_activity(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         event_id = _id("hook-tool-event")
-        hook_invocation_id = _id("hook-invocation")
-        tool_invocation_id = _id("tool-invocation")
         source_refs = _refs(ctx.source_refs)
         evidence_refs = _refs(ctx.evidence_refs)
         metadata = {
@@ -216,35 +213,13 @@ def emit_hook_tool_activity(
             metadata=metadata,
             outcome_status=status,
         )
-        record_invocation(
-            conn,
-            "hook",
-            **ctx.scope(),
-            event_id=event_id,
-            invocation_id=hook_invocation_id,
-            hook_id=hook_name,
-            status=status,
-            purpose="tool activity hook",
-            metadata=metadata,
-        )
-        record_invocation(
-            conn,
-            "tool",
-            **ctx.scope(),
-            event_id=event_id,
-            invocation_id=tool_invocation_id,
-            tool_id=tool_name,
-            status=status,
-            purpose="post tool use activity",
-            metadata=metadata,
-        )
-        return TelemetryEmitResult(True, event_id=event_id, record_id=tool_invocation_id)
+        return TelemetryEmitResult(True, event_id=event_id, record_id=event_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "hook_invocations", "tool_invocations"),
+        required_tables=("execution_events",),
     )
 
 
@@ -262,13 +237,11 @@ def emit_skill_invocations(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         last_event_id: str | None = None
-        last_invocation_id: str | None = None
         for skill in skills:
             skill_id = (
                 _text(skill.get("name"), skill.get("skill"), skill.get("skill_name")) or "unknown"
             )
             event_id = _id("skill-event")
-            invocation_id = _id("skill-invocation")
             metadata = {"skill": dict(skill), "success": success}
             record_execution_event(
                 conn,
@@ -284,26 +257,14 @@ def emit_skill_invocations(
                 metadata=metadata,
                 outcome_status="completed" if success else "failed",
             )
-            record_invocation(
-                conn,
-                "skill",
-                **ctx.scope(),
-                event_id=event_id,
-                invocation_id=invocation_id,
-                skill_id=skill_id,
-                status="completed" if success else "failed",
-                purpose="session skill telemetry",
-                metadata=metadata,
-            )
             last_event_id = event_id
-            last_invocation_id = invocation_id
-        return TelemetryEmitResult(True, event_id=last_event_id, record_id=last_invocation_id)
+        return TelemetryEmitResult(True, event_id=last_event_id, record_id=last_event_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "skill_invocations"),
+        required_tables=("execution_events",),
     )
 
 
@@ -721,7 +682,7 @@ def emit_workflow_invocation(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            "SELECT invocation_id FROM workflow_invocations WHERE invocation_id = ?",
+            "SELECT event_id FROM execution_events WHERE event_id = ?",
             (invocation_id,),
         ).fetchone()
         if existing is not None:
@@ -729,7 +690,7 @@ def emit_workflow_invocation(
                 False, record_id=invocation_id, error="duplicate workflow invocation skipped"
             )
 
-        event_id = _id("workflow-event")
+        event_id = invocation_id
         merged_source_refs = _refs(ctx.source_refs, source_refs)
         merged_evidence_refs = _refs(ctx.evidence_refs, evidence_refs)
         workflow_metadata = {
@@ -756,17 +717,6 @@ def emit_workflow_invocation(
             metadata=workflow_metadata,
             outcome_status=normalized_status,
         )
-        record_invocation(
-            conn,
-            "workflow",
-            **ctx.scope(),
-            event_id=event_id,
-            invocation_id=invocation_id,
-            workflow_id=workflow_id,
-            status=normalized_status,
-            purpose="workflow execution",
-            metadata=workflow_metadata,
-        )
         _record_outcome(
             conn,
             ctx,
@@ -792,7 +742,7 @@ def emit_workflow_invocation(
                 source_refs=merged_source_refs,
                 evidence_refs=merged_evidence_refs,
             )
-        return TelemetryEmitResult(True, event_id=event_id, record_id=invocation_id)
+        return TelemetryEmitResult(True, event_id=event_id, record_id=event_id)
 
     return _emit(
         _write,
@@ -800,7 +750,6 @@ def emit_workflow_invocation(
         mode=mode,
         required_tables=(
             "execution_events",
-            "workflow_invocations",
             "outcome_records",
             "dashboard_attention_items",
         ),

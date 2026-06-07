@@ -85,20 +85,14 @@ def test_hook_tool_emitter_writes_event_and_invocations(tmp_path: Path) -> None:
     assert result.emitted is True
     conn = _connect(db_path)
     try:
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM hook_invocations WHERE event_id = ? AND hook_id = 'on-tool-activity'",
-                (result.event_id,),
-            ).fetchone()[0]
-            == 1
-        )
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM tool_invocations WHERE event_id = ? AND tool_id = 'Read'",
-                (result.event_id,),
-            ).fetchone()[0]
-            == 1
-        )
+        row = conn.execute(
+            "SELECT hook_id, tool_id, event_type FROM execution_events WHERE event_id = ?",
+            (result.event_id,),
+        ).fetchone()
+        assert row is not None
+        assert row["hook_id"] == "on-tool-activity"
+        assert row["tool_id"] == "Read"
+        assert row["event_type"] == "hook.tool_activity"
     finally:
         conn.close()
 
@@ -116,8 +110,12 @@ def test_update_activity_feed_preserves_legacy_json_and_dual_writes(
     assert (state_dir / "activity.json").is_file()
     conn = _connect(db_path)
     try:
-        assert conn.execute("SELECT COUNT(*) FROM hook_invocations").fetchone()[0] == 1
-        assert conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0] == 1
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM execution_events WHERE event_type = 'hook.tool_activity'"
+            ).fetchone()[0]
+            == 1
+        )
     finally:
         conn.close()
 
@@ -142,7 +140,7 @@ def test_skill_and_token_paths_dual_write_without_losing_legacy_outputs(
     try:
         assert (
             conn.execute(
-                "SELECT COUNT(*) FROM skill_invocations WHERE skill_id = 'ds-core'"
+                "SELECT COUNT(*) FROM execution_events WHERE skill_id = 'ds-core' AND event_type = 'skill.invoked'"
             ).fetchone()[0]
             == 1
         )
