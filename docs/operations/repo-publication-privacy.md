@@ -96,3 +96,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No repo publication privacy change; deleted routes had no public surface. -->
 
 <!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated (171 dead entries removed). No change to publication privacy classification, sanitized export rules, or history path filtering. -->
+
+<!-- Last reviewed 2026-06-07 — WO-N behavioral eval harness (18.8.3): full-ci.yml updated to add eval harness unit tests step. Step runs tests/evals/behavioral/test_eval_harness.py excluding TestLiveJudge (skipped in CI — requires functional claude -p subprocess). No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI-only, post-merge, ubuntu-latest. -->

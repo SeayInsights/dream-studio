@@ -694,6 +694,10 @@
                     <span class="nav-mark">WF</span>
                     <span>Workflows</span>
                 </div>
+                <div class="sidebar-item" onclick="navigate('evals')">
+                    <span class="nav-mark">EV</span>
+                    <span>Evals</span>
+                </div>
                 <div class="sidebar-item" onclick="navigate('skills')">
                     <span class="nav-mark">SK</span>
                     <span>Skills</span>
@@ -1281,6 +1285,74 @@
                     <div id="lesson-feed" class="space-y-3 overflow-y-auto" style="max-height: 300px;">
                         <div class="text-sm text-gray-500 text-center py-8">Loading lessons...</div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Eval Health Tab (18.8.3) -->
+        <div id="evals" class="tab-content">
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Total Evals</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="evals-total">--</div>
+                    <div class="mt-1 text-xs text-gray-500" id="evals-status">Loading...</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Pass Rate</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="evals-pass-rate">--%</div>
+                    <div class="mt-1 text-xs text-gray-500" id="evals-pass-detail">-- passing / -- failing</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm font-medium text-gray-600">Recent Runs</div>
+                    <div class="mt-2 text-2xl font-bold text-gray-900" id="evals-recent-count">--</div>
+                    <div class="mt-1 text-xs text-gray-500">Last 20 runs</div>
+                </div>
+            </div>
+
+            <!-- Baselines Table -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Eval Baselines</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eval ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Run</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evals-baselines-body" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="5" class="px-4 py-8 text-center text-gray-400">Loading baselines...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Runs Table -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Recent Runs</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eval ID</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evals-runs-body" class="bg-white divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="5" class="px-4 py-8 text-center text-gray-400">Loading runs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -2776,7 +2848,8 @@
             prd: false,
             graph: false,
             security: false,
-            'audit-history': false
+            'audit-history': false,
+            evals: false
         };
 
         function switchTab(tabName) {
@@ -2846,6 +2919,9 @@
             } else if (tabName === 'audit-history' && !tabsInitialized['audit-history']) {
                 tabsInitialized['audit-history'] = true;
                 initAuditHistoryTab();
+            } else if (tabName === 'evals' && !tabsInitialized.evals) {
+                tabsInitialized.evals = true;
+                initEvalsTab();
             }
         }
 
@@ -5815,6 +5891,67 @@ if (document.readyState === 'loading') {
             }
 
             return { summary, recent, by_source: bySourceArray, timeline };
+        }
+
+        // Eval Health tab (18.8.3)
+        async function initEvalsTab() {
+            try {
+                const resp = await fetch('/api/v1/evals/health');
+                if (!resp.ok) throw new Error(resp.statusText);
+                const d = await resp.json();
+
+                document.getElementById('evals-total').textContent = d.total_evals ?? '--';
+                document.getElementById('evals-status').textContent =
+                    d.source_status ? d.source_status.reason : `${d.passing} passing / ${d.failing} failing`;
+                document.getElementById('evals-pass-rate').textContent =
+                    d.pass_rate !== null ? `${d.pass_rate}%` : '--%';
+                document.getElementById('evals-pass-detail').textContent =
+                    `${d.passing ?? '--'} passing / ${d.failing ?? '--'} failing`;
+                document.getElementById('evals-recent-count').textContent =
+                    d.recent_runs ? d.recent_runs.length : '--';
+
+                const baselinesBody = document.getElementById('evals-baselines-body');
+                if (!d.baselines || d.baselines.length === 0) {
+                    baselinesBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No baselines recorded yet.</td></tr>';
+                } else {
+                    baselinesBody.innerHTML = d.baselines.map(b => `
+                        <tr>
+                            <td class="px-4 py-3 text-sm text-gray-900 font-mono">${b.eval_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${b.version || '--'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${b.score !== null ? b.score.toFixed(3) : '--'}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium ${b.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                    ${b.passed ? 'PASS' : 'FAIL'}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${b.last_run_at ? b.last_run_at.slice(0, 16).replace('T', ' ') : '--'}</td>
+                        </tr>
+                    `).join('');
+                }
+
+                const runsBody = document.getElementById('evals-runs-body');
+                if (!d.recent_runs || d.recent_runs.length === 0) {
+                    runsBody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">No runs recorded yet.</td></tr>';
+                } else {
+                    runsBody.innerHTML = d.recent_runs.map(r => `
+                        <tr>
+                            <td class="px-4 py-3 text-sm text-gray-900 font-mono">${r.eval_id}</td>
+                            <td class="px-4 py-3 text-sm text-gray-900">${r.total_score !== null ? r.total_score.toFixed(3) : '--'}</td>
+                            <td class="px-4 py-3 text-sm">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium ${r.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                                    ${r.passed ? 'PASS' : 'FAIL'}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${r.model_tested || '--'}</td>
+                            <td class="px-4 py-3 text-sm text-gray-500">${r.started_at ? r.started_at.slice(0, 16).replace('T', ' ') : '--'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('Eval Health tab error:', err);
+                document.getElementById('evals-baselines-body').innerHTML =
+                    `<tr><td colspan="5" class="px-4 py-8 text-center text-red-400">Failed to load: ${err.message}</td></tr>`;
+            }
         }
 
         // Fetch and populate Workflows & Lessons tab
