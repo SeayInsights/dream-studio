@@ -56,11 +56,6 @@ from core.shared_intelligence.platform_hardening import (
     platform_hardening_summary,
     validate_platform_hardening_summary,
 )
-from core.shared_intelligence.prd_authority import (
-    PRD_AUTHORITY_SOURCE_TABLES,
-    project_prd_authority_summary,
-    validate_prd_authority_summary,
-)
 from core.shared_intelligence.scoped_agents import (
     scoped_agent_registry,
     validate_scoped_agent_registry,
@@ -132,8 +127,8 @@ def build_contract_atlas(
     usage_accounting = adapter_usage_accounting_summary(conn, project_id=effective_project_id)
     task_attribution = task_attribution_summary(conn, project_id=effective_project_id)
     task_attribution_errors = validate_task_attribution_summary(task_attribution)
-    prd_authority = project_prd_authority_summary(conn, project_id=effective_project_id)
-    prd_authority_errors = validate_prd_authority_summary(prd_authority)
+    prd_authority = {"source_tables": [], "data_status": "retired"}
+    prd_authority_errors = []
     analytics_only_status = analytics_only_profile_status(conn)
     github_cicd_profile = _github_cicd_profile(root)
     expert_workflows = expert_workflow_catalog(project_id=effective_project_id)
@@ -215,18 +210,11 @@ def build_contract_atlas(
             "validation_errors": task_attribution_errors,
         },
         "prd_authority_lifecycle": {
-            "prd_count": prd_authority["prd_count"],
-            "lifecycle_counts": prd_authority["lifecycle_counts"],
-            "change_order_counts": prd_authority["change_order_counts"],
-            "pending_change_order_count": len(prd_authority["pending_change_orders"]),
-            "milestone_count": len(prd_authority["current_milestones"]),
-            "active_work_order_count": len(prd_authority["active_work_orders"]),
-            "route_reconciliation_status": prd_authority["route_reconciliation_status"],
-            "next_safe_action": prd_authority["next_safe_action"],
-            "source_tables": prd_authority["source_tables"],
-            "policy": prd_authority["policy"],
-            "validation_status": "pass" if not prd_authority_errors else "attention_required",
-            "validation_errors": prd_authority_errors,
+            "data_status": "retired",
+            "reason": "prd_cluster_dropped_wo_f",
+            "source_tables": [],
+            "validation_status": "pass",
+            "validation_errors": [],
         },
         "github_cicd_profile": github_cicd_profile,
         "expert_workflow_system": {
@@ -1070,29 +1058,6 @@ def _confirmed_dependency_graph(
             "core.shared_intelligence.task_attribution.TASK_ATTRIBUTION_SOURCE_TABLES",
         )
 
-    add_node("module:prd_authority_lifecycle", "module", "PRD Authority Lifecycle")
-    add_edge(
-        "module:prd_authority_lifecycle",
-        "module:task_attribution_outcome_tracking",
-        "links_work_orders_to_adapter_outcomes",
-        "core.shared_intelligence.prd_authority.project_prd_authority_summary",
-    )
-    add_edge(
-        "module:prd_authority_lifecycle",
-        "layer:sqlite_authority",
-        "persists_product_authority_to",
-        "core.shared_intelligence.prd_authority.PRD_AUTHORITY_SOURCE_TABLES",
-    )
-    for table in prd_authority.get("source_tables", []):
-        table_id = f"table:{table}"
-        add_node(table_id, "sqlite_table", str(table))
-        add_edge(
-            "module:prd_authority_lifecycle",
-            table_id,
-            "reads_or_writes_prd_authority",
-            "core.shared_intelligence.prd_authority.PRD_AUTHORITY_SOURCE_TABLES",
-        )
-
     add_node("module:analytics_only_ingestion", "module", "Analytics-Only Ingestion")
     for table in analytics_only_status.get("source_tables", []):
         table_id = f"table:{table}"
@@ -1372,7 +1337,6 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
     tables.add("findings")
-    tables.update(PRD_AUTHORITY_SOURCE_TABLES)
     tables.update(
         {
             "ai_adapter_accounting_profiles",

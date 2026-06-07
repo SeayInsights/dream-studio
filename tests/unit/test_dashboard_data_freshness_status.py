@@ -83,10 +83,6 @@ def test_dashboard_freshness_classifies_schema_drift_and_backfill_candidates(
     )
     assert sections["legacy_token_metrics"]["classification"] == "fresh"
     assert (
-        sections["prd_list"]["classification"]
-        == "missing because live DB schema is behind repo migrations"
-    )
-    assert (
         sections["security_dashboard"]["classification"]
         == "missing because live DB schema is behind repo migrations"
     )
@@ -96,7 +92,6 @@ def test_dashboard_freshness_classifies_schema_drift_and_backfill_candidates(
     )
     assert status["backfill_status"]["execution_authorized"] is False
     assert status["backfill_status"]["candidate_count"] >= 1
-    assert any(item["object"] == "prd_documents" for item in status["schema_drift"])
 
 
 def test_legacy_backfill_plan_is_non_executable(tmp_path: Path) -> None:

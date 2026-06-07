@@ -70,15 +70,6 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
             "INSERT INTO business_projects(project_id, project_path, name, status, created_at, updated_at) "
             "VALUES('core', '/missing/core', 'core', 'deleted', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
         )
-        conn.execute(
-            "CREATE TABLE prd_documents("
-            "prd_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, status TEXT, created_at TEXT, "
-            "approved_at TEXT, completed_at TEXT, total_tasks INTEGER, completed_tasks INTEGER)"
-        )
-        conn.execute(
-            "INSERT INTO prd_documents(prd_id, project_id, title, status, created_at, total_tasks, completed_tasks) "
-            "VALUES('prd-1', 'dream-studio', 'Current PRD', 'active', '2026-05-14T00:00:00Z', 10, 6)"
-        )
         # pi_bugs, pi_violations, pi_dependencies, pi_improvements dropped in migration 084
         # The route guards with object_exists() → returns 0 for their counts
         conn.execute(
@@ -144,11 +135,6 @@ def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) ->
             "VALUES(?, ?, 'Dream Studio', 'Python FastAPI', ?, 7, 'active', "
             "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')",
             ("dream-studio", str(project_root), json.dumps({"framework": "Python FastAPI"})),
-        )
-        conn.execute(
-            "CREATE TABLE prd_documents("
-            "prd_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, status TEXT, created_at TEXT, approved_at TEXT, "
-            "completed_at TEXT, total_tasks INTEGER, completed_tasks INTEGER)"
         )
         conn.execute(
             "CREATE TABLE findings("

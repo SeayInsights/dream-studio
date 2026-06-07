@@ -154,9 +154,9 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "domain_id": "project_prd_authority_lifecycle",
         "domain_name": "Project PRD Authority Lifecycle",
         "source_patterns": [
-            "core/shared_intelligence/prd_authority.py",
             "core/shared_intelligence/context_packets.py",
             "core/event_store/migrations/047_prd_lifecycle_authority.sql",
+            "core/event_store/migrations/103_drop_prd_cluster.sql",
             "projections/api/routes/project_intelligence.py",
             "projections/api/routes/shared_intelligence.py",
         ],

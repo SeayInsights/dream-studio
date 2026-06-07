@@ -54,7 +54,6 @@ RAW_PRIVATE_TABLES = {
     "validation_failures",
     "canonical_events",
     "raw_handoffs",
-    "prd_handoffs",
 }
 
 CANONICAL_AUTHORITY_TABLES = {

@@ -278,7 +278,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
     {
         "module_id": "external_project",
         "purpose": "Represent imported or observed external projects without mutating them by default.",
-        "owned_tables": ["reg_projects", "prd_documents", "pi_components", "pi_dependencies"],
+        "owned_tables": ["reg_projects", "pi_components", "pi_dependencies"],
         "read_dependencies": ["validation_results", "findings", "readiness records"],
         "write_dependencies": [
             "Dream Studio SQLite authority; external repo writes require explicit approval"

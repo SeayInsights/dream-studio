@@ -15,7 +15,6 @@ from core.module_contracts import module_contract_map
 from core.module_profiles import module_profile_map
 from core.production_readiness import production_readiness_dashboard_summary
 from core.security.lifecycle import build_security_lifecycle_gate
-from core.shared_intelligence.prd_authority import project_details_prd_authority
 from core.shared_intelligence.task_attribution import project_recent_attributed_work
 from projections.api.routes.sqlite_schema import object_exists, table_columns
 
@@ -1595,7 +1594,7 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
         validation_state = _recent_validation_state(conn, project_id)
         attention_detail = _attention_detail_items(conn, project_id)
         attributed_work = project_recent_attributed_work(conn, project_id, limit=10)
-        prd_lifecycle = project_details_prd_authority(conn, project_id)
+        prd_lifecycle = {"data_status": "retired", "model_name": "prd_cluster_retired_wo_f"}
         return {
             "project_id": project_id,
             "derived_view": True,
@@ -1613,18 +1612,18 @@ async def get_project_details(project_id: str) -> Dict[str, Any]:
             "prd_summary": (health_payload["project"].get("prd_status") or {})
             .get("authority", {})
             .get("summary"),
-            "prd_lifecycle_authority": prd_lifecycle["summary"],
-            "prd_version": prd_lifecycle["prd_version"],
-            "prd_confidence": prd_lifecycle["prd_confidence"],
-            "in_flight_formalization_status": prd_lifecycle["in_flight_formalization_status"],
-            "pending_prd_questions": prd_lifecycle["pending_prd_questions"],
-            "prd_assumptions": prd_lifecycle["prd_assumptions"],
-            "current_milestones": prd_lifecycle["current_milestones"],
-            "active_work_orders": prd_lifecycle["active_work_orders"],
-            "change_order_history": prd_lifecycle["change_order_history"],
-            "pending_change_orders": prd_lifecycle["pending_change_orders"],
-            "route_reconciliation_status": prd_lifecycle["route_reconciliation_status"],
-            "planned_vs_actual_route_summary": prd_lifecycle["planned_vs_actual_route_summary"],
+            "prd_lifecycle_authority": prd_lifecycle.get("data_status", "retired"),
+            "prd_version": prd_lifecycle.get("prd_version"),
+            "prd_confidence": prd_lifecycle.get("prd_confidence"),
+            "in_flight_formalization_status": prd_lifecycle.get("in_flight_formalization_status"),
+            "pending_prd_questions": prd_lifecycle.get("pending_prd_questions", []),
+            "prd_assumptions": prd_lifecycle.get("prd_assumptions", []),
+            "current_milestones": prd_lifecycle.get("current_milestones", []),
+            "active_work_orders": prd_lifecycle.get("active_work_orders", []),
+            "change_order_history": prd_lifecycle.get("change_order_history", []),
+            "pending_change_orders": prd_lifecycle.get("pending_change_orders", []),
+            "route_reconciliation_status": prd_lifecycle.get("route_reconciliation_status"),
+            "planned_vs_actual_route_summary": prd_lifecycle.get("planned_vs_actual_route_summary"),
             "health_score": health_payload["health"],
             "readiness_score": production_readiness["readiness_score"],
             "readiness_control_coverage": production_readiness["control_summary"],

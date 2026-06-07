@@ -39,60 +39,13 @@ except ImportError:
 
 
 def load_handoff_from_db(handoff_id: int) -> dict | None:
-    """Load handoff from database (prd_handoffs or raw_handoffs)."""
+    """Load handoff from database (raw_handoffs)."""
     if not _connect:
         return None
 
     try:
         conn = _connect()
 
-        # Try prd_handoffs first (new schema)
-        row = conn.execute(
-            """
-            SELECT
-                h.handoff_id,
-                h.prd_id,
-                h.working,
-                h.broken,
-                h.pending_decisions,
-                h.next_action,
-                h.lessons_json,
-                h.created_at,
-                p.title AS prd_title,
-                p.status AS prd_status,
-                p.total_tasks,
-                p.completed_tasks,
-                p.file_path
-            FROM prd_handoffs h
-            JOIN prd_documents p ON h.prd_id = p.prd_id
-            WHERE h.handoff_id = ?
-        """,
-            (handoff_id,),
-        ).fetchone()
-
-        if row:
-            # Parse JSON fields
-            data = {
-                "handoff_id": row[0],
-                "topic": row[1],  # prd_id
-                "prd_title": row[8],
-                "prd_status": row[9],
-                "working": json.loads(row[2]) if row[2] else [],
-                "broken": json.loads(row[3]) if row[3] else [],
-                "pending_decisions": json.loads(row[4]) if row[4] else [],
-                "next_action": row[5] or "Continue work on this PRD",
-                "lessons_this_session": json.loads(row[6]) if row[6] else [],
-                "created_at": row[7],
-                "plan_path": row[12],  # file_path from prd_documents
-                "progress": f"{row[11]}/{row[10]} tasks" if row[10] else "0/0 tasks",
-                "total_tasks": row[10],
-                "completed_tasks": row[11],
-                "source": "prd_handoffs",
-            }
-            conn.close()
-            return data
-
-        # Fallback to raw_handoffs for old handoffs
         row = conn.execute(
             """
             SELECT
@@ -142,19 +95,6 @@ def find_latest_handoff_db() -> dict | None:
     try:
         conn = _connect()
 
-        # Try prd_handoffs first
-        row = conn.execute("""
-            SELECT h.handoff_id
-            FROM prd_handoffs h
-            ORDER BY h.created_at DESC
-            LIMIT 1
-        """).fetchone()
-
-        if row:
-            conn.close()
-            return load_handoff_from_db(row[0])
-
-        # Fallback to raw_handoffs
         row = conn.execute("""
             SELECT h.id
             FROM raw_handoffs h
