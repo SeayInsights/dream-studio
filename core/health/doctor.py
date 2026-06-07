@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.health.overhead import run_overhead_checks
 from core.health.validate import run_validation
 from core.installed_runtime import resolve_installed_runtime_paths
 
@@ -324,6 +325,7 @@ def run_doctor_checks(
     # paths.dream_studio_home is already resolved from the env/default chain.
     live_db = paths.dream_studio_home / "state" / "studio.db"
     schema_coherence_info = check_schema_coherence(source_root=source_root, live_db_path=live_db)
+    overhead_info = run_overhead_checks(source_root=source_root, claude_dir=claude_dir)
 
     core_pass = validation["ready"]
     critical_fail = (
@@ -412,6 +414,7 @@ def run_doctor_checks(
             "failed_events": failed_info,
             "version_current": version_info,
             "schema_coherence": schema_coherence_info,
+            "overhead": overhead_info,
         },
         "validation": validation,
     }
