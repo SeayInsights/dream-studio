@@ -1,5 +1,7 @@
 # DREAM STUDIO — SYSTEM ARCHITECTURE
 
+> **ASPIRATIONAL** — Some CONTROL layer ingestion items (AI chat logs → events, intent parsing → events) describe directions not yet fully implemented. Review against current canonical event substrate before acting on architecture details. (Flagged: WO-P 2026-06-07)
+
 **Version:** 3.0 (Architecture-based)  
 **Date:** 2026-05-07  
 **Type:** Event-sourced engineering intelligence platform
