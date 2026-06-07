@@ -1286,7 +1286,7 @@ def _update_command(
         # Version stamp matches, but check whether canonical hook source has drifted
         # from what the manifest recorded at the last install.  A hook code change
         # without a version bump (e.g. WO-A) must still trigger re-projection.
-        from integrations.manifest import compute_hash, read_manifest
+        from integrations.manifest import read_manifest
 
         manifest = read_manifest("claude_code", ds_home=paths.dream_studio_home)
         if manifest and _canonical_hook_drift(source_root, manifest):
