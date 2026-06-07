@@ -155,6 +155,7 @@ def test_dashboard_write_like_calls_stay_on_named_api_exceptions():
 def test_projection_api_direct_writes_stay_named_and_noncanonical():
     allowed_route_writes = {
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
+        ("projections/api/routes/extensions_api.py", "UPDATE", "ds_user_extensions"),
         # Phase 19.2: dismiss endpoint sets findings.dismissed_at + dismissed_reason.
         # findings is telemetry (not canonical state) so this write is intentional.
         ("projections/api/routes/security.py", "UPDATE", "findings"),

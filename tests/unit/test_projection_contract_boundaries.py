@@ -186,6 +186,8 @@ def test_api_route_direct_sql_writes_stay_explicitly_classified():
 
     assert writes == [
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
+        ("projections/api/routes/extensions_api.py", "UPDATE", "ds_user_extensions"),
+        ("projections/api/routes/security.py", "UPDATE", "findings"),
     ]
 
 
