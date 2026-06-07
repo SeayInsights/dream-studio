@@ -35,7 +35,7 @@ argument shifting. Adapter apps such as Codex may invoke `UserPromptSubmit`
 from a workspace outside the Dream Studio repo, so launcher root resolution must
 not depend on the current working directory.
 
-## Workflow Inventory (22 templates)
+## Workflow Inventory (23 templates)
 
 | Workflow | Nodes | Gates | Retry | Timeout | Dashboard Dep | Models |
 |----------|-------|-------|-------|---------|---------------|--------|
@@ -61,6 +61,7 @@ not depend on the current working directory.
 | feature-research | 12 | synthesis, director | No | — | **Yes** (GitHub API) | sonnet |
 | studio-onboard | multi | — | No | — | No | — |
 | production-readiness | 5 | no implicit execution gate | No | 60-120s | Yes (SQLite/dashboard read models) | adapter-agnostic |
+| execute-work-orders | 9 | preflight-check (halt on critical/high), migration-class-check (operator go), run-gates (halt on gate failure) | max:1 (implement-tasks) | 30-600s | No | haiku, sonnet |
 
 The `production-readiness` workflow is the canonical workflow template for the
 secure production readiness gate. It classifies impact, builds the gate, persists
@@ -194,3 +195,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- 2026-06-06: WO-A telemetry write-path honesty fixes. runtime/hooks/meta/* changes (on-session-end.py, on-skill-metrics.py, on-context-threshold.py, on-post-compact.py) and runtime/dispatch/hooks.py (tool_name snake_case fix). No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
 
 <!-- Last reviewed 2026-06-07 — WO-O (feat/wo-o-two-tier-gates): pre-push.yaml updated to v2 with advisory tier field. Gate runner and test file updated. No change to hook runtime behavior or workflow execution model — only gate classification metadata added. -->
+
+<!-- 2026-06-07: WO-T autonomous WO-execution workflow. Added execute-work-orders.yaml (9 nodes): capability-probe → preflight-check → migration-class-check → implement-tasks → run-gates → create-branch → push-and-pr → watch-ci → merge → close-work-order → next-iteration. GitHub path is conditional on CapabilityResult (github_repo config + gh CLI auth). Stop conditions: gate failure, migration-class WO (operator go), unresolved critical/high preflight findings. Never --force-close autonomously. inventory count: 22 → 23. -->
