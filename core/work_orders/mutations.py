@@ -361,7 +361,12 @@ def create_work_order(
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
-    """Insert a new work order row with status 'created'.
+    """Emit a work_order.created event; WorkOrderProjection materializes the row.
+
+    Pure event emitter — no direct INSERT to business_work_orders. The
+    WorkOrderProjection daemon (5-second poll or synchronous tick) materializes
+    the row from the canonical event. Cross-session reads are unaffected; the
+    daemon runs between scope and start sessions.
 
     Returns::
 
@@ -383,14 +388,6 @@ def create_work_order(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
-
-        conn.execute(
-            "INSERT OR IGNORE INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description,"
-            " status, work_order_type, created_at, updated_at, last_updated_at)"
-            " VALUES (?, ?, ?, ?, '', 'created', ?, ?, ?, ?)",
-            (work_order_id, project_id, milestone_id, title, work_order_type, now, now, now),
-        )
 
     try:
         import spool.writer as _spool_writer
@@ -460,9 +457,11 @@ def create_task(
             "SELECT work_order_id, milestone_id FROM business_work_orders WHERE work_order_id = ?",
             (work_order_id,),
         ).fetchone()
-        if wo_row is None:
-            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
-        milestone_id = wo_row[1]
+        if wo_row is not None:
+            milestone_id = wo_row[1]
+        # If wo_row is None the work order was just emitted as an event but not yet
+        # materialized by the ProjectionRunner. Proceed with milestone_id=None — it
+        # enriches the trace only and does not affect task creation correctness.
 
     try:
         import spool.writer as _spool_writer
