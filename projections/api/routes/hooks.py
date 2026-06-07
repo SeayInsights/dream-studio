@@ -40,32 +40,30 @@ def _fallback_hook_invocations(
     conn, hook_name: Optional[str], status: Optional[str], since: Optional[str], limit: int
 ) -> list[dict[str, Any]]:
     if not has_columns(
-        conn, "hook_invocations", ["invocation_id", "hook_id", "status", "created_at"]
+        conn, "execution_events", ["event_id", "hook_id", "outcome_status", "created_at"]
     ):
         return []
     query = """
         SELECT
-            invocation_id,
+            event_id,
             project_id,
             milestone_id,
             task_id,
             process_run_id,
-            event_id,
             hook_id,
-            status,
-            prevented_risky_action,
-            purpose,
-            metadata_json,
+            tool_id,
+            outcome_status,
             created_at
-        FROM hook_invocations
-        WHERE 1=1
+        FROM execution_events
+        WHERE event_type = 'hook.tool_activity'
+          AND hook_id IS NOT NULL
     """
     params: list[Any] = []
     if hook_name:
         query += " AND hook_id = ?"
         params.append(hook_name)
     if status:
-        query += " AND status = ?"
+        query += " AND outcome_status = ?"
         params.append(status)
     if since:
         query += " AND created_at >= ?"
@@ -75,16 +73,18 @@ def _fallback_hook_invocations(
     rows = conn.execute(query, params).fetchall()
     return [
         {
-            "hook_exec_id": row["invocation_id"],
+            "hook_exec_id": row["event_id"],
             "activity_id": row["event_id"],
             "hook_name": row["hook_id"],
-            "hook_type": row["purpose"] or "telemetry",
-            "trigger_context": row["metadata_json"],
+            "hook_type": "telemetry",
+            "trigger_context": None,
             "started_at": row["created_at"],
             "completed_at": row["created_at"],
             "duration_ms": 0,
-            "exit_code": 0 if row["status"] in ("success", "passed", "ok") else None,
-            "status": row["status"],
+            "exit_code": (
+                0 if row["outcome_status"] in ("success", "passed", "ok", "completed") else None
+            ),
+            "status": row["outcome_status"],
             "output": None,
             "error_message": None,
             "cpu_time_ms": None,
@@ -135,9 +135,9 @@ async def list_hook_executions(
                     "limit": limit,
                 },
                 "source_status": {
-                    "classification": "legacy source",
-                    "reason": "hook_executions is absent; using hook_invocations telemetry fallback.",
-                    "source_tables": ["hook_invocations"],
+                    "classification": "unified source",
+                    "reason": "hook_executions is absent; using execution_events telemetry fallback.",
+                    "source_tables": ["execution_events"],
                     "derived_view": True,
                     "primary_authority": False,
                 },
@@ -471,9 +471,9 @@ async def get_hook_performance() -> Dict[str, Any]:
                     ),
                 },
                 "source_status": {
-                    "classification": "legacy source",
-                    "reason": "hook performance is derived from hook_invocations telemetry fallback.",
-                    "source_tables": ["hook_invocations"],
+                    "classification": "unified source",
+                    "reason": "hook performance is derived from execution_events telemetry fallback.",
+                    "source_tables": ["execution_events"],
                     "derived_view": True,
                     "primary_authority": False,
                 },
@@ -568,17 +568,17 @@ async def list_hook_anomalies() -> Dict[str, Any]:
 async def list_tool_activity(limit: int = Query(default=50, le=200)) -> Dict[str, Any]:
     """Tool invocation telemetry — every tool Claude used.
 
-    Previously invisible: 3,026+ rows in tool_invocations with no dashboard surface.
-    Shows tool_id, status, metadata, and project context per invocation.
+    Reads from execution_events (unified spine) filtered by tool_id IS NOT NULL.
     """
     conn = get_connection()
     try:
         conn.row_factory = __import__("sqlite3").Row
-        if not object_exists(conn, "tool_invocations"):
+        if not object_exists(conn, "execution_events"):
             return {"invocations": [], "count": 0, "top_tools": {}}
         rows = conn.execute(
-            "SELECT tool_id, status, project_id, created_at, metadata_json "
-            "FROM tool_invocations ORDER BY created_at DESC LIMIT ?",
+            "SELECT tool_id, outcome_status AS status, project_id, created_at "
+            "FROM execution_events WHERE tool_id IS NOT NULL "
+            "ORDER BY created_at DESC LIMIT ?",
             (limit,),
         ).fetchall()
         invocations = [dict(r) for r in rows]
@@ -587,7 +587,9 @@ async def list_tool_activity(limit: int = Query(default=50, le=200)) -> Dict[str
         for r in invocations:
             t = r.get("tool_id") or "unknown"
             top[t] = top.get(t, 0) + 1
-        total = conn.execute("SELECT COUNT(*) FROM tool_invocations").fetchone()[0]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM execution_events WHERE tool_id IS NOT NULL"
+        ).fetchone()[0]
         return {"invocations": invocations, "count": total, "top_tools": top}
     except Exception as ex:
         raise HTTPException(status_code=500, detail=str(ex))
