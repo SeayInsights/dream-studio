@@ -1,5 +1,53 @@
 # Migration Authority
 
+## Dev vs Live Migration Workflow
+
+**Problem:** Migrations auto-apply on every `_connect()` call. Without a guard, adding a migration file on a feature branch would silently mutate the live authority DB (`~/.dream-studio/state/studio.db`) the next time any `ds` command runs — before the PR is reviewed or merged.
+
+**Guard mechanism (WO-MS):**
+
+1. **Released version sentinel** — `core/event_store/migrations/.released_version` contains the highest migration number that has landed on `main`. Any migration with a higher number is considered unreleased.
+
+2. **Auto-skip on live DB** — The migration runner (`sqlite_bootstrap.run_migrations()`) compares each pending migration's version against the released version. If the migration is unreleased AND the DB is the live authority AND `DREAM_STUDIO_APPLY_UNRELEASED` is not set, the migration is skipped with a `RuntimeWarning`.
+
+3. **Auto-backup before first live apply** — When any migration is about to apply to the live authority DB, a timestamped snapshot is written to `~/.dream-studio/state/backups/studio-pre-N-TIMESTAMP.db` first. This is a no-op cost for released-only migrations; it is the safety net for the rare `DREAM_STUDIO_APPLY_UNRELEASED=1` path.
+
+**Live authority = `~/.dream-studio/state/studio.db` (and any path under `~/.dream-studio/`). Temp DBs, test DBs, and CI DBs in other paths are never gated.**
+
+### Developer workflow
+
+```text
+# Normal dev: create migration file, add code, run tests
+# Migrations apply normally to your temp/test DBs (no guard)
+py -m pytest tests/ -k migration
+
+# The gate fires only if your ds command runs against the live DB:
+py -m interfaces.cli.ds project state
+# → [migration-safety] Migration 106 is unreleased (released_version=105). Skipping live authority apply.
+
+# To test against a scratch DB (recommended for in-dev migration work):
+DREAM_STUDIO_HOME=/tmp/scratch-ds py -m interfaces.cli.ds project state
+
+# To explicitly apply an unreleased migration to the live DB (with backup):
+DREAM_STUDIO_APPLY_UNRELEASED=1 py -m interfaces.cli.ds project state
+```
+
+### When a migration PR merges to main
+
+Update `.released_version` to the new max migration number as part of the same PR:
+
+```
+echo "106" > core/event_store/migrations/.released_version
+```
+
+This file is tracked by git and reviewed as part of the migration PR. After merge, `main` carries the updated sentinel and the guard gate advances.
+
+### Migration-risk gate integration
+
+The `migration-risk` pre-push gate fires when `core/event_store/migrations/` changes. Its printed reminder includes the matrix-watch requirement. The dev-vs-live guard is complementary: the gate prevents premature pushes; the guard prevents premature live-DB applies during branch development.
+
+---
+
 ## Canonical Migration Directory
 
 **`core/event_store/migrations/`** is the single source of truth for database schema migrations.
