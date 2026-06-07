@@ -141,12 +141,13 @@ docs/publication/
 .claude/
 .claude-plugin/plugin.json
 
-# Test output captures
-pytest-*.txt
-smoke-*.txt
-black-*.txt
-lint-*.txt
-drift-*.txt
+# Test/diagnostic output captures — write to ~/.dream-studio/diagnostics/ instead
+pytest-*
+diag-test-*
+smoke-*
+black-*
+lint-*
+drift-*
 
 # Debug scripts (one-off investigations)
 tmp_*.py
@@ -163,6 +164,7 @@ pr-body-*.md
 # Internal tracking docs — prevent future commits
 backlog.md
 DREAM-STUDIO-ROADMAP.md
+dream-studio-debt-punchlist.md
 docs/UAT-Phase6-Checklist.md
 docs/coverage-report-phase6.md
 docs/UPGRADE_PLAN.md

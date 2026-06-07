@@ -107,3 +107,4 @@ Static validation checks that:
 <!-- 2026-06-05: Wave 2 reviewed — validate-skills.yml CI workflow fixed to exclude deleted SKILL.md files (--diff-filter=d). No release-gate or publication policy change; no semantic change required in this doc. -->
 
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No external project validation pipeline change; deleted routes were internal only. -->
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated. No change to external project validation pipeline behavior or validation rules. -->

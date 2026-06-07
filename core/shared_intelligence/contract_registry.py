@@ -376,7 +376,7 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "source_patterns": [
             "hooks/**",
             "runtime/hooks/**",
-            "workflows/**",
+            "canonical/workflows/**",
             "control/execution/workflow/**",
         ],
         "contract_refs": [

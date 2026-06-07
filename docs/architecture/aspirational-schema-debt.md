@@ -251,6 +251,8 @@ N2 in the ledger marks removal of the `canonical_events` swallow as intentionall
 
 <!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
 
+<!-- reviewed: 2026-06-07, migration 099 (drop project_* legacy family, Phase 18.6.2). 8 tables dropped: project_readiness_scorecards, project_health_scorecards, project_intake_records, project_intake_questions, project_assumption_records, project_milestone_records, project_work_order_authority_records, project_change_order_records; 1 view dropped: vw_project_readiness_latest. All had 0 rows; no FK dependencies; prd_authority.py writers were test-only. CREATE TABLE migrations 040 and 047 are immutable history and untouched. No aspirational-schema debt introduced by this migration — drop-only. -->
+
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-02: aggregate_metrics.db tables (finding_rollups, rule_fire_rates, baseline_trends, guard_calibration, pattern_catalog, recommendation_outcomes) registered in _PYTHON_OWNED_TABLES. Separate DB from studio.db; no migration file required. -->

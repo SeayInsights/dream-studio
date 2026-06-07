@@ -112,3 +112,4 @@ forbids host writes by default.
 <!-- 2026-06-05: Wave 2 reviewed — validate-skills.yml CI workflow fixed to exclude deleted SKILL.md files (--diff-filter=d). No release-gate or publication policy change; no semantic change required in this doc. -->
 
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No docker module profile change; deleted routes were internal only with no Docker boundary impact. -->
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated. No change to Docker module profiles or SQLite mount policy. -->

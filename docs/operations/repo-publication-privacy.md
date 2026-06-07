@@ -94,3 +94,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- 2026-06-05: Wave 2 reviewed — validate-skills.yml CI workflow fixed to exclude deleted SKILL.md files (--diff-filter=d). No release-gate or publication policy change; no semantic change required in this doc. -->
 
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No repo publication privacy change; deleted routes had no public surface. -->
+
+<!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated (171 dead entries removed). No change to publication privacy classification, sanitized export rules, or history path filtering. -->
