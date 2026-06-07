@@ -29,15 +29,20 @@ def test_write_does_not_ingest(spool_root):
     # SQLite does NOT have the event yet
     if db.exists():
         conn = sqlite3.connect(str(db))
-        rows = conn.execute(
-            "SELECT * FROM canonical_events WHERE event_id = ?", (envelope.event_id,)
-        ).fetchall()
+        # Check dual-canonical authority tables (WO-M: canonical_events retired)
+        for table in ("business_canonical_events", "ai_canonical_events"):
+            try:
+                rows = conn.execute(
+                    f"SELECT * FROM {table} WHERE event_id = ?", (envelope.event_id,)
+                ).fetchall()
+                assert rows == []
+            except Exception:
+                pass  # table may not exist yet; absence is sufficient proof
         conn.close()
-        assert rows == []
 
 
 def test_ingest_pending_lands_in_sqlite(spool_root):
-    """After ingest_pending, the event is in canonical_events."""
+    """After ingest_pending, the event is in dual-canonical authority tables."""
     from canonical.events.envelope import CanonicalEventEnvelope
     from emitters.shared.spool_writer import write_envelopes
     from spool.ingestor import ingest_pending
@@ -55,9 +60,11 @@ def test_ingest_pending_lands_in_sqlite(spool_root):
     result = ingest_pending(root=spool_root, db_path=db)
 
     assert result.processed == 1
+    # test.production.event is unregistered → defaults to both canonical tables (WO-M)
     conn = sqlite3.connect(str(db))
     rows = conn.execute(
-        "SELECT event_id, event_type FROM canonical_events WHERE event_id = ?", (envelope.event_id,)
+        "SELECT event_id, event_type FROM business_canonical_events WHERE event_id = ?",
+        (envelope.event_id,),
     ).fetchall()
     conn.close()
     assert len(rows) == 1

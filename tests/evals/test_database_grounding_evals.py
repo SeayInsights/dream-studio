@@ -199,45 +199,29 @@ def test_start_work_order_consults_db(patched_paths, tmp_path: Path) -> None:
 
 
 def _migrated_db(db_path: Path) -> Path:
-    """Bootstrap, fully migrate, and create runtime tables for a fresh DB."""
+    """Bootstrap, fully migrate a fresh DB. Migration 083 creates canonical_events as a
+    table; migration 102 (WO-M) renames it to canonical_events_legacy_backup and creates
+    a compat VIEW, so no manual table creation is needed after migrations run."""
     from core.event_store.studio_db import _connect as _ds_connect, _run_migrations
 
     with _ds_connect(db_path) as conn:
         _run_migrations(conn)
-        # canonical_events is runtime-created (not in migrations); create it so
-        # attribution queries don't 500 on "no such table".
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS canonical_events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                trace JSON NOT NULL DEFAULT '{}',
-                severity TEXT NOT NULL DEFAULT 'info',
-                payload JSON NOT NULL DEFAULT '{}',
-                actor JSON,
-                confidence_score REAL,
-                source_type TEXT,
-                raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-                raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-                schema_version INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                invocation_mode TEXT
-            )
-        """)
         conn.commit()
     return db_path
 
 
 def _seed_token_events(db_path: Path) -> None:
-    """Seed canonical_events with a known mix of attribution statuses."""
+    """Seed ai_canonical_events with a known mix of attribution statuses.
+    token.consumed routes to _AI; the canonical_events compat VIEW surfaces
+    these rows to attribution queries unchanged."""
     conn = sqlite3.connect(str(db_path))
     try:
         for i, status in enumerate(
             ["fully_attributed", "fully_attributed", "partial", "partial", "partial", "orphan"]
         ):
             conn.execute(
-                "INSERT INTO canonical_events"
-                " (event_id, event_type, timestamp, trace, severity, payload)"
+                "INSERT INTO ai_canonical_events"
+                " (event_id, event_type, event_timestamp, trace, severity, payload)"
                 " VALUES (?, 'token.consumed', ?, json(?), 'info', json(?))",
                 (
                     f"evt-attr-{i:04d}",

@@ -178,15 +178,25 @@ def run_backfill(db_path: Path, dry_run: bool = False) -> int:
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
-        if "canonical_events" not in tables:
-            print("ERROR: canonical_events not found.", file=sys.stderr)
+        # After WO-M migration 102, canonical_events is renamed to canonical_events_legacy_backup.
+        # Support both: pre-migration (canonical_events table) and post-migration (backup table).
+        if "canonical_events" in tables:
+            source_table = "canonical_events"
+        elif "canonical_events_legacy_backup" in tables:
+            source_table = "canonical_events_legacy_backup"
+            print(f"NOTE: Using {source_table} (post-WO-M migration 102 state).")
+        else:
+            print(
+                "ERROR: neither canonical_events nor canonical_events_legacy_backup found.",
+                file=sys.stderr,
+            )
             return 1
 
         if not dry_run:
             _ensure_tables(conn)
 
-        total = conn.execute("SELECT COUNT(*) FROM canonical_events").fetchone()[0]
-        print(f"Found {total} rows in canonical_events.")
+        total = conn.execute(f"SELECT COUNT(*) FROM {source_table}").fetchone()[0]
+        print(f"Found {total} rows in {source_table}.")
         if dry_run:
             print("DRY RUN — no writes will be performed.")
 
@@ -202,10 +212,10 @@ def run_backfill(db_path: Path, dry_run: bool = False) -> int:
 
         while True:
             batch = conn.execute(
-                """
+                f"""
                 SELECT event_id, event_type, timestamp, trace, payload,
                        schema_version, severity, created_at
-                FROM canonical_events
+                FROM {source_table}
                 ORDER BY rowid
                 LIMIT ? OFFSET ?
                 """,
@@ -302,7 +312,7 @@ def run_backfill(db_path: Path, dry_run: bool = False) -> int:
 
         print()
         print("=== Backfill complete ===")
-        print(f"  Total canonical_events processed : {processed}")
+        print(f"  Total {source_table} processed   : {processed}")
         print(f"  Routed to business only          : {to_business}")
         print(f"  Routed to AI only                : {to_ai}")
         print(f"  Routed to both (paired)          : {to_both}")

@@ -118,13 +118,15 @@ def test_event_store_logs_rejected_root_shape_without_persisting_invalid_event(t
     try:
         assert store.write_event(event) is False
 
+        # _emit_validation_failure_event writes to ai_canonical_events (event.validation.failed → _AI)
+        # which also creates the table. Check the invalid event is NOT there, failure event IS.
         invalid_rows = store.db.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_id = ?",
+            "SELECT COUNT(*) FROM ai_canonical_events WHERE event_id = ?",
             (event["event_id"],),
         ).fetchone()[0]
         failures = store.get_validation_failures()
         failure_events = store.db.execute(
-            "SELECT COUNT(*) FROM canonical_events WHERE event_type = ?",
+            "SELECT COUNT(*) FROM ai_canonical_events WHERE event_type = ?",
             ("event.validation.failed",),
         ).fetchone()[0]
 

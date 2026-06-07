@@ -185,10 +185,13 @@ def test_event_emission():
 
 
 def cleanup_test_event():
-    """Clean up test event."""
-    db_path = get_main_db_path()
+    """Clean up test event (WO-M: canonical_events retired, clean dual-canonical authority tables)."""
     conn = get_connection()
-    conn.execute("DELETE FROM canonical_events WHERE event_type = 'test.runtime_verification'")
+    for table in ("business_canonical_events", "ai_canonical_events"):
+        try:
+            conn.execute(f"DELETE FROM {table} WHERE event_type = 'test.runtime_verification'")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -228,13 +231,13 @@ def run_all_tests():
 
     results = []
 
-    # Test 1: Event Emission (CRITICAL - identified as broken in audit)
+    # Test 1: Event Emission (WO-M: verify writes land in ai_canonical_events, not legacy table)
     results.append(
         verify_write_path(
             name="Event Emission (emit_event)",
             write_func=test_event_emission,
-            verify_query='SELECT COUNT(*) FROM canonical_events WHERE event_type = "test.runtime_verification"',
-            table_name="canonical_events",
+            verify_query='SELECT COUNT(*) FROM ai_canonical_events WHERE event_type = "test.runtime_verification"',
+            table_name="ai_canonical_events",
             cleanup_func=cleanup_test_event,
         )
     )

@@ -92,33 +92,11 @@ class EventStore:
     def _init_tables(self):
         """Initialize database tables if they don't exist.
 
-        canonical_events is primarily declared by migration 083.
-        This block is an idempotent fallback (IF NOT EXISTS) for environments
-        where the migration runner has not yet run (e.g. direct EventStore instantiation
-        in isolation). The column list matches migration 083's authoritative schema.
+        WO-M: canonical_events is retired (now a compat VIEW via migration 102).
+        This method only creates validation_failures, which EventStore still owns.
+        Dual-canonical tables are created on demand by _write_to_dual_canonical.
         """
         with self._transaction() as conn:
-            # Canonical event stream — mirror of migration 083 DDL.
-            # Migration 083 is the authoritative declaration; this is a runtime fallback.
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS canonical_events (
-                    event_id TEXT PRIMARY KEY,
-                    event_type TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    trace JSON NOT NULL DEFAULT '{}',
-                    severity TEXT NOT NULL DEFAULT 'info',
-                    payload JSON NOT NULL DEFAULT '{}',
-                    actor JSON,
-                    confidence_score REAL,
-                    source_type TEXT,
-                    raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-                    raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-                    schema_version INTEGER NOT NULL DEFAULT 1,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    invocation_mode TEXT
-                )
-            """)
-
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS validation_failures (
                     failure_id TEXT PRIMARY KEY,
@@ -128,17 +106,6 @@ class EventStore:
                     attempted_event JSON NOT NULL,
                     attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-
-            # Create indexes for common queries
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_canonical_events_event_type
-                ON canonical_events(event_type)
-            """)
-
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_canonical_events_timestamp
-                ON canonical_events(timestamp)
             """)
 
             conn.execute("""
@@ -173,29 +140,10 @@ class EventStore:
             # DO NOT PERSIST invalid events
             return False
 
-        # Event is valid - persist to canonical_events (NEW architecture)
-        with self._transaction() as conn:
-            conn.execute(
-                """
-                INSERT INTO canonical_events (
-                    event_id, event_type, timestamp, trace, severity, payload,
-                    actor, confidence_score, source_type
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    event["event_id"],
-                    event["event_type"],
-                    event["timestamp"],
-                    json.dumps(event["trace"]),
-                    event["severity"],
-                    json.dumps(event["payload"]),
-                    json.dumps(event.get("actor")) if event.get("actor") else None,
-                    event.get("confidence_score"),
-                    event.get("source_type"),
-                ),
-            )
+        # Event is valid — write to dual-canonical authority tables (WO-M: canonical_events retired)
+        from spool.ingestor import _write_to_dual_canonical
 
+        _write_to_dual_canonical(event, Path(self.db_path))
         return True
 
     def _log_validation_failure(self, event: Dict, result: ValidationResult):
@@ -242,23 +190,9 @@ class EventStore:
         }
 
         # Recursion guard: Don't validate validation failures
-        with self._transaction() as conn:
-            conn.execute(
-                """
-                INSERT INTO canonical_events (
-                    event_id, event_type, timestamp, trace, severity, payload
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    failure_event["event_id"],
-                    failure_event["event_type"],
-                    failure_event["timestamp"],
-                    json.dumps(failure_event["trace"]),
-                    failure_event["severity"],
-                    json.dumps(failure_event["payload"]),
-                ),
-            )
+        from spool.ingestor import _write_to_dual_canonical
+
+        _write_to_dual_canonical(failure_event, Path(self.db_path))
 
     def query_events(
         self,

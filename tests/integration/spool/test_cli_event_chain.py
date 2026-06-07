@@ -101,7 +101,7 @@ def test_ingestor_processes_wo_events_without_failure(spool_root):
 
 
 def test_sqlite_has_rows_for_both_event_types(spool_root):
-    """After ingest, canonical_events has a row for work_order.started and work_order.closed."""
+    """After ingest, business_canonical_events has rows for work_order.started and .closed."""
     from spool.writer import write_event
     from spool.ingestor import ingest
 
@@ -110,12 +110,13 @@ def test_sqlite_has_rows_for_both_event_types(spool_root):
     write_event(_wo_closed_raw("chain-sql-close-001", "wo-id-sql"), root=spool_root)
     ingest(root=spool_root, db_path=db_path)
 
+    # work_order.* routes to _BUSINESS → business_canonical_events (WO-M: canonical_events retired)
     conn = sqlite3.connect(str(db_path))
     started = conn.execute(
-        "SELECT event_id FROM canonical_events WHERE event_type = 'work_order.started'"
+        "SELECT event_id FROM business_canonical_events WHERE event_type = 'work_order.started'"
     ).fetchall()
     closed = conn.execute(
-        "SELECT event_id FROM canonical_events WHERE event_type = 'work_order.closed'"
+        "SELECT event_id FROM business_canonical_events WHERE event_type = 'work_order.closed'"
     ).fetchall()
     conn.close()
 

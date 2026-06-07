@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## migration(wo-m) — Dual-canonical authority cutover (2026-06-07)
+
+### Changed
+- `spool/ingestor.py`: `_write_to_dual_canonical` promoted from best-effort to primary; failure now surfaces to caller and moves event to `failed/` for triage. `_write_to_sqlite` removed entirely.
+- `core/event_store/event_store.py`: `_init_tables()` no longer creates `canonical_events` table; `write_event()` and `_emit_validation_failure_event()` now call `_write_to_dual_canonical` directly.
+- Migration 102 (`102_drop_canonical_events.sql`): renames `canonical_events` to `canonical_events_legacy_backup`; creates `canonical_events` compat VIEW over UNION of both authority tables, preserving all 42 production readers without code changes.
+- `scripts/backfill_dual_canonical.py`: updated to fall back to `canonical_events_legacy_backup` when the table has already been renamed by migration 102.
+- All affected tests updated to query `business_canonical_events` or `ai_canonical_events` per event-type routing rules.
+
+### Added
+- `ingestor.py`: best-effort inline execution-events projection block reads from event dict (not from retired `canonical_events` table).
+
 ## fix(wo-u) — Context-threshold hook: version-gate + dispatch consolidation (2026-06-07)
 
 ### Fixed
