@@ -1,5 +1,7 @@
 # Dream Studio Execution Telemetry Traceability Spine
 
+> **ASPIRATIONAL** — This document describes the intended target state of the telemetry spine. Some referenced tables (`telemetry_entity_registry`, `blocker_resolution_records`, `authority_projection_records`) do not yet exist in the schema. Treat as design intent, not current implementation. (Flagged: WO-P 2026-06-07)
+
 Lifecycle status: draft_generated
 
 Authority role: local-first execution telemetry and orchestration intelligence
