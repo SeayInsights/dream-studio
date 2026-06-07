@@ -65,12 +65,22 @@ class ProjectionRunner:
         self._total_events: int = 0
         self._total_errors: int = 0
         self._last_archive_check: float = 0.0
+        self._spine_projections: list = []
 
     # ── Registration ──────────────────────────────────────────────────────────
 
     def register(self, projection: Projection) -> "ProjectionRunner":
         """Register a projection with the engine. Returns self for chaining."""
         self._engine.register(projection)
+        return self
+
+    def register_spine(self, projection: object) -> "ProjectionRunner":
+        """Register a spine projection (reads from a local event spine, not canonical).
+
+        The projection must implement fold_spine(conn) -> int.
+        Called on each cycle after canonical projections complete.
+        """
+        self._spine_projections.append(projection)
         return self
 
     # ── Main daemon loop ──────────────────────────────────────────────────────
@@ -118,6 +128,8 @@ class ProjectionRunner:
                         self._total_errors += len(r.errors)
                 except Exception:
                     logger.exception("ProjectionRunner: unexpected error in run_cycle()")
+
+                self._fold_spine_projections()
 
                 now = time.monotonic()
 
@@ -222,6 +234,27 @@ class ProjectionRunner:
             except Exception:
                 pass
         return "1970-01-01T00:00:00+00:00"
+
+    # ── Spine projection fold ─────────────────────────────────────────────────
+
+    def _fold_spine_projections(self) -> None:
+        """Run fold_spine() for every registered spine projection."""
+        if not self._spine_projections:
+            return
+        try:
+            from core.config.database import get_connection
+
+            with get_connection() as conn:
+                for proj in self._spine_projections:
+                    try:
+                        proj.fold_spine(conn)
+                    except Exception:
+                        logger.exception(
+                            "ProjectionRunner: spine fold failed for %s",
+                            getattr(proj, "name", repr(proj)),
+                        )
+        except Exception:
+            logger.exception("ProjectionRunner: _fold_spine_projections setup failed")
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
@@ -356,6 +389,13 @@ def main() -> None:
         runner.register(ProjectProjection())
     except ImportError:
         logger.warning("ProjectProjection not found — skipping registration.")
+
+    try:
+        from core.projections.preflight_projection import PreflightProjection
+
+        runner.register_spine(PreflightProjection())
+    except ImportError:
+        logger.warning("PreflightProjection not found — skipping spine registration.")
 
     runner.run()
 

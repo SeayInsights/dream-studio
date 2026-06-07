@@ -42,6 +42,43 @@ from core.event_store.studio_db import _connect
 
 _UI_WO_TYPES: frozenset[str] = frozenset({"ui_component", "ui_page"})
 
+_BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
+_BLOCKING_STATUSES: frozenset[str] = frozenset({"open"})
+
+
+def _check_preflight_gate(work_order_id: str) -> dict[str, Any] | None:
+    """Return an error dict if there are unresolved critical/high preflight findings.
+
+    Returns None (gate passes) if the table doesn't exist yet (WO-O not landed)
+    or if no blocking findings are present.  Stub behind the gate-registry
+    interface — full integration lands in WO-O.
+    """
+    try:
+        from core.config.database import get_connection
+
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                "SELECT finding_id, severity, summary FROM business_work_order_preflights"
+                " WHERE work_order_id = ? AND severity IN ('critical', 'high') AND status = 'open'",
+                (work_order_id,),
+            ).fetchall()
+    except Exception:
+        return None
+
+    if not rows:
+        return None
+
+    summaries = "; ".join(r[2] or r[0] for r in rows[:3])
+    return {
+        "ok": False,
+        "error": (
+            f"Cannot start — {len(rows)} unresolved critical/high preflight finding(s): "
+            f"{summaries}. Acknowledge, mitigate, or accept risk before starting."
+        ),
+        "preflight_blocked": True,
+        "finding_count": len(rows),
+    }
+
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     # Lazy import via ds.py — see core.projects.queries._require_db for rationale.
@@ -430,6 +467,13 @@ def start_work_order(
                 f"should be worked on first."
             ),
         }
+
+    # Preflight gate stub (WO-S): block on unresolved critical/high findings.
+    # This stub queries business_work_order_preflights if the table exists.
+    # Full gate-registry integration lands in WO-O.
+    _preflight_block = _check_preflight_gate(work_order_id)
+    if _preflight_block:
+        return _preflight_block
 
     p_root = planning_root or Path.cwd() / ".planning"
     now = datetime.now(timezone.utc).isoformat()

@@ -166,6 +166,18 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "task.completed", _BUSINESS, "meaningful-unit", "Task marked complete within a work order"
     ),
     RegistryEntry(
+        "preflight.created",
+        _BUSINESS,
+        "meaningful-unit",
+        "New preflight finding recorded on a work order (blast_radius/impact/risk/spec_reference/dependency)",
+    ),
+    RegistryEntry(
+        "preflight.status_changed",
+        _BUSINESS,
+        "meaningful-unit",
+        "Preflight finding status updated (open/acknowledged/mitigated/accepted_risk/resolved)",
+    ),
+    RegistryEntry(
         "gate.bypassed",
         _BUSINESS,
         "meaningful-unit",
