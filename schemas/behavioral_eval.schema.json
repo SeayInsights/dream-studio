@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dream_studio.behavioral_eval.v1",
+  "title": "Behavioral Eval Case",
+  "description": "Spec for a single behavioral eval: one user prompt, expected events, and optional behavior text checks.",
+  "type": "object",
+  "required": ["eval_id", "version", "description", "input_prompt"],
+  "additionalProperties": false,
+  "properties": {
+    "eval_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "Stable identifier; used as the primary key in ds_eval_baselines."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver. Bump when expected_events or expected_behavior changes meaningfully."
+    },
+    "description": {
+      "type": "string",
+      "description": "One sentence: what behavior is being tested."
+    },
+    "skill_id": {
+      "type": ["string", "null"],
+      "description": "Optional: if set, ds eval run --skill filters to this skill's evals."
+    },
+    "input_prompt": {
+      "type": "string",
+      "description": "The user prompt injected into the session."
+    },
+    "fixture_events": {
+      "type": ["array", "null"],
+      "description": "Pre-seeded event list for deterministic unit tests. Null means live runner captures real events.",
+      "items": {
+        "type": "object",
+        "required": ["event_type"],
+        "properties": {
+          "event_type": {"type": "string"},
+          "trace": {"type": "object"},
+          "payload": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "expected_events": {
+      "type": "array",
+      "description": "Events that must (or must not) appear in the session event log.",
+      "items": {
+        "type": "object",
+        "required": ["event_type", "must_appear"],
+        "properties": {
+          "event_type": {"type": "string"},
+          "must_appear": {"type": "boolean"},
+          "skill_id": {"type": ["string", "null"]},
+          "max_sequence_position": {
+            "type": ["integer", "null"],
+            "description": "If set, event must appear at or before this 0-based position."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "expected_behavior": {
+      "type": ["string", "null"],
+      "description": "1-2 sentence description of the expected behavioral outcome. Graded by Opus judge (30% weight). Keep short — LLM-judge reliability degrades with length."
+    },
+    "negative_checks": {
+      "type": "array",
+      "description": "Behaviors that must NOT appear. Each string is a plain-language assertion checked by the judge.",
+      "items": {"type": "string"}
+    },
+    "event_weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7,
+      "description": "Fraction of composite score from deterministic event matching."
+    },
+    "behavior_weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.3,
+      "description": "Fraction of composite score from Opus judge behavior grading."
+    },
+    "minimum_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.75,
+      "description": "Composite score threshold; below this the eval is counted as failed."
+    }
+  }
+}
