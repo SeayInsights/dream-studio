@@ -5,7 +5,7 @@ import pytest
 
 
 def test_ingestor_reads_spool_writes_sqlite(spool_root):
-    """Ingestor reads from temp spool, writes to test SQLite DB, assert canonical_events row."""
+    """Ingestor reads from temp spool, writes to test SQLite DB, assert ai_canonical_events row."""
     from spool.writer import write_event
     from spool.ingestor import ingest
 
@@ -25,9 +25,10 @@ def test_ingestor_reads_spool_writes_sqlite(spool_root):
     assert result.processed == 1
     assert result.failed == 0
 
+    # prompt.lifecycle.submitted routes to ai_canonical_events (WO-M: canonical_events retired)
     conn = sqlite3.connect(str(db_path))
     row = conn.execute(
-        "SELECT event_id, event_type, raw_prompt_retained FROM canonical_events WHERE event_id = ?",
+        "SELECT event_id, event_type FROM ai_canonical_events WHERE event_id = ?",
         ("int-test-001",),
     ).fetchone()
     conn.close()
@@ -35,11 +36,10 @@ def test_ingestor_reads_spool_writes_sqlite(spool_root):
     assert row is not None
     assert row[0] == "int-test-001"
     assert row[1] == "prompt.lifecycle.submitted"
-    assert row[2] == 0
 
 
 def test_no_raw_prompt_in_sqlite(spool_root):
-    """Assert canonical_events row has raw_prompt_retained = 0."""
+    """Assert ingested events do not retain raw prompt text (WO-M: check ai_canonical_events)."""
     from emitters.claude_code.emitter import normalize_user_prompt_submit
     from emitters.shared.spool_writer import write_envelopes
 
@@ -54,12 +54,12 @@ def test_no_raw_prompt_in_sqlite(spool_root):
         write_event(env.to_dict(), root=spool_root)
     ingest(root=spool_root, db_path=db_path)
 
+    # prompt.lifecycle.submitted routes to ai_canonical_events (WO-M: canonical_events retired)
     conn = sqlite3.connect(str(db_path))
-    rows = conn.execute("SELECT payload, raw_prompt_retained FROM canonical_events").fetchall()
+    rows = conn.execute("SELECT payload FROM ai_canonical_events").fetchall()
     conn.close()
 
     assert len(rows) >= 1
-    for payload_json, raw_retained in rows:
-        assert raw_retained == 0
+    for (payload_json,) in rows:
         payload = json.loads(payload_json)
         assert "secret prompt text" not in json.dumps(payload)

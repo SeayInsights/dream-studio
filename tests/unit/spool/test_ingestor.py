@@ -76,9 +76,10 @@ def test_sqlite_row_written_on_success(spool_root):
     write_event(envelope, root=spool_root)
     ingest(root=spool_root, db_path=db_path)
 
+    # prompt.lifecycle.submitted routes to ai_canonical_events (WO-M: canonical_events retired)
     conn = sqlite3.connect(str(db_path))
     row = conn.execute(
-        "SELECT event_id, event_type, raw_prompt_retained FROM canonical_events WHERE event_id = ?",
+        "SELECT event_id, event_type FROM ai_canonical_events WHERE event_id = ?",
         ("evt-sqlite-001",),
     ).fetchone()
     conn.close()
@@ -86,7 +87,6 @@ def test_sqlite_row_written_on_success(spool_root):
     assert row is not None
     assert row[0] == "evt-sqlite-001"
     assert row[1] == "prompt.lifecycle.submitted"
-    assert row[2] == 0
 
 
 # ── reason.json subdirectory tests (WS 9e-1) ──────────────────────────────────

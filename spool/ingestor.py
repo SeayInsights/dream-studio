@@ -150,18 +150,24 @@ def _process_one(
             pass
         raise  # re-raise: outer handler in ingest() decides skip vs fail
 
-    # Phase 18.1.2: route to dual canonical (business + AI) per event type registry.
-    # Best-effort: dual canonical failure does not block legacy canonical write.
-    try:
-        _write_to_dual_canonical(data, db_path)
-    except Exception as exc:
-        print(
-            f"[ds-ingestor] WARNING: dual canonical write failed for"
-            f" {data.get('event_id')!r} ({data.get('event_type')!r}): {exc}",
-            file=sys.stderr,
-        )
+    # Phase 18.1.2 (WO-M): dual-canonical is now the authoritative write.
+    # Failure surfaces to the caller; the event is moved to failed/ for retry triage.
+    _write_to_dual_canonical(data, db_path)
 
-    _write_to_sqlite(data, db_path)
+    # Best-effort: project execution events directly from the event dict.
+    # (canonical_events table retired — projection reads event dict, not the legacy table)
+    try:
+        from projections.core.execution_events_projection import apply as _project_execution
+
+        _proj_conn = sqlite3.connect(str(db_path), timeout=5.0)
+        try:
+            _proj_conn.execute("PRAGMA journal_mode = WAL")
+            if _project_execution(data, _proj_conn):
+                _proj_conn.commit()
+        finally:
+            _proj_conn.close()
+    except Exception:
+        pass
 
     processed_path = processed_dir / event_file.name
     os.replace(processing_path, processed_path)
@@ -489,75 +495,6 @@ def _write_to_raw_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
             ),
         )
         conn.commit()
-    finally:
-        conn.close()
-
-
-def _write_to_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), timeout=5.0)
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS canonical_events (
-                event_id TEXT PRIMARY KEY,
-                event_type TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                trace JSON NOT NULL DEFAULT '{}',
-                severity TEXT NOT NULL DEFAULT 'info',
-                payload JSON NOT NULL DEFAULT '{}',
-                actor JSON,
-                confidence_score REAL,
-                source_type TEXT,
-                raw_prompt_retained INTEGER NOT NULL DEFAULT 0,
-                raw_tool_output_retained INTEGER NOT NULL DEFAULT 0,
-                schema_version INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                invocation_mode TEXT
-            )
-        """)
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO canonical_events
-            (event_id, event_type, timestamp, trace, severity, payload,
-             raw_prompt_retained, raw_tool_output_retained, schema_version,
-             invocation_mode)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                envelope["event_id"],
-                envelope["event_type"],
-                envelope["timestamp"],
-                json.dumps(envelope.get("trace", {})),
-                envelope.get("severity", "info"),
-                json.dumps(envelope.get("payload", {})),
-                int(bool(envelope.get("raw_prompt_retained", False))),
-                int(bool(envelope.get("raw_tool_output_retained", False))),
-                envelope.get("schema_version", 1),
-                envelope.get("invocation_mode"),
-            ),
-        )
-        _trace = envelope.get("trace", {})
-        if isinstance(_trace, str):
-            try:
-                _trace = json.loads(_trace)
-            except (json.JSONDecodeError, TypeError):
-                _trace = {}
-        if not _trace.get("domain"):
-            print(
-                f"[ds-ingestor] WARNING: event {envelope['event_id']!r} type={envelope['event_type']!r} missing trace.domain",
-                file=sys.stderr,
-            )
-        conn.commit()
-        # Best-effort projection: execution events → execution_events table
-        try:
-            from projections.core.execution_events_projection import apply as _project_execution
-
-            projected = _project_execution(envelope, conn)
-            if projected:
-                conn.commit()
-        except Exception:
-            pass
     finally:
         conn.close()
 
