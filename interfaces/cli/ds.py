@@ -514,6 +514,35 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    # eval subcommand group (18.8.3)
+    eval_cmd = subcommands.add_parser("eval", help="Behavioral eval runner (18.8.3)")
+    eval_sub = eval_cmd.add_subparsers(dest="eval_command", required=True)
+    eval_run_cmd = eval_sub.add_parser("run", help="Run behavioral evals")
+    eval_run_cmd.add_argument("--all", action="store_true", default=False, help="Run all evals")
+    eval_run_cmd.add_argument(
+        "--eval-id", default=None, dest="eval_id", help="Run a specific eval by ID"
+    )
+    eval_run_cmd.add_argument(
+        "--skill", default=None, dest="skill_filter", help="Filter evals by skill_id"
+    )
+    eval_run_cmd.add_argument(
+        "--evals-dir", default=None, dest="evals_dir", help="Override evals directory"
+    )
+    eval_sub.add_parser("baseline", help="Print current baseline scores")
+    eval_compare_cmd = eval_sub.add_parser(
+        "compare", help="Compare recent run scores against baseline"
+    )
+    eval_compare_cmd.add_argument(
+        "--eval-id", default=None, dest="eval_id", help="Compare specific eval"
+    )
+    eval_list_cmd = eval_sub.add_parser("list", help="List available eval cases")
+    eval_list_cmd.add_argument(
+        "--skill", default=None, dest="skill_filter", help="Filter by skill_id"
+    )
+    eval_list_cmd.add_argument(
+        "--evals-dir", default=None, dest="evals_dir", help="Override evals directory"
+    )
+
     # diagnostics subcommand group (TA3)
     diag_cmd = subcommands.add_parser(
         "diagnostics", help="Read or clear the TA3 diagnostic log stream"
@@ -826,6 +855,8 @@ def main(argv: list[str] | None = None) -> int:
             return _diagnostics_dispatch(args)
         if args.command == "analyze":
             return _analyze_dispatch(args, source_root=source_root, dream_studio_home=home)
+        if args.command == "eval":
+            return _eval_dispatch(args, source_root=source_root)
     except (RuntimeError, sqlite3.Error, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2), file=sys.stderr)
         return 1
@@ -2685,6 +2716,86 @@ def _require_home_for_install(command: str) -> Path:
         f"{command} requires --home for this productization flow unless a live install scope "
         "has been explicitly approved."
     )
+
+
+def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
+    """Dispatch ds eval {run,baseline,compare,list} commands (18.8.3)."""
+    from core.eval.runner import EvalRunner, format_results_report, load_eval_cases
+
+    evals_dir = Path(args.evals_dir) if getattr(args, "evals_dir", None) else source_root / "evals"
+
+    if args.eval_command == "list":
+        cases = load_eval_cases(evals_dir)
+        skill = getattr(args, "skill_filter", None)
+        if skill:
+            cases = [c for c in cases if c.skill_id == skill]
+        rows = [
+            {
+                "eval_id": c.eval_id,
+                "version": c.version,
+                "skill_id": c.skill_id,
+                "description": c.description,
+            }
+            for c in cases
+        ]
+        return _print({"evals": rows, "count": len(rows)})
+
+    if args.eval_command == "run":
+        runner = EvalRunner(evals_dir=evals_dir)
+        eval_id = getattr(args, "eval_id", None)
+        skill_filter = getattr(args, "skill_filter", None)
+        run_all = getattr(args, "all", False)
+        if eval_id:
+            from core.eval.schema import EvalCase
+
+            path = evals_dir / f"{eval_id}.json"
+            if not path.exists():
+                print(
+                    json.dumps({"ok": False, "error": f"Eval not found: {eval_id}"}),
+                    file=sys.stderr,
+                )
+                return 1
+            case = EvalCase.from_json(path)
+            result = runner.run_case(case)
+            return _print(
+                {
+                    "eval_id": result.eval_id,
+                    "passed": result.passed,
+                    "composite_score": result.composite_score,
+                    "event_score": result.event_score,
+                    "behavior_score": result.behavior_score,
+                }
+            )
+        if run_all or skill_filter:
+            results = runner.run_all(skill_filter=skill_filter)
+            report = format_results_report(results)
+            print(report)
+            passed = sum(1 for r in results if r.passed)
+            return 0 if passed == len(results) else 1
+        print("Specify --all, --eval-id, or --skill to run evals.", file=sys.stderr)
+        return 1
+
+    if args.eval_command == "baseline":
+        from core.eval.baseline import get_all_baselines
+
+        rows = get_all_baselines()
+        return _print({"baselines": rows, "count": len(rows)})
+
+    if args.eval_command == "compare":
+        from core.eval.baseline import load_baseline
+
+        eval_id = getattr(args, "eval_id", None)
+        if not eval_id:
+            print("--eval-id required for compare", file=sys.stderr)
+            return 1
+        baseline = load_baseline(eval_id, "1.0.0")
+        if baseline is None:
+            print(json.dumps({"ok": False, "error": f"No baseline for {eval_id}"}), file=sys.stderr)
+            return 1
+        return _print({"eval_id": eval_id, "baseline": baseline})
+
+    print(f"Unknown eval command: {args.eval_command}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

@@ -40,6 +40,12 @@ jobs:
       - name: Run local parity release gate
         run: python interfaces/cli/ci_gate.py
 
+      - name: Eval harness unit tests (18.8.3)
+        run: >
+          python -m pytest
+          tests/evals/behavioral/test_eval_harness.py
+          -q --tb=short -k "not TestLiveJudge"
+
       - name: Test suite with coverage
         run: >
           python -m pytest tests/
