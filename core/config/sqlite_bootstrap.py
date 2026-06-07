@@ -3,12 +3,37 @@
 This module is intentionally independent of runtime singleton state. It lets
 fresh installs, upgrades, and tests create or migrate a user-local SQLite DB
 from the repo-backed migration files without relying on an existing operator DB.
+
+## Dev vs Live Migration Safety
+
+Migrations auto-apply on every _connect() call. To prevent an in-dev migration
+on a feature branch from silently mutating the live authority DB before review:
+
+1. ``core/event_store/migrations/.released_version`` tracks the max released
+   migration version (updated when a migration PR merges to main). Any migration
+   with version > released_version is considered unreleased.
+
+2. Unreleased migrations will NOT apply to the live authority DB
+   (~/.dream-studio/state/studio.db) unless ``DREAM_STUDIO_APPLY_UNRELEASED=1``
+   is set. They apply normally to temp/test DBs (any path outside ~/.dream-studio/).
+
+3. Before the first migration applies to the live authority DB, the current DB
+   is snapshotted to ``~/.dream-studio/state/backups/studio-pre-N-TIMESTAMP.db``.
+
+For in-dev migration work: use ``bootstrap_database(tmp_path / "studio.db", ...)``
+with an explicit temp path. The gate skips for any non-live-authority DB path.
+
+To apply an unreleased migration to the live DB explicitly::
+
+    DREAM_STUDIO_APPLY_UNRELEASED=1 py -m interfaces.cli.ds <command>
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +60,54 @@ def latest_migration_version() -> int:
     if not files:
         return 0
     return max(_migration_version(path) for path in files)
+
+
+def released_migration_version() -> int:
+    """Return the max migration version considered released on main.
+
+    Reads from ``core/event_store/migrations/.released_version``. If the file
+    is absent (e.g. older installs), all current migrations are treated as
+    released (backward-compatible default).
+    """
+
+    rv_path = migrations_dir() / ".released_version"
+    if not rv_path.is_file():
+        return latest_migration_version()
+    try:
+        return int(rv_path.read_text(encoding="utf-8").strip())
+    except (ValueError, OSError):
+        return latest_migration_version()
+
+
+def _is_live_authority_db(db_file: str) -> bool:
+    """True if db_file is the live authority DB under ~/.dream-studio/."""
+
+    if not db_file:
+        return False
+    try:
+        Path(db_file).resolve().relative_to((Path.home() / ".dream-studio").resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _backup_live_db(conn: sqlite3.Connection, db_file: str, current_version: int) -> Path:
+    """Snapshot the live authority DB before applying migrations.
+
+    Uses the SQLite backup API (not file copy) so WAL state is consistent.
+    Returns the backup path.
+    """
+
+    backup_dir = Path.home() / ".dream-studio" / "state" / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup_path = backup_dir / f"studio-pre-{current_version + 1}-{timestamp}.db"
+    dest = sqlite3.connect(str(backup_path))
+    try:
+        conn.backup(dest)
+    finally:
+        dest.close()
+    return backup_path
 
 
 def split_statements(sql_text: str) -> list[str]:
@@ -75,7 +148,14 @@ def split_statements(sql_text: str) -> list[str]:
 
 
 def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = None) -> int:
-    """Apply pending repo migrations and return the resulting schema version."""
+    """Apply pending repo migrations and return the resulting schema version.
+
+    Safety guards (see module docstring):
+    - Unreleased migrations (version > released_migration_version()) are skipped
+      on the live authority DB unless DREAM_STUDIO_APPLY_UNRELEASED=1 is set.
+    - The live DB is snapshotted to ~/.dream-studio/state/backups/ before the
+      first new migration applies.
+    """
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS _schema_version ("
@@ -98,10 +178,37 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
             "Update dream-studio to a compatible version."
         )
 
+    # Live-authority safety: detect DB path, released version, and opt-in flag
+    db_row = conn.execute("PRAGMA database_list").fetchone()
+    db_file: str = db_row[2] if db_row else ""
+    live = _is_live_authority_db(db_file)
+    released = released_migration_version()
+    apply_unreleased = bool(os.environ.get("DREAM_STUDIO_APPLY_UNRELEASED"))
+    backup_taken = False
+
     for path in files:
         version = _migration_version(path)
         if version <= current or version > latest_code:
             continue
+
+        # Gate: unreleased migrations do not auto-apply to the live authority DB
+        if live and not apply_unreleased and version > released:
+            warnings.warn(
+                f"[migration-safety] Migration {version} is unreleased "
+                f"(released_version={released}). Skipping live authority apply. "
+                "Set DREAM_STUDIO_APPLY_UNRELEASED=1 to override.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            continue
+
+        # Auto-backup: snapshot live authority DB before the first migration applies
+        if live and not backup_taken:
+            try:
+                _backup_live_db(conn, db_file, current)
+            except Exception:
+                pass  # backup failure is non-fatal; migration proceeds
+            backup_taken = True
 
         sql_text = path.read_text(encoding="utf-8")
         for stmt in split_statements(sql_text):
