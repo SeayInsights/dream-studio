@@ -1,18 +1,11 @@
-"""Tests for behavioral eval harness infrastructure (18.8.3).
+"""Tests for behavioral eval harness infrastructure (18.8.3 / WO-N2).
 
-Proving gate for merge:
-- Deterministic matcher produces same score on identical inputs
-- Event sequence matching works correctly
-- Negative checks are enforced
-- Baseline regression detection works
-- Judge integration structure is correct (live API calls require ANTHROPIC_API_KEY)
-- CLI structure verified
+Deterministic-only: all scoring is 100% event-based.
+No live Claude sessions, no subprocess calls, no LLM judge.
 """
 
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import pytest
@@ -23,7 +16,6 @@ from core.eval.schema import EvalCase, EvalResult, ExpectedEvent
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EVALS_DIR = REPO_ROOT / "evals"
-HAS_API_KEY = bool(os.environ.get("ANTHROPIC_API_KEY"))
 
 
 # ── EvalCase loading ──────────────────────────────────────────────────────
@@ -45,8 +37,7 @@ class TestEvalCaseLoading:
         path = EVALS_DIR / "eval_01_event_sequence_skill_dispatch.json"
         case = EvalCase.from_json(path)
         assert case.eval_id == "eval_01_event_sequence_skill_dispatch"
-        assert case.event_weight == 0.7
-        assert case.behavior_weight == 0.3
+        assert case.event_weight == 1.0
         assert len(case.expected_events) == 1
         assert case.expected_events[0].event_type == "skill.invoked"
         assert case.expected_events[0].must_appear is True
@@ -65,7 +56,7 @@ class TestEvalCaseLoading:
 
 
 class TestDeterministicMatcher:
-    def _make_case(self, expected_events, negative_checks=None):
+    def _make_case(self, expected_events):
         """Helper: create minimal EvalCase with given expected events."""
         return EvalCase(
             eval_id="test",
@@ -74,7 +65,6 @@ class TestDeterministicMatcher:
             skill_id=None,
             input_prompt="test",
             expected_events=expected_events,
-            negative_checks=negative_checks or [],
         )
 
     def test_perfect_match_scores_1_0(self):
@@ -250,7 +240,6 @@ class TestEvalRunner:
         report = format_results_report(results)
         assert "Behavioral Eval Report" in report
         assert "Summary:" in report
-        assert "Tokens estimated:" in report
 
 
 # ── Regression detection ──────────────────────────────────────────────────
@@ -382,158 +371,29 @@ class TestRegressionDetection:
         ), "Baseline should update after explicit update_baseline() call"
 
 
-# ── Judge structure tests ──────────────────────────────────────────────────
+# ── Deterministic regression test (WO-N2) ─────────────────────────────────
 
 
-class TestJudgeStructure:
-    def test_judge_skips_when_claude_not_available(self, monkeypatch):
-        """Judge must skip gracefully when claude CLI is not available."""
-        import shutil
+class TestDeterministicRegression:
+    def test_bad_fixture_scores_below_minimum_pass_score(self):
+        """Inject a known-bad event trace: forbidden event present + required event missing.
 
-        monkeypatch.setattr(shutil, "which", lambda _: None)
-        from core.eval.judge import grade_behavior
+        Confirms the scorer reliably flags bad sessions without any live Claude invocation.
+        """
+        path = EVALS_DIR / "eval_04_negative_check_no_direct_code.json"
+        case = EvalCase.from_json(path)
 
-        case = EvalCase(
-            eval_id="test",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="Claude should do X",
+        # Bad fixture: required event is absent AND forbidden event is present.
+        # Required (skill.invoked) missing → base_score=0.0; negative violation penalty
+        # makes final_score=0.0, well below minimum_pass_score=0.75.
+        case.fixture_events = [{"event_type": "code.generated"}]
+
+        runner = EvalRunner(evals_dir=EVALS_DIR)
+        result = runner.run_case(case)
+
+        assert result.composite_score < case.minimum_pass_score, (
+            f"Bad fixture must score below minimum_pass_score ({case.minimum_pass_score}), "
+            f"got {result.composite_score}"
         )
-        result = grade_behavior(case, "some transcript", api_key=None)
-        assert result.skipped is True
-        assert result.score is None
-        assert result.effective_score == 0.5  # Neutral fallback
-
-    def test_judge_auto_passes_when_no_expected_behavior(self):
-        """Empty expected_behavior → auto-pass with score 1.0."""
-        from core.eval.judge import grade_behavior
-
-        case = EvalCase(
-            eval_id="test",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="",
-        )
-        result = grade_behavior(case, "any transcript", api_key=None)
-        assert result.score == 1.0
-        assert not result.skipped
-
-    def test_token_estimate_is_positive(self):
-        from core.eval.judge import estimate_judge_tokens
-
-        case = EvalCase(
-            eval_id="test",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="Claude should do X",
-            negative_checks=["Not this"],
-        )
-        tokens = estimate_judge_tokens(case, "session transcript here")
-        assert tokens > 0
-
-
-# ── Live judge tests (Claude Code — no API key required) ──────────────────
-
-HAS_CLAUDE = bool(__import__("shutil").which("claude"))
-
-
-def _claude_subprocess_works() -> bool:
-    """Return True only if `claude -p` can complete a trivial call successfully."""
-    if not HAS_CLAUDE:
-        return False
-    import subprocess
-
-    try:
-        r = subprocess.run(
-            ["claude", "-p", "Reply with the single word: PASS"],
-            capture_output=True,
-            timeout=15,
-        )
-        return r.returncode == 0
-    except Exception:
-        return False
-
-
-_CLAUDE_WORKS = _claude_subprocess_works()
-
-
-@pytest.mark.skipif(not _CLAUDE_WORKS, reason="Requires functional claude -p subprocess")
-class TestLiveJudge:
-    def test_judge_scores_correct_behavior_highly(self):
-        """A transcript that clearly exhibits expected behavior should score >= 0.75."""
-        from core.eval.judge import grade_behavior
-
-        case = EvalCase(
-            eval_id="live_test",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="Claude invokes the resume skill and presents the next work order",
-        )
-        transcript = "Claude: I'll check your project state.\n[Invoked: ds-project:resume]\nNext WO: Build authentication feature."
-        result = grade_behavior(case, transcript)
-        if result.skipped:
-            pytest.skip(f"Judge skipped: {result.rationale}")
-        assert result.score is not None
-        assert not result.skipped
-        assert (
-            result.score >= 0.5
-        ), f"Expected score >= 0.5 for correct behavior, got {result.score}"
-
-    def test_judge_scores_wrong_behavior_low(self):
-        """A transcript that ignores expected behavior should score < 0.5."""
-        from core.eval.judge import grade_behavior
-
-        case = EvalCase(
-            eval_id="live_test_low",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="Claude invokes the resume skill and presents the next work order",
-            negative_checks=["Claude must not start writing code immediately"],
-        )
-        # Transcript that starts writing code without checking project state
-        bad_transcript = "Claude: Sure, let me write the authentication code!\n```python\ndef login(user, password): ...\n```"
-        result = grade_behavior(case, bad_transcript)
-        assert result.score is not None
-        # The negative check about writing code should fire → score = 0.0
-        assert result.score <= 0.5, f"Expected low score for wrong behavior, got {result.score}"
-
-    def test_judge_variance_across_identical_runs(self):
-        """Run same eval 5 times — variance must be < 0.05 (tight prompt working)."""
-        from core.eval.judge import grade_behavior
-
-        case = EvalCase(
-            eval_id="variance_test",
-            version="1.0.0",
-            description="test",
-            skill_id=None,
-            input_prompt="test",
-            expected_behavior="Claude invokes the resume skill and presents work order context",
-        )
-        transcript = (
-            "Claude: Checking project state.\n"
-            "[Invoked: ds-project:resume]\n"
-            "Active WO: Build auth feature. Design brief locked. Ready to proceed."
-        )
-
-        scores = []
-        for _ in range(5):
-            result = grade_behavior(case, transcript)
-            if not result.skipped and result.score is not None:
-                scores.append(result.score)
-
-        assert len(scores) >= 3, "Need at least 3 non-skipped runs for variance check"
-        variance = max(scores) - min(scores)
-        assert variance < 0.05, (
-            f"Judge variance {variance:.3f} exceeds 0.05 target. Scores: {scores}. "
-            "Tight prompt not working — consider redesigning the judge prompt."
-        )
+        assert not result.passed
+        assert result.match_result.negative_violations

@@ -1,8 +1,7 @@
 """Eval case schema — data structures for behavioral eval cases and results.
 
-Eval cases are loaded from JSON files in the evals/ directory.
-Each case defines: input, expected events (deterministic), expected behavior (LLM-judged),
-and optional fixture data for Phase 1 simulation mode.
+Scoring is 100% deterministic: composite_score = event_score.
+No LLM judge, no subprocess calls, no live sessions (WO-N2).
 """
 
 from __future__ import annotations
@@ -34,22 +33,21 @@ class EvalCase:
     skill_id: str | None  # Primary skill being tested (may be None for routing tests)
     input_prompt: str
 
-    # Scoring
-    event_weight: float = 0.7
-    behavior_weight: float = 0.3
+    # Scoring — 100% deterministic event matching
+    event_weight: float = 1.0
     minimum_pass_score: float = 0.75
 
     # Expected outcomes
     expected_events: list[ExpectedEvent] = field(default_factory=list)
-    expected_behavior: str = ""  # Natural language description for LLM judge
-    negative_checks: list[str] = field(default_factory=list)
 
-    # Phase 1 fixtures — pre-specified session output for testing without live Claude
-    fixture_events: list[dict[str, Any]] | None = None  # Pre-specified events to match
-    fixture_transcript: str | None = None  # Pre-specified session transcript for judge
+    # Optional human-readable notes (not used for scoring)
+    notes: str = ""
+
+    # Fixture events for unit/regression tests — pre-specified events to match
+    fixture_events: list[dict[str, Any]] | None = None
 
     def total_weights(self) -> float:
-        return self.event_weight + self.behavior_weight
+        return self.event_weight
 
     @classmethod
     def from_json(cls, path: Path) -> "EvalCase":
@@ -65,21 +63,21 @@ class EvalCase:
             )
             for e in data.get("expected_events", [])
         ]
+        # Read scoring from top-level or legacy "scoring" sub-object
         scoring = data.get("scoring", {})
+        event_weight = data.get("event_weight", scoring.get("event_weight", 1.0))
+        minimum_pass_score = data.get("minimum_score", scoring.get("minimum_pass_score", 0.75))
         return cls(
             eval_id=data["eval_id"],
             version=data.get("version", "1.0.0"),
             description=data.get("description", ""),
             skill_id=data.get("skill_id"),
             input_prompt=data["input_prompt"],
-            event_weight=scoring.get("event_weight", 0.7),
-            behavior_weight=scoring.get("behavior_weight", 0.3),
-            minimum_pass_score=scoring.get("minimum_pass_score", 0.75),
+            event_weight=event_weight,
+            minimum_pass_score=minimum_pass_score,
             expected_events=expected_events,
-            expected_behavior=data.get("expected_behavior", ""),
-            negative_checks=data.get("negative_checks", []),
+            notes=data.get("notes", data.get("expected_behavior", "")),
             fixture_events=data.get("fixture_events"),
-            fixture_transcript=data.get("fixture_transcript"),
         )
 
 
@@ -105,44 +103,23 @@ class MatchResult:
 
 
 @dataclass
-class JudgeResult:
-    """Result of LLM judge evaluation."""
-
-    score: float | None  # None when judge was skipped
-    rationale: str
-    skipped: bool = False
-    model_used: str = ""
-    tokens_used: int = 0
-
-    @property
-    def effective_score(self) -> float:
-        """Score for computation — 0.5 (neutral) when judge was skipped."""
-        return self.score if self.score is not None else 0.5
-
-
-@dataclass
 class EvalResult:
     """Complete result for one eval case run."""
 
     eval_id: str
     version: str
     passed: bool
-    composite_score: float  # Weighted event + behavior
+    composite_score: float  # = event_score (100% deterministic)
     event_score: float
-    behavior_score: float
     match_result: MatchResult
-    judge_result: JudgeResult
     regression_flagged: bool = False
     baseline_score: float | None = None
-    run_mode: str = "fixture"  # "fixture" | "live"
+    run_mode: str = "fixture"
     error: str | None = None
-    tokens_consumed: int = 0
+    tokens_consumed: int = 0  # Always 0 — no LLM calls
 
     @property
     def score_display(self) -> str:
         status = "PASS" if self.passed else "FAIL"
         reg = " [REGRESSION]" if self.regression_flagged else ""
-        return (
-            f"{status}{reg} — {self.composite_score:.2f} "
-            f"(events: {self.event_score:.2f}, behavior: {self.behavior_score:.2f})"
-        )
+        return f"{status}{reg} — {self.composite_score:.2f} (events: {self.event_score:.2f})"

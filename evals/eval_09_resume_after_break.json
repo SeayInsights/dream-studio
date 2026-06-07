@@ -1,7 +1,7 @@
 {
   "eval_id": "eval_09_resume_after_break",
-  "version": "1.0.0",
-  "description": "After a session gap, Claude must resume the active work order via ds-project:resume rather than starting fresh.",
+  "version": "2.0.0",
+  "description": "After a session gap, Claude must resume via ds-project:resume rather than starting fresh.",
   "skill_id": "ds-project",
   "input_prompt": "I'm back. What should I be working on?",
   "fixture_events": [
@@ -12,9 +12,7 @@
     {"event_type": "skill.invoked", "skill_id": "ds-project:resume", "must_appear": true},
     {"event_type": "code.generated", "must_appear": false}
   ],
-  "expected_behavior": "Claude invokes the resume skill and presents the active work order without starting to write code.",
-  "negative_checks": ["Claude must not begin writing code before checking project state"],
-  "event_weight": 0.7,
-  "behavior_weight": 0.3,
+  "notes": "Claude invokes the resume skill and presents the active work order without generating code.",
+  "event_weight": 1.0,
   "minimum_score": 0.75
 }

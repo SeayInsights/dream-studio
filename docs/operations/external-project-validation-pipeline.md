@@ -110,3 +110,5 @@ Static validation checks that:
 <!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated. No change to external project validation pipeline behavior or validation rules. -->
 
 <!-- Last reviewed 2026-06-07 — WO-N behavioral eval harness (18.8.3): full-ci.yml updated to add eval harness unit tests step. Step runs tests/evals/behavioral/test_eval_harness.py excluding TestLiveJudge (skipped in CI — requires functional claude -p subprocess). No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI-only, post-merge, ubuntu-latest. -->
+
+<!-- Last reviewed 2026-06-07 — WO-N2 (fix/wo-n2-deterministic-evals): removed eval harness step from full-ci.yml. No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI eval step removal is internal-only. -->

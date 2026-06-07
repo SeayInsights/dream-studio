@@ -1,9 +1,22 @@
 {
   "eval_id": "eval_05_regression_detection",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Regression detection test: this eval has a known baseline. A degraded skill version should produce lower scores and trigger regression flag.",
   "skill_id": "ds-quality",
   "input_prompt": "debug: why is this failing",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-quality",
+      "trace": {
+        "skill_id": "ds-quality:debug"
+      }
+    },
+    {
+      "event_type": "skill.completed",
+      "skill_id": "ds-quality"
+    }
+  ],
   "expected_events": [
     {
       "event_type": "skill.invoked",
@@ -16,19 +29,7 @@
       "max_sequence_position": 4
     }
   ],
-  "expected_behavior": "Claude invokes the debug skill, analyzes the failure, and provides a root cause with specific file and line number references. The response is actionable, not vague.",
-  "negative_checks": [
-    "Claude does not just say 'check the logs' without specific guidance",
-    "Claude does not invoke an unrelated skill instead of debug"
-  ],
-  "scoring": {
-    "event_weight": 0.7,
-    "behavior_weight": 0.3,
-    "minimum_pass_score": 0.75
-  },
-  "fixture_events": [
-    {"event_type": "skill.invoked", "skill_id": "ds-quality", "trace": {"skill_id": "ds-quality:debug"}},
-    {"event_type": "skill.completed", "skill_id": "ds-quality"}
-  ],
-  "fixture_transcript": "User: debug: why is this failing\n\nClaude: I'll debug the issue using the debug skill.\n\n[Invoked: ds-quality:debug]\n\nRoot Cause Analysis:\n\nThe failure is in core/analytics/aggregate_metrics.py:89 — the `findings` table is being queried with column `skill_id` but the actual column is `introduced_by_skill_id` (renamed in migration 089).\n\nFix:\n```python\n# Old (broken):\nCOALESCE(skill_id, 'unknown') AS skill_id\n\n# Fixed:\nCOALESCE(introduced_by_skill_id, 'unknown') AS skill_id\n```\n\nThis is a common issue after migration 089 renamed the column. Update the query at line 89."
+  "notes": "Claude invokes the debug skill, analyzes the failure, and provides a root cause with specific file and line number references. The response is actionable, not vague.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
 }

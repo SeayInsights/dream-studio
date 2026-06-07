@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "dream_studio.behavioral_eval.v1",
+  "$id": "dream_studio.behavioral_eval.v2",
   "title": "Behavioral Eval Case",
-  "description": "Spec for a single behavioral eval: one user prompt, expected events, and optional behavior text checks.",
+  "description": "Spec for a single behavioral eval: one user prompt, expected events, deterministic scoring only (WO-N2).",
   "type": "object",
   "required": ["eval_id", "version", "description", "input_prompt"],
   "additionalProperties": false,
@@ -10,28 +10,28 @@
     "eval_id": {
       "type": "string",
       "pattern": "^[a-z0-9_]+$",
-      "description": "Stable identifier; used as the primary key in ds_eval_baselines."
+      "description": "Stable identifier; primary key in ds_eval_baselines."
     },
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$",
-      "description": "Semver. Bump when expected_events or expected_behavior changes meaningfully."
+      "description": "Semver. Bump when expected_events changes meaningfully."
     },
     "description": {
       "type": "string",
-      "description": "One sentence: what behavior is being tested."
+      "description": "One sentence: what rail behavior is being measured."
     },
     "skill_id": {
       "type": ["string", "null"],
-      "description": "Optional: if set, ds eval run --skill filters to this skill's evals."
+      "description": "Optional: ds eval run --skill filters to this skill's evals."
     },
     "input_prompt": {
       "type": "string",
-      "description": "The user prompt injected into the session."
+      "description": "The user prompt that was injected into the session."
     },
     "fixture_events": {
       "type": ["array", "null"],
-      "description": "Pre-seeded event list for deterministic unit tests. Null means live runner captures real events.",
+      "description": "Pre-seeded event list for deterministic unit/regression tests. Null means caller supplies recorded events from canonical substrate.",
       "items": {
         "type": "object",
         "required": ["event_type"],
@@ -45,7 +45,7 @@
     },
     "expected_events": {
       "type": "array",
-      "description": "Events that must (or must not) appear in the session event log.",
+      "description": "Events that must (or must not) appear. This is the sole scoring source.",
       "items": {
         "type": "object",
         "required": ["event_type", "must_appear"],
@@ -56,40 +56,32 @@
           "max_sequence_position": {
             "type": ["integer", "null"],
             "description": "If set, event must appear at or before this 0-based position."
+          },
+          "payload_contains": {
+            "type": ["object", "null"],
+            "description": "If set, the event payload must contain these key/value pairs."
           }
         },
         "additionalProperties": false
       }
     },
-    "expected_behavior": {
+    "notes": {
       "type": ["string", "null"],
-      "description": "1-2 sentence description of the expected behavioral outcome. Graded by Opus judge (30% weight). Keep short — LLM-judge reliability degrades with length."
-    },
-    "negative_checks": {
-      "type": "array",
-      "description": "Behaviors that must NOT appear. Each string is a plain-language assertion checked by the judge.",
-      "items": {"type": "string"}
+      "description": "Optional human-readable description of expected behavior. Not used for scoring."
     },
     "event_weight": {
       "type": "number",
       "minimum": 0,
       "maximum": 1,
-      "default": 0.7,
-      "description": "Fraction of composite score from deterministic event matching."
-    },
-    "behavior_weight": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "default": 0.3,
-      "description": "Fraction of composite score from Opus judge behavior grading."
+      "default": 1.0,
+      "description": "Always 1.0 — scoring is 100% deterministic event matching."
     },
     "minimum_score": {
       "type": "number",
       "minimum": 0,
       "maximum": 1,
       "default": 0.75,
-      "description": "Composite score threshold; below this the eval is counted as failed."
+      "description": "Event score threshold; below this the eval counts as failed."
     }
   }
 }

@@ -1,9 +1,18 @@
 {
   "eval_id": "eval_08_promoted_research_dispatch",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Validates that promoted research-analyst subagent loads SKILL.md and applies the correct methodology. Tests anti-sycophancy protocol and source hierarchy from ds-analyze:research skill.",
   "skill_id": "ds-analyze",
   "input_prompt": "use research-analyst to analyze the TAM for enterprise AI coding assistants",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "research-analyst",
+      "trace": {
+        "skill_id": "research-analyst"
+      }
+    }
+  ],
   "expected_events": [
     {
       "event_type": "skill.invoked",
@@ -11,19 +20,7 @@
       "skill_id": "research-analyst"
     }
   ],
-  "expected_behavior": "Claude invokes the research-analyst subagent which loads SKILL.md from ds-analyze:research. Response applies the structured methodology: states a research question, identifies assumptions, applies source hierarchy (Tier 1/2/3), searches for disconfirming evidence first, requires bottoms-up TAM reconciliation, and labels findings with confidence levels.",
-  "negative_checks": [
-    "Claude does not give a single TAM number without sourcing or bottoms-up reconciliation",
-    "Claude does not skip the disconfirming evidence step",
-    "Claude does not present vendor market research as ground truth without triangulation"
-  ],
-  "scoring": {
-    "event_weight": 0.6,
-    "behavior_weight": 0.4,
-    "minimum_pass_score": 0.75
-  },
-  "fixture_events": [
-    {"event_type": "skill.invoked", "skill_id": "research-analyst", "trace": {"skill_id": "research-analyst"}}
-  ],
-  "fixture_transcript": "User: use research-analyst to analyze the TAM for enterprise AI coding assistants\n\nClaude: [Loaded: ~/.claude/skills/ds-analyze/modes/research/SKILL.md]\n\n## Research Question\nWhat is the addressable market for enterprise AI coding assistants (products like GitHub Copilot, Cursor, etc.) targeting software development teams at companies with 100+ engineers?\n\n## Assumption Inventory\n- [unverified] Enterprise buyers will pay $20-50/dev/month — needs WTP evidence\n- [unverified] Adoption rate among eligible companies will reach 60%+ — needs survey data\n- [structural] TAM depends on definition of 'enterprise' (100+ vs 1000+ engineers)\n\n## Disconfirming Evidence (searched first)\nStrongest disconfirm: GitHub Copilot Enterprise reports suggest many pilots fail to expand due to security/compliance friction. If regulatory blockers are widespread, TAM is lower than developer count implies.\n\n## TAM Estimates (preliminary — triangulation incomplete)\nTop-down: Analyst reports suggest $10-25B by 2027 [Tier 2, single source — requires triangulation]\nBottoms-up: ~500k companies with 100+ devs x ~15% adoption x 10 devs/company x $400/dev/yr = ~$300M initial SAM\nReconciliation gap: >10x — investigate before using either figure.\n\n## Confidence: LOW\nRequires 3 independent primary sources and bottoms-up reconciliation before findings are actionable."
+  "notes": "Claude invokes the research-analyst subagent which loads SKILL.md from ds-analyze:research. Response applies the structured methodology: states a research question, identifies assumptions, applies source hierarchy (Tier 1/2/3), searches for disconfirming evidence first, requires bottoms-up TAM reconciliation, and labels findings with confidence levels.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
 }

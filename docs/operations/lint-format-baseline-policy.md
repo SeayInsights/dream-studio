@@ -272,3 +272,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt cleaned up: removed stale entries for deleted files (discovery_external.py E203, discovery_research.py two F401s), removed now-fixed F401 for typing.Any in discovery_internal.py, updated E402 line number for discovery_internal.py from 138 to 58 after function removals. No policy change; same pattern as 2026-05-29 stale-entry cleanup. -->
 
 <!-- Last reviewed 2026-06-07 — WO-N behavioral eval harness (18.8.3): full-ci.yml updated to add eval harness unit tests step. Step runs tests/evals/behavioral/test_eval_harness.py excluding TestLiveJudge (skipped in CI — requires functional claude -p subprocess). No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI-only, post-merge, ubuntu-latest. -->
+
+<!-- Last reviewed 2026-06-07 — WO-N2 (fix/wo-n2-deterministic-evals): removed eval harness step from full-ci.yml. No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI eval step removal is internal-only. -->
