@@ -1,0 +1,191 @@
+name: execute-work-orders
+description: Autonomous work-order execution loop — implements each task, verifies gates, and (if GitHub is available) opens and merges a PR before closing the work order and advancing to the next.
+version: 1
+on_failure: abort
+
+# Stop conditions (halt and report — do NOT --force-close or bypass):
+#   - Gate failure that cannot be resolved autonomously
+#   - Migration-class work order (requires operator go before branch push)
+#   - Unresolved critical/high preflight findings (AD-7)
+#   - Force-close request (never allowed autonomously)
+#
+# GitHub path is gated on: github_repo configured + gh CLI authenticated.
+# When the GitHub path is absent, work order closes on local gates only (no PR).
+
+nodes:
+  - id: capability-probe
+    command: |
+      Run: py -m core.preflight.capability_probe
+      OR call is_github_usable() from core.preflight.capability_probe.
+
+      Output one line:
+        GITHUB: YES   — if github_repo configured and gh auth status returns 0
+        GITHUB: NO <reason>  — otherwise
+
+      Save the result for downstream nodes.
+    model: haiku
+    context: fresh
+    timeout_seconds: 30
+
+  - id: preflight-check
+    depends_on: [capability-probe]
+    command: |
+      Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
+      Check business_work_order_preflights for any open critical/high findings
+      for this work order (query or use ds tooling).
+
+      STOP CONDITIONS (halt + report, do not proceed):
+        - Any open critical severity finding
+        - Any open high severity finding
+
+      If STOPPED: print "PREFLIGHT_BLOCK: <finding summary>" and abort.
+      If CLEAR: print "PREFLIGHT: CLEAR" and continue.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 60
+
+  - id: migration-class-check
+    depends_on: [preflight-check]
+    command: |
+      Inspect the active work order's task list and description.
+      If any task title contains "migration" OR any task creates/drops a SQL table
+      OR modifies core/event_store/migrations/:
+
+        STOP — print "MIGRATION_CLASS: operator go required before push" and halt.
+        Do NOT create a branch or open a PR autonomously for migration-class work orders.
+
+      Otherwise print "MIGRATION_CLASS: clear" and continue.
+    model: haiku
+    context: fresh
+    timeout_seconds: 30
+
+  - id: implement-tasks
+    depends_on: [migration-class-check]
+    skill: build
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+    retry:
+      max: 1
+      backoff_seconds: 30
+    input: |
+      You are executing the active work order autonomously.
+      Read context.md for the active work order (under .planning/work-orders/<id>/context.md).
+      Implement each open task in order. After implementing each task, call:
+        py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>
+      Do not skip tasks. Do not mark a task done unless its acceptance criteria are verifiably met.
+
+  - id: run-gates
+    skill: verify
+    depends_on: [implement-tasks]
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+    input: |
+      Run the pre-push gate:
+        py core/gates/pre_push.py
+
+      If MIGRATION_RISK gate fires: HALT and report. Do not set MIGRATION_RISK_ACKNOWLEDGED autonomously
+      for migration-class work orders (those were filtered at migration-class-check).
+      For non-migration WOs that happen to touch migration files: HALT and report.
+
+      All other gate failures: attempt to fix (format → black, lint → fix new findings only).
+      If gates cannot be resolved in one pass: HALT and report.
+
+      Output: GATES: PASS or GATES: FAIL <reason>
+
+  - id: create-branch
+    depends_on: [run-gates]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{run-gates.output}} contains 'GATES: PASS'"
+    command: |
+      Derive a branch name from the active work order title:
+        Pattern: feat/wo-<short-id>-<kebab-slug> (e.g. feat/wo-abc12-preflight-layer)
+
+      Run: git checkout -b <branch>
+
+      Commit all staged and unstaged changes:
+        git add <relevant files>
+        git commit -m "<conventional commit message — one logical change per commit>"
+
+      Print: BRANCH: <branch-name>
+    model: haiku
+    context: fresh
+    timeout_seconds: 120
+
+  - id: push-and-pr
+    depends_on: [create-branch]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
+    command: |
+      Push: MIGRATION_RISK_ACKNOWLEDGED=1 git push -u origin <branch>  (only if migration files changed)
+             git push -u origin <branch>  (otherwise)
+
+      Check for PR template at .github/PULL_REQUEST_TEMPLATE.md.
+      Create PR: gh pr create --title "<title>" --body "<body using template>"
+
+      Print: PR: <PR-number> <URL>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
+
+  - id: watch-ci
+    depends_on: [push-and-pr]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
+    command: |
+      Run: gh pr checks <PR-number> --watch
+      Wait for all 3 platforms (ubuntu-latest, macos-latest, windows-latest) to show pass.
+
+      If any platform fails: HALT — print "CI_FAIL: <platform> failed" and abort.
+      If all pass: print "CI: ALL_GREEN"
+    model: haiku
+    context: fresh
+    timeout_seconds: 600
+
+  - id: merge
+    depends_on: [watch-ci]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{watch-ci.output}} contains 'CI: ALL_GREEN'"
+    command: |
+      Run: gh pr merge <PR-number> --squash --delete-branch
+      Run: git checkout main && git pull
+      Print: MERGED: <PR-number>
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
+
+  - id: close-work-order-github
+    depends_on: [merge]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
+    command: |
+      Write security-scan.md to .planning/work-orders/<id>/security-scan.md.
+      Run: py -m interfaces.cli.ds work-order close <work_order_id>
+      Print: WO_CLOSED: <work_order_id>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
+
+  - id: close-work-order-local
+    depends_on: [run-gates]
+    condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS'"
+    command: |
+      GitHub path is absent — close on local gates only (no PR/merge).
+      Write security-scan.md to .planning/work-orders/<id>/security-scan.md.
+      Run: py -m interfaces.cli.ds work-order close <work_order_id>
+      Print: WO_CLOSED_LOCAL: <work_order_id>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 120
+
+  - id: next-iteration
+    depends_on: [close-work-order-github, close-work-order-local]
+    trigger_rule: any_done
+    command: |
+      Run: py -m interfaces.cli.ds project state
+      Check next_work_order from the response.
+
+      If next_work_order exists and is unblocked:
+        Print: NEXT_WO: <work_order_id> — <title>
+        Instruction: Re-invoke `workflow: execute-work-orders` to continue the loop.
+      If no next_work_order or milestone complete:
+        Print: LOOP_DONE: milestone complete or no unblocked work orders remain.
+    model: haiku
+    context: fresh
+    timeout_seconds: 60
