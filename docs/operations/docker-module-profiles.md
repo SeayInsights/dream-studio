@@ -113,3 +113,5 @@ forbids host writes by default.
 
 <!-- 2026-06-06: WO-D dead discovery route removal — flake8-baseline.txt stale-entry cleanup. No docker module profile change; deleted routes were internal only with no Docker boundary impact. -->
 <!-- Last reviewed 2026-06-07 — WO-H hygiene & gate bookkeeping: flake8-baseline regenerated. No change to Docker module profiles or SQLite mount policy. -->
+
+<!-- Last reviewed 2026-06-07 — WO-N behavioral eval harness (18.8.3): full-ci.yml updated to add eval harness unit tests step. Step runs tests/evals/behavioral/test_eval_harness.py excluding TestLiveJudge (skipped in CI — requires functional claude -p subprocess). No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI-only, post-merge, ubuntu-latest. -->
