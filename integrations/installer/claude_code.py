@@ -101,11 +101,14 @@ def _collect_hook_file_ops(
     repo_root: Path,
     backup_base: Path,
 ) -> list[FileOp]:
-    """Return FileOps for hook scripts, meta handlers, and the .plugin-root sidecar.
+    """Return FileOps for hook scripts, all handler packs, and the two sidecars.
 
-    # TODO(arch): If hook deps grow beyond the sidecar threshold, switch to
-    # bundling a minimal DS package under hooks/ rather than relying on sys.path
-    # pointing back at the repo.
+    Two sidecars are written on every install (WO-RT self-containment):
+    - .plugin-root   → hooks_dir  (handler-file path resolution)
+    - .ds-source-root → repo_root (Python lib import fallback for core.*, spool.*, etc.)
+
+    This keeps handler-file resolution and lib-import resolution on separate paths.
+    A repo edit only takes effect after re-running install (re-projection).
     """
     from integrations.manifest import compute_hash as _compute_hash
 
@@ -163,14 +166,18 @@ def _collect_hook_file_ops(
             )
         )
 
-    # Meta handlers (all .py files except __init__.py)
-    meta_src_dir = source_root / "runtime" / "hooks" / "meta"
-    meta_tgt_dir = hooks_dir / "runtime" / "hooks" / "meta"
-    if meta_src_dir.is_dir():
-        for handler in sorted(meta_src_dir.glob("*.py")):
+    # Handler packs — all .py files (except __init__.py) for every active pack
+    # WO-RT: project ALL packs so every handler path resolves inside the installed runtime.
+    # Previously only meta/ was projected; quality/, domains/, core/, security/ were missing.
+    for pack in ("meta", "quality", "domains", "core", "security"):
+        pack_src_dir = source_root / "runtime" / "hooks" / pack
+        pack_tgt_dir = hooks_dir / "runtime" / "hooks" / pack
+        if not pack_src_dir.is_dir():
+            continue
+        for handler in sorted(pack_src_dir.glob("*.py")):
             if handler.name == "__init__.py":
                 continue
-            tgt = meta_tgt_dir / handler.name
+            tgt = pack_tgt_dir / handler.name
             file_hash = _compute_file_hash_chunked(handler)
             handler_content = handler.read_text(encoding="utf-8")
             ops.append(
@@ -180,14 +187,17 @@ def _collect_hook_file_ops(
                     backup_required=tgt.exists(),
                     source_hash=file_hash,
                     source_content=handler_content,
-                    reason=f"Install meta hook handler {handler.name}",
+                    reason=f"Install {pack} hook handler {handler.name}",
                     safety_notes="Handler for hook event dispatch.",
                     backup_path=backup_base if tgt.exists() else None,
                 )
             )
 
-    # Sidecar — written on every install so repo moves are self-healing
-    sidecar_content = str(repo_root) + "\n"
+    # .plugin-root — points at the INSTALLED hooks dir (not the repo working tree).
+    # WO-RT: changed from str(repo_root) to str(hooks_dir) so _get_plugin_root()
+    # in run.py and dispatch/hooks.py resolves handler paths inside the installed
+    # runtime. Re-run install after moving the repo or the installed hooks dir.
+    sidecar_content = str(hooks_dir) + "\n"
     sidecar_tgt = hooks_dir / ".plugin-root"
     ops.append(
         FileOp(
@@ -196,8 +206,27 @@ def _collect_hook_file_ops(
             backup_required=False,
             source_hash=_compute_hash(sidecar_content),
             source_content=sidecar_content,
-            reason="Write .plugin-root sidecar so installed hook scripts locate the DS repo",
-            safety_notes="Overwritten on every install — update when repo is moved by re-running install.",
+            reason="Write .plugin-root sidecar pointing at the installed hooks dir",
+            safety_notes="Overwritten on every install. Re-run install if hooks dir moves.",
+        )
+    )
+
+    # .ds-source-root — points at the repo working tree for Python lib imports.
+    # Handler scripts import from core.*, spool.*, canonical.* etc. which live
+    # in the repo. This sidecar lets run.py / dispatch/hooks.py append the repo
+    # to sys.path as a secondary entry (after the installed hooks dir), keeping
+    # lib resolution separate from handler-file resolution.
+    source_root_content = str(repo_root) + "\n"
+    source_root_tgt = hooks_dir / ".ds-source-root"
+    ops.append(
+        FileOp(
+            target=source_root_tgt,
+            op="create",
+            backup_required=False,
+            source_hash=_compute_hash(source_root_content),
+            source_content=source_root_content,
+            reason="Write .ds-source-root sidecar so handlers can import core/* from repo",
+            safety_notes="Overwritten on every install. Re-run install if repo moves.",
         )
     )
 

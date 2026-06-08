@@ -45,16 +45,28 @@ def _enforcement_check() -> str | None:
 
 
 def _get_plugin_root() -> Path:
-    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if env:
-        return Path(env).resolve()
+    # .plugin-root is the sole authoritative source — written on every install
+    # to point at the installed hooks dir (not the repo working tree). WO-RT
+    # removed CLAUDE_PLUGIN_ROOT and parents[N] fallbacks: both can resolve to
+    # the repo, defeating the self-containment guarantee.
     sidecar = Path(__file__).parent / ".plugin-root"
     if sidecar.is_file():
         try:
             return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
         except Exception:
             pass
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).parent.resolve()
+
+
+def _get_source_root() -> Path | None:
+    """Return the DS repo root for lib imports, or None if sidecar absent."""
+    sidecar = Path(__file__).parent / ".ds-source-root"
+    if sidecar.is_file():
+        try:
+            return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
+        except Exception:
+            pass
+    return None
 
 
 def _version_check() -> str | None:
@@ -139,6 +151,9 @@ def main() -> int:
         plugin_root = _get_plugin_root()
         if str(plugin_root) not in sys.path:
             sys.path.insert(0, str(plugin_root))
+        source_root = _get_source_root()
+        if source_root and str(source_root) not in sys.path:
+            sys.path.append(str(source_root))
 
         from emitters.claude_code.emitter import (
             normalize_post_compact,

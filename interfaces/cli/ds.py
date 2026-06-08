@@ -459,6 +459,10 @@ def main(argv: list[str] | None = None) -> int:
     wo_remove_dep = work_order_sub.add_parser("remove-dep", help="Remove a dependency edge")
     wo_remove_dep.add_argument("work_order_id", help="Work order UUID")
     wo_remove_dep.add_argument("depends_on_id", help="Dependency target UUID")
+    wo_next = work_order_sub.add_parser(
+        "next", help="Show next unblocked work order for a project (ready-set selector)"
+    )
+    wo_next.add_argument("project_id", help="Project UUID")
 
     # design-brief subcommand group (Slice 7a)
     design_brief_cmd = subcommands.add_parser("design-brief", help="Manage project design briefs")
@@ -1964,6 +1968,12 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "next":
+        return _work_order_next(
+            project_id=args.project_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
 
@@ -2346,6 +2356,23 @@ def _work_order_remove_dep(
     result = remove_dependency(
         work_order_id=work_order_id,
         depends_on_id=depends_on_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+def _work_order_next(
+    *,
+    project_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.projects.queries import get_next_work_order
+
+    result = get_next_work_order(
+        project_id=project_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
