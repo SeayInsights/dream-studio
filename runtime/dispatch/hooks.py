@@ -16,23 +16,33 @@ before calling this dispatcher. This module contains no tool-specific logic.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
 
 def _get_plugin_root() -> Path:
-    env = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if env:
-        return Path(env).resolve()
-    # Installed to ~/.claude/hooks/dispatch/ — sidecar is one level up in hooks/
+    # Installed to ~/.claude/hooks/dispatch/ — sidecar is one level up in hooks/.
+    # .plugin-root is the sole authoritative source — written on every install to
+    # point at the installed hooks dir. WO-RT removed CLAUDE_PLUGIN_ROOT and
+    # parents[N] fallbacks that could resolve to the repo working tree.
     sidecar = Path(__file__).parent.parent / ".plugin-root"
     if sidecar.is_file():
         try:
             return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
         except Exception:
             pass
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).parent.parent.resolve()
+
+
+def _get_source_root() -> Path | None:
+    """Return the DS repo root for lib imports, or None if sidecar absent."""
+    sidecar = Path(__file__).parent.parent / ".ds-source-root"
+    if sidecar.is_file():
+        try:
+            return Path(sidecar.read_text(encoding="utf-8").strip()).resolve()
+        except Exception:
+            pass
+    return None
 
 
 def _h(plugin_root: Path, pack: str, name: str) -> tuple[str, Path]:
@@ -84,6 +94,9 @@ def main() -> int:
         plugin_root = _get_plugin_root()
         if str(plugin_root) not in sys.path:
             sys.path.insert(0, str(plugin_root))
+        source_root = _get_source_root()
+        if source_root and str(source_root) not in sys.path:
+            sys.path.append(str(source_root))
 
         import control.execution.dispatch_tracking as _dt  # noqa: PLC0415
 
