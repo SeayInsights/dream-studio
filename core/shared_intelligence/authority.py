@@ -78,6 +78,12 @@ def record_artifact_authority(conn: sqlite3.Connection, **values: Any) -> None:
 
 
 def record_learning_event(conn: sqlite3.Connection, **values: Any) -> None:
+    # Superseded by Phase 19 friction/gap pipeline (WO-LEARN). The pipeline
+    # captures learning signals automatically via FrictionSignalHarvester +
+    # GapClassifier at end_session(). This function writes to
+    # learning_event_records (Shared Intelligence subsystem) which is
+    # separate from ds_friction_signals; it remains callable for legacy
+    # SI workflows but should not be wired into the Phase 19 loop.
     require_shared_intelligence_tables(conn)
     conn.execute(
         """

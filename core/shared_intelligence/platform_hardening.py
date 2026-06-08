@@ -338,6 +338,11 @@ def skill_evaluation_harness_status(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def record_skill_evaluation(conn: sqlite3.Connection, **values: Any) -> None:
+    # Superseded by Phase 19 gap/expansion pipeline (WO-LEARN). Skill
+    # performance signals are now captured by FrictionSignalHarvester and
+    # promoted by RetroactiveValidator via ds_user_extensions. This function
+    # writes to skill_evaluation_runs (Shared Intelligence subsystem); it
+    # remains callable for SI workflows but is not wired into end_session().
     _require_table(conn, "skill_evaluation_runs")
     conn.execute(
         """
