@@ -147,12 +147,79 @@ def split_statements(sql_text: str) -> list[str]:
     return statements
 
 
-def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = None) -> int:
+def pending_migrations_info() -> list[dict]:
+    """Return metadata for merged-but-not-activated migrations.
+
+    Pending = version > released_migration_version() AND <= latest_migration_version().
+    These are merged to repo/HEAD but not yet activated on the live authority DB.
+    """
+    released = released_migration_version()
+    pending = []
+    for path in migration_files():
+        version = _migration_version(path)
+        if version > released:
+            stem = path.stem
+            parts = stem.split("_", 1)
+            description = parts[1].replace("_", " ") if len(parts) > 1 else stem
+            pending.append({"version": version, "filename": path.name, "description": description})
+    return pending
+
+
+def activate_pending_migrations(db_path: Path | None = None) -> dict:
+    """Apply pending-activation migrations to the live authority DB.
+
+    Operator-invoked ONLY via ``ds migrate activate``. Bumps .released_version
+    to the latest merged migration after successful apply.
+    """
+    if db_path is None:
+        db_path = Path.home() / ".dream-studio" / "state" / "studio.db"
+
+    pending = pending_migrations_info()
+    if not pending:
+        released = released_migration_version()
+        return {
+            "ok": True,
+            "applied": [],
+            "released_version": released,
+            "schema_version": released,
+            "message": "No pending migrations.",
+        }
+
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    try:
+        new_version = run_migrations(conn, apply_unreleased=True)
+    finally:
+        conn.close()
+
+    latest = latest_migration_version()
+    rv_path = migrations_dir() / ".released_version"
+    rv_path.write_text(str(latest), encoding="utf-8")
+
+    return {
+        "ok": True,
+        "applied": pending,
+        "schema_version": new_version,
+        "released_version": latest,
+    }
+
+
+def run_migrations(
+    conn: sqlite3.Connection,
+    *,
+    target_version: int | None = None,
+    apply_unreleased: bool | None = None,
+) -> int:
     """Apply pending repo migrations and return the resulting schema version.
 
     Safety guards (see module docstring):
     - Unreleased migrations (version > released_migration_version()) are skipped
-      on the live authority DB unless DREAM_STUDIO_APPLY_UNRELEASED=1 is set.
+      on the live authority DB unless DREAM_STUDIO_APPLY_UNRELEASED=1 is set or
+      apply_unreleased=True is passed explicitly.
     - The live DB is snapshotted to ~/.dream-studio/state/backups/ before the
       first new migration applies.
     """
@@ -183,7 +250,8 @@ def run_migrations(conn: sqlite3.Connection, *, target_version: int | None = Non
     db_file: str = db_row[2] if db_row else ""
     live = _is_live_authority_db(db_file)
     released = released_migration_version()
-    apply_unreleased = bool(os.environ.get("DREAM_STUDIO_APPLY_UNRELEASED"))
+    if apply_unreleased is None:
+        apply_unreleased = bool(os.environ.get("DREAM_STUDIO_APPLY_UNRELEASED"))
     backup_taken = False
 
     for path in files:

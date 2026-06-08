@@ -214,6 +214,28 @@ def main(argv: list[str] | None = None) -> int:
     migration_mode.add_argument("--dry-run", action="store_true", default=True)
     migration_mode.add_argument("--execute", action="store_true", default=False)
 
+    migrate_cmd = subcommands.add_parser(
+        "migrate", help="Manage migration activation state on the live authority DB"
+    )
+    migrate_sub = migrate_cmd.add_subparsers(dest="migrate_subcommand", required=True)
+    migrate_sub.add_parser("status", help="Show merged-but-not-activated migrations")
+    migrate_activate_cmd = migrate_sub.add_parser(
+        "activate",
+        help="Apply pending-activation migrations (operator-invoked; creates backup first)",
+    )
+    migrate_activate_cmd.add_argument(
+        "--db-path",
+        default=None,
+        dest="db_path",
+        help="Override live DB path (default: ~/.dream-studio/state/studio.db)",
+    )
+    migrate_activate_cmd.add_argument(
+        "--confirm",
+        action="store_true",
+        default=False,
+        help="Skip interactive confirmation prompt and apply immediately",
+    )
+
     repair_adapters = subcommands.add_parser(
         "repair-adapters", help="Plan or repair Dream-Studio-owned adapter surfaces"
     )
@@ -648,6 +670,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "validate":
             return _print(_validate_status(source_root=source_root, dream_studio_home=home))
+        if args.command == "migrate":
+            return _migrate_command(args)
         if args.command == "modules":
             return _print(module_profiles())
         if args.command in {"adapters", "router"}:
@@ -1433,6 +1457,49 @@ def _validate_status(*, source_root: Path, dream_studio_home: Path | None) -> di
     from core.health.validate import run_validation
 
     return run_validation(source_root=source_root, dream_studio_home=dream_studio_home)
+
+
+def _migrate_command(args: "argparse.Namespace") -> int:
+    from core.config.sqlite_bootstrap import activate_pending_migrations, pending_migrations_info
+
+    if args.migrate_subcommand == "status":
+        pending = pending_migrations_info()
+        if not pending:
+            return _print(
+                {"ok": True, "pending_count": 0, "message": "All merged migrations are activated."}
+            )
+        return _print(
+            {
+                "ok": True,
+                "pending_count": len(pending),
+                "message": (
+                    f"{len(pending)} merged migration(s) await activation on the live authority."
+                    " Run `ds migrate activate --confirm` to apply."
+                ),
+                "pending_migrations": pending,
+            }
+        )
+
+    if args.migrate_subcommand == "activate":
+        pending = pending_migrations_info()
+        if not pending:
+            return _print(
+                {"ok": True, "applied": [], "message": "No pending migrations to activate."}
+            )
+
+        if not getattr(args, "confirm", False):
+            print(f"\n  {len(pending)} migration(s) will be applied to the live authority DB:\n")
+            for m in pending:
+                print(f"    [{m['version']}] {m['description']}")
+            print("\n  A backup will be created before applying.")
+            print("  Re-run with --confirm to proceed.\n")
+            return 0
+
+        db_path = Path(args.db_path).resolve() if getattr(args, "db_path", None) else None
+        result = activate_pending_migrations(db_path)
+        return _print(result)
+
+    return 1
 
 
 def _project_dispatch(
