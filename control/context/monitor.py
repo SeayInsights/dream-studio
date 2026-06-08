@@ -166,10 +166,68 @@ def handle_urgent_reminder(projects: Path, session_id: str | None, label: str) -
     print(f"\n[dream-studio] Context at {label} — urgent; run /compact now.\n", flush=True)
 
 
+def _write_handoff_packet_to_db(session_id: str | None, cwd: Path) -> int | None:
+    """Insert a handoff packet into raw_handoffs and write a thin pending-handoff.json pointer.
+
+    Returns the handoff_id on success, None on failure. Never raises.
+    """
+    try:
+        import subprocess as _sp
+        import time as _time
+
+        from core.event_store.studio_db import insert_handoff
+        from core.sdlc.cwd_resolver import resolve_project_from_cwd
+
+        ctx = resolve_project_from_cwd()
+        project_id = ctx.project_id if ctx is not None else "unknown"
+        sid = session_id or "unknown"
+
+        branch = ""
+        try:
+            result = _sp.run(
+                ["git", "branch", "--show-current"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            branch = result.stdout.strip()
+        except Exception:
+            pass
+
+        handoff_id = insert_handoff(
+            sid,
+            project_id,
+            "context threshold handoff",
+            branch=branch or None,
+            next_action="invoke ds-project:resume to rehydrate work order context",
+        )
+        if handoff_id is None:
+            return None
+
+        state_dir = paths.state_dir()
+        pending = state_dir / "pending-handoff.json"
+        pending.write_text(
+            __import__("json").dumps(
+                {
+                    "handoff_id": handoff_id,
+                    "session_id": sid,
+                    "triggered_at": _time.time(),
+                    "status": "pending",
+                    "cwd": str(cwd),
+                }
+            ),
+            encoding="utf-8",
+        )
+        return handoff_id
+    except Exception:
+        return None
+
+
 def handle_handoff(
     projects: Path, session_id: str | None, cwd: Path, label: str, kb_val: float, using_pct: bool
 ) -> None:
-    """Write handoff and recap documents."""
+    """Write handoff to authority DB and markdown docs."""
     handoff_sentinel = sentinel(projects, session_id, "handoff")
     if not handoff_sentinel.exists():
         try:
@@ -177,6 +235,7 @@ def handle_handoff(
             handoff_sentinel.write_text(label)
         except Exception:
             pass
+        _write_handoff_packet_to_db(session_id, cwd)
         handoff_path = write_handoff(cwd, kb_val, session_id, is_pct=using_pct)
         write_recap(cwd, kb_val, session_id, handoff_path)
         draft_handoff_lesson(kb_val, git_context(cwd), session_id, is_pct=using_pct)

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## feat(wo-hs2) — Context-pressure handoff wired to authority DB (2026-06-08)
+
+### Changed
+- `control/context/monitor.py`: `handle_handoff()` now calls `_write_handoff_packet_to_db()` which inserts a packet into `raw_handoffs` via `insert_handoff()` and writes a thin `pending-handoff.json` pointer `{handoff_id, triggered_at}`.
+- `runtime/hooks/meta/on-context-threshold.py`: "handoff" and "compact" bands now dispatched separately — "handoff" calls `monitor.handle_handoff()` instead of `handle_compact_warning()`.
+- `runtime/hooks/meta/on-stop-dispatch.py`: `_dispatch_handoff_continuation()` reads `pending-handoff.json` (pointer only) and spawns `claude "resume:"` — no handoff content in argv. File `handoff-latest.json` no longer used as content carrier.
+- `runtime/hooks/meta/on-prompt-validate.py`: `_check_pending_handoff()` instruction updated — no longer asks Claude to write content to `handoff-latest.json`; tells Claude to notify user a continuation session is being prepared.
+- `interfaces/cli/resume_from_handoff.py`: `find_latest_handoff_db()` calls `mark_handoff_consumed()` after loading to prevent re-spawning.
+
+### Added
+- `tests/unit/test_wo_hs2_handoff_authority.py`: 12 unit tests covering DB write, band dispatch, reference-only spawn, stale pointer cleanup, and consumed marking.
+
 ## migration(wo-m) — Dual-canonical authority cutover (2026-06-07)
 
 ### Changed

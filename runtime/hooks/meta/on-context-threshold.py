@@ -118,7 +118,10 @@ def main() -> None:
 
     if band == "urgent":
         monitor.handle_urgent_reminder(projects, session_id, label)
-    elif band in ("handoff", "compact"):
+    elif band == "handoff":
+        kb_val = bridge_pct if using_pct else kb
+        monitor.handle_handoff(projects, session_id, cwd, label, kb_val, using_pct)
+    elif band == "compact":
         monitor.handle_compact_warning(projects, session_id, label)
     elif band == "warn":
         monitor.handle_warn(projects, session_id, label, bridge_pct if using_pct else None)
