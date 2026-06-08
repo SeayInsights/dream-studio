@@ -128,6 +128,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
 
     wo_result = create_work_order(
         project_id=PROJECT_ID,
+        milestone_id=MILESTONE_ID,
         title="Plan work order",
         work_order_type="documentation",
         source_root=REPO_ROOT,
@@ -329,3 +330,38 @@ def test_eval_handoff_contract() -> None:
             "fail",
             "incomplete",
         }, f"Invalid pass_fail value for {key}: {eval_result['pass_fail']}"
+
+
+# ── eval_milestone_guard ───────────────────────────────────────────────────────
+
+
+def test_eval_create_wo_rejects_null_milestone(patched_paths, tmp_path: Path) -> None:
+    """create_work_order() with milestone_id=None must return ok=False."""
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id=PROJECT_ID,
+        milestone_id=None,
+        title="Should fail",
+        work_order_type="documentation",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "milestone_id" in result.get("error", "")
+
+
+def test_eval_create_wo_rejects_dangling_milestone(patched_paths, tmp_path: Path) -> None:
+    """create_work_order() with a non-existent milestone_id must return ok=False."""
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id=PROJECT_ID,
+        milestone_id="00000000-0000-0000-0000-000000000000",
+        title="Should fail",
+        work_order_type="documentation",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "Milestone not found" in result.get("error", "")

@@ -542,3 +542,124 @@ def test_in_progress_wo_not_blocked_by_dependency(tmp_path):
 
     selected = _get_next(db_path, pid)
     assert selected == in_progress_id
+
+
+# ---------------------------------------------------------------------------
+# Migration 110 — referential integrity backfill
+# ---------------------------------------------------------------------------
+
+
+def test_migration_110_table_exists(tmp_path: Path) -> None:
+    """After bootstrap, the migration-110 DDL changes are applied (no new table,
+    but the migration runs without error and does not break the schema)."""
+    db_path = _make_db(tmp_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        # business_milestones must still exist
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='business_milestones'"
+        ).fetchone()
+        assert row is not None, "business_milestones table missing after bootstrap"
+    finally:
+        conn.close()
+
+
+def test_migration_110_null_milestone_reassigned(tmp_path: Path) -> None:
+    """A WO with milestone_id=NULL is reassigned to the project's earliest milestone
+    when migration 110 runs (simulated via direct SQL matching migration logic)."""
+    db_path = _make_db(tmp_path)
+    pid = str(uuid.uuid4())
+    mid = str(uuid.uuid4())
+    wo_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, 'P', '', 'active', ?, ?)",
+            (pid, NOW_A, NOW_A),
+        )
+        conn.execute(
+            "INSERT INTO business_milestones (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, 'M1', 'active', 0, ?, ?)",
+            (mid, pid, NOW_A, NOW_A),
+        )
+        # WO with NULL milestone_id (pre-migration state)
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, NULL, 'Orphan WO', 'created', 'documentation', ?, ?)",
+            (wo_id, pid, NOW_A, NOW_A),
+        )
+        conn.commit()
+
+        # Run migration 110 UPDATE logic
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET milestone_id = ("
+            "   SELECT m.milestone_id FROM business_milestones m"
+            "   WHERE m.project_id = business_work_orders.project_id"
+            "   ORDER BY m.order_index ASC, m.created_at ASC LIMIT 1"
+            " ) WHERE milestone_id IS NULL"
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT milestone_id FROM business_work_orders WHERE work_order_id = ?", (wo_id,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == mid, f"Expected milestone_id={mid}, got {row[0]}"
+    finally:
+        conn.close()
+
+
+def test_migration_110_dangling_milestone_reassigned(tmp_path: Path) -> None:
+    """A WO with a dangling milestone_id (not in business_milestones) is reassigned
+    to the project's earliest milestone when migration 110 runs."""
+    db_path = _make_db(tmp_path)
+    pid = str(uuid.uuid4())
+    mid = str(uuid.uuid4())
+    ghost_mid = str(uuid.uuid4())
+    wo_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "INSERT INTO business_projects (project_id, name, description, status, created_at, updated_at)"
+            " VALUES (?, 'P', '', 'active', ?, ?)",
+            (pid, NOW_A, NOW_A),
+        )
+        conn.execute(
+            "INSERT INTO business_milestones (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, 'M1', 'active', 0, ?, ?)",
+            (mid, pid, NOW_A, NOW_A),
+        )
+        # WO with a milestone_id that doesn't exist in business_milestones
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Dangling WO', 'created', 'documentation', ?, ?)",
+            (wo_id, pid, ghost_mid, NOW_A, NOW_A),
+        )
+        conn.commit()
+
+        # Run migration 110 dangling UPDATE logic
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET milestone_id = ("
+            "   SELECT m.milestone_id FROM business_milestones m"
+            "   WHERE m.project_id = business_work_orders.project_id"
+            "   ORDER BY m.order_index ASC, m.created_at ASC LIMIT 1"
+            " )"
+            " WHERE milestone_id IS NOT NULL"
+            " AND NOT EXISTS ("
+            "   SELECT 1 FROM business_milestones m WHERE m.milestone_id = business_work_orders.milestone_id"
+            " )"
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT milestone_id FROM business_work_orders WHERE work_order_id = ?", (wo_id,)
+        ).fetchone()
+        assert row is not None
+        assert row[0] == mid, f"Expected milestone_id={mid}, got {row[0]}"
+    finally:
+        conn.close()

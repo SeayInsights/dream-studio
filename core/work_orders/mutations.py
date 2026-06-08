@@ -378,6 +378,9 @@ def create_work_order(
         {"ok": False, "error": "Project not found: <id>"}
     """
 
+    if milestone_id is None:
+        return {"ok": False, "error": "milestone_id is required: every work order must belong to a milestone"}
+
     db_path = _require_db(source_root, dream_studio_home)
     work_order_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -388,6 +391,12 @@ def create_work_order(
         ).fetchone()
         if row is None:
             return {"ok": False, "error": f"Project not found: {project_id}"}
+        ms_row = conn.execute(
+            "SELECT milestone_id FROM business_milestones WHERE milestone_id = ?",
+            (milestone_id,),
+        ).fetchone()
+        if ms_row is None:
+            return {"ok": False, "error": f"Milestone not found: {milestone_id}"}
 
     try:
         import spool.writer as _spool_writer
