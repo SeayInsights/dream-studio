@@ -172,8 +172,12 @@ def run_gate_check(
         if "VERDICT: PASS" not in content.upper().replace(" ", "").replace("\n", ""):
             # Accept both "VERDICT: PASS" and "VERDICT:PASS"
             import re as _re
+
             if not _re.search(r"VERDICT\s*:\s*PASS", content, _re.IGNORECASE):
-                return False, "independent_review_passed: independent-review.md does not contain 'VERDICT: PASS'"
+                return (
+                    False,
+                    "independent_review_passed: independent-review.md does not contain 'VERDICT: PASS'",
+                )
         return True, ""
 
     return True, ""
