@@ -449,6 +449,13 @@ def main() -> None:
     except ImportError:
         logger.warning("PreflightProjection not found — skipping spine registration.")
 
+    try:
+        from core.projections.findings_projection import FindingsProjection
+
+        runner.register_spine(FindingsProjection())
+    except ImportError:
+        logger.warning("FindingsProjection not found — skipping spine registration.")
+
     runner.run()
 
 

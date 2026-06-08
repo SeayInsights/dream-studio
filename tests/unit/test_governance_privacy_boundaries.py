@@ -72,9 +72,10 @@ CANONICAL_AUTHORITY_TABLES = {
 
 SCANNER_EVIDENCE_TABLES = {
     "activity_log",
-    "sec_sarif_findings",
-    "sec_cve_matches",
-    "sec_manual_reviews",
+    # sec_sarif_findings / sec_cve_matches / sec_manual_reviews retired in migration 112 (WO-Y).
+    # Scanner evidence now lands on the security_events spine + findings_current_status.
+    "security_events",
+    "findings_current_status",
 }
 
 AUTHORITY_RESIDUE_TOKENS = {
@@ -204,9 +205,7 @@ def test_scanner_outputs_write_only_security_evidence_surfaces():
         REPO_ROOT / "runtime" / "hooks" / "quality" / "on-security-scan.py",
     )
 
-    assert writes == [
-        ("projections/parsers/sarif_parser.py", "INSERT INTO", "sec_sarif_findings"),
-    ]
+    assert writes == []
 
     offenders = [
         f"{rel_path}: {operation} {table}"

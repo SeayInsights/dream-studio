@@ -27,8 +27,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Security Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": "security-scanners",
-        "owns_tables": ["findings"],
-        "source_tables": ["execution_events", "findings"],
+        "owns_tables": ["security_events", "findings_current_status"],
+        "source_tables": ["execution_events", "security_events", "findings_current_status"],
         "dashboard_cards": ["findings_by_severity", "findings_by_file", "component_attribution"],
         "drilldown_paths": ["project", "milestone", "task", "process_run", "file_line", "finding"],
         "empty_state": "No security findings recorded for the selected scope.",
@@ -416,62 +416,64 @@ def record_token_usage(conn: sqlite3.Connection, **values: Any) -> None:
 
 
 def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO findings (
-            finding_id, project_id, milestone_id, task_id, scan_id, process_run_id,
-            severity, category, rule_id, file_path, start_line, end_line,
-            description, recommendation, status, introduced_by_agent_id,
-            introduced_by_skill_id, introduced_by_workflow_id, introduced_by_hook_id,
-            evidence_refs_json
-        ) VALUES (
-            :finding_id, :project_id, :milestone_id, :task_id, :scan_id, :process_run_id,
-            :severity, :category, :rule_id, :file_path, :start_line, :end_line,
-            :description, :recommendation, :status, :introduced_by_agent_id,
-            :introduced_by_skill_id, :introduced_by_workflow_id, :introduced_by_hook_id,
-            :evidence_refs_json
+    # findings table retired in migration 112 (WO-Y). Write to security_events spine.
+    try:
+        from core.findings.mutations import _now
+
+        conn.execute(
+            """INSERT OR IGNORE INTO security_events
+               (event_id, parent_event_id, event_kind, correlation_id,
+                project_id, work_order_id, scanner_type,
+                cwe_id, file_path, line_number, vuln_class,
+                severity, title, body, created_at)
+               VALUES (?, NULL, 'finding.recorded', ?,
+                       ?, ?, NULL,
+                       NULL, ?, ?, ?,
+                       ?, ?, ?, ?)""",
+            (
+                values["finding_id"],
+                values.get("process_run_id"),
+                values.get("project_id"),
+                values.get("work_order_id") or values.get("task_id"),
+                values.get("file_path"),
+                values.get("start_line"),
+                values.get("rule_id") or values.get("category"),
+                values["severity"],
+                values.get("description", ""),
+                values.get("recommendation"),
+                _now(),
+            ),
         )
-        """,
-        {
-            "finding_id": values["finding_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "scan_id": values.get("scan_id"),
-            "process_run_id": values.get("process_run_id"),
-            "severity": values["severity"],
-            "category": values.get("category"),
-            "rule_id": values.get("rule_id"),
-            "file_path": values.get("file_path"),
-            "start_line": values.get("start_line"),
-            "end_line": values.get("end_line"),
-            "description": values["description"],
-            "recommendation": values.get("recommendation"),
-            "status": values.get("status", "open"),
-            "introduced_by_agent_id": values.get("introduced_by_agent_id"),
-            "introduced_by_skill_id": values.get("introduced_by_skill_id"),
-            "introduced_by_workflow_id": values.get("introduced_by_workflow_id"),
-            "introduced_by_hook_id": values.get("introduced_by_hook_id"),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
+    except Exception:
+        pass
 
 
 def resolve_security_finding(
     conn: sqlite3.Connection, *, finding_id: str, resolution: str | None = None
 ) -> bool:
-    """Update findings.status for a resolved finding.
+    """Record a finding.status_changed event on the security_events spine.
 
-    Returns True if the row was found and updated, False if not found.
+    findings table retired in migration 112 (WO-Y); status changes are now
+    spine events written via set_finding_status().
+    Returns True if the finding exists in findings_current_status.
     """
     valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
-    cursor = conn.execute(
-        "UPDATE findings SET status = ? WHERE finding_id = ?",
-        (new_status, finding_id),
-    )
-    return cursor.rowcount > 0
+    try:
+        from core.findings.mutations import set_finding_status
+
+        row = conn.execute(
+            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?",
+            (finding_id,),
+        ).fetchone()
+        if row is None:
+            return False
+        set_finding_status(
+            finding_id, new_status, project_id=None, reason=None, correlation_id=None, db_path=None
+        )
+        return True
+    except Exception:
+        return False
 
 
 def record_route_decision(conn: sqlite3.Connection, **values: Any) -> None:
@@ -744,13 +746,16 @@ def token_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def findings_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-
-    return conn.execute("""
-        SELECT project_id, file_path, severity, COUNT(*) AS finding_count
-        FROM findings
-        GROUP BY project_id, file_path, severity
-        ORDER BY finding_count DESC, severity, file_path
-        """).fetchall()
+    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    try:
+        return conn.execute("""
+            SELECT project_id, file_path, severity, COUNT(*) AS finding_count
+            FROM findings_current_status
+            GROUP BY project_id, file_path, severity
+            ORDER BY finding_count DESC, severity, file_path
+            """).fetchall()
+    except Exception:
+        return []
 
 
 def dashboard_module_declarations() -> tuple[dict[str, Any], ...]:

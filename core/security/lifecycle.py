@@ -389,9 +389,12 @@ def _split_scan_ids(raw: str) -> list[str]:
 
 
 def _security_open_finding_count(conn: sqlite3.Connection, *, project_id: str) -> int:
+    # Read from findings_current_status (spine read-model, WO-Y / AD-10).
+    # Falls back to 0 if the table is absent (pre-migration installs).
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM findings WHERE project_id = ? AND status = 'open'",
+            "SELECT COUNT(*) FROM findings_current_status"
+            " WHERE project_id = ? AND current_status = 'open'",
             (project_id,),
         ).fetchone()
         return int(row[0] if row else 0)

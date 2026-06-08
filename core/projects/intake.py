@@ -293,51 +293,40 @@ def persist_security_findings(
         return 0
 
     db_path = _require_db()
-    now = _now()
     written = 0
     severity_counts: dict[str, int] = {}
 
-    with _connect(db_path) as conn:
-        for f in findings:
-            severity = str(f.get("severity", "medium")).lower()
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
+    # findings table retired in migration 112 (WO-Y). Write to security_events spine.
+    from core.findings.mutations import record_finding as _record_finding
 
-            # Compute structural hash for delta computation
-            rule_id = f.get("rule_id") or ""
-            file_path = f.get("file_path") or ""
-            code_excerpt = f.get("code_excerpt") or f.get("excerpt") or ""
-            norm_snippet = _normalize_snippet(code_excerpt)
-            fhash = compute_finding_hash(rule_id, file_path, code_excerpt)
+    for f in findings:
+        severity = str(f.get("severity", "medium")).lower()
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
-            conn.execute(
-                """INSERT OR IGNORE INTO findings
-                   (finding_id, project_id, scan_id, severity, category,
-                    rule_id, file_path, start_line, end_line, description,
-                    recommendation, finding_hash, normalized_snippet,
-                    code_excerpt, enclosing_symbol, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)""",
-                (
-                    str(uuid.uuid4()),
-                    project_id,
-                    scan_id,
-                    severity,
-                    f.get("category"),
-                    rule_id,
-                    file_path or None,
-                    f.get("start_line"),
-                    f.get("end_line"),
-                    str(f.get("description", "")),
-                    f.get("recommendation"),
-                    fhash,
-                    norm_snippet or None,
-                    code_excerpt or None,
-                    f.get("enclosing_symbol"),
-                    now,
-                    now,
-                ),
+        rule_id = f.get("rule_id") or ""
+        file_path = f.get("file_path") or ""
+
+        try:
+            _record_finding(
+                project_id=project_id,
+                work_order_id=None,
+                severity=severity,
+                title=str(f.get("description", "")),
+                body=f.get("recommendation"),
+                file_path=file_path or None,
+                line_number=f.get("start_line"),
+                scanner_type=None,
+                cwe_id=None,
+                owasp_category=None,
+                cve_id=None,
+                vuln_class=rule_id or f.get("category") or None,
+                exploitability=None,
+                correlation_id=scan_id,
+                db_path=db_path,
             )
-            written += conn.execute("SELECT changes()").fetchone()[0]
-        conn.commit()
+            written += 1
+        except Exception:
+            pass
 
     _complete_scan_run(scan_id, findings_count=written, severity_counts=severity_counts)
     return written
@@ -471,10 +460,14 @@ def get_scan_summary(project_id: str) -> dict[str, Any]:
                 (project_id,),
             ).fetchall()
             finding_rows = conn.execute(
-                """SELECT rule_id, severity, file_path, start_line, description, status
-                   FROM findings
-                   WHERE project_id = ?
-                   ORDER BY severity DESC, created_at DESC""",
+                # findings retired migration 112 (WO-Y); read from spine read-model.
+                """SELECT COALESCE(se.vuln_class,'') AS rule_id, fcs.severity,
+                          fcs.file_path, fcs.line_number AS start_line,
+                          COALESCE(fcs.title,'') AS description, fcs.current_status AS status
+                   FROM findings_current_status fcs
+                   LEFT JOIN security_events se ON se.event_id = fcs.finding_id
+                   WHERE fcs.project_id = ?
+                   ORDER BY fcs.severity DESC, fcs.created_at DESC""",
                 (project_id,),
             ).fetchall()
         return {

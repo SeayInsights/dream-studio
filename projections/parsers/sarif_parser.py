@@ -1,7 +1,7 @@
 """SARIF file parser for security findings.
 
 Parses SARIF 2.1.0 format files from security scanning tools (Semgrep, Bandit, Trivy, etc.)
-and writes findings to the analytics database (sec_sarif_findings) and emits canonical events.
+and writes findings to the security_events spine via record_finding() (AD-6 / WO-Y).
 
 Usage:
     from projections.parsers.sarif_parser import parse_sarif_file
@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -25,11 +24,7 @@ _project_root = Path(__file__).resolve().parents[2]
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from core.event_store import studio_db  # noqa: E402
-from core.config.database import transaction  # noqa: E402
-from canonical.events.envelope import CanonicalEventEnvelope  # noqa: E402
-from canonical.events.types import EventType as _CanonicalEventType  # noqa: E402
-from emitters.shared.spool_writer import write_envelopes as _write_envelopes  # noqa: E402
+from core.findings.mutations import record_finding as _record_finding  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -133,36 +128,33 @@ def _normalize_severity(sarif_level: str) -> str:
     return SARIF_TO_FINDING_SEVERITY.get(sarif_level.lower(), "medium")
 
 
-def _check_duplicate(conn, rule_id: str, file_path: str, line_number: Optional[int]) -> bool:
-    """Check if a finding already exists in the database.
+def _check_duplicate(rule_id: str, file_path: str, line_number: Optional[int]) -> bool:
+    """Check if a finding already exists in security_events.
 
     Deduplication logic: same rule_id + file_path + line_number = duplicate.
-
-    Args:
-        conn: SQLite connection
-        rule_id: Tool-specific rule identifier
-        file_path: File path where finding was detected
-        line_number: Line number (nullable)
-
-    Returns:
-        True if duplicate exists, False otherwise
+    Reads from the security_events spine (vuln_class stores rule_id for SARIF findings).
     """
-    query = """
-        SELECT 1 FROM sec_sarif_findings
-        WHERE rule_id = ? AND file_path = ?
-    """
-    params = [rule_id, file_path]
+    try:
+        from core.config.database import get_connection
 
-    if line_number is not None:
-        query += " AND line_number = ?"
-        params.append(line_number)
-    else:
-        query += " AND line_number IS NULL"
-
-    query += " LIMIT 1"
-
-    result = conn.execute(query, params).fetchone()
-    return result is not None
+        with get_connection(read_only=True) as conn:
+            if line_number is not None:
+                row = conn.execute(
+                    "SELECT 1 FROM security_events"
+                    " WHERE event_kind = 'finding.recorded'"
+                    "   AND vuln_class = ? AND file_path = ? AND line_number = ? LIMIT 1",
+                    (rule_id, file_path, line_number),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT 1 FROM security_events"
+                    " WHERE event_kind = 'finding.recorded'"
+                    "   AND vuln_class = ? AND file_path = ? AND line_number IS NULL LIMIT 1",
+                    (rule_id, file_path),
+                ).fetchone()
+            return row is not None
+    except Exception:
+        return False  # Fail-open: if check errors, allow the insert attempt.
 
 
 def parse_sarif_file(file_path: str) -> int:
@@ -212,120 +204,86 @@ def parse_sarif_file(file_path: str) -> int:
     skipped_duplicates = 0
     skipped_malformed = 0
 
-    with transaction() as conn:
-        for run_idx, run in enumerate(sarif_data["runs"]):
-            # Extract tool name
-            tool_name = "unknown"
-            if "tool" in run and "driver" in run["tool"]:
-                driver = run["tool"]["driver"]
-                tool_name = driver.get("name", "unknown")
+    for run_idx, run in enumerate(sarif_data["runs"]):
+        # Extract tool name
+        tool_name = "unknown"
+        if "tool" in run and "driver" in run["tool"]:
+            driver = run["tool"]["driver"]
+            tool_name = driver.get("name", "unknown")
 
-            # Process results
-            results = run.get("results", [])
+        # Process results
+        results = run.get("results", [])
 
-            for result_idx, result in enumerate(results):
-                try:
-                    # Extract required fields
-                    rule_id = result.get("ruleId")
-                    if not rule_id:
-                        logger.warning(
-                            f"Skipping result {result_idx} in run {run_idx}: missing ruleId"
-                        )
-                        skipped_malformed += 1
-                        continue
-
-                    message_obj = result.get("message", {})
-                    message = message_obj.get("text", "No message provided")
-
-                    # Extract location (file path and line number)
-                    locations = result.get("locations", [])
-                    if not locations:
-                        logger.warning(f"Skipping result {result_idx}: no locations")
-                        skipped_malformed += 1
-                        continue
-
-                    first_location = locations[0]
-                    physical_location = first_location.get("physicalLocation", {})
-                    artifact_location = physical_location.get("artifactLocation", {})
-                    file_path = artifact_location.get("uri", "unknown")
-
-                    region = physical_location.get("region", {})
-                    line_number = region.get("startLine")
-
-                    # Extract severity
-                    sarif_level = result.get("level", "warning")
-                    finding_severity = _normalize_severity(sarif_level)
-
-                    # Extract optional fields
-                    rule_name = result.get("ruleId")  # Some tools provide a separate name
-                    cwe_ids = _extract_cwe_ids(result)
-                    cvss_score = _extract_cvss_score(result)
-
-                    # Check for duplicates
-                    if _check_duplicate(conn, rule_id, file_path, line_number):
-                        logger.debug(
-                            f"Skipping duplicate finding: {rule_id} in {file_path}:{line_number or '?'}"
-                        )
-                        skipped_duplicates += 1
-                        continue
-
-                    # Emit canonical event for security finding
-                    timestamp = datetime.now(timezone.utc).isoformat()
-                    try:
-                        _write_envelopes(
-                            [
-                                CanonicalEventEnvelope(
-                                    event_type=_CanonicalEventType.SECURITY_FINDING_RECORDED.value,
-                                    session_id=None,
-                                    payload={
-                                        "rule_id": rule_id,
-                                        "severity": finding_severity,
-                                        "message": message,
-                                        "file_path": file_path,
-                                        "line_number": line_number,
-                                        "scan_tool": tool_name,
-                                    },
-                                    confidence="unavailable",
-                                    project_id=None,
-                                )
-                            ]
-                        )
-                    except Exception:
-                        pass
-
-                    # Insert into sec_sarif_findings
-                    conn.execute(
-                        """INSERT INTO sec_sarif_findings
-                           (scan_tool, rule_id, rule_name, severity,
-                            file_path, line_number, message, cwe_ids, cvss_score,
-                            status, created_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            tool_name,
-                            rule_id,
-                            rule_name,
-                            finding_severity,
-                            file_path,
-                            line_number,
-                            message,
-                            cwe_ids,
-                            cvss_score,
-                            "open",
-                            timestamp,
-                        ),
-                    )
-
-                    imported_count += 1
-
-                except Exception as e:
-                    logger.error(f"Error parsing result {result_idx} in run {run_idx}: {e}")
+        for result_idx, result in enumerate(results):
+            try:
+                # Extract required fields
+                rule_id = result.get("ruleId")
+                if not rule_id:
+                    logger.warning(f"Skipping result {result_idx} in run {run_idx}: missing ruleId")
                     skipped_malformed += 1
                     continue
 
-        logger.info(
-            f"SARIF import complete: {imported_count} imported, "
-            f"{skipped_duplicates} duplicates, {skipped_malformed} malformed"
-        )
+                message_obj = result.get("message", {})
+                message = message_obj.get("text", "No message provided")
+
+                # Extract location (file path and line number)
+                locations = result.get("locations", [])
+                if not locations:
+                    logger.warning(f"Skipping result {result_idx}: no locations")
+                    skipped_malformed += 1
+                    continue
+
+                first_location = locations[0]
+                physical_location = first_location.get("physicalLocation", {})
+                artifact_location = physical_location.get("artifactLocation", {})
+                file_path = artifact_location.get("uri", "unknown")
+
+                region = physical_location.get("region", {})
+                line_number = region.get("startLine")
+
+                # Extract severity
+                sarif_level = result.get("level", "warning")
+                finding_severity = _normalize_severity(sarif_level)
+
+                # Extract optional fields
+                cwe_ids_raw = _extract_cwe_ids(result)
+                cwe_id = None
+                if cwe_ids_raw:
+                    import json as _json
+
+                    cwe_list = _json.loads(cwe_ids_raw)
+                    cwe_id = cwe_list[0] if cwe_list else None
+
+                # Dedup check against security_events spine
+                if _check_duplicate(rule_id, file_path, line_number):
+                    logger.debug(
+                        f"Skipping duplicate finding: {rule_id} in {file_path}:{line_number or '?'}"
+                    )
+                    skipped_duplicates += 1
+                    continue
+
+                # Write to security_events spine via record_finding() (AD-6)
+                _record_finding(
+                    severity=finding_severity,
+                    title=message,
+                    file_path=file_path,
+                    line_number=line_number,
+                    scanner_type=tool_name,
+                    cwe_id=cwe_id,
+                    vuln_class=rule_id,  # rule_id stored in vuln_class for dedup
+                )
+
+                imported_count += 1
+
+            except Exception as e:
+                logger.error(f"Error parsing result {result_idx} in run {run_idx}: {e}")
+                skipped_malformed += 1
+                continue
+
+    logger.info(
+        f"SARIF import complete: {imported_count} imported, "
+        f"{skipped_duplicates} duplicates, {skipped_malformed} malformed"
+    )
 
     return imported_count
 

@@ -1336,15 +1336,13 @@ def _active_adapter_execution_validation(staleness_report: Mapping[str, Any]) ->
 
 def _source_tables() -> list[str]:
     tables = set(REQUIRED_SHARED_INTELLIGENCE_TABLES)
-    tables.add("findings")
+    tables.add("findings_current_status")
+    tables.add("security_events")
     tables.update(
         {
             "ai_adapter_accounting_profiles",
             "ai_usage_operational_records",
             "token_usage_records",
-            "production_readiness_assessment_runs",
-            "production_readiness_control_results",
-            "production_readiness_findings",
             "reg_projects",
             "release_readiness_records",
             "validation_results",

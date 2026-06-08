@@ -136,30 +136,37 @@ class RiskScoringEngine:
         event_data = json.loads(event.get("event_data", "{}"))
         file_path = event_data.get("file_path")
 
-        # File-level risk (0-30)
+        # File-level risk (0-30) — sec_sarif_findings retired, read from spine read-model.
         file_risk = 0.0
-        if file_path:
+        try:
+            if file_path:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM findings_current_status"
+                    " WHERE file_path = ? AND current_status = 'open'",
+                    (file_path,),
+                )
+                file_findings = cursor.fetchone()[0]
+                file_risk = min(30.0, file_findings * 3.0)
+
+            # Project-level risk (0-40)
             cursor.execute(
-                "SELECT COUNT(*) FROM sec_sarif_findings WHERE file_path = ? AND status = 'open'",
-                (file_path,),
+                "SELECT COUNT(*) FROM findings_current_status WHERE current_status = 'open'"
             )
-            file_findings = cursor.fetchone()[0]
-            # Scale: 0 findings = 0, 10+ findings = 30
-            file_risk = min(30.0, file_findings * 3.0)
+            total_findings = cursor.fetchone()[0]
+            project_risk = min(40.0, total_findings * 0.4)
 
-        # Project-level risk (0-40)
-        cursor.execute("SELECT COUNT(*) FROM sec_sarif_findings WHERE status = 'open'")
-        total_findings = cursor.fetchone()[0]
-        # Scale: 0 findings = 0, 100+ findings = 40
-        project_risk = min(40.0, total_findings * 0.4)
-
-        # Temporal risk (0-30)
-        # Count new findings in last 24 hours
-        yesterday = (datetime.now() - timedelta(days=1)).isoformat()
-        cursor.execute("SELECT COUNT(*) FROM sec_sarif_findings WHERE created_at > ?", (yesterday,))
-        recent_findings = cursor.fetchone()[0]
-        # Scale: 0 recent = 0, 20+ recent = 30
-        temporal_risk = min(30.0, recent_findings * 1.5)
+            # Temporal risk (0-30)
+            yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+            cursor.execute(
+                "SELECT COUNT(*) FROM security_events"
+                " WHERE event_kind = 'finding.recorded' AND created_at > ?",
+                (yesterday,),
+            )
+            recent_findings = cursor.fetchone()[0]
+            temporal_risk = min(30.0, recent_findings * 1.5)
+        except Exception:
+            project_risk = 0.0
+            temporal_risk = 0.0
 
         conn.close()
 
