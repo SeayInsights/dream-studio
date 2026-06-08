@@ -161,6 +161,21 @@ def run_gate_check(
             return False, "anti_slop_passed: lint-results.md does not contain PASSED"
         return True, ""
 
+    if gate_name == "independent_review_passed":
+        review_path = wo_dir / "independent-review.md"
+        if not review_path.is_file():
+            return False, (
+                "independent_review_passed: independent-review.md not found. "
+                "The execute-work-orders workflow writes this via the independent-review node."
+            )
+        content = review_path.read_text(encoding="utf-8")
+        if "VERDICT: PASS" not in content.upper().replace(" ", "").replace("\n", ""):
+            # Accept both "VERDICT: PASS" and "VERDICT:PASS"
+            import re as _re
+            if not _re.search(r"VERDICT\s*:\s*PASS", content, _re.IGNORECASE):
+                return False, "independent_review_passed: independent-review.md does not contain 'VERDICT: PASS'"
+        return True, ""
+
     return True, ""
 
 
