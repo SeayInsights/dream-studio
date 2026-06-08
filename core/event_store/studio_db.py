@@ -1217,6 +1217,23 @@ def end_session(
         except Exception:
             pass
 
+        # Session-end workflow pattern analysis (Phase 19.4).
+        # Detects skill co-occurrence patterns across sessions and upserts to
+        # ds_workflow_pattern_signals. Runs after gap classification so the
+        # current session's friction signals are already captured.
+        # Non-blocking: session close completes regardless of analyzer outcome.
+        try:
+            from projections.core.analyzers.workflow_patterns import WorkflowPatternAnalyzer
+
+            _pconn = get_connection()
+            try:
+                analyzer = WorkflowPatternAnalyzer(_pconn)
+                analyzer.analyze()
+            finally:
+                _pconn.close()
+        except Exception:
+            pass
+
         # Session-end retroactive validation (Phase 19.5).
         # Increments past_wo_count for experimental extensions whose skills ran
         # this session; triggers full validation when count crosses 5.
