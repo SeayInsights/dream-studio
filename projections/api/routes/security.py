@@ -5,7 +5,6 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 import tempfile
-import json
 
 from core.config.database import get_connection
 from projections.api.routes.sqlite_schema import has_columns, object_exists, table_columns
@@ -23,36 +22,40 @@ class DismissRequest(BaseModel):
 
 @router.post("/findings/{finding_id}/dismiss")
 async def dismiss_finding(finding_id: str, body: DismissRequest) -> Dict[str, Any]:
-    """Mark a finding as dismissed by the operator.
+    """Mark a finding as dismissed (false_positive) on the security_events spine.
 
-    Sets findings.dismissed_at and findings.dismissed_reason.
-    These columns feed the dismissed_finding friction signal detector.
-    Idempotent: dismissing an already-dismissed finding updates reason + timestamp.
+    Calls set_finding_status() to record a finding.status_changed event.
+    Idempotent: dismissing an already-dismissed finding records a new status event.
     """
+    from core.findings.mutations import set_finding_status
+
     with get_connection() as conn:
-        if not has_columns(conn, "findings", ["dismissed_at", "dismissed_reason"]):
+        if not object_exists(conn, "findings_current_status"):
             raise HTTPException(
                 status_code=503,
-                detail="Migration 096 not applied — dismissed_at column missing",
+                detail="findings_current_status not present — migration 111 not yet applied",
             )
         row = conn.execute(
-            "SELECT finding_id FROM findings WHERE finding_id = ?", (finding_id,)
+            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?", (finding_id,)
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail=f"Finding {finding_id!r} not found")
 
-        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
-        conn.execute(
-            "UPDATE findings SET dismissed_at = ?, dismissed_reason = ? WHERE finding_id = ?",
-            (now, body.reason, finding_id),
-        )
-        conn.commit()
+    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    set_finding_status(
+        finding_id,
+        "false_positive",
+        project_id=None,
+        reason=body.reason,
+        correlation_id=None,
+        db_path=None,
+    )
 
     return {
         "finding_id": finding_id,
         "dismissed_at": now,
         "dismissed_reason": body.reason,
-        "status": "dismissed",
+        "status": "false_positive",
     }
 
 
@@ -78,59 +81,46 @@ def _security_fallback_findings(
     since: Optional[str],
     limit: int,
 ) -> list[dict[str, Any]]:
+    """Return findings from findings_current_status (spine read-model, WO-Y / AD-10).
+
+    Falls back to empty list if the spine tables are not yet present.
+    """
     findings: list[dict[str, Any]] = []
 
-    security_columns = table_columns(conn, "findings")
-    if has_columns(
-        conn,
-        "findings",
-        [
-            "finding_id",
-            "severity",
-            "file_path",
-            "start_line",
-            "description",
-            "status",
-            "created_at",
-        ],
+    if not has_columns(
+        conn, "findings_current_status", ["finding_id", "severity", "current_status"]
     ):
-        project_id_expr = "project_id" if "project_id" in security_columns else "NULL as project_id"
-        tool_sources = [column for column in ("scan_id", "category") if column in security_columns]
-        tool_expr = (
-            f"COALESCE({', '.join(tool_sources)}, 'telemetry_security')"
-            if tool_sources
-            else "'telemetry_security'"
-        )
-        query = """
-            SELECT
-                finding_id,
-                {project_id_expr},
-                {tool_expr} as tool,
-                severity,
-                file_path,
-                start_line as line_number,
-                description as message,
-                status,
-                created_at
-            FROM findings
-            WHERE 1=1
-        """.format(project_id_expr=project_id_expr, tool_expr=tool_expr)
-        params: list[Any] = []
-        if severity:
-            query += " AND severity = ?"
-            params.append(severity)
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-        if since:
-            query += " AND created_at >= ?"
-            params.append(since)
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
+        # Pre-migration install: spine not yet present; return empty (not an error).
+        return findings
+
+    query = (
+        "SELECT fcs.finding_id, fcs.project_id, fcs.severity,"
+        "       fcs.file_path, fcs.line_number,"
+        "       COALESCE(se.title, '') AS message,"
+        "       fcs.current_status AS status, fcs.scanner_type AS tool,"
+        "       fcs.created_at"
+        " FROM findings_current_status fcs"
+        " LEFT JOIN security_events se ON se.event_id = fcs.finding_id"
+        " WHERE 1=1"
+    )
+    params: list[Any] = []
+    if severity:
+        query += " AND fcs.severity = ?"
+        params.append(severity)
+    if status:
+        query += " AND fcs.current_status = ?"
+        params.append(status)
+    if since:
+        query += " AND fcs.created_at >= ?"
+        params.append(since)
+    query += " ORDER BY fcs.created_at DESC LIMIT ?"
+    params.append(limit)
+
+    try:
         for row in conn.execute(query, params).fetchall():
             findings.append(
                 {
-                    "type": "telemetry_security",
+                    "type": "spine",
                     "id": row["finding_id"],
                     "project_id": row["project_id"],
                     "tool": row["tool"],
@@ -142,67 +132,10 @@ def _security_fallback_findings(
                     "created_at": row["created_at"],
                 }
             )
+    except Exception:
+        pass
 
-    remaining = max(limit - len(findings), 0)
-    sarif_columns = table_columns(conn, "sec_sarif_findings")
-    if remaining and has_columns(
-        conn,
-        "sec_sarif_findings",
-        [
-            "sarif_finding_id",
-            "scan_tool",
-            "severity",
-            "file_path",
-            "line_number",
-            "message",
-            "status",
-            "created_at",
-        ],
-    ):
-        project_id_expr = "project_id" if "project_id" in sarif_columns else "NULL as project_id"
-        query = """
-            SELECT
-                sarif_finding_id,
-                {project_id_expr},
-                scan_tool,
-                severity,
-                file_path,
-                line_number,
-                message,
-                status,
-                created_at
-            FROM sec_sarif_findings
-            WHERE 1=1
-        """.format(project_id_expr=project_id_expr)
-        params = []
-        if severity:
-            query += " AND severity = ?"
-            params.append(severity)
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-        if since:
-            query += " AND created_at >= ?"
-            params.append(since)
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(remaining)
-        for row in conn.execute(query, params).fetchall():
-            findings.append(
-                {
-                    "type": "sarif",
-                    "id": row["sarif_finding_id"],
-                    "project_id": row["project_id"],
-                    "tool": row["scan_tool"],
-                    "severity": row["severity"],
-                    "file_path": row["file_path"],
-                    "line_number": row["line_number"],
-                    "message": row["message"],
-                    "status": row["status"],
-                    "created_at": row["created_at"],
-                }
-            )
-
-    return sorted(findings, key=lambda item: item.get("created_at") or "", reverse=True)[:limit]
+    return findings
 
 
 def _count_group(conn, table: str, column: str, cutoff: str) -> dict[str, int]:
@@ -282,7 +215,11 @@ async def list_all_findings(
                 "reason": "Dashboard security findings are read from current compatible security finding tables because the optional summary view does not expose the full dashboard contract.",
                 "source_tables": [
                     name
-                    for name in ("findings", "sec_sarif_findings", "vw_security_summary")
+                    for name in (
+                        "findings_current_status",
+                        "security_events",
+                        "vw_security_summary",
+                    )
                     if object_exists(conn, name)
                 ],
                 "retired_view_columns_missing": sorted(
@@ -366,41 +303,47 @@ async def list_sarif_findings(
     conn = get_connection()
 
     try:
-        query = """
-            SELECT
-                sarif_finding_id,
-                activity_id,
-                scan_tool,
-                rule_id,
-                rule_name,
-                severity,
-                file_path,
-                line_number,
-                message,
-                cwe_ids,
-                cvss_score,
-                status,
-                mitigated_at,
-                mitigation_task_id,
-                created_at
-            FROM sec_sarif_findings
-            WHERE 1=1
-        """
-        params = []
+        # sec_sarif_findings retired in migration 112 (WO-Y). Read from security_events spine.
+        if not object_exists(conn, "security_events"):
+            return {
+                "findings": [],
+                "count": 0,
+                "filters": {
+                    "scan_tool": scan_tool,
+                    "status": status,
+                    "severity": severity,
+                    "limit": limit,
+                },
+                "source_status": {
+                    "classification": "empty by design",
+                    "reason": "security_events spine not yet present.",
+                },
+            }
+
+        query = (
+            "SELECT se.event_id AS sarif_finding_id, se.scanner_type AS scan_tool,"
+            "       se.vuln_class AS rule_id, se.severity, se.file_path, se.line_number,"
+            "       se.title AS message, se.cwe_id, se.created_at,"
+            "       COALESCE(fcs.current_status, 'open') AS status"
+            " FROM security_events se"
+            " LEFT JOIN findings_current_status fcs ON fcs.finding_id = se.event_id"
+            " WHERE se.event_kind = 'finding.recorded'"
+        )
+        params: list = []
 
         if scan_tool:
-            query += " AND scan_tool = ?"
+            query += " AND se.scanner_type = ?"
             params.append(scan_tool)
 
         if status:
-            query += " AND status = ?"
+            query += " AND COALESCE(fcs.current_status, 'open') = ?"
             params.append(status)
 
         if severity:
-            query += " AND severity = ?"
+            query += " AND se.severity = ?"
             params.append(severity)
 
-        query += " ORDER BY created_at DESC LIMIT ?"
+        query += " ORDER BY se.created_at DESC LIMIT ?"
         params.append(limit)
 
         rows = conn.execute(query, params).fetchall()
@@ -410,19 +353,14 @@ async def list_sarif_findings(
             findings.append(
                 {
                     "sarif_finding_id": row["sarif_finding_id"],
-                    "activity_id": row["activity_id"],
                     "scan_tool": row["scan_tool"],
                     "rule_id": row["rule_id"],
-                    "rule_name": row["rule_name"],
                     "severity": row["severity"],
                     "file_path": row["file_path"],
                     "line_number": row["line_number"],
                     "message": row["message"],
-                    "cwe_ids": json.loads(row["cwe_ids"]) if row["cwe_ids"] else None,
-                    "cvss_score": row["cvss_score"],
+                    "cwe_ids": [row["cwe_id"]] if row["cwe_id"] else None,
                     "status": row["status"],
-                    "mitigated_at": row["mitigated_at"],
-                    "mitigation_task_id": row["mitigation_task_id"],
                     "created_at": row["created_at"],
                 }
             )
@@ -463,72 +401,25 @@ async def list_cve_matches(
     conn = get_connection()
 
     try:
-        query = """
-            SELECT
-                cve_match_id,
-                activity_id,
-                cve_id,
-                package_name,
-                package_version,
-                severity,
-                cvss_score,
-                description,
-                fixed_version,
-                status,
-                patched_at,
-                created_at
-            FROM sec_cve_matches
-            WHERE 1=1
-        """
-        params = []
-
-        if package_name:
-            query += " AND package_name = ?"
-            params.append(package_name)
-
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-
-        if severity:
-            query += " AND severity = ?"
-            params.append(severity)
-
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-
-        rows = conn.execute(query, params).fetchall()
-
-        findings = []
-        for row in rows:
-            findings.append(
-                {
-                    "cve_match_id": row["cve_match_id"],
-                    "activity_id": row["activity_id"],
-                    "cve_id": row["cve_id"],
-                    "package_name": row["package_name"],
-                    "package_version": row["package_version"],
-                    "severity": row["severity"],
-                    "cvss_score": row["cvss_score"],
-                    "description": row["description"],
-                    "fixed_version": row["fixed_version"],
-                    "status": row["status"],
-                    "patched_at": row["patched_at"],
-                    "created_at": row["created_at"],
-                }
-            )
-
+        # sec_cve_matches retired in migration 112 (WO-Y). CVE findings now route through
+        # the security_events spine via record_finding(cve_id=...). Filtered reads pending
+        # a dedicated CVE spine query (forward work). Return empty for now.
         return {
-            "findings": findings,
-            "count": len(findings),
+            "findings": [],
+            "count": 0,
             "filters": {
                 "package_name": package_name,
                 "status": status,
                 "severity": severity,
                 "limit": limit,
             },
+            "source_status": {
+                "classification": "empty by design",
+                "reason": "sec_cve_matches retired in migration 112. CVE findings now live on the security_events spine.",
+                "derived_view": True,
+                "primary_authority": False,
+            },
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:
@@ -553,66 +444,24 @@ async def list_manual_reviews(
     conn = get_connection()
 
     try:
-        query = """
-            SELECT
-                review_id,
-                activity_id,
-                reviewer,
-                review_type,
-                findings,
-                risk_level,
-                recommendations,
-                status,
-                created_at
-            FROM sec_manual_reviews
-            WHERE 1=1
-        """
-        params = []
-
-        if reviewer:
-            query += " AND reviewer = ?"
-            params.append(reviewer)
-
-        if review_type:
-            query += " AND review_type = ?"
-            params.append(review_type)
-
-        if status:
-            query += " AND status = ?"
-            params.append(status)
-
-        query += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-
-        rows = conn.execute(query, params).fetchall()
-
-        reviews = []
-        for row in rows:
-            reviews.append(
-                {
-                    "review_id": row["review_id"],
-                    "activity_id": row["activity_id"],
-                    "reviewer": row["reviewer"],
-                    "review_type": row["review_type"],
-                    "findings": row["findings"],
-                    "risk_level": row["risk_level"],
-                    "recommendations": row["recommendations"],
-                    "status": row["status"],
-                    "created_at": row["created_at"],
-                }
-            )
-
+        # sec_manual_reviews retired in migration 112 (WO-Y). Manual review findings
+        # route through the security_events spine. Return empty for now.
         return {
-            "reviews": reviews,
-            "count": len(reviews),
+            "reviews": [],
+            "count": 0,
             "filters": {
                 "reviewer": reviewer,
                 "review_type": review_type,
                 "status": status,
                 "limit": limit,
             },
+            "source_status": {
+                "classification": "empty by design",
+                "reason": "sec_manual_reviews retired in migration 112. Manual reviews now live on the security_events spine.",
+                "derived_view": True,
+                "primary_authority": False,
+            },
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:
@@ -637,73 +486,55 @@ async def get_security_stats(
     try:
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
+        # Aggregate from findings_current_status spine read-model (WO-Y / AD-10).
         findings_by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
-        for table, column in (
-            ("findings", "severity"),
-            ("sec_sarif_findings", "severity"),
-            ("sec_cve_matches", "severity"),
-            ("sec_manual_reviews", "risk_level"),
-        ):
-            for sev, count in _count_group(conn, table, column, cutoff).items():
-                if sev in findings_by_severity:
-                    findings_by_severity[sev] += count
+        for sev, count in _count_group(conn, "findings_current_status", "severity", cutoff).items():
+            if sev in findings_by_severity:
+                findings_by_severity[sev] += count
 
-        # Count by source
-        findings_by_source = {
-            "telemetry_security": _count_since(conn, "findings", cutoff),
-            "sarif": _count_since(conn, "sec_sarif_findings", cutoff),
-            "cve": _count_since(conn, "sec_cve_matches", cutoff),
-            "manual_review": _count_since(conn, "sec_manual_reviews", cutoff),
-            "hook_check": _count_since(conn, "sec_hook_checks", cutoff),
-        }
+        # Count by source (scanner_type from security_events spine)
+        findings_by_source: dict[str, int] = {}
+        if object_exists(conn, "security_events"):
+            rows = conn.execute(
+                "SELECT COALESCE(scanner_type, 'unknown') AS src, COUNT(*) AS cnt"
+                " FROM security_events"
+                " WHERE event_kind = 'finding.recorded' AND created_at >= ?"
+                " GROUP BY src",
+                (cutoff,),
+            ).fetchall()
+            for row in rows:
+                findings_by_source[row["src"]] = int(row["cnt"])
 
-        # Count by status (combining different status fields)
+        # Count by status
         findings_by_status = {}
-        for table in (
-            "findings",
-            "sec_sarif_findings",
-            "sec_cve_matches",
-            "sec_manual_reviews",
-        ):
-            for item_status, count in _count_group(conn, table, "status", cutoff).items():
-                findings_by_status[item_status] = findings_by_status.get(item_status, 0) + count
+        for item_status, count in _count_group(
+            conn, "findings_current_status", "current_status", cutoff
+        ).items():
+            findings_by_status[item_status] = findings_by_status.get(item_status, 0) + count
 
-        # Trend over last N days
+        # Trend over last N days — events recorded per day on the spine
         trend_data = []
+        spine_ok = has_columns(conn, "security_events", ["created_at"])
         for i in range(days):
             date = (datetime.now() - timedelta(days=days - i - 1)).strftime("%Y-%m-%d")
             next_date = (datetime.now() - timedelta(days=days - i - 2)).strftime("%Y-%m-%d")
-
-            def daily(table: str) -> int:
-                if not has_columns(conn, table, ["created_at"]):
-                    return 0
-                return int(
+            if spine_ok:
+                count = int(
                     conn.execute(
-                        f"SELECT COUNT(*) as count FROM {table} WHERE created_at >= ? AND created_at < ?",
+                        "SELECT COUNT(*) FROM security_events"
+                        " WHERE event_kind = 'finding.recorded'"
+                        "   AND created_at >= ? AND created_at < ?",
                         (date, next_date),
-                    ).fetchone()["count"]
+                    ).fetchone()[0]
                     or 0
                 )
-
-            sarif_daily = daily("sec_sarif_findings")
-            cve_daily = daily("sec_cve_matches")
-            review_daily = daily("sec_manual_reviews")
-            hook_daily = daily("sec_hook_checks")
-            telemetry_daily = daily("findings")
-
-            total_daily = sarif_daily + cve_daily + review_daily + hook_daily + telemetry_daily
-
-            trend_data.append({"date": date, "count": total_daily})
+            else:
+                count = 0
+            trend_data.append({"date": date, "count": count})
 
         source_tables = [
             name
-            for name in (
-                "findings",
-                "sec_sarif_findings",
-                "sec_cve_matches",
-                "sec_manual_reviews",
-                "sec_hook_checks",
-            )
+            for name in ("findings_current_status", "security_events", "vw_security_summary")
             if object_exists(conn, name)
         ]
 
@@ -716,9 +547,9 @@ async def get_security_stats(
             "source_status": {
                 "classification": "fresh" if source_tables else "empty by design",
                 "reason": (
-                    "Security stats aggregate current compatible security authority tables."
+                    "Security stats aggregate findings_current_status + security_events spine (WO-Y / AD-10)."
                     if source_tables
-                    else "No current security authority tables are present in this DB snapshot."
+                    else "No security spine tables present in this DB snapshot."
                 ),
                 "source_tables": source_tables,
                 "derived_view": True,

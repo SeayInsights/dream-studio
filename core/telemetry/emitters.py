@@ -491,7 +491,8 @@ def emit_security_finding(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            "SELECT finding_id FROM findings WHERE finding_id = ?",
+            # findings retired migration 112 (WO-Y); dedup via findings_current_status spine.
+            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?",
             (finding_id,),
         ).fetchone()
         if existing is not None:

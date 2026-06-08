@@ -107,6 +107,10 @@ class EventType(str, Enum):
     DESIGN_BRIEF_LOCKED = "design_brief.locked"
     DESIGN_BRIEF_DELETED = "design_brief.deleted"
 
+    # Findings spine event types (WO-Y / AD-10)
+    FINDING_RECORDED = "finding.recorded"
+    FINDING_STATUS_CHANGED = "finding.status_changed"
+
     # Token attribution events (TA3)
     TOKEN_CONSUMED = "token.consumed"
 
@@ -768,6 +772,21 @@ EVENT_TYPE_REGISTRY: tuple[EventTypeMeta, ...] = (
         "telemetry",
         "Skill execution exceeded its configured token/context budget",
         False,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    # Findings spine events (WO-Y / AD-10)
+    EventTypeMeta(
+        EventType.FINDING_RECORDED,
+        "security",
+        "Security or readiness finding recorded on the findings spine",
+        True,
+        EventCategory.PRODUCTION_EMITTED,
+    ),
+    EventTypeMeta(
+        EventType.FINDING_STATUS_CHANGED,
+        "security",
+        "Finding status changed (open → mitigated/false_positive/accepted/resolved)",
+        True,
         EventCategory.PRODUCTION_EMITTED,
     ),
 )

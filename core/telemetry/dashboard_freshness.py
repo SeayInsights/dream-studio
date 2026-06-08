@@ -32,7 +32,8 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "workflow_invocations",
                 "token_usage_records",
                 "validation_results",
-                "findings",
+                "findings_current_status",
+                "security_events",
                 "research_evidence_records",
                 "decision_records",
                 "raw_sessions",
@@ -41,7 +42,6 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "hook_executions",
                 "reg_projects",
                 "vw_security_summary",
-                "sec_sarif_findings",
                 "alert_rules",
                 "alert_history",
             )
@@ -243,7 +243,7 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
                 )
             ),
             "Security dashboard reads vw_security_summary, a current view over compatible security authority tables.",
-            ["vw_security_summary", "findings", "sec_sarif_findings"],
+            ["vw_security_summary", "findings_current_status", "security_events"],
             counts["vw_security_summary"],
             _latest(conn, "vw_security_summary", "created_at"),
         ),

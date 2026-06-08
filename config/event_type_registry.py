@@ -499,6 +499,19 @@ _ENTRIES: tuple[RegistryEntry, ...] = (
         "meaningful-unit",
         "Security scan completed with results — AI execution + business outcome",
     ),
+    # Findings spine (WO-Y / AD-10): AI scan (→ ai) + business finding fact (→ business)
+    RegistryEntry(
+        "finding.recorded",
+        _BOTH,
+        "meaningful-unit",
+        "Security or readiness finding recorded — AI scan produces business finding fact",
+    ),
+    RegistryEntry(
+        "finding.status_changed",
+        _BOTH,
+        "meaningful-unit",
+        "Finding status changed — AI resolution produces business status update",
+    ),
     # Audit findings: AI audit (→ ai) discovers business violations/improvements (→ business)
     RegistryEntry(
         "audit.violation_found",

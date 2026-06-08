@@ -147,16 +147,16 @@ def run_aggregation(db_path: Path | None = None) -> dict:
             rows = src.execute("""
                 SELECT
                     project_id,
-                    COALESCE(introduced_by_skill_id, 'unknown') AS skill_id,
+                    'unknown' AS skill_id,
                     COALESCE(severity, 'unknown') AS severity,
                     date(created_at) AS day,
                     COUNT(*) AS finding_count,
-                    SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) AS new_count,
-                    SUM(CASE WHEN status = 'fixed' THEN 1 ELSE 0 END) AS fixed_count,
-                    SUM(CASE WHEN status = 'persisting' THEN 1 ELSE 0 END) AS persisting_count
-                FROM findings
+                    0 AS new_count,
+                    SUM(CASE WHEN current_status IN ('resolved','fixed') THEN 1 ELSE 0 END) AS fixed_count,
+                    SUM(CASE WHEN current_status = 'open' THEN 1 ELSE 0 END) AS persisting_count
+                FROM findings_current_status
                 WHERE project_id IS NOT NULL
-                GROUP BY project_id, introduced_by_skill_id, severity, day
+                GROUP BY project_id, severity, day
             """).fetchall()
             agg.executemany(
                 """INSERT OR REPLACE INTO finding_rollups
@@ -187,13 +187,13 @@ def run_aggregation(db_path: Path | None = None) -> dict:
         try:
             rows = src.execute("""
                 SELECT
-                    COALESCE(rule_id, 'unknown') AS rule_id,
-                    COALESCE(introduced_by_skill_id, 'unknown') AS skill_id,
+                    COALESCE(vuln_class, 'unknown') AS rule_id,
+                    'unknown' AS skill_id,
                     COUNT(*) AS fire_count,
                     MAX(created_at) AS last_fired_at
-                FROM findings
-                WHERE rule_id IS NOT NULL
-                GROUP BY rule_id, introduced_by_skill_id
+                FROM security_events
+                WHERE event_kind = 'finding.recorded' AND vuln_class IS NOT NULL
+                GROUP BY vuln_class
             """).fetchall()
             # Also get dismiss counts from guard_events
             guard_rows = {}

@@ -1047,61 +1047,68 @@ def _token_cost_intelligence(
 def _security_rollup(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(file_path, 'unknown') AS file_path,
-            start_line,
-            end_line,
-            severity,
-            status,
-            COUNT(*) AS finding_count
-        FROM findings
-        {where}
-        GROUP BY project_id, file_path, start_line, end_line, severity, status
-        ORDER BY finding_count DESC, severity DESC, file_path
-        """,
-        params,
-    )
+    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    where, params = _where_scope_project_only(scope)
+    try:
+        return _rows(
+            conn,
+            f"""
+            SELECT
+                COALESCE(project_id, 'unknown') AS project_id,
+                COALESCE(file_path, 'unknown') AS file_path,
+                line_number AS start_line,
+                NULL AS end_line,
+                severity,
+                current_status AS status,
+                COUNT(*) AS finding_count
+            FROM findings_current_status
+            {where}
+            GROUP BY project_id, file_path, line_number, severity, current_status
+            ORDER BY finding_count DESC, severity DESC, file_path
+            """,
+            params,
+        )
+    except Exception:
+        return []
 
 
 def _security_remediation_intelligence(
     conn: sqlite3.Connection,
     scope: ScopeFilter | None = None,
 ) -> dict[str, Any]:
-    where, params = _where_scope(scope)
-    findings = _rows(
-        conn,
-        f"""
-        SELECT
-            finding_id,
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(milestone_id, 'unknown') AS milestone_id,
-            COALESCE(task_id, 'unknown') AS task_id,
-            COALESCE(process_run_id, 'unknown') AS process_run_id,
-            COALESCE(scan_id, 'unknown') AS scan_id,
-            severity,
-            COALESCE(category, 'unknown') AS category,
-            COALESCE(rule_id, 'unknown') AS rule_id,
-            COALESCE(file_path, 'unknown') AS file_path,
-            start_line,
-            end_line,
-            status,
-            recommendation,
-            COALESCE(introduced_by_agent_id, 'unknown') AS agent_id,
-            COALESCE(introduced_by_skill_id, 'unknown') AS skill_id,
-            COALESCE(introduced_by_workflow_id, 'unknown') AS workflow_id,
-            COALESCE(introduced_by_hook_id, 'unknown') AS hook_id,
-            evidence_refs_json,
-            created_at,
-            updated_at
-        FROM findings
-        {where}
-        ORDER BY
-            CASE severity
+    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    where, params = _where_scope_project_only(scope)
+    try:
+        findings = _rows(
+            conn,
+            f"""
+            SELECT
+                fcs.finding_id,
+                COALESCE(fcs.project_id, 'unknown') AS project_id,
+                'unknown' AS milestone_id,
+                'unknown' AS task_id,
+                'unknown' AS process_run_id,
+                'unknown' AS scan_id,
+                fcs.severity,
+                COALESCE(se.vuln_class, 'unknown') AS category,
+                COALESCE(se.vuln_class, 'unknown') AS rule_id,
+                COALESCE(fcs.file_path, 'unknown') AS file_path,
+                fcs.line_number AS start_line,
+                NULL AS end_line,
+                fcs.current_status AS status,
+                NULL AS recommendation,
+                'unknown' AS agent_id,
+                'unknown' AS skill_id,
+                'unknown' AS workflow_id,
+                'unknown' AS hook_id,
+                NULL AS evidence_refs_json,
+                fcs.created_at,
+                fcs.updated_at
+            FROM findings_current_status fcs
+            LEFT JOIN security_events se ON se.event_id = fcs.finding_id
+            {where}
+            ORDER BY
+                CASE fcs.severity
                 WHEN 'critical' THEN 0
                 WHEN 'high' THEN 1
                 WHEN 'medium' THEN 2
@@ -1111,9 +1118,11 @@ def _security_remediation_intelligence(
             status,
             file_path,
             start_line
-        """,
-        params,
-    )
+            """,
+            params,
+        )
+    except Exception:
+        findings = []
     remediation_candidates = [
         {
             **finding,
@@ -1158,47 +1167,56 @@ def _security_remediation_intelligence(
 def _security_status_counts(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            severity,
-            status,
-            COUNT(*) AS finding_count
-        FROM findings
-        {where}
-        GROUP BY project_id, severity, status
-        ORDER BY finding_count DESC, severity, status
-        """,
-        params,
-    )
+    # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
+    where, params = _where_scope_project_only(scope)
+    try:
+        return _rows(
+            conn,
+            f"""
+            SELECT
+                COALESCE(project_id, 'unknown') AS project_id,
+                severity,
+                current_status AS status,
+                COUNT(*) AS finding_count
+            FROM findings_current_status
+            {where}
+            GROUP BY project_id, severity, current_status
+            ORDER BY finding_count DESC, severity, current_status
+            """,
+            params,
+        )
+    except Exception:
+        return []
 
 
 def _security_attribution(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(introduced_by_agent_id, 'unknown') AS agent_id,
-            COALESCE(introduced_by_skill_id, 'unknown') AS skill_id,
-            COALESCE(introduced_by_workflow_id, 'unknown') AS workflow_id,
-            COALESCE(introduced_by_hook_id, 'unknown') AS hook_id,
-            severity,
-            status,
-            COUNT(*) AS finding_count
-        FROM findings
-        {where}
-        GROUP BY project_id, agent_id, skill_id, workflow_id, hook_id, severity, status
-        ORDER BY finding_count DESC, severity DESC, agent_id, skill_id, workflow_id, hook_id
-        """,
-        params,
-    )
+    # findings retired in migration 112 (WO-Y); attribution columns not on spine.
+    # Return project/severity/status summary only; agent attribution is empty.
+    where, params = _where_scope_project_only(scope)
+    try:
+        return _rows(
+            conn,
+            f"""
+            SELECT
+                COALESCE(project_id, 'unknown') AS project_id,
+                'unknown' AS agent_id,
+                'unknown' AS skill_id,
+                'unknown' AS workflow_id,
+                'unknown' AS hook_id,
+                severity,
+                current_status AS status,
+                COUNT(*) AS finding_count
+            FROM findings_current_status
+            {where}
+            GROUP BY project_id, severity, current_status
+            ORDER BY finding_count DESC, severity DESC
+            """,
+            params,
+        )
+    except Exception:
+        return []
 
 
 def _validation_rollup(
@@ -1732,6 +1750,14 @@ def _where_scope(scope: ScopeFilter | None) -> tuple[str, tuple[Any, ...]]:
     if not clauses:
         return "", ()
     return "WHERE " + " AND ".join(clauses), tuple(params)
+
+
+def _where_scope_project_only(scope: ScopeFilter | None) -> tuple[str, tuple[Any, ...]]:
+    """Like _where_scope but only filters project_id — safe for spine tables
+    that lack milestone_id / task_id / process_run_id columns."""
+    if scope is None or scope.project_id is None:
+        return "", ()
+    return "WHERE project_id = ?", (scope.project_id,)
 
 
 def _add_condition(

@@ -19,7 +19,6 @@ Case 4 proves LLM adjudication; Case 5 proves pre-pairing precision.
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -68,19 +67,37 @@ def _require_db() -> Path:
 
 
 def _get_scan_findings(scan_id: str, db_path: Path) -> list[dict[str, Any]]:
-    """Fetch all findings for a scan."""
-    from core.event_store.studio_db import _connect
+    """Fetch all open findings for a scan from security_events spine.
 
-    with _connect(db_path) as conn:
-        rows = conn.execute(
-            "SELECT finding_id, rule_id, file_path, start_line, end_line,"
-            " severity, category, description, recommendation,"
-            " finding_hash, normalized_snippet, code_excerpt, enclosing_symbol"
-            " FROM findings"
-            " WHERE scan_id = ? AND status != 'resolved'",
-            (scan_id,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    findings table was retired in migration 112 (WO-Y). Reads from
+    findings_current_status (the spine read-model).
+    """
+    from core.findings.mutations import _get_conn
+
+    try:
+        conn, owned = _get_conn(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT fcs.finding_id, se.vuln_class AS rule_id,"
+                "       fcs.file_path, fcs.line_number AS start_line,"
+                "       NULL AS end_line, fcs.severity, se.vuln_class AS category,"
+                "       se.title AS description, NULL AS recommendation,"
+                "       NULL AS finding_hash, NULL AS normalized_snippet,"
+                "       NULL AS code_excerpt, NULL AS enclosing_symbol"
+                " FROM findings_current_status fcs"
+                " JOIN security_events se ON se.event_id = fcs.finding_id"
+                " JOIN security_events scan_root"
+                "   ON scan_root.event_id = ?"
+                "   AND se.parent_event_id = scan_root.event_id"
+                " WHERE fcs.current_status != 'resolved'",
+                (scan_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            if owned:
+                conn.close()
+    except Exception:
+        return []
 
 
 def _get_resolved_links(
@@ -88,20 +105,33 @@ def _get_resolved_links(
     curr_scan_id: str,
     db_path: Path,
 ) -> list[dict[str, Any]]:
-    """Fetch previously-adjudicated links between the two scans."""
-    from core.event_store.studio_db import _connect
+    """Fetch previously-adjudicated resolved events from security_events spine.
+
+    resolved_finding_links was retired in migration 112 (WO-Y). Reads
+    finding.resolved events from the spine as the equivalent.
+    """
+    from core.findings.mutations import _get_conn
 
     try:
-        with _connect(db_path) as conn:
+        conn, owned = _get_conn(db_path)
+        try:
             rows = conn.execute(
-                "SELECT link_id, prev_finding_id, curr_finding_id, verdict, confidence"
-                " FROM resolved_finding_links"
-                " WHERE prev_scan_id = ? AND curr_scan_id = ?",
-                (prev_scan_id, curr_scan_id),
+                "SELECT event_id AS link_id, parent_event_id AS prev_finding_id,"
+                "       NULL AS curr_finding_id, body AS verdict, NULL AS confidence"
+                " FROM security_events"
+                " WHERE event_kind = 'finding.resolved'"
+                "   AND parent_event_id IN ("
+                "       SELECT event_id FROM security_events"
+                "       WHERE parent_event_id = ? AND event_kind = 'finding.recorded'"
+                "   )",
+                (prev_scan_id,),
             ).fetchall()
-        return [dict(r) for r in rows]
+            return [dict(r) for r in rows]
+        finally:
+            if owned:
+                conn.close()
     except Exception:
-        return []  # Table may not exist on older schema versions
+        return []  # Spine may not exist on older schema versions
 
 
 def compute_scan_delta(
@@ -269,88 +299,87 @@ def _persist_adjudications(
     adjudications: list[dict[str, Any]],
     db_path: Path,
 ) -> None:
-    """Write LLM adjudication verdicts to resolved_finding_links."""
-    from core.event_store.studio_db import _connect
-    from datetime import datetime, timezone
+    """Write LLM adjudication verdicts as finding.resolved events on the security_events spine.
 
-    now = datetime.now(timezone.utc).isoformat()
+    resolved_finding_links was retired in migration 112 (WO-Y). Verdicts are now
+    recorded via set_finding_status() on the security_events spine.
+    """
     try:
-        with _connect(db_path) as conn:
-            for a in adjudications:
-                conn.execute(
-                    """INSERT OR IGNORE INTO resolved_finding_links
-                       (link_id, prev_finding_id, curr_finding_id,
-                        prev_scan_id, curr_scan_id, project_id,
-                        verdict, confidence, adjudicated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        str(uuid.uuid4()),
-                        a["prev_finding_id"],
-                        a["curr_finding_id"],
-                        delta.prev_scan_id,
-                        delta.curr_scan_id,
-                        delta.project_id,
-                        a.get("verdict", "distinct"),
-                        a.get("confidence"),
-                        now,
-                    ),
+        from core.findings.mutations import set_finding_status
+
+        for a in adjudications:
+            verdict = a.get("verdict", "distinct")
+            if verdict == "same_edited":
+                # Mark the prev finding as resolved (superseded by curr)
+                set_finding_status(
+                    a["prev_finding_id"],
+                    "resolved",
+                    project_id=delta.project_id,
+                    reason=f"same_edited: superseded by {a['curr_finding_id']}",
+                    db_path=db_path,
                 )
-            conn.commit()
     except Exception:
         pass  # Persistence failure is non-blocking
 
 
 def persist_scan_delta(delta: ScanDelta, db_path: Path | None = None) -> str:
-    """Write delta summary to scan_deltas. Returns delta_id."""
-    from core.event_store.studio_db import _connect
-    from datetime import datetime, timezone
+    """Record scan delta as a scan_run.started event on the security_events spine.
 
-    if db_path is None:
-        db_path = _require_db()
+    scan_deltas was retired in migration 112 (WO-Y). Deltas are now derived from
+    spine history by FindingsProjection. This function records a scan boundary
+    event for lineage and returns a generated delta_id.
+    """
+    import uuid as _uuid
+    from core.findings.mutations import _get_conn, _now
 
-    delta_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    delta_id = str(_uuid.uuid4())
     try:
-        with _connect(db_path) as conn:
+        conn, owned = _get_conn(db_path)
+        try:
             conn.execute(
-                """INSERT OR IGNORE INTO scan_deltas
-                   (delta_id, project_id, curr_scan_id, prev_scan_id,
-                    new_count, fixed_count, persisting_count,
-                    pending_adjudication_count, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT OR IGNORE INTO security_events
+                   (event_id, parent_event_id, event_kind, project_id, body, created_at)
+                   VALUES (?, NULL, 'scan_run.started', ?, ?, ?)""",
                 (
                     delta_id,
                     delta.project_id,
-                    delta.curr_scan_id,
-                    delta.prev_scan_id,
-                    delta.new_count,
-                    delta.fixed_count,
-                    delta.persisting_count,
-                    delta.pending_adjudication_count,
-                    now,
+                    f"curr:{delta.curr_scan_id} prev:{delta.prev_scan_id}"
+                    f" new:{delta.new_count} fixed:{delta.fixed_count}",
+                    _now(),
                 ),
             )
-            conn.commit()
+            if owned:
+                conn.commit()
+        finally:
+            if owned:
+                conn.close()
     except Exception:
         pass
     return delta_id
 
 
 def get_latest_delta(project_id: str, db_path: Path | None = None) -> dict[str, Any] | None:
-    """Return the most recent delta for a project."""
-    from core.event_store.studio_db import _connect
+    """Return the most recent scan_run.started event for a project from security_events.
 
-    if db_path is None:
-        db_path = _require_db()
+    scan_deltas was retired in migration 112 (WO-Y). Deltas are now derived from
+    spine history. This returns the last scan boundary event.
+    """
+    from core.findings.mutations import _get_conn
+
     try:
-        with _connect(db_path) as conn:
+        conn, owned = _get_conn(db_path)
+        try:
             row = conn.execute(
-                "SELECT * FROM scan_deltas"
-                " WHERE project_id = ?"
+                "SELECT event_id, project_id, body, created_at"
+                " FROM security_events"
+                " WHERE event_kind = 'scan_run.started' AND project_id = ?"
                 " ORDER BY created_at DESC LIMIT 1",
                 (project_id,),
             ).fetchone()
-        return dict(row) if row else None
+            return dict(row) if row else None
+        finally:
+            if owned:
+                conn.close()
     except Exception:
         return None
 
