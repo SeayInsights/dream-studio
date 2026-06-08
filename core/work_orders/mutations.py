@@ -379,7 +379,10 @@ def create_work_order(
     """
 
     if milestone_id is None:
-        return {"ok": False, "error": "milestone_id is required: every work order must belong to a milestone"}
+        return {
+            "ok": False,
+            "error": "milestone_id is required: every work order must belong to a milestone",
+        }
 
     db_path = _require_db(source_root, dream_studio_home)
     work_order_id = str(uuid.uuid4())
