@@ -1,5 +1,0 @@
-triggers:
-  - "close work order:"
-  - "finish work order:"
-
-estimated_tokens: 900

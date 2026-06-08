@@ -12,6 +12,9 @@ CONTEXT.md
 # Planning dirs are session artifacts — local only, never committed
 .planning/
 
+# Pre-phase-19 eval baselines — local snapshots, never committed
+baselines/pre_phase_19/
+
 # Generated adapter output — build artifacts, never committed
 dist/
 skills/**/.planning/
@@ -85,7 +88,6 @@ projections/frontend/dashboard_temp_*.html
 
 # Docker test output (volume mount target — never commit results)
 docker-test-results/*
-!docker-test-results/.gitkeep
 
 # Runtime logs
 dashboard*.log
@@ -147,6 +149,7 @@ diag-test-*
 smoke-*
 black-*
 lint-*
+!docs/operations/lint-format-baseline-policy.md
 drift-*
 
 # Debug scripts (one-off investigations)
