@@ -25,7 +25,9 @@ from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-05-20T00:00:00+00:00"
+NOW_LATE = "2026-05-20T00:01:00+00:00"
 PROJECT_ID = "cccc1111-cccc-cccc-cccc-cccccccc1111"
+MILESTONE_ID = "cccc0000-cccc-cccc-cccc-cccccccc0000"
 WO_ID = "cccc2222-cccc-cccc-cccc-cccccccc2222"
 WO_UI_ID = "cccc3333-cccc-cccc-cccc-cccccccc3333"
 
@@ -41,18 +43,24 @@ def db_path(tmp_path: Path) -> Path:
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description, status,"
-            " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
-            (WO_ID, PROJECT_ID, NOW, NOW),
+            "INSERT INTO business_milestones"
+            " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, 'Milestone 1', 'active', 0, ?, ?)",
+            (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
-            (WO_UI_ID, PROJECT_ID, NOW, NOW),
+            " VALUES (?, ?, ?, 'Docs WO', '', 'created', 'documentation', ?, ?)",
+            (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            " work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
+            (WO_UI_ID, PROJECT_ID, MILESTONE_ID, NOW_LATE, NOW_LATE),
         )
         conn.commit()
     finally:
@@ -120,6 +128,7 @@ def test_eval_plan_contract(patched_paths, db_path: Path, tmp_path: Path) -> Non
 
     wo_result = create_work_order(
         project_id=PROJECT_ID,
+        milestone_id=MILESTONE_ID,
         title="Plan work order",
         work_order_type="documentation",
         source_root=REPO_ROOT,
@@ -321,3 +330,38 @@ def test_eval_handoff_contract() -> None:
             "fail",
             "incomplete",
         }, f"Invalid pass_fail value for {key}: {eval_result['pass_fail']}"
+
+
+# ── eval_milestone_guard ───────────────────────────────────────────────────────
+
+
+def test_eval_create_wo_rejects_null_milestone(patched_paths, tmp_path: Path) -> None:
+    """create_work_order() with milestone_id=None must return ok=False."""
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id=PROJECT_ID,
+        milestone_id=None,
+        title="Should fail",
+        work_order_type="documentation",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "milestone_id" in result.get("error", "")
+
+
+def test_eval_create_wo_rejects_dangling_milestone(patched_paths, tmp_path: Path) -> None:
+    """create_work_order() with a non-existent milestone_id must return ok=False."""
+    from core.work_orders.mutations import create_work_order
+
+    result = create_work_order(
+        project_id=PROJECT_ID,
+        milestone_id="00000000-0000-0000-0000-000000000000",
+        title="Should fail",
+        work_order_type="documentation",
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+    )
+    assert result["ok"] is False
+    assert "Milestone not found" in result.get("error", "")
