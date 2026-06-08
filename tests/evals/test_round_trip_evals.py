@@ -26,7 +26,9 @@ from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-05-20T00:00:00+00:00"
+NOW_LATE = "2026-05-20T00:01:00+00:00"
 PROJECT_ID = "11111111-1111-1111-1111-111111111111"
+MILESTONE_ID = "11111111-1111-1111-1111-aaaaaaaaaaaa"
 WO_DOCS_ID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 WO_UI_ID = "uuuuuuuu-uuuu-uuuu-uuuu-uuuuuuuuuuuu"
 TASK_ID = "task-rte-0001"
@@ -43,18 +45,24 @@ def db_path(tmp_path: Path) -> Path:
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description, status,"
-            " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
-            (WO_DOCS_ID, PROJECT_ID, NOW, NOW),
+            "INSERT INTO business_milestones"
+            " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, 'Milestone 1', 'active', 0, ?, ?)",
+            (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
-            (WO_UI_ID, PROJECT_ID, NOW, NOW),
+            " VALUES (?, ?, ?, 'Docs WO', '', 'created', 'documentation', ?, ?)",
+            (WO_DOCS_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            " work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
+            (WO_UI_ID, PROJECT_ID, MILESTONE_ID, NOW_LATE, NOW_LATE),
         )
         conn.execute(
             "INSERT INTO business_tasks"

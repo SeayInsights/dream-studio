@@ -25,7 +25,9 @@ from core.config.sqlite_bootstrap import bootstrap_database
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-05-20T00:00:00+00:00"
+NOW_LATE = "2026-05-20T00:01:00+00:00"
 PROJECT_ID = "cccc1111-cccc-cccc-cccc-cccccccc1111"
+MILESTONE_ID = "cccc0000-cccc-cccc-cccc-cccccccc0000"
 WO_ID = "cccc2222-cccc-cccc-cccc-cccccccc2222"
 WO_UI_ID = "cccc3333-cccc-cccc-cccc-cccccccc3333"
 
@@ -41,18 +43,24 @@ def db_path(tmp_path: Path) -> Path:
             (PROJECT_ID, NOW, NOW),
         )
         conn.execute(
-            "INSERT INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description, status,"
-            " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'Docs WO', '', 'created', 'documentation', ?, ?)",
-            (WO_ID, PROJECT_ID, NOW, NOW),
+            "INSERT INTO business_milestones"
+            " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+            " VALUES (?, ?, 'Milestone 1', 'active', 0, ?, ?)",
+            (MILESTONE_ID, PROJECT_ID, NOW, NOW),
         )
         conn.execute(
             "INSERT INTO business_work_orders"
             " (work_order_id, project_id, milestone_id, title, description, status,"
             " work_order_type, created_at, updated_at)"
-            " VALUES (?, ?, NULL, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
-            (WO_UI_ID, PROJECT_ID, NOW, NOW),
+            " VALUES (?, ?, ?, 'Docs WO', '', 'created', 'documentation', ?, ?)",
+            (WO_ID, PROJECT_ID, MILESTONE_ID, NOW, NOW),
+        )
+        conn.execute(
+            "INSERT INTO business_work_orders"
+            " (work_order_id, project_id, milestone_id, title, description, status,"
+            " work_order_type, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
+            (WO_UI_ID, PROJECT_ID, MILESTONE_ID, NOW_LATE, NOW_LATE),
         )
         conn.commit()
     finally:
