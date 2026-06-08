@@ -431,6 +431,24 @@ def register_project(
     now = datetime.now(timezone.utc).isoformat()
     resolved_path = str(Path(project_path).resolve()) if project_path is not None else None
     with _connect(db_path) as conn:
+        # Idempotency: return existing project when same project_path already registered.
+        if resolved_path is not None:
+            existing = conn.execute(
+                "SELECT project_id, name, status, created_at FROM business_projects"
+                " WHERE project_path = ? AND status != 'archived'"
+                " ORDER BY created_at ASC LIMIT 1",
+                (resolved_path,),
+            ).fetchone()
+            if existing is not None:
+                return {
+                    "ok": True,
+                    "project_id": existing["project_id"],
+                    "name": existing["name"],
+                    "status": existing["status"],
+                    "created_at": existing["created_at"],
+                    "marker_written": False,
+                    "idempotent": True,
+                }
         conn.execute(
             "INSERT INTO business_projects"
             " (project_id, name, description, status, project_path, created_at, updated_at)"
