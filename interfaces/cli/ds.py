@@ -446,6 +446,19 @@ def main(argv: list[str] | None = None) -> int:
         dest="tasks_file",
         help="Path to a tasks.md file with a numbered list of tasks",
     )
+    wo_set_order = work_order_sub.add_parser(
+        "set-order", help="Set sequence_order on a work order (sparse 10/20/30)"
+    )
+    wo_set_order.add_argument("work_order_id", help="Work order UUID")
+    wo_set_order.add_argument("sequence_order", type=int, help="Sequence order (integer, e.g. 10)")
+    wo_add_dep = work_order_sub.add_parser(
+        "add-dep", help="Add a dependency: work_order_id waits for depends_on_id to close"
+    )
+    wo_add_dep.add_argument("work_order_id", help="Work order UUID")
+    wo_add_dep.add_argument("depends_on_id", help="Dependency target UUID")
+    wo_remove_dep = work_order_sub.add_parser("remove-dep", help="Remove a dependency edge")
+    wo_remove_dep.add_argument("work_order_id", help="Work order UUID")
+    wo_remove_dep.add_argument("depends_on_id", help="Dependency target UUID")
 
     # design-brief subcommand group (Slice 7a)
     design_brief_cmd = subcommands.add_parser("design-brief", help="Manage project design briefs")
@@ -1930,6 +1943,27 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "set-order":
+        return _work_order_set_order(
+            work_order_id=args.work_order_id,
+            sequence_order=args.sequence_order,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "add-dep":
+        return _work_order_add_dep(
+            work_order_id=args.work_order_id,
+            depends_on_id=args.depends_on_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
+    if args.work_order_command == "remove-dep":
+        return _work_order_remove_dep(
+            work_order_id=args.work_order_id,
+            depends_on_id=args.depends_on_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
 
@@ -2255,6 +2289,63 @@ def _work_order_add_tasks(
     result = add_tasks_from_file(
         work_order_id=work_order_id,
         tasks_file=tasks_file,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+def _work_order_set_order(
+    *,
+    work_order_id: str,
+    sequence_order: int,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.work_orders.ordering import set_sequence_order
+
+    result = set_sequence_order(
+        work_order_id=work_order_id,
+        sequence_order=sequence_order,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+def _work_order_add_dep(
+    *,
+    work_order_id: str,
+    depends_on_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.work_orders.ordering import add_dependency
+
+    result = add_dependency(
+        work_order_id=work_order_id,
+        depends_on_id=depends_on_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    print(json.dumps(result, indent=2))
+    return 0 if result.get("ok") else 1
+
+
+def _work_order_remove_dep(
+    *,
+    work_order_id: str,
+    depends_on_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.work_orders.ordering import remove_dependency
+
+    result = remove_dependency(
+        work_order_id=work_order_id,
+        depends_on_id=depends_on_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )

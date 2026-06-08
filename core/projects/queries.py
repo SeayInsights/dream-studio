@@ -112,24 +112,32 @@ def get_next_work_order(
         row = conn.execute(
             "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
             " FROM business_work_orders wo"
-            " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+            " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
             " WHERE wo.project_id = ? AND wo.status = 'in_progress'"
-            " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
+            " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST, wo.created_at ASC"
+            " LIMIT 1",
             (project_id,),
         ).fetchone()
         if row is None:
             row = conn.execute(
                 "SELECT wo.work_order_id, wo.title, wo.work_order_type, m.title AS milestone_title"
                 " FROM business_work_orders wo"
-                " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
                 " WHERE wo.project_id = ? AND wo.status = 'created'"
                 " AND m.order_index = ("
                 "   SELECT MIN(m2.order_index)"
                 "   FROM business_work_orders wo2"
-                "   LEFT JOIN business_milestones m2 ON wo2.milestone_id = m2.milestone_id"
+                "   INNER JOIN business_milestones m2 ON wo2.milestone_id = m2.milestone_id"
                 "   WHERE wo2.project_id = ? AND wo2.status IN ('created', 'in_progress')"
                 " )"
-                " ORDER BY wo.created_at ASC LIMIT 1",
+                " AND NOT EXISTS ("
+                "   SELECT 1 FROM work_order_dependencies dep"
+                "   INNER JOIN business_work_orders dep_wo"
+                "     ON dep.depends_on_id = dep_wo.work_order_id"
+                "   WHERE dep.work_order_id = wo.work_order_id"
+                "     AND dep_wo.status != 'closed'"
+                " )"
+                " ORDER BY wo.sequence_order ASC NULLS LAST, wo.created_at ASC LIMIT 1",
                 (project_id, project_id),
             ).fetchone()
     if row is None:
@@ -187,10 +195,18 @@ def get_project_state(
                 " (SELECT COUNT(*) FROM business_tasks t"
                 "  WHERE t.work_order_id = wo.work_order_id) AS total_tasks"
                 " FROM business_work_orders wo"
-                " LEFT JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
+                " INNER JOIN business_milestones m ON wo.milestone_id = m.milestone_id"
                 " LEFT JOIN business_work_order_types wot ON wot.type_id = wo.work_order_type"
                 " WHERE wo.project_id = ? AND wo.status IN ('created', 'in_progress')"
-                " ORDER BY m.order_index ASC, wo.created_at ASC LIMIT 1",
+                " AND (wo.status = 'in_progress' OR NOT EXISTS ("
+                "   SELECT 1 FROM work_order_dependencies dep"
+                "   INNER JOIN business_work_orders dep_wo"
+                "     ON dep.depends_on_id = dep_wo.work_order_id"
+                "   WHERE dep.work_order_id = wo.work_order_id"
+                "     AND dep_wo.status != 'closed'"
+                " ))"
+                " ORDER BY m.order_index ASC, wo.sequence_order ASC NULLS LAST, wo.created_at ASC"
+                " LIMIT 1",
                 (pid,),
             ).fetchone()
 
