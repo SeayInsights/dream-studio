@@ -284,6 +284,40 @@ def _check_failed_events(dream_studio_home: Path) -> dict[str, int]:
         return {"count": 0}
 
 
+def _check_handoff_spawner(source_root: Path) -> dict[str, Any]:
+    """Verify the handoff-continuation spawner can load session_config.spawn_new_session."""
+    import importlib.util
+
+    session_config_path = source_root / "runtime" / "session_config.py"
+    if not session_config_path.is_file():
+        return {
+            "status": "fail",
+            "reason": "session_config.py not found",
+            "spawn_importable": False,
+        }
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "_ds_session_config_check", session_config_path
+        )
+        if spec is None or spec.loader is None:
+            return {
+                "status": "fail",
+                "reason": "module spec unresolvable",
+                "spawn_importable": False,
+            }
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        if not hasattr(mod, "spawn_new_session"):
+            return {
+                "status": "fail",
+                "reason": "spawn_new_session missing from session_config",
+                "spawn_importable": False,
+            }
+        return {"status": "pass", "spawn_importable": True}
+    except Exception as exc:
+        return {"status": "fail", "reason": str(exc), "spawn_importable": False}
+
+
 def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[str, Any]:
     try:
         repo_file = source_root / "VERSION"
@@ -318,6 +352,7 @@ def run_doctor_checks(
     agents_info = _check_agents_installed(claude_dir, source_root)
     failed_info = _check_failed_events(paths.dream_studio_home)
     version_info = _check_version_current(source_root, paths.dream_studio_home)
+    handoff_spawner_info = _check_handoff_spawner(source_root)
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -415,6 +450,7 @@ def run_doctor_checks(
             "version_current": version_info,
             "schema_coherence": schema_coherence_info,
             "overhead": overhead_info,
+            "handoff_spawner": handoff_spawner_info,
         },
         "validation": validation,
     }

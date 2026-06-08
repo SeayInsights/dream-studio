@@ -60,6 +60,18 @@ HANDLERS: list[tuple[str, Path]] = [
 STATE_DIR = Path.home() / ".dream-studio" / "state"
 
 
+def _log_spawner_warning(msg: str) -> None:
+    """Write a timestamped warning to stderr and the diagnostics log (best-effort)."""
+    print(f"[DS handoff-spawner] {msg}", file=sys.stderr)
+    try:
+        diag = Path.home() / ".dream-studio" / "diagnostics" / "handoff-spawn-errors.log"
+        diag.parent.mkdir(parents=True, exist_ok=True)
+        with diag.open("a", encoding="utf-8") as f:
+            f.write(f"{time.time()}: {msg}\n")
+    except Exception:
+        pass
+
+
 def _dispatch_handoff_continuation() -> None:
     """
     If Claude produced a handoff document (handoff-latest.json) during this
@@ -67,6 +79,10 @@ def _dispatch_handoff_continuation() -> None:
     clean up the state files.
     """
     if _spawn_new_session is None:
+        _log_spawner_warning(
+            "session_config.spawn_new_session could not be imported — "
+            "handoff continuation disabled. Run `ds doctor` for details."
+        )
         return
 
     handoff_file = STATE_DIR / "handoff-latest.json"
@@ -106,8 +122,8 @@ def _dispatch_handoff_continuation() -> None:
         handoff_file.unlink(missing_ok=True)
         pending_file.unlink(missing_ok=True)
 
-    except Exception:
-        pass
+    except Exception as _exc:
+        _log_spawner_warning(f"handoff continuation spawn failed: {_exc}")
 
 
 def main() -> None:
