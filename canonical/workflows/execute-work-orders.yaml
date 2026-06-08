@@ -151,9 +151,51 @@ nodes:
     context: fresh
     timeout_seconds: 60
 
+  - id: independent-review
+    depends_on: [run-gates]
+    condition: "{{run-gates.output}} contains 'GATES: PASS'"
+    command: |
+      You are a FRESH reviewer with NO knowledge of what was built.
+      Read ONLY the following sources — do not rely on any prior context:
+
+      1. .planning/work-orders/<active_work_order_id>/context.md
+         — the authoritative task list and acceptance criteria for this work order
+      2. `git log --oneline -10` and `git diff HEAD~3..HEAD --stat`
+         — the actual commits and files changed
+
+      For EACH task listed in context.md under "## Open Tasks":
+        a. State the task title and its acceptance criteria.
+        b. Look for evidence in the diff that the task was completed.
+        c. Return PASS or FAIL for that task with one-sentence rationale.
+
+      Then write a summary file:
+        Path: .planning/work-orders/<active_work_order_id>/independent-review.md
+        Format:
+          # Independent Review — <work_order_id>
+
+          ## Task verdicts
+          - Task: <title>
+            Evidence: <what you found in the diff>
+            Result: PASS | FAIL
+
+          (repeat for each task)
+
+          ## Overall
+          VERDICT: PASS   <- only if ALL tasks pass
+          VERDICT: FAIL   <- if ANY task fails
+
+          Reviewer: clean-slate agent (no prior work context)
+
+      Print: REVIEW_PASS if all tasks pass, or REVIEW_FAIL: <first failing task> if any fail.
+
+      HALT if REVIEW_FAIL — do not proceed to close-work-order.
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
   - id: close-work-order-github
-    depends_on: [merge]
-    condition: "{{capability-probe.output}} contains 'GITHUB: YES'"
+    depends_on: [merge, independent-review]
+    condition: "{{capability-probe.output}} contains 'GITHUB: YES' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
       Write security-scan.md to .planning/work-orders/<id>/security-scan.md.
       Run: py -m interfaces.cli.ds work-order close <work_order_id>
@@ -163,8 +205,8 @@ nodes:
     timeout_seconds: 120
 
   - id: close-work-order-local
-    depends_on: [run-gates]
-    condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS'"
+    depends_on: [run-gates, independent-review]
+    condition: "{{capability-probe.output}} contains 'GITHUB: NO' and {{run-gates.output}} contains 'GATES: PASS' and {{independent-review.output}} contains 'REVIEW_PASS'"
     command: |
       GitHub path is absent — close on local gates only (no PR/merge).
       Write security-scan.md to .planning/work-orders/<id>/security-scan.md.
@@ -179,9 +221,18 @@ nodes:
     trigger_rule: any_done
     command: |
       Run: py -m interfaces.cli.ds project state
-      Check next_work_order from the response.
+      Parse next_work_order from the response for the active project.
 
-      If next_work_order exists and is unblocked:
+      The selector uses sequence_order + work_order_dependencies (WO-ORD ready-set):
+        - Returns the lowest sequence_order in_progress WO first (resume in-flight work)
+        - Then the lowest sequence_order created WO whose dependencies are all closed
+        - Scoped to the milestone with the lowest order_index that has open WOs
+        - WOs without a valid milestone are excluded (never surfaced)
+
+      DO NOT fall back to created_at ordering or any manual list.
+      Trust the selector output exactly — it is the authoritative sequence.
+
+      If next_work_order exists:
         Print: NEXT_WO: <work_order_id> — <title>
         Instruction: Re-invoke `workflow: execute-work-orders` to continue the loop.
       If no next_work_order or milestone complete:

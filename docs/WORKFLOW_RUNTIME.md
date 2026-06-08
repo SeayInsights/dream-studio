@@ -61,7 +61,7 @@ not depend on the current working directory.
 | feature-research | 12 | synthesis, director | No | — | **Yes** (GitHub API) | sonnet |
 | studio-onboard | multi | — | No | — | No | — |
 | production-readiness | 5 | no implicit execution gate | No | 60-120s | Yes (SQLite/dashboard read models) | adapter-agnostic |
-| execute-work-orders | 9 | preflight-check (halt on critical/high), migration-class-check (operator go), run-gates (halt on gate failure) | max:1 (implement-tasks) | 30-600s | No | haiku, sonnet |
+| execute-work-orders | 13 | preflight-check (halt on critical/high), migration-class-check (operator go), run-gates (halt on gate failure), independent-review (halt on REVIEW_FAIL) | max:1 (implement-tasks) | 30-600s | No | haiku, sonnet |
 
 The `production-readiness` workflow is the canonical workflow template for the
 secure production readiness gate. It classifies impact, builds the gate, persists
@@ -198,3 +198,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- 2026-06-07: WO-T autonomous WO-execution workflow. Added execute-work-orders.yaml (9 nodes): capability-probe → preflight-check → migration-class-check → implement-tasks → run-gates → create-branch → push-and-pr → watch-ci → merge → close-work-order → next-iteration. GitHub path is conditional on CapabilityResult (github_repo config + gh CLI auth). Stop conditions: gate failure, migration-class WO (operator go), unresolved critical/high preflight findings. Never --force-close autonomously. inventory count: 22 → 23. -->
 <!-- Last reviewed 2026-06-07 — WO-HS (feat/wo-hs-handoff-spawner): on-stop-dispatch.py _dispatch_handoff_continuation() de-silenced. No workflow YAML, engine, state, validator, cost, registry, or retry contract change. Workflow runtime contract unchanged. -->
+
+<!-- 2026-06-07: WO-T2 (feat/wo-t2-autonomous-loop-hardening): execute-work-orders.yaml updated. (1) Added independent-review node (after run-gates, before close nodes): spawns a fresh sonnet agent with no prior work context that reads context.md + git diff HEAD~3..HEAD, verifies each task against acceptance criteria, writes .planning/work-orders/<id>/independent-review.md with VERDICT: PASS/FAIL, prints REVIEW_PASS or REVIEW_FAIL. (2) close-work-order-github and close-work-order-local nodes updated: both depend on [independent-review] and require REVIEW_PASS in output before closing. (3) next-iteration node updated: documents the WO-ORD ready-set selector (sequence_order + work_order_dependencies, scoped to lowest order_index milestone with open WOs); prohibits created_at fallback. New gate in core/work_orders/close.py: independent_review_passed (checks .planning/work-orders/<id>/independent-review.md for "VERDICT: PASS"). Node count: 9 → 13 (split close-work-order into github/local variants + independent-review + corrected count). inventory count: 23 (unchanged). -->

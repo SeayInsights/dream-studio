@@ -95,3 +95,32 @@ def test_all_tests_pass_fail_no_passed_marker(wo_dir: Path, tmp_path: Path) -> N
     passed, reason = _check("all_tests_pass", tmp_path / ".planning")
     assert passed is False
     assert "all_tests_pass" in reason
+
+
+# ── independent_review_passed ─────────────────────────────────────────────────
+
+
+def test_independent_review_passed_pass(wo_dir: Path, tmp_path: Path) -> None:
+    (wo_dir / "independent-review.md").write_text(
+        "# Independent Review\n## Overall\nVERDICT: PASS\n", encoding="utf-8"
+    )
+    passed, reason = _check("independent_review_passed", tmp_path / ".planning")
+    assert passed is True
+    assert reason == ""
+
+
+def test_independent_review_passed_fail_missing(wo_dir: Path, tmp_path: Path) -> None:
+    passed, reason = _check("independent_review_passed", tmp_path / ".planning")
+    assert passed is False
+    assert "independent_review_passed" in reason
+    assert "independent-review.md" in reason
+
+
+def test_independent_review_passed_fail_verdict(wo_dir: Path, tmp_path: Path) -> None:
+    (wo_dir / "independent-review.md").write_text(
+        "# Independent Review\n## Overall\nVERDICT: FAIL\nTask 2 not evidenced.\n",
+        encoding="utf-8",
+    )
+    passed, reason = _check("independent_review_passed", tmp_path / ".planning")
+    assert passed is False
+    assert "VERDICT: PASS" in reason
