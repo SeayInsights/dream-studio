@@ -88,15 +88,14 @@ def _check_pending_handoff(payload: dict) -> bool:
         ph["status"] = "in_progress"
         pending.write_text(json.dumps(ph), encoding="utf-8")
 
+        handoff_id = ph.get("handoff_id", "")
         handoff_instruction = (
             "SYSTEM: Context threshold reached. "
-            "Before responding to the user's message, invoke the handoff skill:\n\n"
-            "handoff:\n\n"
-            "After the handoff document is complete, write it to "
-            "~/.dream-studio/state/handoff-latest.json as:\n"
-            '{"content": "<full handoff text>", "written_at": <unix timestamp>}\n\n'
-            "Then tell the user: Dream Studio is opening a continuation session "
-            "with this handoff."
+            f"Dream Studio has saved handoff packet #{handoff_id} to its authority database. "
+            "Finish your current thought gracefully. "
+            "Tell the user: 'Context window nearly full — Dream Studio is opening a "
+            "continuation session. Run `ds-project resume` in the new session to pick up "
+            "where we left off.'"
         )
 
         original = payload.get("prompt", "")

@@ -74,9 +74,9 @@ def _log_spawner_warning(msg: str) -> None:
 
 def _dispatch_handoff_continuation() -> None:
     """
-    If Claude produced a handoff document (handoff-latest.json) during this
-    stop cycle, spawn a new session seeded with the handoff content, then
-    clean up the state files.
+    If a handoff packet was written to the authority DB during this session,
+    spawn a new session with a reference-only prompt (no content in argv).
+    The continuation session queries the authority via ds-project:resume.
     """
     if _spawn_new_session is None:
         _log_spawner_warning(
@@ -85,41 +85,28 @@ def _dispatch_handoff_continuation() -> None:
         )
         return
 
-    handoff_file = STATE_DIR / "handoff-latest.json"
     pending_file = STATE_DIR / "pending-handoff.json"
 
-    if not handoff_file.is_file():
+    if not pending_file.is_file():
         return
 
     try:
-        hd = json.loads(handoff_file.read_text(encoding="utf-8"))
-        age = time.time() - hd.get("written_at", 0)
+        pending = json.loads(pending_file.read_text(encoding="utf-8"))
+        age = time.time() - pending.get("triggered_at", 0)
 
         if age >= 120:
+            pending_file.unlink(missing_ok=True)
             return
 
-        content = hd.get("content", "")
-        if not content:
+        handoff_id = pending.get("handoff_id")
+        if not handoff_id:
             return
 
-        pending: dict = {}
-        if pending_file.is_file():
-            try:
-                pending = json.loads(pending_file.read_text(encoding="utf-8"))
-            except Exception:
-                pass
-
-        flags = pending.get("invocation_flags", [])
         cwd = pending.get("cwd") or os.getcwd()
-
-        safe = content.replace('"', '\\"')
-        prompt = f"Continue from handoff: {safe}"
-        flags_str = " ".join(flags)
-        claude_cmd = f'claude {flags_str} "{prompt}"'.strip()
+        claude_cmd = 'claude "resume:"'
 
         _spawn_new_session(claude_cmd, cwd)
 
-        handoff_file.unlink(missing_ok=True)
         pending_file.unlink(missing_ok=True)
 
     except Exception as _exc:

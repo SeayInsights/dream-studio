@@ -33,9 +33,10 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf_8")
 BORDER = "═" * 43
 
 try:
-    from core.event_store.studio_db import _connect  # noqa: E402
+    from core.event_store.studio_db import _connect, mark_handoff_consumed  # noqa: E402
 except ImportError:
     _connect = None  # Fallback if not available
+    mark_handoff_consumed = None  # type: ignore[assignment]
 
 
 def load_handoff_from_db(handoff_id: int) -> dict | None:
@@ -96,7 +97,7 @@ def find_latest_handoff_db() -> dict | None:
         conn = _connect()
 
         row = conn.execute("""
-            SELECT h.id
+            SELECT h.id, h.session_id
             FROM raw_handoffs h
             LEFT JOIN raw_sessions s ON h.session_id = s.session_id
             WHERE COALESCE(s.handoff_consumed, 0) = 0
@@ -107,7 +108,11 @@ def find_latest_handoff_db() -> dict | None:
         conn.close()
 
         if row:
-            return load_handoff_from_db(row[0])
+            handoff_id, session_id = row[0], row[1]
+            data = load_handoff_from_db(handoff_id)
+            if data and mark_handoff_consumed and session_id:
+                mark_handoff_consumed(session_id)
+            return data
 
         return None
     except Exception as e:
