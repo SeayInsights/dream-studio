@@ -514,12 +514,22 @@ class ProjectionEngine:
       table is kept and still written for legacy projections.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        db_path: Optional[str] = None,
+        analytics_conn: Optional[Any] = None,
+    ) -> None:
         self.db_path = db_path or str(state_dir() / "studio.db")
+        self._analytics_conn = analytics_conn  # DuckDB conn; None until WO-TS3 wires projections
         self._registry = ProjectionRegistry()
         # Legacy dict for backward compat with apply_incremental / rebuild
         self._projections: Dict[str, Projection] = {}
         self._ensure_meta_tables()
+
+    @property
+    def analytics_conn(self) -> Optional[Any]:
+        """DuckDB analytics connection, or None if not yet wired (see WO-TS3)."""
+        return self._analytics_conn
 
     # ── Registration ──────────────────────────────────────────────────────────
 
