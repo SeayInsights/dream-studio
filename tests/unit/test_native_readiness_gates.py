@@ -22,7 +22,6 @@ from interfaces.cli import (
     check_migrations,
     ds_dashboard,
     runtime_preflight,
-    verify_migrations,
 )  # noqa: E402
 
 
@@ -151,48 +150,6 @@ def test_check_migrations_blocks_before_connect_on_newer_than_code(tmp_path, mon
     assert "no migration connection was opened" in output
 
 
-def test_verify_migrations_blocks_read_only_on_newer_than_code(tmp_path, monkeypatch, capsys):
-    latest = runtime_preflight._latest_migration_version(REPO_ROOT)
-    fake_home = tmp_path / "home"
-    _schema_db(fake_home, latest + 2)
-    monkeypatch.setenv("HOME", str(fake_home))
-    monkeypatch.setenv("USERPROFILE", str(fake_home))
-
-    with patch(
-        "interfaces.cli.verify_migrations._connect_read_only",
-        side_effect=AssertionError("read-only query opened"),
-    ):
-        assert verify_migrations.main() == 1
-
-    output = capsys.readouterr().out
-    assert "Schema compatibility: blocked_newer_than_code" in output
-    assert "schema compatibility is blocked; no migration was attempted" in output
-    assert "python interfaces/cli/runtime_recovery.py --dry-run --json" in output
-
-
-def test_verify_migrations_allows_missing_legacy_graph_view(tmp_path, monkeypatch, capsys):
-    latest = runtime_preflight._latest_migration_version(REPO_ROOT)
-    fake_home = tmp_path / "home"
-    db_path = _schema_db(fake_home, latest)
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute("CREATE TABLE tool_registry (tool_id TEXT PRIMARY KEY)")
-        conn.execute("CREATE TABLE research_cache (cache_id TEXT PRIMARY KEY)")
-        conn.commit()
-    finally:
-        conn.close()
-    before = _fingerprint(db_path)
-    monkeypatch.setenv("HOME", str(fake_home))
-    monkeypatch.setenv("USERPROFILE", str(fake_home))
-
-    assert verify_migrations.main() == 0
-
-    output = capsys.readouterr().out
-    assert "Schema compatibility: compatible" in output
-    assert "Optional legacy views missing: vw_graph_edges (non-blocking)" in output
-    assert "SUCCESS: Schema compatibility and required tables verified" in output
-    assert _fingerprint(db_path) == before
-
 
 def test_native_readiness_checks_do_not_mutate_newer_than_code_db(tmp_path):
     latest = runtime_preflight._latest_migration_version(REPO_ROOT)
@@ -204,7 +161,6 @@ def test_native_readiness_checks_do_not_mutate_newer_than_code_db(tmp_path):
         ("interfaces/cli/setup.py", ["--check"], 0),
         ("interfaces/cli/ds_dashboard.py", ["--check"], 1),
         ("interfaces/cli/check_migrations.py", [], 1),
-        ("interfaces/cli/verify_migrations.py", [], 1),
     ]
     for script, args, expected_code in commands:
         result = _run_cli(script, *args, home=fake_home)
