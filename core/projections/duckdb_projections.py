@@ -177,3 +177,145 @@ def register_duckdb_projection(proj: Any) -> None:
     _PROJECTIONS.append(proj)
     for et in getattr(proj, "consumed_event_types", []):
         _EVENT_TYPE_MAP.setdefault(et, []).append(proj)
+
+
+class DuckDBWorkOrderProjection:
+    name = "duckdb_work_order_projection"
+    consumed_event_types = [
+        "work_order.created",
+        "work_order.started",
+        "work_order.closed",
+        "work_order.deleted",
+    ]
+
+    def handle(self, event: Dict[str, Any], conn: Any) -> int:
+        payload = event.get("payload") or {}
+        event_type = event["event_type"]
+        event_id = event["event_id"]
+        ts = event.get("event_timestamp") or _now()
+        now = _now()
+
+        work_order_id = (
+            event.get("work_order_id")
+            or (event.get("trace") or {}).get("work_order_id")
+            or payload.get("work_order_id")
+        )
+        if not work_order_id:
+            return 0
+
+        project_id = event.get("project_id") or (event.get("trace") or {}).get("project_id")
+        milestone_id = event.get("milestone_id") or (event.get("trace") or {}).get("milestone_id")
+
+        if event_type == "work_order.created":
+            conn.execute(
+                """INSERT OR REPLACE INTO duckdb_work_orders
+                   (work_order_id, project_id, milestone_id, title, description,
+                    work_order_type, status, sequence_order, created_at, updated_at, last_event_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    work_order_id,
+                    project_id,
+                    milestone_id,
+                    payload.get("title"),
+                    payload.get("description"),
+                    payload.get("work_order_type"),
+                    "created",
+                    payload.get("sequence_order"),
+                    ts,
+                    now,
+                    event_id,
+                ),
+            )
+        elif event_type == "work_order.started":
+            conn.execute(
+                "UPDATE duckdb_work_orders SET status='active', started_at=?,"
+                " updated_at=?, last_event_id=? WHERE work_order_id=?",
+                (ts, now, event_id, work_order_id),
+            )
+        elif event_type == "work_order.closed":
+            conn.execute(
+                "UPDATE duckdb_work_orders SET status='closed', closed_at=?,"
+                " updated_at=?, last_event_id=? WHERE work_order_id=?",
+                (ts, now, event_id, work_order_id),
+            )
+        elif event_type == "work_order.deleted":
+            conn.execute(
+                "UPDATE duckdb_work_orders SET status='deleted', updated_at=?, last_event_id=?"
+                " WHERE work_order_id=?",
+                (now, event_id, work_order_id),
+            )
+        return 1
+
+
+class DuckDBTaskProjection:
+    name = "duckdb_task_projection"
+    consumed_event_types = [
+        "task.created",
+        "task.done",
+        "task.deleted",
+    ]
+
+    def handle(self, event: Dict[str, Any], conn: Any) -> int:
+        payload = event.get("payload") or {}
+        event_type = event["event_type"]
+        event_id = event["event_id"]
+        ts = event.get("event_timestamp") or _now()
+        now = _now()
+
+        task_id = (
+            event.get("task_id")
+            or (event.get("trace") or {}).get("task_id")
+            or payload.get("task_id")
+        )
+        if not task_id:
+            return 0
+
+        work_order_id = (
+            event.get("work_order_id")
+            or (event.get("trace") or {}).get("work_order_id")
+            or payload.get("work_order_id")
+            or ""
+        )
+        project_id = (
+            event.get("project_id")
+            or (event.get("trace") or {}).get("project_id")
+            or payload.get("project_id")
+            or ""
+        )
+
+        if event_type == "task.created":
+            conn.execute(
+                """INSERT OR REPLACE INTO duckdb_tasks
+                   (task_id, work_order_id, project_id, title, description,
+                    status, created_at, updated_at, last_event_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    task_id,
+                    work_order_id,
+                    project_id,
+                    payload.get("title") or "(pending)",
+                    payload.get("description"),
+                    "pending",
+                    ts,
+                    now,
+                    event_id,
+                ),
+            )
+        elif event_type == "task.done":
+            conn.execute(
+                "UPDATE duckdb_tasks SET status='complete', updated_at=?, last_event_id=?"
+                " WHERE task_id=?",
+                (now, event_id, task_id),
+            )
+        elif event_type == "task.deleted":
+            conn.execute(
+                "UPDATE duckdb_tasks SET status='deleted', updated_at=?, last_event_id=?"
+                " WHERE task_id=?",
+                (now, event_id, task_id),
+            )
+        return 1
+
+
+# Register Task 3 projections into the routing table
+for _p3 in [DuckDBWorkOrderProjection(), DuckDBTaskProjection()]:
+    register_duckdb_projection(_p3)
