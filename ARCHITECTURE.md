@@ -76,5 +76,5 @@ Telemetry flows from controlled events into SQLite, read models, FastAPI routes,
 
 - [Detailed Architecture](docs/ARCHITECTURE.md)
 - [Database](DATABASE.md)
-- [Workflows](WORKFLOWS.md)
+- [Workflows](docs/WORKFLOWS.md)
 - [Publication Boundary](docs/PUBLICATION_BOUNDARY.md)
