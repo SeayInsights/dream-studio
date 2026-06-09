@@ -396,3 +396,50 @@ class DuckDBDesignBriefProjection:
 
 # Register Task 4 projection
 register_duckdb_projection(DuckDBDesignBriefProjection())
+
+
+class DuckDBExecutionEventProjection:
+    name = "duckdb_execution_event_projection"
+    consumed_event_types = [
+        "execution.started",
+        "execution.completed",
+        "execution.failed",
+    ]
+
+    def handle(self, event: Dict[str, Any], conn: Any) -> int:
+        event_type = event["event_type"]
+        event_id = event["event_id"]
+        ts = event.get("event_timestamp") or _now()
+        trace = event.get("trace") or {}
+        payload = event.get("payload") or {}
+
+        conn.execute(
+            """INSERT OR REPLACE INTO duckdb_execution_events
+               (event_id, event_type, event_name, project_id, milestone_id, task_id,
+                session_id, skill_id, workflow_id, agent_id, hook_id, tool_id,
+                model_id, adapter_id, outcome_status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                event_id,
+                event_type,
+                payload.get("event_name"),
+                trace.get("project_id") or event.get("project_id"),
+                trace.get("milestone_id"),
+                trace.get("task_id"),
+                event.get("session_id"),
+                trace.get("skill_id"),
+                trace.get("workflow_id"),
+                trace.get("agent_id"),
+                trace.get("hook_id"),
+                trace.get("tool_id"),
+                trace.get("model_id"),
+                trace.get("adapter_id"),
+                payload.get("outcome_status"),
+                ts,
+            ),
+        )
+        return 1
+
+
+# Register Task 7 projection
+register_duckdb_projection(DuckDBExecutionEventProjection())

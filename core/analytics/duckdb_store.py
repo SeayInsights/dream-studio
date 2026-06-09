@@ -183,6 +183,25 @@ _BUSINESS_TABLES_DDL = """
         last_event_timestamp TEXT,
         updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS duckdb_execution_events (
+        event_id TEXT NOT NULL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        event_name TEXT,
+        project_id TEXT,
+        milestone_id TEXT,
+        task_id TEXT,
+        session_id TEXT,
+        skill_id TEXT,
+        workflow_id TEXT,
+        agent_id TEXT,
+        hook_id TEXT,
+        tool_id TEXT,
+        model_id TEXT,
+        adapter_id TEXT,
+        outcome_status TEXT,
+        created_at TEXT NOT NULL
+    );
 """
 
 
