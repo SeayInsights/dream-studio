@@ -80,6 +80,30 @@ def _check_preflight_gate(work_order_id: str) -> dict[str, Any] | None:
     }
 
 
+def _get_pending_audits_for_project(project_id: str | None) -> list[dict]:
+    """Return deferred pending_audits rows for a project, advisory only.
+
+    Returns empty list if the table doesn't exist yet or project_id is None.
+    """
+    if not project_id:
+        return []
+    try:
+        from core.config.database import get_connection
+
+        with get_connection(read_only=True) as conn:
+            rows = conn.execute(
+                "SELECT audit_id, audit_type, status, created_at FROM pending_audits"
+                " WHERE project_id = ? AND status IN ('deferred', 'scheduled')"
+                " ORDER BY created_at",
+                (project_id,),
+            ).fetchall()
+        return [
+            {"audit_id": r[0], "audit_type": r[1], "status": r[2], "created_at": r[3]} for r in rows
+        ]
+    except Exception:
+        return []
+
+
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     # Lazy import via ds.py — see core.projects.queries._require_db for rationale.
     from interfaces.cli.ds import resolve_installed_runtime_paths
@@ -538,4 +562,14 @@ def start_work_order(
             f"This work order uses the `{workflow_template}` workflow. "
             f"First node: `think`. Invoke `ds-core:think` to begin."
         )
+
+    # Surface unresolved pending audits advisory (WO-W gate stub — WO-O lands full dispatch).
+    pending = _get_pending_audits_for_project(brief_data.get("project_id"))
+    if pending:
+        result["pending_audits"] = pending
+        result["pending_audits_notice"] = (
+            f"This project has {len(pending)} deferred audit(s) not yet run. "
+            "Run `ds project audit <project_id>` or defer again to acknowledge."
+        )
+
     return result

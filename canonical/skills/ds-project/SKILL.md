@@ -14,12 +14,13 @@
 2. If no mode given, default to `scope`.
 3. Read the mode's instructions (in this file or the corresponding modes/ SKILL.md) and follow them exactly.
 
-| Mode   | File | Keywords |
-|--------|------|----------|
-| scope  | This file — Phase 1–5 below | scope project:, ds project scope:, create prd: |
-| resume | This file — Resume Mode section | resume:, continue:, what's next:, where was I:, start building: |
-| brief  | modes/brief/SKILL.md | design brief:, fill brief:, brief:, lock brief: |
-| manage | modes/manage/SKILL.md | list projects:, switch project:, archive project:, delete project: |
+| Mode       | File | Keywords |
+|------------|------|----------|
+| scope      | This file — Phase 1–5 below | scope project:, ds project scope:, create prd: |
+| resume     | This file — Resume Mode section | resume:, continue:, what's next:, where was I:, start building: |
+| brief      | modes/brief/SKILL.md | design brief:, fill brief:, brief:, lock brief: |
+| manage     | modes/manage/SKILL.md | list projects:, switch project:, archive project:, delete project: |
+| brownfield | modes/brownfield/SKILL.md | brownfield-onboard:, register existing projects:, bulk register:, ds project brownfield: |
 
 ---
 
