@@ -310,3 +310,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- Last reviewed 2026-06-08 — WO-HS2 handoff-to-authority: no schema changes. insert_handoff() in studio_db.py now called from handle_handoff() via _write_handoff_packet_to_db() in monitor.py (context-threshold band). mark_handoff_consumed() now called in find_latest_handoff_db() after loading to prevent re-spawn. raw_handoffs and raw_sessions.handoff_consumed column were pre-existing — no DDL changes. -->
 
 <!-- Last reviewed 2026-06-09 — migration-release-112: bump .released_version 110→112. Migrations 111+112 (findings event-spine, sec_sarif_findings retire) are merged and now released for live application on fresh clones. sarif_parser.py comments updated to reference security_events (sec_sarif_findings retired). No new schema changes. -->
+
+<!-- Last reviewed 2026-06-09 — WO-W migration 113 (brownfield_onboarding): ALTER TABLE business_projects ADD COLUMN vision_statement TEXT (AD-10, vision on entity not prd_*); CREATE TABLE pending_audits (scheduling table — project_id FK, audit_type, status, correlation_id, timestamps; NOT a findings spine). Additive-only migration. -->
