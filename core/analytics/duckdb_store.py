@@ -1,14 +1,16 @@
 """DuckDB analytics store — connection layer for aggregate_metrics.db.
 
-aggregate_metrics.db is a DuckDB file (not SQLite) that holds the six
-read-model rollup tables and the _aggregate_meta bookkeeping table.
+aggregate_metrics.db is a DuckDB file (not SQLite) that holds analytics
+rollup tables and DuckDB-side projection tables that mirror business_* from
+studio.db (read model for dashboard API routes and analytics queries).
 
 Authority boundary: this store is NEVER-AUTHORITY.
   - It receives aggregated data from studio.db (read-only source).
   - No canonical event is emitted based on DuckDB reads.
   - No gate decision uses DuckDB as source.
   - API routes open read-only connections only.
-  - The aggregation pipeline holds the sole read-write connection.
+  - The aggregation pipeline and projection runners hold the sole
+    read-write connection (core/projections/runner.py only).
 """
 
 from __future__ import annotations
@@ -102,6 +104,87 @@ _ROLLUP_TABLES_DDL = """
     );
 """
 
+_BUSINESS_TABLES_DDL = """
+    CREATE TABLE IF NOT EXISTS duckdb_projects (
+        project_id TEXT NOT NULL PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        project_path TEXT,
+        detected_stack TEXT,
+        vision_statement TEXT,
+        total_sessions INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        last_session_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_event_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS duckdb_milestones (
+        milestone_id TEXT NOT NULL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        order_index INTEGER NOT NULL DEFAULT 0,
+        due_date TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_event_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS duckdb_work_orders (
+        work_order_id TEXT NOT NULL PRIMARY KEY,
+        project_id TEXT,
+        milestone_id TEXT,
+        title TEXT,
+        description TEXT,
+        work_order_type TEXT,
+        status TEXT NOT NULL DEFAULT 'created',
+        sequence_order INTEGER,
+        created_at TEXT,
+        started_at TEXT,
+        closed_at TEXT,
+        updated_at TEXT,
+        last_event_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS duckdb_tasks (
+        task_id TEXT NOT NULL PRIMARY KEY,
+        work_order_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_event_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS duckdb_design_briefs (
+        brief_id TEXT NOT NULL PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        purpose TEXT,
+        audience TEXT,
+        tone TEXT,
+        design_system TEXT,
+        font_pairing TEXT,
+        brand_tokens TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_event_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS duckdb_projection_cursor (
+        projection_name TEXT NOT NULL PRIMARY KEY,
+        last_event_id TEXT,
+        last_event_timestamp TEXT,
+        updated_at TEXT NOT NULL
+    );
+"""
+
 
 def analytics_db_path() -> Path:
     """Return path to the DuckDB analytics store."""
@@ -126,5 +209,6 @@ def connect_analytics(
 def ensure_analytics_schema(
     conn: "duckdb.DuckDBPyConnection",
 ) -> None:
-    """Create all rollup tables if they do not already exist (idempotent)."""
+    """Create all analytics and business-projection tables (idempotent)."""
     conn.execute(_ROLLUP_TABLES_DDL)
+    conn.execute(_BUSINESS_TABLES_DDL)
