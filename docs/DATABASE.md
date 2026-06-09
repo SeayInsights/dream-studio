@@ -312,3 +312,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- Last reviewed 2026-06-09 — migration-release-112: bump .released_version 110→112. Migrations 111+112 (findings event-spine, sec_sarif_findings retire) are merged and now released for live application on fresh clones. sarif_parser.py comments updated to reference security_events (sec_sarif_findings retired). No new schema changes. -->
 
 <!-- Last reviewed 2026-06-09 — WO-W migration 113 (brownfield_onboarding): ALTER TABLE business_projects ADD COLUMN vision_statement TEXT (AD-10, vision on entity not prd_*); CREATE TABLE pending_audits (scheduling table — project_id FK, audit_type, status, correlation_id, timestamps; NOT a findings spine). Additive-only migration. -->
+
+<!-- Last reviewed 2026-06-09 — migration-release-113: bump .released_version 112→113. Migration 113 (brownfield_onboarding — vision_statement + pending_audits) merged via WO-W PRs #224+#225+#226 and now released for live application on fresh clones. No new schema changes in this commit — release marker only. -->

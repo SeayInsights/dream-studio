@@ -346,3 +346,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- Last reviewed 2026-06-09 — migration-release-112: .released_version bumped 110→112. Migrations 111 (security_events/readiness_events/findings_current_status CREATE) and 112 (sec_sarif_findings/sec_cve_matches/sec_manual_reviews DROP + data migration) are now released. No schema additions beyond what was already reviewed for WO-Y. -->
 
 <!-- Last reviewed 2026-06-09 — WO-W migration 113 (brownfield_onboarding): additive migration — vision_statement column on business_projects + pending_audits scheduling table. No DROP, no data migration, no existing schema changes. -->
+
+<!-- Last reviewed 2026-06-09 — migration-release-113: .released_version bumped 112→113. Migration 113 (ALTER TABLE business_projects + CREATE TABLE pending_audits) is now released. Additive-only migration; no DROP or data migration. -->
