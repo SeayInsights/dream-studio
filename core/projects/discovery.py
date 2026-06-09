@@ -33,9 +33,17 @@ _PROJECT_MARKERS = (
 )
 
 _SKIP_DIRS = {
-    ".venv", "venv", "env", ".env",
-    "node_modules", "__pycache__", ".git",
-    "dist", "build", "target", ".tox",
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+    "node_modules",
+    "__pycache__",
+    ".git",
+    "dist",
+    "build",
+    "target",
+    ".tox",
 }
 
 
@@ -84,7 +92,16 @@ def _discover_github_repos(entity: str) -> list[dict[str, Any]]:
     """
     try:
         result = subprocess.run(
-            ["gh", "repo", "list", entity, "--json", "name,url,description,isPrivate", "--limit", "100"],
+            [
+                "gh",
+                "repo",
+                "list",
+                entity,
+                "--json",
+                "name,url,description,isPrivate",
+                "--limit",
+                "100",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -111,7 +128,10 @@ def _discover_github_repos(entity: str) -> list[dict[str, Any]]:
 def _is_gh_authed() -> bool:
     """Return True if `gh auth status` exits 0."""
     try:
-        return subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=10).returncode == 0
+        return (
+            subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=10).returncode
+            == 0
+        )
     except Exception:
         return False
 

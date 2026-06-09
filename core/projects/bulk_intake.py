@@ -80,7 +80,9 @@ def bulk_acquire(
                 dream_studio_home=dream_studio_home,
             )
             if not result.get("ok"):
-                errors.append({"path": path_str, "name": name, "error": result.get("error", "unknown")})
+                errors.append(
+                    {"path": path_str, "name": name, "error": result.get("error", "unknown")}
+                )
             elif result.get("idempotent"):
                 skipped.append(result)
             else:
