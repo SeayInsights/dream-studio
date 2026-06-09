@@ -1,4 +1,4 @@
-"""Tests for ML metrics aggregation pipeline."""
+"""Tests for ML metrics aggregation pipeline (DuckDB backend)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import duckdb  # noqa: E402
 import pytest  # noqa: E402
+
 from core.analytics.aggregate_metrics import ensure_aggregate_schema, run_aggregation  # noqa: E402
 
 
@@ -19,10 +21,10 @@ def _make_source_db(tmp_path: Path) -> Path:
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
-        CREATE TABLE findings (
+        CREATE TABLE findings_current_status (
             finding_id TEXT PRIMARY KEY, project_id TEXT,
             introduced_by_skill_id TEXT,
-            rule_id TEXT, severity TEXT, status TEXT DEFAULT 'new',
+            rule_id TEXT, severity TEXT, current_status TEXT DEFAULT 'open',
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE TABLE scan_runs (
@@ -36,30 +38,40 @@ def _make_source_db(tmp_path: Path) -> Path:
             action TEXT DEFAULT 'logged', confidence REAL,
             details TEXT DEFAULT '{}', created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        INSERT INTO findings VALUES ('f1', 'proj-a', 'security', 'sec-001', 'critical', 'new', datetime('now'));
-        INSERT INTO findings VALUES ('f2', 'proj-a', 'security', 'sec-001', 'high', 'new', datetime('now'));
-        INSERT INTO findings VALUES ('f3', 'proj-a', 'code-quality', 'cq-001', 'medium', 'fixed', datetime('now'));
-        INSERT INTO findings VALUES ('f4', 'proj-b', 'backend-api', 'api-004', 'critical', 'new', datetime('now'));
-        INSERT INTO scan_runs VALUES ('s1', 'proj-a', 'security', 1, 2, 'completed', datetime('now'));
-        INSERT INTO scan_runs VALUES ('s2', 'proj-a', 'security', 0, 1, 'completed', datetime('now'));
-        INSERT INTO guard_events VALUES ('g1', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'logged', 0.9, '{}', datetime('now'));
-        INSERT INTO guard_events VALUES ('g2', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'dismissed', 0.9, '{}', datetime('now'));
+        INSERT INTO findings_current_status VALUES
+            ('f1', 'proj-a', 'security', 'sec-001', 'critical', 'open', datetime('now')),
+            ('f2', 'proj-a', 'security', 'sec-001', 'high', 'open', datetime('now')),
+            ('f3', 'proj-a', 'code-quality', 'cq-001', 'medium', 'fixed', datetime('now')),
+            ('f4', 'proj-b', 'backend-api', 'api-004', 'critical', 'open', datetime('now'));
+        INSERT INTO scan_runs VALUES
+            ('s1', 'proj-a', 'security', 1, 2, 'completed', datetime('now')),
+            ('s2', 'proj-a', 'security', 0, 1, 'completed', datetime('now'));
+        INSERT INTO guard_events VALUES
+            ('g1', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'logged', 0.9, '{}', datetime('now')),
+            ('g2', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'dismissed', 0.9, '{}', datetime('now'));
     """)
     conn.commit()
     conn.close()
     return db
 
 
+def _agg_tables(agg_db: Path) -> set:
+    """Return set of table names in the DuckDB analytics store."""
+    conn = duckdb.connect(str(agg_db), read_only=True)
+    try:
+        rows = conn.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'"
+        ).fetchall()
+        return {r[0] for r in rows}
+    finally:
+        conn.close()
+
+
 class TestAggregateSchema:
     def test_schema_creates_all_tables(self, tmp_path):
         agg_db = tmp_path / "aggregate_metrics.db"
         ensure_aggregate_schema(agg_db)
-        conn = sqlite3.connect(str(agg_db))
-        tables = {
-            r[0]
-            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-        }
-        conn.close()
+        tables = _agg_tables(agg_db)
         assert "finding_rollups" in tables
         assert "rule_fire_rates" in tables
         assert "baseline_trends" in tables
@@ -71,7 +83,7 @@ class TestAggregateSchema:
     def test_schema_idempotent(self, tmp_path):
         agg_db = tmp_path / "aggregate_metrics.db"
         ensure_aggregate_schema(agg_db)
-        ensure_aggregate_schema(agg_db)  # Second call should not error
+        ensure_aggregate_schema(agg_db)  # Second call must not error
 
 
 class TestAggregationPipeline:
@@ -90,16 +102,16 @@ class TestAggregationPipeline:
         src = sqlite3.connect(str(source_db))
         src.row_factory = sqlite3.Row
         raw_count = src.execute(
-            "SELECT COUNT(*) as c FROM findings WHERE project_id = 'proj-a'"
+            "SELECT COUNT(*) as c FROM findings_current_status WHERE project_id = 'proj-a'"
         ).fetchone()["c"]
         src.close()
 
-        agg = sqlite3.connect(str(agg_db))
-        agg.row_factory = sqlite3.Row
-        agg_count = agg.execute(
-            "SELECT SUM(finding_count) as c FROM finding_rollups WHERE project_id = 'proj-a'"
-        ).fetchone()["c"]
+        agg = duckdb.connect(str(agg_db), read_only=True)
+        row = agg.execute(
+            "SELECT SUM(finding_count) AS c FROM finding_rollups WHERE project_id = 'proj-a'"
+        ).fetchone()
         agg.close()
+        agg_count = row[0] if row else 0
 
         assert agg_count == raw_count, f"finding_rollups {agg_count} != raw {raw_count}"
 
@@ -109,14 +121,14 @@ class TestAggregationPipeline:
         monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(source_db))
 
         run_aggregation(agg_db)
-        conn = sqlite3.connect(str(agg_db))
-        count1 = conn.execute("SELECT COUNT(*) FROM finding_rollups").fetchone()[0]
-        conn.close()
+        agg = duckdb.connect(str(agg_db), read_only=True)
+        count1 = agg.execute("SELECT COUNT(*) FROM finding_rollups").fetchone()[0]
+        agg.close()
 
         run_aggregation(agg_db)
-        conn = sqlite3.connect(str(agg_db))
-        count2 = conn.execute("SELECT COUNT(*) FROM finding_rollups").fetchone()[0]
-        conn.close()
+        agg = duckdb.connect(str(agg_db), read_only=True)
+        count2 = agg.execute("SELECT COUNT(*) FROM finding_rollups").fetchone()[0]
+        agg.close()
 
         assert count1 == count2, f"Idempotency failed: {count1} vs {count2}"
 
@@ -126,12 +138,15 @@ class TestAggregationPipeline:
         monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(source_db))
 
         run_aggregation(agg_db)
-        conn = sqlite3.connect(str(agg_db))
-        conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM guard_calibration WHERE rule_id = 'guard-001'").fetchone()
-        conn.close()
+        agg = duckdb.connect(str(agg_db), read_only=True)
+        row = agg.execute(
+            "SELECT total_fires, dismiss_count, fp_rate"
+            " FROM guard_calibration WHERE rule_id = 'guard-001'"
+        ).fetchone()
+        agg.close()
 
         assert row is not None
-        assert row["total_fires"] == 2
-        assert row["dismiss_count"] == 1
-        assert abs(row["fp_rate"] - 0.5) < 0.01
+        total_fires, dismiss_count, fp_rate = row
+        assert total_fires == 2
+        assert dismiss_count == 1
+        assert abs(fp_rate - 0.5) < 0.01

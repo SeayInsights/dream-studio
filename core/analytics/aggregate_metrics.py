@@ -1,9 +1,9 @@
 """Aggregate metrics pipeline — reads from studio.db, writes to aggregate_metrics.db.
 
-Idempotent: running twice produces same data. Uses REPLACE INTO / INSERT OR REPLACE
-to overwrite stale rows rather than accumulating duplicates.
+Idempotent: running twice produces same data. Uses INSERT OR REPLACE to overwrite
+stale rows rather than accumulating duplicates.
 
-aggregate_metrics.db lives at state_dir() / "aggregate_metrics.db".
+aggregate_metrics.db is a DuckDB file at state_dir() / "aggregate_metrics.db".
 """
 
 from __future__ import annotations
@@ -12,12 +12,17 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from core.analytics.duckdb_store import (
+    analytics_db_path,
+    connect_analytics,
+    ensure_analytics_schema,
+)
 from core.config.paths import state_dir
 
 
 def aggregate_metrics_db_path() -> Path:
-    """Return path to aggregate_metrics.db (creates parent dirs if needed)."""
-    return state_dir() / "aggregate_metrics.db"
+    """Return path to aggregate_metrics.db."""
+    return analytics_db_path()
 
 
 def _connect_source() -> sqlite3.Connection:
@@ -30,97 +35,16 @@ def _connect_source() -> sqlite3.Connection:
     return conn
 
 
-def _connect_aggregate(db_path: Path | None = None) -> sqlite3.Connection:
-    """Connect to aggregate_metrics.db (read-write, creates if absent)."""
-    path = db_path or aggregate_metrics_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    return conn
+def _connect_aggregate(db_path: Path | None = None):
+    """Open a read-write DuckDB connection to aggregate_metrics.db."""
+    return connect_analytics(db_path, read_only=False)
 
 
 def ensure_aggregate_schema(db_path: Path | None = None) -> None:
     """Create aggregate_metrics.db schema if not already present."""
     conn = _connect_aggregate(db_path)
     try:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS finding_rollups (
-                project_id TEXT NOT NULL,
-                skill_id TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                day TEXT NOT NULL,
-                finding_count INTEGER NOT NULL DEFAULT 0,
-                new_count INTEGER NOT NULL DEFAULT 0,
-                fixed_count INTEGER NOT NULL DEFAULT 0,
-                persisting_count INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (project_id, skill_id, severity, day)
-            );
-
-            CREATE TABLE IF NOT EXISTS rule_fire_rates (
-                rule_id TEXT NOT NULL,
-                skill_id TEXT NOT NULL,
-                language TEXT,
-                fire_count INTEGER NOT NULL DEFAULT 0,
-                scan_count INTEGER NOT NULL DEFAULT 0,
-                dismiss_count INTEGER NOT NULL DEFAULT 0,
-                fp_rate REAL,
-                last_fired_at TEXT,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (rule_id, skill_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS baseline_trends (
-                project_id TEXT NOT NULL,
-                skill_id TEXT NOT NULL,
-                baseline_count INTEGER NOT NULL DEFAULT 0,
-                current_count INTEGER NOT NULL DEFAULT 0,
-                delta INTEGER NOT NULL DEFAULT 0,
-                trend_direction TEXT,
-                scan_count INTEGER NOT NULL DEFAULT 0,
-                last_scan_at TEXT,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (project_id, skill_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS guard_calibration (
-                rule_id TEXT NOT NULL PRIMARY KEY,
-                total_fires INTEGER NOT NULL DEFAULT 0,
-                dismiss_count INTEGER NOT NULL DEFAULT 0,
-                block_count INTEGER NOT NULL DEFAULT 0,
-                advisory_count INTEGER NOT NULL DEFAULT 0,
-                fp_rate REAL,
-                calibration_status TEXT DEFAULT 'pending',
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS pattern_catalog (
-                pattern_id TEXT NOT NULL PRIMARY KEY,
-                project_id TEXT,
-                skill_sequence TEXT NOT NULL,
-                occurrence_count INTEGER NOT NULL DEFAULT 0,
-                avg_findings_per_run REAL,
-                last_seen_at TEXT,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS recommendation_outcomes (
-                rule_id TEXT NOT NULL,
-                project_id TEXT NOT NULL,
-                recommendation_type TEXT NOT NULL,
-                presented_count INTEGER NOT NULL DEFAULT 0,
-                acted_count INTEGER NOT NULL DEFAULT 0,
-                acceptance_rate REAL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (rule_id, project_id, recommendation_type)
-            );
-
-            CREATE TABLE IF NOT EXISTS _aggregate_meta (
-                key TEXT NOT NULL PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-        """)
-        conn.commit()
+        ensure_analytics_schema(conn)
     finally:
         conn.close()
 
