@@ -28,8 +28,8 @@ from core.findings.mutations import record_finding as _record_finding  # noqa: E
 
 logger = logging.getLogger(__name__)
 
-# SARIF severity mapping to sec_sarif_findings severity levels
-# sec_sarif_findings.severity constraint: ('critical', 'high', 'medium', 'low', 'info')
+# SARIF severity mapping to security_events severity levels (migration 112 retired sec_sarif_findings)
+# security_events.severity constraint: ('critical', 'high', 'medium', 'low', 'info')
 SARIF_TO_FINDING_SEVERITY = {
     "error": "high",  # SARIF 'error' → finding 'high'
     "warning": "medium",  # SARIF 'warning' → finding 'medium'
@@ -170,7 +170,7 @@ def parse_sarif_file(file_path: str) -> int:
     For each finding:
     1. Check for duplicates (skip if exists)
     2. Emit canonical SECURITY_FINDING_RECORDED event via spool
-    3. Insert into sec_sarif_findings
+    3. Write to security_events spine via record_finding() (sec_sarif_findings retired in migration 112)
 
     Args:
         file_path: Path to SARIF JSON file
