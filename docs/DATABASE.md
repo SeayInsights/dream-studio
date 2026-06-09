@@ -10,13 +10,17 @@ Dream Studio uses three stores with distinct authority roles:
 | --- | --- | --- |
 | SQLite authority | `~/.dream-studio/state/studio.db` | Primary authority — event store, projection hub, all canonical state |
 | DuckDB analytics | `~/.dream-studio/state/aggregate_metrics.db` | Never-authority analytics read model — derived from SQLite events via projection pipeline |
-| Files store | `~/.dream-studio/state/files.db` | Artifact store (WO-TS5) |
+| Files store | `~/.dream-studio/state/files.db` | Never-authority artifact store — versioned blobs for handoffs, evidence, releases, rollbacks, and exports |
 
 **Authority boundary:** API routes read business entities directly from `business_*` tables in studio.db (Store 3 authority). DuckDB holds only analytics rollup tables and telemetry projections — never business entity state. DuckDB is NEVER-AUTHORITY — no gate decision or canonical event emission uses DuckDB as source.
 
 Connection model:
 - `core/analytics/duckdb_store.connect_analytics(read_only=True)` — read-only analytics access (all API analytics reads)
 - `core/analytics/duckdb_store.connect_analytics(read_only=False)` — write access restricted to `core/projections/runner.py` only (enforced by the `authority-boundary` pre-push gate)
+
+**Files store (files.db):** A versioned SQLite blob store for forward-only artifact writes (handoffs, evidence, release bundles, rollback state, and exports). Implemented in `core/files/store.py`. Schema: single `ds_files` table with auto-incrementing version per `(project_id, name)`. Authority boundary: files.db is NEVER-AUTHORITY — no canonical event or gate decision reads from this store. Connection: `core/files/store.connect_files()`. CLI: `ds files list [--project-id <id>] [--category <cat>]`.
+
+Valid `ds_files.category` values: `handoff`, `evidence`, `release`, `rollback`, `export`.
 
 ## Paths
 
@@ -26,8 +30,10 @@ Connection model:
 | `core/config/sqlite_bootstrap.py` | Bootstrap and migration application | Tracked |
 | `core/config/database.py` | Canonical DB path resolver and environment override behavior | Tracked |
 | `core/analytics/duckdb_store.py` | DuckDB analytics store schema and connection factory | Tracked |
+| `core/files/store.py` | Files store connection factory, schema (`ds_files`), and CRUD API | Tracked |
 | `~/.dream-studio/state/studio.db` | Operator-local live SQLite authority DB | Ignored/private |
 | `~/.dream-studio/state/aggregate_metrics.db` | Operator-local DuckDB analytics store | Ignored/private |
+| `~/.dream-studio/state/files.db` | Operator-local artifact store (files.db) | Ignored/private |
 | `*.db`, `*.sqlite*`, `*.db-wal`, `*.db-shm` | Runtime DB files | Ignored/private |
 
 ## Authority Areas

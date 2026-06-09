@@ -279,6 +279,11 @@ def main(argv: list[str] | None = None) -> int:
 
     add_memory_subcommand(subcommands)
 
+    # files subcommand group (WO-TS5)
+    from interfaces.cli.ds_files import add_files_subcommand
+
+    add_files_subcommand(subcommands)
+
     # projection subcommand group (Phase 18.1.5)
     from interfaces.cli.projection_cli import add_projection_subcommand
 
