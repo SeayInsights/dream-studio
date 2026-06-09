@@ -38,8 +38,13 @@ class TestMilestoneProjection:
     def test_created(self, tmp_path):
         conn = _db(tmp_path)
         dispatch_to_duckdb(
-            _evt("milestone.created", event_id="e1", milestone_id="ms-1",
-                 project_id="p1", payload={"title": "Alpha", "order_index": 2}),
+            _evt(
+                "milestone.created",
+                event_id="e1",
+                milestone_id="ms-1",
+                project_id="p1",
+                payload={"title": "Alpha", "order_index": 2},
+            ),
             conn,
         )
         row = conn.execute(
@@ -50,10 +55,19 @@ class TestMilestoneProjection:
 
     def test_completed(self, tmp_path):
         conn = _db(tmp_path)
-        dispatch_to_duckdb(_evt("milestone.created", event_id="e1", milestone_id="ms-2",
-                                project_id="p", payload={"title": "B"}), conn)
-        dispatch_to_duckdb(_evt("milestone.completed", event_id="e2", milestone_id="ms-2",
-                                project_id="p"), conn)
+        dispatch_to_duckdb(
+            _evt(
+                "milestone.created",
+                event_id="e1",
+                milestone_id="ms-2",
+                project_id="p",
+                payload={"title": "B"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(
+            _evt("milestone.completed", event_id="e2", milestone_id="ms-2", project_id="p"), conn
+        )
         row = conn.execute(
             "SELECT status FROM duckdb_milestones WHERE milestone_id='ms-2'"
         ).fetchone()
@@ -62,8 +76,13 @@ class TestMilestoneProjection:
 
     def test_idempotent_insert(self, tmp_path):
         conn = _db(tmp_path)
-        evt = _evt("milestone.created", event_id="e1", milestone_id="ms-3",
-                   project_id="p", payload={"title": "X"})
+        evt = _evt(
+            "milestone.created",
+            event_id="e1",
+            milestone_id="ms-3",
+            project_id="p",
+            payload={"title": "X"},
+        )
         dispatch_to_duckdb(evt, conn)
         dispatch_to_duckdb(evt, conn)
         count = conn.execute("SELECT COUNT(*) FROM duckdb_milestones").fetchone()[0]
@@ -80,8 +99,10 @@ class TestMilestoneProjection:
 class TestProjectProjection:
     def test_created(self, tmp_path):
         conn = _db(tmp_path)
-        dispatch_to_duckdb(_evt("project.created", event_id="e1", project_id="proj-a",
-                                payload={"name": "Studio"}), conn)
+        dispatch_to_duckdb(
+            _evt("project.created", event_id="e1", project_id="proj-a", payload={"name": "Studio"}),
+            conn,
+        )
         row = conn.execute(
             "SELECT name, status FROM duckdb_projects WHERE project_id='proj-a'"
         ).fetchone()
@@ -90,8 +111,9 @@ class TestProjectProjection:
 
     def test_deleted(self, tmp_path):
         conn = _db(tmp_path)
-        dispatch_to_duckdb(_evt("project.created", event_id="e1", project_id="proj-b",
-                                payload={"name": "B"}), conn)
+        dispatch_to_duckdb(
+            _evt("project.created", event_id="e1", project_id="proj-b", payload={"name": "B"}), conn
+        )
         dispatch_to_duckdb(_evt("project.deleted", event_id="e2", project_id="proj-b"), conn)
         row = conn.execute(
             "SELECT status FROM duckdb_projects WHERE project_id='proj-b'"

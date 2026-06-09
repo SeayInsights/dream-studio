@@ -51,13 +51,16 @@ class DuckDBMilestoneProjection:
                     order_index, due_date, created_at, updated_at, last_event_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    milestone_id, project_id,
+                    milestone_id,
+                    project_id,
                     payload.get("title") or "(pending)",
                     payload.get("description"),
                     payload.get("status") or "pending",
                     payload.get("order_index") or 0,
                     payload.get("due_date"),
-                    ts, now, event_id,
+                    ts,
+                    now,
+                    event_id,
                 ),
             )
         elif event_type == "milestone.completed":
@@ -113,7 +116,9 @@ class DuckDBProjectProjection:
                     payload.get("project_path"),
                     payload.get("detected_stack"),
                     payload.get("vision_statement"),
-                    ts, now, event_id,
+                    ts,
+                    now,
+                    event_id,
                 ),
             )
         else:
@@ -159,7 +164,10 @@ def dispatch_to_duckdb(event: Dict[str, Any], conn: Any) -> int:
         except Exception as exc:
             logger.warning(
                 "DuckDB projection %s failed for %s (%s): %s",
-                handler.name, event.get("event_id"), event_type, exc,
+                handler.name,
+                event.get("event_id"),
+                event_type,
+                exc,
             )
     return total
 
