@@ -17,7 +17,6 @@ from core.analytics.duckdb_store import (
     connect_analytics,
     ensure_analytics_schema,
 )
-from core.config.paths import state_dir
 
 
 def aggregate_metrics_db_path() -> Path:
