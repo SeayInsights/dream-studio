@@ -98,8 +98,7 @@ def _get_pending_audits_for_project(project_id: str | None) -> list[dict]:
                 (project_id,),
             ).fetchall()
         return [
-            {"audit_id": r[0], "audit_type": r[1], "status": r[2], "created_at": r[3]}
-            for r in rows
+            {"audit_id": r[0], "audit_type": r[1], "status": r[2], "created_at": r[3]} for r in rows
         ]
     except Exception:
         return []
