@@ -150,7 +150,6 @@ def test_check_migrations_blocks_before_connect_on_newer_than_code(tmp_path, mon
     assert "no migration connection was opened" in output
 
 
-
 def test_native_readiness_checks_do_not_mutate_newer_than_code_db(tmp_path):
     latest = runtime_preflight._latest_migration_version(REPO_ROOT)
     fake_home = tmp_path / "home"
