@@ -643,6 +643,17 @@ class ProjectionEngine:
                     self._schedule_retry(proj, event, source, err_msg, err_tb)
                     self._update_state_metrics(proj.name, events_failed=1)
 
+                # Mirror to DuckDB analytics store (fail-open; never blocks SQLite path).
+                if self._analytics_conn is not None:
+                    try:
+                        from core.projections.duckdb_projections import dispatch_to_duckdb
+
+                        dispatch_to_duckdb(event, self._analytics_conn)
+                    except Exception:
+                        logger.debug(
+                            "DuckDB dispatch failed for %s (non-fatal)", event.get("event_id")
+                        )
+
         elapsed = (time.monotonic() - start) * 1000
         return ProjectionResult(
             projection_name=proj.name,
