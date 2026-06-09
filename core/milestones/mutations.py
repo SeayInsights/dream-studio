@@ -67,7 +67,12 @@ def create_milestone(
             CanonicalEventEnvelope(
                 event_type="milestone.created",
                 session_id=None,
-                payload={"title": title, "status": "pending"},
+                payload={
+                    "title": title,
+                    "description": description,
+                    "order_index": order_index,
+                    "status": "pending",
+                },
                 timestamp=now,
                 severity="info",
                 trace={
