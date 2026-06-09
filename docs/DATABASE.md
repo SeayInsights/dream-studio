@@ -2,14 +2,34 @@
 
 Dream Studio uses SQLite as the local structured authority for operational intelligence. The public repo contains schema migrations, bootstrap code, read models, tests, and docs. The operator's live database is private runtime state.
 
+## Three-Store Architecture
+
+Dream Studio uses three stores with distinct authority roles:
+
+| Store | File | Authority role |
+| --- | --- | --- |
+| SQLite authority | `~/.dream-studio/state/studio.db` | Primary authority — event store, projection hub, all canonical state |
+| DuckDB analytics | `~/.dream-studio/state/aggregate_metrics.db` | Never-authority analytics read model — derived from SQLite events via projection pipeline |
+| Files store | `~/.dream-studio/state/files.db` | Artifact store (WO-TS5) |
+
+**DuckDB-first read pattern (WO-TS3):** API routes try the DuckDB analytics store first for lower-latency reads, falling back to SQLite if DuckDB is unavailable or the row is missing. DuckDB is NEVER-AUTHORITY — callers must never use these results for gate decisions or canonical event emission. SQLite remains the sole source of truth.
+
+Connection model:
+- `core/analytics/duckdb_store.connect_analytics(read_only=True)` — read-only analytics access (all API read paths)
+- `core/analytics/duckdb_store.connect_analytics(read_only=False)` — write access restricted to `core/projections/runner.py` only (enforced by the `authority-boundary` pre-push gate)
+- `core/analytics/duckdb_read.py` — read helpers (`get_project_row_duckdb`, `project_exists_duckdb`) that fail open (return None) if DuckDB is unavailable
+
 ## Paths
 
 | Path | Meaning | Git policy |
 | --- | --- | --- |
-| `core/event_store/migrations/` | Repo-backed schema migrations | Tracked |
+| `core/event_store/migrations/` | Repo-backed SQLite schema migrations | Tracked |
 | `core/config/sqlite_bootstrap.py` | Bootstrap and migration application | Tracked |
 | `core/config/database.py` | Canonical DB path resolver and environment override behavior | Tracked |
-| `~/.dream-studio/state/studio.db` | Operator-local live DB | Ignored/private |
+| `core/analytics/duckdb_store.py` | DuckDB analytics store schema and connection factory | Tracked |
+| `core/analytics/duckdb_read.py` | DuckDB-first read helpers for API routes | Tracked |
+| `~/.dream-studio/state/studio.db` | Operator-local live SQLite authority DB | Ignored/private |
+| `~/.dream-studio/state/aggregate_metrics.db` | Operator-local DuckDB analytics store | Ignored/private |
 | `*.db`, `*.sqlite*`, `*.db-wal`, `*.db-shm` | Runtime DB files | Ignored/private |
 
 ## Authority Areas
@@ -314,3 +334,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 <!-- Last reviewed 2026-06-09 — WO-W migration 113 (brownfield_onboarding): ALTER TABLE business_projects ADD COLUMN vision_statement TEXT (AD-10, vision on entity not prd_*); CREATE TABLE pending_audits (scheduling table — project_id FK, audit_type, status, correlation_id, timestamps; NOT a findings spine). Additive-only migration. -->
 
 <!-- Last reviewed 2026-06-09 — migration-release-113: bump .released_version 112→113. Migration 113 (brownfield_onboarding — vision_statement + pending_audits) merged via WO-W PRs #224+#225+#226 and now released for live application on fresh clones. No new schema changes in this commit — release marker only. -->
+
+<!-- Last reviewed 2026-06-09 — WO-TS3 Three-Store Architecture analytics read path: no new SQLite migrations. DuckDB analytics store (aggregate_metrics.db) introduced as the second store of the three-store architecture. Schema managed by core/analytics/duckdb_store.py:ensure_analytics_schema() (not the SQLite migration runner). API routes (project_intelligence.py, discovery_internal.py) updated to try DuckDB first via core/analytics/duckdb_read.py helpers, with fail-open fallback to SQLite authority. DuckDB is NEVER-AUTHORITY — SQLite business_projects/business_milestones/etc. remain the canonical source of truth. The authority-boundary pre-push gate enforces that connect_analytics(read_only=False) is restricted to core/projections/runner.py. -->

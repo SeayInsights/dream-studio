@@ -92,10 +92,15 @@ The root `migrations/` directory contains legacy migration files from an earlier
 
 **`core/config/database.py`** is the single source of truth for database connections.
 
-### Canonical connection functions:
+### Canonical connection functions (SQLite authority):
 - `get_connection(read_only=False)` — primary connection function
 - `DatabaseContext(read_only=False)` — context manager with auto-commit/rollback
 - `transaction(immediate=False)` — transaction context manager
+
+### DuckDB analytics store connections (never-authority):
+- `core/analytics/duckdb_store.connect_analytics(read_only=True)` — read-only analytics access for API routes
+- `core/analytics/duckdb_store.connect_analytics(read_only=False)` — write access restricted to `core/projections/runner.py` only
+- DuckDB schema is managed by `ensure_analytics_schema()` in `core/analytics/duckdb_store.py`, not by the SQLite migration runner
 
 ### Allowed direct sqlite3.connect:
 - `core/config/database.py` — the canonical module itself
@@ -348,3 +353,5 @@ Migration 067 (067_dual_canonical.sql): Adds business_canonical_events and ai_ca
 <!-- Last reviewed 2026-06-09 — WO-W migration 113 (brownfield_onboarding): additive migration — vision_statement column on business_projects + pending_audits scheduling table. No DROP, no data migration, no existing schema changes. -->
 
 <!-- Last reviewed 2026-06-09 — migration-release-113: .released_version bumped 112→113. Migration 113 (ALTER TABLE business_projects + CREATE TABLE pending_audits) is now released. Additive-only migration; no DROP or data migration. -->
+
+<!-- Last reviewed 2026-06-09 — WO-TS3 DuckDB analytics store: no new SQLite migrations. DuckDB schema for the analytics read model is managed by core/analytics/duckdb_store.py:ensure_analytics_schema() and is outside the canonical migration runner scope. The DuckDB connection authority boundary is enforced by the authority-boundary pre-push gate: connect_analytics(read_only=False) is permitted only in core/projections/runner.py. All API read paths use connect_analytics(read_only=True) via core/analytics/duckdb_read.py helpers with fail-open fallback to SQLite. No SQLite schema changes in WO-TS3 Task 6. -->
