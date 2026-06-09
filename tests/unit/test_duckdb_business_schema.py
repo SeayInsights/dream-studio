@@ -1,4 +1,9 @@
-"""Tests for DuckDB business-entity table schema (WO-TS3 task 1)."""
+"""Tests for DuckDB analytics store schema (WO-TS3 task 1 / WO-TS4 correction).
+
+WO-TS4 correction: wrong-scope business entity tables (duckdb_projects,
+duckdb_milestones, duckdb_work_orders, duckdb_tasks, duckdb_design_briefs,
+duckdb_projection_cursor) were removed. Only analytics tables belong here.
+"""
 
 from __future__ import annotations
 
@@ -14,13 +19,8 @@ import pytest  # noqa: E402
 
 from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema  # noqa: E402
 
-_EXPECTED_BUSINESS_TABLES = {
-    "duckdb_projects",
-    "duckdb_milestones",
-    "duckdb_work_orders",
-    "duckdb_tasks",
-    "duckdb_design_briefs",
-    "duckdb_projection_cursor",
+_EXPECTED_ANALYTICS_TABLES = {
+    "duckdb_execution_events",
 }
 
 _EXPECTED_ROLLUP_TABLES = {
@@ -45,17 +45,17 @@ def _tables(db_path: Path) -> set:
         conn.close()
 
 
-class TestBusinessSchema:
-    def test_all_business_tables_created(self, tmp_path):
+class TestAnalyticsSchema:
+    def test_analytics_table_created(self, tmp_path):
         db = tmp_path / "agg.db"
         conn = connect_analytics(db, read_only=False)
         ensure_analytics_schema(conn)
         conn.close()
         tables = _tables(db)
-        for t in _EXPECTED_BUSINESS_TABLES:
-            assert t in tables, f"Missing DuckDB business table: {t}"
+        for t in _EXPECTED_ANALYTICS_TABLES:
+            assert t in tables, f"Missing DuckDB analytics table: {t}"
 
-    def test_all_rollup_tables_still_present(self, tmp_path):
+    def test_all_rollup_tables_present(self, tmp_path):
         db = tmp_path / "agg.db"
         conn = connect_analytics(db, read_only=False)
         ensure_analytics_schema(conn)
@@ -64,6 +64,23 @@ class TestBusinessSchema:
         for t in _EXPECTED_ROLLUP_TABLES:
             assert t in tables, f"Missing rollup table: {t}"
 
+    def test_no_wrong_scope_business_tables(self, tmp_path):
+        db = tmp_path / "agg.db"
+        conn = connect_analytics(db, read_only=False)
+        ensure_analytics_schema(conn)
+        conn.close()
+        tables = _tables(db)
+        wrong_scope = {
+            "duckdb_projects",
+            "duckdb_milestones",
+            "duckdb_work_orders",
+            "duckdb_tasks",
+            "duckdb_design_briefs",
+            "duckdb_projection_cursor",
+        }
+        present = wrong_scope & tables
+        assert not present, f"Wrong-scope business tables in DuckDB: {present}"
+
     def test_schema_idempotent(self, tmp_path):
         db = tmp_path / "agg.db"
         conn = connect_analytics(db, read_only=False)
@@ -71,19 +88,5 @@ class TestBusinessSchema:
         ensure_analytics_schema(conn)
         conn.close()
         tables = _tables(db)
-        assert len(tables) == len(_EXPECTED_BUSINESS_TABLES | _EXPECTED_ROLLUP_TABLES)
-
-    def test_projection_cursor_columns(self, tmp_path):
-        db = tmp_path / "agg.db"
-        conn = connect_analytics(db, read_only=False)
-        ensure_analytics_schema(conn)
-        conn.execute(
-            "INSERT INTO duckdb_projection_cursor VALUES (?, ?, ?, ?)",
-            ("test_proj", "evt-001", "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
-        )
-        row = conn.execute(
-            "SELECT projection_name, last_event_id FROM duckdb_projection_cursor"
-        ).fetchone()
-        conn.close()
-        assert row[0] == "test_proj"
-        assert row[1] == "evt-001"
+        expected = _EXPECTED_ANALYTICS_TABLES | _EXPECTED_ROLLUP_TABLES
+        assert len(tables) == len(expected)
