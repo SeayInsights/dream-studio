@@ -251,8 +251,6 @@ interfaces/cli/benchmark_tokens.py:75:29: E203 whitespace before ':'
 interfaces/cli/build_adapters.py:46:34: E203 whitespace before ':'
 interfaces/cli/check_db_tables.py:1:1: F401 'sqlite3' imported but unused
 interfaces/cli/check_migrations.py:10:1: E402 module level import not at top of file
-interfaces/cli/check_old_dbs.py:3:1: F401 'sqlite3' imported but unused
-interfaces/cli/check_old_dbs.py:4:1: F401 'os' imported but unused
 interfaces/cli/check_repo_updates.py:223:19: F541 f-string is missing placeholders
 interfaces/cli/check_repo_updates.py:22:1: E731 do not assign a lambda expression, use a def
 interfaces/cli/check_repo_updates.py:241:23: F541 f-string is missing placeholders
@@ -412,22 +410,6 @@ runtime/hooks/quality/on-quality-score.py:15:1: F401 'sys' imported but unused
 runtime/hooks/quality/on-quality-score.py:16:1: F401 'pathlib.Path' imported but unused
 runtime/hooks/quality/on-security-scan.py:13:1: F401 'pathlib.Path' imported but unused
 runtime/hooks/quality/on-structure-check.py:13:1: F401 'pathlib.Path' imported but unused
-shared/mcp-integrations/test-agent-browser.py:103:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:104:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:106:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:107:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:120:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:121:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:122:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:123:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:124:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:137:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:138:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:140:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:141:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:154:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:155:15: F541 f-string is missing placeholders
-shared/mcp-integrations/test-agent-browser.py:156:15: F541 f-string is missing placeholders
 shared/paths.py:16:1: E402 module level import not at top of file
 shared/paths.py:17:1: E402 module level import not at top of file
 shared/paths.py:18:1: E402 module level import not at top of file

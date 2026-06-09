@@ -70,7 +70,7 @@ BEFORE claiming any status:
 
 **Workflow:** Create session → navigate → screenshot → interact → cleanup
 
-**Documentation:** [agent-browser.md](../../../../shared/mcp-integrations/agent-browser.md) — detailed examples, MCP tool reference, troubleshooting
+**Documentation:** See the Blender MCP and browser MCP tool descriptions for detailed examples and tool reference.
 
 ## Evidence patterns
 
@@ -80,7 +80,7 @@ Format: `[Action] → [Observation] → [Conclusion]`
 ✅ Agent reports success → Check VCS diff → Verify changes → Report actual state
 
 ## Verification by domain
-- **Web/SaaS** — Run `npm run test:e2e` if Playwright exists. Otherwise open browser, test forms, responsive, a11y. Design quality: `npx impeccable detect`. React/Next.js: `next-browser` commands. Browser automation: see [agent-browser.md](../../../../shared/mcp-integrations/agent-browser.md).
+- **Web/SaaS** — Run `npm run test:e2e` if Playwright exists. Otherwise open browser, test forms, responsive, a11y. Design quality: `npx impeccable detect`. React/Next.js: `next-browser` commands. Browser automation: use the browser MCP tools.
 - **API** — Hit endpoints, verify response shape and status codes.
 - **Game** — Run scene via godot-mcp, check QA stdout events.
 - **Power Platform** — Test in preview mode, verify data connections.
