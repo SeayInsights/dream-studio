@@ -141,6 +141,21 @@ class _MilestoneNoop(Projection):
         return 0
 
 
+class _ExecutionNoop(Projection):
+    name = "noop_execution"
+    source_canonical = "ai"
+    consumed_event_types = ["execution.started", "execution.completed", "execution.failed"]
+
+    def setup_tables(self, conn: sqlite3.Connection) -> None:
+        pass
+
+    def pre_rebuild(self, conn: sqlite3.Connection) -> None:
+        pass
+
+    def handle(self, event: dict, conn: sqlite3.Connection) -> int:
+        return 0
+
+
 class TestAnalyticsConnWiring:
     def test_analytics_conn_stored_on_engine(self, tmp_db, duck_conn):
         engine = ProjectionEngine(analytics_conn=duck_conn)
@@ -151,33 +166,33 @@ class TestAnalyticsConnWiring:
         assert engine.analytics_conn is None
 
     def test_duckdb_dispatch_called_on_cycle(self, tmp_db, duck_conn):
-        """Events processed by SQLite projections also land in DuckDB."""
+        """Events processed by SQLite projections also trigger DuckDB dispatch."""
         conn = sqlite3.connect(str(tmp_db))
         conn.execute(
-            "INSERT INTO business_canonical_events "
+            "INSERT INTO ai_canonical_events "
             "(event_id, event_type, event_timestamp, trace, payload) VALUES (?, ?, ?, ?, ?)",
             (
-                "evt-ms-wired",
-                "milestone.created",
+                "evt-exec-wired",
+                "execution.started",
                 "2026-01-01T00:00:00+00:00",
-                json.dumps({"milestone_id": "ms-wired-1", "project_id": "p1"}),
-                json.dumps({"title": "Alpha"}),
+                json.dumps({"project_id": "p1", "skill_id": "sk-1"}),
+                json.dumps({"event_name": "skill_invoke"}),
             ),
         )
         conn.commit()
         conn.close()
 
         engine = ProjectionEngine(analytics_conn=duck_conn)
-        engine.register(_MilestoneNoop())
+        engine.register(_ExecutionNoop())
         engine.run_cycle()
 
         row = duck_conn.execute(
-            "SELECT milestone_id FROM duckdb_milestones WHERE milestone_id='ms-wired-1'"
+            "SELECT event_id FROM duckdb_execution_events WHERE event_id='evt-exec-wired'"
         ).fetchone()
-        assert row is not None, "milestone.created was not dispatched to DuckDB"
+        assert row is not None, "execution.started was not dispatched to DuckDB"
 
     def test_duckdb_dispatch_failopen_when_conn_none(self, tmp_db):
-        """Engine with analytics_conn=None processes SQLite events without error."""
+        """Engine with analytics_conn=None processes business events without error."""
         conn = sqlite3.connect(str(tmp_db))
         conn.execute(
             "INSERT INTO business_canonical_events "

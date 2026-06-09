@@ -104,86 +104,7 @@ _ROLLUP_TABLES_DDL = """
     );
 """
 
-_BUSINESS_TABLES_DDL = """
-    CREATE TABLE IF NOT EXISTS duckdb_projects (
-        project_id TEXT NOT NULL PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL DEFAULT 'active',
-        project_path TEXT,
-        detected_stack TEXT,
-        vision_statement TEXT,
-        total_sessions INTEGER NOT NULL DEFAULT 0,
-        total_tokens INTEGER NOT NULL DEFAULT 0,
-        last_session_at TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_event_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS duckdb_milestones (
-        milestone_id TEXT NOT NULL PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        order_index INTEGER NOT NULL DEFAULT 0,
-        due_date TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_event_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS duckdb_work_orders (
-        work_order_id TEXT NOT NULL PRIMARY KEY,
-        project_id TEXT,
-        milestone_id TEXT,
-        title TEXT,
-        description TEXT,
-        work_order_type TEXT,
-        status TEXT NOT NULL DEFAULT 'created',
-        sequence_order INTEGER,
-        created_at TEXT,
-        started_at TEXT,
-        closed_at TEXT,
-        updated_at TEXT,
-        last_event_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS duckdb_tasks (
-        task_id TEXT NOT NULL PRIMARY KEY,
-        work_order_id TEXT NOT NULL,
-        project_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_event_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS duckdb_design_briefs (
-        brief_id TEXT NOT NULL PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'draft',
-        purpose TEXT,
-        audience TEXT,
-        tone TEXT,
-        design_system TEXT,
-        font_pairing TEXT,
-        brand_tokens TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        last_event_id TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS duckdb_projection_cursor (
-        projection_name TEXT NOT NULL PRIMARY KEY,
-        last_event_id TEXT,
-        last_event_timestamp TEXT,
-        updated_at TEXT NOT NULL
-    );
-
+_ANALYTICS_TABLES_DDL = """
     CREATE TABLE IF NOT EXISTS duckdb_execution_events (
         event_id TEXT NOT NULL PRIMARY KEY,
         event_type TEXT NOT NULL,
@@ -228,6 +149,6 @@ def connect_analytics(
 def ensure_analytics_schema(
     conn: "duckdb.DuckDBPyConnection",
 ) -> None:
-    """Create all analytics and business-projection tables (idempotent)."""
+    """Create all analytics tables (idempotent)."""
     conn.execute(_ROLLUP_TABLES_DDL)
-    conn.execute(_BUSINESS_TABLES_DDL)
+    conn.execute(_ANALYTICS_TABLES_DDL)
