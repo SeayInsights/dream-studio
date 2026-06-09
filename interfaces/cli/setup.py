@@ -223,6 +223,19 @@ def _repo_slug() -> str:
     return slug
 
 
+def step_first_run_marker() -> StepResult:
+    """FR-S06: Write first-run-pending marker so on-first-run hook triggers onboarding."""
+    name = "First-run marker"
+    try:
+        state_dir = Path.home() / ".dream-studio" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        marker = state_dir / "first-run-pending"
+        marker.write_text("pending", encoding="utf-8")
+        return StepResult(name, True, str(marker))
+    except Exception as exc:  # noqa: BLE001
+        return StepResult(name, False, str(exc))
+
+
 def step_analytics_bootstrap() -> StepResult:
     """FR-S05: Initialize analytics database and harvest existing data."""
     name = "Analytics DB bootstrap"
@@ -537,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
         step_settings_merge,
         step_memory_init,
         step_analytics_bootstrap,
+        step_first_run_marker,
     ]
 
     results: list[StepResult] = []

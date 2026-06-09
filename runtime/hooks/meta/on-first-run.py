@@ -33,18 +33,38 @@ from core.utils.init_helpers import hydrate_registry_once
 
 
 def main() -> None:
+    # Always attempt registry hydration (idempotent via sentinel)
+    try:
+        hydrate_registry_once()
+    except Exception:
+        pass
+
+    # Marker written by setup.py on install — triggers onboarding exactly once.
+    marker = Path.home() / ".dream-studio" / "state" / "first-run-pending"
+    if marker.exists():
+        try:
+            marker.unlink()
+        except Exception:
+            pass
+        print(
+            "\n[dream-studio] First-run setup detected — launching onboarding now.\n\n"
+            "workflow: studio-onboard\n",
+            flush=True,
+        )
+        return
+
     try:
         cfg = state.read_config()
     except Exception:
         cfg = {}
 
-    # Always attempt registry hydration (idempotent via sentinel)
-    hydrate_registry_once()
-
     if cfg.get("director_name"):
         if not cfg.get("onboarding_mode"):
             cfg["onboarding_mode"] = "full"
-            state.write_config(cfg)
+            try:
+                state.write_config(cfg)
+            except Exception:
+                pass
         return
 
     print(

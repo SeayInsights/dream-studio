@@ -167,6 +167,95 @@ nodes:
     context: fresh
     timeout_seconds: 300
 
+  # ── PHASE 0c: OVERHEAD CHECK ─────────────────────────────────────────────
+  - id: overhead-check
+    depends_on: [discovery]
+    trigger_rule: all_done
+    command: |
+      MISSION: Surface advisory overhead findings from the environment audit.
+
+      Run the overhead check (advisory only — never blocks):
+        py -c "
+        import sys, json
+        sys.path.insert(0, '.')
+        from core.health.overhead import run_overhead_checks
+        from pathlib import Path
+        result = run_overhead_checks(source_root='.', claude_dir=Path.home() / '.claude')
+        print(json.dumps(result, indent=2))
+        "
+
+      Parse the JSON output. For each finding in result['findings'], present as:
+
+        ## Overhead Finding: [check]
+        **Severity:** advisory
+        **Summary:** [summary]
+        **Action:** [remediation]
+
+      If finding_count is 0: output "No overhead findings — environment looks clean."
+
+      End with: VERDICT: overhead-check complete — [finding_count] advisory findings
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> overhead-check completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: haiku
+    context: inherit
+    timeout_seconds: 60
+
+  # ── PHASE 0d: MCP AUTO-WIRE ───────────────────────────────────────────────
+  - id: mcp-auto-wire
+    depends_on: [discovery]
+    trigger_rule: all_done
+    command: |
+      MISSION: Probe discovered MCP servers and produce a wiring plan.
+
+      ## Step 1 — Read MCP servers from settings.json
+      Read ~/.claude/settings.json and extract the mcpServers map.
+      If empty or absent: output "No MCP servers configured — nothing to wire."
+      and skip to the VERDICT line.
+
+      ## Step 2 — Probe each server
+      For each server in mcpServers, run the capability probe:
+        py -c "
+        import sys, json
+        sys.path.insert(0, '.')
+        from core.preflight.capability_probe import probe_mcp_server
+        cfg = <paste the server config dict here as a Python literal>
+        r = probe_mcp_server('<server_name>', cfg)
+        print(json.dumps({'name': r.server_name, 'usable': r.usable, 'reason': r.reason, 'transport': r.transport}))
+        "
+
+      ## Step 3 — Classify each server
+      For each server:
+        WIRE-READY  — usable=True and not already wired into dream-studio hooks
+        ALREADY-WIRED — usable=True and already present in settings.json hooks
+        SKIP        — usable=False (print reason)
+
+      ## Step 4 — Dedup installed skills
+      Check ~/.claude/skills/ against the canonical list from the discovery output.
+      For each skill directory that already exists with a SKILL.md:
+        Flag as ALREADY-INSTALLED: skip overwrite during onboarding install.
+      For each canonical skill directory missing from ~/.claude/skills/:
+        Flag as NEEDS-INSTALL.
+
+      Output a WIRING PLAN:
+        ## MCP Servers
+        | Server | Status | Reason |
+        |--------|--------|--------|
+
+        ## Skills
+        | Skill | Status |
+        |-------|--------|
+
+      End with: VERDICT: mcp-auto-wire complete — [N] wire-ready, [M] skip, [K] already-wired, [J] skills already-installed
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> mcp-auto-wire completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: haiku
+    context: inherit
+    timeout_seconds: 60
+
   # ── PHASE 0b: DREAM-STUDIO BASELINE FETCH ────────────────────────────────
   - id: baseline-fetch
     depends_on: [discovery]
@@ -529,18 +618,20 @@ nodes:
 
   # ── PHASE 2: SYNTHESIS ───────────────────────────────────────────────────
   - id: synthesis
-    depends_on: [breakpoint-analysis, gap-analysis, improvement-scan]
+    depends_on: [breakpoint-analysis, gap-analysis, improvement-scan, overhead-check, mcp-auto-wire]
     trigger_rule: all_done
     gate: post-synthesis
     command: |
       MISSION: Synthesize all analysis into a unified onboarding intelligence brief.
 
       Inputs:
-        - Discovery:     {{discovery.output}}
-        - Baseline:      {{baseline-fetch.output}}
-        - Breakpoints:   {{breakpoint-analysis.output}}
-        - Gaps:          {{gap-analysis.output}}
-        - Improvements:  {{improvement-scan.output}}
+        - Discovery:      {{discovery.output}}
+        - Baseline:       {{baseline-fetch.output}}
+        - Breakpoints:    {{breakpoint-analysis.output}}
+        - Gaps:           {{gap-analysis.output}}
+        - Improvements:   {{improvement-scan.output}}
+        - Overhead:       {{overhead-check.output}}
+        - MCP Wire Plan:  {{mcp-auto-wire.output}}
 
       Produce a SYNTHESIS BRIEF:
 
@@ -584,6 +675,14 @@ nodes:
 
         ## Top 5 Improvements (ranked by impact/effort ratio)
         [From improvement-scan Part 2 — the highest-value standard changes to make after baseline]
+
+        ## Overhead Findings (advisory)
+        [From overhead-check — list each finding with its remediation action.
+         If none: "No overhead findings."]
+
+        ## MCP Wiring Plan
+        [From mcp-auto-wire — WIRE-READY servers and NEEDS-INSTALL skills listed with next steps.
+         Include dedup summary: which skills are already installed and will be skipped.]
 
       Write this brief to:
         ~/.dream-studio/planning/onboard-synthesis-<YYYY-MM-DD>.md
