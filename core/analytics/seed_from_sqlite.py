@@ -17,8 +17,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
-from core.config.database import _default_db_path
+from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema  # noqa: E402
+from core.config.database import _default_db_path  # noqa: E402
 
 
 def _seed_projects(src: sqlite3.Connection, dst) -> int:
