@@ -46,7 +46,12 @@ def test_order_index_persisted(db_conn: sqlite3.Connection) -> None:
         conn=db_conn,
         milestone_id=MILESTONE_ID,
         project_id=PROJECT_ID,
-        payload={"title": "Alpha", "description": "First cut", "order_index": 5, "status": "pending"},
+        payload={
+            "title": "Alpha",
+            "description": "First cut",
+            "order_index": 5,
+            "status": "pending",
+        },
         event_id=EVENT_ID,
         ts=NOW,
         now=NOW,
@@ -118,4 +123,6 @@ def test_existing_milestones_unaffected(db_conn: sqlite3.Connection) -> None:
     ).fetchone()
 
     assert old_row["order_index"] == 0, "existing milestone order_index was mutated"
-    assert new_row["order_index"] == 3, f"new milestone has wrong order_index: {new_row['order_index']}"
+    assert (
+        new_row["order_index"] == 3
+    ), f"new milestone has wrong order_index: {new_row['order_index']}"
