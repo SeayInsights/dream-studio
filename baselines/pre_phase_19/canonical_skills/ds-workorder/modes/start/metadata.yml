@@ -1,5 +1,0 @@
-triggers:
-  - "start work order:"
-  - "begin work order:"
-
-estimated_tokens: 800

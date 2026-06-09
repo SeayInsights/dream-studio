@@ -1,5 +1,0 @@
-triggers:
-  - "block:"
-  - "blocked by:"
-
-estimated_tokens: 500

@@ -324,7 +324,6 @@ def test_legacy_research_diagnostics_remain_excluded_or_classified():
 
     legacy_paths = [
         REPO_ROOT / "interfaces" / "cli" / "test_wave1_research_cache.py",
-        REPO_ROOT / "interfaces" / "cli" / "debug_trust_score.py",
     ]
 
     for path in legacy_paths:
@@ -486,7 +485,6 @@ def test_memory_search_uses_explicit_index_database(tmp_path):
 
 def test_legacy_research_diagnostics_require_explicit_opt_in():
     diagnostics = {
-        "interfaces/cli/debug_trust_score.py": "DREAM_STUDIO_RUN_LEGACY_RESEARCH_DIAGNOSTICS",
         "interfaces/cli/test_wave1_research_cache.py": "DREAM_STUDIO_RUN_LEGACY_RESEARCH_DIAGNOSTICS",
     }
 
