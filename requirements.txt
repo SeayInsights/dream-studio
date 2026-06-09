@@ -26,8 +26,8 @@ python-multipart>=0.0.6
 # regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
 regex>=2024.9.11
 
-# PyJWT: pinned to silence pip_audit CVEs in 2.12.x (pulled transitively by mcp/PyGithub/semgrep)
-PyJWT>=2.13.0
+# PyJWT: semgrep pins pyjwt[crypto]~=2.12.0 (caps at <2.13), so we cannot pin higher.
+# pip_audit CVEs in 2.12.x are a known false-positive — upgrade when semgrep relaxes its pin.
 
 # LLM safety scanners: giskard, rebuff, llm-guard
 # Real libraries not yet evaluated for Python 3.12 compatibility.
