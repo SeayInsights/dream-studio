@@ -1,0 +1,185 @@
+# Dream Studio Documentation
+
+Dream Studio documentation is split between public product guidance and private local evidence. Public docs should describe the platform, architecture, APIs, workflows, operator practices, examples, and sanitized release notes. Private Work Orders, handoffs, raw telemetry, local audits, cutover records, backups, cleanup manifests, and operator decision logs belong in local runtime state, not Git.
+
+## Public Product Docs
+
+- [Product Requirements](product/dream-studio-prd.md)
+- [Architecture](ARCHITECTURE.md)
+- [Database](DATABASE.md)
+- [Workflows](WORKFLOWS.md)
+- [Operator Guide](operator-guide.md)
+- [Quick Start](quickstart.md)
+- [Publication Boundary](PUBLICATION_BOUNDARY.md)
+
+## Architecture And Contracts
+
+- [AI Orchestration Architecture](architecture/dream-studio-ai-orchestration-architecture.md)
+- [Contract Atlas and Maturity Ledger](architecture/contract-atlas.md) - local
+  Dream Studio scope by default, with explicit project scoping available for
+  future project-specific atlas inspection. The atlas lifecycle manifest also
+  validates private refresh, sanitized public export refresh, docs/PRD/README
+  impact detection, and public-export leakage checks.
+- [Shared Authority And Adapter Projections](architecture/shared-authority-and-adapter-projections.md)
+- [Execution Telemetry Spine](architecture/dream-studio-execution-telemetry-spine.md)
+- [Dashboard Projection Mapping](architecture/dream-studio-dashboard-projection-mapping.md)
+- [Contracts](contracts/)
+- [Security-By-Default Lifecycle Gate](contracts/security-by-default-development-lifecycle-gate.md)
+- [Secure Production Readiness Gate](contracts/secure-production-readiness-gate.md)
+
+## Analytics-Only Profile
+
+`analytics_only` is a standalone deployment profile for dashboard/API analytics.
+It can import normalized project, CI/validation, security, token/usage,
+dependency, stack, PRD, and readiness facts into current SQLite authority with
+`ds analytics-ingest`. The command is dry-run by default and writes only with
+`--execute`.
+
+Analytics-only does not require hooks, agents, workflows, Claude, Codex, Docker,
+repo mutation, or full orchestration. Missing data should appear as honest empty
+states.
+
+## Installed Dashboard Command
+
+The installed `ds dashboard` command is status-only by default so users can run
+it from any directory without accidentally starting services. Use
+`ds dashboard --serve` to start the local FastAPI dashboard server,
+`ds dashboard --open` to start or reuse the server and open a browser, and
+`ds dashboard --check` to validate `/dashboard` and `/api/health` on a running
+server.
+
+## Module Contracts
+
+Dream Studio module boundaries are declared in `core.module_contracts` and
+surfaced through Contract Atlas. Contracts cover `core`, `telemetry`,
+`dashboard`, `security_only`, `token_only`, `analytics_only`,
+`shared_intelligence`, `adapter_router`, `adapter_projection`,
+`external_project`, `docker_optional`, and `full`.
+
+Each contract names owned authority, read/write dependencies, routes, dashboard
+surfaces, commands, disabled-module behavior, empty states, profile membership,
+security/readiness impact, maturity level, and validation tests. `token_only`
+keeps cost unknown unless cost evidence exists, and Docker remains optional
+non-authoritative infrastructure.
+
+## Expert Workflows
+
+Dream Studio expert workflows map existing skills into evaluated reusable
+workflow contracts for intentional implementation, code quality, debugging,
+performance, frontend design, SEO/content, documentation, data modeling, API
+integration, and product demos/case studies. The
+catalog lives in `core.shared_intelligence.expert_workflows` and is exposed at
+`/api/shared-intelligence/expert-workflows`.
+
+The workflow system strengthens existing owners instead of creating duplicate
+skills.
+
+## Capability Center
+
+Capability Center exposes derived views for skills, workflows, agents,
+controls, evaluations, and hardening candidates. Scoped agents are treated as
+workers rather than authority and receive only the context required for their
+task. Career data remains a deny-by-default private data class that scoped
+agents do not receive unless explicitly enabled and scoped.
+
+## GitHub Repo Intake
+
+Dream Studio evaluates third-party GitHub repositories before adopting code,
+dependencies, prompts, skills, workflows, hooks, adapters, docs, or patterns.
+The intake workflow records license, security, maintenance, overlap,
+attribution, and integration decisions in SQLite authority and defaults to
+pattern learning/original implementation over copying. See
+[GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md).
+
+## AI Usage Accounting
+
+Dream Studio records AI adapter usage as operational telemetry. Tokens are not
+treated as billable dollars unless the adapter billing mode and recorded source
+metadata make cost reportable. Claude Code subscription, Codex via ChatGPT
+plan, Cursor plan, Copilot subscription, MCP, local models, shell tools, and
+unknown/custom adapters are represented through SQLite-backed accounting
+profiles and surfaced through the adapter router, Contract Atlas, dashboard
+read models, and token/model analytics.
+
+Task attribution extends this by showing which AI/adapter did meaningful work,
+which skills/workflows were used, what files and commands were recorded, what
+validation ran, what outcome occurred, whether rework was needed, and what
+security/readiness impact resulted. (The detailed attribution-table authority
+note moved to internal planning docs in Wave 7.)
+
+## PRD Authority Lifecycle
+
+Dream Studio starts and continues project work from SQLite-backed PRD authority:
+adaptive intake, explicit assumptions and unknowns, PRD versions, milestones,
+Work Order authority, Project Change Orders, and planned-vs-actual route
+reconciliation. Project Details and context packets expose the current PRD
+version and next safe action so adapters can continue without relying on prior
+chat memory. (The detailed PRD-lifecycle authority note moved to internal
+planning docs in Wave 7.)
+
+## Platform Hardening
+
+The platform-hardening sequence makes Dream Studio measurable, permissioned,
+privacy-safe, integrated, installable, pilot-ready, and demo-ready. It covers
+skill/workflow evaluation, policy decisions, engineering connector ingestion,
+privacy/redaction, opt-in local watchers, sanitized team rollups,
+installer/distribution checks, and demo/case-study packets. See
+[Platform Hardening Sequence](operations/platform-hardening-sequence.md).
+
+The sanitized public demo packet lives at
+[Sanitized Demo Readiness Packet](demo/sanitized/README.md). It contains the
+5-minute script, 15-minute technical walkthrough, fallback plan, validation
+manifest, and synthetic screenshots for Observe, Assist, and Operate modes.
+
+## Operations
+
+- [Local Runtime](operations/local-runtime.md)
+- [Work Orders](operations/work-orders.md)
+- [Adapter Workspace Hygiene](operations/adapter-workspace-hygiene.md)
+- [Installed Adapter Runtime](operations/installed-adapter-runtime.md)
+- [Installed Platform Productization](operations/installed-platform-productization.md) -
+  includes the Windows `ds.cmd` and `ds.ps1` launcher surfaces plus
+  `ds install-command` for user-local plain-command setup, legacy install
+  detection, guarded legacy migration, adapter repair, and rollback checks.
+- [External Project Validation Pipeline](operations/external-project-validation-pipeline.md)
+- [Lightweight GitHub CI Strategy](operations/lightweight-github-ci-strategy.md)
+- [Repo Publication Privacy](operations/repo-publication-privacy.md)
+- [Troubleshooting](operations/troubleshooting.md)
+- [Verified Legacy Purge Policy](operations/verified-legacy-purge-policy.md)
+- [Windows Development Commands](operations/windows-dev-commands.md)
+- [Docker Clean Room](operations/docker-clean-room.md)
+- [Docker Module Profiles](operations/docker-module-profiles.md)
+- [Lint, Format, And Docs Drift Gate Policy](operations/lint-format-baseline-policy.md)
+- [Expert Workflow Systems](operations/expert-workflow-systems.md)
+- [GitHub Repo Intake And Integration Evaluation](operations/github-repo-intake-evaluation.md)
+- [Platform Hardening Sequence](operations/platform-hardening-sequence.md)
+- [Sanitized Demo Readiness Packet](demo/sanitized/README.md)
+
+<!-- Wave 7: task-attribution-and-outcomes.md, prd-authority-lifecycle.md,
+     long-run-multisession-operational-validation.md, and independent-configuration-model.md
+     were ungated and moved to internal planning docs (.planning/docs/). -->
+
+
+## Publication Rule
+
+When in doubt, keep generated operational history local. Public examples should be synthetic, sanitized, and reproducible without private operator state.
+
+<!-- Last reviewed 2026-05-20 — atlas sanitizer hardened against POSIX absolute paths and `.dream-studio/` substrings (core/shared_intelligence/contract_atlas.py); contract surface unchanged. -->
+
+<!-- Last reviewed 2026-05-28 — fix/linux-ci-failures-batch2: contract_atlas.py private-content scan exclusion added; 7 new adapter projection files generated and committed (chatgpt, codex, copilot, cursor, local-model, mcp, shell). These are generated projection files from default authority profiles. No documentation structure or policy change required. -->
+
+<!-- Last reviewed 2026-05-29 — O2 (18.4-consolidation-followup-4): contract_registry.py updated to close two docs-drift coverage gaps. Domain count is now 15. No docs structure or policy change. -->
+
+<!-- Last reviewed 2026-05-29 — O1: contract_registry.py narrowed 4 over-broad domains. No docs structure or policy change. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
+
+<!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
+
+<!-- 2026-06-05: Phase 18.6.2 reviewed — module_contracts.py removed project_health_scorecards and project_readiness_scorecards from analytics_only read_dependencies (tables dropped in migration 099). No semantic change to this document required. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Dropped `career/portfolio operations` from the Expert Workflows list and the Career-and-application-automation paragraph; replaced the "Career Ops And Capability Center" section with "Capability Center" (career retained only as a deny-by-default private data class for scoped agents); removed the index link to the deleted career-ops-capability-center.md doc. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->

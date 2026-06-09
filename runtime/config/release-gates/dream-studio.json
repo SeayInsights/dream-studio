@@ -1,0 +1,49 @@
+{
+  "project_id": "dream-studio",
+  "repo_path": "<repo-root>",
+  "github_remote": "https://github.com/SeayInsights/dream-studio-clean.git",
+  "default_branch": "main",
+  "release_branch_naming": "integration/{milestone_or_release}",
+  "workflow_files": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/full-ci.yml",
+    ".github/workflows/release-validation.yml",
+    ".github/workflows/validate-skills.yml"
+  ],
+  "required_checks": [
+    "pr-smoke"
+  ],
+  "optional_checks": [
+    "validate-skills",
+    "full-ci",
+    "release-validation"
+  ],
+  "manual_workflows": [
+    ".github/workflows/full-ci.yml"
+  ],
+  "release_workflows": [
+    ".github/workflows/release-validation.yml"
+  ],
+  "local_preflight_commands": [
+    "python scripts/runtime_state_hash_guard.py --label local_release_gate -- python interfaces/cli/ci_gate.py",
+    "git diff --check"
+  ],
+  "github_actions_role": "lightweight_remote_confidence_layer",
+  "heavy_validation_layer": "local_dream_studio_release_gate",
+  "github_actions_minutes_policy": "avoid_full_matrix_on_push; run cheap pr-smoke on pull_request; full-ci is workflow_dispatch only",
+  "github_actions_unavailable_policy": "do_not_block_development; preserve local_release_gate as primary; manual review required before merge if required remote smoke is unavailable",
+  "merge_policy": "auto_merge_when_required_checks_pass_and_no_release_blockers",
+  "deployment_policy": "separate_approval_required",
+  "rollback_notes": [
+    "Do not force-push or rewrite release history.",
+    "If a PR update fails, revert the bounded repair commit on the release branch.",
+    "Deployment remains a separate operator-approved boundary."
+  ],
+  "project_validation_commands": [
+    "python interfaces/cli/ci_gate.py",
+    "python interfaces/cli/contract_docs_drift_gate.py",
+    "python interfaces/cli/contract_atlas_lifecycle_gate.py",
+    "python scripts/runtime_state_hash_guard.py --help"
+  ],
+  "_last_reviewed": "2026-05-24 Phase 18.1.13: ds validate/doctor help text clarified health planes; README health-checks section added; fresh-install-validation.md requires both commands. No gate policy change."
+}

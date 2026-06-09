@@ -1,0 +1,57 @@
+---
+dream_studio:
+  skill_id: ds-security
+  pack: security
+  mode: comply
+  mode_type: report
+  inputs: [findings, framework, controls, scan_coverage]
+  outputs: [compliance_mapping, evidence_documents, coverage_gaps]
+  capabilities_required: [Read, Write, Grep]
+  model_preference: haiku
+  estimated_duration: 20-45min
+---
+
+# Comply — Compliance Framework Mapping
+
+## Applicable regulatory anchors
+
+This skill maps findings to the following sections of [`regulatory-anchors.md`](../../references/regulatory-anchors.md):
+
+- 🟠 [A. Cross-industry trust attestations](../../references/regulatory-anchors.md#a-cross-industry-trust-attestations-the-audit-layer): SOC 2 Type I/II and ISO/IEC 27001 are the primary frameworks this skill maps to; SOC 2 CC-series controls are a built-in mapping target.
+- 🟠 [J. Software supply chain & secure SDLC](../../references/regulatory-anchors.md#j-software-supply-chain--secure-sdlc): NIST SSDF (SP 800-218) and SBOM requirements surface as gap analysis targets when federal software supply chain obligations are in scope.
+- 🟠 [L. Application security standards](../../references/regulatory-anchors.md#l-application-security-standards): OWASP ASVS 5.0 and CWE Top 25 are built-in compliance framework targets in the mapping definitions.
+- 🟠 [M. Vulnerability management & disclosure](../../references/regulatory-anchors.md#m-vulnerability-management--disclosure): CVE/CVSS, VEX, and coordinated vulnerability disclosure appear in compliance evidence documents this skill generates.
+
+See the full anchor list for tier definitions and the complete catalog of applicable regimes.
+
+## Before you start
+Read `gotchas.yml` in this directory before every invocation.
+
+## Trigger
+`comply:`, `compliance map`, `audit evidence`, `/comply`
+
+## Purpose
+Map security scan findings to compliance framework controls, identify controls with no automated scan coverage, and generate audit-ready evidence documents. This skill bridges the gap between raw Semgrep findings and the compliance frameworks clients must satisfy — SOC 2 Type II, NIST CSF, OWASP ASVS, and CWE Top 25.
+
+This skill never modifies findings. It reads, cross-references, and reports. All writes go to `~/.dream-studio/security/datasets/{client}/`.
+
+## Modes
+- `map` — Map all ingested findings to the compliance frameworks configured in the client profile. Reads findings from `~/.dream-studio/security/scans/{client}/`. Cross-references against mapping definitions in `templates/security/compliance/`. Writes to `~/.dream-studio/security/datasets/{client}/compliance.csv`.
+- `gaps` — Identify controls with no automated scan coverage. Shows which framework controls have zero findings mapped to them — i.e., compliance obligations the current scanner configuration cannot satisfy.
+- `evidence` — Generate an audit-ready evidence document (markdown). Per control: control ID, description, scan evidence, finding count, and remediation status.
+
+---
+
+## Anti-patterns
+
+- **Treating zero findings as compliance** — a control with zero findings mapped to it is a coverage gap, not a clean bill of health. Always distinguish between "no findings because we scanned and found none" vs. "no findings because we have no rule covering this control."
+- **Mapping without loading SARIF** — do not generate compliance.csv from finding_counts alone. Counts don't carry CWE/OWASP metadata needed for cross-reference. Always parse SARIF.
+- **Running gaps without a prior map** — always run `map` first. `gaps` depends on compliance.csv to know which controls have evidence.
+- **Presenting evidence without a scan date range** — every evidence document must state the scan period. An undated evidence doc is inadmissible. Always include `earliest_date` to `latest_date` in the header.
+- **Overwriting fixed status** — if a finding is marked `fixed` in SARIF properties or has a suppression comment, preserve that status in compliance.csv. Never reset fixed findings to open on re-import.
+- **Mixing framework controls across clients** — compliance.csv is per-client. Never merge datasets across clients. Each client has independent scope, frameworks, and remediation status.
+- **Generating evidence from stale scans** — if the most recent scan is >7 days old, warn before generating the evidence document: "Scan results are {N} days old. Evidence may not reflect current codebase state."
+
+## Detailed Reference
+
+See `examples.md` in this directory for detailed steps, schemas, templates, and integration points.

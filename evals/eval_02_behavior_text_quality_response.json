@@ -1,0 +1,30 @@
+{
+  "eval_id": "eval_02_behavior_text_quality_response",
+  "version": "2.0.0",
+  "description": "Security skill should produce structured quality findings, not generic responses. Tests Opus judge integration.",
+  "skill_id": "ds-quality",
+  "input_prompt": "audit: check the codebase for security issues",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-quality",
+      "trace": {
+        "skill_id": "ds-quality"
+      }
+    },
+    {
+      "event_type": "skill.completed",
+      "skill_id": "ds-quality"
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "ds-quality"
+    }
+  ],
+  "notes": "Claude invokes the security audit skill and presents findings with rule IDs, severity levels, and specific file locations. Response is structured, not generic.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

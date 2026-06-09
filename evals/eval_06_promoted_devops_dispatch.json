@@ -1,0 +1,26 @@
+{
+  "eval_id": "eval_06_promoted_devops_dispatch",
+  "version": "2.0.0",
+  "description": "Validates that promoted devops-engineer subagent correctly loads its SKILL.md and returns content from it. Tests the agent-as-wrapper pattern: wrapper (19 lines) points to ds-domains:devops skill, skill content loads correctly.",
+  "skill_id": "ds-domains",
+  "input_prompt": "use devops-engineer to explain how to set up OIDC federation between GitHub Actions and AWS",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "devops-engineer",
+      "trace": {
+        "skill_id": "devops-engineer"
+      }
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "devops-engineer"
+    }
+  ],
+  "notes": "Claude invokes the devops-engineer subagent which loads SKILL.md from ds-domains:devops skill. Response includes the OIDC federation pattern: short-lived tokens via GitHub OIDC provider, no static credentials, aws-actions/configure-aws-credentials v4+ mentioned.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

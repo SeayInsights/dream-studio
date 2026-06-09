@@ -1,0 +1,26 @@
+{
+  "eval_id": "eval_08_promoted_research_dispatch",
+  "version": "2.0.0",
+  "description": "Validates that promoted research-analyst subagent loads SKILL.md and applies the correct methodology. Tests anti-sycophancy protocol and source hierarchy from ds-analyze:research skill.",
+  "skill_id": "ds-analyze",
+  "input_prompt": "use research-analyst to analyze the TAM for enterprise AI coding assistants",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "research-analyst",
+      "trace": {
+        "skill_id": "research-analyst"
+      }
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "research-analyst"
+    }
+  ],
+  "notes": "Claude invokes the research-analyst subagent which loads SKILL.md from ds-analyze:research. Response applies the structured methodology: states a research question, identifies assumptions, applies source hierarchy (Tier 1/2/3), searches for disconfirming evidence first, requires bottoms-up TAM reconciliation, and labels findings with confidence levels.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

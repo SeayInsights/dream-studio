@@ -1,0 +1,307 @@
+<!-- Device Frame: Chrome Browser -->
+<div class="device-frame device-frame--browser">
+  <style>
+    .device-frame--browser {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 40px;
+    }
+
+    .device-frame--browser .device-body {
+      width: 1280px;
+      background: #f1f3f4;
+      border-radius: 8px 8px 0 0;
+      box-shadow:
+        0 10px 40px rgba(0, 0, 0, 0.2),
+        0 2px 8px rgba(0, 0, 0, 0.15),
+        0 0 0 1px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Title bar */
+    .device-frame--browser .browser-title-bar {
+      height: 32px;
+      background: #dee1e6;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      border-bottom: 1px solid #c8cdd4;
+      flex-shrink: 0;
+    }
+
+    /* Windows-style window controls */
+    .device-frame--browser .window-controls {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-left: auto;
+    }
+
+    .device-frame--browser .win-btn {
+      width: 46px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+    }
+
+    .device-frame--browser .win-btn svg {
+      width: 10px;
+      height: 10px;
+      fill: none;
+      stroke: #3c4043;
+      stroke-width: 1.2;
+    }
+
+    .device-frame--browser .win-btn--close svg {
+      stroke: #3c4043;
+    }
+
+    /* Tab bar */
+    .device-frame--browser .browser-tab-bar {
+      height: 36px;
+      background: #f1f3f4;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 8px;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
+    .device-frame--browser .browser-tab {
+      position: relative;
+      height: 30px;
+      min-width: 200px;
+      max-width: 240px;
+      background: #ffffff;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      color: #3c4043;
+      border-top: 1px solid #dde0e3;
+      border-left: 1px solid #dde0e3;
+      border-right: 1px solid #dde0e3;
+      box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    .device-frame--browser .tab-favicon {
+      width: 14px;
+      height: 14px;
+      background: #dadce0;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .device-frame--browser .tab-title {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .device-frame--browser .tab-close {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      opacity: 0.5;
+    }
+
+    .device-frame--browser .tab-close::before,
+    .device-frame--browser .tab-close::after {
+      content: '';
+      position: absolute;
+      width: 8px;
+      height: 1.5px;
+      background: #5f6368;
+      border-radius: 1px;
+    }
+
+    .device-frame--browser .tab-close::before { transform: rotate(45deg); }
+    .device-frame--browser .tab-close::after  { transform: rotate(-45deg); }
+
+    /* Address / toolbar */
+    .device-frame--browser .browser-toolbar {
+      height: 40px;
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+      border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0;
+    }
+
+    .device-frame--browser .toolbar-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .device-frame--browser .toolbar-nav-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .device-frame--browser .toolbar-nav-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: #5f6368;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .device-frame--browser .toolbar-nav-btn--disabled svg {
+      stroke: #bdc1c6;
+    }
+
+    .device-frame--browser .browser-address-bar {
+      flex: 1;
+      height: 28px;
+      background: #f1f3f4;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 6px;
+    }
+
+    .device-frame--browser .address-lock {
+      width: 12px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .device-frame--browser .address-lock svg {
+      width: 12px;
+      height: 14px;
+      fill: #5f6368;
+    }
+
+    .device-frame--browser .address-text {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      color: #202124;
+      letter-spacing: 0;
+    }
+
+    .device-frame--browser .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 4px;
+    }
+
+    .device-frame--browser .toolbar-action-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .device-frame--browser .toolbar-action-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: #5f6368;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+    }
+
+    /* Content slot */
+    .device-frame--browser .device-content {
+      height: 800px;
+      background: #ffffff;
+      overflow: hidden;
+      position: relative;
+    }
+  </style>
+
+  <div class="device-body">
+    <!-- Title bar -->
+    <div class="browser-title-bar">
+      <div class="window-controls">
+        <!-- Minimize -->
+        <div class="win-btn">
+          <svg viewBox="0 0 10 10"><line x1="1" y1="5" x2="9" y2="5"/></svg>
+        </div>
+        <!-- Maximize -->
+        <div class="win-btn">
+          <svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8"/></svg>
+        </div>
+        <!-- Close -->
+        <div class="win-btn win-btn--close">
+          <svg viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="browser-tab-bar">
+      <div class="browser-tab">
+        <div class="tab-favicon"></div>
+        <span class="tab-title">example.com</span>
+        <div class="tab-close"></div>
+      </div>
+    </div>
+
+    <!-- Address toolbar -->
+    <div class="browser-toolbar">
+      <div class="toolbar-nav">
+        <!-- Back -->
+        <div class="toolbar-nav-btn toolbar-nav-btn--disabled">
+          <svg viewBox="0 0 16 16"><polyline points="10,3 5,8 10,13"/></svg>
+        </div>
+        <!-- Forward -->
+        <div class="toolbar-nav-btn toolbar-nav-btn--disabled">
+          <svg viewBox="0 0 16 16"><polyline points="6,3 11,8 6,13"/></svg>
+        </div>
+        <!-- Reload -->
+        <div class="toolbar-nav-btn">
+          <svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5"/><polyline points="11,2 13,4.5 10.5,6"/></svg>
+        </div>
+      </div>
+      <div class="browser-address-bar">
+        <div class="address-lock">
+          <svg viewBox="0 0 12 14"><rect x="1" y="6" width="10" height="7" rx="1.5"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2"/></svg>
+        </div>
+        <span class="address-text">example.com</span>
+      </div>
+      <div class="toolbar-actions">
+        <!-- Bookmark star -->
+        <div class="toolbar-action-btn">
+          <svg viewBox="0 0 16 16"><polygon points="8,2 10,6 14,6.5 11,9.5 11.8,14 8,12 4.2,14 5,9.5 2,6.5 6,6"/></svg>
+        </div>
+        <!-- Extensions -->
+        <div class="toolbar-action-btn">
+          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page content -->
+    <div class="device-content">
+      <!-- CONTENT -->
+    </div>
+  </div>
+</div>

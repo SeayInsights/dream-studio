@@ -1,0 +1,15 @@
+capability:
+  # Maximum events sent to LLM per compilation.
+  # Governs token cost: 50 events ≈ 5k input tokens via claude -p.
+  event_cap: 50
+
+  # Maximum distinct sessions to include in the event window.
+  session_cap: 10
+
+  # Minimum event_ids the LLM must cite in compiled_from.
+  # Below this: insufficient grounding — compilation fails.
+  min_evidence_events: 2
+
+  # LLM subprocess timeout in seconds.
+  # Overridden by DREAM_STUDIO_CLASSIFIER_TIMEOUT env var.
+  llm_timeout: 30

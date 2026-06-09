@@ -1,0 +1,35 @@
+{
+  "eval_id": "eval_01_event_sequence_skill_dispatch",
+  "version": "2.0.0",
+  "description": "Natural language routing should invoke ds-project:resume skill. Tests deterministic event matcher.",
+  "skill_id": "ds-project",
+  "input_prompt": "what should I work on next?",
+  "fixture_events": [
+    {
+      "event_type": "session.start",
+      "skill_id": null
+    },
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-project:resume",
+      "trace": {
+        "skill_id": "ds-project:resume"
+      }
+    },
+    {
+      "event_type": "skill.completed",
+      "skill_id": "ds-project:resume"
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "ds-project:resume",
+      "max_sequence_position": 3
+    }
+  ],
+  "notes": "Claude invokes the ds-project:resume skill and presents the next work order with context",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

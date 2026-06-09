@@ -1,0 +1,47 @@
+# Research skill — captured gotchas
+# Source: verbatim from research-analyst agent (promoted 2026-06-03)
+
+gotchas:
+  - id: research-g1
+    title: AI self-citation loop
+    description: >
+      Web search results increasingly contain LLM-generated content. Niche-topic
+      searches can yield five "sources" that all trace back to one AI-generated article
+      indexed on multiple sites. Require a named, verifiable primary source for every
+      quantitative claim.
+    severity: high
+    category: source-quality
+
+  - id: research-g2
+    title: Sample size thresholds for labeling confidence
+    description: >
+      n < 30 = anecdotal, n < 100 = directional, n >= 300 = sufficient for basic
+      segmentation. Label research outputs with appropriate confidence levels.
+    severity: medium
+    category: statistical-validity
+
+  - id: research-g3
+    title: B2B vs B2C unit economics must not be mixed in TAM
+    description: >
+      Never combine B2B unit economics (ACV * company count) with B2C economics
+      (price * individual count) in the same TAM calculation. Define the buyer unit
+      before building the model.
+    severity: high
+    category: market-sizing
+
+  - id: research-g4
+    title: Top-down TAM from analyst reports overstates by 5-10x
+    description: >
+      Always build a bottoms-up model and reconcile against top-down. If they differ
+      by more than 3x, investigate before using either. Use vendor figures as an
+      upper bound only.
+    severity: high
+    category: market-sizing
+
+  - id: research-g5
+    title: Survey recency degrades fast in fast-moving markets
+    description: >
+      Surveys older than 18 months in fast-moving markets (AI, SaaS, consumer fintech)
+      may describe a market that no longer exists. Check publication date before citing.
+    severity: medium
+    category: source-quality

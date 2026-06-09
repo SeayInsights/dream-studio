@@ -1,0 +1,36 @@
+{
+  "eval_id": "eval_04_negative_check_no_direct_code",
+  "version": "2.0.0",
+  "description": "Resume skill should NOT start writing code immediately. Tests negative event/behavior checks.",
+  "skill_id": "ds-project",
+  "input_prompt": "let's build the authentication feature",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-project:resume",
+      "trace": {
+        "skill_id": "ds-project:resume"
+      }
+    },
+    {
+      "event_type": "context.loaded",
+      "payload": {
+        "context_file": "context.md"
+      }
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "ds-project:resume"
+    },
+    {
+      "event_type": "code.generated",
+      "must_appear": false
+    }
+  ],
+  "notes": "Claude checks the current project state before doing any building. Claude does not start writing code until work order context and design brief are loaded.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

@@ -1,0 +1,87 @@
+[project]
+name = "dream-studio"
+version = "2026.5.17"
+description = "Local-first AI orchestration platform for Claude Code and other AI coding assistants."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Dannis Seay" }
+]
+dependencies = [
+    "pydantic>=2.0,<3.0",
+    "jsonschema>=4.0",
+    "pandas>=2.0,<3.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.3.0",
+    "Jinja2>=3.1,<4.0",
+    "PyYAML>=6.0,<7.0",
+    "psutil>=5.9",
+    "networkx>=3.0",
+    "cachetools>=5.0",
+    "fastapi>=0.100,<1.0",
+    "uvicorn>=0.23,<1.0",
+    "httpx>=0.24",
+    "python-multipart>=0.0.6",
+    "regex>=2024.9.11",
+]
+
+[project.scripts]
+ds = "interfaces.cli.ds:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "runtime*", "interfaces*", "spool*", "projections*", "emitters*", "canonical*", "control*", "shared*", "guardrails*", "integrations*"]
+exclude = ["tests*", "docs*", ".planning*", ".audit*"]
+
+[tool.black]
+line-length = 100
+
+[tool.flake8]
+max-line-length = 100
+per-file-ignores = [
+    "tests/*:E501,F401",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "analytics/tests"]
+asyncio_mode = "auto"
+addopts = "-v --color=no"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+markers = [
+    "runtime_reliability: Phase 5 runtime reliability gate — core contracts that must always pass",
+]
+
+[tool.coverage.run]
+source = [
+    "core",
+    "runtime",
+    "interfaces",
+    "spool",
+    "projections",
+    "emitters",
+    "canonical",
+    "control",
+]
+omit = [
+    # omit: example/template files, not production logic
+    "projections/core/email/example_usage.py",
+    # omit: migration scripts, one-time ops — tests added in 18.7.6
+    "core/config/migrations/*",
+    # omit: harvest target — tests added in 18.4.3 telemetry workstream
+    "core/telemetry/emitters.py",
+    # omit: harvest target — tests added in 18.4.3 telemetry workstream
+    "core/telemetry/token_capture.py",
+]
+
+[tool.coverage.report]
+fail_under = 8

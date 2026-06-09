@@ -1,0 +1,97 @@
+# Dashboard projection sample
+# Documentation/data only. Read-only projection, not authority.
+artifact_kind: "DashboardProjectionSnapshot"
+artifact_schema_version: "dashboard_projection_model.v0"
+projection_id: "dashboard.projection.sample"
+generated_at: "unknown"
+source_artifact_refs:
+  - "docs/contracts/security-review-report.sample.yaml"
+  - "docs/contracts/security-review-report-artifact-contract.md"
+projection_scope:
+  target_repo_access: "not_authorized"
+  scan_execution: "not_authorized"
+  dashboard_runtime: "not_authorized"
+non_authority_notice: "Dashboard projections are read-only views over file-backed artifacts. They must not run scans, approve risk, mutate repos, or replace Work Order reports, operator decisions, Security Review reports, eval artifacts, or Handoff Packets."
+stale_or_missing_evidence:
+  - evidence_ref: "sample"
+    status: "sample_only"
+    impact: "Not valid for release or execution decisions."
+work_orders:
+  - work_order_id: "wo-dream-studio-sample-security-review"
+    phase_name: "Sample Security Review Planning"
+    approval_mode: "observe_only"
+    risk_level: "medium"
+    readiness: "HOLD"
+    verdict: "PASS WITH RISKS"
+    final_decision: "HOLD"
+    next_action: "Open a future approved Work Order before target access or scan execution."
+    report_ref: "docs/contracts/security-review-report.sample.yaml"
+    handoff_ref: "missing"
+    blocking_risks:
+      - "Sample projection is not an execution artifact."
+evals:
+  - eval_artifact_ref: "not_applicable_for_sample"
+    eval_type: "dashboard_projection_contract_completeness"
+    pass_fail: "unknown"
+    score: "not_applicable"
+    evidence_refs:
+      - "docs/contracts/dashboard-projection-model-contract.md"
+    blocking: false
+    limitations:
+      - "Sample data only."
+approvals_and_operator_decisions:
+  - approval_artifact_ref: "not_applicable"
+    approval_status: "not_required"
+    operator_decision_ref: "not_applicable"
+    selected_decision: "none"
+    reason_required: false
+    reason_present: false
+    execution_allowed: false
+security_reviews:
+  - security_review_report_ref: "docs/contracts/security-review-report.sample.yaml"
+    target_id: "not_applicable"
+    security_pack_id: "security_review_profile_pack"
+    verdict: "PASS WITH RISKS"
+    release_gate_decision: "SECURITY_CLEAR_WITH_RISKS"
+    taxonomy_coverage:
+      reviewed_categories:
+        - "dependency_supply_chain"
+      missing_categories:
+        - "static_code_security"
+    scan_status_counts:
+      reviewed_from_file_backed_evidence: 1
+      deferred: 1
+    findings_by_severity:
+      info: 1
+      low: 0
+      medium: 0
+      high: 0
+      critical: 0
+      blocker: 0
+    findings_by_release_impact:
+      warn: 1
+      block_release: 0
+    blocking_findings: []
+    accepted_risks:
+      - risk_id: "sec.risk.sample.accepted"
+        operator_decision_ref: "not_applicable_for_sample"
+    deferred_scans:
+      - scan_id: "sec.dast.runtime_injection_testing"
+        reason: "Runtime scan execution is not authorized by sample data."
+    evidence_inventory_refs:
+      - "sec.evidence.sample.status"
+    next_work_order_recommendation:
+      recommended_work_order_id: "wo-dream-studio-sample-next-security-review"
+      recommended_phase_name: "Sample Security Review Planning"
+      recommended_handoff_type: "normal_next_work_order"
+      recommended_phase_type: "normal_next_work_order"
+      recommended_decision: "HOLD"
+      scope_summary: "Planning-only sample; real target work requires a future approved Work Order."
+forbidden_actions_reaffirmed:
+  - "target repo access"
+  - "scan execution"
+  - "dashboard UI implementation"
+  - "dashboard API implementation"
+  - "runtime projection builder implementation"
+  - "DB/event/schema migration"
+  - "dependency or lockfile changes"

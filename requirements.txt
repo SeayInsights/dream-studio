@@ -1,0 +1,41 @@
+duckdb>=0.10
+pydantic>=2.0,<3.0
+jsonschema>=4.0
+pandas>=2.0,<3.0
+numpy>=1.24.0
+scipy>=1.10.0
+Jinja2>=3.1,<4.0
+PyYAML>=6.0,<7.0
+psutil>=5.9
+
+# Unified Discovery System (Phase 4-5)
+networkx>=3.0
+cachetools>=5.0
+
+statsmodels>=0.14.0
+scikit-learn>=1.3.0
+
+# Semantic search is optional — install with: pip install -r requirements-semantic.txt
+
+# Analytics API (Phase 5)
+fastapi>=0.100,<1.0
+uvicorn>=0.23,<1.0
+httpx>=0.24
+python-multipart>=0.0.6
+
+# regex: pinned to satisfy dateparser>=1.4.0 transitive requirement
+regex>=2024.9.11
+
+# LLM safety scanners: giskard, rebuff, llm-guard
+# Real libraries not yet evaluated for Python 3.12 compatibility.
+# Stub implementations in guardrails/scanners/ provide equivalent
+# pattern-based detection and are the active implementation.
+# Integration review planned for Phase 18.4 security workstream.
+# giskard>=2.0
+# rebuff>=0.1
+# llm-guard>=0.3
+
+# Optional: tiktoken (for precise token counting in adapter builds)
+# tiktoken>=0.5
+# Optional: APScheduler (for report scheduler - recommended)
+# apscheduler>=3.10

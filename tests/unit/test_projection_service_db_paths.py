@@ -1,0 +1,85 @@
+"""Phase 9C projection service DB path isolation guardrails."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from core.event_store import studio_db
+from projections.core.alerts import alert_evaluator as alert_evaluator_module
+from projections.core.alerts import rule_manager as rule_manager_module
+from projections.core.alerts.rule_manager import RuleManager
+from projections.core.alerts.alert_evaluator import AlertEvaluator
+from projections.scoring import engine as risk_engine_module
+from projections.scoring.engine import RiskScoringEngine
+
+pytestmark = pytest.mark.runtime_reliability
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _forbid_global_db(*_args, **_kwargs):
+    raise AssertionError("explicit db_path code path used a global DB helper")
+
+
+def test_rule_manager_honors_explicit_db_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(rule_manager_module, "get_connection", _forbid_global_db)
+    monkeypatch.setattr(rule_manager_module, "transaction", _forbid_global_db)
+
+    db_path = tmp_path / "alerts.db"
+    manager = RuleManager(str(db_path))
+    rule_id = manager.create_rule(
+        {
+            "rule_name": "High latency",
+            "metric_path": "api.latency_p95",
+            "condition": "gt",
+            "threshold": 500,
+            "severity": "warning",
+        }
+    )
+
+    active_rules = manager.get_active_rules()
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute("SELECT rule_id, rule_name FROM alert_rules").fetchall()
+
+    assert active_rules[0]["rule_id"] == rule_id
+    assert rows == [(rule_id, "High latency")]
+
+
+def test_alert_evaluator_honors_explicit_db_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(alert_evaluator_module, "get_connection", _forbid_global_db)
+    monkeypatch.setattr(alert_evaluator_module, "transaction", _forbid_global_db)
+
+    db_path = tmp_path / "alerts.db"
+    manager = RuleManager(str(db_path))
+    rule_id = manager.create_rule(
+        {
+            "rule_name": "High failure rate",
+            "metric_path": "skill.failure_rate",
+            "condition": "gt",
+            "threshold": 0.25,
+            "severity": "critical",
+        }
+    )
+
+    evaluator = AlertEvaluator(str(db_path))
+    triggered = evaluator.evaluate_rules({"skill.failure_rate": 0.5})
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute("SELECT rule_id, metric_value, severity FROM alert_history").fetchall()
+
+    assert triggered[0]["rule_id"] == rule_id
+    assert rows == [(rule_id, 0.5, "critical")]
+
+
+def test_risk_scoring_writer_uses_configured_transaction_helper():
+    source = (REPO_ROOT / "projections" / "scoring" / "engine.py").read_text(encoding="utf-8")
+    emit_source = source.split("def emit_enriched_event", 1)[1]
+
+    # emit_enriched_event delegates to _write_envelopes (canonical event spool),
+    # not direct DB writes — verify it does not open a raw transaction.
+    assert "_write_envelopes" in emit_source
+    assert "with transaction() as conn" not in emit_source

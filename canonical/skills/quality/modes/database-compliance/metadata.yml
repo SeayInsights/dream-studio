@@ -1,0 +1,23 @@
+skill_id: database-compliance
+skill_name: Database Compliance Quality
+pack: quality
+mode: database-compliance
+skill_description: |
+  Audits databases and data-handling code for regulatory compliance: PII classification,
+  retention policies, right to erasure/access, consent tracking, and data minimization.
+  GDPR default with config-driven opt-in for HIPAA, CCPA, and COPPA.
+  Auto-skips when no PII schema detected (has_pii_schema=False).
+supports_brownfield: true
+phase: 1
+languages_supported_phase1:
+  - python
+  - typescript
+  - javascript
+  - go
+  - rust
+rules_phase1: 12
+deferred_rules:
+  - encryption_at_rest   # → sec-009 (security skill)
+  - pii_in_runtime_output  # → sec-013 (security skill)
+  - pii_in_log_call_sites  # → ops-003 (ops skill)
+  - backup_strategy        # → db-016/017/018 (database skill)

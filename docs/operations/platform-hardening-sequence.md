@@ -1,0 +1,129 @@
+# Platform Hardening Sequence
+
+Dream Studio's platform-hardening sequence turns local orchestration into a measurable, permissioned, privacy-safe, installable, pilot-ready, and demo-ready product surface.
+
+The sequence is implemented as a single authority-backed read model over current Dream Studio systems. It does not create a competing truth source for Work Orders, validation, security findings, analytics ingestion, adapter usage, or Contract Atlas.
+
+## Milestones
+
+- `skill_evaluation_harness`: versioned skill/workflow evaluations with golden fixtures, expected-output contracts, rubric scores, promotion criteria, rollback criteria, and failure pattern tracking.
+- `policy_permission_engine_maturation`: reusable policy decisions for read-only work, repo mutation, live SQLite writes, external project work, cleanup, push/deploy actions, adapter execution, browser automation, secrets, Docker, and dependency changes.
+- `engineering_connector_ingestion_framework`: read-only connectors for GitHub, CI reports, JUnit, SARIF, coverage, package manifests, CSV/JSON imports, AI usage exports, and evidence packets that normalize into current SQLite authority.
+- `privacy_redaction_and_secret_boundary_maturation`: visibility modes and redaction profiles for private operation, team/client-safe packets, and public sanitized exports.
+- `local_watch_and_scheduled_validation_runtime`: opt-in local watchers for dashboard health, release gate, adapter staleness, Contract Atlas freshness, docs drift, project registry, security/readiness, and backup/restore health.
+- `team_pilot_rollup_and_sanitized_reporting`: local-first team rollups that share summaries without raw private state.
+- `installer_distribution_hardening`: user-facing install, version, doctor, repair, legacy detection, legacy migration dry run, adapter repair, rollback-check, update-check, backup, restore-check, uninstall-check, and acceptance flows.
+- `dream_studio_demo_and_case_study_system`: evidence-backed, sanitized demo scripts, proof packets, screenshots checklists, architecture packets, and case studies.
+
+## Authority
+
+Platform hardening records live in SQLite tables created by migration `046_platform_hardening_authority.sql`:
+
+- `skill_evaluation_runs`
+- `policy_decision_records`
+- `connector_ingestion_runs`
+- `privacy_redaction_export_records`
+- `local_watch_schedule_records`
+- `team_rollup_records`
+- `installer_distribution_checks`
+- `demo_case_study_packets`
+
+Dashboard/API output is derived from these tables and repo-owned declarations in `core/shared_intelligence/platform_hardening.py`.
+
+## Boundaries
+
+- Default behavior is read-only or dry-run.
+- Connector imports normalize into current SQLite authority; they do not create connector-specific truth.
+- Watchers are opt-in and disabled by default.
+- Policy decisions must record actor, action, target, scope, risk, approval requirement, evidence requirement, rollback requirement, state, reason, source authority, and dashboard attention impact.
+- Public exports must use `public_sanitized` visibility and strip private fields before publication.
+- Demos and case studies must be evidence-backed and sanitized before external use.
+
+## Dashboard And CLI
+
+Shared Intelligence exposes:
+
+- `/api/shared-intelligence/platform-hardening`
+- `/api/shared-intelligence/platform-hardening/skill-evaluations`
+- `/api/shared-intelligence/platform-hardening/policy-decision`
+- `/api/shared-intelligence/platform-hardening/connectors`
+- `/api/shared-intelligence/platform-hardening/privacy`
+- `/api/shared-intelligence/platform-hardening/watchers`
+- `/api/shared-intelligence/platform-hardening/team-rollup`
+- `/api/shared-intelligence/platform-hardening/installer`
+- `/api/shared-intelligence/platform-hardening/demo`
+
+The installed command surface includes:
+
+- `ds version`
+- `ds doctor`
+- `ds repair`
+- `ds policy`
+- `ds platform-hardening`
+- `ds dashboard --status`
+- `ds dashboard --serve`
+- `ds dashboard --check`
+- `ds install --check-legacy`
+- `ds migrate-legacy --dry-run`
+- `ds repair-adapters`
+- `ds rollback-check`
+
+These commands do not authorize destructive changes. Dashboard serve/check
+validation is a local runtime health surface only; it must not bootstrap,
+migrate, backfill, clean, or mutate external projects.
+
+## PRD Lifecycle Interaction
+
+Platform hardening treats PRD lifecycle records as control-plane authority for
+scope, milestones, Work Orders, change orders, and route reconciliation.
+Policy, privacy, connector, watcher, team-rollup, installer, and demo surfaces
+may summarize PRD lifecycle status, but they must not overwrite PRDs, create
+file sprawl, expose private project history, or authorize execution.
+
+<!-- Last reviewed 2026-05-20 — repo-wide `py -m black .` formatting applied; no behavior or policy change required here. -->
+
+<!-- Last reviewed 2026-05-20 — pipeline optimization landed (migration 057 extends ds_work_order_types with workflow_template, precondition_skill, task_generator, resolution_instructions; CLI gains `ds project state` single-query, auto-advance, gotcha injection, brief mode); doc policy unchanged here. -->
+
+<!-- Last reviewed 2026-05-20 — A1 extraction: 22 CLI handlers refactored into importable functions under core/projects, core/work_orders, core/design_briefs, core/milestones, core/skills, core/health. ds.py wrappers are now thin (call function, print result, return exit code). No policy or contract change in this doc. -->
+
+<!-- Last reviewed 2026-05-20 — A2.1: `_work_order_start` decomposed into `read_work_order_brief`, `write_work_order_context`, `start_work_order` under `core/work_orders/start.py`. Stdin y/N prompt removed from the pure path; CLI wrapper preserves the legacy stderr warning + non-TTY auto-accept for operator terminals. No policy or contract change here. -->
+
+<!-- Last reviewed 2026-05-20 — A2.2: `_work_order_close` decomposed into `run_gate_check`, `check_close_gates`, `close_work_order` under `core/work_orders/close.py`. `_run_gate_check` lifted out of `interfaces/cli/ds.py`; `core/projects/queries.py` now imports the predicate directly. CLI wrapper re-emits `[gate.bypassed] WARNING:` to stderr from the returned `bypassed_gates` list for operator-terminal parity. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.3: `_project_start` decomposed into the `start_project` composer under `core/projects/start.py`, which orchestrates `set_active_project` (mutations) + `get_next_work_order` (queries) + `start_work_order` (work_orders/start). CLI wrapper converts the compound result dict into the legacy operator-facing summary; no policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.4: `_skill_invoke` (heaviest CLI handler) decomposed into `load_skill_content` + `record_skill_invocation` + `seed_gate_artifact_files` under `core/skills/invocation.py`. Duplicate `_load_packs` / `_SKILL_SPECIFIER_RE` / `_SKILL_FM_RE` removed from `interfaces/cli/ds.py`; the canonical `_load_packs` lives in `core/skills/queries.py`. Phase A3 workflow runner can now compose these three functions directly. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.5: `_design_brief_create` lifted to `create_design_brief` in `core/design_briefs/mutations.py` (returns dict with brief_id, project_id, status, next_step). CLI wrapper preserves the legacy `Draft brief created:` stdout line. A2.4's lazy `from interfaces.cli.ds import _design_brief_create` in `core/skills/invocation.py` is now a direct `core.design_briefs.mutations` import. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.6: `_design_brief_lock` lifted to `lock_design_brief` in `core/design_briefs/mutations.py` (returns dict with brief_id, status='locked', locked_at; ok=False/error for missing brief). CLI wrapper preserves the legacy `Brief <id> locked.` stdout line and exit-1 JSON path. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.7: `_milestone_close` lifted to `close_milestone` in `core/milestones/close.py`. Pure function returns one canonical result dict across every path (missing milestone / open WOs / gate failures / forced bypass / success); CLI wrapper preserves the legacy mixed-format operator output (JSON for failures, plain-text on success, `[gate.bypassed] WARNING:` stderr on force). No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A2.8: `_update_command` no longer self-shells via `subprocess.run(['ds','integrate','install','claude_code','--execute'])`; instead it calls `ClaudeCodeInstaller.install('execute')` directly in-process, mirroring the `ds integrate install` code path. Skips interpreter respawn, keeps tracebacks intact, and lets callers patch the installer with `unittest.mock`. Final A2 handler. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — A6.3: `_project_delete` lifted to `delete_project` in `core/projects/mutations.py` (returns dict; CLI wrapper preserves the `--confirm` operator-facing text). New `ds-project:manage` mode under `canonical/skills/ds-project/modes/manage/` wraps `get_project_list` + `set_active_project` + `deactivate_project` + `delete_project` per the AI-presents-from-database discipline. Final A6 PR. No policy or contract change here. -->
+<!-- Last reviewed 2026-05-20 — B.3: git pre-push hook installer wiring landed. `ds integrate install` now plans + writes `<repo>/.git/hooks/pre-push` (chmod +x on Unix) when invoked from a git repo; opt-in via `ClaudeCodeInstaller(git_repo_root=...)` so tests stay hermetic. No policy or contract change here. -->
+
+<!-- Last reviewed 2026-05-21 — Platform detection added as an installer_distribution_hardening input: `core.config.platform.ensure_platform_recorded()` is called during first-run setup and `ds doctor`, recording OS, shell, Python version, and terminal to `~/.dream-studio/state/platform.json`. This supports shell-correct error messages and diagnostic output. The installer milestone can verify platform.json exists and is readable as part of its doctor/repair health evidence. -->
+
+<!-- Last reviewed 2026-05-21 — TA0 SDLC entity creation events: interfaces/cli/ds.py change in this PR is a CLI handler refactor only. _project_register now delegates to core.projects.mutations.register_project() instead of containing an inline INSERT. This aligns the CLI with the A2 refactor pattern already applied to all other project/milestone/work-order handlers. No new CLI surface, no new permissions, no installer change, no runtime path change, no adapter boundary change. No policy or contract change in this doc. -->
+
+<!-- Last reviewed: TA2 (2026-05-22) — no structural change required for this workstream -->
+
+<!-- Last reviewed 2026-05-22 — TA3 reviewed; no changes required for this doc. -->
+
+<!-- Last reviewed 2026-05-22 — Phase 18.1.5 reviewed; no changes required for this doc. Projection framework (core/projections/framework.py, runner.py) and ds projection CLI (interfaces/cli/projection_cli.py) are covered by the existing installer_distribution_hardening milestone (new ds projection subcommand) and sqlite_schema_authority domain (migrations 068-069). -->
+
+
+<!-- Last reviewed 2026-05-23 -- Phase 18.1.7: ds_* project-spine tables renamed to business_* via migration 070. No policy or boundary change in this doc; runtime table names updated. -->
+
+
+<!-- Last reviewed 2026-05-24 — Phase 18.1.13: ds validate and ds doctor --help text updated to explicitly identify each command's health-check plane. ds validate description now reads: DB authority plane (schema version, migrations, module profiles). ds doctor description now reads: Claude Code integration plane (skills, agents, hooks, routing, version). Each help text cross-references the other command. README.md health-checks section expanded; docs/operations/fresh-install-validation.md updated to require both commands. No runtime behavior change. No new CLI surface. No policy or contract change in this doc. -->
+
+<!-- Last reviewed 2026-05-26 — Phase 18.1.15b: ClaudeCodeInstaller gains skip_hook_install opt-out read from ~/.dream-studio/config.json via _integrate_dispatch in ds.py. Hook installation (pre-push) is now gated on that flag; the six platform-hardening gate checks themselves (format-check, lint-check, skill-sync, test-suite, atlas-leak, docs-drift) are unchanged. No policy or boundary change in this doc. -->
+
+<!-- Last reviewed 2026-05-27 — Phase 18.2.5: ProjectProjection added for project.created/activated/deactivated/deleted events; migrations 076 and 077 add event-tracking columns to business_projects. No platform hardening sequence changes, no publication boundary changes, no contract atlas or dashboard projection mapping changes. -->
+
+<!-- reviewed: 2026-05-30, migration 084 (project model unification A2). reg_projects deleted; business_projects is the sole project authority. Session hooks now use marker-based UUID resolution. No semantic changes to this document required. -->
+
+<!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
+
+<!-- 2026-06-01: security_scan_runs → scan_runs, security_findings → findings, security_scan_deltas → scan_deltas (migration 089); brownfield intake prompt added; proving-index.md added. -->
+
+<!-- 2026-06-05: Wave 2 career annihilation — career_ops module, 15 career_* tables (migration 100), ds-career skill pack, /career-ops route, career_ops contract+profile, and career expert workflow removed. capability_center/scoped_agents/github_repo_intake unchanged. Removed "career submission" from the `policy_permission_engine_maturation` high-risk action list (that action existed only via the removed career module); the policy/permission engine and all other hardening milestones are otherwise unchanged. -->
+
+<!-- 2026-06-06: Wave 6 — 13 verified-dead tables dropped (migration 101). no semantic change required. -->

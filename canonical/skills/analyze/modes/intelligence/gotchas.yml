@@ -1,0 +1,86 @@
+version: 1.0
+
+# Things to AVOID
+avoid:
+  - id: run-without-engine
+    pattern: Invoking intelligence mode before Wave 2-4 complete
+    why: Engine modules won't be available and analysis will fail
+    instead: Check for analyze.engine import before proceeding
+    severity: critical
+
+  - id: large-codebase-full-context
+    pattern: Loading full context for projects >10k files
+    why: Context overflow and token budget exceeded
+    instead: Use Context7 progressive loading (automatic in engine)
+    severity: high
+
+  - id: blocking-analysis
+    pattern: Running analysis without showing progress
+    why: Long-running analysis (15-45min) appears frozen
+    instead: Stream progress updates or run in background
+    severity: medium
+
+# Best PRACTICES
+best_practices:
+  - id: check-engine-availability
+    practice: Verify analyze.engine imports before analysis
+    benefit: Graceful error handling if platform not installed
+    when: Always, at workflow step 3
+
+  - id: display-health-interpretation
+    practice: Show health score with interpretation (Excellent/Good/Fair/Poor/Critical)
+    benefit: Users understand numeric score context
+    when: Always, in summary output
+
+  - id: link-to-dashboard
+    practice: Suggest dashboard visualization after analysis
+    benefit: Interactive exploration of findings
+    when: Analysis completes successfully
+
+  - id: incremental-for-large-projects
+    practice: Recommend --incremental flag for 10k+ file projects
+    benefit: 10-50x faster on small changes
+    when: Project size detected >10k files
+
+# Edge CASES handled
+edge_cases:
+  - case: Project with no git history
+    handling: Discovery phase detects as greenfield project, analysis proceeds
+    limitation: Cannot use --incremental flag without git
+
+  - case: Mixed language project (Python + JavaScript)
+    handling: Stack detector returns highest-confidence adapter, lists all detected languages
+    limitation: Adapter rules only apply to primary stack
+
+  - case: Analysis interrupted mid-run
+    handling: pi_analysis_runs record marked as failed, partial data in DB
+    recovery: Re-run analysis to complete
+
+  - case: PRD file already exists
+    handling: Overwrites with new analysis, old version not backed up
+    recommendation: Use git to version .planning/ directory
+
+# Known LIMITATIONS
+limitations:
+  - limitation: Stack detection limited to Next.js, Astro, Python
+    impact: Other stacks fall back to generic adapter with reduced rule coverage
+    workaround: Extend analyze/stacks/ with new adapters
+    planned_fix: Wave 6 - add more adapters based on usage telemetry
+
+  - limitation: Research phase is a stub (static compatibility notes)
+    impact: Stack compatibility notes may be outdated or incomplete
+    workaround: Use --quick to skip research entirely
+    planned_fix: Wave 6 - integrate web search for real-time compatibility checks
+
+  - limitation: False positive rate ~40% on initial analysis
+    impact: Some violations/bugs may not be real issues
+    workaround: Manual review of findings, adjust pattern confidence over time
+    planned_fix: Wave 6 - pattern learning adjusts confidence based on outcomes
+
+  - limitation: Dashboard requires separate process (ds_dashboard.py)
+    impact: Not integrated into Claude Code UI
+    workaround: Launch dashboard manually in separate terminal
+    planned_fix: Future - WebSocket integration for live updates
+
+# DEPRECATIONS
+deprecated: []

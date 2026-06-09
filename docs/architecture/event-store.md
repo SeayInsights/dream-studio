@@ -1,0 +1,280 @@
+# Event Store Architecture
+
+## Overview
+
+Dream Studio uses a two-layer event storage model:
+
+1. **`canonical_events`** — the single source of truth for all events
+2. **`execution_events`** — a projection table, rebuilt from canonical events
+
+## canonical_events (Authoritative)
+
+All events flow through the spool pipeline:
+1. Emitter writes `CanonicalEventEnvelope` to spool (a JSON file in `.dream-studio/spool/`)
+2. Ingestor picks up the file and writes to `canonical_events` table
+3. Projections and read models are built from `canonical_events`
+
+### Event Schema
+
+```json
+{
+  "event_id": "<uuid>",
+  "event_type": "<domain>.<noun>.<verb>",
+  "timestamp": "<iso8601>",
+  "schema_version": 1,
+  "trace": {
+    "domain": "sdlc | telemetry | system",
+    "project_id": "<optional>",
+    "milestone_id": "<optional>",
+    "task_id": "<optional>",
+    "process_run_id": "<optional>"
+  },
+  "payload": { ... }
+}
+```
+
+### Domain Field
+
+Every canonical event trace must include a `domain` field:
+
+| Domain | Description | Example event types |
+|--------|-------------|---------------------|
+| `sdlc` | Work orders, tasks, milestones, projects, skills | `work_order.started`, `task.completed`, `skill.invoked` |
+| `telemetry` | Token usage, tool execution, session lifecycle, execution runs | `token.consumption.recorded`, `tool.execution.completed` |
+| `system` | Infrastructure, internal Dream Studio events | (reserved) |
+
+Events emitted without a domain field trigger a `[ds-ingestor] WARNING` to stderr.
+
+## execution_events (Projection)
+
+`execution_events` is rebuilt by the ingestor from `canonical_events`. It is NOT a primary
+write target. Historical rows direct-written before TA0b have `_built_from_event_id = NULL`.
+Projected rows carry the source canonical event's `event_id` in `_built_from_event_id`.
+
+### Projection Trigger
+
+When the ingestor writes an execution-domain event to `canonical_events`, it immediately
+calls `projections.core.execution_events_projection.apply()` to write the corresponding
+row to `execution_events`. The projection is idempotent — replaying the same event is safe.
+
+### Projected Event Types
+
+- `execution.started`
+- `execution.completed`
+- `execution.failed`
+
+## Dashboard Status (TA5 — Restored)
+
+The dashboard's token-attribution data now comes directly from `canonical_events`.
+Fabricators `_build_skill_costs` and `_build_exec_time_ranges` were deleted in TA5.
+
+- `/api/metrics/tokens` — `attribution_coverage` field added; `by_skill` is `{}` (honest empty)
+  when no skill cost data exists in `token_usage_records`. Zero fabrication.
+- `/api/metrics/skills` — execution time ranges read from `canonical_events.skill.executed`
+  instead of legacy `skill_invocations`. Empty if no `skill.executed` events.
+
+### Model Pricing Source
+
+Token cost calculations use `core/pricing/claude_models.py`.
+
+**Prices are in USD per 1M tokens (MTok). Source: platform.claude.com/docs, verified 2026-05-22.**
+
+| Model | Input $/MTok | Output $/MTok | Cache Write $/MTok | Cache Read $/MTok |
+|-------|-------------|--------------|-------------------|------------------|
+| claude-opus-4-7 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-6 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-5 | $5.00 | $25.00 | $6.25 | $0.50 |
+| claude-opus-4-1 | $15.00 | $75.00 | $18.75 | $1.50 |
+| claude-sonnet-4-6 | $3.00 | $15.00 | $3.75 | $0.30 |
+| claude-sonnet-4-5 | $3.00 | $15.00 | $3.75 | $0.30 |
+| claude-haiku-4-5 | $1.00 | $5.00 | $1.25 | $0.10 |
+| claude-haiku-3-5 | $0.80 | $4.00 | $1.00 | $0.08 |
+
+Cache write price = 5-minute write tier (standard).
+Model IDs with date suffixes (e.g. `claude-haiku-4-5-20251001`) are normalized before lookup.
+Unknown models log a WARNING and return $0.00 — they never appear as fabricated costs.
+
+To update pricing: edit `CLAUDE_MODEL_PRICING` in `core/pricing/claude_models.py` and
+update this table. No other files need changing.
+
+## SDLC Event Trace Requirements
+
+All SDLC-domain events (`domain = "sdlc"`) must include the following fields in their `trace`:
+
+| Field | Type | Required on | Description |
+|-------|------|------------|-------------|
+| `domain` | `"sdlc"` | All events | Identifies the event as an SDLC ontology event |
+| `attribution_status` | string | SDLC events only | See enum below |
+| `project_id` | string | All SDLC events | The Dream Studio project UUID |
+| `milestone_id` | string \| null | Milestone/WO/task events | Parent milestone UUID |
+| `work_order_id` | string \| null | WO/task events | Parent work order UUID |
+| `task_id` | string \| null | Task events | Task UUID |
+
+### attribution_status Enum
+
+| Value | When to use |
+|-------|-------------|
+| `"fully_attributed"` | Forward-emitted events: the emitting call site knows the full SDLC context |
+| `"partial"` | Some IDs in the trace chain are missing (e.g. WO without milestone) |
+| `"orphan"` | No active SDLC context at emission time (e.g. tool calls outside a task) |
+| `"backfill"` | Synthetic events generated by a migration for rows that predate event emission |
+
+`attribution_status` is mandatory on SDLC-domain events. Telemetry-domain events do not carry it.
+
+## token.consumed Event (TA3)
+
+The `token.consumed` event captures per-tool-invocation token attribution.
+Emitted by `core/telemetry/token_capture.py` via the `PostToolUse` hook shim.
+
+### Event Schema
+
+```json
+{
+  "event_type": "token.consumed",
+  "trace": {
+    "domain": "telemetry",
+    "attribution_status": "fully_attributed | partial | orphan",
+    "task_id": "<from active_task or null>",
+    "work_order_id": "<from active_task or null>",
+    "milestone_id": "<from active_task or null>",
+    "project_id": "<from active_task or CWD marker or null>",
+    "tool_name": "<tool that was invoked>",
+    "tool_use_id": "<from PostToolUse payload>",
+    "session_id": "<from PostToolUse payload if available>",
+    "machine_id": "<Dream Studio machine UUID>"
+  },
+  "payload": {
+    "input_tokens": "<int>",
+    "output_tokens": "<int>",
+    "cache_creation_input_tokens": "<int>",
+    "cache_read_input_tokens": "<int>",
+    "model": "<claude model id if present in payload>",
+    "granularity": "tool_invocation",
+    "project_name": "<from JSON marker only; omitted for plain-UUID markers>",
+    "execution_context": {
+      "git_commit": "<commit SHA if available>",
+      "git_branch": "<branch name if available>",
+      "git_remote_url": "<remote origin URL if available>",
+      "cwd_relative_to_project": "<cwd path relative to project root; no absolute paths>",
+      "platform": {
+        "os": "<OS name>",
+        "os_version": "<OS version>",
+        "shell": "<shell name>"
+      }
+    }
+  }
+}
+```
+
+### Attribution Chain
+
+`token.consumed` events go through a three-step attribution chain:
+
+| Step | Condition | Result |
+|------|-----------|--------|
+| 1. Active task | `get_active_task()` returns a context | `attribution_status: "fully_attributed"`, full SDLC trace |
+| 2. CWD marker | CWD contains `.dream-studio-project` (walks up to root) | `attribution_status: "partial"`, only `project_id` populated |
+| 3. Fallback | Neither active task nor marker | `attribution_status: "orphan"`, all SDLC fields null |
+
+For `attribution_status` definitions see the SDLC Event Trace Requirements section above.
+
+> **Note:** `attribution_status: "partial"` is used for ALL CWD-resolved cases, including
+> when the marker's project_id is not present in ds_projects (Q3 anomaly — auditor reconciles).
+
+### Existing `token.consumption.recorded` events
+
+148 events with type `token.consumption.recorded` exist from before TA3.
+These remain as historical orphans with their original event type — no rename, no backfill.
+`token.consumed` is the canonical type going forward.
+
+### Marker File Authority
+
+The `.dream-studio-project` marker file (JSON or legacy plain-UUID) is the authoritative
+source for **project attribution by filesystem location**. `ds_projects` is authoritative
+for **project metadata** (name, status, descriptions). These two sources can drift; the
+auditor workstream handles reconciliation.
+
+The `metadata.registered_from_path` field in the marker is informational only and
+**never appears in emitted events** — absolute filesystem paths are not stored in
+canonical event traces or payloads.
+
+## Active Task Context
+
+The active task context module (`core/sdlc/active_task.py`) provides a file-backed pointer to the operator's current task. It enables `skill.invoked` events to carry the full SDLC chain.
+
+### Storage
+Active task is persisted at `~/.dream-studio/state/active_task.json` (env-overridable via `DS_ACTIVE_TASK_PATH`).
+
+```json
+{
+  "task_id": "<uuid>",
+  "work_order_id": "<uuid>",
+  "milestone_id": "<uuid or empty string>",
+  "project_id": "<uuid>",
+  "set_at": "<iso8601>"
+}
+```
+
+### Lifecycle
+- **Set:** `ds task set-active <task_id>` resolves the full SDLC chain from the DB and persists it
+- **Read:** `get_active_task()` is a cheap file read — no DB lookup at event emission time
+- **Auto-clear:** when `task.completed` fires and the completed task matches the active pointer, `active_task.json` is automatically removed
+- **Manual clear:** `ds task clear-active` removes the file
+
+### Effect on skill.invoked Events
+
+| Active task set? | `attribution_status` | SDLC fields |
+|-----------------|---------------------|-------------|
+| Yes | `"fully_attributed"` | task_id, work_order_id, milestone_id, project_id |
+| No | `"orphan"` | all null |
+
+Events emitted before TA2 (the existing 21 skill.invoked events) remain orphans permanently.
+
+## attribution_status Enforcement (TA4)
+
+`attribution_status` is enforced at emission time via `CanonicalEventEnvelope.to_dict()`.
+
+### Validation rule
+
+`_validate_sdlc_event(envelope_dict)` runs inside `to_dict()` on every event:
+
+- Non-SDLC events (`domain != "sdlc"` or no domain) always pass — no attribution required.
+- SDLC events missing `attribution_status` fail validation.
+- SDLC events with an unrecognized `attribution_status` value fail validation.
+
+### Failure behavior: visibility over correctness
+
+On validation failure, `to_dict()`:
+1. Logs a diagnostic entry (`category=failure`, `source=canonical.events.envelope.validate`)
+2. **Continues** — the event dict is returned and written to canonical_events normally.
+
+Events are never blocked. The diagnostic stream shows what's broken so call sites can be
+fixed, rather than silently dropping events that would disappear from all analysis.
+
+### Hardcoded project_id inventory
+
+Scanned all production `.py` source (excluding `tests/` and `migrations/`) for literal
+UUID strings and known operator project UUIDs. **Result: 0 genuine hardcodes found.**
+
+One migration artifact was reviewed and intentionally preserved:
+- `core/event_store/migrations/056_milestone_order_index.sql:14` — backfill WHERE clause
+  for a specific historical project where milestones have identical `created_at` timestamps
+  and rowid is the only reliable ordering signal. Correct by design.
+
+### SDLC emitter fixed in TA4
+
+`block_work_order` (in `core/work_orders/mutations.py`) emitted `work_order.blocked` as a
+hand-built dict without `attribution_status`. Converted to `CanonicalEventEnvelope` with
+`attribution_status: "fully_attributed"` (project_id is always resolved from the DB at
+this call site).
+
+## Migration History (updated)
+
+| Migration | Description |
+|-----------|-------------|
+| 037 | Initial execution_events table |
+| 058 | Domain field validation requirement documented |
+| 059 | `_built_from_event_id` column added to execution_events |
+| 060 | Backfill: domain added to existing events; execution_events populated from canonical |
+| 061 | Backfill: synthetic project.created, milestone.created, work_order.created events for pre-TA0 rows |
+| 064 | Backfill: synthetic task.created events for pre-TA1 task rows |

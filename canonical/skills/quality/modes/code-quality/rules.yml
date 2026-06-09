@@ -1,0 +1,1015 @@
+# Code-Quality Rules
+# Version: 1.0.0 (18.4.3 initial)
+# Schema version: 1 (extended with cross_references field)
+#
+# Source authority:
+#   LIST-4 = canonical/skills/quality/references/code-writing-best-practices.md
+#
+# Three-way skill boundary (established 18.4.3):
+#   Security (sec-*) owns: adversarial misuse, breach risk, injection vectors
+#   Database (db-*)  owns: schema design, query patterns, migration safety
+#   Code-quality (cq-*) owns: maintainability, correctness, idiom
+#   Cross-references: cq-016 ↔ sec-003; cq-006/cq-015 ↔ sec-013 (indirect)
+#
+# Schema extension (18.4.3): cross_references field added.
+# Used when two skills may fire on the same code from different angles.
+# Structure:
+#   cross_references:
+#     - rule_id: <str>         # e.g. "sec-003"
+#       skill: <str>           # e.g. "ds-quality:security"
+#       reason: <str>          # why this cross-reference exists
+#       surface_co_located: <bool>  # true = render findings together in report
+#
+# Follow-up: migrate security/database rules.yml free-text cross-refs to
+# this structured field. Not blocking 18.4.3. Track as follow-up commit.
+#
+# External entry point detection: cq-016 uses
+#   canonical/skills/quality/shared/trust_boundary_detection.py
+# to exclude external trust boundaries (FastAPI/Flask routes, Click commands,
+# argparse subcommands, Dream Studio hook handlers) from internal-boundary
+# validation rules. sec-003 owns those.
+#
+# cq-022 (CQS) deferred to Phase 19 — pure LLM, no static fallback, max cost.
+# Rules with action.build_mode: null are audit-only.
+
+rules:
+
+  - id: "cq-001"
+    name: "One job per function"
+    severity: high
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "One job per function"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "No cheap static proxy for 'one job.' LLM judges whether function body mixes concerns (data retrieval + transformation + I/O in one function)."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 600
+
+    triggers:
+      - "Function mixes concerns: data retrieval + transformation + output in single function body"
+      - "Function name requires 'and' to describe what it does"
+      - "Function has multiple unrelated blocks each doing a different thing"
+
+    remediation:
+      summary: "Extract sub-concerns into separate functions. If the function name requires 'and', that's a signal to split. Aim for functions that do exactly one thing at one level of abstraction."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-001-suppress"
+        reason: "Orchestration function — intentionally coordinates multiple concerns at a high level"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "cq-002"
+    name: "Function length ≤ 50 lines (configurable)"
+    severity: medium
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "Short — most 5-20 lines"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "For Python: Python ast line count. Threshold from config.yml thresholds.max_function_lines (default 50). For TypeScript/JavaScript: LLM counts lines in function body (any language — the concept is universal). LLM fallback fires automatically for non-Python files."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 200
+
+    triggers:
+      - "Function body exceeds max_function_lines lines (default 50)"
+
+    remediation:
+      summary: "Break large functions into smaller focused helpers. Functions > 50 lines usually contain multiple concerns or abstraction levels that can be extracted."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-002-suppress"
+        reason: "Long function is justified — e.g., generated migration or template with unavoidable length"
+      - path_glob: "**/migrations/**"
+        reason: "Migration files may contain long single-statement blocks by design"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-003"
+    name: "Parameter count ≤ 4 (configurable)"
+    severity: medium
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "Few parameters — 0-3 ideal, 4 smells, 5+ needs a struct"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "For Python: Python ast param count, excludes self/cls. Threshold from config.yml thresholds.max_param_count (default 4). For TypeScript/JavaScript: LLM counts function parameters (any language). LLM fallback fires for non-Python files."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 150
+
+    triggers:
+      - "Function has more than max_param_count parameters (default 4, excluding self/cls)"
+
+    remediation:
+      summary: "Group related parameters into a dataclass or TypedDict. 5+ parameters usually indicates missing abstraction — the parameters often form a cohesive concept."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-003-suppress"
+        reason: "Parameters are genuinely independent and a struct would obscure the API"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-004"
+    name: "No boolean flag parameters that change behavior"
+    severity: medium
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "No boolean flag parameters that change behavior"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "For Python: detect bool-typed parameters (annotated as bool or defaulting to True/False) in function signatures. For TypeScript/JavaScript: LLM identifies boolean parameters that branch behavior (any language — the anti-pattern is universal). LLM fires for all languages."
+        availability_note: "ruff not installed; using AST + LLM for Python, LLM-only for other languages."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "Boolean parameter that, when True/False, causes the function to take fundamentally different code paths"
+      - "Parameter named `mode`, `extended`, `strict`, `force` typed as bool with behavioral branching"
+
+    remediation:
+      summary: "Split into two functions or use an enum parameter. Exception: factory functions with single `extended: bool = False` where the bool extends (not changes) behavior are acceptable with inline suppression."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-004-suppress"
+        reason: "Factory function with additive bool flag (extends behavior, doesn't branch)"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-005"
+    name: "Guard clauses over deep nesting"
+    severity: medium
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "No deep nesting (2-3 levels max)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "For Python: Python ast nesting depth (if/for/while/with/try nodes). Threshold from config.yml thresholds.max_nesting_depth (default 3). For TypeScript/JavaScript: LLM counts nesting depth of conditionals and loops (any language — deep nesting is a universal smell). LLM fallback fires for non-Python files."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 200
+
+    triggers:
+      - "Function has nesting depth > max_nesting_depth (default 3 levels of if/for/while/with/try)"
+
+    remediation:
+      summary: "Invert conditions to return early (guard clauses). Extract inner blocks to helper functions. Deep nesting hides the happy path and makes code hard to follow."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-005-suppress"
+        reason: "Deep nesting is warranted here — e.g., state machine with many branches"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-006"
+    name: "No silent failures — bare except without logging or re-raise"
+    severity: critical
+    category: error-handling
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "No silent failures"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: pyflakes
+        fallback_to_llm: true
+        notes: "Static: detect `except: pass` or `except Exception: pass` with no logging or re-raise. LLM pass for context (e.g., is there a log call nearby?)."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "except: pass — swallows any exception silently"
+      - "except Exception: pass — swallows broad exception silently"
+      - "except block with no logging call and no re-raise"
+
+    remediation:
+      summary: "At minimum: log the exception before passing. Better: re-raise, return an error value, or handle specifically. Silent failures make production debugging impossible."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-006-suppress"
+        reason: "Intentional swallow — documented reason why this exception is safe to ignore"
+      - inline_comment: "# cq-006-suppress: intentional graceful degradation on malformed event payload"
+        reason: "Graceful-degradation pattern: silent failure is intentional when malformed external data (e.g., event payload, JSON parse) must not crash a critical path. Document the rationale inline."
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "cq-007"
+    name: "Names reveal intent — no single-letter variables outside loops"
+    severity: medium
+    category: naming
+
+    source:
+      list: "LIST-4"
+      section: "C"
+      item: "Names reveal intent"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Regex: single-char variable names assigned in function body that are not loop variables (i, j, k, x, y, z in for/while context). LLM confirms context."
+        availability_note: "ruff not installed; using regex + LLM. Install ruff for cheaper static execution."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Single-letter variable name assigned outside a for/while loop body (not i, j, k in loop)"
+      - "Variable name that requires reading the value to understand the variable's purpose"
+
+    remediation:
+      summary: "Replace single-letter names with names that describe what the value represents. Exception: `i`/`j`/`k` as loop counters, `x`/`y` for coordinates, `e` for exception in except clauses."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#c-naming"
+
+    suppressions:
+      - inline_comment: "# cq-007-suppress"
+        reason: "Single-letter name is conventional in this context (e.g., mathematical formula)"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-008"
+    name: "No noise words in names"
+    severity: medium
+    category: naming
+
+    source:
+      list: "LIST-4"
+      section: "C"
+      item: "No noise words (data, info, manager, helper, util)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "Regex on class names and function names: detect *Manager, *Helper, *Util, *Utils, *Data, *Info, *Processor, *Handler (catch-all), *Service (when generic). Case-insensitive."
+        availability_note: "ruff not installed; using regex. Install ruff for cheaper static execution."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Class named *Manager, *Helper, *Util, *Utils, *Data, *Info — generic god-object names"
+      - "Function named *Handler (generic) without indicating what it handles"
+
+    remediation:
+      summary: "Name the class/function after what it specifically does, not a generic role. `UserRepository` instead of `UserManager`. `TokenRefresher` instead of `TokenHelper`. Noise words signal incomplete design thinking."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#c-naming"
+
+    suppressions:
+      - inline_comment: "# cq-008-suppress"
+        reason: "Name is conventional in this framework/library context"
+      - path_glob: "tests/**"
+        reason: "Test helpers are conventionally named *Helper"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-009"
+    name: "Boolean names are predicates"
+    severity: medium
+    category: naming
+
+    source:
+      list: "LIST-4"
+      section: "C"
+      item: "Booleans are predicates (`isActive`, `hasPermission`, `canEdit`)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "LLM semantic: assess whether bool-typed variables/parameters read as yes/no questions. Regex prefix check (is_/has_/can_/should_/did_) has high false-positive rate — misses valid predicates like `valid`, `dirty`, `ready`. LLM handles context better."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 400
+
+    triggers:
+      - "Boolean variable or parameter that reads as a noun or verb, not a yes/no question"
+      - "Boolean named `flag`, `mode`, `type`, `status` — ambiguous predicates"
+
+    remediation:
+      summary: "Rename boolean to read as a yes/no question: `is_active`, `has_permission`, `can_edit`, `is_valid`, `is_dirty`, `is_ready`. Avoids double-negatives (`if not not_found`) and communicates semantics clearly."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#c-naming"
+
+    suppressions:
+      - inline_comment: "# cq-009-suppress"
+        reason: "Boolean name follows established API convention in this context"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-010"
+    name: "Constants SCREAMING_SNAKE_CASE and declared at module level"
+    severity: medium
+    category: naming
+
+    source:
+      list: "LIST-4"
+      section: "C"
+      item: "Constants SCREAMING_SNAKE_CASE"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "For Python: Python ast detects module-level constant assignments not in SCREAMING_SNAKE_CASE. For TypeScript/JavaScript: LLM identifies top-level const declarations and enum values not following the SCREAMING_SNAKE or ALL_CAPS convention (TypeScript commonly uses SCREAMING_SNAKE for true constants). LLM fallback fires for non-Python files."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 300
+
+    triggers:
+      - "Module-level constant named with lowercase (should be SCREAMING_SNAKE_CASE)"
+      - "Repeated literal value in function bodies that should be a named constant"
+
+    remediation:
+      summary: "Move repeated literal values to named module-level constants: TIMEOUT_SECONDS = 30. SCREAMING_SNAKE_CASE signals 'this value is fixed and intentional' to readers."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#c-naming"
+
+    suppressions:
+      - inline_comment: "# cq-010-suppress"
+        reason: "Lowercase constant follows framework convention or is intentionally mutable"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: warn
+
+  - id: "cq-011"
+    name: "No magic numbers or strings"
+    severity: medium
+    category: structure
+
+    source:
+      list: "LIST-4"
+      section: "H"
+      item: "No magic numbers/strings"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Regex: literal numeric values other than 0, 1, -1, 2 used in function bodies. Literal strings other than empty string, common sentinels. LLM confirms whether the literal should be a named constant."
+        availability_note: "ruff not installed; using regex + LLM. Install ruff for cheaper static execution."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 350
+
+    triggers:
+      - "Numeric literal (not 0, 1, -1, 2) used directly in logic without named constant"
+      - "String literal repeated 2+ times in the codebase without named constant"
+
+    remediation:
+      summary: "Extract magic literals to named constants. `TIMEOUT_SECONDS = 30` instead of bare `30`. The name makes the intent clear and makes future changes easier."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#h-code-structure--control-flow"
+
+    suppressions:
+      - inline_comment: "# cq-011-suppress"
+        reason: "Literal is self-explanatory in context (e.g., HTTP 200, index 0)"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-012"
+    name: "No mutable global state"
+    severity: critical
+    category: structure
+
+    source:
+      list: "LIST-4"
+      section: "H"
+      item: "No mutable global state"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "For Python: Python ast detects module-level mutable containers (list, dict, set) and global keyword mutation. For TypeScript/JavaScript: LLM identifies module-level let variables, exported mutable arrays/objects, and functions that mutate module-scope state (the anti-pattern is universal; syntax differs). LLM fires for all languages."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 500
+
+    triggers:
+      - "Module-level mutable container (list, dict, set) that is modified by multiple functions"
+      - "global keyword used to write to module-level variable inside a function"
+
+    remediation:
+      summary: "Replace mutable global state with function parameters, class attributes, or a configuration object passed explicitly. Global mutable state makes testing impossible and creates hidden coupling."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#h-code-structure--control-flow"
+
+    suppressions:
+      - inline_comment: "# cq-012-suppress"
+        reason: "Module-level registry/cache with documented thread-safety; cannot be scoped narrower"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "cq-013"
+    name: "Consistent import order: stdlib → third-party → internal → relative"
+    severity: medium
+    category: structure
+
+    source:
+      list: "LIST-4"
+      section: "D"
+      item: "Consistent import order: std → third-party → internal → relative"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: pyflakes
+        fallback_to_llm: false
+        notes: "Parse import blocks. Detect: stdlib imports after third-party; internal imports before third-party; relative imports before absolute."
+        availability_note: "ruff not installed; using pyflakes + AST analysis. Install ruff (E401/E402) for cheaper, more accurate static execution."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Import section mixes stdlib and third-party without blank-line separator"
+      - "Relative imports appear before absolute internal imports"
+
+    remediation:
+      summary: "Order imports: (1) stdlib, (2) third-party, (3) internal/project, (4) relative. Separate groups with blank lines. Black/ruff enforces this automatically when configured."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#d-files--module-organization"
+
+    suppressions:
+      - inline_comment: "# cq-013-suppress"
+        reason: "Import order is intentional for circular import resolution"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-014"
+    name: "No circular imports"
+    severity: high
+    category: structure
+
+    source:
+      list: "LIST-4"
+      section: "D"
+      item: "No circular dependencies"
+
+    regulatory_anchors: []
+
+    # CROSS-REFERENCE: dep-007 in ds-quality:types-deps is the CALIBRATED version of this rule.
+    # dep-007 excludes TYPE_CHECKING-guarded imports at the AST level before generating candidates,
+    # which prevents ~50% false positives from the standard Python pattern of breaking runtime cycles
+    # via `if TYPE_CHECKING: from module import Type`. cq-014 lacks this exclusion — if running
+    # both skills, dep-007 is the authoritative circular-import detector; cq-014 defers to it.
+    # When running code-quality without types-deps, cq-014 fires with the caveat that
+    # TYPE_CHECKING-guarded imports will appear as false positives.
+    cross_references:
+      - rule_id: "dep-007"
+        skill: "ds-quality:types-deps"
+        reason: "dep-007 is the calibrated circular-import detector with TYPE_CHECKING guard exclusion. cq-014 defers to dep-007 when both skills are running. cq-014 exists for code-quality-only audits."
+        surface_co_located: true
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "Multi-file import graph analysis for Python only. Build directed import graph; detect cycles. Default scope: --full-repo and --sample only. Note: does NOT exclude TYPE_CHECKING-guarded imports — see dep-007 for the calibrated version with that exclusion. Operator can override with circular_imports_in_changed: true in config.yml."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Module A imports module B which imports module A (direct cycle)"
+      - "Longer import cycles: A → B → C → A"
+
+    remediation:
+      summary: "Break cycles by: (1) moving shared code to a new module both can import; (2) using dependency injection; (3) moving one import inside a function body (lazy import). For typing-only cycles, use `if TYPE_CHECKING:` guard (dep-007 in ds-quality:types-deps handles this correctly)."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#d-files--module-organization"
+
+    suppressions:
+      - inline_comment: "# cq-014-suppress"
+        reason: "Circular import intentionally resolved via lazy import or TYPE_CHECKING guard"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-015"
+    name: "Specific exceptions — not bare except"
+    severity: critical
+    category: error-handling
+
+    source:
+      list: "LIST-4"
+      section: "F"
+      item: "Specific exceptions, not bare `except`"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: pyflakes
+        fallback_to_llm: false
+        notes: "Static: detect bare `except:` (no exception type) or `except BaseException:` (catches too broadly). Distinct from cq-006 which focuses on the no-log/no-reraise body. cq-015 focuses on the exception type being too broad."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "bare `except:` clause with no exception type specified"
+      - "`except BaseException:` where a more specific type is appropriate"
+
+    remediation:
+      summary: "Catch the specific exception type you expect and can handle. `except ValueError:` instead of `except:`. Bare except also catches SystemExit and KeyboardInterrupt — almost never what you want."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#f-error-handling"
+
+    suppressions:
+      - inline_comment: "# cq-015-suppress"
+        reason: "Intentional broad catch — documented why BaseException or bare except is needed here"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "cq-016"
+    name: "Validate at internal function boundaries"
+    severity: medium
+    category: error-handling
+
+    source:
+      list: "LIST-4"
+      section: "F"
+      item: "Validate at boundaries — every external input is untrusted"
+
+    regulatory_anchors: []
+
+    detection:
+      type: llm
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Uses trust_boundary_detection.py to classify function as internal or external. ONLY applies to internal functions. External entry points (FastAPI/Flask routes, Click commands, argparse subcommands, Dream Studio hook handlers) are EXCLUDED — sec-003 owns those. For internal functions: LLM checks whether the function uses its parameters without validating preconditions where invalid input would cause incorrect behavior."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 600
+
+    cross_references:
+      - rule_id: "sec-003"
+        skill: "ds-quality:security"
+        reason: "External entry points are excluded from this rule; sec-003 owns validation at HTTP/RPC/IPC boundaries from the security angle."
+        surface_co_located: false
+
+    triggers:
+      - "Internal function uses parameters without checking preconditions where invalid input causes incorrect behavior"
+      - "Function accepting numeric ranges with no bounds check in a domain where bounds matter"
+      - "Function accepting optional objects and dereferencing them without None check"
+
+    remediation:
+      summary: "Add precondition checks at the top of functions where invalid input would cause incorrect behavior (not just crashes). Raises or explicit error returns preferred over silent wrong behavior. Note: external entry point validation is owned by ds-quality:security (sec-003)."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#f-error-handling"
+
+    suppressions:
+      - inline_comment: "# cq-016-suppress"
+        reason: "Preconditions enforced by type system or upstream caller; redundant check avoided intentionally"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-017"
+    name: "No dead code (commented-out code blocks)"
+    severity: medium
+    category: comments
+
+    source:
+      list: "LIST-4"
+      section: "E"
+      item: "No dead/commented-out code (git remembers)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "Regex: detect comment blocks that appear to be former code. Patterns: lines starting with `#` (Python) or `//` (TypeScript/JavaScript) containing keywords, assignments, or function calls. LLM confirms whether it's dead code vs. a legitimate explanation comment."
+      llm:
+        prompt_template: null
+        context_scope: full_file
+        estimated_tokens: 400
+
+    triggers:
+      - "Comment block containing code syntax: `# x = foo()` or `// x = foo()` or `# if condition:` or `// if (cond) {`"
+      - "Multi-line commented-out function or class definition (any language)"
+
+    remediation:
+      summary: "Delete the commented-out code. Git history preserves it. Dead code confuses readers who can't tell if it was intentional removal or a mistake."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#e-comments--documentation"
+
+    suppressions:
+      - inline_comment: "# cq-017-suppress"
+        reason: "Commented code is reference material for nearby active code (not removable)"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-018"
+    name: "TODOs must have context"
+    severity: low
+    category: comments
+
+    source:
+      list: "LIST-4"
+      section: "E"
+      item: "No TODO without context (owner, date, condition)"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "Regex: `# TODO:?\\s*$`, `// TODO:?\\s*$`, or bare `TODO:?` with no following context. Matches both Python `#` and TypeScript/JavaScript `//` comment styles. Requires at least a few words beyond the label."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Bare `# TODO` or `# TODO:` or `// TODO` with no following context (Python or TypeScript/JavaScript)"
+      - "TODO that names a task but doesn't say who owns it or when it should be resolved"
+
+    remediation:
+      summary: "Add context: # TODO(username): description — WO-1234 or # TODO: Fix before Phase 19 — see .planning/workstreams/X. A TODO without context becomes permanent debt."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#e-comments--documentation"
+
+    suppressions:
+      - inline_comment: "# cq-018-suppress"
+        reason: "Context is in the linked WO or issue"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-019"
+    name: "No sleep() as synchronization primitive"
+    severity: critical
+    category: concurrency
+
+    source:
+      list: "LIST-4"
+      section: "I"
+      item: "No `sleep()` as sync primitive in tests"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "AST: detect `time.sleep()`, `asyncio.sleep()`, `await asyncio.sleep()` used as a synchronization mechanism (not a delay for legitimate reasons). Distinguishes sleep-as-sync (inside try/while loops, or in test assertions) from acceptable sleep."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "time.sleep() or asyncio.sleep() used inside a retry loop as a synchronization primitive"
+      - "sleep() in test code to wait for an async event instead of proper await/signal"
+
+    remediation:
+      summary: "Replace sleep-based sync with proper synchronization: asyncio.Event, asyncio.Queue, threading.Event, or test framework async utilities. Sleep-based sync is flaky and slow."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#i-concurrency-async--state"
+
+    suppressions:
+      - inline_comment: "# cq-019-suppress"
+        reason: "Sleep is intentional rate-limiting or human-readable delay, not synchronization"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "cq-020"
+    name: "Docstrings on public functions and classes"
+    severity: medium
+    category: comments
+
+    source:
+      list: "LIST-4"
+      section: "E"
+      item: "Public API has docstrings"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "AST: detect public functions and classes (no leading underscore) that lack a docstring. Module-level __init__.py files excluded."
+        availability_note: "ruff not installed; using AST. Install ruff (D100-D107) for more comprehensive docstring enforcement."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "Public function (no leading _) with no docstring"
+      - "Public class (no leading _) with no class-level docstring"
+
+    remediation:
+      summary: "Add a docstring to public API. Minimum: one sentence describing what the function does and returns. Public API without docstrings forces readers to read the implementation."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#e-comments--documentation"
+
+    suppressions:
+      - path_glob: "tests/**"
+        reason: "Test functions are self-documenting by name convention"
+      - inline_comment: "# cq-020-suppress"
+        reason: "Function name is self-explanatory; docstring would be redundant"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: null
+
+  - id: "cq-021"
+    name: "No side effects from getters or @property methods"
+    severity: critical
+    category: functions
+
+    source:
+      list: "LIST-4"
+      section: "B"
+      item: "No side effects from getters"
+
+    regulatory_anchors: []
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        fallback_to_llm: true
+        notes: "For Python: Python ast detects @property methods with mutations. For TypeScript/JavaScript: LLM identifies getter methods (get foo() {...}) or functions named get*/fetch*/read* that mutate object state. The anti-pattern is universal — getter = read-only by convention in any language. LLM fires for all languages."
+      llm:
+        prompt_template: null
+        context_scope: function
+        estimated_tokens: 450
+
+    triggers:
+      - "@property method that mutates instance state (self.x = ... or similar)"
+      - "Function named get_X or fetch_X that has observable side effects beyond reading"
+
+    remediation:
+      summary: "Getter methods must be pure reads. Side effects in getters break the principle of least surprise — callers assume reading is safe. Use a separate setter/method for mutations."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#b-functions"
+
+    suppressions:
+      - inline_comment: "# cq-021-suppress"
+        reason: "Lazy initialization pattern — side effect is creation on first access, intentional"
+
+    applies_to:
+      languages: [python, typescript, javascript]
+      file_types: [".py", ".ts", ".js"]
+
+    action:
+      audit_mode: report
+      build_mode: block
+
+  - id: "cq-A-explicit"
+    name: "No wildcard imports (`from X import *`)"
+    severity: medium
+    category: structure
+
+    source:
+      list: "LIST-4"
+      section: "A"
+      item: "Explicit beats implicit"
+
+    regulatory_anchors: []
+
+    detection:
+      type: static
+      static:
+        tool: null
+        fallback_to_llm: false
+        notes: "AST: detect `from X import *` in any Python file. Fast and precise — no false positives."
+      llm:
+        prompt_template: null
+        context_scope: null
+        estimated_tokens: 0
+
+    triggers:
+      - "`from X import *` — wildcard import makes the namespace opaque"
+
+    remediation:
+      summary: "Import explicitly: `from X import SpecificThing, AnotherThing`. Wildcard imports make it impossible to know where names come from without reading the source module. They also pollute the namespace and break autocomplete."
+      guide_ref: "canonical/skills/quality/references/code-writing-best-practices.md#a-foundational-principles"
+
+    suppressions:
+      - inline_comment: "# cq-A-explicit-suppress"
+        reason: "Wildcard import is conventional for this module (e.g., test fixtures, re-export __init__.py)"
+      - path_glob: "tests/fixtures/**"
+        reason: "Test fixtures may use wildcard imports for brevity"
+
+    applies_to:
+      languages: [python]
+      file_types: [".py"]
+
+    action:
+      audit_mode: report
+      build_mode: warn

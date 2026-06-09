@@ -1,0 +1,397 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from core.event_store.studio_db import _connect
+from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
+from core.shared_intelligence.adapter_config_projection import adapter_config_projection_report
+from core.shared_intelligence.contract_atlas import (
+    build_contract_atlas,
+    sanitize_contract_atlas_for_public_export,
+    validate_contract_atlas,
+)
+from core.shared_intelligence.contract_atlas_lifecycle import _PRIVATE_LEAK_PATTERNS
+
+
+def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
+    tmp_path: Path, monkeypatch
+) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(
+            conn,
+            repo_root=repo_root,
+            project_id="dream-studio",
+        )
+
+    assert validate_contract_atlas(atlas) == []
+    assert atlas["schema"] == "dream_studio.contract_atlas.v1"
+    assert atlas["private_by_default"] is True
+    assert atlas["derived_view"] is True
+    assert atlas["primary_authority"] is False
+    assert atlas["execution_authorized"] is False
+    assert atlas["whole_system_contract"]["contract_id"] == "dream-studio-system"
+    assert atlas["contract_registry"]["domain_count"] >= 6
+    assert atlas["docs_freshness_tracking"]["rewrite_every_doc_required"] is False
+    assert atlas["current_maturity_ledger"]["area_count"] >= 20
+    assert atlas["current_maturity_ledger"]["status_counts"]["runtime_validated"] >= 8
+    assert {layer["layer_id"] for layer in atlas["layer_contracts"]} >= {
+        "repo_source",
+        "sqlite_authority",
+        "dashboard_api",
+        "adapter_projection",
+        "runtime_profiles",
+    }
+    assert atlas["module_contracts"]["schema"] == "dream_studio.module_contracts.v1"
+    assert {module["module_id"] for module in atlas["module_contracts"]["contracts"]} >= {
+        "core",
+        "analytics_only",
+        "security_only",
+        "token_only",
+        "adapter_router",
+        "docker_optional",
+        "capability_center",
+        "scoped_agents",
+        "github_repo_intake",
+    }
+    assert {module["module_id"] for module in atlas["telemetry_module_contracts"]} >= {
+        "security_analytics",
+        "token_analytics",
+        "route_milestone_analytics",
+    }
+    assert {contract["interface_id"] for contract in atlas["interface_contracts"]} >= {
+        "telemetry_api",
+        "shared_intelligence_api",
+        "hook_launcher",
+    }
+    assert atlas["analytics_only_profile"]["writes_authorized"] is False
+    assert atlas["analytics_only_profile"]["ingestion_write_authorization"].startswith(
+        "ds analytics-ingest"
+    )
+    assert atlas["analytics_only_ingestion"]["write_authorization"] == (
+        "explicit_ingestion_execute_only"
+    )
+    assert atlas["analytics_only_ingestion"]["hooks_required"] is False
+    assert atlas["security_lifecycle_gate"]["source_framework"]["source_control_count"] == 47
+    assert atlas["security_lifecycle_gate"]["full_review_required"] is True
+    assert atlas["production_readiness_control_catalog"]["control_count"] > 47
+    assert atlas["secure_production_readiness_gate"]["workflow_id"] == (
+        "production_readiness_workflow"
+    )
+    assert atlas["installed_runtime_model"]["source_state_separation"] is True
+    assert atlas["installed_runtime_model"]["productization_surface"]["installer"].startswith(
+        "ds install"
+    )
+    assert atlas["installed_module_profiles"]["profile_count"] == 9
+    assert "career_ops_module" not in atlas
+    assert atlas["task_attribution_model"]["validation_status"] == "pass"
+    assert atlas["task_attribution_model"]["policy"]["token_cost_precision_not_inferred"] is True
+    assert atlas["capability_center"]["validation_status"] == "pass"
+    assert atlas["scoped_agent_execution"]["dream_studio_remains_canonical"] is True
+    assert atlas["github_repo_intake"]["copy_code_allowed_without_approval"] is False
+    assert atlas["github_cicd_profile"]["status"] == "pass"
+    assert atlas["github_cicd_profile"]["required_checks"] == ["pr-smoke"]
+    assert atlas["github_cicd_profile"]["heavy_validation_layer"] == (
+        "local_dream_studio_release_gate"
+    )
+    assert atlas["boundary_violation_report"]["status"] == "pass"
+    assert any(
+        item["area"] == "current_maturity_ledger" and item["status"] == "validated"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "security_lifecycle_gate"
+        and item["canonical_framework"] == "47_enterprise_security_controls"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "secure_production_readiness_gate"
+        and item["workflow_id"] == "production_readiness_workflow"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "analytics_only_ingestion"
+        and item["write_authorization"] == "explicit_ingestion_execute_only"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "github_cicd_profile"
+        and item["github_actions_role"] == "lightweight_remote_confidence_layer"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "module_boundary_contracts" and item["status"] == "validated"
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "github_repo_intake" and item["copy_code_allowed_without_approval"] is False
+        for item in atlas["maturity_scorecard"]
+    )
+    assert any(
+        item["area"] == "task_attribution_outcome_tracking"
+        and item["no_fake_cost_precision"] is True
+        for item in atlas["maturity_scorecard"]
+    )
+    assert atlas["active_adapter_execution_validation"]["live_claude_execution_proven"] is False
+    assert atlas["active_adapter_execution_validation"]["live_codex_execution_proven"] is False
+    assert (
+        atlas["active_adapter_execution_validation"]["staleness_status"]["repair_candidate_count"]
+        == 0
+    )
+
+
+def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(conn, repo_root=repo_root, project_id="dream-studio")
+
+    graph = atlas["confirmed_dependency_graph"]
+    assert graph["inferred_edges_included"] is False
+    assert graph["unverified_edges_included"] is False
+    assert graph["nodes"]
+    assert graph["edges"]
+    assert all(edge["edge_status"] == "confirmed" for edge in graph["edges"])
+    assert any(
+        edge["source"] == "module:security_analytics"
+        and edge["relation"] == "reads_source_table"
+        and edge["target"] == "table:findings"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "adapter:codex"
+        and edge["target"] == "projection:adapter-projections/codex/AGENTS.md"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:security_lifecycle_gate"
+        and edge["target"] == "contract:47_enterprise_security_controls"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:production_readiness_workflow"
+        and edge["target"] == "contract:secure_production_readiness_gate"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:analytics_only_ingestion"
+        and edge["target"] == "table:business_projects"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:github_cicd_profile" and edge["target"] == "workflow:pr-smoke"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "system:dream-studio"
+        and edge["target"] == "module:token_only"
+        and edge["relation"] == "declares_module_contract"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:github_repo_intake"
+        and edge["target"] == "module:security_lifecycle_gate"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:scoped_agent_execution"
+        and edge["target"] == "layer:sqlite_authority"
+        for edge in graph["edges"]
+    )
+    assert any(
+        edge["source"] == "module:task_attribution_outcome_tracking"
+        and edge["target"] == "table:task_attribution_records"
+        for edge in graph["edges"]
+    )
+
+
+def test_contract_atlas_defaults_to_dream_studio_scope(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(conn, repo_root=repo_root)
+
+    assert atlas["project_id"] == "dream-studio"
+    assert atlas["boundary_violation_report"]["status"] == "pass"
+    assert (
+        atlas["active_adapter_execution_validation"]["staleness_status"]["repair_candidate_count"]
+        == 0
+    )
+
+
+def test_contract_atlas_public_export_is_sanitized(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(
+            conn,
+            repo_root=repo_root,
+            project_id="dream-studio",
+            export_scope="public",
+        )
+
+    payload = json.dumps(atlas, sort_keys=True)
+    assert validate_contract_atlas(atlas) == []
+    assert atlas["export_scope"] == "public"
+    assert atlas["sanitized_public_export"] is True
+    assert "career_ops_module" not in atlas
+    assert str(tmp_path) not in payload
+    assert all(
+        "local_user_surface" not in contract for contract in atlas["adapter_projection_contracts"]
+    )
+    hook_surfaces = [
+        contract.get("local_hook_surface")
+        for contract in atlas["adapter_projection_contracts"]
+        if contract.get("local_hook_surface") is not None
+    ]
+    assert hook_surfaces
+    assert all(surface.get("secret_contents_read") is False for surface in hook_surfaces)
+
+
+def test_sanitizer_scrubs_posix_and_dream_studio_paths() -> None:
+    """Regression: the public atlas sanitizer must catch every private-path
+    pattern enforced by `_PRIVATE_LEAK_PATTERNS`, including POSIX absolute paths
+    (CI Linux) and any string containing `.dream-studio/`. A prior version only
+    matched Windows drive letters, which let Linux paths leak through and tripped
+    the lifecycle gate."""
+
+    cases = {
+        "linux_runner": {
+            "installed_runtime_model": {
+                "user_local_state_location": "/home/runner/.dream-studio",
+                "canonical_sqlite_path": "/home/runner/.dream-studio/state/studio.db",
+                "adapter_runtime_path": "/home/runner/.dream-studio/adapters",
+                "context_packet_fallback": {
+                    "path": "/home/runner/.dream-studio/context-packets",
+                },
+            },
+        },
+        "macos_user_home": {
+            "installed_runtime_model": {
+                "canonical_sqlite_path": "/Users/jane/.dream-studio/state/studio.db",
+            },
+        },
+        "windows_user_with_space": {
+            "installed_runtime_model": {
+                "canonical_sqlite_path": "C:\\Users\\Example User\\.dream-studio\\state\\studio.db",
+                "source_build_location": "C:\\Users\\Example User\\builds\\dream-studio",
+            },
+        },
+        "appdata_path": {
+            "installed_runtime_model": {
+                "context_packet_fallback": {
+                    "path": "/home/runner/.local/share/dream",
+                },
+            },
+        },
+        "live_backup_root": {
+            "boundary_violation_report": {
+                "note": "scan excluded operator backup directory",
+            },
+        },
+    }
+
+    for label, payload in cases.items():
+        sanitized = sanitize_contract_atlas_for_public_export(payload)
+        serialized = json.dumps(sanitized, sort_keys=True, ensure_ascii=False)
+        leaks = [
+            rule_id for rule_id, pattern in _PRIVATE_LEAK_PATTERNS if pattern.search(serialized)
+        ]
+        assert leaks == [], f"{label} leaked: {leaks} — payload={serialized}"
+
+
+def _db(tmp_path: Path) -> Path:
+    return tmp_path / "contract-atlas" / "studio.db"
+
+
+def _write_projection_files(repo_root: Path, projection_report: dict) -> None:
+    for projection in projection_report["projections"]:
+        _write(repo_root / projection["projection_path"], projection["content"])
+    _write(
+        repo_root / "AGENTS.md",
+        "Dream Studio SQLite authority projection for Codex.\n"
+        "adapter-projections/codex/AGENTS.md\n",
+    )
+    _write(
+        repo_root / "CLAUDE.md",
+        "Dream Studio SQLite authority projection for Claude.\n"
+        "adapter-projections/claude/CLAUDE.md\n",
+    )
+
+
+def _write_current_hook_surfaces(home: Path) -> None:
+    _write(
+        home / ".claude" / "settings.json",
+        """
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \\"C:/Users/Example/builds/dream-studio/hooks/run.py\\" on-prompt-dispatch"
+          }
+        ]
+      }
+    ]
+  }
+}
+""".lstrip(),
+    )
+    _write(
+        home / ".codex" / "hooks.json",
+        """
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\\"C:/Users/Example/builds/dream-studio/hooks/run.cmd\\" on-prompt-dispatch"
+          }
+        ]
+      }
+    ]
+  }
+}
+""".lstrip(),
+    )
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")

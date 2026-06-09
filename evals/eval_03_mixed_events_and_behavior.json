@@ -1,0 +1,47 @@
+{
+  "eval_id": "eval_03_mixed_events_and_behavior",
+  "version": "2.0.0",
+  "description": "Work order close should emit gate-check events AND explain failures clearly. Tests 70/30 weighting. Human-graded spot-check case.",
+  "skill_id": "ds-workorder",
+  "input_prompt": "close work order: finish the current work order",
+  "fixture_events": [
+    {
+      "event_type": "cli.command",
+      "payload": {
+        "command_pattern": "work-order close",
+        "command": "ds work-order close wo-abc123"
+      }
+    },
+    {
+      "event_type": "gate.check",
+      "payload": {
+        "gate": "all_tests_pass",
+        "result": "fail"
+      }
+    },
+    {
+      "event_type": "gate.check",
+      "payload": {
+        "gate": "api_contract_exists",
+        "result": "pass"
+      }
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "cli.command",
+      "must_appear": true,
+      "payload_contains": {
+        "command_pattern": "work-order close"
+      }
+    },
+    {
+      "event_type": "gate.check",
+      "must_appear": true,
+      "max_sequence_position": 5
+    }
+  ],
+  "notes": "Claude runs the work order close command, gate checks fire, and if gates fail Claude explains which gates failed and what action is needed to fix them.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

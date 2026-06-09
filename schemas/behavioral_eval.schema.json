@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dream_studio.behavioral_eval.v2",
+  "title": "Behavioral Eval Case",
+  "description": "Spec for a single behavioral eval: one user prompt, expected events, deterministic scoring only (WO-N2).",
+  "type": "object",
+  "required": ["eval_id", "version", "description", "input_prompt"],
+  "additionalProperties": false,
+  "properties": {
+    "eval_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "Stable identifier; primary key in ds_eval_baselines."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semver. Bump when expected_events changes meaningfully."
+    },
+    "description": {
+      "type": "string",
+      "description": "One sentence: what rail behavior is being measured."
+    },
+    "skill_id": {
+      "type": ["string", "null"],
+      "description": "Optional: ds eval run --skill filters to this skill's evals."
+    },
+    "input_prompt": {
+      "type": "string",
+      "description": "The user prompt that was injected into the session."
+    },
+    "fixture_events": {
+      "type": ["array", "null"],
+      "description": "Pre-seeded event list for deterministic unit/regression tests. Null means caller supplies recorded events from canonical substrate.",
+      "items": {
+        "type": "object",
+        "required": ["event_type"],
+        "properties": {
+          "event_type": {"type": "string"},
+          "trace": {"type": "object"},
+          "payload": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "expected_events": {
+      "type": "array",
+      "description": "Events that must (or must not) appear. This is the sole scoring source.",
+      "items": {
+        "type": "object",
+        "required": ["event_type", "must_appear"],
+        "properties": {
+          "event_type": {"type": "string"},
+          "must_appear": {"type": "boolean"},
+          "skill_id": {"type": ["string", "null"]},
+          "max_sequence_position": {
+            "type": ["integer", "null"],
+            "description": "If set, event must appear at or before this 0-based position."
+          },
+          "payload_contains": {
+            "type": ["object", "null"],
+            "description": "If set, the event payload must contain these key/value pairs."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Optional human-readable description of expected behavior. Not used for scoring."
+    },
+    "event_weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 1.0,
+      "description": "Always 1.0 — scoring is 100% deterministic event matching."
+    },
+    "minimum_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.75,
+      "description": "Event score threshold; below this the eval counts as failed."
+    }
+  }
+}

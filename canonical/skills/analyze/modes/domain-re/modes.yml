@@ -1,0 +1,70 @@
+# Domain-RE Skill — Mode Configuration
+# Analysts: skeptic (sonnet, forensic), diplomat (haiku, fast), strategist (sonnet, strategic)
+# credit-check uses only skeptic — no diplomatic softening on financial risk assessment.
+
+lease-analysis:
+  status: tested
+  description: "Full lease offer evaluation — all three lenses, contested dimensions surfaced"
+  analysts:
+    - skeptic
+    - diplomat
+    - strategist
+  quick_analysts:
+    - diplomat
+  max_parallel: 3
+  min_quorum: 2
+  raw_input: false
+  always_synthesize: true
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: decision-memo
+
+credit-check:
+  status: tested
+  description: "Tenant credit and financial health — forensic analysis only, no diplomatic softening"
+  analysts:
+    - skeptic
+  quick_analysts:
+    - skeptic
+  max_parallel: 1
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: false
+  synthesis:
+    strategy: single-analyst
+    output: risk-report
+
+renewal-economics:
+  status: tested
+  description: "Renewal vs. relocation economic comparison — skeptic + strategist"
+  analysts:
+    - skeptic
+    - strategist
+  quick_analysts:
+    - skeptic
+  max_parallel: 2
+  min_quorum: 2
+  raw_input: false
+  always_synthesize: true
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 1
+    output: decision-memo
+
+rollover-analysis:
+  status: tested
+  description: "Portfolio lease expiry risk, concentration flags, renewal prioritization"
+  analysts:
+    - skeptic
+    - strategist
+  quick_analysts:
+    - strategist
+  max_parallel: 2
+  min_quorum: 1
+  raw_input: false
+  always_synthesize: true
+  synthesis:
+    strategy: weighted-vote
+    disagreement_threshold: 2
+    output: risk-report

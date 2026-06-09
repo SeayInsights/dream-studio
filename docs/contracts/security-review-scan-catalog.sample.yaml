@@ -1,0 +1,186 @@
+# Security Review Scan Catalog Sample
+# Documentation/data excerpt only. This file is not execution authority.
+
+catalog_schema_version: security_review_scan_definition.v0
+execution_status: non_executing_definition
+source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+crosswalk_ref: docs/contracts/security-review-47-scan-crosswalk.md
+profile_pack_contract_ref: docs/contracts/security-review-profile-pack-contract.md
+generated_from: wo-dream-studio-018s5-structured-security-catalog-schema-draft
+
+scan_definitions:
+  - scan_id: sec.static.injection_patterns
+    title: Static Injection Pattern Review
+    tier: T0
+    source_item_refs:
+      - source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+        item_number: 1
+        item_name: SQL Injection Detection
+        domain: SOURCE CODE ANALYSIS (SAST)
+        coverage_status: explicit
+        coverage_rationale: The scan reviews query and interpreter injection paths.
+      - source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+        item_number: 3
+        item_name: Command Injection
+        domain: SOURCE CODE ANALYSIS (SAST)
+        coverage_status: explicit
+        coverage_rationale: The scan reviews shell and command execution injection paths.
+    category_id: static_code_security
+    scan_kind: static_command
+    intent: Identify source patterns that may allow injection into queries, shells, templates, or interpreters.
+    phase_allowed:
+      - security_review_planning
+      - approved_mutation
+    approval_mode_required: approval_required
+    target_profile_inputs:
+      - repo_path
+      - target_output_restrictions
+    validation_profile_inputs:
+      - command_mutation_risk
+      - cache_or_artifact_write_risk
+    evidence_profile_inputs:
+      - branch_head
+      - diff_name_only
+      - no_forbidden_action_proof
+    mutation_risk: none
+    network_risk: local_only
+    artifact_write_risk: none
+    prerequisites:
+      - source scope approved by Work Order
+    expected_outputs:
+      - matched source refs
+      - sanitizer refs
+      - limitation notes
+    timeout_policy: short_static_review
+    safe_failure_mode: HOLD if source scope or artifact containment is unclear.
+    false_positive_notes: Framework sanitizers and typed query builders need human review.
+    remediation_handoff_hint: approved_mutation_execution
+    execution_status: non_executing_definition
+    command_template: null
+
+  - scan_id: sec.dast.runtime_injection_testing
+    title: Runtime Injection Testing Planning
+    tier: T2
+    source_item_refs:
+      - source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+        item_number: 36
+        item_name: Injection Testing (Runtime)
+        domain: DYNAMIC & RUNTIME TESTING (DAST)
+        coverage_status: deferred_runtime
+        coverage_rationale: Runtime testing requires approved target scope and validation profile data.
+    category_id: api_surface
+    scan_kind: deferred
+    intent: Plan runtime injection testing as a future approved DAST validation step.
+    phase_allowed:
+      - security_review_planning
+    approval_mode_required: approval_required
+    target_profile_inputs:
+      - repo_path
+      - allowed_runtime_targets
+    validation_profile_inputs:
+      - broad_commands
+      - timeout_policy
+      - command_mutation_risk
+    evidence_profile_inputs:
+      - approval_artifact
+      - command_result
+      - no_target_mutation_proof
+    mutation_risk: unknown
+    network_risk: external_service
+    artifact_write_risk: unknown
+    prerequisites:
+      - explicit target approval
+      - artifact containment plan
+    expected_outputs:
+      - approved target URL scope
+      - test result artifact refs
+    timeout_policy: approval_scoped_runtime
+    safe_failure_mode: HOLD if target scope, credentials, or artifact containment are unclear.
+    false_positive_notes: Runtime payload findings require manual exploitability review.
+    remediation_handoff_hint: normal_next_work_order
+    execution_status: non_executing_definition
+    command_template: null
+
+  - scan_id: sec.infra.kubernetes_pod_security_review
+    title: Kubernetes Pod Security Review
+    tier: T2
+    source_item_refs:
+      - source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+        item_number: 29
+        item_name: Kubernetes Security Posture (Pod Security)
+        domain: CONTAINER & IMAGE SECURITY
+        coverage_status: deferred_infrastructure
+        coverage_rationale: Cluster or IaC scope must be approved before review.
+    category_id: infrastructure_runtime
+    scan_kind: config_review
+    intent: Review pod security posture, workload privileges, namespaces, and policy evidence when cluster scope is approved.
+    phase_allowed:
+      - security_review_planning
+    approval_mode_required: approval_required
+    target_profile_inputs:
+      - infrastructure_scope
+      - target_output_restrictions
+    validation_profile_inputs:
+      - no_validation_phases
+      - command_mutation_risk
+    evidence_profile_inputs:
+      - external_report_ref
+      - no_forbidden_action_proof
+    mutation_risk: none
+    network_risk: local_only
+    artifact_write_risk: none
+    prerequisites:
+      - approved infrastructure scope
+      - manifest or report evidence
+    expected_outputs:
+      - manifest refs
+      - policy refs
+      - scope limitations
+    timeout_policy: manual_review
+    safe_failure_mode: HOLD if cluster scope is missing.
+    false_positive_notes: Managed cluster defaults may require platform context.
+    remediation_handoff_hint: hold_review
+    execution_status: non_executing_definition
+    command_template: null
+
+  - scan_id: sec.compliance.regulatory_mapping_review
+    title: Regulatory Compliance Mapping Review
+    tier: T2
+    source_item_refs:
+      - source_list_ref: docs/contracts/security-review-source-47-enterprise-scans.md
+        item_number: 42
+        item_name: Regulatory Compliance Mapping (GDPR/HIPAA/PCI/SOC2)
+        domain: COMPLIANCE, GOVERNANCE & OPERATIONAL SECURITY
+        coverage_status: explicit
+        coverage_rationale: The scan maps evidence to regulatory frameworks without claiming certification.
+    category_id: data_handling_privacy
+    scan_kind: manual_review
+    intent: Map scoped evidence to regulatory frameworks without claiming certification.
+    phase_allowed:
+      - security_review_planning
+    approval_mode_required: observe_only
+    target_profile_inputs:
+      - target_id
+      - target_display_terms
+    validation_profile_inputs:
+      - no_validation_phases
+    evidence_profile_inputs:
+      - evidence_limitations
+      - finding_refs
+      - operator_decision_artifact
+    mutation_risk: none
+    network_risk: local_only
+    artifact_write_risk: none
+    prerequisites:
+      - compliance scope statement
+      - available evidence refs
+    expected_outputs:
+      - mapping table
+      - gap notes
+      - evidence limitations
+    timeout_policy: manual_review
+    safe_failure_mode: HOLD if compliance scope or evidence is unclear.
+    false_positive_notes: Mapping evidence is not a legal certification.
+    remediation_handoff_hint: hold_review
+    execution_status: non_executing_definition
+    command_template: null

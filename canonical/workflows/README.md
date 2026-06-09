@@ -1,0 +1,39 @@
+# workflows/
+
+YAML workflow templates defining multi-step task pipelines as directed acyclic graphs (DAGs).
+
+## What this directory provides
+
+Each `.yaml` file is a reusable workflow template. The `workflow` skill executes these by evaluating node dependencies, running skill invocations at each node, and tracking state in `~/.dream-studio/state/`.
+
+## Entry point
+
+`idea-to-pr.yaml` — the canonical full-cycle workflow (spec → plan → build → review → ship). Read it to understand the node/gate/parallel structure.
+
+## Public interfaces
+
+Workflows are invoked by name via the `workflow` skill: `/workflow run <name>`. The YAML schema is defined in `rules/structure/` (pending) — key fields are `nodes`, `gates`, `parallel`, and `on_failure`.
+
+## What should never be imported directly
+
+Workflows are declarative templates. They do not contain executable code and are not imported by Python modules. Any runner that consumes them must implement `docs/contracts/workflow-contract.md` and must not rely on retired hook-library helpers.
+
+## Key invariants
+
+- Every workflow must have a `name`, `description`, and at least one `node`
+- Gate nodes must define pass/fail conditions — no implicit success
+- Parallel node groups must have no data dependencies between them
+- Workflow state is persisted externally (not in these files) so templates remain stateless
+
+## Available workflows
+
+| Workflow | Purpose |
+|---|---|
+| `idea-to-pr.yaml` | Full build cycle: spec → plan → build → review → ship |
+| `domain-ingest.yaml` | Synthesize a new specialist agent from external sources |
+| `domain-refresh.yaml` | Re-score and re-synthesize stale agents |
+| `self-audit.yaml` | Run the self-improvement loop: scan → prioritize → fix |
+| `studio-onboard.yaml` | First-run setup and validation |
+| `project-audit.yaml` | Comprehensive project health check |
+| `security-audit.yaml` | Security posture review |
+| `production-readiness.yaml` | Secure production readiness classification, persistence, dashboard hydration, and remediation routing |

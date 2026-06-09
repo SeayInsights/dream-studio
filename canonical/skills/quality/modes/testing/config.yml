@@ -1,0 +1,81 @@
+name: testing
+model_tier: sonnet
+description: "Test quality enforcement — audit and build modes"
+argument-hint: "audit | build"
+user_invocable: true
+args: mode
+
+# Scope mode flags for audit mode
+# --changed: default — only test files changed vs main branch
+# --full-repo: all test files (LLM semantic pass batched at llm_batch_size)
+# --sample: N files per top-level test directory for representative sampling
+scope_modes:
+  default: changed
+  sample_size: 10           # per top-level test directory (unit/, integration/, evals/, root)
+
+# Critical path configuration for tst-009
+# Operator-defined: which source paths constitute "critical paths" that require integration tests.
+# Default is the API route surface for Dream Studio.
+# Override per project: replace with paths appropriate to the codebase.
+critical_path_globs:
+  - "projections/api/routes/**"
+
+# Coverage settings for tst-001 and tst-010
+coverage:
+  report_actual: true                   # always report actual coverage %
+  flag_enforcement_gap: true            # flag gap between fail_under and actual
+  gap_high_severity_threshold: 22       # points gap to trigger high severity on tst-010
+  # tst-001 uses coverage data, not path-scan. A module with 0% coverage = critical.
+  # A module tested via integration (not unit) still passes tst-001 if coverage > 0.
+
+# LLM semantic pass settings
+testing_audit:
+  llm_batch_size: 20                    # test files per LLM call for semantic pass
+  default_scope: changed
+
+# Token budgets per scope mode
+# ESTIMATES — first real audit will validate. See first-audit verification paste for measured values.
+# Baseline reference: database skill measured with static-only pass.
+budgets:
+  max_tokens_per_audit_changed: 15000           # estimate; LLM-pass measurement pending
+  max_tokens_per_audit_full_small: 400000       # repos < 100 test files
+  max_tokens_per_audit_full_medium: 1500000     # repos 100-400 test files
+  max_tokens_per_audit_full_large: 4000000      # repos > 400 test files
+  max_tokens_per_audit_sample: 30000            # 10 files/dir; estimate
+
+# Gate: require --force-full flag for full-repo mode on large test suites
+full_repo_llm_gate_file_count: 200             # > 200 test files requires --force-full
+
+thresholds:
+  min_confidence_for_llm_finding: 0.75
+  halt_on_critical_in_build: true
+  warn_on_high_in_build: true
+  suppression_default_expires_days: 90
+
+# tst-002 / tst-008 semantic rule calibration
+# Pre-committed demotion criterion (see rules.yml for rule-level documentation):
+# If human reviewer disagrees with LLM call on > 20% of flagged tests in the first audit,
+# the rule is demoted to requires_human_review: true.
+# This threshold is locked before the first audit; post-hoc adjustment requires justification.
+semantic_rules_demotion:
+  demotion_disagreement_threshold: 0.20    # > 20% human-LLM disagreement → demote
+  applies_to_rules: [tst-002, tst-008]
+
+behavior:
+  llm_cache_enabled: true
+  cache_by: [rule_id, file_hash]
+  fallback_to_llm_when_tool_missing: true
+  log_tool_degradation: true
+  classify_before_fix: true
+  # Dream Studio specific: the pre-push hook runs tests/evals/ only due to runtime cost.
+  # The full unit suite takes ~79 min on Windows (subprocess spawn overhead, verified 2026-05-29).
+  # It does NOT OOM (peak 283MB/16GB). This is a documented CI-discipline decision, NOT a tst-014 violation.
+  # The testing skill notes this as context in reports but does not fire tst-014 against it.
+  known_context:
+    - id: dream-studio-evals-only-prepush
+      note: "Pre-push hook runs tests/evals/ only — full unit suite takes ~79 min on Windows (subprocess.run() spawn cost, 52 calls x 3-12s each). Does not OOM. Full suite runs ubuntu-only post-merge in full-ci.yml. Documented in CLAUDE.md. Not a tst-014 violation."
+
+models:
+  default: sonnet
+  audit_llm_pass: sonnet
+  build_check: sonnet

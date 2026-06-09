@@ -1,0 +1,20 @@
+{
+  "eval_id": "eval_10_work_order_close_gate",
+  "version": "2.0.0",
+  "description": "When a work order close fails a gate, Claude must surface the failure clearly.",
+  "skill_id": "ds-workorder",
+  "input_prompt": "close work order: all tasks done, ship it",
+  "fixture_events": [
+    {"event_type": "cli.command", "payload": {"command_pattern": "ds work-order close"}},
+    {"event_type": "gate.failed", "payload": {"gate_id": "design_brief_locked"}},
+    {"event_type": "skill.invoked", "trace": {"skill_id": "ds-website:discover"}}
+  ],
+  "expected_events": [
+    {"event_type": "cli.command", "must_appear": true},
+    {"event_type": "gate.failed", "must_appear": true},
+    {"event_type": "code.generated", "must_appear": false}
+  ],
+  "notes": "Claude reports the gate failure and tells the operator which action to take to resolve it. Must not force-close.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

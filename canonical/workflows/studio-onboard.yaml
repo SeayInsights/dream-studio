@@ -1,0 +1,1182 @@
+name: studio-onboard
+description: >
+  Dream-studio onboarding audit for an end user's existing environment.
+  Discovers what the user already has, compares against dream-studio baseline,
+  runs parallel breakpoint + gap + improvement analysis, plans fixes, and produces
+  a full onboarding report with wiring instructions.
+  Invoke: "workflow: studio-onboard" — optionally pass "path: <home-dir>" to target
+  a specific user's environment (defaults to current user's ~/.claude/).
+version: 1
+on_failure: abort
+
+gates:
+  post-discovery:
+    type: pause
+    prompt: "Environment discovery complete. Review the inventory above and confirm this is the correct environment before deep analysis begins?"
+  post-synthesis:
+    type: pause
+    prompt: "Analysis synthesis complete. Review findings above and confirm direction before planning begins?"
+  mission-commander:
+    type: pause
+    requires: [fix-plan, risk-matrix]
+    prompt: "Onboarding mission briefing delivered. Director approval required before applying any changes."
+
+nodes:
+
+  # ── PHASE 0: USER CONFIG SETUP ───────────────────────────────────────────
+  - id: config-setup
+    command: |
+      MISSION: Establish the user's personal config before any environment scan runs.
+
+      This step is idempotent — safe to re-run. It updates changed values and
+      leaves existing correct values untouched.
+
+      ## Step 1 — Read current config
+      Check if `~/.dream-studio/config.json` exists.
+      If it exists, read and display the current values for:
+        - director_name, domain, primary_use (existing onboarding fields)
+        - harvest.projects_root
+        - claude_memory_path
+
+      ## Step 2 — Collect harvest.projects_root
+      If `harvest.projects_root` is already set and non-empty:
+        Show the current value and ask: "Keep this as your projects root? (yes / enter new path)"
+        If yes: keep as-is. If new path: use the new value.
+      If not set or empty:
+        Detect a smart default: use the parent directory of the current working directory.
+        Ask: "Where do you keep your builds/projects? [default: <detected-parent>]"
+        Accept Enter to use the default, or let the user type a different path.
+
+      ## Step 3 — Auto-detect claude_memory_path
+      Compute the Claude memory path using the deterministic encoding rule:
+        - Take the absolute path of the dream-studio repo directory (current working directory)
+        - Replace all path separators (\ and /) with hyphens (-)
+        - Remove colons (:)
+        - Result: the encoded directory name under ~/.claude/projects/
+        - Full path: ~/.claude/projects/<encoded-name>/memory
+
+      Example: C:\Users\Example User\builds\dream-studio
+           →   C--Users-Dannis-Seay-builds-dream-studio
+           →   ~/.claude/projects/C--Users-Dannis-Seay-builds-dream-studio/memory
+
+      Verify the computed path exists on disk. If it does not exist:
+        - Note "memory path not found at computed location"
+        - Ask the user to confirm or provide the correct path
+        - If user skips: write null for claude_memory_path and note it can be set later
+
+      ## Step 4 — Write to ~/.dream-studio/config.json
+      Merge the new values into the existing config.json (preserve all other existing keys).
+      Write the following keys under a "harvest" object:
+        - harvest.projects_root: <confirmed path>
+        - claude_memory_path: <detected or confirmed path>
+
+      If config.json does not exist: create it with these keys plus empty strings for
+      director_name, domain, primary_use so the structure is complete.
+
+      Show the final written config (harvest section only) and confirm success.
+
+      End with: VERDICT: config-setup complete — projects_root: <path>, memory_path: <path>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> config-setup completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: inherit
+    timeout_seconds: 120
+
+  # ── PHASE 0b: ENVIRONMENT DISCOVERY ─────────────────────────────────────
+  - id: discovery
+    depends_on: [config-setup]
+    trigger_rule: all_done
+    gate: post-discovery
+    command: |
+      MISSION: Full environment inventory — map everything that exists before touching anything.
+
+      The user's home is assumed to be the current user's home directory unless
+      a "path:" argument was provided in the workflow invocation.
+
+      Read and inventory each of the following, noting PRESENT / MISSING / PARTIAL for each:
+
+      ## A. Claude Installation
+        - ~/.claude/settings.json          — read full contents if present
+        - ~/.claude/settings.local.json    — read full contents if present
+        - ~/.claude/CLAUDE.md              — read full contents if present
+        - ~/.claude/keybindings.json       — note if present
+        - List ~/.claude/plugins/          — note if present (skills go in skills/, not plugins/)
+        - List ~/.claude/skills/           — list all skill directories; for each, verify
+                                             SKILL.md present AND modes/ subdirectory present
+        - List ~/.claude/agents/           — list all agent .md files (expect 9)
+        - List ~/.claude/workflows/        — count and list all workflow .yaml files (expect 22)
+        - List ~/.claude/hooks/            — enumerate: run.py, dispatch/hooks.py,
+                                             runtime/hooks/meta/ (count .py handlers, expect 17),
+                                             and .plugin-root (read its content to confirm repo path)
+
+      ## B. Dream-Studio State
+        - List ~/.dream-studio/            — full directory tree (2 levels deep)
+        - ~/.dream-studio/state/studio.db  — confirm present; note file size
+        - ~/.dream-studio/state/installed-version  — read content (version string)
+        - ~/.dream-studio/state/workflows.json     — note if present, last 3 entries
+        - ~/.dream-studio/meta/skill-usage.log     — note if present
+
+      ## C. Build Directory
+        - Locate dream-studio build: check ~/builds/dream-studio-clean/ or ~/dream-studio/
+        - If found: list workflows/, list skills/ or plugins/
+        - Note git remote and current branch if it's a git repo
+
+      ## D. MCP Servers (from settings.json)
+        For each mcpServer configured:
+          - Name, command/url, transport type
+          - Whether it appears to be running/reachable (check process or port if possible)
+
+      ## E. Hooks (from settings.json)
+        For each hook configured:
+          - Event name, command, timeout
+          - Whether the command file/script actually exists on disk
+
+      ## F. Permissions (from settings.json)
+        - List all allow/deny rules
+        - Flag any overly broad permissions (e.g., allow: "*")
+        - Flag any missing permissions that dream-studio commonly needs
+
+      ## G. External Tools
+        Check availability of each (run --version):
+          - git, gh (GitHub CLI), node, npm, python / py, pip, wrangler, bun, jq
+          - Note version for each found tool
+
+      ## H. Platform Context
+        - OS and version
+        - Shell (bash / zsh / powershell)
+        - Home directory path
+        - Python environment (venv? conda? system?)
+
+      ## I. Authoritative Health Check
+        Run: py -m interfaces.cli.ds doctor
+        Include the full output in the report. This is the authoritative signal for
+        infrastructure health. A passing doctor check means Layer 2 (Infrastructure)
+        is functional.
+
+      Output a structured ENVIRONMENT INVENTORY REPORT covering all sections above.
+      Use ✅ PRESENT, ⚠️ PARTIAL, ❌ MISSING for each item.
+
+      End with: VERDICT: discovery complete — <N present, M partial, K missing>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> discovery completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 0c: OVERHEAD CHECK ─────────────────────────────────────────────
+  - id: overhead-check
+    depends_on: [discovery]
+    trigger_rule: all_done
+    command: |
+      MISSION: Surface advisory overhead findings from the environment audit.
+
+      Run the overhead check (advisory only — never blocks):
+        py -c "
+        import sys, json
+        sys.path.insert(0, '.')
+        from core.health.overhead import run_overhead_checks
+        from pathlib import Path
+        result = run_overhead_checks(source_root='.', claude_dir=Path.home() / '.claude')
+        print(json.dumps(result, indent=2))
+        "
+
+      Parse the JSON output. For each finding in result['findings'], present as:
+
+        ## Overhead Finding: [check]
+        **Severity:** advisory
+        **Summary:** [summary]
+        **Action:** [remediation]
+
+      If finding_count is 0: output "No overhead findings — environment looks clean."
+
+      End with: VERDICT: overhead-check complete — [finding_count] advisory findings
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> overhead-check completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: haiku
+    context: inherit
+    timeout_seconds: 60
+
+  # ── PHASE 0d: MCP AUTO-WIRE ───────────────────────────────────────────────
+  - id: mcp-auto-wire
+    depends_on: [discovery]
+    trigger_rule: all_done
+    command: |
+      MISSION: Probe discovered MCP servers and produce a wiring plan.
+
+      ## Step 1 — Read MCP servers from settings.json
+      Read ~/.claude/settings.json and extract the mcpServers map.
+      If empty or absent: output "No MCP servers configured — nothing to wire."
+      and skip to the VERDICT line.
+
+      ## Step 2 — Probe each server
+      For each server in mcpServers, run the capability probe:
+        py -c "
+        import sys, json
+        sys.path.insert(0, '.')
+        from core.preflight.capability_probe import probe_mcp_server
+        cfg = <paste the server config dict here as a Python literal>
+        r = probe_mcp_server('<server_name>', cfg)
+        print(json.dumps({'name': r.server_name, 'usable': r.usable, 'reason': r.reason, 'transport': r.transport}))
+        "
+
+      ## Step 3 — Classify each server
+      For each server:
+        WIRE-READY  — usable=True and not already wired into dream-studio hooks
+        ALREADY-WIRED — usable=True and already present in settings.json hooks
+        SKIP        — usable=False (print reason)
+
+      ## Step 4 — Dedup installed skills
+      Check ~/.claude/skills/ against the canonical list from the discovery output.
+      For each skill directory that already exists with a SKILL.md:
+        Flag as ALREADY-INSTALLED: skip overwrite during onboarding install.
+      For each canonical skill directory missing from ~/.claude/skills/:
+        Flag as NEEDS-INSTALL.
+
+      Output a WIRING PLAN:
+        ## MCP Servers
+        | Server | Status | Reason |
+        |--------|--------|--------|
+
+        ## Skills
+        | Skill | Status |
+        |-------|--------|
+
+      End with: VERDICT: mcp-auto-wire complete — [N] wire-ready, [M] skip, [K] already-wired, [J] skills already-installed
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> mcp-auto-wire completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: haiku
+    context: inherit
+    timeout_seconds: 60
+
+  # ── PHASE 0b: DREAM-STUDIO BASELINE FETCH ────────────────────────────────
+  - id: baseline-fetch
+    depends_on: [discovery]
+    trigger_rule: all_done
+    command: |
+      MISSION: Read the local Dream Studio canonical baseline to compare against the installed state.
+
+      NOTE: SeayInsights/dream-studio is not yet public. Read the local canonical source instead.
+      If the GitHub repo becomes reachable in the future, also fetch remote to compare — for now skip.
+
+      ## Step 1 — Locate the repo root
+      Read ~/.claude/hooks/.plugin-root — this file contains the absolute path to the
+      dream-studio repo. Use that path as <repo_root> for all steps below.
+
+      ## Step 2 — Read canonical skill list
+      List <repo_root>/canonical/skills/ — enumerate all subdirectories.
+      For each skill directory: note whether it contains SKILL.md, modes/, gotchas.yml.
+      Expected: 9 skill packs (core, quality, security, analyze, domains, workflow, setup,
+      ds-project, ds-bootstrap).
+
+      ## Step 3 — Read canonical workflow list
+      List <repo_root>/canonical/workflows/ — enumerate all .yaml files.
+      Expected: 22 workflow YAMLs.
+
+      ## Step 4 — Read pack map
+      Read <repo_root>/packs.yaml — extract all pack names, modes, and agents.
+
+      ## Step 5 — Read version
+      Read <repo_root>/VERSION — note source version string.
+      Read ~/.dream-studio/state/installed-version — note installed version string.
+      Compare: source == installed? Note any divergence.
+
+      ## Step 6 — Document correct install state
+      Based on the installer (ds integrate install claude_code --execute), a correct
+      install produces:
+        ~/.claude/CLAUDE.md               — enforcement block + routing table
+        ~/.claude/settings.json           — 8 hooks (4 emitter + 4 dispatcher) with matchers
+        ~/.claude/skills/                 — 9 full skill directories
+        ~/.claude/agents/                 — 9 agent .md profiles
+        ~/.claude/workflows/              — 22 workflow YAMLs
+        ~/.claude/hooks/run.py            — spool emitter
+        ~/.claude/hooks/dispatch/hooks.py — event dispatcher
+        ~/.claude/hooks/.plugin-root      — repo path sidecar
+        ~/.claude/hooks/runtime/hooks/meta/ — 17 meta handler .py files
+        ~/.dream-studio/state/studio.db   — SQLite (schema version 55)
+        ~/.dream-studio/state/installed-version — version marker
+        ~/.dream-studio/bin/ds.cmd (Windows) or ds (Unix) — global launcher
+
+      Output a DREAM-STUDIO BASELINE document:
+
+        ## Source Version
+        [VERSION file content and installed-version comparison]
+
+        ## Canonical Skill List (9 packs)
+        [List from canonical/skills/ with structure notes]
+
+        ## Canonical Workflow List (22 workflows)
+        [List from canonical/workflows/]
+
+        ## Pack Map
+        [Pack names, modes, agents from packs.yaml]
+
+        ## Correct Install State
+        [The expected ~/.claude/ structure documented in Step 6 above]
+
+        ## Required External Dependencies
+        [tools that dream-studio requires: py (Python 3.12+), git, gh (optional)]
+
+      ## Step 7 — Run installer dry-run to capture install delta
+      Run from <repo_root>:
+        py -m interfaces.cli.ds integrate install claude_code --dry-run
+
+      Parse the JSON output and record the delta categorized as:
+        create_count:    N  (additive new files — NOT conflicts, NOT stale; these are new
+                            capability files that do not yet exist at the install target)
+        update_count:    N  (modifications to existing installed files — investigate each one)
+        unchanged_count: N  (files that already match canonical — high count is healthy)
+        skip_count:      N  (intentionally excluded by installer, e.g. settings.local.json)
+        merge_json_count: N (JSON merge ops, e.g. settings.json hook append)
+
+      Include this categorized summary in the baseline output under:
+
+        ## Install Delta (dry-run)
+        create: N  | update: N  | unchanged: N  | skip: N  | merge_json: N
+        [Note: create entries are additive only — do not interpret as conflicts]
+
+      End with: VERDICT: baseline read — source version <X.Y.Z>, installed <X.Y.Z>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> baseline-fetch completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 1: PARALLEL DEEP ANALYSIS ──────────────────────────────────────
+  - id: breakpoint-analysis
+    depends_on: [discovery, baseline-fetch]
+    trigger_rule: all_done
+    command: |
+      MISSION: Breakpoint analysis — find every conflict before applying dream-studio.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      ## CRITICAL: Interpreting the Install Delta from baseline-fetch
+
+      The baseline-fetch output includes an Install Delta section. Read it carefully
+      using these rules before drawing any conclusions:
+
+        op=create   → ADDITIVE FILES ONLY. These are new capability files (mode definitions,
+                      analyst profiles, agent files, workflow YAMLs) that do not yet exist
+                      at the install target. They are NOT stale files, NOT diffs, NOT
+                      conflicts. A high create count is normal after a canonical source
+                      update. Do NOT flag create entries as breakpoints.
+
+        op=update   → GENUINE MODIFICATIONS to existing installed files. Investigate each
+                      one. Compare source vs installed content. These are real candidates
+                      for breakpoints if the modification could conflict with existing state.
+
+        op=unchanged → Files that already match canonical. High unchanged count confirms
+                       a healthy, current install. This is a positive signal.
+
+        op=skip     → Intentionally excluded (e.g. settings.local.json). Not a gap.
+
+        op=merge_json → Requires hook duplication check. After install, verify the
+                        settings.json hooks section still matches the 2/2/2/3 pattern
+                        (2 entries for UserPromptSubmit, Stop, PostCompact; 3 for PostToolUse).
+                        If the count doubles, hooks were duplicated and must be deduplicated.
+
+        When calculating severity: create-only delta with zero update operations is
+        SKILL_GAP LOW or MEDIUM at most. Never CRITICAL. Reserve CRITICAL for update
+        operations on active hook or settings files.
+
+      A BREAKPOINT is only raised when op=update or op=merge_json could overwrite,
+      conflict with, or corrupt the user's existing working configuration.
+      Never raise a breakpoint based solely on create entries.
+
+      A BREAKPOINT here is any place where the user's existing configuration, rules,
+      hooks, or installed tools CONFLICT with or will be OVERWRITTEN by dream-studio.
+      Think like a flight systems engineer — every coupling is a failure path.
+
+      Produce a BREAKPOINT ANALYSIS REPORT:
+
+        ## BREAKPOINT REGISTRY
+        | ID   | Location              | Type        | Severity | Likelihood | Description |
+        |------|----------------------|-------------|----------|------------|-------------|
+
+        Severity:    CRITICAL (breaks existing workflow) | HIGH (data loss or silent override) | MEDIUM (degraded) | LOW (cosmetic)
+        Likelihood:  CERTAIN | PROBABLE | POSSIBLE | UNLIKELY
+        Type:        CONFIG_CONFLICT | RULE_CONFLICT | HOOK_CONFLICT | SKILL_OVERLAP | VERSION_MISMATCH | PERMISSION_CLASH
+
+        ## CRITICAL AND HIGH BREAKPOINT DETAILS
+        For each CRITICAL or HIGH breakpoint:
+          Conflict description:   [exactly what collides with what]
+          Current behavior:       [what the user's setup does today]
+          Dream-studio behavior:  [what dream-studio would do instead]
+          Data at risk:           [any existing config, state, or files that could be lost]
+          Resolution strategy:    [merge | replace | rename | exclude | wrap]
+          Verification test:      [how to confirm this breakpoint is resolved]
+
+        ## EXISTING RULES THAT CONFLICT
+        For each CLAUDE.md rule or settings.json hook that dream-studio would override:
+          [existing rule/hook] → [dream-studio equivalent] → [resolution]
+
+        ## SAFE SEQUENCING CONSTRAINT
+        The order breakpoints MUST be resolved in to avoid cascading failures:
+          [BP-ID] must precede [BP-ID] because [reason]
+
+      End with: VERDICT: breakpoint analysis complete — <N critical, M high, K medium, J low>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> breakpoint-analysis completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: gap-analysis
+    depends_on: [discovery, baseline-fetch]
+    trigger_rule: all_done
+    command: |
+      MISSION: Gap analysis — every missing piece with exact wiring instructions.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      Compare what the user HAS (from discovery) against what they NEED (from baseline).
+      A GAP is anything missing, misconfigured, or incompletely wired.
+
+      Produce a GAP ANALYSIS REPORT:
+
+        ## GAP REGISTRY
+        | Gap ID | Category      | Description | Size | Blocking? |
+        |--------|---------------|-------------|------|-----------|
+
+        Categories:
+          PLUGIN_GAP     — dream-studio plugin not installed or wrong version
+          SKILL_GAP      — one or more canonical skills missing or incompletely installed
+                           (complete = SKILL.md + modes/ subdirectory present per pack)
+          AGENT_GAP      — one or more of the 9 agent .md profiles missing from ~/.claude/agents/
+          WORKFLOW_GAP   — one or more of the 22 canonical workflow YAMLs missing from
+                           ~/.claude/workflows/
+          CONFIG_GAP     — missing settings.json keys, hooks, or mcpServers entries
+          WIRE_GAP       — component exists but is not connected to the runtime
+          PERMISSION_GAP — missing tool permissions needed by dream-studio skills
+          STATE_GAP      — ~/.dream-studio/ directory structure missing or incomplete
+          RULE_GAP       — missing CLAUDE.md rules that dream-studio depends on
+          TOOL_GAP       — external tool (git, gh, node, etc.) missing or wrong version
+          TEST_GAP       — no way to verify the installation is working after onboarding
+          PERSISTENCE_GAP — any installed workflow or skill whose terminal node produces
+                            output (findings, reports, summaries, decisions) but does NOT
+                            write to a durable location (~/.dream-studio/ or .sessions/).
+                            Project-root files (e.g. final-audit-report.md) are ephemeral
+                            and DO NOT satisfy this requirement. Flag every workflow that
+                            falls into this pattern — list the workflow name and terminal node.
+          TRACKING_GAP   — any installed workflow that can produce HIGH or CRITICAL findings
+                            with no mechanism to create durable follow-up (GitHub Issues,
+                            persistent task list, or next-session-readable record). If the
+                            user's environment has GitHub MCP configured but workflows are
+                            not creating Issues for findings, this is a blocking gap.
+
+        Size: S (< 15 min) | M (15–60 min) | L (1–4 hr) | XL (> 4 hr)
+
+        ## WIRING INSTRUCTIONS (for each CONFIG_GAP, WIRE_GAP, RULE_GAP)
+        For each gap requiring exact wiring:
+
+          Gap ID:         [GAP-ID]
+          File to edit:   [absolute path]
+          Section:        [JSON key path or markdown heading]
+          Exact addition:
+            ```
+            [the exact JSON / YAML / markdown block to add]
+            ```
+          Validation:     [command or check to confirm it's correctly wired]
+
+        ## CONFIGURATION DIFF
+        Show the before → after for settings.json and CLAUDE.md:
+          Present only the sections that change — not the full file.
+          Use --- before / +++ after format.
+
+        ## MISSING SKILLS INSTALL STEPS
+        For each SKILL_GAP: exact steps to install the missing skill.
+
+        ## CLOSURE ORDER
+        Correct sequence to close all gaps (dependency order):
+          1. [GAP-ID] — [why this must come first]
+          2. [GAP-ID] — [reason]
+          ...
+
+      End with: VERDICT: gap analysis complete — <N gaps total, M blocking>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> gap-analysis completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  - id: improvement-scan
+    depends_on: [discovery, baseline-fetch]
+    trigger_rule: all_done
+    command: |
+      MISSION: Assess what the user already has that isn't in dream-studio yet, and show
+      them how to make it theirs — natively wired, not bolted on.
+
+      Inputs:
+        - Environment inventory: {{discovery.output}}
+        - Dream-studio baseline: {{baseline-fetch.output}}
+
+      PART 1 — MAKE IT YOURS (primary focus)
+      ─────────────────────────────────────
+      Compare the user's environment against the dream-studio baseline.
+      For every custom asset found that is NOT already part of dream-studio
+      (skills, hooks, CLAUDE.md rules, workflows, MCP servers, scripts, agents,
+      keybindings, permission patterns), produce an ADOPTION ENTRY:
+
+        ## USER ASSETS TO ADOPT INTO DREAM-STUDIO
+        | Asset ID | Type           | Current Location | Description | Adopt Value |
+        |----------|----------------|-----------------|-------------|-------------|
+
+        Types: SKILL | WORKFLOW | HOOK | CLAUDE_RULE | MCP_SERVER | AGENT | SCRIPT | PERMISSION_PATTERN
+        Adopt Value: HIGH (core to their workflow) | MED (useful extension) | LOW (nice to have)
+
+        For each HIGH and MED asset, produce a full ADOPTION BLUEPRINT:
+
+          Asset:              [name and current path]
+          What it does:       [one-line description of its current function]
+          Native wiring:      [exactly where in dream-studio this belongs —
+                               which skill/workflow/agent/hook it connects to]
+          Rewrite needed:     [what to adapt to fit dream-studio conventions vs. keep as-is]
+          Integration steps:  [numbered, exact steps to wire it in natively]
+          Why native is better: [maintainability, model routing, gate access, etc.]
+
+        For each LOW asset:
+          [Asset name] → [brief one-line adoption note or "skip — low value"]
+
+        If no custom assets found outside dream-studio baseline, state that explicitly.
+
+      PART 2 — STANDARD IMPROVEMENTS
+      ────────────────────────────────
+
+        ## CONFIGURATION IMPROVEMENTS
+        Settings or rules that would make dream-studio work better for this user's
+        specific setup — e.g., model routing preferences, hook optimizations,
+        permission tuning, MCP server additions that match their workflow.
+
+        ## MISSING MCP SERVERS (high value, not required)
+        MCP servers that dream-studio can use but aren't required — ranked by value:
+          - Name, purpose, install command, which skills benefit
+
+        ## SKILL ENHANCEMENTS
+        Skills the user has that could be configured better, or optional skills
+        they don't have that would extend their capabilities:
+          - Skill name, current state, improvement, expected benefit
+
+        ## WORKFLOW OPPORTUNITIES
+        Workflows that would benefit this user based on what they have installed
+        (e.g., if they have godot-mcp, recommend game-feature workflow):
+          - Workflow name, trigger scenario, why it fits their setup
+
+        ## WORKFLOW PERSISTENCE + TRACKING AUDIT
+        For each installed workflow (read their YAML from the build directory):
+          Check the terminal node(s) — the last node(s) with no dependents.
+          For each terminal node, answer:
+            - Does it write output to ~/.dream-studio/ or .sessions/? (YES/NO)
+            - Can it produce findings/errors that require action? (YES/NO)
+            - If YES to findings: does it create GitHub Issues or equivalent? (YES/NO)
+
+          Flag as PERSISTENCE_GAP if: terminal node produces output but doesn't persist it.
+          Flag as TRACKING_GAP if: terminal node produces actionable findings with no Issue creation.
+
+          Output a table:
+          | Workflow | Terminal Node | Persists Output | Creates Issues | Gap Type |
+          |----------|---------------|-----------------|----------------|----------|
+
+        ## CLAUDE.MD RULE IMPROVEMENTS
+        Rules that would improve reliability or reduce permission prompts:
+          - Rule, rationale, exact text to add
+
+        ## PERFORMANCE & RELIABILITY IMPROVEMENTS
+        Hook timeouts, retry configs, model assignments, or permission grants
+        that would make the system faster or more resilient:
+          - Change, expected improvement, risk level (LOW / MED)
+
+        ## QUICK WINS (S-size, immediate impact)
+        List 3-5 things that take < 15 minutes and deliver clear value.
+        For each: what to do + exact change + expected benefit.
+
+      End with: VERDICT: improvement scan complete — <N assets to adopt, M improvements identified, K quick wins>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> improvement-scan completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 2: SYNTHESIS ───────────────────────────────────────────────────
+  - id: synthesis
+    depends_on: [breakpoint-analysis, gap-analysis, improvement-scan, overhead-check, mcp-auto-wire]
+    trigger_rule: all_done
+    gate: post-synthesis
+    command: |
+      MISSION: Synthesize all analysis into a unified onboarding intelligence brief.
+
+      Inputs:
+        - Discovery:      {{discovery.output}}
+        - Baseline:       {{baseline-fetch.output}}
+        - Breakpoints:    {{breakpoint-analysis.output}}
+        - Gaps:           {{gap-analysis.output}}
+        - Improvements:   {{improvement-scan.output}}
+        - Overhead:       {{overhead-check.output}}
+        - MCP Wire Plan:  {{mcp-auto-wire.output}}
+
+      Produce a SYNTHESIS BRIEF:
+
+        ## Onboarding Readiness Score
+        Score the environment 0–100:
+          - 0–39:  Needs significant work before dream-studio can function
+          - 40–69: Partial installation — core features will work, some won't
+          - 70–89: Nearly complete — a few targeted fixes needed
+          - 90–100: Dream-studio ready — only improvements remain
+
+        Show scoring breakdown mapped to the three-layer architecture:
+          - Layer 1 Capability (skills + agents + workflows): weight 35 pts
+          - Layer 2 Infrastructure (hooks + spool + SQLite + installer): weight 35 pts
+          - Layer 3 Intelligence (project spine + design gates + memory): weight 20 pts
+          - Usability (PATH configured + ds doctor passing + update working): weight 10 pts
+
+        Also include ds doctor output as the authoritative Layer 2 health signal:
+          Run: py -m interfaces.cli.ds doctor
+          Doctor passing = Infrastructure layer is functional.
+
+        ## Critical Path to Functional
+        The minimum set of changes needed before dream-studio is usable at all.
+        Ordered list: [change] → [what it unlocks]
+
+        ## What Works Right Now
+        [Features/skills that will work immediately with no changes]
+
+        ## What Will Break Without Fixes
+        [Features/skills that will fail unless CRITICAL/HIGH breakpoints are resolved]
+
+        ## Make It Yours — Adoption Summary
+        Summarize the user's custom assets found outside the dream-studio baseline.
+        For each asset worth adopting (HIGH or MED value from improvement-scan):
+
+          Asset: [name]
+          Native wiring: [where it connects in dream-studio]
+          Effort: [S / M / L]
+          Why adopt natively: [one sentence — the concrete benefit over keeping it separate]
+
+        If no custom assets: state "No custom assets found outside baseline — nothing to adopt."
+
+        ## Top 5 Improvements (ranked by impact/effort ratio)
+        [From improvement-scan Part 2 — the highest-value standard changes to make after baseline]
+
+        ## Overhead Findings (advisory)
+        [From overhead-check — list each finding with its remediation action.
+         If none: "No overhead findings."]
+
+        ## MCP Wiring Plan
+        [From mcp-auto-wire — WIRE-READY servers and NEEDS-INSTALL skills listed with next steps.
+         Include dedup summary: which skills are already installed and will be skipped.]
+
+      Write this brief to:
+        ~/.dream-studio/planning/onboard-synthesis-<YYYY-MM-DD>.md
+      Output the saved file path.
+
+      End with: VERDICT: synthesis complete — readiness score: <N>/100 — <N> assets to adopt
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> synthesis completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 3: FIX + IMPROVEMENT PLAN ──────────────────────────────────────
+  - id: fix-plan
+    depends_on: [synthesis]
+    trigger_rule: all_done
+    skill: plan
+    input: |
+      Generate an onboarding implementation plan for applying dream-studio to this environment.
+
+      Synthesis brief:
+      {{synthesis.output}}
+
+      Breakpoint analysis:
+      {{breakpoint-analysis.output}}
+
+      Gap analysis:
+      {{gap-analysis.output}}
+
+      Improvement scan:
+      {{improvement-scan.output}}
+
+      CONSTRAINTS for this plan:
+        1. Wave 1 must only contain CRITICAL breakpoint resolutions — nothing else
+        2. Wave 2 closes all blocking gaps in closure order from gap analysis
+        3. Wave 3 closes non-blocking gaps and installs missing skills/workflows
+        4. Wave 4 — MAKE IT YOURS: adopt the user's custom assets into dream-studio natively.
+           For each HIGH/MED asset from the improvement-scan adoption summary:
+             - Create a task using the full Adoption Blueprint from improvement-scan
+             - Each task: rewrite/adapt the asset + wire it in + verify it works within dream-studio
+             - Do NOT just copy files — adapt them to fit dream-studio conventions
+           Present adoption tasks as "Path A (Recommended)" and note "Path B: keep it separate"
+           as an explicit alternative the user can choose instead for any individual asset
+        5. Wave 5+ covers standard improvements ordered by impact/effort ratio
+        6. Every task ends with an explicit verification step
+        7. Tasks within a wave can run in parallel
+        8. Include a smoke-test task as the final task of every wave
+        9. No single task exceeds 1 hour — split larger tasks
+        10. Assign model per task: haiku (read/list/check), sonnet (edit/install/wire)
+        11. Final task: full end-to-end test of dream-studio in this environment
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 4: RISK MATRIX ─────────────────────────────────────────────────
+  - id: risk-matrix
+    depends_on: [breakpoint-analysis, gap-analysis, fix-plan]
+    trigger_rule: all_done
+    command: |
+      MISSION: Construct a risk matrix for this onboarding.
+
+      Inputs:
+        - Breakpoints: {{breakpoint-analysis.output}}
+        - Gaps:        {{gap-analysis.output}}
+        - Fix plan:    {{fix-plan.output}}
+
+      Produce a RISK ASSESSMENT REPORT:
+
+        ## RISK REGISTER
+        | Risk ID | Description | Probability (1-5) | Impact (1-5) | RPN | Response |
+        |---------|-------------|-------------------|--------------|-----|----------|
+
+        RPN = Probability × Impact. Sort descending. Mark RPN ≥ 15 as [RED].
+        Response types: MITIGATE | ACCEPT | AVOID | TRANSFER
+
+        ## TOP RISKS — FULL DETAIL (all risks with RPN ≥ 15)
+        For each red-level risk:
+          Trigger conditions:             [what must go wrong]
+          Early warning indicators:       [detectable before full failure]
+          Mitigation plan:                [specific steps to reduce RPN]
+          Residual risk after mitigation: [new Probability × new Impact = new RPN]
+          Contingency:                    [if mitigation fails, exact fallback]
+
+        ## GO / NO-GO CRITERIA
+          ✅ GO conditions:    [conditions that must be true before applying any changes]
+          ⛔ NO-GO conditions: [hard blockers — stop until these are resolved]
+
+        ## ROLLBACK PLAN
+        If onboarding fails mid-stream, exact steps to restore the environment:
+          Step 1: [action] → verify with: [check]
+          Step 2: [action] → verify with: [check]
+          ...
+        Note: identify any changes that are NOT safely reversible and flag them explicitly.
+
+        ## MISSION VERDICT
+        GO | NO-GO | GO WITH CONDITIONS
+        Conditions (if applicable): [specific pre-conditions to resolve first]
+
+      End with: VERDICT: risk matrix complete — GO|NO-GO|GO WITH CONDITIONS
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> risk-matrix completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 5a: BRIEFING GENERATION ───────────────────────────────────────
+  - id: mission-briefing-generate
+    depends_on: [fix-plan, risk-matrix]
+    trigger_rule: all_done
+    command: |
+      MISSION: Deliver the executive onboarding briefing for Director approval.
+
+      Compile a MISSION BRIEFING using all prior outputs:
+
+        # Dream-Studio Onboarding Briefing
+
+        ## Environment Readiness Score
+        [Score from synthesis with one-line interpretation]
+
+        ## What Works Right Now
+        [Skills and features usable immediately with no changes]
+
+        ## Critical Breakpoints
+        [CRITICAL and HIGH breakpoints with their resolutions]
+        [If none: "No critical breakpoints identified — clean environment"]
+
+        ## Open Gaps
+        [Count by category with estimated closure time]
+
+        ## Fix Plan Summary
+        [Number of waves, total tasks, estimated total time to fully onboarded]
+
+        ## Make It Yours — Assets to Adopt
+        List each custom asset found outside the dream-studio baseline.
+        For each HIGH/MED asset, present BOTH options clearly:
+
+          Asset: [name]
+          Path A — Native Integration (Recommended):
+            [what gets rewritten/adapted, where it wires in, effort estimate, concrete benefit]
+          Path B — Keep Separate (Alternative):
+            [what stays the same, any caveats, what the user gives up]
+
+        Director: for each asset, confirm Path A (adopt natively) or Path B (keep separate).
+        If no custom assets were found, state that here.
+
+        ## Top 5 Improvements After Baseline
+        [From improvement-scan Part 2 — highest impact/effort ratio standard improvements]
+
+        ## Risk Verdict
+        [GO / NO-GO / GO WITH CONDITIONS + top 2 risks by RPN]
+
+        ## Recommendation
+        [One paragraph: proceed, sequence recommendation, or specific blockers to resolve first]
+
+      Director: review the briefing above, confirm adoption decisions for each asset,
+      then respond to the approval gate that follows to proceed or abort.
+
+      End with: VERDICT: briefing delivered — awaiting Director decision
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> mission-briefing-generate completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: inherit
+    timeout_seconds: 180
+
+  # ── PHASE 5b: DIRECTOR APPROVAL GATE ────────────────────────────────────
+  - id: mission-briefing-approve
+    depends_on: [mission-briefing-generate]
+    trigger_rule: all_done
+    gate: mission-commander
+    command: |
+      The onboarding mission briefing has been delivered above.
+      The workflow is now PAUSED at the mission-commander gate.
+
+      Review the briefing, confirm Path A or Path B for each custom asset,
+      then resume the workflow:
+        py -m control.execution.workflow.state resume <workflow-key>
+      To abort instead:
+        py -m control.execution.workflow.state abort <workflow-key>
+
+      After Director approval and resuming, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> mission-briefing-approve completed --output 'director approved'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: inherit
+    timeout_seconds: 600
+
+  # ── PHASE 6: FINAL ONBOARDING REPORT ─────────────────────────────────────
+  - id: final-report
+    depends_on: [mission-briefing-approve]
+    trigger_rule: all_done
+    command: |
+      MISSION: Compile and save the complete onboarding report to disk.
+
+      Save to: ~/.dream-studio/planning/onboard-report-<YYYY-MM-DD>.md
+
+      Report structure:
+
+        # Dream-Studio Onboarding Report
+        **Generated:** [date]   **Readiness Score:** [N]/100   **Risk Verdict:** [GO/NO-GO]
+
+        ## Executive Summary
+        [4-6 sentences: environment state, what works now, what needs fixing,
+         how many custom assets were found to adopt, top risk, estimated time to fully onboarded, recommendation]
+
+        ## Readiness Score Breakdown
+        [Scoring table by category from synthesis]
+
+        ## What Works Right Now (no changes needed)
+        [Full list from synthesis]
+
+        ## Make It Yours — Adoption Plan
+        [Full adoption section from improvement-scan and synthesis — all assets, all blueprints,
+         confirmed Path A/B decisions from Director, exact integration steps for each adopted asset.
+         This section is the user's permanent reference for what was brought in natively and how.]
+
+        ## Breakpoint Analysis
+        [Full breakpoint registry + critical/high details + safe sequencing constraint]
+
+        ## Gap Analysis
+        [Full gap registry + all wiring instructions + configuration diff + closure order]
+
+        ## Fix and Improvement Plan
+        [Full plan with all waves and tasks — do not truncate]
+
+        ## Improvement Opportunities
+        [Full improvement-scan Part 2 output — quick wins first]
+
+        ## Risk Matrix
+        [Full risk register + top risk details + GO/NO-GO criteria + rollback plan]
+
+        ## Architecture Layer Assessment
+        Layer 1 Capability (skills + agents + workflows): [score]/35
+        Layer 2 Infrastructure (hooks + spool + SQLite + installer): [score]/35
+        Layer 3 Intelligence (project spine + design gates + memory): [score]/20
+        Usability (PATH + ds doctor + update): [score]/10
+
+        ## Appendix A: Full Environment Inventory
+        [Full discovery output]
+
+        ## Appendix B: Dream-Studio Baseline Reference
+        [Full baseline-fetch output — canonical skills, workflows, version]
+
+        ## Appendix C: ds doctor Full Output
+        Run: py -m interfaces.cli.ds doctor
+        [Capture and include full output here]
+
+      After writing the file, output its full absolute path on a line by itself.
+      End with: VERDICT: report saved — <file path>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> final-report completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 7: END-TO-END SMOKE TEST ──────────────────────────────────
+  - id: smoke-test
+    name: End-to-End Smoke Test
+    type: command
+    depends_on: [final-report]
+    output_key: smoke_test_results
+    command: |
+      Run the following checks in order.
+      Record pass/fail for each.
+      Never abort early — run all checks even if some fail.
+
+      CHECK 1 — Doctor passes
+      Run: py -m interfaces.cli.ds doctor
+      Pass: status is "pass"
+      Fail: status is "fail"
+
+      CHECK 2 — Stop hooks all exit 0
+      For each handler in the Stop dispatcher:
+      on-session-end, on-skill-telemetry, on-token-log, on-meta-review,
+      on-session-start, on-prompt-validate, on-context-threshold,
+      on-edit-dispatch, on-tool-activity
+
+      Run each with empty JSON input:
+        echo '{}' | py <handler-path>
+      Pass: exit code 0 for all
+      Fail: any exit code non-zero — note which
+
+      CHECK 3 — UserPromptSubmit hook exits 0
+        echo '{}' | py ~/.claude/hooks/run.py
+      Pass: exit code 0
+      Fail: exit code non-zero
+
+      CHECK 4 — statusLine produces output
+        echo '{"context_window": {"used_percentage": 50}, "model": {"display_name": "Test"}}' |
+        py ~/.claude/hooks/statusline.py
+      Pass: output contains "Test" and "%"
+      Fail: empty output or error
+
+      CHECK 5 — project next respects milestone order
+      Only run if an active project exists in SQLite.
+      Query: SELECT id FROM ds_projects WHERE status='active' LIMIT 1
+      If no active project: SKIP (not fail)
+      If active project exists:
+        Run: ds project next <project-id>
+        Pass: returns a work order
+        Fail: returns error or empty
+
+      CHECK 6 — Hook counts correct
+      Read ~/.claude/settings.json
+      Pass: UserPromptSubmit has 2 hooks, Stop has 2, PostCompact has 2, PostToolUse has 3
+      Fail: any count is wrong
+
+      CHECK 7 — Spool pipeline end to end
+      Emit a test event and verify it ingests to SQLite:
+
+        py -c "
+        import sys
+        sys.path.insert(0, str(__import__('pathlib').Path(
+            __import__('os').environ.get(
+                'DREAM_STUDIO_ROOT',
+                str(__import__('pathlib').Path.home() /
+                    'builds' / 'dream-studio-clean')
+            )
+        )))
+        from spool.emitter import emit
+        result = emit('smoke.test',
+            {'check': 7, 'source': 'studio-onboard'})
+        print('emitted' if result else 'failed')
+        "
+        py -m interfaces.cli.ds spool ingest
+
+      Pass: spool ingest completes without errors
+      Fail: errors during emit or ingest
+
+      CHECK 8 — Skill invocation chain
+        py -m interfaces.cli.ds skill invoke ds-core:build
+
+      Pass: output is non-empty and contains the word 'build' or 'Build'
+      Fail: empty output, error, or exit non-zero
+
+      CHECK 9 — CLAUDE.md routing integrity
+      Read ~/.claude/CLAUDE.md
+      Pass: contains 'ds-website' AND 'ds-fullstack'
+            does NOT contain 'ds-domains-website'
+            does NOT contain 'ds-domains-fullstack'
+      Fail: dead-end IDs present or correct IDs absent
+
+      CHECK 10 — Critical skill directories exist
+      Check all paths exist:
+        ~/.claude/skills/ds-core/modes/build/SKILL.md
+        ~/.claude/skills/ds-quality/modes/debug/SKILL.md
+      Pass: all exist
+      Fail: any missing — note which
+
+      CHECK 11 — Install idempotency
+      Run install once more:
+        py -m interfaces.cli.ds integrate install claude_code --execute
+      Re-read hook counts from settings.json
+      Pass: UserPromptSubmit:2 Stop:2 PostCompact:2 PostToolUse:3
+            (identical to CHECK 6 counts)
+      Fail: any count increased after second install
+
+      CHECK 12 — Identity configured
+      Read ~/.dream-studio/config.json
+      Pass: director_name field is non-empty string
+      Fail: director_name is empty, null, or missing
+      If fail: remind user to complete Step 0 from FIRST_RUN.md before proceeding
+
+      After all checks produce a summary:
+
+      SMOKE TEST RESULTS
+      ==================
+      CHECK  1 Doctor:               PASS/FAIL
+      CHECK  2 Stop hooks:           PASS/FAIL
+      CHECK  3 Prompt hook:          PASS/FAIL
+      CHECK  4 StatusLine:           PASS/FAIL
+      CHECK  5 Project next:         PASS/FAIL/SKIP
+      CHECK  6 Hook counts:          PASS/FAIL
+      CHECK  7 Spool pipeline:       PASS/FAIL
+      CHECK  8 Skill invocation:     PASS/FAIL
+      CHECK  9 CLAUDE.md routing:    PASS/FAIL
+      CHECK 10 Skill directories:    PASS/FAIL
+      CHECK 11 Install idempotency:  PASS/FAIL
+      CHECK 12 Identity configured:  PASS/FAIL
+
+      Score: N/12 checks passed (or N/11 if CHECK 5 skipped)
+
+      If score is 12/12 (or 11/11 with CHECK 5 skipped): SMOKE_PASS — proceed to schedule-self-audit
+
+      If score is below threshold: SMOKE_FAIL — surface specific remediation for each failed
+      check before proceeding:
+
+      CHECK 2 failures: Run
+        py -m interfaces.cli.ds integrate install claude_code --execute
+        Then re-run failed handlers manually to confirm exit 0.
+
+      CHECK 3 failure: Check
+        ~/.claude/hooks/run.py exists and .plugin-root sidecar is present.
+
+      CHECK 4 failure: Check
+        ~/.claude/hooks/statusline.py exists and settings.json has statusLine
+        entry with type: command.
+
+      CHECK 6 failure: Run the dedup script then reinstall.
+
+      CHECK 7 failure: Run ds spool ingest manually,
+        check ~/.dream-studio/events/ for errors.
+
+      CHECK 8 failure: Run ds integrate install --execute to redeploy skills.
+
+      CHECK 9 failure: Fix packs.yaml routing IDs and reinstall.
+
+      CHECK 10 failure: Run ds integrate install --execute to deploy missing skill files.
+
+      CHECK 11 failure: dedup_hooks_by_normalized_command not wired —
+        check settings_merge.py.
+
+      CHECK 12 failure: Open ~/.dream-studio/config.json and fill
+        director_name, domain, primary_use.
+
+      After remediation, re-run smoke-test node.
+
+      End with: VERDICT: SMOKE_PASS or SMOKE_FAIL — <N/12 checks passed>
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> smoke-test completed --output '<one-line verdict>'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 180
+
+  # ── PHASE 8: SCHEDULE SELF-AUDIT ─────────────────────────────────────
+  - id: schedule-self-audit
+    depends_on: [smoke-test]
+    trigger_rule: all_done
+    command: |
+      MISSION: Seed the weekly self-audit schedule so dream-studio evolves automatically.
+
+      This step is idempotent — if a schedule is already registered, do nothing.
+
+      ## Step 1 — Check if already scheduled
+
+      Read ~/.dream-studio/state/self-audit-schedule.json (may not exist yet).
+      If it exists and has a "schedule" key set to "weekly-monday-9am":
+        Print: "Self-audit already scheduled — skipping registration."
+        End here.
+
+      ## Step 2 — Load CronCreate tool and register the weekly cron
+
+      First, load the CronCreate tool: call ToolSearch with query "select:CronCreate".
+      Then use the CronCreate tool with these exact parameters:
+        cron:      "3 9 * * 1"
+        prompt:    "workflow: run self-audit"
+        recurring: true
+        durable:   true
+
+      Note: 9:03am Monday local time. Off-minute to avoid fleet congestion.
+      The self-audit workflow re-registers itself each run, so the chain
+      continues indefinitely even after CronCreate's 7-day auto-expiry.
+
+      ## Step 3 — Persist schedule metadata
+
+      Write to ~/.dream-studio/state/self-audit-schedule.json:
+        {
+          "schedule": "weekly-monday-9am",
+          "cron": "3 9 * * 1",
+          "registered": "<today ISO date>",
+          "last_run": null,
+          "last_issue_url": null
+        }
+
+      ## Step 4 — Confirm
+
+      Print:
+        "✓ Weekly self-audit scheduled — fires every Monday at 9:03am local."
+        "  Each run audits routing, hooks, skill size, and gotchas, then posts"
+        "  findings as a GitHub issue and reschedules the next run automatically."
+        "  Onboarding complete."
+
+      ## Step 5 — Output next steps
+      Print next steps for the Director:
+        "Dream Studio is onboarded. To start your first project:
+         1. ds project register --name 'Your Project'
+         2. ds project set-active <project_id>
+         3. ds skill invoke ds-project:scope
+         4. ds project start <project_id>"
+
+      End with: VERDICT: onboarding complete — weekly self-audit scheduled
+
+      After completing this step, update workflow state:
+        py -m control.execution.workflow.state update <workflow-key> schedule-self-audit completed --output 'onboarding complete — weekly self-audit scheduled'
+      Then call: py -m interfaces.cli.ds workflow advance <workflow-key>
+    model: sonnet
+    context: fresh
+    timeout_seconds: 60

@@ -1,0 +1,108 @@
+schema_version: 2
+
+packs:
+  core:
+    description: Build lifecycle — think through ship, core agents, session context
+    skill: core
+    modes: [think, plan, build, review, verify, ship, handoff, recap, explain]
+    agents: [director, engineering, chief-of-staff]
+    context: [session-context, session-primer, director-preferences, director-corrections, fullstack-standards]
+    hooks: [on-milestone-start, on-milestone-end, on-workflow-progress, on-changelog-nudge, on-stop-handoff, on-post-tool-use]
+
+  quality:
+    description: Code quality, learning, and structural discipline
+    skill: quality
+    modes: [debug, polish, harden, pr-security-scan, structure-audit, learn, coach, audit, security, accessibility, database, code-quality, testing, types-deps, backend-api, frontend-ux, architecture, ops, database-compliance, pre-launch]
+    hooks: [on-security-scan, on-quality-score, on-structure-check, on-agent-correction]
+    rules: [structure/architecture.md, structure/fsc.md]
+
+  analyze:
+    description: Multi-perspective analysis engine
+    skill: analyze
+    # repo and intelligence added — Flag 1 fix; research — 18.9 Tier 1; idea-validation — 18.9 Tier 2-3
+    modes: [multi, domain-re, repo, intelligence, research, idea-validation]
+
+  domains:
+    description: Stack-specific and domain builders
+    skill: domains
+    # fullstack and website — Flag 1 fix; devops, kubernetes — 18.9 Tier 1; technical-writing, terraform, mobile — 18.9 Tier 2-3; data-engineering — 18.9 Tier 4
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering]
+    agents: [game, client]
+    hooks: [on-game-validate]
+    rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
+    templates: [project-standards/]
+
+  meta:
+    description: Observability, session management, and shared hook infrastructure
+    skill: workflow
+    skill_path: canonical/skills/workflow
+    # Placeholder .gitkeep dirs under packs/meta/ are intentional — Flag 6
+    hooks:
+      # User-facing pack hooks
+      - on-pulse
+      - on-meta-review
+      - on-context-threshold
+      - on-post-compact
+      - on-token-log
+      - on-tool-activity
+      - on-skill-load
+      - on-skill-telemetry
+      # Added — Flag 5 fix
+      - on-first-run
+      - on-memory-retrieve
+      - on-context-inject
+      - on-prompt-validate
+      - on-session-start
+      - on-session-end
+      - on-memory-ingest
+      # Internal dispatch hooks (called via hooks.json directly, not pack routing)
+      - on-prompt-dispatch
+      - on-stop-dispatch
+      - on-edit-dispatch
+      - on-skill-complete
+      - on-skill-metrics
+    lib: hooks/lib/
+
+  security:
+    description: Enterprise security analysis — automated scanning, compliance mapping, mitigation generation, network compatibility, and executive dashboards.
+    skill: security
+    # review added — Flag 2 fix
+    modes: [scan, dast, binary-scan, mitigate, comply, netcompat, dashboard, review]
+
+  ds-project:
+    description: Project lifecycle — scope, brief, resume, and portfolio-level management (list/switch/archive/delete)
+    skill: ds-project
+    modes: [scope, resume, brief, manage]
+
+  ds-workorder:
+    description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status
+    skill: ds-workorder
+    modes: [start, execute, close, block, status]
+
+  ds-milestone:
+    description: Milestone lifecycle — read-only status and close (with gate checks)
+    skill: ds-milestone
+    modes: [status, close]
+
+  website:
+    description: Website build pipeline — discovery through delivery, 9 sub-modes
+    skill: ds-website
+    skill_path: canonical/skills/domains/modes/website
+    modes: [discover, direction, page, prototype, animate, brand, cip, critique, deck]
+
+  fullstack:
+    description: Full-stack build pipeline — frontend, backend, integration, and security
+    skill: ds-fullstack
+    skill_path: canonical/skills/domains/modes/fullstack
+    modes: [frontend, backend, integrate, secure]
+
+  setup:
+    description: Platform setup — interactive wizard, status reporting, and JIT tool installation
+    skill: ds-setup
+    modes: [wizard, status, jit]
+
+# Cross-pack assets not owned by any single pack.
+shared:
+  templates: [templates/traceability-registry.yaml]
+  workflows: canonical/workflows/
+  # feeds/ removed — directory does not exist (Flag 4 fix, ODP-5 safe default)

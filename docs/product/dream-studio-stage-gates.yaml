@@ -1,0 +1,205 @@
+status: draft_generated
+authority_role: stage_gate_authority
+active_objective: prove_dream_studio_internal_operational_loop
+current_stage: operational_loop_authority
+
+paused_validation_targets:
+  - Bill Stack
+  - DreamySuite
+  - TORII
+
+external_project_resume_policy:
+  status: paused_until_explicit_operator_approval
+  rule: "External projects may be referenced as paused validation targets or evidence sources only."
+  blocked_implementation_targets:
+    - bill_stack_resume
+    - dreamysuite_resume
+    - torii_resume
+
+auto_continue_policy:
+  low_risk_internal_steps: true
+  allowed_inside_approved_milestone:
+    - approved_artifact_reads
+    - checklist_review
+    - package_review
+    - evidence_creation
+    - evidence_indexing
+    - report_writing
+    - summary_generation
+    - approved_backup
+    - checksum_calculation
+    - approved_restore_rehearsal_on_copied_files
+    - non_mutating_validation
+  stop_on_material_risk: true
+
+approval_policy:
+  source_code_mutation_outside_approved_scope_requires_approval: true
+  database_mutation_requires_approval: true
+  migration_requires_approval: true
+  commit_requires_operator_approval: true
+  push_or_deploy_requires_operator_approval: true
+  package_manager_commands_require_operator_approval: true
+  runtime_browser_validation_requires_operator_approval: true
+  secret_or_sensitive_access_requires_operator_approval: true
+  artifact_compaction_deletion_archive_requires_operator_approval: true
+  high_risk_research_interpretation_requires_operator_verification: true
+
+stop_gates:
+  - architecture_direction_change
+  - prd_or_stage_gate_change
+  - stage_gate_order_change
+  - scope_expansion
+  - missing_required_authority_artifact
+  - ambiguous_operator_or_product_decision
+  - source_code_mutation_outside_approved_scope
+  - runtime_sqlite_mutation
+  - database_migration
+  - ddl_or_dml_execution
+  - failed_backup_or_restore
+  - failed_validation
+  - rollback_uncertainty
+  - commit_push_or_deploy
+  - package_or_dependency_operation
+  - runtime_or_browser_validation
+  - secret_or_sensitive_data_access
+  - artifact_compaction_deletion_archive
+  - external_project_resume
+  - stage_gate_invalid_next_phase
+
+research_verification_gates:
+  decision_classes:
+    - no_research_needed
+    - research_allowed
+    - research_required
+    - operator_verification_required
+    - blocked_due_to_source_uncertainty
+    - blocked_due_to_safety_or_sensitive_context
+  operator_verification_required_for:
+    - high_risk_research_interpretation
+    - source_conflict
+    - legal_financial_security_or_medical_claims
+    - product_direction_change
+    - current_fact_with_low_confidence
+
+database_authority_gates:
+  structured_state_can_be_authority_where_safe: true
+  migrations_require_separate_milestone: true
+  runtime_sqlite_mutation_requires_explicit_approval: true
+  reports_and_handoffs_are_not_primary_database_authority: true
+
+dashboard_authority_gates:
+  projection_layer_is_derived: true
+  dashboard_is_not_primary_truth: true
+  dashboard_runtime_implementation_requires_explicit_scope: true
+
+handoff_reduction_gates:
+  handoff_generated_only_for:
+    - pause_resume
+    - hard_blocker
+    - operator_approval
+    - operator_decision
+    - material_risk_boundary
+    - session_transfer
+    - failed_validation_or_rollback
+    - user_requested_export_or_continuation
+    - milestone_completion_when_policy_requires
+    - commit_required
+    - push_or_deploy_required
+    - database_mutation_required
+    - migration_required
+    - ddl_or_dml_required
+    - package_or_dependency_operation_required
+    - runtime_or_browser_validation_required
+    - secret_or_sensitive_access_required
+    - artifact_compaction_deletion_archive_required
+    - external_project_resume_required
+  handoff_not_generated_for:
+    - checklist_review
+    - package_review
+    - routine_evidence_creation
+    - report_writing
+    - approved_artifact_reads
+    - approved_backup_restore_rehearsal_inside_milestone
+    - non_mutating_validation_inside_approved_milestone
+    - planning_finished
+    - next_step_exists
+    - next_milestone_exists
+    - phase_number_incremented
+    - recommended_next_work_order_by_default
+
+ordered_stage_gates:
+  - id: operational_loop_authority
+    name: "Operational loop authority"
+    required_before: []
+    milestone_sequence:
+      - product_authority_overhaul
+      - milestone_controller_integration
+      - generated_handoff_self_validation
+      - review_and_commit
+    routing_constraints:
+      - "PRD and stage gates override naive handoff-chain routing."
+      - "Milestones are the unit of meaningful progress."
+      - "Handoffs are rendered only when policy requires them."
+      - "Dream Studio remains the only active implementation target."
+  - id: structured_authority_projection
+    name: "Structured authority and projection"
+    required_before:
+      - operational_loop_authority
+    milestone_sequence:
+      - structured_state_authority_projection
+      - dashboard_projection_mapping
+      - runtime_projection_update
+    routing_constraints:
+      - "Dashboard consumes structured state and projections, not long reports as primary truth."
+      - "Runtime/dashboard/API implementation requires a separately approved milestone."
+      - "Stage-gate-valid structured authority milestones continue by route decision, not by planning-only handoff chaining."
+  - id: external_validation_readiness
+    name: "Paused external validation readiness"
+    required_before:
+      - operational_loop_authority
+      - structured_authority_projection
+    milestone_sequence:
+      - paused_target_evidence_mapping
+      - external_resume_decision
+    routing_constraints:
+      - "Bill Stack, DreamySuite, and TORII remain paused until explicit resume approval."
+
+milestones:
+  - id: product_authority_overhaul
+    stage_gate_id: operational_loop_authority
+    title: "Full product PRD and AI orchestration authority"
+    completion_criteria:
+      - "Product docs define Dream Studio as a local-first AI orchestration platform."
+      - "HITL, research, stack/runtime, architecture, artifact, and done policies exist."
+      - "Architecture and ERD diagrams exist as source-controlled rendered views."
+    handoff_policy: stop_gate_or_milestone_completion
+  - id: milestone_controller_integration
+    stage_gate_id: operational_loop_authority
+    title: "Milestone controller and handoff routing integration"
+    completion_criteria:
+      - "Classifier decisions feed handoff/next-phase routing."
+      - "Low-risk internal steps suppress routine handoffs."
+      - "Material stop gates require approval, hard stop, or handoff."
+      - "External project pause constraint is enforced."
+    handoff_policy: stop_gate_or_milestone_completion
+  - id: generated_handoff_self_validation
+    stage_gate_id: operational_loop_authority
+    title: "Generated handoff self-validation"
+    completion_criteria:
+      - "Generated handoffs validate path integrity before ready."
+      - "Required context sections are checked before ready."
+      - "Database relationship and executable-design boundaries are enforced when applicable."
+    handoff_policy: milestone_completion_only
+  - id: review_and_commit
+    stage_gate_id: operational_loop_authority
+    title: "Review and commit"
+    completion_criteria:
+      - "Focused validation evidence is recorded."
+      - "Diff scope is reviewed."
+      - "Operator-approved commit milestone can stage and commit exact files."
+    handoff_policy: milestone_completion_only
+
+blocked_milestones:
+  - bill_stack_resume
+  - dreamysuite_resume
+  - torii_resume

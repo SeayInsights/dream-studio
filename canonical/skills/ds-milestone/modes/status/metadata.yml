@@ -1,0 +1,5 @@
+triggers:
+  - "milestone status:"
+  - "milestone progress:"
+
+estimated_tokens: 500

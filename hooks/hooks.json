@@ -1,0 +1,84 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); emitter=next((p/'emitters'/'claude_code'/'run.py' for p in (root,*root.parents) if (p/'emitters'/'claude_code'/'run.py').is_file()),None); sys.argv=[str(emitter),'UserPromptSubmit']; (runpy.run_path(str(emitter),run_name='__main__') if emitter else None); sys.exit(0)\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'UserPromptSubmit']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); emitter=next((p/'emitters'/'claude_code'/'run.py' for p in (root,*root.parents) if (p/'emitters'/'claude_code'/'run.py').is_file()),None); sys.argv=[str(emitter),'Stop']; (runpy.run_path(str(emitter),run_name='__main__') if emitter else None); sys.exit(0)\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'Stop']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); emitter=next((p/'emitters'/'claude_code'/'run.py' for p in (root,*root.parents) if (p/'emitters'/'claude_code'/'run.py').is_file()),None); sys.argv=[str(emitter),'PostCompact']; (runpy.run_path(str(emitter),run_name='__main__') if emitter else None); sys.exit(0)\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'PostCompact']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": []
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": []
+      },
+      {
+        "matcher": "Read",
+        "hooks": []
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); emitter=next((p/'emitters'/'claude_code'/'run.py' for p in (root,*root.parents) if (p/'emitters'/'claude_code'/'run.py').is_file()),None); sys.argv=[str(emitter),'PostToolUse']; (runpy.run_path(str(emitter),run_name='__main__') if emitter else None); sys.exit(0)\""
+          },
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'PostToolUse']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+          }
+        ]
+      }
+    ]
+  }
+}

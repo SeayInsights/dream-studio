@@ -1,0 +1,169 @@
+name: domain-ingest
+description: 4-phase domain synthesis pipeline — find sources, score and compare, synthesize domain YAML + persona MD, register in ingest-log
+version: 1
+on_failure: abort
+
+gates:
+  director-review:
+    type: pause
+    prompt: "Review synthesized domain files before registering in ingest-log. Check agents/<domain>-expert.md and skills/domains/<domain>/patterns.yml. Approve to register."
+
+nodes:
+
+  # ── PHASE 1: FIND SOURCES ────────────────────────────────────────────────
+  - id: find-sources
+    command: |
+      MISSION: Research and catalog specialist agent sources for domain: {{workflow.input}}
+
+      You are doing research only — no files will be created in this phase.
+
+      Step 1 — GitHub code search:
+        Using mcp__github__search_code, run the following searches:
+          a. Search for `.claude/agents/*.md` files matching the domain keywords for: {{workflow.input}}
+          b. Search for `agents/*.md` files with the domain name in the content
+          c. Search for SKILL.md files in skills directories matching the domain
+        For each match: record repo (owner/name), file path, estimated stars if available, and a brief description of what the file covers.
+
+      Step 2 — VoltAgent catalog search:
+        Using mcp__github__get_file_contents, read:
+          - VoltAgent/awesome-claude-code-subagents (check README.md for domain matches)
+          - VoltAgent/awesome-agent-skills (check README.md for domain matches)
+        For each matching entry in these catalogs: record repo, path, URL, and brief description.
+
+      Step 3 — Compile candidate list:
+        Produce a CANDIDATE LIST with one entry per unique source found:
+          - repo: owner/name
+          - path: file path within repo
+          - url: full GitHub URL
+          - stars: star count (or "unknown")
+          - description: 1-2 sentence summary of what domain knowledge this source contains
+          - source_type: github-code-search | voltagent-catalog | awesome-agent-skills
+
+      If fewer than 2 candidates are found, note what searches were attempted and explain why results were sparse.
+
+      Your final output MUST end with exactly one verdict line in this format:
+      VERDICT: PASSED: found N candidates — [brief list of repo names] OR VERDICT: BLOCKED: no candidates found — [reason]
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: haiku
+    context: fresh
+    timeout_seconds: 300
+
+  # ── PHASE 2: SCORE AND COMPARE ───────────────────────────────────────────
+  - id: score-and-compare
+    depends_on: [find-sources]
+    skill: analyze
+    input: |
+      Candidate sources from research phase:
+      {{find-sources.output}}
+
+      ANALYSIS TASK: Score and compare each candidate source against the domain eval rubric.
+
+      Rubric path: skills/domains/eval-rubric.yml
+      Read that file first to understand the 8 scoring signals.
+
+      For each candidate identified in the find-sources output:
+        1. Retrieve the candidate file content using mcp__github__get_file_contents
+        2. Score it against each of the 8 rubric signals (0 or 1 per signal, max score = 8)
+        3. Identify what unique knowledge or patterns this source contributes
+        4. Note any overlaps with other candidates
+
+      Produce a CANDIDATE SCORING REPORT:
+
+        ## Candidate Scores
+        | Candidate | Repo | Score (0-8) | Top Signals | Unique Contribution |
+        |-----------|------|-------------|-------------|---------------------|
+
+        ## Per-Candidate Analysis
+        For each candidate: list the 8 signal scores individually and what content drove each score.
+
+        ## Synthesis Recommendation
+        Based on scores and unique contributions:
+          - Which sources to include (score >= 4 only)
+          - Which sources to exclude and why
+          - Synthesis strategy: which source to use as the base, which parts to layer in from others
+          - Gaps that no source covers (content to generate fresh)
+          - Recommended file structure for the output domain YAML and persona MD
+    model: opus
+    context: fresh
+    timeout_seconds: 600
+
+  # ── PHASE 3: SYNTHESIZE ──────────────────────────────────────────────────
+  - id: synthesize
+    depends_on: [score-and-compare]
+    skill: build
+    input: |
+      Synthesis recommendation and candidate scores:
+      {{score-and-compare.output}}
+
+      Domain: {{workflow.input}}
+
+      BUILD TASK: Produce two output files using the synthesis recommendation above.
+
+      QUALITY GATE: Only include content from sources that scored >= 4 on the eval rubric.
+      Discard any content from lower-scoring sources entirely.
+
+      OUTPUT FILE 1 — Domain patterns YAML:
+        Path: skills/domains/{{workflow.input}}/patterns.yml
+        Content: domain patterns, gotchas, anti-patterns, concrete commands, and workflow signals
+        Strip all persona framing — no "you are a senior X" language
+        Structure: reframe everything as domain patterns, gotchas, anti-patterns, and concrete commands
+
+      OUTPUT FILE 2 — Agent persona MD:
+        Path: agents/{{workflow.input}}-expert.md
+        Content: enhanced domain specialist agent definition
+        Strip all generic "you are a senior X" framing
+        Reframe as: domain patterns, gotchas, anti-patterns, concrete commands, and decision heuristics
+        Include: trigger keywords, model recommendation, context requirements, and example invocations
+
+      After writing both files, output their paths and a brief summary of what was synthesized.
+    config:
+      task: produce domain YAML at skills/domains/<domain>/patterns.yml AND agent MD at agents/<domain>-expert.md using synthesis recommendation
+      strip_persona_framing: "true"
+      quality_gate: only include content from sources scoring >= 4 on eval-rubric
+    model: sonnet
+    context: fresh
+    timeout_seconds: 600
+
+  # ── PHASE 4: REGISTER ────────────────────────────────────────────────────
+  - id: register
+    depends_on: [synthesize]
+    gate: director-review
+    command: |
+      MISSION: Register the synthesized domain agent in the ingest log.
+
+      Domain: {{workflow.input}}
+      Synthesize output: {{synthesize.output}}
+      Score data: {{score-and-compare.output}}
+
+      Step 1 — Read current ingest log:
+        Read the file: skills/domains/ingest-log.yml
+        If the file does not exist, start with an empty agents list: `agents: []`
+
+      Step 2 — Build the new entry:
+        Create a new agent-type entry with these fields:
+          domain: {{workflow.input}}
+          analyzed_date: [today's date in YYYY-MM-DD format]
+          refresh_due: [90 days from today in YYYY-MM-DD format]
+          keywords: [extract 5-10 relevant keywords from the domain name and synthesized content]
+          persona_md_path: agents/{{workflow.input}}-expert.md
+          quality_score: [highest candidate score from Phase 2 score-and-compare output]
+          sources_evaluated:
+            - [list each candidate from Phase 2 with: repo, score, and the key fields it contributed]
+          enhancement_notes: [brief note on what was generated fresh vs. synthesized from sources]
+
+      Step 3 — Write the updated ingest-log.yml:
+        Append the new entry to the agents list and write the file back.
+        Preserve all existing entries exactly as they were.
+
+      Step 4 — Commit the registration:
+        Stage the updated ingest-log.yml and commit with message:
+          feat(domain-ingest): register {{workflow.input}} specialist in ingest-log
+
+      Your final output MUST end with exactly one verdict line in this format:
+      VERDICT: PASSED: {{workflow.input}} agent registered in ingest-log
+
+      Your final output line MUST be exactly one of: PASSED, BLOCKED, FAILED. Format: VERDICT: one-line summary.
+    model: haiku
+    context: fresh
+    timeout_seconds: 300

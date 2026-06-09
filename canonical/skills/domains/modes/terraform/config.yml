@@ -1,0 +1,12 @@
+invocation:
+  type: subagent-target
+  wrapper_agent: terraform-architect
+  dispatch_path: ~/.claude/agents/terraform-architect.md
+
+behavior:
+  graceful_degradation: true
+  fallback_standard: Terraform official documentation and best practices
+
+budgets:
+  max_tokens_per_session: null
+  typical_tokens_per_engagement: null

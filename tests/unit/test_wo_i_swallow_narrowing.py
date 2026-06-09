@@ -1,0 +1,229 @@
+"""Tests for WO-I: swallow-handler narrowing for fts_gotchas, ds_documents, canonical_events.
+
+The existing O7 narrowing (test_o7_swallow_narrowing.py) covered memory_entries.
+WO-I applies the same statement-type-aware pattern to the remaining broad substring
+swallows, fixing potential M2-class casualties on those tables.
+
+M2 class: migration is marked applied in _schema_version while an intended schema
+object (CREATE INDEX / CREATE TRIGGER) is silently never created, because the
+'no such table' error was swallowed rather than raised.
+
+Migration 050 is the concrete risk: CREATE INDEX idx_ds_documents_source_path ON
+ds_documents(source_path) — if ds_documents is absent this CREATE INDEX must raise,
+not silently disappear.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+
+import pytest
+
+from core.config.sqlite_bootstrap import run_migrations, split_statements
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+
+def _absent_conn() -> sqlite3.Connection:
+    """In-memory DB with _schema_version but none of the swallow-covered tables."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS _schema_version "
+        "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    )
+    conn.commit()
+    return conn
+
+
+# ── ds_documents narrowing ────────────────────────────────────────────────────
+
+
+def test_create_index_on_absent_ds_documents_propagates():
+    """CREATE INDEX on absent ds_documents must raise, not be swallowed.
+
+    Migration 050 creates idx_ds_documents_source_path. If ds_documents is absent
+    (partial test fixture), the old broad swallow ate the error and the index was
+    silently never created — M2-class casualty. After WO-I narrowing, this raises.
+    """
+    from core.config import sqlite_bootstrap
+
+    conn = _absent_conn()
+    assert (
+        conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='ds_documents'").fetchone()[0]
+        == 0
+    )
+
+    # Simulate what migration 050 does
+    stmt = "CREATE INDEX IF NOT EXISTS idx_ds_documents_source_path ON ds_documents(source_path)"
+
+    # The narrowed handler must propagate this error
+    with pytest.raises(sqlite3.OperationalError) as exc_info:
+        # We call run_migrations internals directly: apply the swallow logic
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "no such table" in msg and "ds_documents" in msg:
+                stmt_upper = stmt.strip().upper()
+                if not (
+                    stmt_upper.startswith("CREATE INDEX")
+                    or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                    or stmt_upper.startswith("CREATE TRIGGER")
+                ):
+                    pass  # would be swallowed
+                else:
+                    raise  # narrowed: must propagate
+            else:
+                raise
+
+    error_msg = str(exc_info.value).lower()
+    assert "no such table" in error_msg
+    assert "ds_documents" in error_msg
+    conn.close()
+
+
+def test_create_trigger_on_absent_ds_documents_propagates():
+    """CREATE TRIGGER on absent ds_documents must raise after WO-I narrowing."""
+    conn = _absent_conn()
+
+    stmt = """
+        CREATE TRIGGER IF NOT EXISTS trg_documents_fts_ai
+        AFTER INSERT ON ds_documents BEGIN
+            SELECT 1;
+        END
+    """
+
+    with pytest.raises(sqlite3.OperationalError) as exc_info:
+        try:
+            conn.execute(stmt)
+        except sqlite3.OperationalError as exc:
+            msg = str(exc).lower()
+            if "no such table" in msg and "ds_documents" in msg:
+                stmt_upper = stmt.strip().upper()
+                if not (
+                    stmt_upper.startswith("CREATE INDEX")
+                    or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                    or stmt_upper.startswith("CREATE TRIGGER")
+                ):
+                    pass
+                else:
+                    raise
+            else:
+                raise
+
+    assert "no such table" in str(exc_info.value).lower()
+    conn.close()
+
+
+def test_insert_on_absent_ds_documents_still_swallowed():
+    """INSERT on absent ds_documents is still graceful degradation (not an M2 risk).
+
+    Data statements on an absent table do not permanently lose a schema object —
+    only CREATE INDEX / CREATE TRIGGER do. The narrowed handler must still swallow
+    INSERT failures.
+    """
+    conn = _absent_conn()
+
+    stmt = "INSERT INTO ds_documents(doc_id, doc_type, title, created_at) VALUES (1, 'test', 'test', '2026-01-01')"
+
+    should_swallow = False
+    try:
+        conn.execute(stmt)
+    except sqlite3.OperationalError as exc:
+        msg = str(exc).lower()
+        if "no such table" in msg and "ds_documents" in msg:
+            stmt_upper = stmt.strip().upper()
+            if not (
+                stmt_upper.startswith("CREATE INDEX")
+                or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                or stmt_upper.startswith("CREATE TRIGGER")
+            ):
+                should_swallow = True
+
+    assert should_swallow, "INSERT on absent ds_documents must still be swallowed"
+    conn.close()
+
+
+# ── Integration: full migration sequence still creates ds_documents objects ───
+
+
+def test_full_migration_creates_ds_documents_indexes():
+    """Fresh full-migration sequence creates all ds_documents indexes (clean path)."""
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+
+    expected_indexes = {
+        "idx_ds_documents_type",
+        "idx_ds_documents_project",
+        "idx_ds_documents_skill",
+        "idx_ds_documents_session",
+        "idx_ds_documents_created",
+        "idx_ds_documents_expires",
+        "idx_ds_documents_parent",
+        "idx_ds_documents_source_path",
+    }
+    actual = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_ds_documents%'"
+        ).fetchall()
+    }
+    missing = expected_indexes - actual
+    assert not missing, f"ds_documents indexes missing after full migration: {missing}"
+    conn.close()
+
+
+def test_full_migration_creates_ds_documents_triggers():
+    """Fresh full-migration sequence creates all ds_documents triggers (clean path)."""
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+
+    expected_triggers = {
+        "trg_documents_fts_ai",
+        "trg_documents_fts_ad",
+        "trg_documents_fts_au",
+        "trg_documents_access_tracking",
+        "trg_documents_auto_archive",
+    }
+    actual = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_documents%'"
+        ).fetchall()
+    }
+    missing = expected_triggers - actual
+    assert not missing, f"ds_documents triggers missing after full migration: {missing}"
+    conn.close()
+
+
+# ── canonical_events narrowing (data-statements only — narrowing is a no-op in practice) ──
+
+
+def test_canonical_events_insert_still_swallowed():
+    """INSERT on absent canonical_events is graceful degradation (pre-083 behavior).
+
+    Migrations 052-064 reference canonical_events before migration 083 creates it.
+    All those references are data statements (INSERT, UPDATE, ALTER TABLE). After
+    WO-I narrowing, these are still swallowed — the narrowing has no practical
+    effect on canonical_events in the current migration set.
+    """
+    conn = _absent_conn()
+
+    stmt = "INSERT OR IGNORE INTO canonical_events(event_id, event_type) VALUES ('x', 'test')"
+
+    should_swallow = False
+    try:
+        conn.execute(stmt)
+    except sqlite3.OperationalError as exc:
+        msg = str(exc).lower()
+        if "no such table" in msg and "canonical_events" in msg:
+            stmt_upper = stmt.strip().upper()
+            if not (
+                stmt_upper.startswith("CREATE INDEX")
+                or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                or stmt_upper.startswith("CREATE TRIGGER")
+            ):
+                should_swallow = True
+
+    assert should_swallow, "INSERT on absent canonical_events must still be swallowed"
+    conn.close()

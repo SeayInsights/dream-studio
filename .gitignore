@@ -1,0 +1,185 @@
+# Dream Studio local/private runtime state (never committed)
+.dream-studio/
+.dream-studio/*
+**/.dream-studio/
+
+# Generated session handoffs — contain conversation history, never commit
+.sessions/
+
+# Generated context/domain glossary — session artifact, not source
+CONTEXT.md
+
+# Planning dirs are session artifacts — local only, never committed
+.planning/
+
+# Pre-phase-19 eval baselines — local snapshots, never committed
+baselines/pre_phase_19/
+
+# Generated adapter output — build artifacts, never committed
+dist/
+skills/**/.planning/
+
+# Structure audit reports — generated artifacts
+.audit/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Node
+node_modules/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+*.swp
+
+.venv/
+venv/
+env/
+*.egg-info/
+.env
+.env.local
+*.tmp
+.pymon
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.bak
+*.backup
+*.dump
+
+# Enterprise repo (external — do not track)
+../dream-studio-enterprise/
+
+# Org intelligence graph (generated output — not source)
+core/org_intelligence_graph/
+
+# Enterprise environment
+DREAMSTUDIO_ENTERPRISE_KEY
+.enterprise/
+
+# Generated/archive artifacts — internal audit, analysis, deprecated code
+.census/
+.archive/
+_archived/
+.marketplace/
+scripts/_archived/
+
+# Dashboard backups and experimental prototypes
+projections/frontend/*_backup*.html
+projections/frontend/dashboard_new.html
+projections/frontend/hooks_improved.html
+projections/frontend/dashboard_temp_*.html
+
+# Docker test output (volume mount target — never commit results)
+docker-test-results/*
+
+# Runtime logs
+dashboard*.log
+*.log
+logs/
+
+# Local runtime/evidence exports
+/backups/
+/reports/
+/raw-telemetry/
+/raw_telemetry/
+/meta/
+.tmp/
+/test_output/
+*.handoff.md
+handoff-*.json
+
+# Phase completion reports and session artifacts
+PHASE*_*.md
+SESSION_SUMMARY.md
+PROJECT_COMPLETE.md
+CODEx_*.md
+DEPLOYMENT_GUIDE.md
+MIGRATION_STATUS.md
+MIGRATION_GUIDE.md
+FILESYSTEM_HYDRATION_V2.md
+IMPLEMENTATION_STATUS.md
+session3-*.txt
+RUNTIME_MANIFEST.md
+apply_migration.py
+check_events.py
+check_tables.py
+fix_extra_parens.py
+test_context_compiler.py
+test_wave_integration.py
+verify_phase1.py
+
+# Superseded README variants
+README_FINAL.md
+README_EXECUTION_OS.md
+
+# Root legacy migrations (superseded by core/event_store/migrations/)
+/migrations/
+
+# Historical/internal docs (archived, not actively referenced)
+docs/forensics/
+docs/convergence/
+docs/phase8/
+docs/intelligence/
+docs/repo_actions/
+docs/audits/
+docs/publication/
+.claude/
+.claude-plugin/plugin.json
+
+# Test/diagnostic output captures — write to ~/.dream-studio/diagnostics/ instead
+pytest-*
+diag-test-*
+smoke-*
+black-*
+lint-*
+!docs/operations/lint-format-baseline-policy.md
+drift-*
+
+# Debug scripts (one-off investigations)
+tmp_*.py
+verify_*.py
+tools/_ta*.md
+tools/_ta*.py
+
+# PR body drafts
+pr-body-*.md
+
+# Per-operator project marker (each operator registers their own)
+.dream-studio-project
+
+# Internal tracking docs — prevent future commits
+backlog.md
+DREAM-STUDIO-ROADMAP.md
+dream-studio-debt-punchlist.md
+docs/UAT-Phase6-Checklist.md
+docs/coverage-report-phase6.md
+docs/UPGRADE_PLAN.md
+docs/TRANSACTION_SAFETY_GUIDE.md
+docs/security-skills-redundancy-analysis.md
+docs/token-reduction-summary.md
+docs/design-skills-guide.md
+docs/demo-script.md
+
+# Local dev artifacts (session output files)
+coverage-first-output.txt
+paths-to-scrub.txt
+
+# Graphify output (operator-managed; see storage-architecture.md)
+/graphify-out/

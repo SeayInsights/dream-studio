@@ -1,0 +1,35 @@
+{
+  "eval_id": "eval_05_regression_detection",
+  "version": "2.0.0",
+  "description": "Regression detection test: this eval has a known baseline. A degraded skill version should produce lower scores and trigger regression flag.",
+  "skill_id": "ds-quality",
+  "input_prompt": "debug: why is this failing",
+  "fixture_events": [
+    {
+      "event_type": "skill.invoked",
+      "skill_id": "ds-quality",
+      "trace": {
+        "skill_id": "ds-quality:debug"
+      }
+    },
+    {
+      "event_type": "skill.completed",
+      "skill_id": "ds-quality"
+    }
+  ],
+  "expected_events": [
+    {
+      "event_type": "skill.invoked",
+      "must_appear": true,
+      "skill_id": "ds-quality"
+    },
+    {
+      "event_type": "skill.completed",
+      "must_appear": true,
+      "max_sequence_position": 4
+    }
+  ],
+  "notes": "Claude invokes the debug skill, analyzes the failure, and provides a root cause with specific file and line number references. The response is actionable, not vague.",
+  "event_weight": 1.0,
+  "minimum_score": 0.75
+}

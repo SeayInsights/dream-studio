@@ -1,0 +1,61 @@
+# Testing Skill — Gotchas
+# Status: JIT-pending — pre-seeded with the Dream Studio conftest.py pattern.
+# Real gotchas from first audit added after 18.5.1 first run.
+
+gotchas:
+
+  - id: tst-gotcha-001
+    title: conftest.py early-isolation is a POSITIVE pattern, not a violation
+    description: >
+      Dream Studio's conftest.py redirects DREAM_STUDIO_DB_PATH, DREAM_STUDIO_HOME,
+      and DS_SPOOL_ROOT at module import time — before pytest collection and before
+      any test module is imported. This is NOT a violation of tst-004 (test
+      independence) or tst-012 (fixture scope). It is the CORRECT pattern for
+      projects where production singletons cache paths at import time, making
+      fixture-level redirection too late. The skill should recognize this as
+      intentional and compliment the isolation approach in the report.
+    severity: informational
+    category: isolation
+    discovered: 2026-05-29
+    context: Dream Studio conftest.py pre-seeded pattern
+    fix: "Recognize and document as positive. Do NOT flag as shared state or fixture-scope violation."
+
+  - id: tst-gotcha-002
+    title: tst-003 grep hits on datetime.now() in test helpers are often benign
+    description: >
+      A test helper that creates a record with datetime.now() as a timestamp and
+      never asserts that the timestamp equals a specific value is NOT a flakiness
+      risk. tst-003's static pass flags the PATTERN; the LLM confirms whether
+      the non-deterministic value reaches an assertion. Do not report as critical
+      without LLM confirmation.
+    severity: medium
+    category: determinism
+    discovered: 2026-05-29
+    context: Pre-flight analysis identified 10+ test files with time/random patterns
+    fix: "Static pass severity: high (candidate). LLM confirmation required to escalate to critical. See Adjustment 4 in the approved design."
+
+  - id: tst-gotcha-003
+    title: fail_under=8% in Dream Studio is intentional (CI gate, not actual coverage)
+    description: >
+      Dream Studio's coverage.py is configured with fail_under=8%, which is far
+      below actual coverage. This is a deliberate CI gate choice — the threshold
+      prevents accidental zero-coverage merges but does not enforce meaningful
+      coverage. tst-010 should flag the gap between enforcement (8%) and actual
+      coverage as a high severity finding ("enforcement floor permits large regressions"),
+      not fail with "coverage is too low." The actual coverage % is a separate
+      informational finding.
+    severity: high
+    category: coverage
+    discovered: 2026-05-29
+    context: Dream Studio pyproject.toml [tool.coverage.report] fail_under = 8
+    fix: "Report: enforcement gap = (actual% - 8%). High severity when gap > 22 points. Actual coverage is informational only."
+
+# Template for when real gotchas are added:
+# - id: tst-gotcha-NNN
+#   title: <short title>
+#   description: <what went wrong>
+#   severity: high | medium | low | informational
+#   category: coverage | determinism | isolation | structure | naming | mocking | ci
+#   discovered: <YYYY-MM-DD>
+#   context: <which rule triggered it, what codebase>
+#   fix: <what the right behavior is>

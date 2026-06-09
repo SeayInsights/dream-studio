@@ -1,0 +1,857 @@
+# Database Compliance Rules — Phase 1
+# Version: 1.0.0
+# Schema version: 1
+#
+# Phase 1 scope: 12 rules (dbc-001–012)
+#   Rules dbc-001–011: GDPR default (fire when 'gdpr' in compliance_frameworks)
+#   Rule dbc-012: HIPAA-only (fires ONLY when 'hipaa' in compliance_frameworks)
+#
+# DEFERRED RULES — owned by existing skills; documented to prevent duplication:
+#
+#   Encryption at rest:
+#     → sec-009 (security skill): "Encryption at rest: database, backups, object storage"
+#     sec-009 already covers whether data is encrypted. dbc does not add a second check.
+#
+#   PII in runtime output (logs, error responses, cache keys):
+#     → sec-013 (security skill): "No PII in logs, URLs, or error messages"
+#
+#   PII in log call sites:
+#     → ops-003 (ops skill): "PII in log statements — personally identifiable data in logs"
+#     Two skills already cover PII in output. A third would produce duplicate findings.
+#
+#   Backup strategy (scheduled, restore-tested, RTO/RPO):
+#     → db-016, db-017, db-018 (database skill): full backup triad
+#     db skill owns backup operations entirely.
+#
+# CROSS-REFERENCES (dual-angle, not duplicates):
+#   dbc-001 ↔ db-020: db-020 catches PII in structurally wrong columns (schema design angle);
+#     dbc-001 checks whether PII columns have regulatory classification annotations (compliance angle).
+#     Both can fire on the same table for different reasons.
+#
+#   dbc-007 ↔ db-002: db-002 flags any FK missing ON DELETE behavior (schema quality angle);
+#     dbc-007 narrows to PII tables under GDPR right-to-erasure (regulatory angle).
+#     db-002 fires broadly; dbc-007 fires specifically on PII FK references.
+#
+# AUTO-SKIP: When has_pii_schema=False, all rules skip and return empty result.
+# This is correct behavior for operational codebases without personal data.
+#
+# REGULATION TAGS:
+#   regulations: [gdpr] — fires when 'gdpr' in config.compliance_frameworks (default)
+#   regulations: [hipaa] — fires ONLY when 'hipaa' in config.compliance_frameworks
+#   regulations: [gdpr, ccpa] — fires when either framework is active
+
+rules:
+
+  # ─── Category 1: PII Classification ───────────────────────────────────────
+
+  - id: "dbc-001"
+    name: "PII column without classification annotation"
+    severity: high
+    category: pii_classification
+    regulations: [gdpr, ccpa, hipaa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Scans database schema definitions (migration SQL, ORM models) for PII-suggestive column names without classification comments."
+
+    source:
+      list: "GDPR Article 5(1)(b)"
+      section: "Purpose Limitation"
+      item: "Personal data must be collected for specified, explicit, and legitimate purposes — classification enables this"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Scan migration SQL files and ORM model definitions for columns with PII-suggestive names:
+            email, phone, phone_number, mobile, name, full_name, first_name, last_name,
+            ssn, social_security, dob, date_of_birth, address, street, city, zip, postcode,
+            ip_address, user_ip, credit_card, card_number, cvv, passport, national_id,
+            medical_record, health_info, biometric
+
+          Check for classification annotation (SQL comment on the column):
+          COMPLIANT: email TEXT, -- PII: identifier — GDPR Art.4(1) — retention: user-lifetime
+          VIOLATION: email TEXT  (no comment, no annotation)
+
+          Also check: Python SQLAlchemy Column() with Column.comment, TypeScript with JSDoc
+          above the field, Prisma with @@comment or field-level comment.
+
+          Flag as CANDIDATE if column name matches PII signal AND no classification comment found.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-001.
+
+          Rule: dbc-001 — PII column without classification annotation
+          Severity: high
+
+          Schema excerpt (migration SQL or ORM model):
+          {static_finding_excerpt}
+
+          File: {file_path}
+          Table: {table_name}
+          Column: {column_name}
+
+          Does this PII column have adequate classification?
+
+          ADEQUATE (do NOT flag):
+          - SQL comment on the column line stating: data category, legal basis, retention period
+          - ORM field with .comment or docstring describing PII category
+          - Separate data mapping document referenced in the column comment
+
+          INADEQUATE (flag as high):
+          - No comment at all on a clearly PII-suggestive column
+          - Generic comment ("user info") that doesn't classify the data
+          - Classification exists but missing legal basis or retention period
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 400
+
+    triggers:
+      - "PII-named column with no classification annotation in schema"
+
+    suppressions:
+      - "-- dbc-001: ignore"
+      - "# dbc-001: ignore"
+      - "// dbc-001: ignore"
+
+    remediation: |
+      Add classification annotation to each PII column:
+      SQL: email TEXT, -- PII: identifier — GDPR Art.4(1) — retention: user-lifetime
+      SQLAlchemy: Column(String, comment="PII: identifier — GDPR Art.4(1)")
+      Prisma: email String /// PII: identifier — GDPR Art.4(1) — retention: user-lifetime
+
+    cross_references:
+      - rule_id: "db-020"
+        skill: "database"
+        relationship: "dual_angle"
+        note: "db-020 flags PII data placed in structurally wrong non-PII columns (schema design). dbc-001 checks whether PII columns carry regulatory classification annotations (compliance). Different checks — both can fire on the same table."
+        surface_co_located: true
+
+    action: "report"
+
+  - id: "dbc-002"
+    name: "Special category data without explicit consent or legal basis"
+    severity: critical
+    category: pii_classification
+    regulations: [gdpr, hipaa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".tsx", ".js", ".go", ".rs"]
+      note: "LLM-only. Identifies GDPR Art. 9 special categories (health, biometric, racial origin, political, religious, sexual orientation) or HIPAA PHI without explicit legal basis."
+
+    source:
+      list: "GDPR Article 9"
+      section: "Processing of special categories of personal data"
+      item: "Processing special category data requires explicit consent or another Article 9(2) condition"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-002.
+
+          Rule: dbc-002 — Special category data without explicit consent or legal basis
+          Severity: critical
+
+          File: {file_path}
+          Schema or data model excerpt:
+          {file_excerpt}
+
+          Does this schema handle GDPR Art. 9 special categories or HIPAA PHI without documented legal basis?
+
+          SPECIAL CATEGORY DATA (GDPR Art. 9):
+          health_condition, medical_record, diagnosis, medication, mental_health
+          biometric_data, fingerprint, face_scan, retina_scan
+          racial_origin, ethnic_origin
+          political_opinion, religious_belief, philosophical_belief
+          sexual_orientation, sexual_life
+          trade_union_membership, criminal_record
+
+          HIPAA PHI (if HIPAA framework active):
+          Any of the 18 PHI identifiers: name, address, dates, phone, fax, email,
+          SSN, medical_record_number, health_plan_beneficiary, account_number,
+          certificate/license number, vehicle identifiers, device identifiers,
+          web URLs, IP address, biometric identifiers, full-face photo, any unique identifier
+
+          ADEQUATE (do NOT flag):
+          - Column comment explicitly references Art. 9(2) condition: explicit consent, vital interests, etc.
+          - Consent tracking table referenced for this data category
+          - Data is in an anonymized/pseudonymized form (not re-identifiable)
+
+          INADEQUATE (flag as critical):
+          - Special category column with no legal basis documented
+          - PHI column (HIPAA active) without explicit consent/authorization reference
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "data_category": "health|biometric|racial|political|religious|sexual|phi",
+            "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 600
+
+    triggers:
+      - "Special category data column without Art. 9(2) legal basis documented"
+      - "HIPAA PHI column without consent/authorization reference (HIPAA mode)"
+
+    suppressions:
+      - "-- dbc-002: ignore"
+      - "# dbc-002: ignore"
+
+    remediation: |
+      Document the Art. 9(2) legal basis in the schema:
+      -- health_condition TEXT, -- SPECIAL CATEGORY (Art. 9) — basis: explicit consent (Art. 9(2)(a))
+      Add a consent record for this data category to your consents table.
+
+    action: "report"
+
+  - id: "dbc-003"
+    name: "PII mixed into non-PII tables without isolation"
+    severity: medium
+    category: pii_classification
+    regulations: [gdpr, ccpa, hipaa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "LLM-only. Judges whether PII is isolated in dedicated tables vs scattered across operational/analytics tables."
+
+    source:
+      list: "GDPR Article 25"
+      section: "Data Protection by Design and by Default"
+      item: "Personal data should be isolated to minimize exposure surface"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-003.
+
+          Rule: dbc-003 — PII mixed into non-PII tables without isolation
+          Severity: medium
+
+          File: {file_path}
+          Schema excerpt:
+          {file_excerpt}
+
+          Is PII mixed into non-PII tables unnecessarily?
+
+          VIOLATION (flag as medium):
+          - Analytics/metrics/event tables that include user email or phone for debugging
+          - Audit logs that store full name or DOB when an opaque ID would suffice
+          - Session/cache tables with email or IP stored redundantly when a FK to users would work
+          - Operational tables (orders, logs) that denormalize PII instead of referencing a user_id FK
+
+          NOT a violation:
+          - Dedicated PII table (users, contacts, guests) — this IS the PII home
+          - Operational table with a FK to the PII table (references, not stores)
+          - Anonymized/pseudonymized identifier (uuid, hash) — not PII
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the PII mixed into a non-PII table"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "PII fields denormalized into non-PII tables instead of FK reference"
+
+    suppressions:
+      - "-- dbc-003: ignore"
+      - "# dbc-003: ignore"
+
+    remediation: |
+      Normalize PII into a dedicated table. Reference it via FK (user_id, contact_id).
+      Remove PII fields from operational/analytics/event tables; join at query time.
+
+    action: "report"
+
+  # ─── Category 2: Retention Enforcement ────────────────────────────────────
+
+  - id: "dbc-004"
+    name: "No data retention policy defined for PII tables"
+    severity: high
+    category: retention
+    regulations: [gdpr, ccpa, hipaa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs", ".md"]
+      note: "LLM + schema. Checks that each PII table has a documented retention period (schema comment, privacy policy reference, or code annotation)."
+
+    source:
+      list: "GDPR Article 5(1)(e)"
+      section: "Storage Limitation"
+      item: "Personal data shall be kept for no longer than necessary for the purposes for which it is processed"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-004.
+
+          Rule: dbc-004 — No retention policy for PII table
+          Severity: high
+
+          File: {file_path}
+          PII table definition:
+          {file_excerpt}
+
+          Does this PII table have a documented retention period?
+
+          RETENTION DOCUMENTED (do NOT flag):
+          - SQL table comment stating retention period: CREATE TABLE guests (...) -- retention: 2 years
+          - Column created_at with explicit reference to when records are purged
+          - Privacy policy document referenced in schema: -- see docs/privacy-policy.md#guest-retention
+          - Application code with documented retention: GUEST_RETENTION_DAYS = 730 # GDPR Art.5(1)(e)
+
+          NO RETENTION (flag as high):
+          - PII table with no mention of retention anywhere in schema, code, or docs
+          - Table has created_at but no evidence of cleanup policy
+          - Records accumulate indefinitely with no purge mechanism or policy
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 450
+
+    triggers:
+      - "PII table with no documented retention period or purge policy"
+
+    suppressions:
+      - "-- dbc-004: ignore"
+      - "# dbc-004: ignore"
+
+    remediation: |
+      Document retention period for each PII table:
+      SQL: CREATE TABLE guests (...); -- retention: 2 years from last activity — GDPR Art.5(1)(e)
+      Code: GUEST_RETENTION_DAYS = 730  # GDPR storage limitation — purge via scheduled job
+
+    action: "report"
+
+  - id: "dbc-005"
+    name: "No automated purge mechanism for time-limited PII data"
+    severity: high
+    category: retention
+    regulations: [gdpr, ccpa, hipaa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".py", ".ts", ".js", ".go", ".rs", ".sql", ".yaml", ".yml"]
+      note: "Code pattern + LLM. Scans for scheduled jobs, DELETE + datetime patterns, TTL indexes that enforce PII retention limits."
+
+    source:
+      list: "GDPR Article 5(1)(e)"
+      section: "Storage Limitation"
+      item: "Personal data shall be erased when no longer necessary — automated enforcement required"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Scan for retention enforcement patterns:
+            Python: DELETE FROM {pii_table} WHERE created_at < datetime('now', '-N days/months/years')
+                    @celery.task / @dramatiq.actor with delete/purge/cleanup in task name
+                    GUEST_RETENTION_DAYS + any delete referencing that constant
+            TypeScript/JS: .deleteMany({ createdAt: { lt: cutoff } }) with PII table name
+                          cron job or setInterval with delete logic
+            SQL: scheduled DELETE statements, TTL triggers
+            Go: time.After / time.Tick + db.Exec DELETE with PII table
+            MongoDB: TTL index on PII collection (expireAfterSeconds)
+
+          Flag as CANDIDATE if PII table exists (from dbc-001 findings) but no purge
+          pattern referencing that table is found anywhere in the codebase.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-005.
+
+          Rule: dbc-005 — No automated purge mechanism for PII data
+          Severity: high
+
+          PII tables detected: {pii_tables}
+          Candidate purge code:
+          {file_excerpt}
+
+          Does this codebase have an automated purge mechanism for the PII tables?
+
+          PURGE PRESENT (do NOT flag):
+          - Scheduled job (cron, celery, cloud scheduler) that deletes records older than N days/months
+          - TTL index in MongoDB on the PII collection
+          - Database trigger that archives/deletes after retention period
+          - Clearly documented manual process with regular cadence (acceptable if well-documented)
+
+          NO PURGE (flag as high):
+          - PII table exists but no delete/purge/cleanup job references it
+          - delete() calls exist but only for user-initiated deletion (not time-based)
+          - Retention constant exists but is never used in any delete operation
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: directory
+        estimated_tokens: 500
+
+    triggers:
+      - "PII table with no scheduled purge or TTL enforcement"
+
+    suppressions:
+      - "# dbc-005: ignore"
+      - "// dbc-005: ignore"
+
+    remediation: |
+      Implement automated purge:
+      Python/celery: @app.task(name='purge_expired_contacts')
+                     def purge(): db.execute("DELETE FROM contacts WHERE created_at < ?", [cutoff])
+      SQLite: DELETE FROM guests WHERE created_at < datetime('now', '-2 years')
+      PostgreSQL: pg_cron or Cloud Scheduler + DELETE query
+      MongoDB: db.contacts.createIndex({ created_at: 1 }, { expireAfterSeconds: 63072000 })
+
+    action: "report"
+
+  # ─── Category 3: Right to Erasure / Deletion ──────────────────────────────
+
+  - id: "dbc-006"
+    name: "No user data deletion endpoint — right to erasure not implemented"
+    severity: high
+    category: right_to_erasure
+    regulations: [gdpr, ccpa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["is_service=False"]
+      note: "Static route scan + LLM. Checks HTTP API for a user data deletion endpoint."
+
+    source:
+      list: "GDPR Article 17"
+      section: "Right to Erasure ('Right to be Forgotten')"
+      item: "Data subjects have the right to request erasure of their personal data"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan all HTTP route files for DELETE method endpoints matching:
+            /user/delete, /user/:id (DELETE method), /users/:id (DELETE method)
+            /account/delete, /account/close, /account/terminate
+            /me/delete, /profile/delete
+            /guest/:id (DELETE method), /contact/:id (DELETE method)
+            /gdpr/delete, /privacy/delete, /data/delete
+            /api/v*/users/:id (DELETE)
+
+          Also accept: POST /user/deletion-request, POST /account/close
+          (DSAR deletion requests may be asynchronous)
+
+          Flag as FIRE if no deletion endpoint found in any route file AND PII tables confirmed.
+          Flag as PASS if deletion endpoint found (regardless of implementation quality).
+
+          Note: implementation quality (does it actually delete all data?) is dbc-007's concern.
+        fallback_to_llm: false
+
+    triggers:
+      - "No user/account deletion endpoint found in service routing"
+
+    suppressions:
+      - "# dbc-006: ignore"
+      - "// dbc-006: ignore"
+
+    remediation: |
+      Implement a deletion endpoint:
+      FastAPI: @router.delete("/users/{user_id}") async def delete_user(user_id: str, ...)
+      Express: router.delete('/users/:id', auth, async (req, res) => ...)
+      Ensure the endpoint deletes ALL PII associated with the user, not just the user record.
+
+    action: "report"
+
+  - id: "dbc-007"
+    name: "Deletion not cascaded — orphaned PII may remain after user deletion"
+    severity: high
+    category: right_to_erasure
+    regulations: [gdpr, ccpa, hipaa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: |
+        Schema rule. Checks FK references FROM non-PII tables TO PII tables for ON DELETE CASCADE.
+        Cross-reference with db-002 (general FK ON DELETE hygiene — different scope).
+
+    source:
+      list: "GDPR Article 17"
+      section: "Right to Erasure"
+      item: "Erasure must cascade to all personal data including data in related tables"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          1. Build PII table map from dbc-001 scan (tables with PII-suggestive columns).
+          2. Scan migration SQL for FK references TO those PII tables:
+             REFERENCES users(id), REFERENCES guests(id), REFERENCES contacts(id)
+          3. Check for ON DELETE CASCADE on each FK.
+
+          Flag as FIRE if FK references a PII table without ON DELETE CASCADE.
+          Note: application-level cascade (code that manually deletes related records) is acceptable
+          but harder to detect statically. Flag as CANDIDATE for LLM confirmation when FK lacks
+          ON DELETE CASCADE but there may be application-level handling.
+        fallback_to_llm: false
+
+    triggers:
+      - "FK references PII table without ON DELETE CASCADE"
+
+    suppressions:
+      - "-- dbc-007: ignore"
+      - "# dbc-007: ignore"
+
+    remediation: |
+      Add ON DELETE CASCADE to FK references to PII tables:
+      guest_id TEXT REFERENCES guests(id) ON DELETE CASCADE
+
+      If application-level cascade is used instead, document it:
+      guest_id TEXT REFERENCES guests(id), -- cascade handled in application layer: GuestService.delete()
+
+    cross_references:
+      - rule_id: "db-002"
+        skill: "database"
+        relationship: "dual_angle"
+        note: "db-002 flags any FK missing ON DELETE behavior (schema quality). dbc-007 narrows to FKs referencing PII tables under right-to-erasure (compliance). db-002 fires broadly on all FKs; dbc-007 fires only on PII table references."
+        surface_co_located: false
+
+    action: "report"
+
+  # ─── Category 4: Right to Access / Data Portability ───────────────────────
+
+  - id: "dbc-008"
+    name: "No data export endpoint for DSAR compliance"
+    severity: medium
+    category: right_to_access
+    regulations: [gdpr, ccpa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["is_service=False"]
+      note: "Static route scan. Checks for a data export/portability endpoint."
+
+    source:
+      list: "GDPR Article 15 / Article 20"
+      section: "Right of access / Right to data portability"
+      item: "Data subjects have the right to obtain their personal data in a structured, machine-readable format"
+
+    detection:
+      type: static
+      static:
+        tool: null
+        notes: |
+          Scan route files for data export patterns:
+            /user/export, /user/data, /user/download
+            /account/data, /account/export
+            /me/data, /me/export
+            /gdpr/export, /gdpr/data, /privacy/data
+            /api/v*/users/:id/data, /api/v*/users/:id/export
+            POST /data-subject-request, POST /dsar
+
+          Flag as FIRE if no export endpoint found AND PII tables confirmed.
+        fallback_to_llm: false
+
+    triggers:
+      - "No data export/portability endpoint found in service routing"
+
+    suppressions:
+      - "# dbc-008: ignore"
+      - "// dbc-008: ignore"
+
+    remediation: |
+      Implement a data export endpoint:
+      FastAPI: @router.get("/users/{user_id}/data") async def export_user_data(...)
+      Express: router.get('/users/:id/data', auth, async (req, res) => ...)
+      Response should include ALL personal data associated with the user in JSON or CSV format.
+
+    action: "report"
+
+  # ─── Category 5: Consent Tracking ─────────────────────────────────────────
+
+  - id: "dbc-009"
+    name: "No consent record for PII collection"
+    severity: high
+    category: consent
+    regulations: [gdpr, ccpa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "Schema + LLM. Scans for presence of consent table or consent columns on PII tables."
+
+    source:
+      list: "GDPR Article 6 / Article 7"
+      section: "Lawfulness of processing / Conditions for consent"
+      item: "Where consent is the legal basis, it must be recorded with what was agreed to and when"
+
+    detection:
+      type: hybrid
+      static:
+        tool: null
+        notes: |
+          Check for consent mechanism in schema:
+          1. Dedicated consent table: consent, consents, user_consents, data_processing_consents
+          2. Consent columns on PII table: consent_given, consent_at, consent_version, gdpr_consent
+          3. Consent reference: FK from PII table to a consents table
+
+          Flag as CANDIDATE if PII tables exist with no consent table or consent columns found.
+        fallback_to_llm: true
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-009.
+
+          Rule: dbc-009 — No consent record for PII collection
+          Severity: high
+
+          PII tables detected: {pii_tables}
+          Schema files:
+          {file_excerpt}
+
+          Does this schema record consent for PII collection?
+
+          CONSENT RECORDED (do NOT flag):
+          - Dedicated consents table with: guest_id FK, purpose, granted_at, revoked_at, version
+          - Consent columns on PII table: consent_given BOOLEAN, consent_at TIMESTAMP, consent_version TEXT
+          - FK from PII table to a consent_records table
+          - Legal basis other than consent documented (legitimate interest, contract, legal obligation)
+
+          NO CONSENT (flag as high):
+          - PII table collects email/phone/name with no consent columns or consent table
+          - No reference to legal basis for processing in schema or code
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "PII table with no consent record or documented legal basis"
+
+    suppressions:
+      - "-- dbc-009: ignore"
+      - "# dbc-009: ignore"
+
+    remediation: |
+      Add consent tracking:
+      CREATE TABLE consents (
+        id TEXT PRIMARY KEY,
+        guest_id TEXT REFERENCES guests(id) ON DELETE CASCADE,
+        purpose TEXT,          -- 'rsvp_tracking', 'marketing', etc.
+        granted_at TEXT,
+        revoked_at TEXT,       -- NULL = still active
+        version TEXT           -- consent text version
+      );
+
+    action: "report"
+
+  - id: "dbc-010"
+    name: "Consent withdrawal not supported"
+    severity: high
+    category: consent
+    regulations: [gdpr, ccpa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust]
+      file_types: [".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs"]
+      skip_on: ["is_service=False"]
+      note: "LLM route scan. Checks for consent withdrawal mechanism."
+
+    source:
+      list: "GDPR Article 7(3)"
+      section: "Withdrawal of consent"
+      item: "The data subject shall have the right to withdraw consent at any time. Withdrawal shall be as easy as giving consent."
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-010.
+
+          Rule: dbc-010 — Consent withdrawal not supported
+          Severity: high
+
+          File: {file_path}
+          Route handlers and schema:
+          {file_excerpt}
+
+          Is there a consent withdrawal mechanism?
+
+          WITHDRAWAL PRESENT (do NOT flag):
+          - DELETE or PATCH endpoint for consents: /consents/:id, /consent/withdraw, /me/consent
+          - revoked_at column in consent schema that can be set via API
+          - Unsubscribe/opt-out endpoint that clears consent for a specific purpose
+          - Account deletion endpoint that implies consent withdrawal
+
+          NO WITHDRAWAL (flag as high):
+          - Consent records exist but no mechanism to update or delete them
+          - No endpoint to withdraw consent for a specific purpose
+          - Consent can only be set, not cleared
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...", "explanation": "one sentence"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "No consent withdrawal endpoint or mechanism found"
+
+    suppressions:
+      - "# dbc-010: ignore"
+      - "// dbc-010: ignore"
+
+    remediation: |
+      Implement consent withdrawal:
+      FastAPI: @router.delete("/consents/{consent_id}") async def withdraw_consent(...)
+      Or: @router.patch("/me/consent") with body { purpose: "marketing", revoked: true }
+      Ensure withdrawal is as easy as giving consent (GDPR Art. 7(3)).
+
+    action: "report"
+
+  # ─── Category 6: Data Minimization ────────────────────────────────────────
+
+  - id: "dbc-011"
+    name: "Collecting more PII than necessary for stated purpose"
+    severity: medium
+    category: data_minimization
+    regulations: [gdpr, ccpa, hipaa, coppa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs"]
+      note: "LLM-only. Judges whether the PII collected is proportionate to the service's purpose."
+
+    source:
+      list: "GDPR Article 5(1)(c)"
+      section: "Data Minimisation"
+      item: "Personal data shall be adequate, relevant, and limited to what is necessary in relation to the purposes"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a data compliance auditor checking rule dbc-011.
+
+          Rule: dbc-011 — Collecting more PII than necessary
+          Severity: medium
+
+          File: {file_path}
+          PII schema and service context:
+          {file_excerpt}
+
+          Is the PII collected proportionate to the stated service purpose?
+
+          PROPORTIONATE (do NOT flag):
+          - Wedding RSVP service collecting: name, email, dietary restrictions — all needed for event management
+          - E-commerce collecting: name, address, email, payment info — all needed for orders/delivery
+          - Healthcare app collecting: medical history, conditions, medications — needed for care
+          - Analytics collecting: anonymized/aggregated data only
+
+          DISPROPORTIONATE (flag as medium):
+          - Wedding RSVP collecting: name, email, phone, DOB, national ID, income — only name+email needed
+          - Newsletter subscription collecting: full address and phone when only email needed
+          - Simple contact form collecting: SSN, DOB, credit score — grossly unnecessary
+          - Any special category data (health, biometric) collected "for future features"
+
+          Focus only on what is clearly disproportionate — give reasonable benefit of the doubt.
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the disproportionate fields"}
+        context_scope: file
+        estimated_tokens: 600
+
+    triggers:
+      - "PII collection appears disproportionate to service purpose"
+
+    suppressions:
+      - "-- dbc-011: ignore"
+      - "# dbc-011: ignore"
+
+    remediation: |
+      Remove PII fields not necessary for the service's core purpose.
+      If optional fields are collected, make them explicitly opt-in with clear purpose.
+      Apply GDPR Art. 5(1)(c): "adequate, relevant and limited to what is necessary."
+
+    action: "report"
+
+  # ─── Category 7: HIPAA-Specific (opt-in only) ─────────────────────────────
+
+  - id: "dbc-012"
+    name: "No Business Associate Agreement reference for PHI data processing"
+    severity: high
+    category: hipaa_specific
+    regulations: [hipaa]
+
+    applies_to:
+      languages: [python, typescript, javascript, go, rust, sql]
+      file_types: [".sql", ".py", ".ts", ".js", ".go", ".rs", ".md"]
+      note: |
+        HIPAA-ONLY rule. Fires ONLY when 'hipaa' is in config.compliance_frameworks.
+        Checks that PHI data processing references a Business Associate Agreement (BAA).
+        This rule does NOT fire under GDPR-only configuration.
+
+    source:
+      list: "HIPAA 45 CFR 164.308(b)"
+      section: "Business Associate Contracts"
+      item: "Covered entities must have BAAs with business associates who handle PHI"
+
+    detection:
+      type: llm_only
+      llm:
+        prompt_template: |
+          You are a HIPAA compliance auditor checking rule dbc-012.
+
+          Rule: dbc-012 — No BAA reference for PHI data processing
+          Severity: high
+          Regulation: HIPAA (this rule only fires when HIPAA framework is active)
+
+          File: {file_path}
+          PHI data handling code or documentation:
+          {file_excerpt}
+
+          Is there a BAA (Business Associate Agreement) reference for this PHI processing?
+
+          BAA REFERENCED (do NOT flag):
+          - Comment or docstring referencing a BAA: "# HIPAA BAA: see docs/legal/baa-aws.md"
+          - docs/legal/ directory with BAA documentation
+          - README or privacy policy referencing BAA with cloud providers (AWS, GCP, Azure HIPAA)
+          - Code configuration referencing HIPAA-compliant service: S3_BUCKET_HIPAA_BAA_SIGNED = True
+
+          NO BAA (flag as high):
+          - PHI data sent to third-party services (email, storage, analytics) without BAA reference
+          - Cloud storage or database hosting PHI with no HIPAA BAA documented
+          - PHI processed by a service that has not disclosed HIPAA-compliant hosting
+
+          Only flag when there is clear evidence of PHI being handled without BAA documentation.
+
+          Return JSON: {"finding": bool, "confidence": 0.0-1.0,
+            "location": "filename:line", "excerpt": "...",
+            "explanation": "one sentence naming the BAA gap"}
+        context_scope: file
+        estimated_tokens: 500
+
+    triggers:
+      - "PHI data processing without Business Associate Agreement reference"
+
+    suppressions:
+      - "# dbc-012: ignore"
+      - "// dbc-012: ignore"
+
+    remediation: |
+      Document BAA coverage for all third-party services handling PHI:
+      1. Obtain BAA from all cloud providers and third-party services that process PHI
+      2. Reference BAA in code/docs: # HIPAA BAA signed with AWS — see docs/legal/aws-baa.md
+      3. Ensure only HIPAA-compliant service configurations are used for PHI storage/processing
+
+    action: "report"
