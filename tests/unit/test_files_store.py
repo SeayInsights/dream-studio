@@ -63,7 +63,9 @@ class TestWriteFile:
     def test_version_increments_per_name_and_project(self, db):
         write_file("handoff.md", b"v1", "text/markdown", "handoff", project_id="p1", db_path=db)
         write_file("handoff.md", b"v2", "text/markdown", "handoff", project_id="p1", db_path=db)
-        fid3 = write_file("handoff.md", b"v3", "text/markdown", "handoff", project_id="p1", db_path=db)
+        fid3 = write_file(
+            "handoff.md", b"v3", "text/markdown", "handoff", project_id="p1", db_path=db
+        )
         row = read_file(fid3, db_path=db)
         assert row["version"] == 3
 

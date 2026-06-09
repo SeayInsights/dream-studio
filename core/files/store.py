@@ -100,7 +100,9 @@ def write_file(
     A new version is created for every call with the same (name, project_id).
     """
     if category not in _VALID_CATEGORIES:
-        raise ValueError(f"Invalid category {category!r}. Must be one of: {sorted(_VALID_CATEGORIES)}")
+        raise ValueError(
+            f"Invalid category {category!r}. Must be one of: {sorted(_VALID_CATEGORIES)}"
+        )
 
     file_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
@@ -168,7 +170,9 @@ def list_files(
     Returns the latest version of each (name, project_id) pair first, ordered by created_at desc.
     """
     if category is not None and category not in _VALID_CATEGORIES:
-        raise ValueError(f"Invalid category {category!r}. Must be one of: {sorted(_VALID_CATEGORIES)}")
+        raise ValueError(
+            f"Invalid category {category!r}. Must be one of: {sorted(_VALID_CATEGORIES)}"
+        )
 
     conn = connect_files(db_path)
     try:
