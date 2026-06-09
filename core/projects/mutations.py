@@ -527,3 +527,101 @@ def register_project(
         "created_at": now,
         "marker_written": marker_written,
     }
+
+
+def set_project_vision(project_id: str, vision_statement: str) -> dict:
+    """Persist intended vision onto the business_projects entity (AD-10).
+
+    Stores vision directly on the project row — not in prd_* tables (retired).
+    Emits a project.vision_set canonical event for audit trail.
+
+    Returns {"ok": True} on success, {"ok": False, "error": ...} on failure.
+    """
+    from core.event_store.studio_db import _connect
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        with _connect() as conn:
+            rows = conn.execute(
+                "UPDATE business_projects SET vision_statement = ?, updated_at = ? WHERE project_id = ?",
+                (vision_statement.strip(), now, project_id),
+            ).rowcount
+            conn.commit()
+
+        if rows == 0:
+            return {"ok": False, "error": f"project not found: {project_id}"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.vision_set",
+                session_id=None,
+                payload={"vision_statement": vision_statement},
+                timestamp=now,
+                severity="info",
+                trace={"domain": "sdlc", "project_id": project_id},
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "project_id": project_id}
+
+
+def defer_project_audit(
+    project_id: str,
+    audit_type: str = "security",
+    *,
+    notes: str | None = None,
+) -> dict:
+    """Record a deferred readiness audit for a project in pending_audits.
+
+    Called after bulk registration when the user opts to defer audits.
+    Emits readiness_audit.deferred on business_canonical_events (AD-6).
+
+    Returns {"ok": True, "audit_id": UUID} or {"ok": False, "error": ...}.
+    """
+    import uuid as _uuid
+
+    from core.event_store.studio_db import _connect
+
+    audit_id = str(_uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        with _connect() as conn:
+            conn.execute(
+                "INSERT INTO pending_audits"
+                " (audit_id, project_id, audit_type, status, created_at, updated_at, notes)"
+                " VALUES (?, ?, ?, 'deferred', ?, ?, ?)",
+                (audit_id, project_id, audit_type, now, now, notes),
+            )
+            conn.commit()
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="readiness_audit.deferred",
+                session_id=None,
+                payload={"audit_id": audit_id, "audit_type": audit_type},
+                timestamp=now,
+                severity="info",
+                trace={"domain": "sdlc", "project_id": project_id},
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "audit_id": audit_id, "project_id": project_id, "audit_type": audit_type}
