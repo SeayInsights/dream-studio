@@ -1012,7 +1012,17 @@ def _project_surface_availability(conn) -> dict[str, bool]:
 
 
 def _project_row_for_authority(conn: sqlite3.Connection, project_id: str) -> dict[str, Any] | None:
-    # reg_projects deleted in migration 084; use business_projects
+    # Try DuckDB analytics store first (faster read model); fall back to SQLite authority.
+    try:
+        from core.analytics.duckdb_read import get_project_row_duckdb
+
+        duck_row = get_project_row_duckdb(project_id)
+        if duck_row is not None:
+            return duck_row
+    except Exception:
+        pass
+
+    # SQLite fallback — reg_projects deleted in migration 084; use business_projects
     if not object_exists(conn, "business_projects"):
         return None
     row = conn.execute(

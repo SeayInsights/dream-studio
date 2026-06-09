@@ -59,6 +59,20 @@ from core.config.database import get_connection
 
 def verify_project_exists(project_id: str) -> None:
     """Verify project exists, raise 404 if not"""
+    # Try DuckDB read model first; fall back to SQLite authority.
+    try:
+        from core.analytics.duckdb_read import project_exists_duckdb
+
+        duck_result = project_exists_duckdb(project_id)
+        if duck_result is True:
+            return
+        if duck_result is False:
+            raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
