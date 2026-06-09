@@ -1,4 +1,4 @@
-"""Tests for DuckDB milestone and project projections (WO-TS3 tasks 2)."""
+"""Tests for DuckDB milestone, project, work order, task, and design brief projections (WO-TS3)."""
 
 from __future__ import annotations
 
@@ -211,3 +211,105 @@ class TestTaskProjection:
         row = conn.execute("SELECT status FROM duckdb_tasks WHERE task_id='t-2'").fetchone()
         conn.close()
         assert row[0] == "deleted"
+
+
+class TestDesignBriefProjection:
+    def test_created(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.created",
+                event_id="e1",
+                brief_id="br-1",
+                project_id="proj-1",
+                payload={"purpose": "Sell widgets", "audience": "Consumers"},
+            ),
+            conn,
+        )
+        row = conn.execute(
+            "SELECT status, purpose, audience FROM duckdb_design_briefs WHERE brief_id='br-1'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "draft"
+        assert row[1] == "Sell widgets"
+        assert row[2] == "Consumers"
+
+    def test_updated_allowed_field(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.created",
+                event_id="e1",
+                brief_id="br-2",
+                project_id="proj-1",
+                payload={"purpose": "Original"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.updated",
+                event_id="e2",
+                brief_id="br-2",
+                payload={"field": "tone", "value": "Professional"},
+            ),
+            conn,
+        )
+        row = conn.execute("SELECT tone FROM duckdb_design_briefs WHERE brief_id='br-2'").fetchone()
+        conn.close()
+        assert row[0] == "Professional"
+
+    def test_updated_disallowed_field_is_noop(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.created",
+                event_id="e1",
+                brief_id="br-3",
+                project_id="proj-1",
+                payload={"purpose": "Stay"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.updated",
+                event_id="e2",
+                brief_id="br-3",
+                payload={"field": "status", "value": "hacked"},
+            ),
+            conn,
+        )
+        row = conn.execute(
+            "SELECT status FROM duckdb_design_briefs WHERE brief_id='br-3'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "draft"
+
+    def test_locked(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "design_brief.created",
+                event_id="e1",
+                brief_id="br-4",
+                project_id="proj-1",
+                payload={},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(
+            _evt("design_brief.locked", event_id="e2", brief_id="br-4"),
+            conn,
+        )
+        row = conn.execute(
+            "SELECT status FROM duckdb_design_briefs WHERE brief_id='br-4'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "locked"
+
+    def test_no_brief_id_returns_zero(self, tmp_path):
+        conn = _db(tmp_path)
+        result = dispatch_to_duckdb(_evt("design_brief.created", event_id="e1"), conn)
+        conn.close()
+        assert result == 0
