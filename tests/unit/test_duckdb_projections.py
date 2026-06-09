@@ -126,3 +126,88 @@ class TestProjectProjection:
         result = dispatch_to_duckdb(_evt("unknown.x"), conn)
         conn.close()
         assert result == 0
+
+
+class TestWorkOrderProjection:
+    def test_created_and_closed(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "work_order.created",
+                event_id="e1",
+                work_order_id="wo-1",
+                project_id="p",
+                milestone_id="ms",
+                payload={"title": "Do X", "work_order_type": "infrastructure"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(
+            _evt("work_order.closed", event_id="e2", work_order_id="wo-1"),
+            conn,
+        )
+        row = conn.execute(
+            "SELECT title, status, work_order_type FROM duckdb_work_orders WHERE work_order_id='wo-1'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "Do X"
+        assert row[1] == "closed"
+        assert row[2] == "infrastructure"
+
+    def test_started(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt("work_order.created", event_id="e1", work_order_id="wo-2", payload={"title": "Y"}),
+            conn,
+        )
+        dispatch_to_duckdb(_evt("work_order.started", event_id="e2", work_order_id="wo-2"), conn)
+        row = conn.execute(
+            "SELECT status FROM duckdb_work_orders WHERE work_order_id='wo-2'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "active"
+
+    def test_no_work_order_id_returns_zero(self, tmp_path):
+        conn = _db(tmp_path)
+        result = dispatch_to_duckdb(_evt("work_order.created", event_id="e1"), conn)
+        conn.close()
+        assert result == 0
+
+
+class TestTaskProjection:
+    def test_created_and_done(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "task.created",
+                event_id="e1",
+                task_id="t-1",
+                work_order_id="wo-1",
+                project_id="p",
+                payload={"title": "Task A"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(_evt("task.done", event_id="e2", task_id="t-1"), conn)
+        row = conn.execute("SELECT title, status FROM duckdb_tasks WHERE task_id='t-1'").fetchone()
+        conn.close()
+        assert row[0] == "Task A"
+        assert row[1] == "complete"
+
+    def test_deleted(self, tmp_path):
+        conn = _db(tmp_path)
+        dispatch_to_duckdb(
+            _evt(
+                "task.created",
+                event_id="e1",
+                task_id="t-2",
+                work_order_id="wo",
+                project_id="p",
+                payload={"title": "B"},
+            ),
+            conn,
+        )
+        dispatch_to_duckdb(_evt("task.deleted", event_id="e2", task_id="t-2"), conn)
+        row = conn.execute("SELECT status FROM duckdb_tasks WHERE task_id='t-2'").fetchone()
+        conn.close()
+        assert row[0] == "deleted"
