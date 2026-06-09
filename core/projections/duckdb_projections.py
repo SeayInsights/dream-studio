@@ -319,3 +319,80 @@ class DuckDBTaskProjection:
 # Register Task 3 projections into the routing table
 for _p3 in [DuckDBWorkOrderProjection(), DuckDBTaskProjection()]:
     register_duckdb_projection(_p3)
+
+
+class DuckDBDesignBriefProjection:
+    name = "duckdb_design_brief_projection"
+    consumed_event_types = [
+        "design_brief.created",
+        "design_brief.updated",
+        "design_brief.locked",
+    ]
+
+    _UPDATABLE = frozenset(
+        ["purpose", "audience", "tone", "design_system", "font_pairing", "brand_tokens"]
+    )
+
+    def handle(self, event: Dict[str, Any], conn: Any) -> int:
+        payload = event.get("payload") or {}
+        event_type = event["event_type"]
+        event_id = event["event_id"]
+        ts = event.get("event_timestamp") or _now()
+        now = _now()
+
+        brief_id = (
+            event.get("brief_id")
+            or (event.get("trace") or {}).get("brief_id")
+            or payload.get("brief_id")
+        )
+        project_id = (
+            event.get("project_id")
+            or (event.get("trace") or {}).get("project_id")
+            or payload.get("project_id")
+            or ""
+        )
+
+        if not brief_id:
+            return 0
+
+        if event_type == "design_brief.created":
+            conn.execute(
+                """INSERT OR REPLACE INTO duckdb_design_briefs
+                   (brief_id, project_id, status, purpose, audience, tone,
+                    design_system, font_pairing, brand_tokens, created_at, updated_at, last_event_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    brief_id,
+                    project_id,
+                    "draft",
+                    payload.get("purpose"),
+                    payload.get("audience"),
+                    payload.get("tone"),
+                    payload.get("design_system"),
+                    payload.get("font_pairing"),
+                    payload.get("brand_tokens"),
+                    ts,
+                    now,
+                    event_id,
+                ),
+            )
+        elif event_type == "design_brief.updated":
+            field = payload.get("field")
+            value = payload.get("value")
+            if field and field in self._UPDATABLE:
+                conn.execute(
+                    f"UPDATE duckdb_design_briefs SET {field}=?, updated_at=?, last_event_id=?"  # noqa: S608
+                    " WHERE brief_id=?",
+                    (value, now, event_id, brief_id),
+                )
+        elif event_type == "design_brief.locked":
+            conn.execute(
+                "UPDATE duckdb_design_briefs SET status='locked', updated_at=?, last_event_id=?"
+                " WHERE brief_id=?",
+                (now, event_id, brief_id),
+            )
+        return 1
+
+
+# Register Task 4 projection
+register_duckdb_projection(DuckDBDesignBriefProjection())
