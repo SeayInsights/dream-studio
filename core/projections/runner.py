@@ -53,7 +53,9 @@ class ProjectionRunner:
     _ARCHIVE_CHECK_INTERVAL_SECONDS: float = 86400.0  # 24 hours
 
     def __init__(self) -> None:
-        self._engine = ProjectionEngine()
+        analytics_conn = self._open_analytics_conn()
+        self._engine = ProjectionEngine(analytics_conn=analytics_conn)
+        self._analytics_conn = analytics_conn
         self._poll_interval = float(
             os.environ.get("PROJECTION_POLL_INTERVAL", str(self.POLL_INTERVAL_SECONDS))
         )
@@ -66,6 +68,21 @@ class ProjectionRunner:
         self._total_errors: int = 0
         self._last_archive_check: float = 0.0
         self._spine_projections: list = []
+
+    @staticmethod
+    def _open_analytics_conn() -> Optional[object]:
+        """Open the DuckDB analytics store (read-write). Fail-open: returns None on error."""
+        try:
+            from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+
+            conn = connect_analytics(read_only=False)
+            ensure_analytics_schema(conn)
+            return conn
+        except Exception:
+            logger.debug(
+                "ProjectionRunner: DuckDB analytics conn unavailable (non-fatal)", exc_info=True
+            )
+            return None
 
     # ── Registration ──────────────────────────────────────────────────────────
 
@@ -345,6 +362,11 @@ class ProjectionRunner:
             self._pid_path.unlink(missing_ok=True)
         except Exception:
             pass
+        if self._analytics_conn is not None:
+            try:
+                self._analytics_conn.close()
+            except Exception:
+                pass
         logger.info(
             "ProjectionRunner shutdown complete (total events=%d, total errors=%d)",
             self._total_events,
