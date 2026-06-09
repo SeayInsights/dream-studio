@@ -85,3 +85,13 @@ gates:
       SQL/migration files changed. Run `gh pr checks <N> --watch` and confirm
       all three platforms (ubuntu, macos, windows) are green before merging.
       To bypass: MIGRATION_RISK_ACKNOWLEDGED=1 git push
+
+  - id: authority-boundary
+    tier: advisory
+    description: >
+      DuckDB authority boundary gate. Detects connect_analytics(read_only=False)
+      calls outside core/projections/runner.py — the sole authorised write
+      connection holder. Hygiene gate — advisory so it never blocks a push,
+      but violations should be resolved before WO-TS3 lands.
+    command: [py, -m, core.gates.authority_boundary_check]
+    warn_hint: "DuckDB write connection outside runner.py — see authority boundary docs."
