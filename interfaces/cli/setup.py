@@ -53,6 +53,27 @@ class StepResult(NamedTuple):
 
 
 # ---------------------------------------------------------------------------
+# File-write audit (T1 — WO-SETUP2)
+# ---------------------------------------------------------------------------
+# Every file write in this script is listed below. Anything not listed is
+# read-only. This comment is the canonical record; keep it current.
+#
+# step_venv_and_deps()        → <repo>/.venv/          (created if absent; pip-managed)
+# step_settings_merge()       → ~/.claude/settings.json (non-destructive merge: existing
+#                               non-hook keys preserved; existing hook commands never
+#                               removed; only new DS groups appended)
+#                             → does NOT touch ~/.claude/CLAUDE.md or any other user file
+# step_memory_init()          → ~/.claude/projects/<slug>/memory/MEMORY.md
+#                               (created only if the file does not already exist — no overwrite)
+# step_analytics_bootstrap()  → ~/.dream-studio/state/studio.db (delegated to studio_db)
+# step_first_run_marker()     → ~/.dream-studio/state/first-run-pending (overwrite: safe,
+#                               DS-owned marker file, not user data)
+# step_sync_hook_projection() → <repo>/.claude/hooks/runtime/hooks/{quality,domains,core,meta}/
+#                               (gitignored DS projection; shutil.copy2 per .py file)
+#                             → <repo>/.claude/hooks/.plugin-root (overwrite: DS-owned)
+# step_local_adapter_excludes()→ <repo>/.git/info/exclude (appends patterns only;
+#                               existing lines preserved)
+# ---------------------------------------------------------------------------
 # Step implementations
 # ---------------------------------------------------------------------------
 
@@ -179,10 +200,12 @@ def step_settings_merge() -> StepResult:
                 if not new_hooks:
                     continue
 
-                # Build a group dict that preserves optional "matcher" key
+                # Build a group dict preserving optional "matcher" and DS ownership marker.
                 new_group: dict = {}
                 if "matcher" in source_group:
                     new_group["matcher"] = source_group["matcher"]
+                if source_group.get("dream_studio_managed"):
+                    new_group["dream_studio_managed"] = True
                 new_group["hooks"] = new_hooks
 
                 existing_groups.append(new_group)
@@ -337,6 +360,188 @@ def step_sync_hook_projection() -> StepResult:
         return StepResult(name, False, str(exc))
 
 
+def step_uninstall() -> int:
+    """Remove Dream Studio hook entries and projection files. Leaves user hooks untouched."""
+    import shutil
+
+    print("[dream-studio] Uninstall")
+    print()
+
+    removed_hooks: list[str] = []
+    kept_hooks: list[str] = []
+    removed_files: list[str] = []
+    errors: list[str] = []
+
+    # 1 — Remove DS hook groups from ~/.claude/settings.json
+    if SETTINGS_JSON.exists():
+        try:
+            with SETTINGS_JSON.open(encoding="utf-8") as fh:
+                settings: dict = json.load(fh)
+            hooks_section: dict = settings.get("hooks", {})
+            changed = False
+            for event_type, groups in list(hooks_section.items()):
+                keep = []
+                for group in groups:
+                    if group.get("dream_studio_managed"):
+                        for hook in group.get("hooks", []):
+                            removed_hooks.append(f"{event_type}: {hook.get('command', '')[:60]}…")
+                        changed = True
+                    else:
+                        for hook in group.get("hooks", []):
+                            kept_hooks.append(f"{event_type}: {hook.get('command', '')[:60]}…")
+                        keep.append(group)
+                hooks_section[event_type] = keep
+            if changed:
+                with SETTINGS_JSON.open("w", encoding="utf-8") as fh:
+                    json.dump(settings, fh, indent=2)
+                    fh.write("\n")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"settings.json: {exc}")
+    else:
+        print("  settings.json not found — skipping hook removal")
+
+    # 2 — Remove .claude/hooks/ DS projection subdirs (gitignored, DS-owned)
+    projection_root = REPO_ROOT / ".claude" / "hooks" / "runtime" / "hooks"
+    for sub in ("quality", "domains", "core"):
+        sub_dir = projection_root / sub
+        if sub_dir.exists():
+            try:
+                shutil.rmtree(sub_dir)
+                removed_files.append(str(sub_dir))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{sub_dir}: {exc}")
+
+    # 3 — Remove .plugin-root
+    plugin_root = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
+    if plugin_root.exists():
+        try:
+            plugin_root.unlink()
+            removed_files.append(str(plugin_root))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{plugin_root}: {exc}")
+
+    # Report
+    print(f"  Removed {len(removed_hooks)} DS hook entries:")
+    for h in removed_hooks:
+        print(f"    - {h}")
+    print(f"  Kept {len(kept_hooks)} non-DS hook entries intact")
+    print(f"  Removed {len(removed_files)} projection files/dirs")
+    for f in removed_files:
+        print(f"    - {f}")
+    if errors:
+        print("  Errors:")
+        for e in errors:
+            print(f"    ✗ {e}")
+        return 1
+
+    print()
+    print("Uninstall complete. Re-run setup.py to reinstall.")
+    return 0
+
+
+def test_coexistence() -> int:
+    """T4: Verify pre-existing user hooks survive install and are not removed on uninstall."""
+    import tempfile, copy
+
+    print("[dream-studio] Coexistence test")
+    failures: list[str] = []
+
+    # Mock settings.json with a pre-existing hook from another tool
+    pre_existing: dict = {
+        "model": "claude-opus-4-5",
+        "hooks": {
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {"type": "command", "command": "echo 'user-hook-from-other-tool'"}
+                    ]
+                }
+            ]
+        }
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_settings = Path(tmpdir) / "settings.json"
+        tmp_settings.write_text(json.dumps(pre_existing, indent=2), encoding="utf-8")
+
+        # Temporarily redirect SETTINGS_JSON
+        import interfaces.cli.setup as _self
+        orig = _self.SETTINGS_JSON
+        _self.SETTINGS_JSON = tmp_settings
+        try:
+            # --- Install ---
+            result = step_settings_merge()
+            if not result.passed:
+                failures.append(f"install failed: {result.detail}")
+            else:
+                with tmp_settings.open(encoding="utf-8") as fh:
+                    after_install: dict = json.load(fh)
+
+                # Pre-existing hook must still be present
+                ups = after_install.get("hooks", {}).get("UserPromptSubmit", [])
+                user_cmds = [
+                    h.get("command") for g in ups for h in g.get("hooks", [])
+                ]
+                if "echo 'user-hook-from-other-tool'" not in user_cmds:
+                    failures.append("install: pre-existing user hook was removed")
+
+                # model key must be preserved
+                if after_install.get("model") != "claude-opus-4-5":
+                    failures.append("install: non-hook key 'model' was lost")
+
+                # DS hooks must have been added with marker
+                ds_groups = [g for g in ups if g.get("dream_studio_managed")]
+                if not ds_groups:
+                    failures.append("install: no dream_studio_managed groups written")
+
+                # --- Uninstall (settings only — skip projection file removal in test) ---
+                import interfaces.cli.setup as _self2
+                orig_repo = _self2.REPO_ROOT
+                # Point REPO_ROOT at a temp dir so projection removal is a no-op
+                _self2.REPO_ROOT = Path(tmpdir)
+                (Path(tmpdir) / ".claude" / "hooks").mkdir(parents=True, exist_ok=True)
+                try:
+                    uninstall_rc = step_uninstall()
+                finally:
+                    _self2.REPO_ROOT = orig_repo
+                if uninstall_rc != 0:
+                    failures.append(f"uninstall returned {uninstall_rc}")
+                else:
+                    with tmp_settings.open(encoding="utf-8") as fh:
+                        after_uninstall: dict = json.load(fh)
+
+                    ups2 = after_uninstall.get("hooks", {}).get("UserPromptSubmit", [])
+                    remaining_cmds = [
+                        h.get("command") for g in ups2 for h in g.get("hooks", [])
+                    ]
+
+                    if "echo 'user-hook-from-other-tool'" not in remaining_cmds:
+                        failures.append("uninstall: pre-existing user hook was removed")
+
+                    ds_remaining = [g for g in ups2 if g.get("dream_studio_managed")]
+                    if ds_remaining:
+                        failures.append("uninstall: DS hook groups still present after uninstall")
+
+                    if after_uninstall.get("model") != "claude-opus-4-5":
+                        failures.append("uninstall: non-hook key 'model' was lost")
+        finally:
+            _self.SETTINGS_JSON = orig
+
+    if failures:
+        print("  FAIL:")
+        for f in failures:
+            print(f"    ✗ {f}")
+        return 1
+
+    print("  ✓ pre-existing hooks preserved after install")
+    print("  ✓ non-hook settings preserved after install")
+    print("  ✓ DS hooks written with dream_studio_managed marker")
+    print("  ✓ DS hooks removed on uninstall")
+    print("  ✓ pre-existing hooks intact after uninstall")
+    print("  ✓ non-hook settings preserved after uninstall")
+    return 0
+
+
 def step_local_adapter_excludes() -> StepResult:
     """Configure checkout-local adapter scratch/worktree excludes."""
     name = "Adapter workspace local excludes"
@@ -404,6 +609,46 @@ def _schema_compatibility_report() -> dict:
             "blocked": False,
             "error": str(exc),
         }
+
+
+def _projection_completeness_report() -> dict:
+    """Return DS hook projection health without writing anything."""
+    projection_root = REPO_ROOT / ".claude" / "hooks" / "runtime" / "hooks"
+    plugin_root_path = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
+    expected_subdirs = ("meta", "quality", "domains", "core")
+
+    present = [s for s in expected_subdirs if (projection_root / s).is_dir()]
+    missing = [s for s in expected_subdirs if s not in present]
+
+    plugin_root_ok = False
+    plugin_root_value = ""
+    expected_plugin_root = str(REPO_ROOT / ".claude" / "hooks")
+    if plugin_root_path.exists():
+        plugin_root_value = plugin_root_path.read_text(encoding="utf-8").strip()
+        plugin_root_ok = plugin_root_value == expected_plugin_root
+
+    # Check settings.json for DS hook presence
+    ds_hooks_present = False
+    if SETTINGS_JSON.exists():
+        try:
+            with SETTINGS_JSON.open(encoding="utf-8") as fh:
+                settings = json.load(fh)
+            for groups in settings.get("hooks", {}).values():
+                if any(g.get("dream_studio_managed") for g in groups):
+                    ds_hooks_present = True
+                    break
+        except Exception:
+            pass
+
+    return {
+        "present_subdirs": present,
+        "missing_subdirs": missing,
+        "plugin_root_ok": plugin_root_ok,
+        "plugin_root_value": plugin_root_value,
+        "plugin_root_expected": expected_plugin_root,
+        "ds_hooks_present": ds_hooks_present,
+        "all_ok": not missing and plugin_root_ok and ds_hooks_present,
+    }
 
 
 def _print_schema_compatibility() -> bool:
@@ -534,6 +779,24 @@ def _check_only() -> int:
             "as a readiness blocker for setup --apply, dashboard bootstrap, and migration checks."
         )
 
+    proj = _projection_completeness_report()
+    ds_marker = "  ✓" if proj["ds_hooks_present"] else "  ✗"
+    print(f"{ds_marker} DS hooks in settings.json (dream_studio_managed)")
+    subdirs_ok = not proj["missing_subdirs"]
+    subdirs_marker = "  ✓" if subdirs_ok else "  ✗"
+    subdirs_detail = (
+        "meta/quality/domains/core all present"
+        if subdirs_ok
+        else f"missing: {', '.join(proj['missing_subdirs'])}"
+    )
+    print(f"{subdirs_marker} .claude/hooks/ projection — {subdirs_detail}")
+    pr_marker = "  ✓" if proj["plugin_root_ok"] else "  ✗"
+    pr_detail = (
+        proj["plugin_root_value"] if proj["plugin_root_ok"]
+        else f"got '{proj['plugin_root_value']}' expected '{proj['plugin_root_expected']}'"
+    )
+    print(f"{pr_marker} .plugin-root — {pr_detail}")
+
     return 0
 
 
@@ -553,6 +816,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Full setup: create venv, merge hooks, seed memory (default if no flag)",
     )
+    group.add_argument(
+        "--uninstall",
+        action="store_true",
+        help="Remove DS hook entries (dream_studio_managed=true) and projection files",
+    )
+    group.add_argument(
+        "--test-coexistence",
+        action="store_true",
+        dest="test_coexistence",
+        help="Run install/uninstall coexistence test against a mock settings.json",
+    )
     parser.add_argument(
         "--json",
         action="store_true",
@@ -567,6 +841,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             return _check_only_json()
         return _check_only()
+
+    if args.uninstall:
+        return step_uninstall()
+
+    if args.test_coexistence:
+        return test_coexistence()
 
     # Default behavior (no flag or --apply): full setup
     # Validate repo root early — fail before any filesystem mutation

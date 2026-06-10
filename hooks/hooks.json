@@ -2,6 +2,7 @@
   "hooks": {
     "UserPromptSubmit": [
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -10,6 +11,7 @@
         ]
       },
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -20,6 +22,7 @@
     ],
     "Stop": [
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -28,6 +31,7 @@
         ]
       },
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -38,6 +42,7 @@
     ],
     "PostCompact": [
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -46,6 +51,7 @@
         ]
       },
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
@@ -68,6 +74,7 @@
         "hooks": []
       },
       {
+        "dream_studio_managed": true,
         "hooks": [
           {
             "type": "command",
