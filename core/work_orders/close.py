@@ -457,9 +457,10 @@ def close_work_order(
         milestone_complete = False
         if wo_milestone_id:
             next_row = conn.execute(
-                "SELECT work_order_id, title, work_order_type FROM business_work_orders"
+                "SELECT work_order_id, title, work_order_type, sequence_order"
+                " FROM business_work_orders"
                 " WHERE milestone_id = ? AND work_order_id != ? AND status = 'created'"
-                " ORDER BY created_at ASC LIMIT 1",
+                " ORDER BY sequence_order ASC NULLS LAST, created_at ASC LIMIT 1",
                 (wo_milestone_id, work_order_id),
             ).fetchone()
             if next_row:
@@ -467,6 +468,7 @@ def close_work_order(
                     "work_order_id": next_row[0],
                     "title": next_row[1],
                     "type": next_row[2],
+                    "sequence_order": next_row[3],
                     "next_command": f"ds work-order start {next_row[0]}",
                 }
             else:
@@ -490,9 +492,23 @@ def close_work_order(
     if next_wo:
         result["next_work_order"] = next_wo
         result["next_command"] = next_wo["next_command"]
+        seq = next_wo.get("sequence_order")
+        seq_str = f" (seq={seq})" if seq is not None else ""
+        next_id = next_wo["work_order_id"]
+        next_title = next_wo["title"]
+        result["next_block"] = (
+            f"NEXT WORK ORDER: {next_title}{seq_str}"
+            f" / ID: {next_id}"
+            f" / Run: py -m interfaces.cli.ds work-order start {next_id}"
+        )
     elif milestone_complete and wo_milestone_id:
         result["milestone_complete"] = True
         result["milestone_id"] = wo_milestone_id
         result["next_command"] = f"ds milestone close {wo_milestone_id}"
+        result["next_block"] = (
+            f"MILESTONE COMPLETE / Run: py -m interfaces.cli.ds milestone close {wo_milestone_id}"
+        )
+    else:
+        result["next_block"] = "NO NEXT WORK ORDER FOUND"
 
     return result
