@@ -92,7 +92,6 @@ Complete reference for all `ds` CLI commands.
 | `ds work-order unblock WO_ID` | Unblock a work order |
 | `ds work-order task-done WO_ID TASK_ID [--planning-root DIR]` | Mark a task complete, update context.md |
 | `ds work-order tasks WO_ID` | List tasks for a work order |
-| `ds work-order add-tasks WO_ID --from-file FILE` | Parse tasks.md and insert tasks |
 
 ---
 

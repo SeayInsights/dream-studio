@@ -114,6 +114,8 @@
    → Enforced by pre-push gate `rule4-ingestor-sole-event-writer` (`core/gates/dependency_rules.py rule4`)
 5. **Skills route through function calls, not subprocess `py -m interfaces.cli.ds`.** The A4/A5 enforcement block is the canonical reference.
    → Enforced by pre-push gate `skill-sync` (`core/gates/skill_sync_source.py`)
+6. **Constitutional manifests live in the repo, not in agent-writable SQLite.** `packs.yaml`, `eval-rubric.yml`, and `canonical/skills/` are constitutional data — any modification must survive the blocking pre-push gates and a human commit. The write-path separation is enforced by git, not by runtime checks alone. This is a design guarantee, not an accident of layout.
+   → Enforced by git history and the pre-push gate suite; no runtime path writes to constitutional files
 
 ---
 

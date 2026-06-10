@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 SESSION_CONFIG_PREFIX = "claude-session-config-"
 
@@ -35,6 +36,16 @@ def read_session_config(session_id: str) -> dict:
     return {}
 
 
+def detect_terminal_env() -> Literal["vscode", "windows-terminal", "other"]:
+    """Detect the terminal environment for context-aware spawn decisions."""
+    term_program = os.environ.get("TERM_PROGRAM", "").lower()
+    if term_program == "vscode" or os.environ.get("VSCODE_INJECTION"):
+        return "vscode"
+    if os.environ.get("WT_SESSION"):
+        return "windows-terminal"
+    return "other"
+
+
 def spawn_new_session(claude_cmd: str, cwd: str) -> None:
     """Spawn a new Claude Code terminal window. Platform-aware."""
     import subprocess
@@ -43,18 +54,25 @@ def spawn_new_session(claude_cmd: str, cwd: str) -> None:
 
     try:
         if sys.platform == "win32":
-            subprocess.Popen(
-                [
-                    "powershell",
-                    "-NoExit",
-                    "-Command",
-                    f'Set-Location "{cwd}"; '
-                    f'Write-Host "Dream Studio: continuing session" '
-                    f"-ForegroundColor Cyan; {claude_cmd}",
-                ],
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-                cwd=cwd,
-            )
+            env = detect_terminal_env()
+            if env in ("vscode", "windows-terminal"):
+                subprocess.Popen(
+                    ["wt.exe", "-w", "0", "nt", "--title", "DS-continuation", "claude", "--continue"],
+                    cwd=cwd,
+                )
+            else:
+                subprocess.Popen(
+                    [
+                        "powershell",
+                        "-NoExit",
+                        "-Command",
+                        f'Set-Location "{cwd}"; '
+                        f'Write-Host "Dream Studio: continuing session" '
+                        f"-ForegroundColor Cyan; {claude_cmd}",
+                    ],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    cwd=cwd,
+                )
         elif sys.platform == "darwin":
             apple_script = (
                 f'tell application "Terminal" to do script '

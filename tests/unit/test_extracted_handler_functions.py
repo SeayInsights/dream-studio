@@ -232,30 +232,6 @@ def test_unblock_work_order_rejects_non_blocked(
     assert "not blocked" in result["error"]
 
 
-def test_add_tasks_from_file_returns_inserted_count(
-    patched_paths, db_path: Path, tmp_path: Path
-) -> None:
-    from core.work_orders.mutations import add_tasks_from_file
-
-    _seed_project(db_path, project_id="p1")
-    _seed_work_order(db_path, work_order_id="w1", project_id="p1")
-
-    tasks_file = tmp_path / "tasks.md"
-    tasks_file.write_text(
-        "1. First task\n   With detail\n\n2. Second task\n",
-        encoding="utf-8",
-    )
-
-    result = add_tasks_from_file(
-        work_order_id="w1",
-        tasks_file=tasks_file,
-        source_root=REPO_ROOT,
-        dream_studio_home=tmp_path,
-    )
-    assert result["ok"] is True
-    assert result["tasks_inserted"] == 2
-
-
 # ── core.design_briefs ────────────────────────────────────────────────────────
 
 

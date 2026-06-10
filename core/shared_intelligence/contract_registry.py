@@ -590,6 +590,29 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "freshness_policy": "schema_coherence_audit_changes_require_debt_doc_refresh",
         "public_export_boundary": "schema_coherence_findings_are_operational_evidence_not_public_claims",
     },
+    {
+        # STRUCTURE.md has a hand-written directory tree that drifts as packs evolve.
+        # Adding packs.yaml as a source here means any pack/mode change requires STRUCTURE.md
+        # to be updated in the same changeset — enforcing the AUTO-DIRECTORY-TREE contract.
+        "domain_id": "repo_structure_navigation",
+        "domain_name": "Repository Structure And Navigation",
+        "source_patterns": [
+            "packs.yaml",
+            "packs/**",
+        ],
+        "contract_refs": [
+            "STRUCTURE.md",
+            "docs/reference/layer-map.md",
+            "docs/reference/skills-index.md",
+        ],
+        "docs_refs": [],
+        "required_doc_refs": [
+            "STRUCTURE.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "pack_definition_changes_require_structure_doc_refresh",
+        "public_export_boundary": "structure_docs_public_runtime_state_private",
+    },
 )
 
 

@@ -1,9 +1,8 @@
-"""Work-order lifecycle mutations: task-done, block, unblock, add-tasks."""
+"""Work-order lifecycle mutations: task-done, block, unblock."""
 
 from __future__ import annotations
 
 import os
-import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -266,88 +265,6 @@ def unblock_work_order(
         "ok": True,
         "work_order_id": work_order_id,
         "status": "in_progress",
-    }
-
-
-def add_tasks_from_file(
-    *,
-    work_order_id: str,
-    tasks_file: Path,
-    source_root: Path,
-    dream_studio_home: Path | None = None,
-) -> dict[str, Any]:
-    """Parse a numbered-list tasks.md file and insert tasks into business_tasks."""
-
-    if not tasks_file.is_file():
-        return {"ok": False, "error": f"File not found: {tasks_file}"}
-
-    db_path = _require_db(source_root, dream_studio_home)
-    with _connect(db_path) as conn:
-        wo_row = conn.execute(
-            "SELECT work_order_id, project_id, milestone_id FROM business_work_orders"
-            " WHERE work_order_id = ?",
-            (work_order_id,),
-        ).fetchone()
-        if wo_row is None:
-            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
-        project_id = wo_row[1]
-        milestone_id = wo_row[2]
-
-        text = tasks_file.read_text(encoding="utf-8").replace("\r\n", "\n")
-        items = re.findall(
-            r"^\s*\d+\.\s+(.+?)(?=\n\s*\d+\.|\Z)",
-            text,
-            re.MULTILINE | re.DOTALL,
-        )
-        if not items:
-            return {"ok": False, "error": "No numbered list items found in file"}
-
-        inserted: list[dict[str, Any]] = []
-        for raw in items:
-            lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
-            if not lines:
-                continue
-            t_title = lines[0]
-            t_desc = " ".join(lines[1:]) if len(lines) > 1 else ""
-            t_id = str(uuid.uuid4())
-            inserted.append({"task_id": t_id, "title": t_title, "description": t_desc})
-
-    try:
-        import spool.writer as _spool_writer
-
-        from canonical.events.envelope import CanonicalEventEnvelope
-
-        emit_now = datetime.now(timezone.utc).isoformat()
-        for task in inserted:
-            _spool_writer.write_event(
-                CanonicalEventEnvelope(
-                    event_type="task.created",
-                    session_id=None,
-                    payload={
-                        "title": task["title"],
-                        "description": task["description"],
-                        "status": "created",
-                    },
-                    timestamp=emit_now,
-                    severity="info",
-                    trace={
-                        "domain": "sdlc",
-                        "project_id": project_id,
-                        "milestone_id": milestone_id,
-                        "work_order_id": work_order_id,
-                        "task_id": task["task_id"],
-                        "attribution_status": "fully_attributed",
-                    },
-                ).to_dict()
-            )
-    except Exception:
-        pass
-
-    return {
-        "ok": True,
-        "work_order_id": work_order_id,
-        "tasks_inserted": len(inserted),
-        "tasks": [{"task_id": t["task_id"], "title": t["title"]} for t in inserted],
     }
 
 

@@ -5,7 +5,7 @@ Complete catalog of all event types in the dual-canonical architecture.
 **Primary source:** `canonical/events/types.py`  
 **Routing registry:** `config/event_type_registry.py`  
 **Taxonomy reference:** `docs/canonical/event_taxonomy_v1.json`  
-**Total defined:** 97+ event types across 2 canonical tables
+**Total defined:** See `canonical/events/types.py` — the `EventType` enum is the canonical count (do not hand-write a number here)
 
 ---
 
@@ -302,7 +302,7 @@ All canonical events share this envelope:
 | Raw-only | 3 |
 | Diagnostic | 1 |
 | Deprecated | 2 |
-| **Total defined** | **97+** |
+| **Total defined** | See `canonical/events/types.py` |
 
 ---
 

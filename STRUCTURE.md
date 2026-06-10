@@ -1,39 +1,57 @@
 # Dream Studio Project Structure
 
-Dream Studio is a local-first AI orchestration and operational intelligence platform. This file is a public map of the source tree, not a runtime-state manifest.
+Dream Studio is a local-first AI orchestration and operational intelligence platform.
 
+- **Layer architecture** → [`docs/reference/layer-map.md`](docs/reference/layer-map.md)
+- **All skills, packs, and routing** → [`docs/reference/skills-index.md`](docs/reference/skills-index.md)
+
+---
+
+<!-- BEGIN DIRECTORY-TREE: auto-generated from packs.yaml — do not edit manually -->
 ## Top-Level Layout
 
 ```text
 dream-studio/
-  .claude/                         optional Claude Code adapter projection
-  .claude-plugin/                  optional Claude Code adapter metadata
-  .github/                         GitHub workflows and templates
-  agents/                          public specialist-agent templates
-  core/                            authority, telemetry, release, work-order, and shared-intelligence code
-  docs/                            public product and architecture documentation
-  hooks/                           hook registration and dispatch surface
-  interfaces/                      CLI and adapter command surfaces
-  packs/                           pack-level context, agents, and templates
-  projections/                     API and dashboard projections
-  skills/                          repeatable skill instructions and registries
-  tests/                           unit, integration, runtime, and validation tests
-  workflows/                       YAML workflow definitions
+  canonical/                         constitutional source — skills, workflows, adapter authority
+    skills/                          skill packs (one subdir per pack, see packs.yaml)
+      core/                          build lifecycle (ds-core)
+      quality/                       code quality (ds-quality)
+      analyze/                       analysis engine (ds-analyze)
+      domains/                       domain builders (ds-domains)
+      workflow/                      workflow orchestration (ds-workflow)
+      security/                      security analysis (ds-security)
+      project/                       project lifecycle (ds-project)
+      workorder/                     work order lifecycle (ds-workorder)
+      milestone/                     milestone lifecycle (ds-milestone)
+      website/                       website builder (ds-website)
+      fullstack/                     fullstack builder (ds-fullstack)
+      setup/                         setup (ds-setup)
+    workflows/                       YAML workflow definitions (e.g. idea-to-pr.yaml)
+  core/                              authority, telemetry, release, work-order, shared-intelligence
+  control/                           session, research, execution models
+  projections/                       API and dashboard projection surfaces
+  interfaces/                        CLI and adapter command surfaces
+  spool/                             event ingestion and session harvesting
+  runtime/                           hooks, config, release gates
+  docs/                              public product and architecture documentation
+  tests/                             unit, integration, runtime, and validation tests
+  packs.yaml                         single source of truth for pack × mode matrix
 ```
+<!-- END DIRECTORY-TREE -->
+
+---
 
 ## Runtime State Boundary
 
-The user-local runtime directory is not part of the source tree and must not be committed:
+Operator-local runtime state is never committed:
 
 ```text
 ~/.dream-studio/
-  state/studio.db
-  meta/
-  backups/
+  state/studio.db     — SQLite authority (work orders, tasks, milestones, projects)
+  diagnostics/        — session test output (write here, not to repo root)
+  backups/            — DB backups before migration runs
 ```
-
-Generated Work Orders, handoffs, local audit trails, raw telemetry, backups, cleanup records, cutover evidence, and private operator decisions belong in local state unless separately sanitized and approved for publication.
 
 ## Adapter Boundary
 
-The `.claude/` and `.claude-plugin/` directories describe one adapter surface. Dream Studio also supports or plans adapter projections for Codex, Cursor, Copilot, ChatGPT, MCP systems, shell tools, local models, and future tools. No adapter is the source of truth.
+`.claude/` describes the Claude Code adapter projection. Dream Studio supports adapter projections for other tools (Codex, Cursor, Copilot, MCP systems, shell tools). No adapter is the source of truth — `~/.dream-studio/state/studio.db` is.
