@@ -28,7 +28,7 @@ from core.gates.dependency_rules import (
 
 def test_rule1_clean_on_current_tree() -> None:
     violations = check_rule1()
-    assert violations == [], f"rule1: unexpected violations in runtime/:\n" + "\n".join(
+    assert violations == [], "rule1: unexpected violations in runtime/:\n" + "\n".join(
         f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
@@ -66,7 +66,7 @@ def test_rule2_clean_on_current_tree() -> None:
     violations = check_rule2()
     assert (
         violations == []
-    ), f"rule2: unexpected violations in projections/api/ or projections/core/:\n" + "\n".join(
+    ), "rule2: unexpected violations in projections/api/ or projections/core/:\n" + "\n".join(
         f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
@@ -104,7 +104,7 @@ def test_rule3_clean_on_current_tree() -> None:
     violations = check_rule3()
     assert (
         violations == []
-    ), f"rule3: unexpected business_* writes in projections/api/routes/:\n" + "\n".join(
+    ), "rule3: unexpected business_* writes in projections/api/routes/:\n" + "\n".join(
         f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
@@ -143,7 +143,7 @@ def test_rule4_clean_on_current_tree() -> None:
     violations = check_rule4()
     assert (
         violations == []
-    ), f"rule4: unexpected INSERT INTO canonical_events in production source:\n" + "\n".join(
+    ), "rule4: unexpected INSERT INTO canonical_events in production source:\n" + "\n".join(
         f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
