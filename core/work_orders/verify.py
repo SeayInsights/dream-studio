@@ -90,12 +90,24 @@ def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
 
 
 def _read_tasks(conn: Any, work_order_id: str) -> list[dict[str, str]]:
+    has_ac = any(
+        r[1] == "acceptance_criteria"
+        for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
+    )
+    cols = "title, description, status" + (", acceptance_criteria" if has_ac else "")
     rows = conn.execute(
-        "SELECT title, description, status FROM business_tasks"
-        " WHERE work_order_id = ? ORDER BY created_at ASC",
+        f"SELECT {cols} FROM business_tasks WHERE work_order_id = ? ORDER BY created_at ASC",
         (work_order_id,),
     ).fetchall()
-    return [{"title": r[0], "description": r[1] or "", "status": r[2]} for r in rows]
+    return [
+        {
+            "title": r[0],
+            "description": r[1] or "",
+            "status": r[2],
+            "acceptance_criteria": (r[3] or "") if has_ac else "",
+        }
+        for r in rows
+    ]
 
 
 def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
@@ -261,7 +273,17 @@ def verify_work_order(
             return {"ok": False, "error": f"No tasks found for work order: {work_order_id}"}
 
         task_list_str = "\n".join(
-            f"{i + 1}. [{t['status']}] {t['title']}: {t['description']}"
+            "{n}. [{st}] {title}: {desc}{ac}".format(
+                n=i + 1,
+                st=t["status"],
+                title=t["title"],
+                desc=t["description"],
+                ac=(
+                    f"\n   Acceptance criteria: {t['acceptance_criteria']}"
+                    if t.get("acceptance_criteria")
+                    else ""
+                ),
+            )
             for i, t in enumerate(tasks)
         )
         git_diff = _collect_git_commits(source_root, work_order_id)

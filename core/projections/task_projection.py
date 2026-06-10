@@ -113,6 +113,7 @@ class TaskProjection(Projection):
             "project_id": project_id,
             "title": payload.get("title") or _SKELETON_TITLE,
             "description": payload.get("description"),
+            "acceptance_criteria": payload.get("acceptance_criteria"),
             "status": "pending",
             "created_at": ts,
             "updated_at": now,
@@ -122,10 +123,12 @@ class TaskProjection(Projection):
         conn.execute(
             f"""
             INSERT OR IGNORE INTO {_TABLE}
-                (task_id, work_order_id, project_id, title, description, status,
+                (task_id, work_order_id, project_id, title, description,
+                 acceptance_criteria, status,
                  created_at, updated_at, source_event_id, last_event_id)
             VALUES
-                (:task_id, :work_order_id, :project_id, :title, :description, :status,
+                (:task_id, :work_order_id, :project_id, :title, :description,
+                 :acceptance_criteria, :status,
                  :created_at, :updated_at, :source_event_id, :last_event_id)
             """,
             row,
@@ -134,14 +137,15 @@ class TaskProjection(Projection):
         conn.execute(
             f"""
             UPDATE {_TABLE}
-            SET work_order_id  = COALESCE(work_order_id, :work_order_id),
-                project_id     = COALESCE(project_id, :project_id),
-                title          = CASE WHEN title = :skeleton THEN :title ELSE
-                                      COALESCE(title, :title) END,
-                description    = COALESCE(description, :description),
-                created_at     = COALESCE(created_at, :created_at),
-                source_event_id = COALESCE(source_event_id, :source_event_id),
-                updated_at     = :updated_at
+            SET work_order_id       = COALESCE(work_order_id, :work_order_id),
+                project_id          = COALESCE(project_id, :project_id),
+                title               = CASE WHEN title = :skeleton THEN :title ELSE
+                                           COALESCE(title, :title) END,
+                description         = COALESCE(description, :description),
+                acceptance_criteria = COALESCE(acceptance_criteria, :acceptance_criteria),
+                created_at          = COALESCE(created_at, :created_at),
+                source_event_id     = COALESCE(source_event_id, :source_event_id),
+                updated_at          = :updated_at
             WHERE task_id = :task_id
             """,
             {**row, "skeleton": _SKELETON_TITLE},
