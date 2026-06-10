@@ -95,3 +95,41 @@ gates:
       but violations should be resolved before WO-TS3 lands.
     command: [py, -m, core.gates.authority_boundary_check]
     warn_hint: "DuckDB write connection outside runner.py — see authority boundary docs."
+
+  - id: rule1-adapters-no-authority
+    tier: blocking
+    description: >
+      Dependency rule 1: runtime/hooks/ must not write directly to authority tables
+      (business_*, raw_*, reg_*, canonical_events). Hooks must emit events via spool
+      only. Any direct SQL write from the adapter layer is a boundary violation.
+    command: [py, -m, core.gates.dependency_rules, rule1]
+    fail_hint: "Rule 1 violation — runtime/hooks/ wrote to an authority table. Route through spool/emitters instead."
+
+  - id: rule2-projections-readonly
+    tier: blocking
+    description: >
+      Dependency rule 2: projections/ modules must be read-only. No INSERT, UPDATE,
+      or DELETE against canonical authority tables (business_*, raw_*, reg_*,
+      canonical_events) from projections/api/ or projections/core/ (tests excluded).
+    command: [py, -m, core.gates.dependency_rules, rule2]
+    fail_hint: "Rule 2 violation — a projection module wrote to an authority table. Move the write to the CLI or ingestor layer."
+
+  - id: rule3-cli-business-state-writer
+    tier: advisory
+    description: >
+      Dependency rule 3 (advisory): API route handlers in projections/api/routes/
+      must not write directly to business_* tables. The CLI/work-order layer is the
+      designated writer for business state. Warning tier only until false-positive rate
+      is confirmed low.
+    command: [py, -m, core.gates.dependency_rules, rule3]
+    warn_hint: "Rule 3 advisory — a route handler wrote to business_* directly. Consider routing through the CLI/work-order layer."
+
+  - id: rule4-ingestor-sole-event-writer
+    tier: blocking
+    description: >
+      Dependency rule 4: no module outside the ingestor path may INSERT INTO
+      canonical_events (the compat VIEW alias). The ingestor writes to
+      business_canonical_events and ai_canonical_events directly. Any direct
+      INSERT to the canonical_events VIEW name is an authority boundary violation.
+    command: [py, -m, core.gates.dependency_rules, rule4]
+    fail_hint: "Rule 4 violation — INSERT INTO canonical_events found outside spool/ingestor.py. Use the spool/emitter path instead."

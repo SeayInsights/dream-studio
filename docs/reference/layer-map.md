@@ -1,7 +1,7 @@
 # System Layer Map
 
 **Status:** CURRENT  
-**Last reviewed:** 2026-06-07 (WO-P)
+**Last reviewed:** 2026-06-10 (WO-CONSTITUTION-GATES)
 
 ---
 
@@ -105,10 +105,15 @@
 ## Dependency Rules (Hard Constraints)
 
 1. **Adapters never write to authority tables.** Hooks emit events via spool only.
+   → Enforced by pre-push gate `rule1-adapters-no-authority` (`core/gates/dependency_rules.py rule1`)
 2. **Projections are read-only.** No projection module writes to canonical event tables.
+   → Enforced by pre-push gate `rule2-projections-readonly` (`core/gates/dependency_rules.py rule2`)
 3. **CLI commands are the designated writer for business state** (projects, milestones, work orders, tasks).
+   → Advisory gate `rule3-cli-business-state-writer` (`core/gates/dependency_rules.py rule3`) — warning tier
 4. **The ingestor is the sole writer to authority event tables.** No direct INSERT to `business_canonical_events` or `ai_canonical_events` from other code.
+   → Enforced by pre-push gate `rule4-ingestor-sole-event-writer` (`core/gates/dependency_rules.py rule4`)
 5. **Skills route through function calls, not subprocess `py -m interfaces.cli.ds`.** The A4/A5 enforcement block is the canonical reference.
+   → Enforced by pre-push gate `skill-sync` (`core/gates/skill_sync_source.py`)
 
 ---
 
