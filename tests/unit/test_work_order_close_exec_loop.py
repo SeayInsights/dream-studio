@@ -108,7 +108,9 @@ def _write_fail_verdict(planning: Path, wo_id: str) -> None:
             {
                 "passed": False,
                 "summary": "T1 partial",
-                "tasks_verified": [{"task_title": "T1", "evidence": "missing", "verdict": "partial"}],
+                "tasks_verified": [
+                    {"task_title": "T1", "evidence": "missing", "verdict": "partial"}
+                ],
                 "gaps": [
                     {
                         "title": "Fix T1",
@@ -152,9 +154,7 @@ def _mock_verify_gap(*, work_order_id, planning_root, **_kw):
         "summary": "T1 partial",
         "tasks_verified": [{"task_title": "T1", "evidence": "missing", "verdict": "partial"}],
         "gaps": [{"title": "Fix T1", "description": "T1 partial", "work_order_type": "cleanup"}],
-        "spawned_work_orders": [
-            {"work_order_id": GAP_WO_ID, "title": "Fix T1", "type": "cleanup"}
-        ],
+        "spawned_work_orders": [{"work_order_id": GAP_WO_ID, "title": "Fix T1", "type": "cleanup"}],
         "verdict_path": str(planning_root / "work-orders" / work_order_id / "review-verdict.json"),
     }
 
@@ -182,12 +182,10 @@ def test_auto_verify_triggered_when_no_verdict_file(patched_paths) -> None:
     _fake, db_path, tmp_path = patched_paths
     planning = _planning(tmp_path, WO_INFRA)
 
-    with patch(
-        "core.work_orders.verify.verify_work_order", side_effect=_mock_verify_pass
-    ) as mock_v, patch(
-        "core.work_orders.start.start_work_order", return_value=_MOCK_START_OK
-    ), patch(
-        "core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO
+    with (
+        patch("core.work_orders.verify.verify_work_order", side_effect=_mock_verify_pass) as mock_v,
+        patch("core.work_orders.start.start_work_order", return_value=_MOCK_START_OK),
+        patch("core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO),
     ):
         from core.work_orders.close import close_work_order
 
@@ -208,10 +206,10 @@ def test_auto_verify_skipped_when_verdict_exists(patched_paths) -> None:
     planning = _planning(tmp_path, WO_INFRA)
     _write_pass_verdict(planning, WO_INFRA)
 
-    with patch("core.work_orders.verify.verify_work_order") as mock_v, patch(
-        "core.work_orders.start.start_work_order", return_value=_MOCK_START_OK
-    ), patch(
-        "core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO
+    with (
+        patch("core.work_orders.verify.verify_work_order") as mock_v,
+        patch("core.work_orders.start.start_work_order", return_value=_MOCK_START_OK),
+        patch("core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO),
     ):
         from core.work_orders.close import close_work_order
 
@@ -234,13 +232,11 @@ def test_pass_path_auto_starts_next_wo(patched_paths) -> None:
     _fake, db_path, tmp_path = patched_paths
     planning = _planning(tmp_path, WO_INFRA)
 
-    with patch(
-        "core.work_orders.verify.verify_work_order", side_effect=_mock_verify_pass
-    ), patch(
-        "core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO
-    ), patch(
-        "core.work_orders.start.start_work_order", return_value=_MOCK_START_OK
-    ) as mock_start:
+    with (
+        patch("core.work_orders.verify.verify_work_order", side_effect=_mock_verify_pass),
+        patch("core.projects.queries.get_next_work_order", return_value=_MOCK_NEXT_WO),
+        patch("core.work_orders.start.start_work_order", return_value=_MOCK_START_OK) as mock_start,
+    ):
         from core.work_orders.close import close_work_order
 
         result = close_work_order(
@@ -267,11 +263,12 @@ def test_gap_path_closes_original_and_auto_starts_gap_wo(patched_paths) -> None:
     _fake, db_path, tmp_path = patched_paths
     planning = _planning(tmp_path, WO_INFRA)
 
-    with patch(
-        "core.work_orders.verify.verify_work_order", side_effect=_mock_verify_gap
-    ), patch(
-        "core.work_orders.start.start_work_order", return_value=_MOCK_START_GAP_OK
-    ) as mock_start:
+    with (
+        patch("core.work_orders.verify.verify_work_order", side_effect=_mock_verify_gap),
+        patch(
+            "core.work_orders.start.start_work_order", return_value=_MOCK_START_GAP_OK
+        ) as mock_start,
+    ):
         from core.work_orders.close import close_work_order
 
         result = close_work_order(
