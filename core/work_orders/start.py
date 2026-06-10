@@ -104,6 +104,39 @@ def _get_pending_audits_for_project(project_id: str | None) -> list[dict]:
         return []
 
 
+def _check_sequence_order(
+    work_order_id: str,
+    db_path: Path,
+) -> list[dict[str, Any]]:
+    """Return out-of-sequence predecessors in the same milestone.
+
+    A predecessor is any WO in the same milestone with a lower sequence_order
+    that is not yet closed or cancelled. Returns empty list when the table
+    doesn't exist, the WO has no milestone, or no sequence_order is set.
+    """
+    try:
+        with _connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT milestone_id, sequence_order FROM business_work_orders"
+                " WHERE work_order_id = ?",
+                (work_order_id,),
+            ).fetchone()
+            if row is None or row[0] is None or row[1] is None:
+                return []
+            milestone_id, my_seq = row
+            blockers = conn.execute(
+                "SELECT work_order_id, title, sequence_order FROM business_work_orders"
+                " WHERE milestone_id = ? AND work_order_id != ?"
+                " AND sequence_order < ?"
+                " AND status NOT IN ('closed', 'cancelled')"
+                " ORDER BY sequence_order ASC",
+                (milestone_id, work_order_id, my_seq),
+            ).fetchall()
+    except Exception:
+        return []
+    return [{"work_order_id": r[0], "title": r[1], "sequence_order": r[2]} for r in blockers]
+
+
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path:
     # Lazy import via ds.py — see core.projects.queries._require_db for rationale.
     from interfaces.cli.ds import resolve_installed_runtime_paths
@@ -443,11 +476,15 @@ def start_work_order(
     planning_root: Path | None = None,
     accept_no_brief: bool = False,
     brief_data: dict[str, Any] | None = None,
+    in_sequence: bool = False,
 ) -> dict[str, Any]:
     """Compose read/write/mutate to start a work order.
 
     Skills should call this directly. If a missing design brief is acceptable
     (the skill has already confirmed with the user), pass `accept_no_brief=True`.
+
+    Pass `in_sequence=True` to abort (exit 1 equivalent: ok=False) when
+    earlier-sequence WOs in the same milestone are not yet closed.
 
     Returns:
         `{"ok": True, "work_order_id": ..., "title": ..., "type": ...,
@@ -491,6 +528,27 @@ def start_work_order(
                 f"should be worked on first."
             ),
         }
+
+    # Sequence-order check: warn (or abort if in_sequence) when lower-seq WOs
+    # in the same milestone are not yet closed.
+    _db_path_for_seq = _require_db(source_root, dream_studio_home)
+    _seq_blockers = _check_sequence_order(work_order_id, _db_path_for_seq)
+    if _seq_blockers:
+        blocker_lines = "; ".join(
+            f"{b['title']} (seq={b['sequence_order']}, id={b['work_order_id']})"
+            for b in _seq_blockers
+        )
+        if in_sequence:
+            return {
+                "ok": False,
+                "error": (
+                    f"Out-of-sequence start blocked — {len(_seq_blockers)} earlier WO(s)"
+                    f" in this milestone are not closed: {blocker_lines}"
+                ),
+                "sequence_blockers": _seq_blockers,
+            }
+        # Soft warning — callers receive the list and can surface it.
+        # Execution continues: Proceeding.
 
     # Preflight gate stub (WO-S): block on unresolved critical/high findings.
     # This stub queries business_work_order_preflights if the table exists.
@@ -562,6 +620,18 @@ def start_work_order(
             f"This work order uses the `{workflow_template}` workflow. "
             f"First node: `think`. Invoke `ds-core:think` to begin."
         )
+
+    # Attach soft sequence warning when lower-seq WOs were detected.
+    if _seq_blockers:
+        blocker_lines = "; ".join(
+            f"{b['title']} (seq={b['sequence_order']}, id={b['work_order_id']})"
+            for b in _seq_blockers
+        )
+        result["sequence_warning"] = (
+            f"WARNING: {len(_seq_blockers)} earlier WO(s) in this milestone are not closed:"
+            f" {blocker_lines}. Proceeding."
+        )
+        result["sequence_blockers"] = _seq_blockers
 
     # Surface unresolved pending audits advisory (WO-W gate stub — WO-O lands full dispatch).
     pending = _get_pending_audits_for_project(brief_data.get("project_id"))

@@ -434,6 +434,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override .planning/ directory (default: <cwd>/.planning)",
     )
+    wo_start.add_argument(
+        "--in-sequence",
+        action="store_true",
+        default=False,
+        dest="in_sequence",
+        help="Abort (exit 1) if earlier-sequence WOs in the same milestone are not closed",
+    )
     wo_list = work_order_sub.add_parser("list", help="List work orders")
     wo_list.add_argument("--project", default=None, dest="project_id", help="Filter by project_id")
     wo_list.add_argument("--status", default=None, dest="status_filter", help="Filter by status")
@@ -2000,6 +2007,7 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
             planning_root=planning_root,
+            in_sequence=getattr(args, "in_sequence", False),
         )
     if args.work_order_command == "list":
         return _work_order_list(
@@ -2097,6 +2105,7 @@ def _work_order_start(
     dream_studio_home: Path | None,
     planning_root: Path | None = None,
     accept_no_brief: bool = False,
+    in_sequence: bool = False,
 ) -> int:
     """CLI wrapper around `core.work_orders.start.start_work_order`.
 
@@ -2146,7 +2155,10 @@ def _work_order_start(
         planning_root=planning_root,
         accept_no_brief=accept_no_brief,
         brief_data=brief_data,
+        in_sequence=in_sequence,
     )
+    if result.get("ok") and result.get("sequence_warning"):
+        print(result["sequence_warning"], file=sys.stderr)
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
 
@@ -2317,6 +2329,9 @@ def _work_order_close(
             print(f"[gate.bypassed] WARNING: {reason}", file=sys.stderr)
 
     print(json.dumps(result, indent=2))
+    if result.get("ok") and result.get("next_block"):
+        print()
+        print(result["next_block"])
     return 0 if result.get("ok") else 1
 
 
