@@ -766,3 +766,30 @@ def invalidate_cache(topic: str, *, emit_events: bool = True) -> None:
         ).rowcount
 
     _emit_metric("web_research.cache_invalidate", {"topic": topic, "rows_deleted": rows_deleted})
+
+
+def load_from_cache_by_id(cache_id: str) -> Optional[ResearchReport]:
+    """Load research report from cache by cache_id, or None if not found/expired."""
+    with get_connection() as c:
+        row = c.execute(
+            "SELECT topic, sources, findings, confidence_score, triangulation_score "
+            "FROM research_cache WHERE cache_id = ? AND expires_at > datetime('now')",
+            (cache_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    sources = [_source_from_cache_dict(s) for s in json.loads(row[1])]
+    return ResearchReport(
+        topic=row[0],
+        sources=sources,
+        findings=row[2],
+        confidence=row[3],
+        triangulation=row[4],
+        cache_status="cached",
+    )
+
+
+def delete_from_cache_by_id(cache_id: str) -> None:
+    """Remove cache entry by cache_id. Idempotent — succeeds even if not found."""
+    with transaction() as c:
+        c.execute("DELETE FROM research_cache WHERE cache_id = ?", (cache_id,))

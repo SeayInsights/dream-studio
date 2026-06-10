@@ -453,23 +453,30 @@ def resolve_security_finding(
 ) -> bool:
     """Record a finding.status_changed event on the security_events spine.
 
-    findings table retired in migration 112 (WO-Y); status changes are now
-    spine events written via set_finding_status().
-    Returns True if the finding exists in findings_current_status.
+    findings table retired in migration 112 (WO-Y). Checks the spine directly
+    (not findings_current_status, which is a projection and may lag). Writes
+    the status event via the provided conn to avoid cross-connection writes.
+    Returns True if the finding exists and the status event was written.
     """
+    import uuid as _uuid
+    from datetime import datetime as _dt, timezone as _tz
+
     valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
     try:
-        from core.findings.mutations import set_finding_status
-
         row = conn.execute(
-            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?",
+            "SELECT event_id FROM security_events"
+            " WHERE event_id = ? AND event_kind = 'finding.recorded'",
             (finding_id,),
         ).fetchone()
         if row is None:
             return False
-        set_finding_status(
-            finding_id, new_status, project_id=None, reason=None, correlation_id=None, db_path=None
+        now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        conn.execute(
+            "INSERT INTO security_events"
+            " (event_id, parent_event_id, event_kind, body, created_at)"
+            " VALUES (?, ?, 'finding.status_changed', ?, ?)",
+            (str(_uuid.uuid4()), finding_id, new_status, now),
         )
         return True
     except Exception:
