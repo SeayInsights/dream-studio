@@ -476,16 +476,6 @@ def main(argv: list[str] | None = None) -> int:
     wo_tasks.add_argument(
         "--verbose", "-v", action="store_true", help="Include full description for each task"
     )
-    wo_add_tasks = work_order_sub.add_parser(
-        "add-tasks", help="Parse a tasks.md file and insert tasks into business_tasks"
-    )
-    wo_add_tasks.add_argument("work_order_id", help="Work order UUID")
-    wo_add_tasks.add_argument(
-        "--from-file",
-        required=True,
-        dest="tasks_file",
-        help="Path to a tasks.md file with a numbered list of tasks",
-    )
     wo_set_order = work_order_sub.add_parser(
         "set-order", help="Set sequence_order on a work order (sparse 10/20/30)"
     )
@@ -2054,13 +2044,6 @@ def _work_order_dispatch(
             dream_studio_home=dream_studio_home,
             verbose=getattr(args, "verbose", False),
         )
-    if args.work_order_command == "add-tasks":
-        return _work_order_add_tasks(
-            work_order_id=args.work_order_id,
-            tasks_file=Path(args.tasks_file),
-            source_root=source_root,
-            dream_studio_home=dream_studio_home,
-        )
     if args.work_order_command == "set-order":
         return _work_order_set_order(
             work_order_id=args.work_order_id,
@@ -2444,26 +2427,6 @@ def _work_order_verify(
             print(f"  [{wo['type']}] {wo['title']}  (id: {wo['work_order_id']})")
     print(f"\nVerdict: {result['verdict_path']}")
     return 0 if passed else 1
-
-
-def _work_order_add_tasks(
-    *,
-    work_order_id: str,
-    tasks_file: Path,
-    source_root: Path,
-    dream_studio_home: Path | None,
-) -> int:
-    """Parse a numbered-list tasks.md file and insert tasks into business_tasks."""
-    from core.work_orders.mutations import add_tasks_from_file
-
-    result = add_tasks_from_file(
-        work_order_id=work_order_id,
-        tasks_file=tasks_file,
-        source_root=source_root,
-        dream_studio_home=dream_studio_home,
-    )
-    print(json.dumps(result, indent=2))
-    return 0 if result.get("ok") else 1
 
 
 def _work_order_set_order(

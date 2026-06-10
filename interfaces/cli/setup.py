@@ -352,6 +352,14 @@ def step_sync_hook_projection() -> StepResult:
                 shutil.copy2(src_file, dst_file)
                 copied += 1
 
+        # Also sync session_config.py (imported by on-stop-dispatch via sys.path)
+        sc_src = REPO_ROOT / "runtime" / "session_config.py"
+        sc_dst = REPO_ROOT / ".claude" / "hooks" / "runtime" / "session_config.py"
+        if sc_src.exists():
+            sc_dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(sc_src, sc_dst)
+            copied += 1
+
         plugin_root = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
         plugin_root.write_text(str(REPO_ROOT / ".claude" / "hooks"), encoding="utf-8")
 

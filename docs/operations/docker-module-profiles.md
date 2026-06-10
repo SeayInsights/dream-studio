@@ -120,3 +120,5 @@ forbids host writes by default.
 
 <!-- Last reviewed 2026-06-07 — WO-N2 (fix/wo-n2-deterministic-evals): removed eval harness step from full-ci.yml. No change to publication boundary, release gate policy, Docker profiles, or privacy classification. CI eval step removal is internal-only. -->
 <!-- Last reviewed 2026-06-09 — WO-F2 dead-code cleanup: removed 18 stale entries from flake8-baseline.txt for check_old_dbs.py and shared/mcp-integrations/ (already deleted in prior waves). Removed broken agent-browser.md link from verify/SKILL.md. No change to publication boundary, release gate policy, Docker profiles, or privacy classification. Release gate baseline pruned — only removing entries for files that no longer exist. -->
+
+<!-- Last reviewed 2026-06-10 — WO-DEBT-H (chore/wo-debt-h-hygiene): regenerated flake8-baseline.txt from 707 (stale, 126+ entries for deleted files) down to 509 clean entries. No change to baseline policy, publication boundary, privacy classification, Docker profiles, or release gate enforcement logic. Baseline content change only — dead-file violations removed. -->

@@ -117,13 +117,12 @@ FILESYSTEM_HYDRATION_V2.md
 IMPLEMENTATION_STATUS.md
 session3-*.txt
 RUNTIME_MANIFEST.md
-apply_migration.py
-check_events.py
-check_tables.py
-fix_extra_parens.py
-test_context_compiler.py
-test_wave_integration.py
-verify_phase1.py
+/apply_*.py
+/check_*.py
+/fix_*.py
+/test_context_*.py
+/test_wave_*.py
+/verify_phase*.py
 
 # Superseded README variants
 README_FINAL.md
@@ -180,6 +179,7 @@ docs/demo-script.md
 # Local dev artifacts (session output files)
 coverage-first-output.txt
 paths-to-scrub.txt
+columns
 
 # Graphify output (operator-managed; see storage-architecture.md)
 /graphify-out/

@@ -222,7 +222,7 @@ guardrails/scanners/rebuff_validator.py:20:1: F401 'typing.Dict' imported but un
 guardrails/scanners/rebuff_validator.py:20:1: F401 'typing.Tuple' imported but unused
 guardrails/scanners/rebuff_validator.py:21:1: F401 'dataclasses.asdict' imported but unused
 integrations/installer/claude_code.py:15:1: F401 'os' imported but unused
-integrations/installer/claude_code.py:283:21: F541 f-string is missing placeholders
+integrations/installer/claude_code.py:312:21: F541 f-string is missing placeholders
 interfaces/cli/analyze_project.py:112:15: F541 f-string is missing placeholders
 interfaces/cli/analyze_project.py:114:13: F541 f-string is missing placeholders
 interfaces/cli/analyze_project.py:150:11: F541 f-string is missing placeholders
@@ -265,7 +265,7 @@ interfaces/cli/dream_exec.py:39:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:40:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:41:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:42:1: E402 module level import not at top of file
-interfaces/cli/ds.py:1745:9: F841 local variable 'tool_id' is assigned to but never used
+interfaces/cli/ds.py:1905:9: F841 local variable 'tool_id' is assigned to but never used
 interfaces/cli/ds_analytics/analyzer.py:10:1: E402 module level import not at top of file
 interfaces/cli/ds_analytics/analyzer.py:9:1: E402 module level import not at top of file
 interfaces/cli/ds_analytics/backfill_pulse.py:18:35: E203 whitespace before ':'
@@ -324,7 +324,7 @@ interfaces/cli/session_analytics.py:284:11: F541 f-string is missing placeholder
 interfaces/cli/session_analytics.py:296:11: F541 f-string is missing placeholders
 interfaces/cli/session_analytics.py:306:11: F541 f-string is missing placeholders
 interfaces/cli/session_analytics.py:317:11: F541 f-string is missing placeholders
-interfaces/cli/setup.py:563:39: E203 whitespace before ':'
+interfaces/cli/setup.py:888:39: E203 whitespace before ':'
 interfaces/cli/spec_risk_check.py:17:1: F401 'io' imported but unused
 interfaces/cli/studio_backup.py:34:1: E402 module level import not at top of file
 interfaces/cli/studio_backup.py:397:15: F541 f-string is missing placeholders
@@ -338,8 +338,6 @@ interfaces/cli/test_wave1_research_cache.py:83:29: E712 comparison to True shoul
 interfaces/cli/validation_health.py:20:1: E402 module level import not at top of file
 interfaces/cli/validation_health.py:50:22: F541 f-string is missing placeholders
 interfaces/cli/validation_health.py:57:22: F541 f-string is missing placeholders
-interfaces/cli/verify_tool_registry.py:4:1: F401 'json' imported but unused
-interfaces/cli/verify_tool_registry.py:5:1: F401 'sqlite3' imported but unused
 projections/api/models/insights.py:5:1: F401 'datetime.datetime' imported but unused
 projections/api/routes/audits.py:270:13: F841 local variable 'cursor' is assigned to but never used
 projections/api/routes/audits.py:4:1: F401 'typing.List' imported but unused
@@ -372,7 +370,6 @@ projections/core/config/runtime_paths.py:18:1: E402 module level import not at t
 projections/core/config/runtime_paths.py:20:1: E402 module level import not at top of file
 projections/core/insights/root_cause.py:3:1: F401 'typing.Optional' imported but unused
 projections/core/insights/root_cause.py:3:1: F401 'typing.Tuple' imported but unused
-projections/parsers/sarif_parser.py:28:1: F401 'core.event_store.studio_db' imported but unused
 projections/tests/test_analyzers.py:3:1: F401 'pytest' imported but unused
 projections/tests/test_api.py:3:1: F401 'pytest' imported but unused
 projections/tests/test_insights.py:3:1: F401 'pytest' imported but unused
@@ -428,7 +425,6 @@ shared/repo_analysis/pattern_extractors/frontmatter.py:8:1: F401 're' imported b
 shared/repo_analysis/pattern_extractors/progressive_disclosure.py:11:1: F401 'typing.List' imported but unused
 shared/repo_analysis/pattern_extractors/testing_patterns.py:10:1: F401 'typing.List' imported but unused
 shared/repo_analysis/pattern_extractors/version_guards.py:10:1: F401 'typing.Tuple' imported but unused
-skills/generate-catalog.py:19:1: E402 module level import not at top of file
 spool/ingestor.py:14:1: E402 module level import not at top of file
 spool/ingestor.py:15:1: E402 module level import not at top of file
 spool/ingestor.py:5:1: F401 'signal' imported but unused

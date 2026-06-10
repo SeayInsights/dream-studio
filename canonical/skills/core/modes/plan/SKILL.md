@@ -5,7 +5,7 @@ dream_studio:
   mode: plan
   mode_type: planning
   inputs: [approved_spec, user_stories, requirements]
-  outputs: [plan_document, task_list, traceability_registry, github_issues]
+  outputs: [plan_document, traceability_registry, github_issues]
   capabilities_required: [Read, Write, Bash]
   model_preference: sonnet
   estimated_duration: 15-45min
@@ -48,9 +48,7 @@ Use these templates to structure your plan:
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
 9. **Persist tasks to SQLite** — Tasks live in SQLite (`business_tasks`) only — never in `.planning/` files.
    - If the active work order already has tasks in SQLite, skip this step entirely — do not add duplicates.
-   - If no tasks exist yet, present the proposed task list to the user for approval, then write each approved task via:
-     `py -m interfaces.cli.ds work-order add-tasks <work_order_id> --from-file <tasks-file>`
-     where `<tasks-file>` is a temporary numbered-list file (write it to a temp path, never to `.planning/`).
+   - If no tasks exist yet, present the proposed task list to the user for approval, then write each approved task via `create_task(work_order_id=..., project_id=..., title=..., description=..., source_root=..., dream_studio_home=...)` — one call per task.
    - Never create `.planning/specs/<topic>/tasks.md`. Tasks are read from SQLite via `ds work-order tasks <id>`.
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
@@ -100,7 +98,7 @@ Tasks persisted to business_tasks with [P] markers for parallelization:
 
 ## Output
 - Plan document at `.planning/specs/<topic>/plan.md` (always)
-- Tasks persisted to SQLite `business_tasks` via `ds work-order add-tasks` (always, unless tasks already exist)
+- Tasks persisted to SQLite `business_tasks` via `create_task()` per task (always, unless tasks already exist)
 - Traceability registry at `.planning/traceability.yaml` (only when traceability active)
 
 ## Next in pipeline
