@@ -441,7 +441,7 @@ def step_uninstall() -> int:
 
 def test_coexistence() -> int:
     """T4: Verify pre-existing user hooks survive install and are not removed on uninstall."""
-    import tempfile, copy
+    import tempfile
 
     print("[dream-studio] Coexistence test")
     failures: list[str] = []
