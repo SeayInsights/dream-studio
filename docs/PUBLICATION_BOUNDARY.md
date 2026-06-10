@@ -2,6 +2,8 @@
 
 Dream Studio is public source plus private local authority. The public GitHub repository should accurately represent the current product without publishing private operational history.
 
+**2026-06-10 (WO-CONSTITUTION-GATES):** CI smoke suite extended to include `test_release_gates_dependency_rules.py`. No publication boundary impact — gate tests are test-only artifacts.
+
 ## Public Allowlist
 
 The public repo may contain:

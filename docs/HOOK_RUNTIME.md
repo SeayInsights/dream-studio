@@ -2,6 +2,10 @@
 
 Phase 5.4A — Hook Runtime Reliability audit and classification.
 
+**2026-06-10 (WO-CONSTITUTION-GATES):** Four dependency rule gates added to `canonical/workflows/pre-push.yaml`:
+`rule1-adapters-no-authority`, `rule2-projections-readonly`, `rule3-cli-business-state-writer` (advisory), `rule4-ingestor-sole-event-writer`.
+These enforce the layer boundary rules documented in `docs/reference/layer-map.md`.
+
 ## Hook Authority Model
 
 ### Canonical (active, authoritative)
