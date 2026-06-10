@@ -47,10 +47,12 @@ Use these templates to structure your plan:
 7. **Assess traceability need** — See Traceability section below.
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
 9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
+   > **Note:** `tasks.md` is a supplementary reference artifact. SQLite (`business_tasks`) is the execution authority. The terminal reads task descriptions from SQLite, not from this file.
 9b. **Persist tasks to DB** — After writing tasks.md, call:
     `add_tasks_from_file(work_order_id=..., tasks_file=Path(".planning/specs/<topic>/tasks.md"), source_root=..., dream_studio_home=...)`
     This reads the numbered list from tasks.md and inserts each item as a `business_tasks` row.
     If `work_order_id` is unknown or the call returns `{"ok": False}`, keep the file artifact and note DB persistence was skipped.
+    **If the work order already has tasks in SQLite (from work order creation), skip this step — do not add duplicates.**
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
     - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in tasks.md
