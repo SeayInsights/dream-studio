@@ -1,5 +1,27 @@
 # Core — Build Lifecycle
 
+## Active work order pre-flight (think / plan / build only)
+
+Before dispatching to `think`, `plan`, or `build`, check for an active work order:
+
+```
+py -m interfaces.cli.ds project state
+```
+
+If the response contains a `next_work_order` with `status: in_progress` **and**
+`pending_tasks > 0`, do NOT enter think/plan/build. Instead print:
+
+> Active WO found: **[title]** with **N** pending tasks.
+> Use `ds-workorder execute` and read task descriptions from SQLite instead of ds-core.
+
+Then stop. Only proceed with think/plan/build if **no** in-progress work order with
+pending tasks exists.
+
+This check does not apply to `review`, `verify`, `ship`, `handoff`, `recap`, or `explain` —
+those modes are safe to run alongside an active work order.
+
+---
+
 ## Mode dispatch
 
 0. **Progressive disclosure check:** Before dispatching to a mode, apply the portable skill contract. If a current calibration interface is available in this checkout, use it; otherwise rely on the mode table below. If a mode is locked, show the unlock message and stop.
