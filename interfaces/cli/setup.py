@@ -451,13 +451,9 @@ def test_coexistence() -> int:
         "model": "claude-opus-4-5",
         "hooks": {
             "UserPromptSubmit": [
-                {
-                    "hooks": [
-                        {"type": "command", "command": "echo 'user-hook-from-other-tool'"}
-                    ]
-                }
+                {"hooks": [{"type": "command", "command": "echo 'user-hook-from-other-tool'"}]}
             ]
-        }
+        },
     }
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -466,6 +462,7 @@ def test_coexistence() -> int:
 
         # Temporarily redirect SETTINGS_JSON
         import interfaces.cli.setup as _self
+
         orig = _self.SETTINGS_JSON
         _self.SETTINGS_JSON = tmp_settings
         try:
@@ -479,9 +476,7 @@ def test_coexistence() -> int:
 
                 # Pre-existing hook must still be present
                 ups = after_install.get("hooks", {}).get("UserPromptSubmit", [])
-                user_cmds = [
-                    h.get("command") for g in ups for h in g.get("hooks", [])
-                ]
+                user_cmds = [h.get("command") for g in ups for h in g.get("hooks", [])]
                 if "echo 'user-hook-from-other-tool'" not in user_cmds:
                     failures.append("install: pre-existing user hook was removed")
 
@@ -496,6 +491,7 @@ def test_coexistence() -> int:
 
                 # --- Uninstall (settings only — skip projection file removal in test) ---
                 import interfaces.cli.setup as _self2
+
                 orig_repo = _self2.REPO_ROOT
                 # Point REPO_ROOT at a temp dir so projection removal is a no-op
                 _self2.REPO_ROOT = Path(tmpdir)
@@ -511,9 +507,7 @@ def test_coexistence() -> int:
                         after_uninstall: dict = json.load(fh)
 
                     ups2 = after_uninstall.get("hooks", {}).get("UserPromptSubmit", [])
-                    remaining_cmds = [
-                        h.get("command") for g in ups2 for h in g.get("hooks", [])
-                    ]
+                    remaining_cmds = [h.get("command") for g in ups2 for h in g.get("hooks", [])]
 
                     if "echo 'user-hook-from-other-tool'" not in remaining_cmds:
                         failures.append("uninstall: pre-existing user hook was removed")
@@ -792,7 +786,8 @@ def _check_only() -> int:
     print(f"{subdirs_marker} .claude/hooks/ projection — {subdirs_detail}")
     pr_marker = "  ✓" if proj["plugin_root_ok"] else "  ✗"
     pr_detail = (
-        proj["plugin_root_value"] if proj["plugin_root_ok"]
+        proj["plugin_root_value"]
+        if proj["plugin_root_ok"]
         else f"got '{proj['plugin_root_value']}' expected '{proj['plugin_root_expected']}'"
     )
     print(f"{pr_marker} .plugin-root — {pr_detail}")
