@@ -21,7 +21,6 @@ from core.gates.dependency_rules import (
     main,
 )
 
-
 # ---------------------------------------------------------------------------
 # Rule 1 — adapters-no-authority
 # ---------------------------------------------------------------------------
@@ -29,9 +28,8 @@ from core.gates.dependency_rules import (
 
 def test_rule1_clean_on_current_tree() -> None:
     violations = check_rule1()
-    assert violations == [], (
-        f"rule1: unexpected violations in runtime/:\n"
-        + "\n".join(f"  {p}:{ln}: {line}" for p, ln, line in violations)
+    assert violations == [], f"rule1: unexpected violations in runtime/:\n" + "\n".join(
+        f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
 
@@ -66,9 +64,10 @@ def test_rule1_comment_lines_are_ignored(tmp_path: Path) -> None:
 
 def test_rule2_clean_on_current_tree() -> None:
     violations = check_rule2()
-    assert violations == [], (
-        f"rule2: unexpected violations in projections/api/ or projections/core/:\n"
-        + "\n".join(f"  {p}:{ln}: {line}" for p, ln, line in violations)
+    assert (
+        violations == []
+    ), f"rule2: unexpected violations in projections/api/ or projections/core/:\n" + "\n".join(
+        f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
 
@@ -103,9 +102,10 @@ def test_rule2_excludes_projections_tests_dir(tmp_path: Path) -> None:
 
 def test_rule3_clean_on_current_tree() -> None:
     violations = check_rule3()
-    assert violations == [], (
-        f"rule3: unexpected business_* writes in projections/api/routes/:\n"
-        + "\n".join(f"  {p}:{ln}: {line}" for p, ln, line in violations)
+    assert (
+        violations == []
+    ), f"rule3: unexpected business_* writes in projections/api/routes/:\n" + "\n".join(
+        f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
 
@@ -141,9 +141,10 @@ def test_rule3_is_advisory_via_main(tmp_path: Path, monkeypatch) -> None:
 
 def test_rule4_clean_on_current_tree() -> None:
     violations = check_rule4()
-    assert violations == [], (
-        f"rule4: unexpected INSERT INTO canonical_events in production source:\n"
-        + "\n".join(f"  {p}:{ln}: {line}" for p, ln, line in violations)
+    assert (
+        violations == []
+    ), f"rule4: unexpected INSERT INTO canonical_events in production source:\n" + "\n".join(
+        f"  {p}:{ln}: {line}" for p, ln, line in violations
     )
 
 
