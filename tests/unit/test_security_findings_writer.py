@@ -168,7 +168,7 @@ def test_emit_security_finding_spool_failure_does_not_block_sqlite(
     assert result.emitted is True  # SQLite write succeeded despite spool failure
     with sqlite3.connect(str(db_path)) as conn:
         row = conn.execute(
-            "SELECT finding_id FROM findings WHERE finding_id = ?",
+            "SELECT event_id FROM security_events WHERE event_id = ?",
             (result.record_id,),
         ).fetchone()
     assert row is not None
@@ -194,12 +194,15 @@ def test_resolve_security_finding_updates_status(patched_db, db_path: Path) -> N
     finding_id = result.record_id
     with sqlite3.connect(str(db_path)) as conn:
         updated = resolve_security_finding(conn, finding_id=finding_id, resolution="mitigated")
-        status = conn.execute(
-            "SELECT status FROM findings WHERE finding_id = ?", (finding_id,)
-        ).fetchone()[0]
+        row = conn.execute(
+            "SELECT body FROM security_events"
+            " WHERE parent_event_id = ? AND event_kind = 'finding.status_changed'",
+            (finding_id,),
+        ).fetchone()
 
     assert updated is True
-    assert status == "mitigated"
+    assert row is not None
+    assert row[0] == "mitigated"
 
 
 def test_resolve_security_finding_returns_false_for_unknown_id(patched_db, db_path: Path) -> None:

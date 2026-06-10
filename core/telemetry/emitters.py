@@ -491,8 +491,9 @@ def emit_security_finding(
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         existing = conn.execute(
-            # findings retired migration 112 (WO-Y); dedup via findings_current_status spine.
-            "SELECT finding_id FROM findings_current_status WHERE finding_id = ?",
+            # findings retired migration 112 (WO-Y); dedup via security_events spine directly
+            # (findings_current_status is a projection that lags until fold_spine() runs).
+            "SELECT event_id FROM security_events WHERE event_id = ? AND event_kind = 'finding.recorded'",
             (finding_id,),
         ).fetchone()
         if existing is not None:
@@ -596,7 +597,7 @@ def emit_security_finding(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "findings", "dashboard_attention_items"),
+        required_tables=("execution_events", "security_events", "dashboard_attention_items"),
     )
 
 
@@ -647,7 +648,7 @@ def emit_security_finding_resolved(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("findings",),
+        required_tables=("security_events",),
     )
 
 

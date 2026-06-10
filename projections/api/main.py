@@ -14,6 +14,7 @@ from .routes import (
     analytics,
     project_intelligence,
     discovery_internal,
+    discovery_research,
     hooks,
     security,
     audits,
@@ -73,6 +74,7 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(project_intelligence.router, prefix="/api/v1/projects", tags=["projects"])
 
 app.include_router(discovery_internal.router, prefix="/api/discovery/internal", tags=["discovery"])
+app.include_router(discovery_research.router, prefix="/api/discovery/research", tags=["discovery"])
 app.include_router(hooks.router, prefix="/api/v1", tags=["hooks"])
 app.include_router(security.router, prefix="/api/v1", tags=["security"])
 app.include_router(audits.router, prefix="/api/v1", tags=["audits"])
