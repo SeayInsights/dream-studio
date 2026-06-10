@@ -302,6 +302,41 @@ def step_memory_init() -> StepResult:
         return StepResult(name, False, str(exc))
 
 
+def step_sync_hook_projection() -> StepResult:
+    """FR-RT2: Copy runtime/hooks/ subdirs into .claude/hooks/runtime/hooks/ and fix .plugin-root."""
+    name = "Hook projection sync"
+    try:
+        import shutil
+
+        src_base = REPO_ROOT / "runtime" / "hooks"
+        dst_base = REPO_ROOT / ".claude" / "hooks" / "runtime" / "hooks"
+
+        if not src_base.exists():
+            return StepResult(name, False, f"source not found: {src_base}")
+
+        copied = 0
+        for sub in ("quality", "domains", "core", "meta"):
+            src_dir = src_base / sub
+            dst_dir = dst_base / sub
+            if not src_dir.exists():
+                continue
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            for src_file in src_dir.rglob("*.py"):
+                if "__pycache__" in src_file.parts:
+                    continue
+                dst_file = dst_dir / src_file.relative_to(src_dir)
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+                copied += 1
+
+        plugin_root = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
+        plugin_root.write_text(str(REPO_ROOT / ".claude" / "hooks"), encoding="utf-8")
+
+        return StepResult(name, True, f"{copied} files synced, .plugin-root updated")
+    except Exception as exc:  # noqa: BLE001
+        return StepResult(name, False, str(exc))
+
+
 def step_local_adapter_excludes() -> StepResult:
     """Configure checkout-local adapter scratch/worktree excludes."""
     name = "Adapter workspace local excludes"
@@ -551,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
         step_memory_init,
         step_analytics_bootstrap,
         step_first_run_marker,
+        step_sync_hook_projection,
     ]
 
     results: list[StepResult] = []
