@@ -70,6 +70,7 @@ def list_tasks(
     work_order_id: str,
     source_root: Path,
     dream_studio_home: Path | None = None,
+    verbose: bool = False,
 ) -> dict[str, Any]:
     db_path = _require_db(source_root, dream_studio_home)
     with _connect(db_path) as conn:
@@ -79,28 +80,33 @@ def list_tasks(
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+        select_cols = "task_id, title, status, description" if verbose else "task_id, title, status"
         rows = conn.execute(
-            "SELECT task_id, title, status FROM business_tasks"
+            f"SELECT {select_cols} FROM business_tasks"
             " WHERE work_order_id = ? ORDER BY created_at ASC",
             (work_order_id,),
         ).fetchall()
 
     tasks: list[dict[str, Any]] = []
     for row in rows:
-        t_id, t_title, t_status = row
+        if verbose:
+            t_id, t_title, t_status, t_desc = row
+        else:
+            t_id, t_title, t_status = row
         if t_status == "complete":
             indicator = "[x]"
         elif t_status == "in_progress":
             indicator = "[~]"
         else:
             indicator = "[ ]"
-        tasks.append(
-            {
-                "task_id": t_id,
-                "title": t_title,
-                "status": t_status,
-                "indicator": indicator,
-            }
-        )
+        entry: dict[str, Any] = {
+            "task_id": t_id,
+            "title": t_title,
+            "status": t_status,
+            "indicator": indicator,
+        }
+        if verbose:
+            entry["description"] = t_desc
+        tasks.append(entry)
 
     return {"ok": True, "work_order_id": work_order_id, "tasks": tasks}

@@ -153,7 +153,7 @@ Testable conditions that must be true for the feature to be considered complete.
 
 **Next Steps**: 
 1. Run `ds-core plan` to break this spec into implementation tasks
-2. Output will be `.planning/specs/[topic-name]/plan.md` and `tasks.md`
+2. Output will be `.planning/specs/[topic-name]/plan.md`; tasks are written to SQLite (not a file)
 
 ## PRD Context (optional)
 
