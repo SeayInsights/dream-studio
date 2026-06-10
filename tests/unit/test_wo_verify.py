@@ -1,0 +1,348 @@
+"""Tests for WO-REVIEW-GATE: ds work-order verify and independent_review close gate."""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from core.config.sqlite_bootstrap import bootstrap_database
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+NOW = "2026-01-01T00:00:00.000000Z"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_db(tmp_path: Path) -> Path:
+    db_path = tmp_path / "state" / "studio.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    bootstrap_database(db_path)
+    return db_path
+
+
+@contextmanager
+def _patch_db(db_path: Path):
+    fake_paths = MagicMock()
+    fake_paths.sqlite_path = db_path
+    with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
+        yield
+
+
+def _seed(
+    db_path: Path,
+    *,
+    project_id: str,
+    milestone_id: str,
+    work_order_id: str,
+    wo_type: str = "cleanup",
+) -> None:
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT OR IGNORE INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?)",
+        (project_id, "Test", "", "active", NOW, NOW),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO business_milestones"
+        " (milestone_id, project_id, title, status, order_index, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (milestone_id, project_id, "M1", "active", 1, NOW, NOW),
+    )
+    conn.execute(
+        "INSERT INTO business_work_orders"
+        " (work_order_id, project_id, milestone_id, title, description,"
+        "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
+        " VALUES (?,?,?,?,?,?,'in_progress',1,?,?,?)",
+        (work_order_id, project_id, milestone_id, "Test WO", "desc", wo_type, NOW, NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _add_task(db_path: Path, *, work_order_id: str, project_id: str, title: str, desc: str) -> str:
+    task_id = str(uuid.uuid4())
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,'complete',?,?)",
+        (task_id, work_order_id, project_id, title, desc, NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+    return task_id
+
+
+# ---------------------------------------------------------------------------
+# verify_work_order: no commits found → passed=False (mock gap insertion)
+# ---------------------------------------------------------------------------
+
+
+def test_verify_no_commits_mock_gap(tmp_path: pytest.TempPathFactory) -> None:
+    """With DREAM_STUDIO_VERIFY_MOCK=1, mock passes. No gaps, no WOs created."""
+    db_path = _make_db(tmp_path)
+    project_id = str(uuid.uuid4())
+    milestone_id = str(uuid.uuid4())
+    work_order_id = str(uuid.uuid4())
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
+
+    planning_root = tmp_path / "planning"
+    with _patch_db(db_path):
+        with patch.dict(os.environ, {"DREAM_STUDIO_VERIFY_MOCK": "1"}):
+            from core.work_orders.verify import verify_work_order
+
+            result = verify_work_order(
+                work_order_id=work_order_id,
+                source_root=REPO_ROOT,
+                dream_studio_home=tmp_path,
+                planning_root=planning_root,
+            )
+
+    assert result["ok"] is True
+    assert result["passed"] is True
+    assert result["spawned_work_orders"] == []
+    # verdict file must be written
+    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+    assert verdict_path.is_file()
+    data = json.loads(verdict_path.read_text())
+    assert data["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# verify_work_order: mock fixture with gaps → gap WOs created in SQLite
+# ---------------------------------------------------------------------------
+
+
+def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> None:
+    """When mock fixture has gaps[], verify inserts new WOs under same milestone."""
+    db_path = _make_db(tmp_path)
+    project_id = str(uuid.uuid4())
+    milestone_id = str(uuid.uuid4())
+    work_order_id = str(uuid.uuid4())
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
+
+    gap_fixture = {
+        "passed": False,
+        "tasks_verified": [
+            {"task_title": "T1", "evidence": "not found in diff", "verdict": "missing"}
+        ],
+        "summary": "Task T1 was not addressed.",
+        "gaps": [
+            {
+                "title": "Fix missing T1 implementation",
+                "description": "T1 was not done",
+                "work_order_type": "cleanup",
+                "tasks": [
+                    {"title": "Implement T1", "description": "Add the missing code"},
+                ],
+            }
+        ],
+    }
+
+    planning_root = tmp_path / "planning"
+    with _patch_db(db_path):
+        with patch("core.work_orders.verify._call_subagent", return_value=gap_fixture):
+            from core.work_orders.verify import verify_work_order
+
+            result = verify_work_order(
+                work_order_id=work_order_id,
+                source_root=REPO_ROOT,
+                dream_studio_home=tmp_path,
+                planning_root=planning_root,
+            )
+
+    assert result["ok"] is True
+    assert result["passed"] is False
+    assert len(result["spawned_work_orders"]) == 1
+    spawned_id = result["spawned_work_orders"][0]["work_order_id"]
+
+    # Verify the gap WO and its task are in the DB under the same milestone
+    conn = sqlite3.connect(str(db_path))
+    wo_row = conn.execute(
+        "SELECT milestone_id, work_order_type FROM business_work_orders WHERE work_order_id = ?",
+        (spawned_id,),
+    ).fetchone()
+    assert wo_row is not None
+    assert wo_row[0] == milestone_id
+    assert wo_row[1] == "cleanup"
+
+    task_row = conn.execute(
+        "SELECT title FROM business_tasks WHERE work_order_id = ?",
+        (spawned_id,),
+    ).fetchone()
+    assert task_row is not None
+    assert task_row[0] == "Implement T1"
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# independent_review close gate: missing verdict → blocked
+# ---------------------------------------------------------------------------
+
+
+def test_close_gate_missing_verdict_blocks(tmp_path: pytest.TempPathFactory) -> None:
+    """close gate 'independent_review' blocks when review-verdict.json is absent."""
+    from core.work_orders.close import run_gate_check
+
+    conn = MagicMock()
+    planning_root = tmp_path / "planning"
+    work_order_id = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())
+
+    passed, reason = run_gate_check(
+        "independent_review",
+        planning_root=planning_root,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        conn=conn,
+    )
+    assert passed is False
+    assert "review-verdict.json not found" in reason
+    assert "work-order verify" in reason
+
+
+# ---------------------------------------------------------------------------
+# independent_review close gate: passed=false verdict → blocked with summary
+# ---------------------------------------------------------------------------
+
+
+def test_close_gate_failed_verdict_blocks(tmp_path: pytest.TempPathFactory) -> None:
+    """close gate 'independent_review' blocks when verdict has passed=false."""
+    from core.work_orders.close import run_gate_check
+
+    conn = MagicMock()
+    work_order_id = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())
+    planning_root = tmp_path / "planning"
+    wo_dir = planning_root / "work-orders" / work_order_id
+    wo_dir.mkdir(parents=True)
+    spawned_id = str(uuid.uuid4())
+    (wo_dir / "review-verdict.json").write_text(
+        json.dumps(
+            {
+                "passed": False,
+                "summary": "Task T1 was missing.",
+                "spawned_work_orders": [
+                    {"work_order_id": spawned_id, "title": "Fix T1", "type": "cleanup"}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    passed, reason = run_gate_check(
+        "independent_review",
+        planning_root=planning_root,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        conn=conn,
+    )
+    assert passed is False
+    assert "review failed" in reason
+    assert spawned_id in reason
+
+
+# ---------------------------------------------------------------------------
+# independent_review close gate: passed=true → allowed
+# ---------------------------------------------------------------------------
+
+
+def test_close_gate_passed_verdict_allows(tmp_path: pytest.TempPathFactory) -> None:
+    """close gate 'independent_review' passes when verdict has passed=true."""
+    from core.work_orders.close import run_gate_check
+
+    conn = MagicMock()
+    work_order_id = str(uuid.uuid4())
+    project_id = str(uuid.uuid4())
+    planning_root = tmp_path / "planning"
+    wo_dir = planning_root / "work-orders" / work_order_id
+    wo_dir.mkdir(parents=True)
+    (wo_dir / "review-verdict.json").write_text(
+        json.dumps(
+            {
+                "passed": True,
+                "summary": "All tasks addressed.",
+                "spawned_work_orders": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    passed, reason = run_gate_check(
+        "independent_review",
+        planning_root=planning_root,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        conn=conn,
+    )
+    assert passed is True
+    assert reason == ""
+
+
+# ---------------------------------------------------------------------------
+# ds project state shows spawned gap WOs
+# ---------------------------------------------------------------------------
+
+
+def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) -> None:
+    """Gap WOs inserted by verify show up in business_work_orders for the project."""
+    db_path = _make_db(tmp_path)
+    project_id = str(uuid.uuid4())
+    milestone_id = str(uuid.uuid4())
+    work_order_id = str(uuid.uuid4())
+    _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
+    _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
+
+    gap_fixture = {
+        "passed": False,
+        "tasks_verified": [],
+        "summary": "Gap found.",
+        "gaps": [
+            {
+                "title": "Gap WO Alpha",
+                "description": "needs fixing",
+                "work_order_type": "infrastructure",
+                "tasks": [{"title": "Fix alpha", "description": "do the fix"}],
+            }
+        ],
+    }
+
+    planning_root = tmp_path / "planning"
+    with _patch_db(db_path):
+        with patch("core.work_orders.verify._call_subagent", return_value=gap_fixture):
+            from core.work_orders.verify import verify_work_order
+
+            result = verify_work_order(
+                work_order_id=work_order_id,
+                source_root=REPO_ROOT,
+                dream_studio_home=tmp_path,
+                planning_root=planning_root,
+            )
+
+    assert result["spawned_work_orders"][0]["work_order_id"]
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute(
+        "SELECT COUNT(*) FROM business_work_orders WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()[0]
+    assert count == 2  # original + gap
+
+    titles = conn.execute(
+        "SELECT title FROM business_work_orders WHERE project_id = ? ORDER BY sequence_order",
+        (project_id,),
+    ).fetchall()
+    assert any("Gap WO Alpha" in r[0] for r in titles)
+    conn.close()

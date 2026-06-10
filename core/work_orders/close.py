@@ -180,6 +180,27 @@ def run_gate_check(
                 )
         return True, ""
 
+    if gate_name == "independent_review":
+        import json as _json
+
+        verdict_path = wo_dir / "review-verdict.json"
+        if not verdict_path.is_file():
+            return False, (
+                f"independent_review: review-verdict.json not found. "
+                f"Run: py -m interfaces.cli.ds work-order verify {work_order_id}"
+            )
+        try:
+            verdict = _json.loads(verdict_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return False, f"independent_review: review-verdict.json is not valid JSON: {exc}"
+        if not verdict.get("passed"):
+            gap_ids = [w.get("work_order_id", "") for w in verdict.get("spawned_work_orders", [])]
+            gap_msg = f" Gap WOs: {', '.join(gap_ids)}" if gap_ids else ""
+            return False, (
+                f"independent_review: review failed — {verdict.get('summary', 'no summary')}.{gap_msg}"
+            )
+        return True, ""
+
     return True, ""
 
 

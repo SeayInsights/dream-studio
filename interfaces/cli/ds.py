@@ -496,6 +496,10 @@ def main(argv: list[str] | None = None) -> int:
         "next", help="Show next unblocked work order for a project (ready-set selector)"
     )
     wo_next.add_argument("project_id", help="Project UUID")
+    wo_verify = work_order_sub.add_parser(
+        "verify", help="Run independent fresh-context review; gaps become new work orders"
+    )
+    wo_verify.add_argument("work_order_id", help="Work order UUID")
 
     # design-brief subcommand group (Slice 7a)
     design_brief_cmd = subcommands.add_parser("design-brief", help="Manage project design briefs")
@@ -2076,6 +2080,12 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "verify":
+        return _work_order_verify(
+            work_order_id=args.work_order_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
 
@@ -2388,6 +2398,37 @@ def _work_order_tasks(
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
+
+
+def _work_order_verify(
+    *,
+    work_order_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    from core.work_orders.verify import verify_work_order
+
+    result = verify_work_order(
+        work_order_id=work_order_id,
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+        planning_root=source_root / ".planning",
+    )
+    if not result.get("ok"):
+        print(f"Error: {result.get('error', 'unknown error')}", file=sys.stderr)
+        return 1
+    passed = result["passed"]
+    print(f"Verification {'PASSED' if passed else 'FAILED'}: {result['summary']}")
+    for tv in result.get("tasks_verified", []):
+        indicator = "✓" if tv["verdict"] == "pass" else ("~" if tv["verdict"] == "partial" else "✗")
+        print(f"  {indicator} [{tv['verdict']}] {tv['task_title']}: {tv['evidence']}")
+    spawned = result.get("spawned_work_orders", [])
+    if spawned:
+        print(f"\nGap work orders created ({len(spawned)}):")
+        for wo in spawned:
+            print(f"  [{wo['type']}] {wo['title']}  (id: {wo['work_order_id']})")
+    print(f"\nVerdict: {result['verdict_path']}")
+    return 0 if passed else 1
 
 
 def _work_order_add_tasks(
