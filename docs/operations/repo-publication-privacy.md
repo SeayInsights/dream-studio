@@ -3,6 +3,8 @@
 Dream Studio can be published only when the public repository contains product
 source and sanitized public documentation without private operational history.
 
+**2026-06-10 (WO-CONSTITUTION-GATES):** No privacy boundary changes. `core/gates/dependency_rules.py` and related tests added — public source, no private data.
+
 ## Publication Readiness Command
 
 Run the non-mutating check:

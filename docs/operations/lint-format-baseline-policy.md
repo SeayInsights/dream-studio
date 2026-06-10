@@ -2,6 +2,8 @@
 
 Status: active release-gate policy
 
+**2026-06-10 (WO-CONSTITUTION-GATES):** `tests/unit/test_release_gates_dependency_rules.py` added to the focused smoke suite in `.github/workflows/ci.yml`.
+
 Dream Studio uses formatting and linting as release signals without confusing historical style debt with new release regressions.
 
 ## Formatting

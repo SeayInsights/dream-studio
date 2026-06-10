@@ -2,6 +2,9 @@
 
 Phase 5.5A — Workflow Runtime Reliability audit and classification.
 
+**2026-06-10 (WO-CONSTITUTION-GATES):** `canonical/workflows/pre-push.yaml` extended with four dependency rule gates
+(`rule1`–`rule4`). Implementation: `core/gates/dependency_rules.py`. Tests: `tests/unit/test_release_gates_dependency_rules.py`.
+
 ## Workflow Authority Model
 
 ### Canonical
