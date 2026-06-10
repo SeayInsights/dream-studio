@@ -57,7 +57,16 @@ def spawn_new_session(claude_cmd: str, cwd: str) -> None:
             env = detect_terminal_env()
             if env in ("vscode", "windows-terminal"):
                 subprocess.Popen(
-                    ["wt.exe", "-w", "0", "nt", "--title", "DS-continuation", "claude", "--continue"],
+                    [
+                        "wt.exe",
+                        "-w",
+                        "0",
+                        "nt",
+                        "--title",
+                        "DS-continuation",
+                        "claude",
+                        "--continue",
+                    ],
                     cwd=cwd,
                 )
             else:
