@@ -253,6 +253,121 @@ N2 in the ledger marks removal of the `canonical_events` swallow as intentionall
 
 <!-- reviewed: 2026-06-07, migration 099 (drop project_* legacy family, Phase 18.6.2). 8 tables dropped: project_readiness_scorecards, project_health_scorecards, project_intake_records, project_intake_questions, project_assumption_records, project_milestone_records, project_work_order_authority_records, project_change_order_records; 1 view dropped: vw_project_readiness_latest. All had 0 rows; no FK dependencies; prd_authority.py writers were test-only. CREATE TABLE migrations 040 and 047 are immutable history and untouched. No aspirational-schema debt introduced by this migration — drop-only. -->
 
+---
+
+## Dropped-table record (migration 099, migration 115)
+
+Schema-debt audit traceability for clean-drop migrations. These are not ongoing
+debt findings — they document that schema objects were intentionally removed, their
+pre-drop state was verified, and no migration-side aspirational schema was introduced.
+
+---
+
+### project_* legacy family — DROPPED (migration 099, Phase 18.6.2)
+
+**Migration:** `099_drop_project_legacy_family.sql` (2026-06-07)
+**Work order:** WO-DEBT-C (Phase 18.6.2 debt sweep)
+
+**Tables dropped (8):**
+
+| Table | Pre-drop row count | Notes |
+|-------|--------------------|-------|
+| `project_readiness_scorecards` | 0 | No FK deps |
+| `project_health_scorecards` | 0 | No FK deps |
+| `project_intake_records` | 0 | prd_authority.py writer was test-only |
+| `project_intake_questions` | 0 | prd_authority.py writer was test-only |
+| `project_assumption_records` | 0 | No FK deps |
+| `project_milestone_records` | 0 | No FK deps |
+| `project_work_order_authority_records` | 0 | No FK deps |
+| `project_change_order_records` | 0 | No FK deps |
+
+**Views dropped (1):** `vw_project_readiness_latest` (0 live consumers)
+
+**Why:** project_* tables were the legacy project authority superseded by the
+`business_*` family (migration 084, Phase 18.5 project model unification). All writers
+had already been decommissioned or were test-only at drop time.
+
+**CREATE TABLE history preserved:** Migrations 040 and 047 that originally created these
+tables are immutable history and were not modified. DROP TABLE IF EXISTS in migration
+099 is the authoritative close of this schema lifecycle.
+
+**Aspirational-schema debt introduced:** None. Drop-only migration.
+
+---
+
+### Vestigial table sweep — PARTIAL DROP (migration 115, WO-DEBT-F)
+
+**Migration:** `115_vestigial_table_sweep.sql` (2026-06-10)
+**Work order:** WO-DEBT-F (seq=150, Phase 18.6.x debt sweep)
+
+The original task scope listed 27 tables for drop. A code-reference sweep during
+pre-push gate failure revealed 20 of those 27 tables have live SQL consumers
+(row-count pre-flight was insufficient — the T1 check should have also grepped
+for code consumers). Migration 115 was narrowed to the 11 tables confirmed safe
+after the full sweep. The 20 excluded tables are documented below as OPEN debt.
+
+All drops use `DROP TABLE IF EXISTS` — idempotent on clean installs.
+
+**prd_* cluster — 7 tables (never created in live DB; no-ops):**
+
+| Table | Status |
+|-------|--------|
+| `prd_assumptions` | Never existed in any migration file; no-op |
+| `prd_change_orders` | Never existed in any migration file; no-op |
+| `prd_intake_questions` | Never existed in any migration file; no-op |
+| `prd_intakes` | Never existed in any migration file; no-op |
+| `prd_notes` | Never existed in any migration file; no-op |
+| `prd_requirements` | Never existed in any migration file; no-op |
+| `prd_specs` | Never existed in any migration file; no-op |
+
+**PI wave scaffolding — 2 tables:**
+
+| Table | Pre-drop rows | Reason |
+|-------|---------------|--------|
+| `pi_wave_tasks` | 0 | No SQL consumers found; docstring ref only; dropped before pi_waves (FK-safe order) |
+| `pi_waves` | 0 | No SQL consumers found; docstring ref only |
+
+**Agent scaffolding — 2 tables:**
+
+| Table | Pre-drop rows | Reason |
+|-------|---------------|--------|
+| `agent_context_scope_policies` | 0 | No SQL SELECT/INSERT/UPDATE found; only in `source_tables` metadata lists |
+| `agent_registry_records` | 0 | `scoped_agents._recorded_agents()` guards all queries with `_table_exists()` and returns `[]` if absent |
+
+**Truncated (schema kept):** `research_evidence_records` — 9 test-contamination rows.
+Real write path is live; only data cleared, table structure preserved.
+
+**Aspirational-schema debt introduced:** None. Drop-only migration (plus one DELETE).
+
+#### OPEN: 20 tables deferred — live consumers discovered at pre-push
+
+The following 20 tables from the original WO-DEBT-F scope were found to have live
+SQL writers or readers during the code-reference sweep. They require a dedicated
+WO to decommission the consumers before the tables can be dropped.
+
+| Table | Live consumers (non-exhaustive) |
+|-------|---------------------------------|
+| `capability_route_records` | `core/shared_intelligence/capability_routing.py` (writer + reader) |
+| `artifact_records` | `core/telemetry/read_models.py`, `core/telemetry/execution_spine.py` |
+| `raw_research` | `core/event_store/studio_db.py` (writer), `control/research/engine.py` (reader) |
+| `hook_findings` | `core/event_store/studio_db.py` (writer), `projections/api/routes/hooks.py` (reader) |
+| `github_repo_attribution_records` | `core/module_contracts.py` |
+| `team_rollup_records` | `projections/api/routes/shared_intelligence.py` |
+| `installer_distribution_checks` | `projections/api/routes/shared_intelligence.py` |
+| `demo_case_study_packets` | `projections/api/routes/shared_intelligence.py` |
+| `raw_lessons` | `projections/core/collectors/lesson_collector.py`, `interfaces/cli/ds_memory.py` |
+| `raw_workflow_runs` | `projections/core/collectors/workflow_collector.py`, `projections/core/sla/tracker.py` |
+| `raw_workflow_nodes` | `projections/core/collectors/workflow_collector.py` |
+| `raw_pulse_snapshots` | `interfaces/cli/ds_analytics/harvester.py` (writer + reader) |
+| `raw_planning_specs` | `interfaces/cli/ds_analytics/harvester.py` (writer + reader) |
+| `reg_analyzed_repos` | `interfaces/cli/check_repo_updates.py` (reader + writer) |
+| `reg_skills` | `interfaces/cli/migrate_files_to_sqlite.py` (reader) |
+| `raw_token_usage` | `interfaces/cli/backfill_token_sessions.py` (writer + reader) |
+| `raw_specs` | `interfaces/cli/backfill_task_status.py` (reader) |
+| `raw_tasks` | `interfaces/cli/backfill_task_status.py` (reader + writer) |
+| `ds_technology_signals` | `spool/session_harvester.py` (writer) |
+| `raw_skill_telemetry` | `core/event_store/studio_db.py` (writer), `control/execution/models/selector.py` (reader) |
+
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-02: aggregate_metrics.db tables (finding_rollups, rule_fire_rates, baseline_trends, guard_calibration, pattern_catalog, recommendation_outcomes) registered in _PYTHON_OWNED_TABLES. Separate DB from studio.db; no migration file required. -->
