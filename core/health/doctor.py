@@ -332,6 +332,35 @@ def _check_version_current(source_root: Path, dream_studio_home: Path) -> dict[s
         return {"repo": None, "installed": None, "current": False}
 
 
+def _check_stale_dbs(dream_studio_home: Path) -> dict[str, Any]:
+    """Scan ~/.dream-studio/ for .db files outside ~/.dream-studio/state/.
+
+    These are unexpected and likely stale ghost files (e.g. empty authority.db
+    created at the home root by a misconfigured resolver). Flags them with a
+    clear delete recommendation so they don't cause false-negative task-done
+    reads or other silent authority mismatches.
+    """
+    try:
+        state_dir = dream_studio_home / "state"
+        diagnostics_dir = dream_studio_home / "diagnostics"
+        stale: list[str] = []
+        for db_file in dream_studio_home.rglob("*.db"):
+            try:
+                db_file.relative_to(state_dir)
+                continue
+            except ValueError:
+                pass
+            try:
+                db_file.relative_to(diagnostics_dir)
+                continue
+            except ValueError:
+                pass
+            stale.append(str(db_file))
+        return {"stale_dbs": stale, "ok": len(stale) == 0}
+    except Exception:
+        return {"stale_dbs": [], "ok": True}
+
+
 def run_doctor_checks(
     *,
     source_root: Path,
@@ -353,6 +382,7 @@ def run_doctor_checks(
     failed_info = _check_failed_events(paths.dream_studio_home)
     version_info = _check_version_current(source_root, paths.dream_studio_home)
     handoff_spawner_info = _check_handoff_spawner(source_root)
+    stale_dbs_info = _check_stale_dbs(paths.dream_studio_home)
 
     from core.config.schema_coherence import check_schema_coherence
 
@@ -451,6 +481,7 @@ def run_doctor_checks(
             "schema_coherence": schema_coherence_info,
             "overhead": overhead_info,
             "handoff_spawner": handoff_spawner_info,
+            "stale_dbs": stale_dbs_info,
         },
         "validation": validation,
     }

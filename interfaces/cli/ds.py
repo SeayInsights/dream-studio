@@ -70,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ds", description="Dream Studio global command")
     parser.add_argument("--source-root", default=None, help="Dream Studio source/build root")
     parser.add_argument("--home", default=None, help="Dream Studio user-local state root")
+    parser.add_argument(
+        "--debug", action="store_true", help="Emit diagnostic output (DB path, authority, command)"
+    )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("status", help="Show installed runtime status")
@@ -463,6 +466,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     wo_tasks = work_order_sub.add_parser("tasks", help="List tasks for a work order")
     wo_tasks.add_argument("work_order_id", help="Work order UUID")
+    wo_tasks.add_argument(
+        "--verbose", "-v", action="store_true", help="Include full description for each task"
+    )
     wo_add_tasks = work_order_sub.add_parser(
         "add-tasks", help="Parse a tasks.md file and insert tasks into business_tasks"
     )
@@ -530,6 +536,11 @@ def main(argv: list[str] | None = None) -> int:
     t_set_active.add_argument("task_id", help="Task UUID")
     task_sub.add_parser("active", help="Show the current active task context")
     task_sub.add_parser("clear-active", help="Clear the active task context")
+    t_list = task_sub.add_parser("list", help="Alias for 'ds work-order tasks <work_order_id>'")
+    t_list.add_argument("work_order_id", help="Work order UUID")
+    t_list.add_argument(
+        "--verbose", "-v", action="store_true", help="Include full description for each task"
+    )
 
     # analyze subcommand group (brownfield intake)
     analyze_cmd = subcommands.add_parser(
@@ -613,6 +624,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     source_root = Path(args.source_root).resolve() if args.source_root else REPO_ROOT
     home = Path(args.home).resolve() if args.home else None
+
+    if getattr(args, "debug", False):
+        import sys as _sys
+
+        try:
+            _paths = resolve_installed_runtime_paths(
+                source_root=source_root, dream_studio_home=home
+            )
+            _db_path = _paths.sqlite_path
+        except Exception as _e:
+            _db_path = f"<error: {_e}>"
+        print(f"[debug] source_root: {source_root}", file=_sys.stderr)
+        print(f"[debug] dream_studio_home: {home}", file=_sys.stderr)
+        print(f"[debug] db_path: {_db_path}", file=_sys.stderr)
+        print(f"[debug] command: {getattr(args, 'command', None)}", file=_sys.stderr)
+        _sub = getattr(args, "work_order_command", None) or getattr(args, "project_command", None)
+        if _sub:
+            print(f"[debug] subcommand: {_sub}", file=_sys.stderr)
 
     try:
         if args.command == "status":
@@ -892,7 +921,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "milestone":
             return _milestone_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "task":
-            return _task_dispatch(args)
+            return _task_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "projection":
             from interfaces.cli.projection_cli import handle_projection_command
 
@@ -2011,6 +2040,7 @@ def _work_order_dispatch(
             work_order_id=args.work_order_id,
             source_root=source_root,
             dream_studio_home=dream_studio_home,
+            verbose=getattr(args, "verbose", False),
         )
     if args.work_order_command == "add-tasks":
         return _work_order_add_tasks(
@@ -2346,6 +2376,7 @@ def _work_order_tasks(
     work_order_id: str,
     source_root: Path,
     dream_studio_home: Path | None,
+    verbose: bool = False,
 ) -> int:
     from core.work_orders.queries import list_tasks
 
@@ -2353,6 +2384,7 @@ def _work_order_tasks(
         work_order_id=work_order_id,
         source_root=source_root,
         dream_studio_home=dream_studio_home,
+        verbose=verbose,
     )
     print(json.dumps(result, indent=2))
     return 0 if result.get("ok") else 1
@@ -2718,13 +2750,24 @@ def _milestone_status(
     return 0 if result.get("ok") else 1
 
 
-def _task_dispatch(args: argparse.Namespace) -> int:
+def _task_dispatch(
+    args: argparse.Namespace,
+    source_root: Path | None = None,
+    dream_studio_home: Path | None = None,
+) -> int:
     if args.task_command == "set-active":
         return _task_set_active(task_id=args.task_id)
     if args.task_command == "active":
         return _task_get_active()
     if args.task_command == "clear-active":
         return _task_clear_active()
+    if args.task_command == "list":
+        return _work_order_tasks(
+            work_order_id=args.work_order_id,
+            source_root=source_root or REPO_ROOT,
+            dream_studio_home=dream_studio_home,
+            verbose=getattr(args, "verbose", False),
+        )
     print(f"Unknown task command: {args.task_command}", file=sys.stderr)
     return 1
 

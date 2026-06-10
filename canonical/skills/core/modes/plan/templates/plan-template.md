@@ -39,7 +39,7 @@
 .planning/specs/[topic-name]/
 ├── spec.md              # User stories, requirements (ds-core think output)
 ├── plan.md              # This file (ds-core plan output)
-├── tasks.md             # Task breakdown (ds-core plan output)
+│   (tasks live in SQLite business_tasks — use `ds work-order tasks <id>`)
 ├── research.md          # Optional: research findings
 ├── data-model.md        # Optional: data structures
 └── contracts/           # Optional: API contracts
@@ -120,9 +120,9 @@ directories captured above]
 
 **Skill Flow**: think → **plan** → build → review → verify → ship
 
-**Output Location**: `.planning/specs/[topic-name]/plan.md` and `tasks.md`
+**Output Location**: `.planning/specs/[topic-name]/plan.md`; tasks are in SQLite (`ds work-order tasks <id>`)
 
 **Next Steps**: 
 1. Review this plan with user for approval
-2. Run `ds-core build` with the tasks.md file
+2. Run `ds-core build` to execute tasks from SQLite
 3. Execute tasks in dependency order

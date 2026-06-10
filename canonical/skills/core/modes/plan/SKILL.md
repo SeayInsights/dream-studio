@@ -46,17 +46,15 @@ Use these templates to structure your plan:
 6. **Acceptance** — Each task gets acceptance criteria that can be verified without judgment.
 7. **Assess traceability need** — See Traceability section below.
 8. **Write plan** — Output to `.planning/specs/<topic>/plan.md`
-9. **Write tasks** — Output to `.planning/specs/<topic>/tasks.md`
-   > **Note:** `tasks.md` is a supplementary reference artifact. SQLite (`business_tasks`) is the execution authority. The terminal reads task descriptions from SQLite, not from this file.
-9b. **Persist tasks to DB** — After writing tasks.md, call:
-    `add_tasks_from_file(work_order_id=..., tasks_file=Path(".planning/specs/<topic>/tasks.md"), source_root=..., dream_studio_home=...)`
-    This reads the numbered list from tasks.md and inserts each item as a `business_tasks` row.
-    If `work_order_id` is unknown or the call returns `{"ok": False}`, keep the file artifact and note DB persistence was skipped.
-    **If the work order already has tasks in SQLite (from work order creation), skip this step — do not add duplicates.**
+9. **Persist tasks to SQLite** — Tasks live in SQLite (`business_tasks`) only — never in `.planning/` files.
+   - If the active work order already has tasks in SQLite, skip this step entirely — do not add duplicates.
+   - If no tasks exist yet, present the proposed task list to the user for approval, then write each approved task via:
+     `py -m interfaces.cli.ds work-order add-tasks <work_order_id> --from-file <tasks-file>`
+     where `<tasks-file>` is a temporary numbered-list file (write it to a temp path, never to `.planning/`).
+   - Never create `.planning/specs/<topic>/tasks.md`. Tasks are read from SQLite via `ds work-order tasks <id>`.
 10. **Write traceability registry** — If traceability is active, output to `.planning/traceability.yaml`
 11. **Auto-issues (optional)** — If Director approves, generate GitHub issues from the task list:
-    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in tasks.md
-    - After creation, update tasks.md to add the issue number as a tag: `[#42]` after the task ID
+    - Run `gh issue create --title "<task description>" --body "**Acceptance:** <acceptance criteria>\n\n**Spec:** .planning/specs/<topic>/spec.md"` for each task in SQLite
     - This links plan tasks to trackable GitHub issues for visibility outside the session
     - Skip if: prototype work, personal project without a GitHub remote, or Director declines
 
@@ -92,13 +90,9 @@ Input: "plan: user-auth" (after approved spec)
 
 Output: .planning/specs/user-auth/
 ├── plan.md — Technical context, React 19 + Cloudflare Workers + D1
-├── tasks.md — 16 tasks organized by user story
-│   Phase 2: Foundational (T001-T003)
-│   Phase 3: User Story 1 - Email/Password (T004-T008) ðŸŽ¯ MVP
-│   Phase 4: User Story 2 - Password Reset (T009-T012)
-│   Phase 5: User Story 3 - OAuth (T013-T016)
+│   (tasks persisted to SQLite — query with `ds work-order tasks <id>`)
 
-Tasks use [P] markers for parallelization:
+Tasks persisted to business_tasks with [P] markers for parallelization:
 - T004 [P] [US1] Create User model in src/models/user.ts
 - T005 [P] [US1] Create Session model in src/models/session.ts
 - T006 [US1] Implement AuthService (depends on T004, T005)
@@ -106,7 +100,7 @@ Tasks use [P] markers for parallelization:
 
 ## Output
 - Plan document at `.planning/specs/<topic>/plan.md` (always)
-- Tasks document at `.planning/specs/<topic>/tasks.md` (always)
+- Tasks persisted to SQLite `business_tasks` via `ds work-order add-tasks` (always, unless tasks already exist)
 - Traceability registry at `.planning/traceability.yaml` (only when traceability active)
 
 ## Next in pipeline
