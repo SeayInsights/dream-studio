@@ -24,13 +24,10 @@ from core.telemetry.execution_spine import (
 REQUIRED_TABLES = {
     "execution_events",
     "process_runs",
-    "agent_invocations",
-    "skill_invocations",
-    "workflow_invocations",
-    "hook_invocations",
-    "tool_invocations",
+    # agent_invocations, skill_invocations, workflow_invocations, hook_invocations,
+    # tool_invocations: dropped in migration 106 (data covered by execution_events).
     "token_usage_records",
-    "findings",
+    # findings: dropped in migration 112 (data migrated to security_events + findings_current_status).
     "decision_records",
     "research_evidence_records",
     "blocker_resolution_records",
@@ -294,25 +291,21 @@ def test_spine_writes_reads_and_global_analytics(tmp_path: Path) -> None:
         _seed(conn)
 
         assert conn.execute("SELECT COUNT(*) FROM execution_events").fetchone()[0] == 1
-        assert (
-            usage_by_component(conn, "skill_invocations", "skill_id")[0]["component_id"]
-            == "ds-core"
-        )
-        assert (
-            usage_by_component(conn, "agent_invocations", "agent_id")[0]["component_id"] == "codex"
-        )
-        assert (
-            usage_by_component(conn, "workflow_invocations", "workflow_id")[0]["component_id"]
-            == "route-first"
-        )
-        assert (
-            usage_by_component(conn, "hook_invocations", "hook_id")[0]["component_id"]
-            == "preflight"
-        )
+        # usage_by_component for invocation tables removed — migration 106 dropped
+        # agent_invocations, skill_invocations, workflow_invocations, hook_invocations,
+        # tool_invocations. Data is now in execution_events.
         assert token_rollup(conn)[0]["total_tokens"] == 175
-        finding = findings_rollup(conn)[0]
-        assert finding["file_path"] == "core/telemetry/execution_spine.py"
-        assert finding["severity"] == "medium"
+        # findings_rollup reads findings_current_status which is a projection
+        # (populated by FindingsProjection.fold_spine, not in direct DB tests).
+        # Assert on security_events spine directly instead.
+        row = conn.execute(
+            "SELECT file_path, severity FROM security_events"
+            " WHERE event_kind = 'finding.recorded'"
+            " AND event_id = 'security-finding-telemetry-test'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "core/telemetry/execution_spine.py"
+        assert row[1] == "medium"
         assert (
             conn.execute(
                 "SELECT COUNT(*) FROM route_decision_records WHERE handoff_required = 0"

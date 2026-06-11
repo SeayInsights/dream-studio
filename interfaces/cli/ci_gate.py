@@ -118,9 +118,20 @@ def main() -> None:
         results.append(advisory)
 
     overall = all(r["passed"] for r in results if r["name"] != "advisory_review")
+
+    # Print failures to stderr BEFORE the JSON so they're visible even if the
+    # full JSON output is truncated in CI logs (the output field can be megabytes).
+    if not overall:
+        for r in results:
+            if not r["passed"] and r["name"] != "advisory_review":
+                tail = (r["output"] or "")[-3000:]
+                print(f"\n--- FAILED: {r['name']} ---\n{tail}", file=sys.stderr)
+
     output = {
         "status": "pass" if overall else "fail",
-        "checks": results,
+        "checks": [
+            {**r, "output": (r["output"] or "")[-2000:]} for r in results
+        ],
     }
     print(json.dumps(output, indent=2))
     sys.exit(0 if overall else 1)

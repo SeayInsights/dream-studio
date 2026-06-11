@@ -30,7 +30,7 @@ FACT_TABLES: tuple[str, ...] = (
     "token_usage_records",
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
-    "findings",
+    "findings_current_status",  # findings retired in migration 112 → findings_current_status
     "validation_results",
     "research_evidence_records",
     "decision_records",
@@ -237,7 +237,7 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
             "process_runs",
             "token_usage_records",
             "validation_results",
-            "findings",
+            "findings_current_status",
             "research_evidence_records",
             "decision_records",
             "blocker_resolution_records",
@@ -280,9 +280,9 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                 "validations": _scoped_rows(
                     conn, "validation_results", scope, order_by="created_at, validation_id"
                 ),
-                "findings": _scoped_rows(
-                    conn, "findings", scope, order_by="created_at, finding_id"
-                ),
+                # findings retired in migration 112; findings_current_status lacks
+                # process_run_id/milestone_id/task_id — use project-only rollup.
+                "findings": _security_rollup(conn, scope),
                 "research": _scoped_rows(
                     conn, "research_evidence_records", scope, order_by="created_at, research_id"
                 ),
@@ -846,7 +846,12 @@ def _component_hardening_intelligence(
                     "success_count": usage.get("success_count"),
                     "failure_count": usage.get("failure_count"),
                     "validation_count": _row_count(conn, "validation_results", scope),
-                    "security_finding_count": _row_count(conn, "findings", scope),
+                    # findings_current_status lacks milestone_id/task_id/process_run_id
+                    "security_finding_count": _row_count(
+                        conn,
+                        "findings_current_status",
+                        ScopeFilter(project_id=scope.project_id) if scope else None,
+                    ),
                     "outcome_count": _row_count(conn, "outcome_records", scope),
                     "token_total": token_total,
                     "dashboard_ready": True,
@@ -1295,7 +1300,12 @@ def _validation_outcome_intelligence(
                 "milestone_id": validation["milestone_id"],
                 "task_id": validation["task_id"],
                 "process_run_id": validation["process_run_id"],
-                "security_finding_count": _row_count(conn, "findings", validation_scope),
+                # findings_current_status lacks milestone_id/task_id/process_run_id
+                "security_finding_count": _row_count(
+                    conn,
+                    "findings_current_status",
+                    ScopeFilter(project_id=validation_scope.project_id),
+                ),
                 "token_total": token_total,
                 "component_counts": component_counts,
                 "outcomes": outcome_rows,
@@ -1800,7 +1810,7 @@ def _source_tables_for_components(components: Mapping[str, tuple[str, str, str]]
         "execution_events",
         "token_usage_records",
         "validation_results",
-        "findings",
+        "findings_current_status",  # findings retired in migration 112
         "outcome_records",
     ]
     tables.extend(table for table, _column, _label in components.values())

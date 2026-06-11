@@ -564,7 +564,7 @@ def test_execute_installs_dispatch_hooks_to_hooks_dir(config_root, canonical_roo
 
 
 def test_execute_writes_plugin_root_sidecar(config_root, canonical_root, ds_home):
-    """hooks/.plugin-root sidecar must contain the repo/source root path."""
+    """hooks/.plugin-root sidecar must point at the installed hooks dir."""
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
@@ -572,8 +572,9 @@ def test_execute_writes_plugin_root_sidecar(config_root, canonical_root, ds_home
     sidecar = config_root / "hooks" / ".plugin-root"
     assert sidecar.is_file()
     content = sidecar.read_text(encoding="utf-8").strip()
-    # Source root is canonical_root.parent (tmp_path)
-    assert content == str(canonical_root.parent)
+    # WO-RT changed content from repo_root to hooks_dir so _get_plugin_root()
+    # resolves handler paths inside the installed runtime, not the repo working tree.
+    assert content == str(config_root / "hooks")
 
 
 def test_execute_installs_meta_handlers(config_root, canonical_root, ds_home):
