@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Live-session eval mode (`ds eval run --live`): spawns a fresh `claude` subprocess with `--output-format json`, synthesizes Dream Studio events from its tool-call output (`skill.invoked` / `skill.completed`), and scores with the same deterministic matcher as fixture mode. Live baselines stored under `eval_id + ":live"` key to avoid conflating with fixture baselines. Requires `claude` CLI in PATH; skipped gracefully when absent (WO-EVAL-LIVE).
+- `ds_eval_runs.run_mode` column (migration 120): `ALTER TABLE ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'fixture'` — distinguishes `'fixture'` (deterministic, default), `'live'` (subprocess spawn), and `'verify'` (WO-close verifier) runs. Additive-only; all existing rows implicitly read as `'fixture'` (WO-EVAL-LIVE).
+
 ### Fixed
 - `docs/DATABASE.md`: explicit three-store placement for `eval_registry`, `ds_eval_runs`, `skill_evaluation_runs`, and `hook_eval_runs` — these are primary SQLite authority, not DuckDB analytics projections, consistent with `ds_eval_runs` (migration 104) and `guardrail_decisions` patterns (WO-EVAL-REGISTRY follow-up, PR #289).
 - Migration 117 recreates the three usage-table indexes migration 081's table reconstruction dropped and never recreated (`idx_token_usage_scope`, `idx_ai_usage_operational_scope`, `idx_ai_usage_operational_process`) — every DB at schema 81–116 silently lacked them; DDL matches migrations 037/043 verbatim with `IF NOT EXISTS` (issue #264, WO-IDX-RECREATE).
