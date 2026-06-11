@@ -129,9 +129,7 @@ def main() -> None:
 
     output = {
         "status": "pass" if overall else "fail",
-        "checks": [
-            {**r, "output": (r["output"] or "")[-2000:]} for r in results
-        ],
+        "checks": [{**r, "output": (r["output"] or "")[-2000:]} for r in results],
     }
     print(json.dumps(output, indent=2))
     sys.exit(0 if overall else 1)
