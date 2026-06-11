@@ -386,46 +386,41 @@ def test_audit_direction_aware_live_only_object_not_flagged():
     )
 
 
-def test_audit_against_actual_live_copy():
-    """Audit against the live DB copy from the divergence-sweep detects idx_memory_lifecycle.
+def test_audit_against_reconstructed_live_copy():
+    """Audit detects the exact real-world casualty set on a reconstructed live DB.
 
-    This connects the audit extension back to the real-world finding that motivated O7.
+    Replaces the frozen 2026-05-29 diagnostics-copy dependency (WO-IDX-RECREATE,
+    issue #265): a live copy pinned to a date goes stale with every migration that
+    adds schema objects (the audit's fresh side is always built at HEAD), and the
+    operator-local file made the test skip in CI — so the audit ran nowhere.
+    Reconstruct the scenario hermetically instead: a fully-migrated DB carrying
+    the one known M2 scar (idx_memory_lifecycle silently never created). This
+    runs on every platform, in CI, and never goes stale.
     """
+    import tempfile
+
     from core.config.schema_coherence import check_schema_coherence
 
-    live_copy = (
-        Path.home()
-        / ".dream-studio/diagnostics/2026-05-29/dream-studio-clean/divergence-sweep/studio-copy.db"
-    )
-    if not live_copy.is_file():
-        pytest.skip("Live DB copy from divergence-sweep not available in this environment")
-
     source_root = _source_root()
-    result = check_schema_coherence(source_root, live_db_path=live_copy)
 
-    # The live DB should have exactly the one known casualty
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = Path(tmpdir) / "reconstructed-live.db"
+        conn = sqlite3.connect(str(db_path))
+        run_migrations(conn)
+        conn.execute("DROP INDEX IF EXISTS idx_memory_lifecycle")
+        conn.commit()
+        conn.close()
+
+        result = check_schema_coherence(source_root, live_db_path=db_path)
+
     casualties = [
         f for f in result["findings"] if f.get("finding_type") == "swallowed_statement_casualty"
     ]
     casualty_names = {c["object_name"] for c in casualties}
-    assert (
-        "idx_memory_lifecycle" in casualty_names
-    ), f"Expected idx_memory_lifecycle as a casualty on the live DB copy. Found: {casualty_names}"
-    # Migration 084 (2026-05-30) added two new indexes to business_projects
-    # (idx_business_projects_last_session, idx_business_projects_path) that postdate
-    # the 2026-05-29 live-copy; those are expected casualties on this historical copy.
-    # The original 511-object sweep (pre-084) found exactly 1; after 084 we expect 3.
-    expected_names = {
-        "idx_memory_lifecycle",
-        "idx_business_projects_last_session",
-        "idx_business_projects_path",
-    }
-    assert (
-        "idx_memory_lifecycle" in casualty_names
-    ), f"idx_memory_lifecycle casualty missing. Found: {casualty_names}"
-    assert casualty_names == expected_names, (
-        f"Unexpected casualty set on the live DB copy. "
-        f"Expected {expected_names}, found {casualty_names}"
+    assert casualty_names == {"idx_memory_lifecycle"}, (
+        f"Expected exactly the idx_memory_lifecycle casualty on the reconstructed "
+        f"live DB. Found: {casualty_names}"
     )
     idx_mem = next(c for c in casualties if c["object_name"] == "idx_memory_lifecycle")
     assert idx_mem["severity"] == "medium", "idx_memory_lifecycle is non-unique → medium"
+    assert idx_mem["scope"] == "live_drift"

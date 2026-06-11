@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Migration 117 recreates the three usage-table indexes migration 081's table reconstruction dropped and never recreated (`idx_token_usage_scope`, `idx_ai_usage_operational_scope`, `idx_ai_usage_operational_process`) — every DB at schema 81–116 silently lacked them; DDL matches migrations 037/043 verbatim with `IF NOT EXISTS` (issue #264, WO-IDX-RECREATE).
+- `test_o7_swallow_narrowing.py`: the stale live-copy audit test (frozen 2026-05-29 diagnostics DB; failed locally, skipped in CI) is replaced with a hermetic reconstructed-live-DB test that asserts the exact idx_memory_lifecycle casualty set and runs on every platform (issue #265).
+
 ### Changed
 - Out-of-scope findings now require authority registration: context.md enforcement rule 6 (`core/work_orders/start.py`), the Debug Workflow in CLAUDE.md, and the ds-quality debug skill all instruct registering a Dream Studio authority work order (status `created`) before/alongside any GitHub issue — an issue alone is invisible to `get_next_work_order` and on-close routing (WO-FINDING-TRACK).
 
