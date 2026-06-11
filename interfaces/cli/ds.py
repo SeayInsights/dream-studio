@@ -584,6 +584,12 @@ def main(argv: list[str] | None = None) -> int:
     eval_run_cmd.add_argument(
         "--evals-dir", default=None, dest="evals_dir", help="Override evals directory"
     )
+    eval_run_cmd.add_argument(
+        "--live",
+        action="store_true",
+        default=False,
+        help="Live mode: spawn a fresh claude subprocess and score its events (requires claude CLI in PATH)",
+    )
     eval_sub.add_parser("baseline", help="Print current baseline scores")
     eval_compare_cmd = eval_sub.add_parser(
         "compare", help="Compare recent run scores against baseline"
@@ -3015,6 +3021,7 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
         eval_id = getattr(args, "eval_id", None)
         skill_filter = getattr(args, "skill_filter", None)
         run_all = getattr(args, "all", False)
+        live_mode = getattr(args, "live", False)
         if eval_id:
             from core.eval.schema import EvalCase
 
@@ -3026,7 +3033,7 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
                 )
                 return 1
             case = EvalCase.from_json(path)
-            result = runner.run_case(case)
+            result = runner.run_case(case, live=live_mode)
             return _print(
                 {
                     "eval_id": result.eval_id,
@@ -3034,10 +3041,11 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
                     "composite_score": result.composite_score,
                     "event_score": result.event_score,
                     "behavior_score": result.behavior_score,
+                    "run_mode": result.run_mode,
                 }
             )
         if run_all or skill_filter:
-            results = runner.run_all(skill_filter=skill_filter)
+            results = runner.run_all(skill_filter=skill_filter, live=live_mode)
             report = format_results_report(results)
             print(report)
             passed = sum(1 for r in results if r.passed)
