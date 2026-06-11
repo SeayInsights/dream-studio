@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Out-of-scope findings now require authority registration: context.md enforcement rule 6 (`core/work_orders/start.py`), the Debug Workflow in CLAUDE.md, and the ds-quality debug skill all instruct registering a Dream Studio authority work order (status `created`) before/alongside any GitHub issue — an issue alone is invisible to `get_next_work_order` and on-close routing (WO-FINDING-TRACK).
+
 ### Fixed
 - `canonical/workflows/pre-push.yaml`: docs-drift gate escalated from advisory to blocking. CI runs the identical `contract_docs_drift_gate.py` script (same `origin/main...HEAD` merge-base change set) as a blocking step, so the advisory local tier let PR #263 push green and then fail all three matrix platforms on the same drift. Regression tests pin the full-branch change-set computation and the blocking tier (WO-GATE-PARITY).
 - `core/work_orders/verify.py`: `_collect_git_commits` now falls back to grepping the WO title token (e.g. `WO-DEBT-I`) when the UUID grep finds nothing — squash-merge commit messages carry the WO name, never the UUID, so every squash-merged WO previously graded against an empty diff (score-0 "N/A: empty diff" violations spawning unactionable remediation WOs). When neither pattern matches, the diff is `None` and `verify_work_order` records an `unreviewable` verdict (no gaps, no spawned WOs) instead of grading nothing (WO-GRADER-LOOKUP).
