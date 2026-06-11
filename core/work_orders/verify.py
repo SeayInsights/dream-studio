@@ -403,6 +403,36 @@ def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
     return proc
 
 
+def _extract_first_json_object(text: str) -> "str | None":
+    """Return the first balanced top-level JSON object substring, or None."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
 def _collect_grader(proc: subprocess.Popen, timeout: int = 180) -> dict[str, Any]:  # type: ignore[type-arg]
     try:
         feeder = getattr(proc, "_ds_feeder", None)
@@ -410,12 +440,25 @@ def _collect_grader(proc: subprocess.Popen, timeout: int = 180) -> dict[str, Any
             feeder.join(timeout=60)
         stdout, _ = proc.communicate(timeout=timeout)
         output = stdout.strip()
+        # Strip leading/trailing fences when the entire output is a fenced block.
         if output.startswith("```"):
             lines = output.splitlines()
             output = "\n".join(ln for ln in lines if not ln.strip().startswith("```")).strip()
-        return json.loads(output)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Grader returned non-JSON: {exc}\nRaw:\n{stdout[:500]}")
+        # Fast path: clean JSON.
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            pass
+        # Slow path: prose prefix or trailing text — extract first balanced object.
+        candidate = _extract_first_json_object(output)
+        if candidate is not None:
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+        raise ValueError(f"Grader returned non-JSON.\nRaw:\n{stdout[:500]}")
+    except ValueError:
+        raise
     except Exception as exc:
         raise RuntimeError(f"Grader failed: {exc}")
 
