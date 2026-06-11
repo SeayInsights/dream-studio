@@ -517,23 +517,14 @@ def test_compute_scores_composite_weights() -> None:
 
 
 def test_compute_scores_below_threshold() -> None:
-    """Composite below 0.70 when quality is poor."""
+    """Composite < 0.70 when correctness and quality are both degraded."""
     from core.work_orders.verify import _compute_scores
 
+    # 1.0*0.5 + 0.5*0.3 + 0.0*0.2 = 0.65
     scores = _compute_scores(
-        completion={"passed": True, "completion_score": 1.0},
-        correctness={"correctness_passed": True, "correctness_score": 1.0},
-        quality={"quality_passed": False, "quality_score": 0.2},
-        total_tasks=1,
-    )
-    # 1.0*0.5 + 1.0*0.3 + 0.2*0.2 = 0.84 — wait that's above 0.70.
-    # Need lower quality: 1.0*0.5 + 1.0*0.3 + 0.0*0.2 = 0.80 still above.
-    # With correctness also degraded: 1.0*0.5 + 0.5*0.3 + 0.0*0.2 = 0.65
-    scores2 = _compute_scores(
         completion={"passed": True, "completion_score": 1.0},
         correctness={"correctness_passed": False, "correctness_score": 0.5},
         quality={"quality_passed": False, "quality_score": 0.0},
         total_tasks=1,
     )
-    # 1.0*0.5 + 0.5*0.3 + 0.0*0.2 = 0.65
-    assert scores2["composite_score"] < 0.70
+    assert scores["composite_score"] < 0.70
