@@ -69,6 +69,7 @@ Everything else flows continuously: start → execute each task → close → au
         "status": "closed",
         "forced": bool,
         "bypassed_gates": [str, ...],          # populated when forced
+        "verify_warning": str | absent,        # inline verify was unreviewable (no commit evidence) — surface verbatim
         "next_work_order": {...} | absent,     # next open WO in same milestone
         "next_command": str | absent,          # explicit next-step hint
         "next_block": str,                     # printable NEXT WORK ORDER / MILESTONE COMPLETE / none-found block

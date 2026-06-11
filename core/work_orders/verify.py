@@ -302,19 +302,39 @@ def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
 # ── Git diff collection ─────────────────────────────────────────────────────────
 
 
-def _collect_git_commits(source_root: Path, work_order_id: str) -> str:
+def _collect_git_commits(
+    source_root: Path, work_order_id: str, title: str | None = None
+) -> str | None:
+    """Collect commit diffs referencing this work order.
+
+    Greps git log for the WO UUID's first 8 chars and, when that finds nothing,
+    for the WO title token (the part before ' - ', e.g. 'WO-DEBT-I') — squash-merge
+    commit messages carry the WO name, never the UUID (WO-GRADER-LOOKUP).
+    Returns None when neither pattern matches: the diff is unreviewable, which
+    callers must treat differently from a reviewable diff (no score-0 verdicts,
+    no remediation WOs, surface a warning instead).
+    """
     short_id = work_order_id[:8]
+    patterns = [short_id]
+    if title:
+        token = title.split(" - ")[0].strip()
+        if token:
+            patterns.append(token)
     try:
-        log_result = subprocess.run(
-            ["git", "log", "--oneline", "--all", f"--grep={short_id}"],
-            cwd=str(source_root),
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if not log_result.stdout.strip():
-            return f"(no commits found referencing {short_id})"
-        lines = log_result.stdout.strip().splitlines()
+        lines: list[str] = []
+        for pattern in patterns:
+            log_result = subprocess.run(
+                ["git", "log", "--oneline", "--all", "--fixed-strings", f"--grep={pattern}"],
+                cwd=str(source_root),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if log_result.stdout.strip():
+                lines = log_result.stdout.strip().splitlines()
+                break  # UUID hits are the precise match; only widen when empty
+        if not lines:
+            return None
         diff_parts: list[str] = []
         for line in lines[:10]:
             commit_hash = line.split()[0]
@@ -714,7 +734,76 @@ def verify_work_order(
             )
             for i, t in enumerate(tasks)
         )
-        git_diff = _collect_git_commits(source_root, work_order_id)
+        git_diff = _collect_git_commits(source_root, work_order_id, title=wo["title"])
+
+        # Unreviewable: no commit evidence by UUID or title token. Do NOT grade —
+        # graders given an empty diff return score-0 "N/A: empty diff" violations
+        # that spawn unactionable remediation WOs (WO-GRADER-LOOKUP). Record an
+        # unreviewable verdict with a warning instead. Mock mode skips this so CI
+        # fixtures (seeded WOs with no commits) keep exercising the grader path.
+        if git_diff is None and not os.environ.get(_MOCK_ENV):
+            token = wo["title"].split(" - ")[0].strip()
+            warning = (
+                f"independent review unreviewable: no commits found referencing "
+                f"{work_order_id[:8]} or '{token}'. Work is NOT certified — review manually."
+            )
+            scores = {
+                "completion_score": 0.0,
+                "correctness_score": 0.0,
+                "quality_score": 0.0,
+                "composite_score": 0.0,
+            }
+            completed_at = datetime.now(timezone.utc).isoformat()
+            _write_eval_run(
+                conn,
+                work_order_id=work_order_id,
+                scores=scores,
+                passed=False,
+                failure_reasons=["unreviewable_no_commits_found"],
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+            verdict_dir = p_root / "work-orders" / work_order_id
+            verdict_dir.mkdir(parents=True, exist_ok=True)
+            verdict_path = verdict_dir / "review-verdict.json"
+            verdict_path.write_text(
+                json.dumps(
+                    {
+                        "work_order_id": work_order_id,
+                        "passed": False,
+                        "unreviewable": True,
+                        "unreviewable_reason": warning,
+                        "scores": scores,
+                        "auto_continue_warning": warning,
+                        "completion": {},
+                        "correctness": {},
+                        "quality": {},
+                        "gaps": [],
+                        "spawned_work_orders": [],
+                        "verified_at": completed_at,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            return {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "passed": False,
+                "unreviewable": True,
+                "summary": warning,
+                "completion": {},
+                "correctness": {},
+                "quality": {},
+                "migration": None,
+                "scores": scores,
+                "auto_continue_warning": warning,
+                "gaps": [],
+                "spawned_work_orders": [],
+                "verdict_path": str(verdict_path),
+            }
+        if git_diff is None:
+            git_diff = f"(no commits found referencing {work_order_id[:8]})"
 
         # Build grader prompts.
         prompts: dict[str, str] = {
