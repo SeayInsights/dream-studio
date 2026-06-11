@@ -197,6 +197,52 @@ def test_pre_push_manifest_docs_drift_is_blocking() -> None:
     assert docs_drift["tier"] == "blocking"
 
 
+def test_engine_skill_coupling_domains_exist() -> None:
+    """WO-SKILL-COUPLING: the three new deterministic engine→skill coupling domains
+    must be registered and release-blocking."""
+    registry = contract_registry()
+    domain_ids = {domain["domain_id"] for domain in registry["domains"]}
+    assert "work_orders_engine_skill_surface" in domain_ids
+    assert "projects_engine_skill_surface" in domain_ids
+    assert "milestones_engine_skill_surface" in domain_ids
+    for domain in registry["domains"]:
+        if domain["domain_id"] in (
+            "work_orders_engine_skill_surface",
+            "projects_engine_skill_surface",
+            "milestones_engine_skill_surface",
+        ):
+            assert (
+                domain["release_blocking"] is True
+            ), f"{domain['domain_id']} must be release_blocking"
+
+
+def test_work_orders_engine_change_triggers_skill_surface_domain() -> None:
+    """Changing a work_orders engine file must require canonical/skills/ds-workorder/SKILL.md."""
+    report = change_impact_report(["core/work_orders/verify.py"])
+
+    wo_domain = next(
+        (d for d in report["domains"] if d["domain_id"] == "work_orders_engine_skill_surface"),
+        None,
+    )
+    assert wo_domain is not None
+    assert wo_domain["impacted"] is True
+    assert "canonical/skills/ds-workorder/SKILL.md" in wo_domain["missing_required_doc_refs"]
+    assert wo_domain["release_blocking"] is True
+
+
+def test_work_orders_engine_change_passes_when_skill_doc_included() -> None:
+    """Including canonical/skills/ds-workorder/SKILL.md in the changeset satisfies the coupling."""
+    report = change_impact_report(
+        ["core/work_orders/verify.py", "canonical/skills/ds-workorder/SKILL.md"]
+    )
+
+    wo_domain = next(
+        d for d in report["domains"] if d["domain_id"] == "work_orders_engine_skill_surface"
+    )
+    assert wo_domain["freshness_status"] == "fresh"
+    assert wo_domain["missing_required_doc_refs"] == []
+
+
 def test_contract_docs_drift_cli_accepts_reviewed_no_change() -> None:
     result = subprocess.run(
         [

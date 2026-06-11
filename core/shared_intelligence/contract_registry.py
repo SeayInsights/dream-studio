@@ -591,6 +591,75 @@ CONTRACT_DOMAINS: tuple[dict[str, Any], ...] = (
         "public_export_boundary": "schema_coherence_findings_are_operational_evidence_not_public_claims",
     },
     {
+        # Work-order engine → ds-workorder skill surface coupling.
+        # core/work_orders/*.py are the authoritative functions wrapped by ds-workorder
+        # skill modes (start, execute, close, block, status). When the engine API changes
+        # (return shapes, gate names, field names), the corresponding SKILL.md surface
+        # contract must be reviewed and updated in the same changeset so operators do not
+        # get instructions that mismatch what the functions return.
+        # Phase 18 evidence: WO-GATE-PARITY (PR #269), WO-GRADER-LOOKUP (PRs #267–268),
+        # and WO-TASK-UX (PR #266) all changed engine + SKILL.md in the same PR — the
+        # coupling was implicit; this domain makes it explicit and enforced.
+        "domain_id": "work_orders_engine_skill_surface",
+        "domain_name": "Work Orders Engine → DS-Workorder Skill Surface",
+        "source_patterns": [
+            "core/work_orders/**",
+        ],
+        "contract_refs": [
+            "canonical/skills/ds-workorder/SKILL.md",
+            "canonical/skills/ds-workorder/modes/start/SKILL.md",
+            "canonical/skills/ds-workorder/modes/execute/SKILL.md",
+            "canonical/skills/ds-workorder/modes/close/SKILL.md",
+            "canonical/skills/ds-workorder/modes/block/SKILL.md",
+            "canonical/skills/ds-workorder/modes/status/SKILL.md",
+        ],
+        "docs_refs": [],
+        "required_doc_refs": [
+            "canonical/skills/ds-workorder/SKILL.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "work_orders_engine_changes_require_ds_workorder_skill_surface_review",
+        "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
+    },
+    {
+        # Projects engine → ds-project skill surface coupling.
+        # Same pattern as work_orders_engine_skill_surface.
+        "domain_id": "projects_engine_skill_surface",
+        "domain_name": "Projects Engine → DS-Project Skill Surface",
+        "source_patterns": [
+            "core/projects/**",
+        ],
+        "contract_refs": [
+            "canonical/skills/ds-project/SKILL.md",
+        ],
+        "docs_refs": [],
+        "required_doc_refs": [
+            "canonical/skills/ds-project/SKILL.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "projects_engine_changes_require_ds_project_skill_surface_review",
+        "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
+    },
+    {
+        # Milestones engine → ds-milestone skill surface coupling.
+        # Same pattern as work_orders_engine_skill_surface.
+        "domain_id": "milestones_engine_skill_surface",
+        "domain_name": "Milestones Engine → DS-Milestone Skill Surface",
+        "source_patterns": [
+            "core/milestones/**",
+        ],
+        "contract_refs": [
+            "canonical/skills/ds-milestone/SKILL.md",
+        ],
+        "docs_refs": [],
+        "required_doc_refs": [
+            "canonical/skills/ds-milestone/SKILL.md",
+        ],
+        "release_blocking": True,
+        "freshness_policy": "milestones_engine_changes_require_ds_milestone_skill_surface_review",
+        "public_export_boundary": "skill_surface_docs_are_agent_contracts_not_public_api",
+    },
+    {
         # STRUCTURE.md has a hand-written directory tree that drifts as packs evolve.
         # Adding packs.yaml as a source here means any pack/mode change requires STRUCTURE.md
         # to be updated in the same changeset — enforcing the AUTO-DIRECTORY-TREE contract.

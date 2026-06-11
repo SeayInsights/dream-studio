@@ -97,6 +97,7 @@ _COMPLETION_PROMPT_TEMPLATE = """You are an independent code reviewer with no pr
 
 Work order: {title}
 Work order ID: {work_order_id}
+Work order type: {work_order_type}
 
 Tasks that were supposed to be completed:
 {task_list}
@@ -134,6 +135,20 @@ Return ONLY valid JSON with this exact schema (no prose, no markdown fences):
 
 A gap entry is required for every task with verdict "partial" or "missing".
 If all tasks pass, return gaps as an empty array.
+
+BEHAVIORAL AC CHECK (warning only, never causes passed=false):
+If the work_order_type is "feature" or "infrastructure" AND none of the task descriptions
+contain observable end-to-end behavioral acceptance criteria (what the operator sees or
+experiences — e.g., a phrase like "Acceptance:", "operator can", "user can", "returns X
+when", "emits Y spool event", "CLI outputs") — add one warning-severity gap:
+{{
+  "title": "Add observable behavioral acceptance criteria to task descriptions",
+  "description": "No task in this work order describes end-to-end observable behavior from the operator's perspective. Tasks should include at least one AC statement like 'Acceptance: <what the operator experiences>'. This is a documentation gap; it does not affect code correctness.",
+  "work_order_type": "documentation",
+  "tasks": [{{ "title": "Add behavioral AC to task descriptions", "description": "Rewrite each task description to include an Acceptance: clause stating what the operator observes when the task is done correctly." }}]
+}}
+Do NOT emit this gap if: (a) behavioral AC is already present, (b) work_order_type is not
+feature/infrastructure, or (c) the gap would duplicate a task-level gap already in the list.
 """
 
 # ── Grader 2 — Correctness prompt (no task list) ───────────────────────────────
@@ -884,6 +899,7 @@ def verify_work_order(
             "completion": _COMPLETION_PROMPT_TEMPLATE.format(
                 title=wo["title"],
                 work_order_id=work_order_id,
+                work_order_type=wo.get("work_order_type", "infrastructure"),
                 task_list=task_list_str,
                 git_diff=git_diff,
             ),
