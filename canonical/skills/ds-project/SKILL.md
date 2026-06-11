@@ -375,4 +375,4 @@ A scoped project passes quality review if:
 
 A scope session that produces "TBD" in any field has failed the quality bar. Ask for the missing information instead.
 
-<!-- Last reviewed 2026-06-11 — WO-MARKER-FORMAT: no skill surface change. Internal guard added to _write_project_marker() in core/projects/mutations.py to refuse overwriting an existing marker for a different project. emitters/claude_code/project.py read_project_id() updated to parse both JSON (TA3+ format) and legacy plain-UUID marker formats. Neither change affects the skill API seen by the adapter. -->
+<!-- Last reviewed 2026-06-11 — WO-MARKER-FORMAT + remediation (993ba17a): no skill surface change in either PR. PR #278: cross-project overwrite guard + JSON/UUID emitter parse. PR #279 (remediation): added db_path param to _write_project_marker() for project-existence validation against business_projects before writing. Root-cause audit note written to decision_log (decision_id 8cc3a6d0). Neither change affects the skill API seen by the adapter. -->
