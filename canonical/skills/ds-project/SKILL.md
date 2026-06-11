@@ -374,3 +374,5 @@ A scoped project passes quality review if:
 - `ds project next <project_id>` returns a valid work order
 
 A scope session that produces "TBD" in any field has failed the quality bar. Ask for the missing information instead.
+
+<!-- Last reviewed 2026-06-11 — WO-MARKER-FORMAT: no skill surface change. Internal guard added to _write_project_marker() in core/projects/mutations.py to refuse overwriting an existing marker for a different project. emitters/claude_code/project.py read_project_id() updated to parse both JSON (TA3+ format) and legacy plain-UUID marker formats. Neither change affects the skill API seen by the adapter. -->

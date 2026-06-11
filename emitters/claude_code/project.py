@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -18,18 +19,44 @@ _log = logging.getLogger(__name__)
 def read_project_id(root: Path | None) -> str | None:
     """Read .dream-studio-project from root (or cwd) and return a valid UUID, or None.
 
+    Parses both marker formats:
+    - JSON (TA3+ format): {"project_id": "<uuid>", ...}
+    - Plain UUID (legacy format): bare UUID on the first line
+
     Retained for backward compatibility. Prefer get_active_project_id() when
     Claude Code runs from non-project directories (e.g. home directory).
     """
     base = root if root is not None else Path.cwd()
     marker = base / _MARKER
     try:
-        line = marker.read_text(encoding="utf-8").splitlines()[0].strip()
-    except (OSError, IndexError):
+        raw = marker.read_text(encoding="utf-8").strip()
+    except OSError:
         return None
-    if _UUID_RE.match(line):
-        return line
-    _log.warning("Malformed project ID in %s (not a UUID) — project_id will be null", marker)
+
+    # Try JSON first (TA3+ format).
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "project_id" in data:
+            project_id = str(data["project_id"]).strip()
+            if _UUID_RE.match(project_id):
+                return project_id
+            _log.warning(
+                "Malformed project ID in %s (JSON project_id is not a UUID) — project_id will be null",
+                marker,
+            )
+            return None
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Plain-UUID fallback (legacy format: first line is a bare UUID).
+    first_line = raw.splitlines()[0].strip() if raw else ""
+    if _UUID_RE.match(first_line):
+        return first_line
+
+    _log.warning(
+        "Malformed project ID in %s (not JSON with project_id, not a UUID) — project_id will be null",
+        marker,
+    )
     return None
 
 
