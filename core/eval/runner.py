@@ -3,9 +3,10 @@
 Scoring: composite_score = event_score (100% deterministic, no LLM judge).
 Pass threshold: composite_score >= case.minimum_pass_score
 
-Events are read from fixture_events (unit tests) or from the canonical-event
-substrate (business_canonical_events / ai_canonical_events) for live runs.
-No live Claude sessions, no subprocess calls.
+Events are read from case.fixture_events only. All eval cases in evals/ define
+fixture_events — live canonical-session mode is not implemented. Passing a case
+with fixture_events=None raises NotImplementedError so the gap is explicit rather
+than silently scoring 0.0 with a misleading "canonical" run_mode label.
 """
 
 from __future__ import annotations
@@ -58,7 +59,12 @@ class EvalRunner:
 
         try:
             # ── 1. Get events ────────────────────────────────────────────────
-            events = case.fixture_events or []
+            if case.fixture_events is None:
+                raise NotImplementedError(
+                    f"Live canonical-session eval mode is not implemented. "
+                    f"Eval case '{case.eval_id}' must define fixture_events."
+                )
+            events = case.fixture_events
 
             # ── 2. Deterministic event matching (100% weight) ─────────────────
             match_result = match_events(case, events)
@@ -97,7 +103,7 @@ class EvalRunner:
                 match_result=match_result,
                 regression_flagged=regression_flagged,
                 baseline_score=baseline_score,
-                run_mode="fixture" if case.fixture_events is not None else "canonical",
+                run_mode="fixture",
             )
 
         except Exception as exc:
