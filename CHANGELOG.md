@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `eval_registry` friction threshold logic (WO-EVAL-LOOP-THRESHOLD): `aggregate_friction_signals()` now increments `friction_signal_count` per run and only sets `friction_flag=1` when the count reaches `friction_threshold` (default 3 per row). Migration 121 adds `friction_signal_count INTEGER NOT NULL DEFAULT 0` and `friction_threshold INTEGER NOT NULL DEFAULT 3` to `eval_registry`. Source (a) table reference (`raw_skill_telemetry` vs non-existent `skill_invocations`) documented in code.
+
 ### Added
 - Friction-to-eval feedback loop (WO-EVAL-LOOP): `core/eval/friction.py` aggregates three friction sources (session failures, skill corrections, guardrail blocks) into `eval_registry.friction_flag`; `ds eval queue show/run/aggregate` CLI surface; `ds eval baseline --live` and `ds eval run --live` already in place; pulse `degraded_skills` now uses max of telemetry-based and registry-based degraded counts; `rubric-immutability` pre-push gate blocks changes to `eval-rubric.yml` without `[rubric-update]` commit token (PR #292).
 

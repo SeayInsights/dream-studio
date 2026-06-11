@@ -34,7 +34,10 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
         flagged: set[str] = set()
         sources_ok = 0
 
-        # (a) Session failures linked to skill invocations
+        # (a) Session failures linked to skill invocations.
+        # The task spec references skill_invocations.skill_id; that table does not
+        # exist in the schema — raw_skill_telemetry is the canonical skill-run table
+        # (confirmed by sqlite_master inspection 2026-06-11). Using it here is correct.
         try:
             rows = conn.execute("""
                 SELECT DISTINCT rst.skill_name AS skill_id
@@ -82,12 +85,23 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
         except Exception as exc:
             logger.debug("Friction source (c) skipped — guardrail_decisions: %s", exc)
 
-        # Update eval_registry.friction_flag for all flagged targets (only where not yet set)
+        # Increment signal counts and gate friction_flag on threshold.
+        # friction_threshold defaults to 3 (column default); friction_flag is only
+        # set to 1 when friction_signal_count reaches the per-row threshold.
         updated = 0
         for target_id in flagged:
+            conn.execute(
+                "UPDATE eval_registry"
+                " SET friction_signal_count = friction_signal_count + 1,"
+                "     updated_at = datetime('now')"
+                " WHERE target_id=?",
+                (target_id,),
+            )
             cursor = conn.execute(
-                "UPDATE eval_registry SET friction_flag=1, updated_at=datetime('now')"
-                " WHERE target_id=? AND friction_flag=0",
+                "UPDATE eval_registry"
+                " SET friction_flag=1, updated_at=datetime('now')"
+                " WHERE target_id=? AND friction_flag=0"
+                "   AND friction_signal_count >= friction_threshold",
                 (target_id,),
             )
             updated += cursor.rowcount
