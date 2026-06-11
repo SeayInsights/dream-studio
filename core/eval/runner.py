@@ -195,7 +195,13 @@ class EvalRunner:
                 db_path=self.db_path,
             )
 
-            # ── 5. Persist to ds_eval_runs ────────────────────────────────────
+            # Load fixture baseline for friction detection (live vs fixture delta)
+            fixture_baseline_data = load_baseline(case.eval_id, case.version, self.db_path)
+            fixture_baseline_score = (
+                fixture_baseline_data["baseline_score"] if fixture_baseline_data else None
+            )
+
+            # ── 5. Persist to ds_eval_runs + update eval_registry ────────────
             _write_live_eval_run(
                 eval_id=case.eval_id,
                 version=case.version,
@@ -203,6 +209,9 @@ class EvalRunner:
                 passed=passed,
                 failure_reasons=match_result.missing_events + match_result.negative_violations,
                 db_path=self.db_path,
+                target_id=case.skill_id,
+                target_type="skill" if case.skill_id else None,
+                fixture_baseline_score=fixture_baseline_score,
             )
 
             elapsed = time.monotonic() - start
@@ -340,8 +349,11 @@ def _write_live_eval_run(
     passed: bool,
     failure_reasons: list[str],
     db_path=None,
+    target_id: str | None = None,
+    target_type: str | None = None,
+    fixture_baseline_score: float | None = None,
 ) -> None:
-    """Persist one live-mode eval run to ds_eval_runs. Non-fatal on any error."""
+    """Persist one live-mode eval run to ds_eval_runs and update eval_registry. Non-fatal on any error."""
     try:
         import sqlite3
 
@@ -371,6 +383,22 @@ def _write_live_eval_run(
                 "live",
             ),
         )
+        if target_id and target_type:
+            conn.execute(
+                "UPDATE eval_registry"
+                " SET last_run_at=?, last_run_id=?, rubric_score=?, updated_at=?"
+                " WHERE target_id=? AND target_type=?",
+                (now, run_id, int(round(composite_score * 100)), now, target_id, target_type),
+            )
+            if (
+                fixture_baseline_score is not None
+                and (fixture_baseline_score - composite_score) > 0.10
+            ):
+                conn.execute(
+                    "UPDATE eval_registry SET friction_flag=1, updated_at=?"
+                    " WHERE target_id=? AND target_type=?",
+                    (now, target_id, target_type),
+                )
         conn.commit()
         conn.close()
     except Exception:

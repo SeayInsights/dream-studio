@@ -590,7 +590,19 @@ def main(argv: list[str] | None = None) -> int:
         default=False,
         help="Live mode: spawn a fresh claude subprocess and score its events (requires claude CLI in PATH)",
     )
-    eval_sub.add_parser("baseline", help="Print current baseline scores")
+    eval_baseline_cmd = eval_sub.add_parser("baseline", help="Print current baseline scores")
+    eval_baseline_cmd.add_argument(
+        "--live",
+        action="store_true",
+        default=False,
+        help="Run eval in live mode and capture the result as the live baseline (requires --eval-id)",
+    )
+    eval_baseline_cmd.add_argument(
+        "--eval-id",
+        default=None,
+        dest="eval_id",
+        help="Eval ID to capture live baseline for (required when --live is specified)",
+    )
     eval_compare_cmd = eval_sub.add_parser(
         "compare", help="Compare recent run scores against baseline"
     )
@@ -3054,6 +3066,37 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
         return 1
 
     if args.eval_command == "baseline":
+        live_mode = getattr(args, "live", False)
+        eval_id = getattr(args, "eval_id", None)
+        if live_mode:
+            if not eval_id:
+                print("--eval-id is required when --live is specified", file=sys.stderr)
+                return 1
+            from core.eval.schema import EvalCase
+
+            path = evals_dir / f"{eval_id}.json"
+            if not path.exists():
+                print(
+                    json.dumps({"ok": False, "error": f"Eval not found: {eval_id}"}),
+                    file=sys.stderr,
+                )
+                return 1
+            case = EvalCase.from_json(path)
+            runner = EvalRunner(evals_dir=evals_dir)
+            result = runner.run_case(case, live=True)
+            from core.eval.baseline import load_baseline
+
+            live_baseline = load_baseline(eval_id + ":live", case.version)
+            return _print(
+                {
+                    "eval_id": eval_id,
+                    "live_baseline_score": (
+                        live_baseline["baseline_score"] if live_baseline else result.composite_score
+                    ),
+                    "passed": result.passed,
+                    "run_mode": result.run_mode,
+                }
+            )
         from core.eval.baseline import get_all_baselines
 
         rows = get_all_baselines()
