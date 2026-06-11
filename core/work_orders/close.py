@@ -383,12 +383,18 @@ def close_work_order(
             # dependency (e.g. for gap WO registration callbacks).
             from core.work_orders.verify import verify_work_order as _verify_wo
 
-            _verify_result = _verify_wo(
-                work_order_id=work_order_id,
-                source_root=source_root,
-                dream_studio_home=dream_studio_home,
-                planning_root=p_root,
-            )
+            try:
+                _verify_result = _verify_wo(
+                    work_order_id=work_order_id,
+                    source_root=source_root,
+                    dream_studio_home=dream_studio_home,
+                    planning_root=p_root,
+                )
+            except Exception as exc:
+                return {
+                    "ok": False,
+                    "error": f"Auto-verify raised an exception: {exc}",
+                }
             _verify_ran = True
             if not _verify_result.get("ok"):
                 return {

@@ -146,10 +146,10 @@ Git diff to review:
 {git_diff}
 
 Rules to check (flag violations, not warnings — be precise):
-(1) THREE-STORE ARCHITECTURE: SQLite studio.db is for business_* and event-spine tables only. DuckDB is for analytics projections. files.db is for artifact blobs. Flag: projections/ code writing to business_* tables; analytics code reading from SQLite instead of DuckDB.
+(1) THREE-STORE ARCHITECTURE: SQLite studio.db is for business_* and event-spine tables only. DuckDB is for analytics projections. files.db is for artifact blobs. Flag: analytics code reading from SQLite instead of DuckDB. NOTE: core/projections/ modules are EXPECTED to write to business_* tables — they materialize canonical events into business read models. Do NOT flag projection writes to business_* as violations.
 (2) LAYER-MAP Rule 1: runtime/hooks/ must not write to authority tables (business_*, raw_*).
-(3) LAYER-MAP Rule 2: projections/ modules must be read-only against canonical tables.
-(4) LAYER-MAP Rule 3: business_* writes must come only from interfaces/cli/ or core/work_orders/.
+(3) LAYER-MAP Rule 2: projections/ modules must be read-only against CANONICAL EVENT tables (business_canonical_events, ai_canonical_events). Projections may and should write to business_* read-model tables as part of event materialization.
+(4) LAYER-MAP Rule 3: business_* writes must come only from interfaces/cli/, core/work_orders/, OR core/projections/ (canonical event handlers only — not ad-hoc writes outside an event handler method).
 (5) LAYER-MAP Rule 4: canonical_events must only be written by spool/ingestor.py.
 (6) TEST COVERAGE: new public functions or CLI commands added without corresponding tests; existing tests deleted without replacement.
 (7) MIGRATION HYGIENE (only if the diff adds a migration file): migration file added? released_version bumped? aspirational-schema-debt.md updated?
