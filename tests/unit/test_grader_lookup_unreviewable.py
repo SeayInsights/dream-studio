@@ -199,6 +199,42 @@ def test_gate_passes_on_unreviewable_verdict(tmp_path):
     assert reason == ""
 
 
+def test_spawn_grader_feeds_prompt_via_stdin_not_argv():
+    """The prompt must reach the grader via stdin, never argv.
+
+    With a real diff the prompt routinely exceeds Windows' ~32K command-line
+    limit and CreateProcess fails with WinError 206 (hit re-verifying
+    WO-DEBT-I once the title-token lookup started finding real commits).
+    """
+    import io
+
+    from core.work_orders import verify as verify_mod
+
+    big_prompt = "x" * 100_000  # far beyond the Windows argv limit
+    captured: dict[str, object] = {}
+
+    class _RecordingStdin(io.StringIO):
+        def close(self):  # keep the buffer readable after the feeder closes it
+            self.closed_by_feeder = True
+
+    class _FakeProc:
+        def __init__(self):
+            self.stdin = _RecordingStdin()
+
+    def _fake_popen(args, **kwargs):
+        captured["args"] = args
+        captured["stdin_is_pipe"] = kwargs.get("stdin") == subprocess.PIPE
+        return _FakeProc()
+
+    with patch.object(verify_mod.subprocess, "Popen", _fake_popen):
+        proc = verify_mod._spawn_grader(big_prompt)
+        proc._ds_feeder.join(timeout=10)
+
+    assert captured["args"] == ["claude", "--print"], "prompt must not be an argv element"
+    assert captured["stdin_is_pipe"] is True
+    assert proc.stdin.getvalue() == big_prompt
+
+
 def test_gate_still_fails_on_reviewable_failed_verdict(tmp_path):
     from core.work_orders.close import run_gate_check
 
