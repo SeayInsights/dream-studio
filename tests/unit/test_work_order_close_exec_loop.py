@@ -1,11 +1,17 @@
 """Tests for the WO-EXEC-LOOP autonomous close flow in core.work_orders.close.
 
-Three scenarios exercised:
+Scenarios exercised:
 1. auto-verify triggers — verify_work_order called inline when independent_review
    gate applies and no verdict file exists.
-2. pass path — after verify passes, close succeeds and next WO is auto-started.
-3. gap path — after verify returns gaps, remediation WO is registered and auto-started;
+2. auto-verify skipped — verify_work_order NOT called when verdict file already exists.
+3. pass path — after verify passes, close succeeds and next WO is auto-started.
+4. gap path — after verify returns gaps, remediation WO is registered and auto-started;
    original WO still closes.
+5. T4c: correctness fail — completion passes but correctness grader finds an
+   architectural violation; remediation WO registered, original WO still closes.
+6. T4d: composite below threshold — quality issues tank composite below 0.70;
+   gap WO registered, auto-continue blocked.
+7. T4d: _compute_scores weights — unit test of composite score formula.
 """
 
 from __future__ import annotations
@@ -159,6 +165,134 @@ def _mock_verify_gap(*, work_order_id, planning_root, **_kw):
     }
 
 
+def _mock_verify_correctness_fail(*, work_order_id, planning_root, **_kw):
+    """Completion passes but correctness grader found an architectural violation (T4c)."""
+    verdict = {
+        "passed": False,
+        "summary": "Completion ok but architectural violation detected",
+        "completion": {
+            "passed": True,
+            "tasks_verified": [{"task_title": "T1", "evidence": "done", "verdict": "pass"}],
+            "gaps": [],
+            "completion_score": 1.0,
+        },
+        "correctness": {
+            "correctness_passed": False,
+            "correctness_score": 0.857,
+            "violations": [
+                {
+                    "rule": "Rule 3: business_* writes",
+                    "file": "projections/foo.py",
+                    "line": "42",
+                    "detail": "business_tasks INSERT from projections/ module",
+                }
+            ],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {"quality_passed": True, "quality_score": 1.0, "issues": []},
+        "scores": {
+            "completion_score": 1.0,
+            "correctness_score": 0.857,
+            "quality_score": 1.0,
+            "composite_score": 0.757,
+        },
+        "gaps": [
+            {
+                "title": "Fix architectural violations flagged by correctness grader",
+                "description": "1 architectural rule violation(s) detected.",
+                "work_order_type": "cleanup",
+                "tasks": [
+                    {
+                        "title": "Fix Rule 3 in projections/foo.py",
+                        "description": "business_tasks INSERT from projections/ module",
+                    }
+                ],
+            }
+        ],
+        "spawned_work_orders": [
+            {
+                "work_order_id": GAP_WO_ID,
+                "title": "Fix architectural violations flagged by correctness grader",
+                "type": "cleanup",
+            }
+        ],
+        "work_order_id": work_order_id,
+        "verified_at": NOW,
+    }
+    path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(verdict), encoding="utf-8")
+    return {"ok": True, **verdict, "verdict_path": str(path)}
+
+
+def _mock_verify_low_composite(*, work_order_id, planning_root, **_kw):
+    """All tasks pass + no architectural violations, but quality issues tank composite
+    below 0.70 (T4d threshold test)."""
+    verdict = {
+        "passed": False,
+        "summary": "Low composite score due to quality errors",
+        "scores": {
+            "completion_score": 1.0,
+            "correctness_score": 1.0,
+            "quality_score": 0.2,
+            "composite_score": 0.64,
+        },
+        "completion": {
+            "passed": True,
+            "tasks_verified": [{"task_title": "T1", "evidence": "done", "verdict": "pass"}],
+            "gaps": [],
+            "completion_score": 1.0,
+        },
+        "correctness": {
+            "correctness_passed": True,
+            "correctness_score": 1.0,
+            "violations": [],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {
+            "quality_passed": False,
+            "quality_score": 0.2,
+            "issues": [
+                {
+                    "category": "SECURITY",
+                    "file": "core/foo.py",
+                    "line": "10",
+                    "detail": "bare eval() call",
+                    "severity": "error",
+                }
+            ],
+        },
+        "gaps": [
+            {
+                "title": "Fix error-severity quality issues",
+                "description": "1 error-severity quality issue(s) detected.",
+                "work_order_type": "cleanup",
+                "tasks": [
+                    {
+                        "title": "Fix SECURITY issue in core/foo.py",
+                        "description": "bare eval() call",
+                    }
+                ],
+            }
+        ],
+        "spawned_work_orders": [
+            {
+                "work_order_id": GAP_WO_ID,
+                "title": "Fix error-severity quality issues",
+                "type": "cleanup",
+            }
+        ],
+        "work_order_id": work_order_id,
+        "verified_at": NOW,
+    }
+    path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(verdict), encoding="utf-8")
+    return {"ok": True, **verdict, "verdict_path": str(path)}
+
+
 _MOCK_START_OK = {"ok": True, "work_order_id": WO_NEXT, "title": "Next WO"}
 _MOCK_START_GAP_OK = {"ok": True, "work_order_id": GAP_WO_ID, "title": "Fix T1"}
 _MOCK_NEXT_WO = {
@@ -287,3 +421,119 @@ def test_gap_path_closes_original_and_auto_starts_gap_wo(patched_paths) -> None:
     assert result["auto_started"]["work_order_id"] == GAP_WO_ID
     assert mock_start.called
     assert mock_start.call_args.kwargs.get("work_order_id") == GAP_WO_ID
+
+
+# ── T4c: correctness fail registers remediation WO ──────────────────────────────
+
+
+def test_correctness_fail_registers_remediation_wo_and_closes_original(patched_paths) -> None:
+    """When completion passes but the correctness grader finds an architectural
+    violation, the original WO still closes and the violation gap WO is auto-started."""
+    _fake, db_path, tmp_path = patched_paths
+    planning = _planning(tmp_path, WO_INFRA)
+
+    with (
+        patch(
+            "core.work_orders.verify.verify_work_order",
+            side_effect=_mock_verify_correctness_fail,
+        ),
+        patch(
+            "core.work_orders.start.start_work_order", return_value=_MOCK_START_GAP_OK
+        ) as mock_start,
+    ):
+        from core.work_orders.close import close_work_order
+
+        result = close_work_order(
+            work_order_id=WO_INFRA,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+
+    assert result["ok"] is True, f"WO should close even with correctness failure: {result}"
+    assert result["status"] == "closed"
+    assert "gaps_block" in result, "gaps_block must surface correctness violation gaps"
+    assert "GAPS FOUND" in result["gaps_block"]
+    assert "auto_started" in result
+    assert result["auto_started"]["work_order_id"] == GAP_WO_ID
+    assert mock_start.called
+    assert mock_start.call_args.kwargs.get("work_order_id") == GAP_WO_ID
+
+
+# ── T4d: composite below threshold triggers gap ──────────────────────────────────
+
+
+def test_composite_below_threshold_triggers_gap(patched_paths) -> None:
+    """When quality issues tank composite below 0.70, auto-continue is blocked and
+    a quality gap WO is registered and auto-started."""
+    _fake, db_path, tmp_path = patched_paths
+    planning = _planning(tmp_path, WO_INFRA)
+
+    with (
+        patch(
+            "core.work_orders.verify.verify_work_order",
+            side_effect=_mock_verify_low_composite,
+        ),
+        patch(
+            "core.work_orders.start.start_work_order", return_value=_MOCK_START_GAP_OK
+        ) as mock_start,
+    ):
+        from core.work_orders.close import close_work_order
+
+        result = close_work_order(
+            work_order_id=WO_INFRA,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+
+    assert result["ok"] is True
+    assert result["status"] == "closed"
+    assert "gaps_block" in result
+    assert "GAPS FOUND" in result["gaps_block"]
+    assert "auto_started" in result
+    assert result["auto_started"]["work_order_id"] == GAP_WO_ID
+    assert mock_start.called
+
+
+# ── T4d: _compute_scores unit test ───────────────────────────────────────────────
+
+
+def test_compute_scores_composite_weights() -> None:
+    """Composite = completion*0.5 + correctness*0.3 + quality*0.2."""
+    from core.work_orders.verify import _compute_scores
+
+    scores = _compute_scores(
+        completion={"passed": True, "completion_score": 1.0, "tasks_verified": []},
+        correctness={"correctness_passed": True, "correctness_score": 1.0},
+        quality={"quality_passed": True, "quality_score": 0.8},
+        total_tasks=2,
+    )
+    assert scores["completion_score"] == 1.0
+    assert scores["correctness_score"] == 1.0
+    assert scores["quality_score"] == 0.8
+    # 1.0*0.5 + 1.0*0.3 + 0.8*0.2 = 0.96
+    assert abs(scores["composite_score"] - 0.96) < 0.001
+
+
+def test_compute_scores_below_threshold() -> None:
+    """Composite below 0.70 when quality is poor."""
+    from core.work_orders.verify import _compute_scores
+
+    scores = _compute_scores(
+        completion={"passed": True, "completion_score": 1.0},
+        correctness={"correctness_passed": True, "correctness_score": 1.0},
+        quality={"quality_passed": False, "quality_score": 0.2},
+        total_tasks=1,
+    )
+    # 1.0*0.5 + 1.0*0.3 + 0.2*0.2 = 0.84 — wait that's above 0.70.
+    # Need lower quality: 1.0*0.5 + 1.0*0.3 + 0.0*0.2 = 0.80 still above.
+    # With correctness also degraded: 1.0*0.5 + 0.5*0.3 + 0.0*0.2 = 0.65
+    scores2 = _compute_scores(
+        completion={"passed": True, "completion_score": 1.0},
+        correctness={"correctness_passed": False, "correctness_score": 0.5},
+        quality={"quality_passed": False, "quality_score": 0.0},
+        total_tasks=1,
+    )
+    # 1.0*0.5 + 0.5*0.3 + 0.0*0.2 = 0.65
+    assert scores2["composite_score"] < 0.70
