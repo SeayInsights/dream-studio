@@ -62,15 +62,20 @@ gates:
     fail_hint: "Atlas leak — see contract-atlas docs for resolution."
 
   - id: docs-drift
-    tier: advisory
+    tier: blocking
     description: >
       Contract docs drift gate. Detects when docs and code references have
-      drifted apart. Hygiene signal — advisory only (AD-3 Item 28 stamp-trap).
-      Uses DREAM_STUDIO_BASE_REF=origin/main to match CI behavior.
+      drifted apart. Blocking — CI runs the identical script as a blocking
+      step, and the advisory local tier let PR #263 push green and then fail
+      all three platforms on the same drift (WO-GATE-PARITY). Uses
+      DREAM_STUDIO_BASE_REF=origin/main to match CI behavior.
     command: [py, interfaces/cli/contract_docs_drift_gate.py]
     env:
       DREAM_STUDIO_BASE_REF: origin/main
-    warn_hint: "Docs drift detected — update docs or log a gotcha, but push is not blocked."
+    fail_hint: >
+      Docs drift detected — CI's Contract docs drift step will fail on the
+      same change set. Update the required_doc_refs listed in the gate JSON
+      (e.g. docs/DATABASE.md, docs/MIGRATION_AUTHORITY.md) in this change set.
 
   - id: migration-risk
     tier: blocking

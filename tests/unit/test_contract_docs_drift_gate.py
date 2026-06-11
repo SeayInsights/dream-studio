@@ -143,6 +143,60 @@ def test_contract_docs_drift_cli_fails_on_missing_impacted_docs() -> None:
     assert "docs/DATABASE.md" in payload["blocking_domains"][0]["missing_required_doc_refs"]
 
 
+def test_changed_files_covers_full_branch_not_just_last_commit(tmp_path, monkeypatch) -> None:
+    """WO-GATE-PARITY regression: the base-ref diff must capture the FULL branch
+    change set (merge-base three-dot diff), including a contract-domain file
+    changed in an earlier commit than the one being pushed."""
+    import argparse
+
+    import interfaces.cli.contract_docs_drift_gate as gate_mod
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    run = dict(cwd=str(repo), capture_output=True, text=True, check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main"], **run)
+    subprocess.run(["git", "config", "user.email", "t@t"], **run)
+    subprocess.run(["git", "config", "user.name", "t"], **run)
+    (repo / "base.txt").write_text("base", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "base"], **run)
+    subprocess.run(["git", "checkout", "-q", "-b", "feature"], **run)
+    # Commit 1: the contract-domain source change.
+    (repo / "sqlite_bootstrap.py").write_text("v1", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "touch contract domain"], **run)
+    # Commit 2 (the one "being pushed"): an unrelated change.
+    (repo / "other.txt").write_text("v1", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], **run)
+    subprocess.run(["git", "commit", "-q", "-m", "unrelated"], **run)
+
+    monkeypatch.setattr(gate_mod, "REPO_ROOT", repo)
+    monkeypatch.delenv("DREAM_STUDIO_CHANGED_FILES", raising=False)
+    monkeypatch.delenv("DREAM_STUDIO_BASE_REF", raising=False)
+    monkeypatch.delenv("GITHUB_BASE_REF", raising=False)
+    args = argparse.Namespace(
+        changed_file=[], changed_files=None, base_ref="main", docs_reviewed_no_change=[]
+    )
+
+    files = gate_mod._changed_files(args)
+
+    assert "sqlite_bootstrap.py" in files, "earlier-commit change missing from change set"
+    assert "other.txt" in files
+
+
+def test_pre_push_manifest_docs_drift_is_blocking() -> None:
+    """WO-GATE-PARITY: CI runs the docs-drift script as a blocking step, so the
+    local pre-push tier must be blocking too — an advisory tier let PR #263
+    push green and then fail all three matrix platforms on the same drift."""
+    import yaml
+
+    manifest = yaml.safe_load(
+        (REPO_ROOT / "canonical" / "workflows" / "pre-push.yaml").read_text(encoding="utf-8")
+    )
+    docs_drift = next(g for g in manifest["gates"] if g["id"] == "docs-drift")
+    assert docs_drift["tier"] == "blocking"
+
+
 def test_contract_docs_drift_cli_accepts_reviewed_no_change() -> None:
     result = subprocess.run(
         [
