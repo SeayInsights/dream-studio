@@ -194,6 +194,11 @@ def run_gate_check(
         except Exception as exc:
             return False, f"independent_review: review-verdict.json is not valid JSON: {exc}"
         if not verdict.get("passed"):
+            # Unreviewable verdicts (no commit evidence found — WO-GRADER-LOOKUP)
+            # pass the gate with a warning surfaced by close_work_order instead of
+            # blocking: there is nothing to remediate and no grade to enforce.
+            if verdict.get("unreviewable"):
+                return True, ""
             gap_ids = [w.get("work_order_id", "") for w in verdict.get("spawned_work_orders", [])]
             gap_msg = f" Gap WOs: {', '.join(gap_ids)}" if gap_ids else ""
             return False, (
@@ -352,6 +357,7 @@ def close_work_order(
             "status": "closed",
             "forced": bool,
             "bypassed_gates": list[str],   # populated when force=True
+            "verify_warning": str | absent,  # inline verify was unreviewable (no commits)
             "next_work_order": {...} | absent,
             "next_command": str | absent,
             "milestone_complete": True | absent,
@@ -543,6 +549,10 @@ def close_work_order(
         "forced": force,
         "bypassed_gates": gate_failures if force else [],
     }
+    if _verify_ran and _verify_result is not None and _verify_result.get("unreviewable"):
+        result["verify_warning"] = _verify_result.get("summary") or (
+            "independent review unreviewable: no commit evidence found."
+        )
     if next_wo:
         result["next_work_order"] = next_wo
         result["next_command"] = next_wo["next_command"]

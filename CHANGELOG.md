@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `core/work_orders/verify.py`: `_collect_git_commits` now falls back to grepping the WO title token (e.g. `WO-DEBT-I`) when the UUID grep finds nothing — squash-merge commit messages carry the WO name, never the UUID, so every squash-merged WO previously graded against an empty diff (score-0 "N/A: empty diff" violations spawning unactionable remediation WOs). When neither pattern matches, the diff is `None` and `verify_work_order` records an `unreviewable` verdict (no gaps, no spawned WOs) instead of grading nothing (WO-GRADER-LOOKUP).
+- `core/work_orders/close.py`: the `independent_review` gate passes on `unreviewable` verdicts, and `close_work_order` surfaces the warning as `verify_warning` in the close result instead of blocking or spawning remediation loops.
+
 ### Changed
 - `canonical/skills/ds-workorder/modes/{start,execute,close}/SKILL.md`: continuous autonomous execution — start flows into task execution, execute chains into close when all tasks complete, close announces `auto_started` WOs and continues into them; operator stops only at force-close, missing-brief confirmation, blocked WO, `auto_start_error`, milestone-complete, or a genuine blocking question. Task lists are mirrored into the native todo display (SQLite stays sole authority). Close/start surface contracts refreshed to match actual return shapes (`status: "closed"`, `auto_started`, `gaps_block`, `next_block`, `spawned_work_orders`, `auto_start_error`, `auto_start_message`, `sequence_warning`, `pending_audits`) (WO-TASK-UX).
 - `core/work_orders/start.py`: context.md enforcement rules now permit parallel-wave execution of clearly independent tasks (each still marked done individually) and instruct mirroring the task list into the native todo display.
