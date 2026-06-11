@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `canonical/skills/ds-workorder/modes/{start,execute,close}/SKILL.md`: continuous autonomous execution — start flows into task execution, execute chains into close when all tasks complete, close announces `auto_started` WOs and continues into them; operator stops only at force-close, missing-brief confirmation, blocked WO, `auto_start_error`, milestone-complete, or a genuine blocking question. Task lists are mirrored into the native todo display (SQLite stays sole authority). Close/start surface contracts refreshed to match actual return shapes (`status: "closed"`, `auto_started`, `gaps_block`, `next_block`, `spawned_work_orders`, `auto_start_error`, `auto_start_message`, `sequence_warning`, `pending_audits`) (WO-TASK-UX).
+- `core/work_orders/start.py`: context.md enforcement rules now permit parallel-wave execution of clearly independent tasks (each still marked done individually) and instruct mirroring the task list into the native todo display.
+
 ### Fixed
 - `core/config/sqlite_bootstrap.py`: narrowed the two remaining broad `no such table` swallow clauses (token_usage_records / ai_usage_operational_records and the ds_* project spine) to statement-type-aware matching — CREATE INDEX / CREATE TRIGGER failures now raise instead of being silently discarded (M2 class, the idx_memory_lifecycle mechanism); data statements remain graceful degradation so migration 070/081 partial-fixture tolerance is unchanged (WO-DEBT-I).
 
