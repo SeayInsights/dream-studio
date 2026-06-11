@@ -528,3 +528,29 @@ def test_compute_scores_below_threshold() -> None:
         total_tasks=1,
     )
     assert scores["composite_score"] < 0.70
+
+
+# ── WO 0d1166fa: verify exception propagation ─────────────────────────────────────
+
+
+def test_verify_exception_returns_ok_false(patched_paths) -> None:
+    """If verify_work_order() raises, close_work_order() returns ok=False instead of crashing."""
+    _fake, db_path, tmp_path = patched_paths
+    planning = _planning(tmp_path, WO_INFRA)
+
+    with patch(
+        "core.work_orders.verify.verify_work_order",
+        side_effect=RuntimeError("subprocess spawn failed"),
+    ):
+        from core.work_orders.close import close_work_order
+
+        result = close_work_order(
+            work_order_id=WO_INFRA,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning,
+        )
+
+    assert result["ok"] is False
+    assert "Auto-verify raised an exception" in result["error"]
+    assert "subprocess spawn failed" in result["error"]
