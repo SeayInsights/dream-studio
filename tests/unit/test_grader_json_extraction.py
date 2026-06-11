@@ -100,3 +100,14 @@ def test_collect_grader_garbage_raises_value_error():
     proc = _FakeProc("This is not JSON at all.")
     with pytest.raises(ValueError, match="Grader returned non-JSON"):
         _collect_grader(proc)
+
+
+def test_collect_grader_default_timeout_is_sufficient():
+    import inspect
+
+    sig = inspect.signature(_collect_grader)
+    default_timeout = sig.parameters["timeout"].default
+    assert default_timeout >= 300, (
+        f"_collect_grader default timeout {default_timeout}s is too low; "
+        "completion grader prompts (task list + diff) need at least 300s on large diffs"
+    )

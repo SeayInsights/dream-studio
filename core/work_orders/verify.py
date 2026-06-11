@@ -433,11 +433,11 @@ def _extract_first_json_object(text: str) -> "str | None":
     return None
 
 
-def _collect_grader(proc: subprocess.Popen, timeout: int = 180) -> dict[str, Any]:  # type: ignore[type-arg]
+def _collect_grader(proc: subprocess.Popen, timeout: int = 360) -> dict[str, Any]:  # type: ignore[type-arg]
     try:
         feeder = getattr(proc, "_ds_feeder", None)
         if feeder is not None:
-            feeder.join(timeout=60)
+            feeder.join(timeout=120)
         stdout, _ = proc.communicate(timeout=timeout)
         output = stdout.strip()
         # Strip leading/trailing fences when the entire output is a fenced block.
