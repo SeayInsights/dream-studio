@@ -367,16 +367,47 @@ def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
 
 
 def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
-    return subprocess.Popen(
-        ["claude", "--print", prompt],
+    """Spawn a grader, feeding the prompt via stdin.
+
+    The prompt must NOT be passed as an argv element: with a real diff it
+    routinely exceeds Windows' ~32K command-line limit and CreateProcess fails
+    with WinError 206 (found re-verifying WO-DEBT-I under WO-GRADER-LOOKUP).
+    Stdin is written from a daemon thread so all graders start consuming
+    immediately and in parallel — a 64K pipe buffer would otherwise block the
+    spawn loop on large prompts.
+    """
+    import threading
+
+    proc = subprocess.Popen(
+        ["claude", "--print"],
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
 
+    def _feed() -> None:
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write(prompt)
+            proc.stdin.close()
+        except Exception:
+            pass  # broken pipe → grader died; _collect_grader surfaces it
+
+    feeder = threading.Thread(target=_feed, daemon=True)
+    feeder.start()
+    # _collect_grader joins this before communicate() — communicate() closes
+    # stdin, which would otherwise race a still-writing feeder and silently
+    # truncate the prompt.
+    proc._ds_feeder = feeder  # type: ignore[attr-defined]
+    return proc
+
 
 def _collect_grader(proc: subprocess.Popen, timeout: int = 180) -> dict[str, Any]:  # type: ignore[type-arg]
     try:
+        feeder = getattr(proc, "_ds_feeder", None)
+        if feeder is not None:
+            feeder.join(timeout=60)
         stdout, _ = proc.communicate(timeout=timeout)
         output = stdout.strip()
         if output.startswith("```"):
