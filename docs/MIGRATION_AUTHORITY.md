@@ -157,6 +157,16 @@ authority changes. `ds dashboard --serve`, `--open`, and `--check` must use the
 existing resolved SQLite path and must not create schema, run migrations,
 backfill records, or treat dashboard output as authority.
 
+Migration `116_task_acceptance_criteria.sql` is additive. It adds a nullable
+`acceptance_criteria TEXT` column to `business_tasks` with no default value.
+Existing task rows are unaffected. New tasks registered after migration 116 may
+include a structured acceptance criteria string that the independent verifier
+checks specifically rather than interpreting the freeform description. The
+column is written by `create_task()` via the standard event-spool path; the
+`TaskProjection` materializes it. No authority boundary change; `business_tasks`
+remains under the SDLC write-path policy (interfaces/cli/ and core/work_orders/
+only).
+
 Migration `044_career_capability_agent_github_authority.sql` is additive. It
 created Capability Center records, scoped
 agent registry/context/result tables, and GitHub repo intake evaluation tables.

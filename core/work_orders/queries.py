@@ -80,7 +80,15 @@ def list_tasks(
         ).fetchone()
         if wo_row is None:
             return {"ok": False, "error": f"Work order not found: {work_order_id}"}
-        select_cols = "task_id, title, status, description" if verbose else "task_id, title, status"
+        has_ac = verbose and any(
+            r[1] == "acceptance_criteria"
+            for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
+        )
+        if verbose:
+            extra = ", acceptance_criteria" if has_ac else ""
+            select_cols = f"task_id, title, status, description{extra}"
+        else:
+            select_cols = "task_id, title, status"
         rows = conn.execute(
             f"SELECT {select_cols} FROM business_tasks"
             " WHERE work_order_id = ? ORDER BY created_at ASC",
@@ -89,10 +97,15 @@ def list_tasks(
 
     tasks: list[dict[str, Any]] = []
     for row in rows:
-        if verbose:
+        if verbose and has_ac:
+            t_id, t_title, t_status, t_desc, t_ac = row
+        elif verbose:
             t_id, t_title, t_status, t_desc = row
+            t_ac = None
         else:
             t_id, t_title, t_status = row
+            t_desc = None
+            t_ac = None
         if t_status == "complete":
             indicator = "[x]"
         elif t_status == "in_progress":
@@ -107,6 +120,8 @@ def list_tasks(
         }
         if verbose:
             entry["description"] = t_desc
+            if t_ac:
+                entry["acceptance_criteria"] = t_ac
         tasks.append(entry)
 
     return {"ok": True, "work_order_id": work_order_id, "tasks": tasks}

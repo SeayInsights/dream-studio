@@ -362,6 +362,45 @@ def close_work_order(
     p_root = planning_root or Path.cwd() / ".planning"
     db_path = _require_db(source_root, dream_studio_home)
 
+    # T1: Auto-verify — if the independent_review gate applies and no verdict file
+    # exists yet, run verify inline before the gate evaluation so operators don't
+    # need to call `ds work-order verify` separately.
+    _verify_result: dict[str, Any] | None = None
+    _verify_ran = False
+
+    with _connect(db_path) as _pre_conn:
+        _pre_meta = _lookup_work_order_and_gates(_pre_conn, work_order_id)
+    if not _pre_meta.get("ok"):
+        return _pre_meta
+
+    _post_gate_str = _pre_meta.get("post_gate") or ""
+    if "independent_review" in [g.strip() for g in _post_gate_str.split("|") if g.strip()]:
+        _verdict_path = p_root / "work-orders" / work_order_id / "review-verdict.json"
+        if not _verdict_path.is_file():
+            from core.work_orders.verify import verify_work_order as _verify_wo
+
+            _verify_result = _verify_wo(
+                work_order_id=work_order_id,
+                source_root=source_root,
+                dream_studio_home=dream_studio_home,
+                planning_root=p_root,
+            )
+            _verify_ran = True
+            if not _verify_result.get("ok"):
+                return {
+                    "ok": False,
+                    "error": f"Auto-verify failed: {_verify_result.get('error', 'unknown error')}",
+                }
+
+    # Gaps exist when verify ran and returned passed=False with spawned remediation WOs.
+    _has_gaps = (
+        _verify_ran
+        and _verify_result is not None
+        and not _verify_result.get("passed")
+        and bool(_verify_result.get("spawned_work_orders"))
+    )
+    _project_id_for_autostart = _pre_meta.get("project_id")
+
     with _connect(db_path) as conn:
         meta = _lookup_work_order_and_gates(conn, work_order_id)
         if not meta.get("ok"):
@@ -379,6 +418,11 @@ def close_work_order(
             project_id=project_id,
             planning_root=p_root,
         )
+
+        # T3: Gaps found via inline verify — bypass only the independent_review gate
+        # failure. The original WO closes with gaps registered; the gap WO remediates.
+        if _has_gaps:
+            gate_failures = [f for f in gate_failures if not f.startswith("independent_review")]
 
         if gate_failures and not force:
             return {
@@ -510,5 +554,77 @@ def close_work_order(
         )
     else:
         result["next_block"] = "NO NEXT WORK ORDER FOUND"
+
+    # T2/T4: Auto-start after close when verify ran inline.
+    if _verify_ran and _verify_result is not None and _project_id_for_autostart:
+        if _has_gaps:
+            # T4: Print GAPS FOUND block; T2: auto-start the first spawned gap WO.
+            spawned = _verify_result.get("spawned_work_orders", [])
+            if spawned:
+                first_gap = spawned[0]
+                gap_wo_id = first_gap["work_order_id"]
+                gap_wo_title = first_gap["title"]
+                gaps_list = _verify_result.get("gaps", [])
+                tasks_str = "\n".join(f"  - {g.get('title', '')}" for g in gaps_list)
+                _sep = "=" * 42
+                result["gaps_block"] = (
+                    f"\n{_sep}\n"
+                    f"=== GAPS FOUND IN {title} ===\n"
+                    f"Registered: REMEDIATION WO {gap_wo_id} with {len(gaps_list)} tasks\n"
+                    f"Tasks:\n{tasks_str}\n"
+                    f"AUTO-STARTING remediation WO next.\n"
+                    f"Main session: review "
+                    f".planning/work-orders/{work_order_id}/review-verdict.json for full detail.\n"
+                    f"{_sep}\n"
+                )
+                result["spawned_work_orders"] = spawned
+                from core.work_orders.start import start_work_order as _start_wo
+
+                _started = _start_wo(
+                    work_order_id=gap_wo_id,
+                    source_root=source_root,
+                    dream_studio_home=dream_studio_home,
+                    planning_root=p_root,
+                    accept_no_brief=True,
+                )
+                if _started.get("ok"):
+                    result["auto_started"] = {
+                        "work_order_id": gap_wo_id,
+                        "title": gap_wo_title,
+                        "message": f"AUTO-STARTING: {gap_wo_title} / ID: {gap_wo_id}",
+                    }
+                else:
+                    result["auto_start_error"] = _started.get("error", "unknown error")
+        else:
+            # T2: Verify passed — find and auto-start the next WO in the project.
+            from core.projects.queries import get_next_work_order as _get_next
+            from core.work_orders.start import start_work_order as _start_wo
+
+            _next_result = _get_next(
+                project_id=_project_id_for_autostart,
+                source_root=source_root,
+                dream_studio_home=dream_studio_home,
+            )
+            _next_wo = _next_result.get("work_order") if _next_result.get("ok") else None
+            if _next_wo:
+                _next_id = _next_wo["work_order_id"]
+                _next_title = _next_wo["title"]
+                _started = _start_wo(
+                    work_order_id=_next_id,
+                    source_root=source_root,
+                    dream_studio_home=dream_studio_home,
+                    planning_root=p_root,
+                    accept_no_brief=True,
+                )
+                if _started.get("ok"):
+                    result["auto_started"] = {
+                        "work_order_id": _next_id,
+                        "title": _next_title,
+                        "message": f"AUTO-STARTING: {_next_title} / ID: {_next_id}",
+                    }
+                else:
+                    result["auto_start_error"] = _started.get("error", "unknown error")
+            else:
+                result["auto_start_message"] = "MILESTONE COMPLETE"
 
     return result

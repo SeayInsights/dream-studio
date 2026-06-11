@@ -369,6 +369,7 @@ def create_task(
     project_id: str,
     title: str,
     description: str = "",
+    acceptance_criteria: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -408,7 +409,12 @@ def create_task(
             CanonicalEventEnvelope(
                 event_type="task.created",
                 session_id=None,
-                payload={"title": title, "description": description, "status": "created"},
+                payload={
+                    "title": title,
+                    "description": description,
+                    "acceptance_criteria": acceptance_criteria,
+                    "status": "created",
+                },
                 timestamp=now,
                 severity="info",
                 trace={
@@ -431,13 +437,16 @@ def create_task(
     except Exception:
         pass
 
-    return {
+    result: dict[str, Any] = {
         "ok": True,
         "task_id": task_id,
         "work_order_id": work_order_id,
         "title": title,
         "status": "pending",
     }
+    if acceptance_criteria is not None:
+        result["acceptance_criteria"] = acceptance_criteria
+    return result
 
 
 def _settings_path_for_todowrite(source_root: Path) -> Path:
