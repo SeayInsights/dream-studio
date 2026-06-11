@@ -341,10 +341,23 @@ def run_migrations(
                 # with the corrected NUMERIC(20,8) schema, and DROP TABLE IF EXISTS
                 # in the migration removes any partial source table.  This matches
                 # the migration 070 pattern for partial-fixture tolerance.
+                # Narrowed to statement-type-aware (WO-DEBT-I), mirroring the
+                # memory_entries (O7) and fts_gotchas/ds_documents (WO-I) fixes:
+                # migration 081 contains no CREATE INDEX/TRIGGER on these tables —
+                # only data statements — so the fixture tolerance is unaffected.
+                # A swallowed CREATE INDEX would be an M2 casualty (e.g. migration
+                # 037's idx_token_usage_scope, 043's idx_ai_usage_operational_*).
                 if "no such table" in msg and (
                     "token_usage_records" in msg or "ai_usage_operational_records" in msg
                 ):
-                    continue
+                    stmt_upper = stmt.strip().upper()
+                    if not (
+                        stmt_upper.startswith("CREATE INDEX")
+                        or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                        or stmt_upper.startswith("CREATE TRIGGER")
+                    ):
+                        continue
+                    # CREATE INDEX and CREATE TRIGGER fall through to raise.
                 # Migration 081 column-error counterpart: INSERT from a partial
                 # fixture table that is missing columns added by migrations 042/043.
                 if "no such column" in msg and (
@@ -357,6 +370,12 @@ def run_migrations(
                 # never created (e.g., partial test DB or upgrade from schema < 48),
                 # skip gracefully — business_* tables are created empty, which is
                 # correct: there was no old data to migrate.
+                # Narrowed to statement-type-aware (WO-DEBT-I): migration 070's
+                # statements on ds_* are all data statements and remain swallowed.
+                # The ds_* indexes (migrations 048/053, e.g. idx_ds_milestones_project)
+                # are created in the same file as their tables, so a CREATE INDEX
+                # reaching this handler indicates a real installation problem that
+                # must surface, not an expected upgrade path.
                 if "no such table" in msg and any(
                     f"ds_{t}" in msg
                     for t in (
@@ -368,7 +387,14 @@ def run_migrations(
                         "work_order_types",
                     )
                 ):
-                    continue
+                    stmt_upper = stmt.strip().upper()
+                    if not (
+                        stmt_upper.startswith("CREATE INDEX")
+                        or stmt_upper.startswith("CREATE UNIQUE INDEX")
+                        or stmt_upper.startswith("CREATE TRIGGER")
+                    ):
+                        continue
+                    # CREATE INDEX and CREATE TRIGGER fall through to raise.
                 # Index creation on a pre-existing table may fail when the
                 # table was created by a test fixture with a minimal schema.
                 # Skip gracefully — queries still work without the index.
