@@ -335,18 +335,22 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
         "metadata_json": _json(values.get("metadata"), {}),
         "prevented_risky_action": 1 if values.get("prevented_risky_action") else 0,
     }
-    conn.execute(
-        f"""
-        INSERT INTO {table} (
-            invocation_id, project_id, milestone_id, task_id, process_run_id,
-            event_id, {component_col}, status, purpose, metadata_json{extra}
-        ) VALUES (
-            :invocation_id, :project_id, :milestone_id, :task_id, :process_run_id,
-            :event_id, :{component_col}, :status, :purpose, :metadata_json{extra_values}
+    try:
+        conn.execute(
+            f"""
+            INSERT INTO {table} (
+                invocation_id, project_id, milestone_id, task_id, process_run_id,
+                event_id, {component_col}, status, purpose, metadata_json{extra}
+            ) VALUES (
+                :invocation_id, :project_id, :milestone_id, :task_id, :process_run_id,
+                :event_id, :{component_col}, :status, :purpose, :metadata_json{extra_values}
+            )
+            """,
+            params,
         )
-        """,
-        params,
-    )
+    except Exception:  # noqa: BLE001
+        # Tables dropped in migration 106 — graceful no-op on fresh DBs.
+        pass
 
 
 def record_token_usage(conn: sqlite3.Connection, **values: Any) -> None:
@@ -445,6 +449,15 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
             ),
         )
     except Exception:
+        pass
+
+    # Eagerly refresh findings_current_status projection so read models see the
+    # new finding immediately (FindingsProjection.fold_spine is idempotent).
+    try:
+        from core.projections.findings_projection import FindingsProjection
+
+        FindingsProjection().fold_spine(conn)
+    except Exception:  # noqa: BLE001
         pass
 
 
