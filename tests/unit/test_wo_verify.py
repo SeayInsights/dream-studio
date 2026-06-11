@@ -126,7 +126,8 @@ def test_verify_no_commits_mock_gap(tmp_path: pytest.TempPathFactory) -> None:
 
 
 def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> None:
-    """When mock fixture has gaps[], verify inserts new WOs under same milestone."""
+    """When parallel graders return a completion result with gaps[], verify inserts
+    new WOs under the same milestone."""
     db_path = _make_db(tmp_path)
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
@@ -134,42 +135,61 @@ def test_verify_gap_creates_work_orders(tmp_path: pytest.TempPathFactory) -> Non
     _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
     _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
 
-    gap_fixture = {
-        "passed": False,
-        "tasks_verified": [
-            {"task_title": "T1", "evidence": "not found in diff", "verdict": "missing"}
-        ],
-        "summary": "Task T1 was not addressed.",
-        "gaps": [
-            {
-                "title": "Fix missing T1 implementation",
-                "description": "T1 was not done",
-                "work_order_type": "cleanup",
-                "tasks": [
-                    {"title": "Implement T1", "description": "Add the missing code"},
-                ],
-            }
-        ],
+    grader_results = {
+        "completion": {
+            "passed": False,
+            "completion_score": 0.0,
+            "tasks_verified": [
+                {"task_title": "T1", "evidence": "not found in diff", "verdict": "missing"}
+            ],
+            "summary": "Task T1 was not addressed.",
+            "gaps": [
+                {
+                    "title": "Fix missing T1 implementation",
+                    "description": "T1 was not done",
+                    "work_order_type": "cleanup",
+                    "tasks": [
+                        {"title": "Implement T1", "description": "Add the missing code"},
+                    ],
+                }
+            ],
+        },
+        "correctness": {
+            "correctness_passed": True,
+            "correctness_score": 1.0,
+            "violations": [],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {
+            "quality_passed": True,
+            "quality_score": 1.0,
+            "issues": [],
+        },
     }
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify._call_subagent", return_value=gap_fixture):
-            from core.work_orders.verify import verify_work_order
+        with patch("core.work_orders.verify._run_graders_parallel", return_value=grader_results):
+            with patch(
+                "core.work_orders.verify._collect_git_commits",
+                return_value="diff --git a/fake.py b/fake.py\n+# change",
+            ):
+                from core.work_orders.verify import verify_work_order
 
-            result = verify_work_order(
-                work_order_id=work_order_id,
-                source_root=REPO_ROOT,
-                dream_studio_home=tmp_path,
-                planning_root=planning_root,
-            )
+                result = verify_work_order(
+                    work_order_id=work_order_id,
+                    source_root=REPO_ROOT,
+                    dream_studio_home=tmp_path,
+                    planning_root=planning_root,
+                )
 
     assert result["ok"] is True
     assert result["passed"] is False
     assert len(result["spawned_work_orders"]) == 1
     spawned_id = result["spawned_work_orders"][0]["work_order_id"]
 
-    # Verify the gap WO and its task are in the DB under the same milestone
+    # Verify the gap WO and its task are in the DB under the same milestone.
     conn = sqlite3.connect(str(db_path))
     wo_row = conn.execute(
         "SELECT milestone_id, work_order_type FROM business_work_orders WHERE work_order_id = ?",
@@ -306,31 +326,50 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
     _seed(db_path, project_id=project_id, milestone_id=milestone_id, work_order_id=work_order_id)
     _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
 
-    gap_fixture = {
-        "passed": False,
-        "tasks_verified": [],
-        "summary": "Gap found.",
-        "gaps": [
-            {
-                "title": "Gap WO Alpha",
-                "description": "needs fixing",
-                "work_order_type": "infrastructure",
-                "tasks": [{"title": "Fix alpha", "description": "do the fix"}],
-            }
-        ],
+    grader_results = {
+        "completion": {
+            "passed": False,
+            "completion_score": 0.0,
+            "tasks_verified": [],
+            "summary": "Gap found.",
+            "gaps": [
+                {
+                    "title": "Gap WO Alpha",
+                    "description": "needs fixing",
+                    "work_order_type": "infrastructure",
+                    "tasks": [{"title": "Fix alpha", "description": "do the fix"}],
+                }
+            ],
+        },
+        "correctness": {
+            "correctness_passed": True,
+            "correctness_score": 1.0,
+            "violations": [],
+            "coverage_gaps": [],
+            "migration_gaps": [],
+        },
+        "quality": {
+            "quality_passed": True,
+            "quality_score": 1.0,
+            "issues": [],
+        },
     }
 
     planning_root = tmp_path / "planning"
     with _patch_db(db_path):
-        with patch("core.work_orders.verify._call_subagent", return_value=gap_fixture):
-            from core.work_orders.verify import verify_work_order
+        with patch("core.work_orders.verify._run_graders_parallel", return_value=grader_results):
+            with patch(
+                "core.work_orders.verify._collect_git_commits",
+                return_value="diff --git a/fake.py b/fake.py\n+# change",
+            ):
+                from core.work_orders.verify import verify_work_order
 
-            result = verify_work_order(
-                work_order_id=work_order_id,
-                source_root=REPO_ROOT,
-                dream_studio_home=tmp_path,
-                planning_root=planning_root,
-            )
+                result = verify_work_order(
+                    work_order_id=work_order_id,
+                    source_root=REPO_ROOT,
+                    dream_studio_home=tmp_path,
+                    planning_root=planning_root,
+                )
 
     assert result["spawned_work_orders"][0]["work_order_id"]
     conn = sqlite3.connect(str(db_path))
