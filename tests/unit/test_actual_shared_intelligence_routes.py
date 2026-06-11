@@ -169,17 +169,11 @@ def test_actual_app_exposes_security_lifecycle_gate_without_persisting(
     )
 
 
-@pytest.mark.skip(
-    reason=(
-        "References production_readiness_assessment_runs, dropped in migration 112. "
-        "Tracked in WO e6bb82f1 (WO-ANALYTICS-TABLE-REMAP)."
-    )
-)
 def test_actual_app_exposes_production_readiness_preview_without_persisting(
     tmp_path: Path, monkeypatch
 ) -> None:
     client, db_path = _client_with_shared_db(tmp_path, monkeypatch)
-    before_runs = _count(db_path, "production_readiness_assessment_runs")
+    before_runs = _count(db_path, "readiness_events")  # production_readiness_* dropped migration 112
 
     response = client.get(
         "/api/shared-intelligence/production-readiness",
@@ -191,7 +185,7 @@ def test_actual_app_exposes_production_readiness_preview_without_persisting(
     )
     controls = client.get("/api/shared-intelligence/production-readiness/controls")
 
-    after_runs = _count(db_path, "production_readiness_assessment_runs")
+    after_runs = _count(db_path, "readiness_events")
     payload = response.json()
     assert response.status_code == 200
     assert controls.status_code == 200

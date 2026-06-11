@@ -31,30 +31,27 @@ INGESTION_SECTIONS: tuple[str, ...] = (
 SECTION_TABLES: dict[str, tuple[str, ...]] = {
     "projects": ("business_projects",),
     "validations": ("validation_results",),
-    "findings": ("findings",),
+    "findings": ("security_events",),  # findings retired in migration 112 → security_events spine
     "token_usage": ("token_usage_records",),
     "ai_usage": ("ai_usage_operational_records",),
-    "components": ("pi_components",),
-    "dependencies": ("pi_dependencies",),
+    "components": (),  # pi_components dropped in migration 084
+    "dependencies": (),  # pi_dependencies dropped in migration 084
     "readiness_assessments": (
-        "production_readiness_assessment_runs",
-        "production_readiness_control_results",
-        "production_readiness_findings",
-    ),
+        "readiness_events",
+    ),  # production_readiness_* dropped in migration 112
 }
 
 TABLE_KEYS: dict[str, str] = {
     "business_projects": "project_id",
     "validation_results": "validation_id",
-    "findings": "finding_id",
+    "security_events": "event_id",
     "token_usage_records": "token_usage_id",
     "ai_usage_operational_records": "usage_record_id",
-    "pi_components": "component_id",
-    "pi_dependencies": "dependency_id",
-    "production_readiness_assessment_runs": "assessment_id",
-    "production_readiness_control_results": "result_id",
-    "production_readiness_findings": "finding_id",
+    "readiness_events": "event_id",
 }
+
+# These tables are append-only event spines — never update existing rows on re-import.
+APPEND_ONLY_TABLES: frozenset[str] = frozenset({"security_events", "readiness_events"})
 
 ANALYTICS_ONLY_CAPABILITIES: tuple[str, ...] = (
     "normalized_project_import",
@@ -213,6 +210,13 @@ def ingest_analytics_payload(
 
     if execute:
         conn.commit()
+        if written.get("security_events"):
+            try:
+                from core.projections.findings_projection import FindingsProjection
+
+                FindingsProjection().fold_spine(conn)
+            except Exception:  # noqa: BLE001
+                pass
 
     return {
         "schema": ANALYTICS_INGESTION_SCHEMA,
@@ -323,34 +327,32 @@ def _security_finding_rows(
     evidence_refs: list[str],
     ingested_at: str,
 ) -> list[tuple[str, dict[str, Any]]]:
+    # findings table retired in migration 112; write to security_events spine instead.
     project_id = _required(record, "project_id")
-    finding_id = record.get("finding_id") or _stable_id("security", record)
+    event_id = record.get("finding_id") or _stable_id("security", record)
+    rule_id = record.get("rule_id") or record.get("control_id")
+    description = record.get("description") or record.get("summary") or ""
+    recommendation = record.get("recommendation") or record.get("remediation_path") or ""
+    body_parts = [description]
+    if recommendation:
+        body_parts.append(f"Remediation: {recommendation}")
+    if rule_id:
+        body_parts.append(f"Rule: {rule_id}")
     return [
         (
-            "findings",
+            "security_events",
             {
-                "finding_id": finding_id,
+                "event_id": event_id,
+                "event_kind": "finding.recorded",
                 "project_id": project_id,
-                "milestone_id": record.get("milestone_id"),
-                "task_id": record.get("task_id"),
-                "scan_id": record.get("scan_id") or "analytics_only_import",
-                "process_run_id": record.get("process_run_id"),
+                "work_order_id": record.get("work_order_id"),
                 "severity": record.get("severity") or "unknown",
-                "category": record.get("category") or record.get("control_family") or "imported",
-                "rule_id": record.get("rule_id") or record.get("control_id"),
+                "vuln_class": record.get("category") or record.get("control_family") or "imported",
                 "file_path": record.get("file_path"),
-                "start_line": record.get("line") or record.get("start_line"),
-                "end_line": record.get("end_line"),
-                "description": record.get("description") or record.get("summary"),
-                "recommendation": record.get("recommendation") or record.get("remediation_path"),
-                "status": record.get("status") or "open",
-                "introduced_by_agent_id": None,
-                "introduced_by_skill_id": record.get("skill_owner"),
-                "introduced_by_workflow_id": record.get("workflow_owner"),
-                "introduced_by_hook_id": None,
-                "evidence_refs_json": _json(_merged_refs(record, evidence_refs)),
+                "line_number": record.get("line") or record.get("start_line"),
+                "title": rule_id or record.get("category") or "analytics_import",
+                "body": "\n".join(body_parts).strip() or None,
                 "created_at": record.get("created_at") or ingested_at,
-                "updated_at": record.get("updated_at") or ingested_at,
             },
         )
     ]
@@ -483,23 +485,8 @@ def _dependency_rows(
     evidence_refs: list[str],
     ingested_at: str,
 ) -> list[tuple[str, dict[str, Any]]]:
-    project_id = _required(record, "project_id")
-    dependency_type = str(record.get("dependency_type") or "references")
-    if dependency_type not in {"import", "extends", "implements", "calls", "references"}:
-        dependency_type = "references"
-    return [
-        (
-            "pi_dependencies",
-            {
-                "dependency_id": record.get("dependency_id") or _stable_id("dependency", record),
-                "project_id": project_id,
-                "from_component": record.get("from_component") or record.get("source"),
-                "to_component": record.get("to_component") or record.get("target"),
-                "dependency_type": dependency_type,
-                "strength": record.get("strength") if record.get("strength") is not None else 1.0,
-            },
-        )
-    ]
+    # pi_dependencies dropped in migration 084 — no-op.
+    return []
 
 
 def _component_rows(
@@ -509,30 +496,8 @@ def _component_rows(
     evidence_refs: list[str],
     ingested_at: str,
 ) -> list[tuple[str, dict[str, Any]]]:
-    project_id = _required(record, "project_id")
-    component_id = record.get("component_id") or _stable_id("component", record)
-    component_type = str(record.get("component_type") or "module")
-    if component_type not in {"module", "class", "function", "component", "route", "api"}:
-        component_type = "module"
-    return [
-        (
-            "pi_components",
-            {
-                "component_id": component_id,
-                "project_id": project_id,
-                "path": record.get("path") or str(component_id),
-                "name": record.get("name") or str(component_id),
-                "component_type": component_type,
-                "lines": record.get("lines"),
-                "complexity_score": record.get("complexity_score"),
-                "change_frequency": record.get("change_frequency"),
-                "bug_density": record.get("bug_density"),
-                "imports": record.get("imports"),
-                "imported_by": record.get("imported_by"),
-                "last_analyzed": record.get("last_analyzed") or ingested_at,
-            },
-        )
-    ]
+    # pi_components dropped in migration 084 — no-op.
+    return []
 
 
 def _readiness_rows(
@@ -542,155 +507,80 @@ def _readiness_rows(
     evidence_refs: list[str],
     ingested_at: str,
 ) -> list[tuple[str, dict[str, Any]]]:
+    # production_readiness_* tables retired in migration 112; write to readiness_events spine.
     project_id = _required(record, "project_id")
     assessment_id = record.get("assessment_id") or _stable_id("readiness", record)
-    missing = _json_list(record.get("missing_evidence"))
-    blockers = _json_list(record.get("blocking_factors"))
-    health = record.get("health_score")
-    readiness = record.get("readiness_score")
+    status = record.get("status") or "partial"
     confidence = record.get("confidence") or "medium"
-    health_status = record.get("health_status") or record.get("status") or "partial"
-    readiness_status = record.get("readiness_status") or record.get("status") or "partial"
-    health_score_json = record.get("health_score_json") or {
-        "score": health,
-        "status": health_status,
-        "confidence": confidence,
-        "missing_evidence": missing,
-        "blocking_factors": blockers,
-    }
-    readiness_score_json = record.get("readiness_score_json") or {
-        "score": readiness,
-        "status": readiness_status,
-        "confidence": confidence,
-        "missing_evidence": missing,
-        "blocking_factors": blockers,
-    }
+    body = _json(
+        {
+            "status": status,
+            "confidence": confidence,
+            "health_score": record.get("health_score"),
+            "readiness_score": record.get("readiness_score"),
+            "missing_evidence": _json_list(record.get("missing_evidence")),
+            "blocking_factors": _json_list(record.get("blocking_factors")),
+            "release_readiness_effect": record.get("release_readiness_effect"),
+        }
+    )
     rows: list[tuple[str, dict[str, Any]]] = [
         (
-            "production_readiness_assessment_runs",
+            "readiness_events",
             {
-                "assessment_id": assessment_id,
+                "event_id": assessment_id,
+                "event_kind": "assessment.started",
                 "project_id": project_id,
-                "workflow_id": record.get("workflow_id") or "analytics_only_ingestion",
-                "lifecycle_event": record.get("lifecycle_event") or "analytics_import",
-                "status": record.get("status") or "partial",
-                "confidence": confidence,
-                "full_review_required": int(bool(record.get("full_review_required", False))),
-                "release_readiness_effect": record.get("release_readiness_effect")
-                or "needs_review",
-                "health_score_json": _json(health_score_json),
-                "readiness_score_json": _json(readiness_score_json),
-                "missing_evidence_json": _json(missing),
-                "blocking_factors_json": _json(blockers),
-                "source_refs_json": _json(_merged_refs(record, source_refs, key="source_refs")),
+                "work_order_id": record.get("work_order_id"),
+                "title": f"analytics import: {assessment_id}",
+                "body": body,
                 "created_at": record.get("created_at") or ingested_at,
             },
-        ),
+        )
     ]
     for control in record.get("controls") or []:
-        if isinstance(control, dict):
-            rows.append(
-                (
-                    "production_readiness_control_results",
-                    _readiness_control_row(
-                        control,
-                        assessment_id=assessment_id,
-                        project_id=project_id,
-                        source_refs=source_refs,
-                        evidence_refs=evidence_refs,
-                        ingested_at=ingested_at,
+        if not isinstance(control, dict):
+            continue
+        control_id = control.get("control_id") or "unknown_control"
+        result_id = control.get("result_id") or _stable_id("readiness-control", control)
+        result = control.get("status") or "incomplete"
+        rows.append(
+            (
+                "readiness_events",
+                {
+                    "event_id": result_id,
+                    "parent_event_id": assessment_id,
+                    "event_kind": "control_result.recorded",
+                    "project_id": project_id,
+                    "control_id": control_id,
+                    "result": result,
+                    "title": control_id,
+                    "body": _json(
+                        {
+                            "control_family": control.get("control_family"),
+                            "severity": control.get("severity"),
+                            "applicability": control.get("applicability"),
+                        }
                     ),
-                )
+                    "created_at": control.get("created_at") or ingested_at,
+                },
             )
-    for finding in record.get("findings") or []:
-        if isinstance(finding, dict):
-            rows.append(
-                (
-                    "production_readiness_findings",
-                    _readiness_finding_row(
-                        finding,
-                        assessment_id=assessment_id,
-                        project_id=project_id,
-                        source_refs=source_refs,
-                        evidence_refs=evidence_refs,
-                        ingested_at=ingested_at,
-                    ),
-                )
-            )
+        )
     return rows
-
-
-def _readiness_control_row(
-    record: dict[str, Any],
-    *,
-    assessment_id: str,
-    project_id: str,
-    source_refs: list[str],
-    evidence_refs: list[str],
-    ingested_at: str,
-) -> dict[str, Any]:
-    control_id = record.get("control_id") or "unknown_control"
-    return {
-        "result_id": record.get("result_id") or _stable_id("readiness-control", record),
-        "assessment_id": assessment_id,
-        "project_id": project_id,
-        "control_id": control_id,
-        "control_family": record.get("control_family") or "analytics_import",
-        "name": record.get("name") or control_id,
-        "skill_owner": record.get("skill_owner") or "analytics_only_ingestion",
-        "workflow_owner": record.get("workflow_owner") or "analytics_only_ingestion",
-        "applicability": record.get("applicability") or "unknown",
-        "status": record.get("status") or "unknown",
-        "severity": record.get("severity") or "info",
-        "blocking": int(bool(record.get("blocking", False))),
-        "score_impact": record.get("score_impact"),
-        "evidence_refs_json": _json(_merged_refs(record, evidence_refs)),
-        "source_refs_json": _json(_merged_refs(record, source_refs, key="source_refs")),
-        "file_path": record.get("file_path"),
-        "line": record.get("line"),
-        "remediation_work_order": record.get("remediation_work_order"),
-        "reason_not_applicable": record.get("reason_not_applicable"),
-        "created_at": record.get("created_at") or ingested_at,
-    }
-
-
-def _readiness_finding_row(
-    record: dict[str, Any],
-    *,
-    assessment_id: str,
-    project_id: str,
-    source_refs: list[str],
-    evidence_refs: list[str],
-    ingested_at: str,
-) -> dict[str, Any]:
-    control_id = record.get("control_id") or "unknown_control"
-    return {
-        "finding_id": record.get("finding_id") or _stable_id("readiness-finding", record),
-        "project_id": project_id,
-        "assessment_id": assessment_id,
-        "control_id": control_id,
-        "control_family": record.get("control_family") or "analytics_import",
-        "skill_owner": record.get("skill_owner") or "analytics_only_ingestion",
-        "workflow_owner": record.get("workflow_owner") or "analytics_only_ingestion",
-        "applicability": record.get("applicability") or "applicable",
-        "status": record.get("status") or "open",
-        "severity": record.get("severity") or "info",
-        "blocking": int(bool(record.get("blocking", False))),
-        "score_impact": record.get("score_impact"),
-        "evidence_refs_json": _json(_merged_refs(record, evidence_refs)),
-        "source_refs_json": _json(_merged_refs(record, source_refs, key="source_refs")),
-        "file_path": record.get("file_path"),
-        "line": record.get("line"),
-        "remediation_work_order": record.get("remediation_work_order"),
-        "reason_not_applicable": record.get("reason_not_applicable"),
-        "created_at": record.get("created_at") or ingested_at,
-    }
 
 
 def _upsert(conn: sqlite3.Connection, table: str, row: dict[str, Any]) -> None:
     columns = _table_columns(conn, table)
     filtered = {key: value for key, value in row.items() if key in columns}
     if not filtered:
+        return
+    col_sql = ", ".join(filtered)
+    placeholders = ", ".join("?" for _ in filtered)
+    if table in APPEND_ONLY_TABLES:
+        # Event spines are append-only — INSERT OR IGNORE on duplicate PK for idempotent re-import.
+        conn.execute(
+            f"INSERT OR IGNORE INTO {table}({col_sql}) VALUES ({placeholders})",
+            tuple(filtered.values()),
+        )
         return
     key = TABLE_KEYS.get(table)
     if key and key in filtered:
@@ -705,8 +595,6 @@ def _upsert(conn: sqlite3.Connection, table: str, row: dict[str, Any]) -> None:
             )
             if cursor.rowcount:
                 return
-    col_sql = ", ".join(filtered)
-    placeholders = ", ".join("?" for _ in filtered)
     conn.execute(
         f"INSERT INTO {table}({col_sql}) VALUES ({placeholders})",
         tuple(filtered.values()),
