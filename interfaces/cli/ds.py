@@ -598,6 +598,24 @@ def main(argv: list[str] | None = None) -> int:
     eval_list_cmd.add_argument(
         "--evals-dir", default=None, dest="evals_dir", help="Override evals directory"
     )
+    eval_registry_cmd = eval_sub.add_parser(
+        "registry", help="Unified eval registry across skills, hooks, workflows, agents"
+    )
+    eval_registry_sub = eval_registry_cmd.add_subparsers(dest="registry_command", required=True)
+    eval_registry_list_cmd = eval_registry_sub.add_parser(
+        "list", help="List all registered eval targets with latest status"
+    )
+    eval_registry_list_cmd.add_argument(
+        "--type",
+        default=None,
+        dest="target_type",
+        choices=["skill", "hook", "workflow", "agent"],
+        help="Filter by target type",
+    )
+    eval_registry_show_cmd = eval_registry_sub.add_parser(
+        "show", help="Show eval run history for a specific target"
+    )
+    eval_registry_show_cmd.add_argument("target_id", help="Target ID to inspect")
 
     # diagnostics subcommand group (TA3)
     diag_cmd = subcommands.add_parser(
@@ -3046,8 +3064,123 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
             return 1
         return _print({"eval_id": eval_id, "baseline": baseline})
 
+    if args.eval_command == "registry":
+        return _eval_registry_dispatch(args, source_root=source_root)
+
     print(f"Unknown eval command: {args.eval_command}", file=sys.stderr)
     return 1
+
+
+def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
+    """Dispatch ds eval registry {list,show} commands (WO-EVAL-REGISTRY)."""
+    from core.config.database import DatabaseRuntime
+
+    db_path = DatabaseRuntime.get_instance().db_path
+    import sqlite3
+
+    registry_command = getattr(args, "registry_command", None)
+
+    if registry_command == "list":
+        target_type = getattr(args, "target_type", None)
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if not _table_exists_in_conn(conn, "eval_registry"):
+                return _print(
+                    {"ok": False, "error": "eval_registry table not found. Run migrations."}
+                )
+            where = "WHERE er.target_type = ?" if target_type else ""
+            params = [target_type] if target_type else []
+            rows = conn.execute(
+                f"""
+                SELECT
+                    er.eval_id,
+                    er.target_type,
+                    er.target_id,
+                    er.rubric_score,
+                    er.last_run_at,
+                    er.friction_flag,
+                    COALESCE(dr.passed, hr.passed, NULL) AS passed
+                FROM eval_registry er
+                LEFT JOIN ds_eval_runs dr ON dr.run_id = er.last_run_id
+                LEFT JOIN hook_eval_runs hr
+                    ON er.target_type = 'hook' AND hr.hook_id = er.target_id
+                    AND hr.created_at = er.last_run_at
+                {where}
+                ORDER BY er.target_type, er.target_id
+                """,
+                params,
+            ).fetchall()
+        result = [
+            {
+                "eval_id": r["eval_id"],
+                "target_type": r["target_type"],
+                "target_id": r["target_id"],
+                "rubric_score": r["rubric_score"],
+                "last_run_at": r["last_run_at"],
+                "passed": "Y" if r["passed"] else ("N" if r["passed"] is not None else "—"),
+                "friction_flag": bool(r["friction_flag"]),
+            }
+            for r in rows
+        ]
+        return _print({"registry": result, "count": len(result)})
+
+    if registry_command == "show":
+        target_id = getattr(args, "target_id", None)
+        if not target_id:
+            print("target_id required", file=sys.stderr)
+            return 1
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if not _table_exists_in_conn(conn, "eval_registry"):
+                return _print(
+                    {"ok": False, "error": "eval_registry table not found. Run migrations."}
+                )
+            entry = conn.execute(
+                "SELECT * FROM eval_registry WHERE target_id = ?", (target_id,)
+            ).fetchone()
+            if entry is None:
+                return _print(
+                    {"ok": False, "error": f"No registry entry for target_id={target_id!r}"}
+                )
+            # Fetch run history depending on target type
+            target_type = entry["target_type"]
+            if target_type == "hook":
+                runs = conn.execute(
+                    """SELECT run_id, eval_type, passed, score, failure_reasons, created_at
+                    FROM hook_eval_runs WHERE hook_id = ?
+                    ORDER BY created_at DESC LIMIT 20""",
+                    (target_id,),
+                ).fetchall()
+                run_rows = [dict(r) for r in runs]
+            else:
+                runs = conn.execute(
+                    """SELECT run_id, eval_id, eval_version, total_score, passed,
+                    failure_reasons, started_at, completed_at
+                    FROM ds_eval_runs WHERE eval_id = ?
+                    ORDER BY started_at DESC LIMIT 20""",
+                    (target_id,),
+                ).fetchall()
+                run_rows = [dict(r) for r in runs]
+        return _print(
+            {
+                "target_id": target_id,
+                "target_type": target_type,
+                "rubric_score": entry["rubric_score"],
+                "last_run_at": entry["last_run_at"],
+                "friction_flag": bool(entry["friction_flag"]),
+                "runs": run_rows,
+            }
+        )
+
+    print(f"Unknown registry command: {registry_command}", file=sys.stderr)
+    return 1
+
+
+def _table_exists_in_conn(conn, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table_name,)
+    ).fetchone()
+    return row is not None
 
 
 if __name__ == "__main__":
