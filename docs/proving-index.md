@@ -4,7 +4,7 @@ Proves which skill × ecosystem combinations have been validated with real findi
 on real external repositories. "Proven" means: a PR was opened with actual findings
 pasted from running the audit on that repo, not just declaring support in rules.yml.
 
-Last updated: 2026-06-03
+Last updated: 2026-06-11
 
 ---
 
@@ -14,7 +14,7 @@ Last updated: 2026-06-03
 |-----------|---------|--------------|---------------|------|---------|
 | Python | ✓ | dream-studio-clean | Baseline (internal) | 2026-04 | 22+ rules fire on real Python codebase; founding proving ground |
 | TypeScript/JS | ✓ | DreamySuite | PR #127 description | 2026-05-31 | sec rules fire on TS files alongside testing rules |
-| Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no external run with pasted findings |
+| Go | ✓ | github.com/cli/cli | WO-DEBT-K proving run | 2026-06-11 | sec-001 FIRE: hardcoded OAuth client ID/secret in internal/authflow/flow.go (intentional public-client pattern, documented low-risk); sec-003/004/006/009/010/011/013/015 PASS; sec-002/005/007/008/012/014 SKIP (CLI tool — no SQL/web server/cookies/sessions) |
 | Rust | DECLARED | — | rules.yml only | — | Declared in applies_to; no external run with pasted findings |
 | Shell/YAML | DECLARED | — | rules.yml only | — | Declared; no dedicated external proving run |
 
