@@ -429,7 +429,7 @@ def _extract_first_json_object(text: str) -> "str | None":
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                return text[start:i + 1]
+                return text[start : i + 1]  # noqa: E203
     return None
 
 
