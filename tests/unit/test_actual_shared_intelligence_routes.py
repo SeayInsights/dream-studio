@@ -173,7 +173,9 @@ def test_actual_app_exposes_production_readiness_preview_without_persisting(
     tmp_path: Path, monkeypatch
 ) -> None:
     client, db_path = _client_with_shared_db(tmp_path, monkeypatch)
-    before_runs = _count(db_path, "readiness_events")  # production_readiness_* dropped migration 112
+    before_runs = _count(
+        db_path, "readiness_events"
+    )  # production_readiness_* dropped migration 112
 
     response = client.get(
         "/api/shared-intelligence/production-readiness",
