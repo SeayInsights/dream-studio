@@ -163,7 +163,29 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
     return count > 0
 
 
-def evaluate(event_id: str | None = None, rules_dir: Path | None = None) -> GuardrailAction:
+def _write_hook_eval_run(hook_id: str, passed: bool, failure_reasons: list[str], conn) -> None:
+    """Write one row to hook_eval_runs after a guardrail evaluation."""
+    run_id = str(uuid.uuid4())
+    score = 1.0 if passed else max(0.0, 1.0 - len(failure_reasons) * 0.25)
+    try:
+        conn.execute(
+            """
+            INSERT INTO hook_eval_runs
+            (run_id, hook_id, eval_type, passed, score, failure_reasons, created_at)
+            VALUES (?, ?, 'guardrail', ?, ?, ?, datetime('now'))
+            """,
+            (run_id, hook_id, int(passed), score, json.dumps(failure_reasons)),
+        )
+        conn.commit()
+    except Exception:
+        pass  # hook_eval_runs may not exist on older DBs; never block the main path
+
+
+def evaluate(
+    event_id: str | None = None,
+    rules_dir: Path | None = None,
+    hook_id: str | None = None,
+) -> GuardrailAction:
     """Evaluate guardrail rules and return decision.
 
     Args:
@@ -208,6 +230,8 @@ def evaluate(event_id: str | None = None, rules_dir: Path | None = None) -> Guar
             continue
 
     if not triggered_rules:
+        if hook_id:
+            _write_hook_eval_run(hook_id=hook_id, passed=True, failure_reasons=[], conn=conn)
         return GuardrailAction.ALLOW
 
     # Determine most severe action
@@ -281,6 +305,14 @@ def evaluate(event_id: str | None = None, rules_dir: Path | None = None) -> Guar
             print(f"   ACTION: REQUIRES APPROVAL\n", file=sys.stderr)
         else:
             print(f"   ACTION: ADVISORY ONLY\n", file=sys.stderr)
+
+    if hook_id:
+        _write_hook_eval_run(
+            hook_id=hook_id,
+            passed=(final_action == GuardrailAction.ALLOW),
+            failure_reasons=[r.rule_id for r in triggered_rules],
+            conn=conn,
+        )
 
     return final_action
 
