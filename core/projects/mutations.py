@@ -369,17 +369,52 @@ def _write_project_marker(
     project_id: str,
     project_name: str,
     created_at: str,
+    db_path: "Path | None" = None,
 ) -> None:
     """Write the JSON .dream-studio-project marker file to project_path.
 
-    Refuses to overwrite an existing marker that belongs to a different project.
-    This prevents ghost-marker writes from bulk-intake or acquisition flows that
-    inadvertently target a path already claimed by another project.
+    Guards:
+    1. Refuses to overwrite an existing marker for a DIFFERENT project.
+    2. When db_path is provided, refuses to write if project_id is not found
+       in business_projects (prevents ghost markers from deleted or phantom projects).
     """
     import json as _json
     import subprocess
 
     marker_path = project_path / ".dream-studio-project"
+
+    # Guard: refuse to write a marker for a project that doesn't exist in the authority.
+    if db_path is not None:
+        import sqlite3 as _sqlite3
+
+        try:
+            conn = _sqlite3.connect(str(db_path), timeout=2.0)
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM business_projects WHERE project_id = ?",
+                    (project_id,),
+                ).fetchone()
+            finally:
+                conn.close()
+        except Exception as _exc:
+            row = None
+            try:
+                from core.telemetry.diagnostics import log_diagnostic
+
+                log_diagnostic(
+                    category="anomaly",
+                    source="_write_project_marker",
+                    context={"project_path": str(project_path), "project_id": project_id},
+                    details={"error_message": f"DB read failed during existence check: {_exc}"},
+                )
+            except Exception:
+                pass
+        if row is None:
+            raise ValueError(
+                f"Cannot write marker for project {project_id} to {project_path}: "
+                "project_id does not exist in business_projects. "
+                "Register the project before writing its marker."
+            )
 
     # Guard: refuse to overwrite a marker for a DIFFERENT project.
     if marker_path.exists():
@@ -503,6 +538,7 @@ def register_project(
                 project_id=project_id,
                 project_name=name,
                 created_at=now,
+                db_path=db_path,
             )
             marker_written = True
         except Exception as exc:

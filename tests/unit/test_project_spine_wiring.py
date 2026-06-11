@@ -430,3 +430,87 @@ def test_write_project_marker_writes_new_marker_when_none_exists(tmp_path):
     saved = json.loads(marker_path.read_text(encoding="utf-8"))
     assert saved["project_id"] == pid
     assert saved["project_name"] == "Brand New"
+
+
+# ── _write_project_marker project-existence guard (WO-MARKER-FORMAT remediation) ─
+
+
+def _make_authority_db(path: Path, project_ids: list) -> Path:
+    """Create a minimal authority DB with the given project_ids in business_projects."""
+    import sqlite3
+
+    db_path = path / "studio.db"
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "CREATE TABLE business_projects"
+            " (project_id TEXT PRIMARY KEY, name TEXT, status TEXT,"
+            "  created_at TEXT, updated_at TEXT)"
+        )
+        for pid in project_ids:
+            conn.execute(
+                "INSERT INTO business_projects"
+                " (project_id, name, status, created_at, updated_at)"
+                " VALUES (?, 'Test', 'active', '2026-01-01', '2026-01-01')",
+                (pid,),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+    return db_path
+
+
+def test_write_project_marker_refuses_unknown_project_id(tmp_path):
+    """_write_project_marker must raise ValueError when project_id is not in business_projects."""
+    from core.projects.mutations import _write_project_marker
+
+    pid = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+    db_path = _make_authority_db(tmp_path, [])  # empty — pid not registered
+
+    with pytest.raises(ValueError, match="does not exist in business_projects"):
+        _write_project_marker(
+            project_path=tmp_path,
+            project_id=pid,
+            project_name="Phantom Project",
+            created_at="2026-01-01T00:00:00+00:00",
+            db_path=db_path,
+        )
+
+    assert not (tmp_path / ".dream-studio-project").exists()
+
+
+def test_write_project_marker_succeeds_when_project_exists_in_db(tmp_path):
+    """_write_project_marker writes the marker when project_id is in business_projects."""
+    from core.projects.mutations import _write_project_marker
+
+    pid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+    db_dir = tmp_path / "db"
+    db_dir.mkdir()
+    db_path = _make_authority_db(db_dir, [pid])
+    marker_dir = tmp_path / "project"
+    marker_dir.mkdir()
+
+    _write_project_marker(
+        project_path=marker_dir,
+        project_id=pid,
+        project_name="Registered Project",
+        created_at="2026-01-01T00:00:00+00:00",
+        db_path=db_path,
+    )
+    saved = json.loads((marker_dir / ".dream-studio-project").read_text(encoding="utf-8"))
+    assert saved["project_id"] == pid
+
+
+def test_write_project_marker_skips_existence_check_when_no_db_path(tmp_path):
+    """When db_path is None the existence guard is skipped (backward-compat)."""
+    from core.projects.mutations import _write_project_marker
+
+    pid = "11111111-1111-1111-1111-111111111111"
+    _write_project_marker(
+        project_path=tmp_path,
+        project_id=pid,
+        project_name="No DB check",
+        created_at="2026-01-01T00:00:00+00:00",
+        db_path=None,
+    )
+    assert (tmp_path / ".dream-studio-project").exists()
