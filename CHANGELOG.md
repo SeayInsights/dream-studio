@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Friction-to-eval feedback loop (WO-EVAL-LOOP): `core/eval/friction.py` aggregates three friction sources (session failures, skill corrections, guardrail blocks) into `eval_registry.friction_flag`; `ds eval queue show/run/aggregate` CLI surface; `ds eval baseline --live` and `ds eval run --live` already in place; pulse `degraded_skills` now uses max of telemetry-based and registry-based degraded counts; `rubric-immutability` pre-push gate blocks changes to `eval-rubric.yml` without `[rubric-update]` commit token (PR #292).
+
 ### Fixed
 - `eval_registry` not updated after live eval runs: `_write_live_eval_run` now UPDATEs `eval_registry.last_run_at`, `last_run_id`, and `rubric_score` so `ds eval registry show` reflects live-run state; sets `friction_flag=1` when live score drops >10% below fixture baseline. `ds eval baseline --live --eval-id <id>` added to capture live baselines independently (WO-EVAL-LIVE remediation, PR #291).
 

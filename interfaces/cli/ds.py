@@ -635,6 +635,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     eval_registry_show_cmd.add_argument("target_id", help="Target ID to inspect")
 
+    eval_queue_cmd = eval_sub.add_parser(
+        "queue", help="Friction-flagged re-run queue: show pending evals or run them"
+    )
+    eval_queue_sub = eval_queue_cmd.add_subparsers(dest="queue_command", required=True)
+    eval_queue_sub.add_parser("show", help="Show eval targets pending re-run (friction_flag=1)")
+    eval_queue_sub.add_parser(
+        "run",
+        help="Run live evals for all friction-flagged targets and clear their flags on pass",
+    )
+    eval_queue_sub.add_parser(
+        "aggregate", help="Aggregate friction signals from raw_sessions, corrections, guardrails"
+    )
+
     # diagnostics subcommand group (TA3)
     diag_cmd = subcommands.add_parser(
         "diagnostics", help="Read or clear the TA3 diagnostic log stream"
@@ -3118,6 +3131,9 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
     if args.eval_command == "registry":
         return _eval_registry_dispatch(args, source_root=source_root)
 
+    if args.eval_command == "queue":
+        return _eval_queue_dispatch(args, evals_dir=evals_dir)
+
     print(f"Unknown eval command: {args.eval_command}", file=sys.stderr)
     return 1
 
@@ -3224,6 +3240,83 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
         )
 
     print(f"Unknown registry command: {registry_command}", file=sys.stderr)
+    return 1
+
+
+def _eval_queue_dispatch(args: argparse.Namespace, *, evals_dir: Path) -> int:
+    """Dispatch ds eval queue {show,run,aggregate} commands (WO-EVAL-LOOP)."""
+    from core.config.database import DatabaseRuntime
+    import sqlite3
+
+    db_path = DatabaseRuntime.get_instance().db_path
+    queue_command = getattr(args, "queue_command", None)
+
+    if queue_command == "aggregate":
+        from core.eval.friction import aggregate_friction_signals
+
+        result = aggregate_friction_signals(db_path=db_path)
+        return _print(result)
+
+    if queue_command == "show":
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if not _table_exists_in_conn(conn, "eval_registry"):
+                return _print(
+                    {"ok": False, "error": "eval_registry table not found. Run migrations."}
+                )
+            rows = conn.execute("""
+                SELECT eval_id, target_type, target_id, rubric_score,
+                       last_run_at, friction_flag, updated_at
+                FROM eval_registry
+                WHERE friction_flag = 1
+                ORDER BY updated_at DESC
+                """).fetchall()
+        return _print({"pending_rerun": [dict(r) for r in rows], "count": len(rows)})
+
+    if queue_command == "run":
+        from core.eval.runner import EvalRunner
+        from core.eval.schema import EvalCase
+
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            if not _table_exists_in_conn(conn, "eval_registry"):
+                return _print(
+                    {"ok": False, "error": "eval_registry table not found. Run migrations."}
+                )
+            pending = conn.execute(
+                "SELECT target_id, target_type FROM eval_registry WHERE friction_flag = 1"
+            ).fetchall()
+
+        runner = EvalRunner(evals_dir=evals_dir)
+        results = []
+        for row in pending:
+            target_id = row["target_id"]
+            path = evals_dir / f"{target_id}.json"
+            if not path.exists():
+                results.append(
+                    {"target_id": target_id, "status": "skipped", "reason": "eval case not found"}
+                )
+                continue
+            case = EvalCase.from_json(path)
+            result = runner.run_case(case, live=True)
+            if result.passed:
+                with sqlite3.connect(db_path) as conn:
+                    conn.execute(
+                        "UPDATE eval_registry SET friction_flag=0, updated_at=datetime('now')"
+                        " WHERE target_id=?",
+                        (target_id,),
+                    )
+            results.append(
+                {
+                    "target_id": target_id,
+                    "passed": result.passed,
+                    "composite_score": result.composite_score,
+                    "friction_cleared": result.passed,
+                }
+            )
+        return _print({"results": results, "count": len(results)})
+
+    print(f"Unknown queue command: {queue_command}", file=sys.stderr)
     return 1
 
 
