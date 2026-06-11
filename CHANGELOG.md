@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `core/config/sqlite_bootstrap.py`: narrowed the two remaining broad `no such table` swallow clauses (token_usage_records / ai_usage_operational_records and the ds_* project spine) to statement-type-aware matching — CREATE INDEX / CREATE TRIGGER failures now raise instead of being silently discarded (M2 class, the idx_memory_lifecycle mechanism); data statements remain graceful degradation so migration 070/081 partial-fixture tolerance is unchanged (WO-DEBT-I).
+
+### Added
+- `tests/unit/test_wo_debt_i_swallow_narrowing.py`: 7 tests driving the real `run_migrations()` handler via a synthetic migration set, plus clean-path index checks at schema v69/v80.
+
 ## feat(wo-hs2) — Context-pressure handoff wired to authority DB (2026-06-08)
 
 ### Changed
