@@ -12,7 +12,6 @@ import pytest
 
 from core.work_orders.verify import _extract_first_json_object, _collect_grader
 
-
 # ── _extract_first_json_object unit tests ──────────────────────────────────
 
 
