@@ -179,9 +179,9 @@ def test_migration_117_recreates_usage_indexes_upgrade_path():
     # After migration 081 the tables are reconstructed and indexes dropped.
     # No migration between 082 and 116 recreates them — confirm absence.
     present_before = _USAGE_INDEXES & _index_names(conn)
-    assert not present_before, (
-        f"Expected indexes to be absent at v116 (dropped by 081), but found: {present_before}"
-    )
+    assert (
+        not present_before
+    ), f"Expected indexes to be absent at v116 (dropped by 081), but found: {present_before}"
 
     # Continue from v116 to HEAD — migration 117 should recreate them.
     run_migrations(conn)
