@@ -370,9 +370,48 @@ def _write_project_marker(
     project_name: str,
     created_at: str,
 ) -> None:
-    """Write the JSON .dream-studio-project marker file to project_path."""
+    """Write the JSON .dream-studio-project marker file to project_path.
+
+    Refuses to overwrite an existing marker that belongs to a different project.
+    This prevents ghost-marker writes from bulk-intake or acquisition flows that
+    inadvertently target a path already claimed by another project.
+    """
     import json as _json
     import subprocess
+
+    marker_path = project_path / ".dream-studio-project"
+
+    # Guard: refuse to overwrite a marker for a DIFFERENT project.
+    if marker_path.exists():
+        try:
+            existing_raw = marker_path.read_text(encoding="utf-8").strip()
+            existing_data = _json.loads(existing_raw) if existing_raw.startswith("{") else {}
+            existing_id = existing_data.get("project_id") or (
+                existing_raw.splitlines()[0].strip() if existing_raw else ""
+            )
+        except (OSError, _json.JSONDecodeError):
+            existing_id = ""  # unreadable or malformed — allow write to overwrite
+        if existing_id and existing_id != project_id:
+            try:
+                from core.telemetry.diagnostics import log_diagnostic
+
+                log_diagnostic(
+                    category="anomaly",
+                    source="_write_project_marker",
+                    context={"project_path": str(project_path), "project_id": project_id},
+                    details={
+                        "error_message": "Refusing to overwrite existing marker for a different project",
+                        "existing_project_id": existing_id,
+                        "new_project_id": project_id,
+                    },
+                )
+            except Exception:
+                pass
+            raise ValueError(
+                f"Cannot write marker for project {project_id} to {project_path}: "
+                f"path already has a marker for project {existing_id}. "
+                "Delete the existing marker manually if this is intentional."
+            )
 
     git_remote_url: str | None = None
     try:
@@ -398,7 +437,6 @@ def _write_project_marker(
             "registered_from_path": str(project_path.resolve()),
         },
     }
-    marker_path = project_path / ".dream-studio-project"
     marker_path.write_text(_json.dumps(marker_content, indent=2), encoding="utf-8")
 
 

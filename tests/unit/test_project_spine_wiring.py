@@ -308,3 +308,125 @@ def test_project_next_returns_none_when_no_open_work_orders(tmp_path, capsys):
     result = json.loads(captured.out)
     assert result["ok"] is True
     assert result["work_order"] is None
+
+
+# ── read_project_id — JSON marker format (WO-MARKER-FORMAT T1) ────────────────
+
+
+def test_read_project_id_parses_json_format(tmp_path):
+    """read_project_id must parse the TA3+ JSON marker format."""
+    from emitters.claude_code.project import read_project_id
+
+    pid = "abcdef01-abcd-abcd-abcd-abcdef012345"
+    marker_content = json.dumps({"project_id": pid, "project_name": "Test", "schema_version": 1})
+    (tmp_path / ".dream-studio-project").write_text(marker_content, encoding="utf-8")
+    assert read_project_id(tmp_path) == pid
+
+
+def test_read_project_id_json_with_extra_fields_returns_uuid(tmp_path):
+    """JSON marker with extra metadata fields still returns the project_id."""
+    from emitters.claude_code.project import read_project_id
+
+    pid = "12345678-abcd-abcd-abcd-1234567890ab"
+    marker = {
+        "schema_version": 1,
+        "project_id": pid,
+        "project_name": "My Project",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "metadata": {"git_remote_url": "https://github.com/org/repo"},
+    }
+    (tmp_path / ".dream-studio-project").write_text(json.dumps(marker), encoding="utf-8")
+    assert read_project_id(tmp_path) == pid
+
+
+def test_read_project_id_json_with_invalid_uuid_returns_none(tmp_path, caplog):
+    """JSON marker whose project_id is not a valid UUID returns None."""
+    import logging
+
+    from emitters.claude_code.project import read_project_id
+
+    (tmp_path / ".dream-studio-project").write_text(
+        json.dumps({"project_id": "not-a-valid-uuid"}), encoding="utf-8"
+    )
+    with caplog.at_level(logging.WARNING, logger="emitters.claude_code.project"):
+        result = read_project_id(tmp_path)
+    assert result is None
+    assert caplog.records, "Expected a warning log for invalid UUID in JSON marker"
+
+
+def test_read_project_id_malformed_json_falls_back_to_uuid_line(tmp_path):
+    """Content that starts with '{' but is invalid JSON falls back to plain-UUID check."""
+    from emitters.claude_code.project import read_project_id
+
+    pid = "99999999-9999-9999-9999-999999999999"
+    # JSON parse will fail; first line is the UUID as plain text.
+    (tmp_path / ".dream-studio-project").write_text(pid, encoding="utf-8")
+    assert read_project_id(tmp_path) == pid
+
+
+# ── _write_project_marker ghost-marker guard (WO-MARKER-FORMAT T2) ────────────
+
+
+def test_write_project_marker_refuses_different_project_id(tmp_path):
+    """_write_project_marker must raise ValueError when target already has a
+    marker for a different project (the ghost-marker guard)."""
+    from core.projects.mutations import _write_project_marker
+
+    existing_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    new_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    # Write a pre-existing marker for a different project.
+    existing_marker = json.dumps({"project_id": existing_id, "schema_version": 1})
+    (tmp_path / ".dream-studio-project").write_text(existing_marker, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=existing_id):
+        _write_project_marker(
+            project_path=tmp_path,
+            project_id=new_id,
+            project_name="New Project",
+            created_at="2026-01-01T00:00:00+00:00",
+        )
+
+    # Marker must still contain the original project_id — the write was refused.
+    saved = json.loads((tmp_path / ".dream-studio-project").read_text(encoding="utf-8"))
+    assert saved["project_id"] == existing_id
+
+
+def test_write_project_marker_allows_overwrite_same_project(tmp_path):
+    """_write_project_marker allows overwriting when the existing marker is for
+    the SAME project (idempotent re-registration)."""
+    from core.projects.mutations import _write_project_marker
+
+    pid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    (tmp_path / ".dream-studio-project").write_text(
+        json.dumps({"project_id": pid, "schema_version": 1}), encoding="utf-8"
+    )
+
+    # Should not raise — same project.
+    _write_project_marker(
+        project_path=tmp_path,
+        project_id=pid,
+        project_name="Same Project Updated",
+        created_at="2026-06-01T00:00:00+00:00",
+    )
+    saved = json.loads((tmp_path / ".dream-studio-project").read_text(encoding="utf-8"))
+    assert saved["project_id"] == pid
+    assert saved["project_name"] == "Same Project Updated"
+
+
+def test_write_project_marker_writes_new_marker_when_none_exists(tmp_path):
+    """_write_project_marker creates a new JSON marker when no marker exists."""
+    from core.projects.mutations import _write_project_marker
+
+    pid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    _write_project_marker(
+        project_path=tmp_path,
+        project_id=pid,
+        project_name="Brand New",
+        created_at="2026-01-01T00:00:00+00:00",
+    )
+    marker_path = tmp_path / ".dream-studio-project"
+    assert marker_path.exists()
+    saved = json.loads(marker_path.read_text(encoding="utf-8"))
+    assert saved["project_id"] == pid
+    assert saved["project_name"] == "Brand New"
