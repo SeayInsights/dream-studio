@@ -150,3 +150,44 @@ def test_migration_sequence_creates_usage_indexes_before_081():
     missing = expected - _index_names(conn)
     assert not missing, f"usage-table indexes missing at schema v80: {missing}"
     conn.close()
+
+
+_USAGE_INDEXES = {
+    "idx_token_usage_scope",
+    "idx_ai_usage_operational_scope",
+    "idx_ai_usage_operational_process",
+}
+
+
+def test_migration_117_recreates_usage_indexes_fresh_install():
+    """Fresh-install path: full sequence up to latest should include all three indexes."""
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn)
+    missing = _USAGE_INDEXES - _index_names(conn)
+    assert not missing, (
+        f"usage-table indexes missing after full migration sequence: {missing}. "
+        "Migration 117 should recreate indexes dropped by migration 081."
+    )
+    conn.close()
+
+
+def test_migration_117_recreates_usage_indexes_upgrade_path():
+    """Upgrade path: run to v116, confirm indexes absent, then complete to HEAD."""
+    conn = sqlite3.connect(":memory:")
+    run_migrations(conn, target_version=116)
+
+    # After migration 081 the tables are reconstructed and indexes dropped.
+    # No migration between 082 and 116 recreates them — confirm absence.
+    present_before = _USAGE_INDEXES & _index_names(conn)
+    assert not present_before, (
+        f"Expected indexes to be absent at v116 (dropped by 081), but found: {present_before}"
+    )
+
+    # Continue from v116 to HEAD — migration 117 should recreate them.
+    run_migrations(conn)
+    missing = _USAGE_INDEXES - _index_names(conn)
+    assert not missing, (
+        f"usage-table indexes missing after upgrading from v116: {missing}. "
+        "Migration 117 should recreate indexes dropped by migration 081."
+    )
+    conn.close()
