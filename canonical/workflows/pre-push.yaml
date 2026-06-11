@@ -129,6 +129,18 @@ gates:
     command: [py, -m, core.gates.dependency_rules, rule3]
     warn_hint: "Rule 3 advisory — a route handler wrote to business_* directly. Consider routing through the CLI/work-order layer."
 
+  - id: rubric-immutability
+    tier: blocking
+    description: >
+      eval-rubric.yml write-protection gate. Any change to
+      canonical/skills/domains/eval-rubric.yml requires the [rubric-update]
+      token in at least one commit message. Writes a guardrail_decisions row
+      (reason=rubric-immutability-constraint) for audit regardless of outcome.
+    command: [py, -m, core.gates.rubric_immutability_gate]
+    fail_hint: >
+      eval-rubric.yml was modified without the [rubric-update] commit token.
+      Add [rubric-update] to your commit message and re-push.
+
   - id: rule4-ingestor-sole-event-writer
     tier: blocking
     description: >

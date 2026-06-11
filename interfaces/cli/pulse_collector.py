@@ -371,7 +371,11 @@ def generate_pulse() -> tuple[str, dict]:
     drafts_overflow = len(pending_drafts) > MAX_PENDING_DRAFTS
     skill_summaries, health_section = _get_skill_health()
     _update_skill_metadata(Path(__file__).resolve().parents[2], skill_summaries)
-    degraded_count = sum(1 for s in skill_summaries if (s.get("success_rate") or 1.0) < 0.70)
+    telemetry_degraded = sum(1 for s in skill_summaries if (s.get("success_rate") or 1.0) < 0.70)
+    from core.eval.friction import count_degraded_skills
+
+    registry_degraded = count_degraded_skills()
+    degraded_count = max(telemetry_degraded, registry_degraded)
 
     issues = (
         len(stale_branches)
