@@ -145,7 +145,7 @@ See `docs/operations/lightweight-github-ci-strategy.md` for the full rationale.
 7. Merge
 
 ## Debug Workflow
-When `ds-quality debug` finds a root cause: create GitHub issue with debug log, then follow Issue → PR workflow. Bugs found during Dream Command builds get tracked even if the fix is trivial.
+When `ds-quality debug` finds a root cause: register a Dream Studio authority work order first (status `created`, backlog sequence), then create the GitHub issue with the debug log and the WO id in the body, then follow Issue → PR workflow. A GitHub issue alone is NOT sufficient tracking — `get_next_work_order`, `ds project state`, and on-close routing only see the authority. Bugs found during Dream Command builds get tracked even if the fix is trivial.
 
 ## Ship Gate
 Use `ds-core ship` (full quality gate) when user says "ship it", before major releases, client demos, or after risky refactors. Regular PRs do NOT need the ship gate — CI auto-deploys after merge.

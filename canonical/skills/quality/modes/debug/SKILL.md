@@ -49,7 +49,8 @@ Match symptoms to category, then follow the trace strategy in the reference:
 3. **Narrow** — Eliminate hypotheses. Add new ones if needed.
 4. **Fix** — Apply fix. Verify no regressions.
 5. **Document** — Record what was tried and ruled out.
-6. **Capture** — After ≥3 iterations OR reusable pattern found, invoke `learn:` with debug log.
+6. **Track** — If the root cause is out of the active work order's scope or the fix is deferred: register a Dream Studio authority work order FIRST (status `created`, backlog sequence), then create the GitHub issue with the WO id in the body. A GitHub issue alone is invisible to Dream Studio routing — only the authority is tracked.
+7. **Capture** — After ≥3 iterations OR reusable pattern found, invoke `learn:` with debug log.
 
 ## Debug Log Template
 ```
