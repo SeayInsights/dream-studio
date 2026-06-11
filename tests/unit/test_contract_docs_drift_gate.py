@@ -211,9 +211,9 @@ def test_engine_skill_coupling_domains_exist() -> None:
             "projects_engine_skill_surface",
             "milestones_engine_skill_surface",
         ):
-            assert domain["release_blocking"] is True, (
-                f"{domain['domain_id']} must be release_blocking"
-            )
+            assert (
+                domain["release_blocking"] is True
+            ), f"{domain['domain_id']} must be release_blocking"
 
 
 def test_work_orders_engine_change_triggers_skill_surface_domain() -> None:
