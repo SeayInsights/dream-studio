@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `eval_registry` not updated after live eval runs: `_write_live_eval_run` now UPDATEs `eval_registry.last_run_at`, `last_run_id`, and `rubric_score` so `ds eval registry show` reflects live-run state; sets `friction_flag=1` when live score drops >10% below fixture baseline. `ds eval baseline --live --eval-id <id>` added to capture live baselines independently (WO-EVAL-LIVE remediation, PR #291).
+
 ### Added
 - Live-session eval mode (`ds eval run --live`): spawns a fresh `claude` subprocess with `--output-format json`, synthesizes Dream Studio events from its tool-call output (`skill.invoked` / `skill.completed`), and scores with the same deterministic matcher as fixture mode. Live baselines stored under `eval_id + ":live"` key to avoid conflating with fixture baselines. Requires `claude` CLI in PATH; skipped gracefully when absent (WO-EVAL-LIVE).
 - `ds_eval_runs.run_mode` column (migration 120): `ALTER TABLE ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'fixture'` — distinguishes `'fixture'` (deterministic, default), `'live'` (subprocess spawn), and `'verify'` (WO-close verifier) runs. Additive-only; all existing rows implicitly read as `'fixture'` (WO-EVAL-LIVE).
