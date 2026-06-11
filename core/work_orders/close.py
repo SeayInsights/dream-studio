@@ -377,6 +377,10 @@ def close_work_order(
     if "independent_review" in [g.strip() for g in _post_gate_str.split("|") if g.strip()]:
         _verdict_path = p_root / "work-orders" / work_order_id / "review-verdict.json"
         if not _verdict_path.is_file():
+            # Deferred import: verify.py is a sibling module; deferring keeps the
+            # import tree symmetrical with the other lazy imports in this module
+            # and avoids any future circular-import risk if verify gains a close
+            # dependency (e.g. for gap WO registration callbacks).
             from core.work_orders.verify import verify_work_order as _verify_wo
 
             _verify_result = _verify_wo(
