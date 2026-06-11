@@ -56,6 +56,12 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     "guard_calibration": "core/analytics/aggregate_metrics.py:86",
     "pattern_catalog": "core/analytics/aggregate_metrics.py:97",
     "recommendation_outcomes": "core/analytics/aggregate_metrics.py:107",
+    # duckdb_execution_events — DuckDB execution log created by DuckDBStore in a
+    # separate analytics SQLite file (not studio.db). No migration file.
+    "duckdb_execution_events": "core/analytics/duckdb_store.py:108",
+    # ds_files — file-tracking table created by FileStore at module load.
+    # Not in studio.db; no migration file.
+    "ds_files": "core/files/store.py:25",
 }
 
 # Dual-owned tables — both Python and a migration create them with IF NOT EXISTS.
@@ -263,14 +269,20 @@ def _effective_swallow_classification(entry: dict[str, Any], migration_tables: s
 
 
 def _build_migration_only_tables(source_root: Path) -> set[str]:
-    """Run all migrations into a fresh in-memory DB. Return the resulting table names."""
+    """Run all migrations into a fresh in-memory DB. Return the resulting table and view names.
+
+    VIEWs are included because a migration may convert a table to a view (e.g. migration 102
+    retired the canonical_events TABLE and replaced it with a VIEW of the same name). Both
+    are migration-owned schema objects and must be excluded from the staleness guard.
+    """
     from core.config.sqlite_bootstrap import run_migrations
 
     conn = sqlite3.connect(":memory:")
     try:
         run_migrations(conn)
         cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            "SELECT name FROM sqlite_master"
+            " WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'"
         )
         return {row[0] for row in cursor.fetchall()}
     finally:
