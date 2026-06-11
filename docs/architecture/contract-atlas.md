@@ -56,6 +56,9 @@ The registry currently tracks these release-blocking domains:
 - Long-run multisession operational validation
 - Expert skills and workflow system
 - Platform hardening sequence
+- Work orders engine → DS-Workorder skill surface
+- Projects engine → DS-Project skill surface
+- Milestones engine → DS-Milestone skill surface
 
 Each domain declares:
 
@@ -428,3 +431,5 @@ and boundary report without inventing new dependency data.
 <!-- Last reviewed 2026-06-08 — WO-Y findings event-spine: contract_atlas.py _source_tables() updated — findings and sec_sarif_findings replaced with security_events and findings_current_status; production_readiness_findings removed (retired in migration 112). The findings cluster (findings, sec_sarif_findings, sec_cve_matches, sec_manual_reviews) is now the security_events spine + findings_current_status read-model. No claim-boundary or surface ownership change. -->
 
 <!-- Last reviewed 2026-06-10 — WO-DEBT-H (chore/wo-debt-h-hygiene): added repo_structure_navigation domain to contract_registry.py CONTRACT_DOMAINS tuple. Domain watches packs.yaml and canonical/skills/ and requires STRUCTURE.md to be updated in any changeset touching pack definitions. No change to contract schema, verification logic, or existing domain boundaries. -->
+
+<!-- Last reviewed 2026-06-11 — WO-SKILL-COUPLING: added three deterministic engine→skill surface coupling domains. (1) work_orders_engine_skill_surface: core/work_orders/** changes require canonical/skills/ds-workorder/SKILL.md in the same changeset. (2) projects_engine_skill_surface: core/projects/** changes require canonical/skills/ds-project/SKILL.md. (3) milestones_engine_skill_surface: core/milestones/** changes require canonical/skills/ds-milestone/SKILL.md. Domain count: 15 → 18. The coupling was previously implicit — Phase 18 WOs frequently changed engine behavior without flagging the AI-facing skill contract as needing review. These domains make the coupling enforced at the pre-push gate level. All three are release_blocking. -->
