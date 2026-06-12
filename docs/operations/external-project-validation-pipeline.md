@@ -2,6 +2,8 @@
 
 Lifecycle status: runtime_validated
 
+**2026-06-12 (WO b1961e3e):** No external validation pipeline changes. ci.yml smoke suite updated to include resurrection guard tests.
+
 **2026-06-10 (WO-CONSTITUTION-GATES):** No external validation pipeline changes. ci.yml smoke suite updated to include dependency rule gate tests.
 
 Dream Studio can track external projects, but external targets are paused by
