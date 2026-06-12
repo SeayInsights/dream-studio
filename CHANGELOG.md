@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tests/evals/test_rubric_immutability_gate.py`: 4 gate tests for `rubric_immutability_gate.main()` covering no-rubric-change exit 0, rubric+token allow, rubric-without-token block, and skip-record-decision paths (WO 7dc2f344).
+- `tests/evals/test_eval_queue_show_aggregate.py`: 5 gate tests for `ds eval queue show` (pending rows, empty list, missing table error) and `ds eval queue aggregate` (delegates to `aggregate_friction_signals` with correct `db_path`, result forwarded to output) (WO 7dc2f344).
 - `check_rubric_write_guardrail(file_path, conn, event_id, is_operator)` in `guardrails/evaluator.py`: runtime guardrail that records a `guardrail_decisions` block row with `rule_id='rubric-immutability-constraint'` when a Write/Edit targets `eval-rubric.yml`; `is_operator=True` exempts operator sessions (WO 58890751, b57c60eb).
 - `_check_rubric_guardrail()` in `runtime/hooks/meta/on-edit-dispatch.py`: wires `check_rubric_write_guardrail` into the PostToolUse Write/Edit dispatch pipeline; fires for every Edit/Write event (WO b57c60eb).
 - `tests/evals/test_rubric_immutability_guardrail.py`: 6 gate tests covering block decision creation, non-rubric passthrough, event_id forwarding, None file_path, operator-session exemption, and non-operator block (WO 58890751, b57c60eb).
