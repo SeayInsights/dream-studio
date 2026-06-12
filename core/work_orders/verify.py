@@ -371,6 +371,7 @@ def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
     """Return migration SQL files referenced in the git diff."""
     import re
 
+    source_root = Path(source_root)
     found: list[Path] = []
     for match in re.finditer(r"core/event_store/migrations/(\S+\.sql)", git_diff):
         candidate = source_root / "core" / "event_store" / "migrations" / match.group(1)
