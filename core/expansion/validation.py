@@ -463,13 +463,10 @@ class CapabilityValidator:
             skill_id=skill_id,
             input_prompt=f"Validate extension: {description}",
             expected_events=[],
-            expected_behavior=description,
-            negative_checks=[],
+            notes=description,
             event_weight=0.7,
-            behavior_weight=0.3,
             minimum_pass_score=baseline * DECISION_6_SCORE_TOLERANCE,
             fixture_events=fixture_events if fixture_events else None,
-            fixture_transcript=f"Operator session demonstrating: {description}",
         )
 
         try:

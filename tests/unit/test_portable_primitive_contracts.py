@@ -152,7 +152,7 @@ def test_contract_docs_define_required_fields_and_authority_boundaries():
 
 def test_active_skill_ids_use_canonical_ds_slug_form():
     offenders: list[str] = []
-    skill_files = sorted((REPO_ROOT / "skills").rglob("SKILL.md"))
+    skill_files = sorted((REPO_ROOT / ".claude" / "skills").rglob("SKILL.md"))
     assert skill_files
 
     for path in skill_files:
