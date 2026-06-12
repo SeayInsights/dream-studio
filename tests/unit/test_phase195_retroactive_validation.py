@@ -312,7 +312,7 @@ class TestPersonalizationValidator:
 
 class TestCapabilityValidator:
     def _mock_eval_result(self, score=0.88):
-        from core.eval.schema import EvalResult, MatchResult, JudgeResult
+        from core.eval.schema import EvalResult, MatchResult
 
         match_result = MagicMock(spec=MatchResult)
         match_result.score = score
@@ -321,18 +321,13 @@ class TestCapabilityValidator:
         match_result.out_of_order = []
         match_result.matched_required = 1
         match_result.total_required = 1
-        judge_result = MagicMock(spec=JudgeResult)
-        judge_result.effective_score = score
-        judge_result.skipped = False
         return EvalResult(
             eval_id="ext_test_v",
             version="19.5",
             passed=score >= 0.75,
             composite_score=score,
             event_score=score,
-            behavior_score=score,
             match_result=match_result,
-            judge_result=judge_result,
             regression_flagged=False,
             baseline_score=0.85,
             run_mode="fixture",
@@ -537,7 +532,6 @@ class TestTokenCostDocumentation:
 
     def test_capability_reports_tokens(self, full_conn):
         from core.expansion.validation import RetroactiveValidator
-        from core.eval.schema import EvalResult, MatchResult, JudgeResult
 
         v = RetroactiveValidator(full_conn)
         _, ext_id = _insert_extension(full_conn, classified_as="capability", past_wo_count=5)
