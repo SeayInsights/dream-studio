@@ -77,12 +77,13 @@ def test_spawn_exception_emits_warning(tmp_path):
     orig_state = mod.STATE_DIR
     mod.STATE_DIR = tmp_path
 
-    # Write a fresh handoff-latest.json
+    # Write a fresh pending-handoff.json with the fields _dispatch_handoff_continuation checks.
     handoff = {
-        "written_at": time.time(),
-        "content": "Test handoff content",
+        "triggered_at": time.time(),
+        "handoff_id": "test-handoff-spawn-failure",
+        "cwd": str(tmp_path),
     }
-    (tmp_path / "handoff-latest.json").write_text(json.dumps(handoff), encoding="utf-8")
+    (tmp_path / "pending-handoff.json").write_text(json.dumps(handoff), encoding="utf-8")
 
     def _broken_spawn(cmd, cwd):
         raise RuntimeError("simulated spawn failure")

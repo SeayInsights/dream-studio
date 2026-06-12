@@ -72,10 +72,16 @@ def db_home(tmp_path):
 
 
 def _spool_events(spool_root: Path) -> list[dict]:
-    spool_dir = spool_root / "spool"
-    if not spool_dir.exists():
-        return []
-    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(spool_dir.glob("*.json"))]
+    # sync_tick() moves files from spool/ → processed/ (or failed/) after ingestion;
+    # check all three directories so tests pass whether or not sync_tick ran.
+    events = []
+    for subdir in ("spool", "processed", "failed"):
+        d = spool_root / subdir
+        if d.exists():
+            events.extend(
+                json.loads(p.read_text(encoding="utf-8")) for p in sorted(d.glob("*.json"))
+            )
+    return events
 
 
 def _events_of_type(spool_root: Path, event_type: str) -> list[dict]:
