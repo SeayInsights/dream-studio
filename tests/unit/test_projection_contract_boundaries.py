@@ -151,17 +151,30 @@ def test_core_projection_writers_only_touch_projection_owned_tables():
         "projection_state",
         "projection_retry_queue",
         "projection_dead_letter",
-        # DuckDB analytics projection — L3 analytics mirror, not canonical authority
-        "duckdb_execution_events",
     }
+    # duckdb_projections.py writes to DuckDB (not SQLite studio.db) via a DuckDB connection;
+    # its SQL is excluded from the SQLite boundary scan.
+    duckdb_rel = "core/projections/duckdb_projections.py"
     offenders: list[str] = []
 
     for rel_path, operation, table in _sql_writes_under(REPO_ROOT / "core" / "projections"):
+        if rel_path == duckdb_rel:
+            continue
         if table.startswith("proj_") or table in allowed_exact:
             continue
         offenders.append(f"{rel_path}: {operation} {table}")
 
     assert offenders == []
+
+    # Confirm the DuckDB projection file is the sole DuckDB-namespaced writer in core/projections.
+    duckdb_writers = [
+        rel_path
+        for rel_path, _op, table in _sql_writes_under(REPO_ROOT / "core" / "projections")
+        if table == "duckdb_execution_events"
+    ]
+    assert duckdb_writers == [
+        duckdb_rel
+    ], "Only duckdb_projections.py should write to duckdb_execution_events"
 
 
 def test_projection_service_state_writers_stay_limited_and_classified():
