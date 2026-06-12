@@ -12,6 +12,9 @@ was DROP TABLE (not CREATE TABLE or a RENAME TO target).
 Exit codes:
   0 -- no dead-table resurrection found, or running in CI (GITHUB_ACTIONS=true)
   1 -- dead-table CREATE TABLE found in the test-file diff
+
+Split: this module lives in core/gates/ as a standalone pre-push script;
+its pytest test coverage is in tests/unit/test_gate_fixture_resurrection.py.
 """
 
 from __future__ import annotations
