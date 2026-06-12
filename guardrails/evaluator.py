@@ -33,6 +33,63 @@ from emitters.shared.spool_writer import write_envelopes  # noqa: E402
 from .loader import load_rules  # noqa: E402
 from .models import EvaluationError, GuardrailAction, GuardrailDecision  # noqa: E402
 
+_RUBRIC_PATH_PATTERN = "eval-rubric.yml"
+
+
+def check_rubric_write_guardrail(
+    file_path: str | None,
+    conn,
+    event_id: str | None = None,
+) -> "GuardrailDecision | None":
+    """Block runtime Write/Edit events targeting eval-rubric.yml.
+
+    Records a guardrail_decisions row with action='block' and
+    rule_id='rubric-immutability-constraint'. Returns the decision if the
+    path matches, None if it does not.
+
+    Non-fatal on DB write failure — the return value is authoritative.
+    """
+    if not file_path:
+        return None
+    normalized = file_path.replace("\\", "/")
+    if _RUBRIC_PATH_PATTERN not in normalized:
+        return None
+
+    decision = GuardrailDecision(
+        decision_id=str(uuid.uuid4()),
+        rule_id="rubric-immutability-constraint",
+        event_id=event_id,
+        action=GuardrailAction.BLOCK,
+        message=(
+            "eval-rubric.yml is immutable at runtime. "
+            "Changes require operator authorization and the [rubric-update] commit token."
+        ),
+        evaluated_at=datetime.now(timezone.utc),
+        metadata={"file_path": file_path},
+    )
+    try:
+        conn.execute(
+            """
+            INSERT INTO guardrail_decisions
+            (decision_id, rule_id, event_id, action, message, evaluated_at, metadata)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                decision.decision_id,
+                decision.rule_id,
+                decision.event_id,
+                decision.action.value,
+                decision.message,
+                decision.evaluated_at.isoformat(),
+                json.dumps(decision.metadata) if decision.metadata else None,
+            ),
+        )
+        conn.commit()
+    except Exception:
+        pass
+    return decision
+
+
 CANONICAL_EVENTS_FIELDS = {
     "event_id",
     "event_type",
