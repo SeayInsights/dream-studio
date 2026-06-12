@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `_run_case_live()` in `core/eval/runner.py` now checks `proc.returncode` after spawning the claude subprocess; a non-zero exit returns an `EvalResult` with `passed=False` and an `error` field including the returncode and stderr snippet, preventing a failed subprocess from silently yielding a misleading 0-score result (WO 312dc5ac).
 - `record_invocation()` in `core/telemetry/execution_spine.py` now logs skipped DB writes at DEBUG level instead of silently discarding the exception (WO 68fe6a1b). Adds `import logging` and a module-level logger.
 
 ### Added
