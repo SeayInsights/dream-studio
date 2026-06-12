@@ -64,4 +64,5 @@ jobs:
           tests/unit/test_github_pr_cicd_release_gate.py
           tests/unit/test_release_gate_lint_baseline_policy.py
           tests/unit/test_release_gates_dependency_rules.py
+          tests/unit/test_gate_fixture_resurrection.py
           -q --tb=short
