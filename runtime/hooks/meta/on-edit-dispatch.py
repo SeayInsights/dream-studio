@@ -76,7 +76,11 @@ def main() -> None:
     if any(p in file_path for p in PROTECTED_PATHS):
         sys.exit(0)
 
-    is_operator = os.environ.get("DREAM_STUDIO_OPERATOR_SESSION", "").lower() in ("1", "true", "yes")
+    is_operator = os.environ.get("DREAM_STUDIO_OPERATOR_SESSION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     _check_rubric_guardrail(file_path, event_id=data.get("event_id"), is_operator=is_operator)
 
     run_handlers(HANDLERS, raw_payload, "PostToolUse_Edit_Write", STATE_DIR)

@@ -16,11 +16,7 @@ import sqlite3
 from pathlib import Path
 
 _DISPATCH_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "runtime"
-    / "hooks"
-    / "meta"
-    / "on-edit-dispatch.py"
+    Path(__file__).resolve().parents[2] / "runtime" / "hooks" / "meta" / "on-edit-dispatch.py"
 )
 
 _DDL = """
@@ -79,7 +75,9 @@ class TestPostToolUseGuardrailDispatch:
         mod.STATE_DIR = tmp_path
         conn.close()
 
-        result = mod._check_rubric_guardrail(_RUBRIC_PATH, event_id="evt-dispatch-002", is_operator=True)
+        result = mod._check_rubric_guardrail(
+            _RUBRIC_PATH, event_id="evt-dispatch-002", is_operator=True
+        )
 
         assert result is None
 
