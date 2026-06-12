@@ -149,8 +149,12 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
 
 
 def count_degraded_skills(db_path: Path | None = None) -> int:
-    """Return the number of eval_registry entries with friction_flag=1.
+    """Return the number of eval_registry entries that are both friction-flagged
+    and score below their fixture baseline.
 
+    Degradation requires friction_flag=1 AND rubric_score < baseline_score * 100.
+    Targets with no baseline entry are counted as degraded when friction_flag=1
+    (no comparison point means we can't rule out regression).
     Used by the pulse check to surface degraded skill count.
     """
     if db_path is None:
@@ -159,7 +163,17 @@ def count_degraded_skills(db_path: Path | None = None) -> int:
         db_path = _default_db_path()
     try:
         conn = sqlite3.connect(str(db_path))
-        row = conn.execute("SELECT COUNT(*) FROM eval_registry WHERE friction_flag=1").fetchone()
+        row = conn.execute("""
+            SELECT COUNT(*) FROM eval_registry er
+            LEFT JOIN (
+                SELECT eval_id, MAX(baseline_score) AS baseline_score
+                FROM ds_eval_baselines
+                GROUP BY eval_id
+            ) b ON b.eval_id = er.eval_id
+            WHERE er.friction_flag = 1
+              AND er.rubric_score IS NOT NULL
+              AND (b.baseline_score IS NULL OR er.rubric_score < b.baseline_score * 100)
+            """).fetchone()
         conn.close()
         return row[0] if row else 0
     except Exception as exc:
