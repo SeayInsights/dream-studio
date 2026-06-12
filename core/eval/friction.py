@@ -111,7 +111,7 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
             if effective_threshold is not None:
                 cursor = conn.execute(
                     f"UPDATE eval_registry"
-                    f" SET friction_flag=1, updated_at=datetime('now')"
+                    f" SET friction_flag=1, pending_rerun=1, updated_at=datetime('now')"
                     f" WHERE target_id IN ({placeholders}) AND friction_flag=0"
                     f"   AND friction_signal_count >= ?",
                     target_list + [effective_threshold],
@@ -119,7 +119,7 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
             else:
                 cursor = conn.execute(
                     f"UPDATE eval_registry"
-                    f" SET friction_flag=1, updated_at=datetime('now')"
+                    f" SET friction_flag=1, pending_rerun=1, updated_at=datetime('now')"
                     f" WHERE target_id IN ({placeholders}) AND friction_flag=0"
                     f"   AND friction_signal_count >= friction_threshold",
                     target_list,
