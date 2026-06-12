@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `ci_gate.py` JSON verdict now includes a `failing_tests` list on the `test` check: empty when tests pass, populated with pytest node IDs (e.g. `tests/unit/test_foo.py::test_bar`) when tests fail (WO f0e8f2c0). Non-test checks are unaffected.
+
 ### Fixed
 - `ds eval queue show` and `ds eval queue run` now filter on `pending_rerun = 1` instead of `friction_flag = 1` (WO d1f3e656).
 - `_COMPLETION_PROMPT_TEMPLATE` structure verified by 4 contract tests in `tests/unit/test_wo_verify.py` (WO e3e30247): `{work_order_type}` placeholder present and interpolates; behavioral AC check block mentions feature/infrastructure as trigger types; Do-NOT-emit conditions include the already-present case. `pending_rerun` is the explicit queue-membership flag; `friction_flag` may remain set on targets whose re-run failed. `queue show` SELECT also surfaces the `pending_rerun` column.

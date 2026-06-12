@@ -73,6 +73,19 @@ def _isolated_test_env() -> dict[str, str]:
     return env
 
 
+def _extract_failing_tests(output: str) -> list[str]:
+    """Parse pytest output and return FAILED test node IDs (strips ` - reason` suffix)."""
+    result = []
+    for line in output.splitlines():
+        if line.startswith("FAILED "):
+            node_id = line[len("FAILED "):].strip()
+            # pytest appends ` - <reason>` — strip it
+            if " - " in node_id:
+                node_id = node_id.split(" - ", 1)[0]
+            result.append(node_id)
+    return result
+
+
 def run_check(name: str, cmd: list[str]) -> dict:
     env = _isolated_test_env() if name == "test" else _isolated_check_env()
     try:
@@ -88,7 +101,10 @@ def run_check(name: str, cmd: list[str]) -> dict:
     except FileNotFoundError as e:
         passed = False
         output = f"command not found: {e}"
-    return {"name": name, "passed": passed, "output": output}
+    record: dict = {"name": name, "passed": passed, "output": output}
+    if name == "test":
+        record["failing_tests"] = [] if passed else _extract_failing_tests(output)
+    return record
 
 
 def run_advisory() -> dict | None:
