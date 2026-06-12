@@ -78,7 +78,7 @@ def _extract_failing_tests(output: str) -> list[str]:
     result = []
     for line in output.splitlines():
         if line.startswith("FAILED "):
-            node_id = line[len("FAILED "):].strip()
+            node_id = line[len("FAILED ") :].strip()
             # pytest appends ` - <reason>` — strip it
             if " - " in node_id:
                 node_id = node_id.split(" - ", 1)[0]
