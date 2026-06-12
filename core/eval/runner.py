@@ -174,6 +174,29 @@ class EvalRunner:
             )
             raw_output = proc.stdout or ""
 
+            if proc.returncode != 0:
+                stderr_snippet = (proc.stderr or "").strip()[:200]
+                error_msg = f"claude subprocess exited with returncode={proc.returncode}"
+                if stderr_snippet:
+                    error_msg += f": {stderr_snippet}"
+                return EvalResult(
+                    eval_id=case.eval_id,
+                    version=case.version,
+                    passed=False,
+                    composite_score=0.0,
+                    event_score=0.0,
+                    match_result=MatchResult(
+                        score=0.0,
+                        matched_required=0,
+                        total_required=0,
+                        negative_violations=[],
+                        missing_events=[],
+                        out_of_order=[],
+                    ),
+                    error=error_msg,
+                    run_mode="live",
+                )
+
             # ── 2. Synthesize events from JSON output ─────────────────────────
             events = _synthesize_events_from_output(raw_output)
 
