@@ -44,10 +44,18 @@ _CANONICAL_EVENTS_DDL = """
 
 @pytest.fixture
 def db_with_canonical(tmp_path):
-    """Migrated DB + canonical_events table (created by the ingestor at runtime, not migrations)."""
+    """Migrated DB with canonical_events present as a writable TABLE.
+
+    After the three-store architecture migration, canonical_events is a VIEW
+    (UNION of business_canonical_events + ai_canonical_events). The backfill
+    tests in this file test migration 062 behavior, which inserts into
+    canonical_events at a point in the migration sequence when it is still a
+    table. This fixture drops the VIEW and recreates the table so those
+    backfill INSERT assertions remain valid.
+    """
     db = tmp_path / "test.db"
     conn = _connect(db)
-    # canonical_events is a view post-migration; drop it so the backfill DDL can create the table
+    # Drop the view so the backfill DDL can create a writable table in its place.
     conn.execute("DROP VIEW IF EXISTS canonical_events")
     conn.execute(_CANONICAL_EVENTS_DDL)
     conn.commit()
