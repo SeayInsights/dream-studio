@@ -210,13 +210,20 @@ class TestSkillDispatcherAudit:
             len(dbc_findings) == 0
         ), f"Expected 0 dbc findings on dream-studio-clean (no PII), got {len(dbc_findings)}"
 
-    def test_audit_pl009_fires_on_dream_studio_clean(self):
-        """pl-009 should fire: dream-studio-clean uses ph-X.Y.Z tags (not semver)."""
+    def test_audit_pl009_silent_on_dream_studio_clean(self):
+        """pl-009 is SILENT when the repo has no git tags.
+
+        rules_scanner.py only fires pl-009 for non-semver tags that actually exist.
+        dream-studio-clean has no release tags, so the loop never runs and pl-009
+        produces no findings. This is correct per the SILENT clause: 'no tags at all
+        and this is first release.'
+        """
         result = SkillDispatcher.audit(REPO_ROOT, skill_filter=["pre-launch"])
         pl009 = [f for f in result.findings if f.rule_id == "pl-009"]
-        assert (
-            pl009
-        ), "pl-009 should fire on dream-studio-clean: release tags use ph-X.Y.Z format, not semver"
+        assert not pl009, (
+            "pl-009 should be SILENT on dream-studio-clean: no git tags exist, "
+            "so the non-semver tag detector has nothing to check"
+        )
 
     def test_audit_pl001_silent_on_dream_studio_clean(self):
         """pl-001 (Terms of Service) should be SILENT on dream-studio-clean (developer-tool)."""
