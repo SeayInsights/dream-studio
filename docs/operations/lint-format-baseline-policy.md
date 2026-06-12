@@ -2,6 +2,8 @@
 
 Status: active release-gate policy
 
+**2026-06-12 (WO b1961e3e):** `tests/unit/test_gate_fixture_resurrection.py` added to the focused smoke suite in `.github/workflows/ci.yml`. The dead-table resurrection guard is now verified on every PR across all three matrix platforms.
+
 **2026-06-10 (WO-CONSTITUTION-GATES):** `tests/unit/test_release_gates_dependency_rules.py` added to the focused smoke suite in `.github/workflows/ci.yml`.
 
 Dream Studio uses formatting and linting as release signals without confusing historical style debt with new release regressions.
