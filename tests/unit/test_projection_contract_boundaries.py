@@ -151,6 +151,8 @@ def test_core_projection_writers_only_touch_projection_owned_tables():
         "projection_state",
         "projection_retry_queue",
         "projection_dead_letter",
+        # DuckDB analytics projection — L3 analytics mirror, not canonical authority
+        "duckdb_execution_events",
     }
     offenders: list[str] = []
 
@@ -170,6 +172,10 @@ def test_projection_service_state_writers_stay_limited_and_classified():
         "scheduled_reports",
         # execution_events_projection.py projects canonical execution events into this L3 table
         "execution_events",
+        # analyzer signal tables — L3 derived signals, not canonical authority
+        "ds_friction_signals",
+        "ds_user_extensions",
+        "ds_workflow_pattern_signals",
     }
     writes = _sql_writes_under(REPO_ROOT / "projections" / "core")
     offenders = [
@@ -187,7 +193,6 @@ def test_api_route_direct_sql_writes_stay_explicitly_classified():
     assert writes == [
         ("projections/api/routes/audits.py", "INSERT INTO", "audit_runs"),
         ("projections/api/routes/extensions_api.py", "UPDATE", "ds_user_extensions"),
-        ("projections/api/routes/security.py", "UPDATE", "findings"),
     ]
 
 

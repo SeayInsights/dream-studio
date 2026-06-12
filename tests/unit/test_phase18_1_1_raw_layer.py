@@ -52,7 +52,7 @@ def _raw_count(conn: sqlite3.Connection) -> int:
 
 
 def _canonical_count(conn: sqlite3.Connection) -> int:
-    return conn.execute("SELECT COUNT(*) FROM canonical_events").fetchone()[0]
+    return conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
 
 
 # ---------------------------------------------------------------------------
