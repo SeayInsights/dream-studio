@@ -112,6 +112,17 @@ def check_ci_status(repo: str) -> str:
     return f"{run.get('name', 'unknown')}: {conclusion}"
 
 
+def check_full_ci_on_main(repo: str) -> str | None:
+    """Return the conclusion of the latest full-ci run on main, or None if unavailable."""
+    runs = gh_api(f"repos/{repo}/actions/workflows/full-ci.yml/runs?branch=main&per_page=1")
+    if not isinstance(runs, dict):
+        return None
+    workflow_runs = runs.get("workflow_runs", [])
+    if not workflow_runs:
+        return None
+    return workflow_runs[0].get("conclusion") or None
+
+
 def check_pending_drafts() -> list[str]:
     drafts_dir = paths.meta_dir() / "draft-lessons"
     if not drafts_dir.exists():
@@ -358,8 +369,10 @@ def generate_pulse() -> tuple[str, dict]:
         overdue_ms = check_overdue_milestones(repo)
         open_prs = check_open_prs(repo)
         ci_status = check_ci_status(repo)
+        full_ci_conclusion = check_full_ci_on_main(repo)
     else:
         stale_branches, overdue_ms, open_prs, ci_status = [], [], [], "no github_repo configured"
+        full_ci_conclusion = None
 
     archived = auto_archive_stale_drafts()
     _run_memory_maintenance()
@@ -393,6 +406,10 @@ def generate_pulse() -> tuple[str, dict]:
     else:
         health = "ACTION NEEDED"
 
+    # Full-CI red on main always degrades health to at least DEGRADED.
+    if full_ci_conclusion == "failure" and health == "HEALTHY":
+        health = "DEGRADED"
+
     def bullets(items: list[str], empty: str = "None") -> str:
         if not items:
             return f"- {empty}\n"
@@ -410,7 +427,17 @@ def generate_pulse() -> tuple[str, dict]:
         f"### Open PRs\n\n"
         f"{bullets(open_prs, 'No open PRs')}\n"
         f"### CI Status\n\n"
-        f"- {ci_status}\n\n"
+        f"- {ci_status}\n"
+        + (
+            f"- **full-ci (main): {full_ci_conclusion} ⚠ health degraded**\n"
+            if full_ci_conclusion == "failure"
+            else (
+                f"- full-ci (main): {full_ci_conclusion}\n"
+                if full_ci_conclusion is not None
+                else ""
+            )
+        )
+        + "\n"
         f"## Local\n\n"
         f"### Pending Draft Lessons ({len(pending_drafts)}){' ⚠ OVERFLOW — run /recap to clear' if drafts_overflow else ''}\n\n"
         f"{f'> {archived} stale drafts auto-archived (older than {DRAFT_STALE_DAYS}d).' + chr(10) if archived else ''}"
@@ -444,6 +471,7 @@ def generate_pulse() -> tuple[str, dict]:
         "overdue_milestones": len(overdue_ms),
         "open_prs": len(open_prs),
         "ci_status": ci_status,
+        "full_ci_conclusion": full_ci_conclusion,
         "pending_drafts": len(pending_drafts),
         "corrections": corrections_count,
         "escalations": len(open_escalations),
