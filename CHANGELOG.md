@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `test_audit_pl009_fires_on_dream_studio_clean` renamed to `test_audit_pl009_silent_on_dream_studio_clean` in `tests/unit/test_audit_dispatcher.py`: the repo has no git tags, so `rules_scanner.py` pl-009 detection loop never runs and the rule is correctly SILENT; the test assertion was inverted from `assert pl009` to `assert not pl009` (WO 919a9055).
 - `_insert_gap_work_orders()` in `core/work_orders/verify.py` now deduplicates remediation WO spawning: before inserting a new gap WO, checks for an open WO (`status IN ('created','in_progress')`) with the same title in the same milestone; on match, appends the gap's tasks to the existing WO instead of creating a duplicate (WO-SPAWN-DEDUPE). `merged_into_existing: True` field on the result entry signals a merge.
 
 ### Added
