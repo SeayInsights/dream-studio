@@ -8,11 +8,14 @@ depending on dashboard/API/runtime surfaces.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     from canonical.events.envelope import CanonicalEventEnvelope
@@ -348,9 +351,9 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
             """,
             params,
         )
-    except Exception:  # noqa: BLE001
-        # Tables dropped in migration 106 — graceful no-op on fresh DBs.
-        pass
+    except Exception as exc:  # noqa: BLE001
+        # Tables may be absent in legacy or migrated DBs (migration 106).
+        logger.debug("record_invocation: DB write skipped for %s — %s", table, exc)
 
 
 def record_token_usage(conn: sqlite3.Connection, **values: Any) -> None:
