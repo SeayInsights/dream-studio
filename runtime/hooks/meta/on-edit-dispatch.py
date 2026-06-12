@@ -76,12 +76,19 @@ def main() -> None:
     if any(p in file_path for p in PROTECTED_PATHS):
         sys.exit(0)
 
-    _check_rubric_guardrail(file_path, event_id=data.get("event_id"))
+    is_operator = os.environ.get("DREAM_STUDIO_OPERATOR_SESSION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    _check_rubric_guardrail(file_path, event_id=data.get("event_id"), is_operator=is_operator)
 
     run_handlers(HANDLERS, raw_payload, "PostToolUse_Edit_Write", STATE_DIR)
 
 
-def _check_rubric_guardrail(file_path: str, event_id: str | None = None) -> None:
+def _check_rubric_guardrail(
+    file_path: str, event_id: str | None = None, *, is_operator: bool = False
+) -> None:
     """Call check_rubric_write_guardrail for Write/Edit events. Non-fatal."""
     try:
         import sqlite3
@@ -90,7 +97,9 @@ def _check_rubric_guardrail(file_path: str, event_id: str | None = None) -> None
 
         db_path = STATE_DIR / "studio.db"
         conn = sqlite3.connect(str(db_path))
-        decision = check_rubric_write_guardrail(file_path, conn=conn, event_id=event_id)
+        decision = check_rubric_write_guardrail(
+            file_path, conn=conn, event_id=event_id, is_operator=is_operator
+        )
         conn.close()
         if decision is not None:
             print(
