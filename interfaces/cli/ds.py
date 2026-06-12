@@ -3072,8 +3072,7 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
                     (result.baseline_score or 0) - result.composite_score, 4
                 )
                 out["failure_reasons"] = list(
-                    result.match_result.missing_events
-                    + result.match_result.negative_violations
+                    result.match_result.missing_events + result.match_result.negative_violations
                 )
             return _print(out)
         if run_all or skill_filter:
