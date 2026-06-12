@@ -3064,7 +3064,7 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
                 "passed": result.passed,
                 "composite_score": result.composite_score,
                 "event_score": result.event_score,
-                "behavior_score": result.behavior_score,
+                "behavior_score": getattr(result, "behavior_score", None),
                 "run_mode": result.run_mode,
             }
             if live_mode:
