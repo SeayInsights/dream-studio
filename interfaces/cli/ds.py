@@ -3266,9 +3266,9 @@ def _eval_queue_dispatch(args: argparse.Namespace, *, evals_dir: Path) -> int:
                 )
             rows = conn.execute("""
                 SELECT eval_id, target_type, target_id, rubric_score,
-                       last_run_at, friction_flag, updated_at
+                       last_run_at, friction_flag, pending_rerun, updated_at
                 FROM eval_registry
-                WHERE friction_flag = 1
+                WHERE pending_rerun = 1
                 ORDER BY updated_at DESC
                 """).fetchall()
         return _print({"pending_rerun": [dict(r) for r in rows], "count": len(rows)})
@@ -3284,7 +3284,7 @@ def _eval_queue_dispatch(args: argparse.Namespace, *, evals_dir: Path) -> int:
                     {"ok": False, "error": "eval_registry table not found. Run migrations."}
                 )
             pending = conn.execute(
-                "SELECT target_id, target_type FROM eval_registry WHERE friction_flag = 1"
+                "SELECT target_id, target_type FROM eval_registry WHERE pending_rerun = 1"
             ).fetchall()
 
         runner = EvalRunner(evals_dir=evals_dir)
