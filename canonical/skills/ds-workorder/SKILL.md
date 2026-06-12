@@ -32,3 +32,5 @@ The Dream Studio source-of-truth is the SQLite authority. This pack does not rea
 <!-- Last reviewed 2026-06-12 — WO-SPAWN-DEDUPE: _insert_gap_work_orders in core/work_orders/verify.py gains title-match dedup; merges tasks into existing open WO instead of spawning duplicate. merged_into_existing field added to result. No skill instruction change required — existing mutation discipline unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: no work-order skill instruction change. core/work_orders/verify.py _CORRECTNESS_PROMPT_TEMPLATE gains rule (8) for dead-table resurrection detection. Skill surface and mutation discipline unchanged. -->
+
+<!-- Last reviewed 2026-06-12 — WO-2dbcdc63: core/work_orders/verify.py _find_migration_files gains Path(source_root) coercion to handle os.getcwd() returning str. Pure bug fix, no skill interface change. -->
