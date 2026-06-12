@@ -176,3 +176,36 @@ def test_gate_fires_only_on_added_lines(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: diff)
     assert guard.main() == 0
+
+
+# ---------------------------------------------------------------------------
+# Explicit named-table coverage: prd_documents (dead) and ds_documents (live)
+# Gate module: core/gates/test_fixture_resurrection_guard.py
+# Test file: tests/unit/test_gate_fixture_resurrection.py  (here)
+# ---------------------------------------------------------------------------
+
+
+def test_prd_documents_is_dead_in_ledger() -> None:
+    # prd_documents was created in migration 040/047 and dropped in migration 103
+    # (103_drop_prd_cluster.sql — same migration that dropped prd_tasks).
+    dead = guard.build_dead_table_ledger()
+    assert "prd_documents" in dead
+
+
+def test_ds_documents_is_live_in_ledger() -> None:
+    # ds_documents is a live table (Python-owned in core/files/store.py);
+    # it is registered in _PYTHON_OWNED_TABLES as a separate SQLite DB, not dropped.
+    dead = guard.build_dead_table_ledger()
+    assert "ds_documents" not in dead
+
+
+def test_gate_fires_on_prd_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("prd_documents"))
+    assert guard.main() == 1
+
+
+def test_gate_passes_for_ds_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("ds_documents"))
+    assert guard.main() == 0
