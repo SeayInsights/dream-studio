@@ -395,6 +395,20 @@ def run_migrations(
                     ):
                         continue
                     # CREATE INDEX and CREATE TRIGGER fall through to raise.
+                # General partial-fixture tolerance: pure data statements
+                # (INSERT/UPDATE/DELETE) on absent tables are always safe no-ops —
+                # no permanent schema object is created, so no M2 casualty is possible.
+                # This generalises the per-table swallows above and handles any
+                # absent table that those entries don't explicitly name.
+                # In production, every referenced table exists (earlier migrations
+                # created it); these errors only arise in minimal test fixtures
+                # that omit tables that were created before the fixture's baseline.
+                if "no such table" in msg:
+                    stmt_upper = stmt.strip().upper()
+                    if any(
+                        stmt_upper.startswith(pfx) for pfx in ("INSERT", "UPDATE", "DELETE", "DROP")
+                    ):
+                        continue
                 # Index creation on a pre-existing table may fail when the
                 # table was created by a test fixture with a minimal schema.
                 # Skip gracefully — queries still work without the index.

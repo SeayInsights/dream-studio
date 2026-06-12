@@ -182,9 +182,12 @@ def test_migration_052_runs_cleanly():
         db_path = Path(tmp) / "state" / "studio.db"
         db_path.parent.mkdir(parents=True)
         bootstrap_database(db_path)
-        # Simulate a DB where ingestor already created canonical_events WITHOUT invocation_mode
+        # Simulate a DB where ingestor already created canonical_events WITHOUT invocation_mode.
+        # After bootstrap, canonical_events is a VIEW (three-store architecture). Drop it first
+        # so the TABLE can be created to simulate the pre-052 ingestor state.
         conn = sqlite3.connect(str(db_path))
         try:
+            conn.execute("DROP VIEW IF EXISTS canonical_events")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS canonical_events (
                     event_id TEXT PRIMARY KEY,

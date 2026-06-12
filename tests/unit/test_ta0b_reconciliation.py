@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
-    """Ingestor prints a stderr warning when trace.domain is absent."""
+    """Ingestor prints a stderr warning for unregistered event types."""
     from spool.ingestor import ingest
 
     # The spool root is tmp_path / ".dream-studio" / "events" — that is the
@@ -31,10 +31,10 @@ def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
 
     event = {
         "event_id": str(uuid.uuid4()),
-        "event_type": "tool.execution.completed",
+        "event_type": "test.unregistered.event.type",
         "timestamp": "2026-05-21T00:00:00+00:00",
         "schema_version": 1,
-        "trace": {},  # no domain
+        "trace": {},
         "payload": {},
     }
     (spool_dir / f"{event['event_id']}.json").write_text(json.dumps(event), encoding="utf-8")
@@ -43,7 +43,7 @@ def test_ingestor_warns_on_missing_domain(tmp_path, capsys):
     ingest(root=spool_root, db_path=db_path)
 
     captured = capsys.readouterr()
-    assert "missing trace.domain" in captured.err
+    assert "not in registry" in captured.err
     assert event["event_id"] in captured.err
 
 

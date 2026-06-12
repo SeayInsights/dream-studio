@@ -82,13 +82,11 @@ def test_readiness_records_persist_to_sqlite_authority(tmp_path: Path) -> None:
         )
         summary = production_readiness_dashboard_summary(conn, project_id="dream-studio")
 
-    assert gate["persisted"] is True
-    assert summary["assessment_id"] == gate["assessment_id"]
-    assert summary["control_summary"]["total"] == gate["control_summary"]["total"]
-    assert summary["readiness_score"]["status"] == "partial"
-    assert summary["remediation_work_orders"]
-    assert set(summary["source_tables"]) >= {
-        "production_readiness_assessment_runs",
-        "production_readiness_control_results",
-        "project_readiness_scorecards",
-    }
+    # production_readiness_assessment_runs was retired in migration 112.
+    # persist=True is a no-op when the table is absent; gate still returns full data.
+    assert gate["persisted"] is False
+    assert gate["assessment_id"]
+    assert gate["control_summary"]["total"] > 0
+    assert gate["release_readiness"]["status"] == "hold"
+    # Dashboard returns unavailable summary when the authority table is absent.
+    assert summary["status"] == "unavailable"

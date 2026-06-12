@@ -141,6 +141,19 @@ gates:
       eval-rubric.yml was modified without the [rubric-update] commit token.
       Add [rubric-update] to your commit message and re-push.
 
+  - id: test-fixture-resurrection
+    tier: blocking
+    description: >
+      Dead-table resurrection guard. Blocks any test-file diff that introduces
+      CREATE TABLE for a table permanently dropped by a numbered migration.
+      Resurrections simulate a DB state that can never exist in production —
+      the correct fix is to delete the test (dead subject) or repair the
+      migration, not feed dead-table fixtures.
+    command: [py, -m, core.gates.test_fixture_resurrection_guard]
+    fail_hint: >
+      Dead-table CREATE TABLE found in test diff. Delete the test if its
+      subject is dead, or fix the root cause in the migration.
+
   - id: rule4-ingestor-sole-event-writer
     tier: blocking
     description: >

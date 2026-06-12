@@ -142,10 +142,19 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "commit_sha TEXT, completed_at TEXT, PRIMARY KEY (task_id, spec_id))"
         )
         # Use security_findings (pre-migration-089 name) so migration 089 can rename it to findings.
+        # Full migration 037 schema required so migration 112 can SELECT process_run_id,
+        # project_id, recommendation etc. when migrating rows to security_events.
         conn.execute(
             "CREATE TABLE security_findings("
-            "finding_id TEXT PRIMARY KEY, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, "
-            "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
+            "finding_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT, task_id TEXT, "
+            "scan_id TEXT, process_run_id TEXT, severity TEXT NOT NULL, category TEXT, "
+            "rule_id TEXT, file_path TEXT, start_line INTEGER, end_line INTEGER, "
+            "description TEXT NOT NULL, recommendation TEXT, status TEXT NOT NULL DEFAULT 'open', "
+            "introduced_by_agent_id TEXT, introduced_by_skill_id TEXT, "
+            "introduced_by_workflow_id TEXT, introduced_by_hook_id TEXT, "
+            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
         # Full schemas required so migration 062's INSERT...SELECT * succeeds (column-count match).
         conn.execute(
@@ -261,6 +270,17 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
+        # ds_documents created in migration 007; needed by migration 050 (ALTER TABLE + CREATE INDEX).
+        conn.execute(
+            "CREATE TABLE ds_documents("
+            "doc_id INTEGER PRIMARY KEY AUTOINCREMENT, doc_type TEXT NOT NULL, "
+            "parent_doc_id INTEGER, project_id TEXT, skill_id TEXT, session_id TEXT, "
+            "title TEXT NOT NULL, content TEXT, format TEXT DEFAULT 'markdown', "
+            "metadata TEXT, tags TEXT, keywords TEXT, version INTEGER DEFAULT 1, "
+            "status TEXT DEFAULT 'active', created_at TEXT NOT NULL, created_by TEXT, "
+            "updated_at TEXT, access_count INTEGER DEFAULT 0, last_accessed TEXT, "
+            "ttl_days INTEGER, expires_at TEXT)"
+        )
         conn.commit()
 
         run_migrations(conn)

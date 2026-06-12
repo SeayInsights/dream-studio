@@ -19,7 +19,7 @@
 | scope      | This file — Phase 1–5 below | scope project:, ds project scope:, create prd: |
 | resume     | This file — Resume Mode section | resume:, continue:, what's next:, where was I:, start building: |
 | brief      | modes/brief/SKILL.md | design brief:, fill brief:, brief:, lock brief: |
-| manage     | modes/manage/SKILL.md | list projects:, switch project:, archive project:, delete project: |
+| manage | modes/manage/SKILL.md | list projects:, switch project:, archive project:, delete project: |
 | brownfield | modes/brownfield/SKILL.md | brownfield-onboard:, register existing projects:, bulk register:, ds project brownfield: |
 
 ---
