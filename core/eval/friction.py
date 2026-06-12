@@ -140,7 +140,9 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
             "sources_checked": sources_ok,
             "new_flags": updated,
             "total_signaled": len(flagged),
-            "effective_threshold": effective_threshold if effective_threshold is not None else "per-row",
+            "effective_threshold": (
+                effective_threshold if effective_threshold is not None else "per-row"
+            ),
         }
     except Exception as exc:
         logger.error("Friction aggregation failed: %s", exc)
