@@ -3302,7 +3302,8 @@ def _eval_queue_dispatch(args: argparse.Namespace, *, evals_dir: Path) -> int:
             if result.passed:
                 with sqlite3.connect(db_path) as conn:
                     conn.execute(
-                        "UPDATE eval_registry SET friction_flag=0, updated_at=datetime('now')"
+                        "UPDATE eval_registry"
+                        " SET friction_flag=0, pending_rerun=0, updated_at=datetime('now')"
                         " WHERE target_id=?",
                         (target_id,),
                     )

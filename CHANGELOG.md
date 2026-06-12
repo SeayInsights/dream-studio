@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Eval queue mechanism now has explicit schema backing (WO 9a6222ca): migration 122 adds `pending_rerun INTEGER NOT NULL DEFAULT 0` to `eval_registry`; `aggregate_friction_signals()` sets `pending_rerun=1` alongside `friction_flag=1`; `ds eval queue run` clears `pending_rerun=0` alongside `friction_flag=0` after a passing re-run.
 - `count_degraded_skills()` now requires both `friction_flag=1` AND `rubric_score < baseline_score * 100` (WO 3ca8be3a). Previously counted any flagged target regardless of whether the score had actually degraded below baseline. Uses a LEFT JOIN with `ds_eval_baselines` so targets without a baseline are still counted as degraded.
 
 ### Fixed
