@@ -2362,8 +2362,8 @@ def _work_order_close(
 
     print(json.dumps(result, indent=2))
     if result.get("ok") and result.get("next_block"):
-        print()
-        print(result["next_block"])
+        print(file=sys.stderr)
+        print(result["next_block"], file=sys.stderr)
     return 0 if result.get("ok") else 1
 
 
