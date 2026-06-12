@@ -50,11 +50,16 @@ def test_workflow_invocation_emitter_is_idempotent_and_writes_attention(tmp_path
     conn = _connect(db_path)
     try:
         row = conn.execute(
-            "SELECT workflow_id, status FROM workflow_invocations WHERE invocation_id = ?",
+            "SELECT workflow_id, outcome_status AS status FROM execution_events WHERE event_id = ? AND event_type = 'workflow.invocation_recorded'",
             (first.record_id,),
         ).fetchone()
         assert dict(row) == {"workflow_id": "route-first-validation", "status": "failed"}
-        assert conn.execute("SELECT COUNT(*) FROM workflow_invocations").fetchone()[0] == 1
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM execution_events WHERE event_type = 'workflow.invocation_recorded'"
+            ).fetchone()[0]
+            == 1
+        )
         assert (
             conn.execute(
                 "SELECT COUNT(*) FROM dashboard_attention_items WHERE event_id = ? AND attention_type = 'workflow_status_attention'",
@@ -93,7 +98,9 @@ def test_archive_workflow_preserves_raw_tables_and_dual_writes(tmp_path: Path) -
             ).fetchone()[0]
             == 1
         )
-        row = conn.execute("SELECT workflow_id, status FROM workflow_invocations").fetchone()
+        row = conn.execute(
+            "SELECT workflow_id, outcome_status AS status FROM execution_events WHERE event_type = 'workflow.invocation_recorded'"
+        ).fetchone()
         assert row["workflow_id"] == "daily-standup"
         assert row["status"] == "completed"
     finally:
