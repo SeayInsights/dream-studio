@@ -114,9 +114,7 @@ def check_ci_status(repo: str) -> str:
 
 def check_full_ci_on_main(repo: str) -> str | None:
     """Return the conclusion of the latest full-ci run on main, or None if unavailable."""
-    runs = gh_api(
-        f"repos/{repo}/actions/workflows/full-ci.yml/runs?branch=main&per_page=1"
-    )
+    runs = gh_api(f"repos/{repo}/actions/workflows/full-ci.yml/runs?branch=main&per_page=1")
     if not isinstance(runs, dict):
         return None
     workflow_runs = runs.get("workflow_runs", [])

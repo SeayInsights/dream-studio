@@ -39,9 +39,9 @@ class TestFullCiHealthDegradation:
         ):
             _report, stats = generate_pulse()
 
-        assert stats["health"] != "HEALTHY", (
-            "health must not be HEALTHY when full-ci conclusion is 'failure'"
-        )
+        assert (
+            stats["health"] != "HEALTHY"
+        ), "health must not be HEALTHY when full-ci conclusion is 'failure'"
         assert stats["full_ci_conclusion"] == "failure"
 
     def test_success_conclusion_does_not_degrade_health(self):
