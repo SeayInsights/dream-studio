@@ -149,6 +149,36 @@ def test_contract_atlas_explains_layers_modules_interfaces_and_boundaries(
     )
 
 
+def test_contract_atlas_dependency_graph_uses_confirmed_edges_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    home = tmp_path / "home"
+    repo_root = tmp_path / "repo"
+    _write_current_hook_surfaces(home)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+
+    with _connect(_db(tmp_path)) as conn:
+        register_default_adapter_authority_profiles(conn)
+        projection_report = adapter_config_projection_report(conn, project_id="dream-studio")
+        _write_projection_files(repo_root, projection_report)
+
+        atlas = build_contract_atlas(conn, repo_root=repo_root, project_id="dream-studio")
+
+    graph = atlas["confirmed_dependency_graph"]
+    # security_analytics module reads from the live security spine (migration 111 replaced findings)
+    assert any(
+        edge["source"] == "module:security_analytics"
+        and edge["relation"] == "reads_source_table"
+        and edge["target"] == "table:findings_current_status"
+        for edge in graph["edges"]
+    )
+    # Confirmed-only graph: every edge must have edge_status == "confirmed"
+    assert all(edge.get("edge_status") == "confirmed" for edge in graph["edges"])
+    # inferred / unverified flags are explicitly off
+    assert graph["inferred_edges_included"] is False
+    assert graph["unverified_edges_included"] is False
+
+
 def test_contract_atlas_defaults_to_dream_studio_scope(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "home"
     repo_root = tmp_path / "repo"

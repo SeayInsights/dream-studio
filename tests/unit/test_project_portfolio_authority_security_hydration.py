@@ -106,15 +106,32 @@ dependencies = ["fastapi", "pydantic"]
             "'unknown', '{}', 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
             (str(demo_root),),
         )
+        # Security spine tables: security_events (spine) + findings_current_status (projection)
+        # Replaced dead `findings` table (migration 112 dropped it; migration 111 created the spine).
         conn.execute(
-            "CREATE TABLE findings("
-            "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, file_path TEXT, "
-            "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
+            "CREATE TABLE security_events("
+            "event_id TEXT PRIMARY KEY, event_kind TEXT NOT NULL, project_id TEXT, "
+            "severity TEXT, title TEXT, file_path TEXT, line_number INTEGER, "
+            "vuln_class TEXT, scanner_type TEXT, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')))"
         )
         conn.execute(
-            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
-            "description, status, created_at) VALUES('finding-1', 'dream-studio', 'medium', 'ci', "
-            "'.github/workflows/ci.yml', 1, 'Real CI finding', 'open', '2026-05-14T00:00:00Z')"
+            "INSERT INTO security_events(event_id, event_kind, project_id, severity, title, "
+            "file_path, line_number, scanner_type) "
+            "VALUES('finding-1', 'finding.recorded', 'dream-studio', 'medium', 'Real CI finding', "
+            "'.github/workflows/ci.yml', 1, 'SAST')"
+        )
+        conn.execute(
+            "CREATE TABLE findings_current_status("
+            "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, file_path TEXT, "
+            "line_number INTEGER, scanner_type TEXT, current_status TEXT NOT NULL DEFAULT 'open', "
+            "title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO findings_current_status(finding_id, project_id, severity, file_path, "
+            "line_number, scanner_type, current_status, title, created_at, updated_at) "
+            "VALUES('finding-1', 'dream-studio', 'medium', '.github/workflows/ci.yml', 1, "
+            "'SAST', 'open', 'Real CI finding', '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
         conn.execute(
             "CREATE TABLE dashboard_attention_items(item_id TEXT, project_id TEXT, status TEXT)"
@@ -278,5 +295,115 @@ def test_project_dependencies_render_confirmed_edges_only_by_default(
             )
         if "drilldown" in payload:
             assert payload["drilldown"].get("confirmed_edges_only_by_default") is True
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_all_projects_defaults_to_current_local_builds_authority(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
+    try:
+        response = client.get("/api/v1/projects?limit=100")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["derived_view"] is True
+        assert payload["primary_authority"] is False
+        assert payload["total"] == 1
+        assert {project["project_id"] for project in payload["projects"]} == {"dream-studio"}
+        assert payload["source_status"]["excluded_from_default_view"]["count"] == 1
+        assert (
+            "demo-project"
+            in payload["source_status"]["excluded_from_default_view"]["sample_project_ids"]
+        )
+        project = payload["projects"][0]
+        assert project["project_authority_status"]["include_in_default_operator_view"] is True
+        assert project["project_authority_status"]["classification"] == "current_legitimate_project"
+        # Security spine (migration 111): findings_current_status has 1 open finding
+        assert project["security_package_status"]["open_findings"] == 1
+        assert project["security_lifecycle_status"]["security_status"] == "blocked_by_open_findings"
+        assert (
+            project["security_lifecycle_status"]["finding_normalization_policy"][
+                "synthetic_demo_findings_in_live_operator_views"
+            ]
+            is False
+        )
+        assert project["work_order_status"]["attention_open"] == 1
+        assert project["telemetry_status"]["event_count"] == 1
+        assert "dashboard_attention_items" in payload["source_status"]["source_tables"]
+        assert "execution_events" in payload["source_status"]["source_tables"]
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_project_security_uses_high_confidence_legacy_alias(tmp_path: Path, monkeypatch) -> None:
+    db_path = _portfolio_db(tmp_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO security_events(event_id, event_kind, project_id, severity, title, "
+            "file_path, line_number, scanner_type) "
+            "VALUES('finding-alias', 'finding.recorded', 'project_dream_studio', 'high', "
+            "'Alias-matched finding', 'core/security/lifecycle.py', 10, 'SAST')"
+        )
+        conn.execute(
+            "INSERT INTO findings_current_status(finding_id, project_id, severity, file_path, "
+            "line_number, scanner_type, current_status, title, created_at, updated_at) "
+            "VALUES('finding-alias', 'project_dream_studio', 'high', 'core/security/lifecycle.py', "
+            "10, 'SAST', 'open', 'Alias-matched finding', '2026-05-14T00:00:00Z', '2026-05-14T00:00:00Z')"
+        )
+        conn.commit()
+    client = _client_for_db(db_path, monkeypatch)
+    try:
+        # Alias count surfaces on the health endpoint (SQL-side alias expansion via _security_alias_expr)
+        health = client.get("/api/v1/projects/dream-studio/health").json()
+        assert health["project"]["security_package_status"]["open_findings"] == 2
+
+        # Project-specific security endpoint normalises raw project_id to the requested project_id
+        security = client.get("/api/v1/projects/dream-studio/security").json()
+        assert security["count"] == 2
+        alias_finding = next((f for f in security["findings"] if f["id"] == "finding-alias"), None)
+        assert alias_finding is not None
+        assert alias_finding["project_id"] == "dream-studio"
+        assert alias_finding["source_project_id"] == "project_dream_studio"
+        assert "project_dream_studio" in security["alias_policy"]["aliases"]
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_project_health_uses_current_authority_when_legacy_tables_are_absent(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
+    try:
+        response = client.get("/api/v1/projects/dream-studio/health")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["project"]["security_package_status"]["open_findings"] == 1
+        assert (
+            payload["project"]["security_lifecycle_status"]["security_status"]
+            == "blocked_by_open_findings"
+        )
+        assert payload["project"]["health_model"]["status"] == "scored"
+        assert payload["health"]["overall_score"] == payload["project"]["health_score"]
+    finally:
+        DatabaseRuntime.reset_instance()
+
+
+def test_security_dashboard_findings_keep_project_attribution(tmp_path: Path, monkeypatch) -> None:
+    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
+    try:
+        response = client.get("/api/v1/security/findings?limit=100")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["count"] == 1
+        finding = payload["findings"][0]
+        assert finding["id"] == "finding-1"
+        assert finding["project_id"] == "dream-studio"
+        assert finding["file_path"] == ".github/workflows/ci.yml"
+        # message = COALESCE(se.title, '') — security_events.title joined on event_id = finding_id
+        assert finding["message"] == "Real CI finding"
     finally:
         DatabaseRuntime.reset_instance()
