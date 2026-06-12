@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import sqlite3
 
-
 _DDL = """
 CREATE TABLE IF NOT EXISTS guardrail_decisions (
     decision_id TEXT PRIMARY KEY,
