@@ -109,3 +109,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py updated to print failures to stderr before truncating JSON output field. No private data is introduced or changed in publication scope. -->
 
 <!-- Last reviewed 2026-06-11 — WO-EVAL-REGISTRY: migration 119 adds eval_registry and hook_eval_runs tables (no PII; eval run IDs, hook names, pass/fail, timestamps only). guardrails/evaluator.py write path unchanged in policy semantics — adds optional hook_id parameter for hook eval telemetry. ds eval registry list/show CLI added. All new schema is migration-authority-owned. No change to publication boundary, privacy classification, or Docker profile scope. -->
+
+<!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: ci_gate JSON verdict adds failing_tests list (pytest node IDs, empty on pass). Diagnostic output only — no private data in test node IDs. No change to privacy classification or publication privacy policy. -->

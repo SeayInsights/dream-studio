@@ -119,3 +119,5 @@ Static validation checks that:
 <!-- Last reviewed 2026-06-10 — WO-DEBT-H (chore/wo-debt-h-hygiene): regenerated flake8-baseline.txt from 707 (stale, 126+ entries for deleted files) down to 509 clean entries. No change to baseline policy, publication boundary, privacy classification, Docker profiles, or release gate enforcement logic. Baseline content change only — dead-file violations removed. -->
 
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py updated to emit failures to stderr before JSON truncation. External project validation pipeline logic is unchanged. -->
+
+<!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: ci_gate JSON verdict adds failing_tests list. External project validation pipeline is unchanged — failing_tests is an internal diagnostic field only. -->
