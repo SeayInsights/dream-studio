@@ -368,6 +368,49 @@ WO to decommission the consumers before the tables can be dropped.
 | `ds_technology_signals` | `spool/session_harvester.py` (writer) |
 | `raw_skill_telemetry` | `core/event_store/studio_db.py` (writer), `control/execution/models/selector.py` (reader) |
 
+---
+
+### Ghost view drops — migrations 102 and 118
+
+**Migrations:**
+- `102_drop_canonical_events.sql` (WO-M, 2026-06-11)
+- `118_drop_stale_prd_fk_refs.sql` (WO-RETRY-TEST, 2026-06-11)
+
+SQLite 3.26+ validates ALL views in `sqlite_master` during `ALTER TABLE RENAME`. Any
+view referencing an absent or renamed table causes the rename to fail, even if the view
+is never queried. Migrations 102 and 118 both perform RENAME-based table reconstructions;
+each drops views pre-RENAME to prevent validation failures, then recreates only those
+views that have live consumers.
+
+**Views permanently retired by migration 102:**
+
+| View | Originally created | Reason for retirement |
+|------|-------------------|-----------------------|
+| `vw_prd_progress` | migration 012 (recreation: 062, 081, 088, 089) | `prd_tasks` / `prd_documents` dropped in migration 103; no post-103 consumers |
+| `vw_task_details` | migration 012 (recreation: 062, 081, 088, 089) | Same — prd base tables gone |
+
+Migration 103 confirms the retirement with `DROP VIEW IF EXISTS` (no-op since 102 already
+dropped them). `vw_approach_patterns` and `vw_guardrail_decisions` were also dropped
+pre-RENAME in migration 102 but were **recreated** immediately after the rename.
+Migration 118 permanently retires them.
+
+**Views permanently retired by migration 118:**
+
+| View | Originally created | Reason for retirement |
+|------|-------------------|-----------------------|
+| `vw_risk_hotspots` | migration 029 (recreation: 062, 081, 088, 089) | References `sec_sarif_findings` dropped in migration 112 without a cleanup |
+| `vw_approach_patterns` | migration 102 | No live consumers post-118 |
+| `vw_guardrail_decisions` | migration 102 | No live consumers post-118 |
+
+**Root cause of `vw_risk_hotspots` ghost:** Migration 112 dropped `sec_sarif_findings`
+without dropping `vw_risk_hotspots`, leaving a broken view in `sqlite_master`. SQLite's
+lazy validation meant this was undetected until migration 118's ALTER TABLE RENAME
+attempted to compile all views. Pattern: after DROP TABLE migrations, grep
+`sqlite_master` for `VIEW` definitions that reference the dropped table.
+
+**Aspirational-schema debt introduced:** None. All retired views had functionally dead
+base tables or zero live consumers at time of drop.
+
 <!-- reviewed: 2026-05-30, brownfield vertical slice migration 085. Stack profile + security_scan_runs. No semantic changes required to this document. -->
 
 <!-- 2026-06-02: aggregate_metrics.db tables (finding_rollups, rule_fire_rates, baseline_trends, guard_calibration, pattern_catalog, recommendation_outcomes) registered in _PYTHON_OWNED_TABLES. Separate DB from studio.db; no migration file required. -->
