@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS business_tasks (
     project_id TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT,
+    acceptance_criteria TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
