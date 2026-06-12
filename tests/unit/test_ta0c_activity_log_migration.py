@@ -22,6 +22,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from core.event_store.studio_db import _connect  # noqa: E402
 
+# Design decision (WO-8c8e7538): The backfill tests in TestBackfillFormat INSERT
+# directly into canonical_events rather than routing through raw_events or the
+# ingestor. This is intentional: migration 062 runs BEFORE the three-store
+# architecture migration that converts canonical_events into a VIEW. At migration
+# 062 execution time canonical_events is still a table. The db_with_canonical
+# fixture accurately simulates that pre-VIEW state by dropping the VIEW created
+# by later migrations and recreating canonical_events as a table. Rewriting the
+# tests to use raw_events would change the test semantics — they would no longer
+# verify what migration 062's backfill SQL actually does.
 _CANONICAL_EVENTS_DDL = """
     CREATE TABLE IF NOT EXISTS canonical_events (
         event_id TEXT PRIMARY KEY,
