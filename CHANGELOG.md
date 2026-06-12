@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `_insert_gap_work_orders()` in `core/work_orders/verify.py` now deduplicates remediation WO spawning: before inserting a new gap WO, checks for an open WO (`status IN ('created','in_progress')`) with the same title in the same milestone; on match, appends the gap's tasks to the existing WO instead of creating a duplicate (WO-SPAWN-DEDUPE). `merged_into_existing: True` field on the result entry signals a merge.
+
 ### Added
+- `tests/evals/test_gap_wo_dedupe.py`: 6 gate tests for the dedup path in `_insert_gap_work_orders`: fresh-spawn, task-attachment, merge-on-title-match, task-append-to-existing, no-milestone-skips-dedup, multi-gap-independent-dedup (WO-SPAWN-DEDUPE).
 - `tests/evals/test_rubric_immutability_gate.py`: 4 gate tests for `rubric_immutability_gate.main()` covering no-rubric-change exit 0, rubric+token allow, rubric-without-token block, and skip-record-decision paths (WO 7dc2f344).
 - `tests/evals/test_eval_queue_show_aggregate.py`: 5 gate tests for `ds eval queue show` (pending rows, empty list, missing table error) and `ds eval queue aggregate` (delegates to `aggregate_friction_signals` with correct `db_path`, result forwarded to output) (WO 7dc2f344).
 - `check_rubric_write_guardrail(file_path, conn, event_id, is_operator)` in `guardrails/evaluator.py`: runtime guardrail that records a `guardrail_decisions` block row with `rule_id='rubric-immutability-constraint'` when a Write/Edit targets `eval-rubric.yml`; `is_operator=True` exempts operator sessions (WO 58890751, b57c60eb).

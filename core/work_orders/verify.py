@@ -721,42 +721,94 @@ def _insert_gap_work_orders(
         if max_seq_row and max_seq_row[0] is not None:
             base_seq = max(base_seq, max_seq_row[0])
 
-    for i, gap in enumerate(gaps):
-        new_wo_id = str(uuid.uuid4())
-        seq = base_seq + i + 1
-        desc = (
-            f"Spawned by review of '{reviewed_wo_title}' on {now[:10]}: "
-            f"{gap.get('description', '')}"
-        )
+    new_wo_counter = 0
+    for gap in gaps:
         wo_type = gap.get("work_order_type", "cleanup")
+        gap_title = gap["title"]
 
-        conn.execute(
-            "INSERT INTO business_work_orders"
-            " (work_order_id, project_id, milestone_id, title, description,"
-            "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?)",
-            (new_wo_id, project_id, milestone_id, gap["title"], desc, wo_type, seq, now, now, now),
-        )
+        # Dedup: if an open WO with the same title already exists in this milestone,
+        # append the tasks to it instead of spawning a duplicate (WO-SPAWN-DEDUPE).
+        existing_row = None
+        if milestone_id:
+            existing_row = conn.execute(
+                "SELECT work_order_id FROM business_work_orders"
+                " WHERE milestone_id = ? AND title = ?"
+                "   AND status IN ('created', 'in_progress')"
+                " LIMIT 1",
+                (milestone_id, gap_title),
+            ).fetchone()
 
-        for task in gap.get("tasks", []):
-            task_id = str(uuid.uuid4())
+        if existing_row:
+            target_wo_id = existing_row[0]
+            for task in gap.get("tasks", []):
+                task_id = str(uuid.uuid4())
+                conn.execute(
+                    "INSERT INTO business_tasks"
+                    " (task_id, work_order_id, project_id, title, description,"
+                    "  status, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                    (
+                        task_id,
+                        target_wo_id,
+                        project_id,
+                        task.get("title", ""),
+                        task.get("description", ""),
+                        now,
+                        now,
+                    ),
+                )
+            spawned.append(
+                {
+                    "work_order_id": target_wo_id,
+                    "title": gap_title,
+                    "type": wo_type,
+                    "merged_into_existing": True,
+                }
+            )
+        else:
+            new_wo_id = str(uuid.uuid4())
+            seq = base_seq + new_wo_counter + 1
+            new_wo_counter += 1
+            desc = (
+                f"Spawned by review of '{reviewed_wo_title}' on {now[:10]}: "
+                f"{gap.get('description', '')}"
+            )
             conn.execute(
-                "INSERT INTO business_tasks"
-                " (task_id, work_order_id, project_id, title, description,"
-                "  status, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                "INSERT INTO business_work_orders"
+                " (work_order_id, project_id, milestone_id, title, description,"
+                "  work_order_type, status, sequence_order, created_at, updated_at, last_updated_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'created', ?, ?, ?, ?)",
                 (
-                    task_id,
                     new_wo_id,
                     project_id,
-                    task.get("title", ""),
-                    task.get("description", ""),
+                    milestone_id,
+                    gap_title,
+                    desc,
+                    wo_type,
+                    seq,
+                    now,
                     now,
                     now,
                 ),
             )
-
-        spawned.append({"work_order_id": new_wo_id, "title": gap["title"], "type": wo_type})
+            for task in gap.get("tasks", []):
+                task_id = str(uuid.uuid4())
+                conn.execute(
+                    "INSERT INTO business_tasks"
+                    " (task_id, work_order_id, project_id, title, description,"
+                    "  status, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)",
+                    (
+                        task_id,
+                        new_wo_id,
+                        project_id,
+                        task.get("title", ""),
+                        task.get("description", ""),
+                        now,
+                        now,
+                    ),
+                )
+            spawned.append({"work_order_id": new_wo_id, "title": gap_title, "type": wo_type})
 
     return spawned
 
