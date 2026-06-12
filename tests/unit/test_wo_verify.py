@@ -385,3 +385,48 @@ def test_spawned_gap_wos_visible_in_project(tmp_path: pytest.TempPathFactory) ->
     ).fetchall()
     assert any("Gap WO Alpha" in r[0] for r in titles)
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# _COMPLETION_PROMPT_TEMPLATE: work_order_type field and behavioral AC block
+# Acceptance: template structure contracts proven; work_order_type appears in
+# formatted output; behavioral AC check triggers and suppression conditions
+# are both stated in the template.
+# ---------------------------------------------------------------------------
+
+
+def test_completion_prompt_template_contains_work_order_type_placeholder() -> None:
+    """{work_order_type} placeholder is present in _COMPLETION_PROMPT_TEMPLATE."""
+    from core.work_orders.verify import _COMPLETION_PROMPT_TEMPLATE
+
+    assert "{work_order_type}" in _COMPLETION_PROMPT_TEMPLATE
+
+
+def test_completion_prompt_template_work_order_type_interpolates() -> None:
+    """Formatting the template with a known type produces a string containing that type."""
+    from core.work_orders.verify import _COMPLETION_PROMPT_TEMPLATE
+
+    rendered = _COMPLETION_PROMPT_TEMPLATE.format(
+        title="Test WO",
+        work_order_id="test-id",
+        work_order_type="infrastructure",
+        task_list="- T1",
+        git_diff="diff",
+    )
+    assert "infrastructure" in rendered
+
+
+def test_completion_prompt_template_behavioral_ac_check_mentions_triggering_types() -> None:
+    """Template's behavioral AC block names 'feature' and 'infrastructure' as trigger types."""
+    from core.work_orders.verify import _COMPLETION_PROMPT_TEMPLATE
+
+    assert "feature" in _COMPLETION_PROMPT_TEMPLATE
+    assert "infrastructure" in _COMPLETION_PROMPT_TEMPLATE
+
+
+def test_completion_prompt_template_behavioral_ac_check_not_emit_conditions() -> None:
+    """Template documents that the AC gap must NOT be emitted when AC is already present."""
+    from core.work_orders.verify import _COMPLETION_PROMPT_TEMPLATE
+
+    assert "Do NOT emit" in _COMPLETION_PROMPT_TEMPLATE
+    assert "already present" in _COMPLETION_PROMPT_TEMPLATE
