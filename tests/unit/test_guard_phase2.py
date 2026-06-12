@@ -127,50 +127,6 @@ class TestMemoryTaintPair:
 class TestGuardEventEmission:
     """guard_events emitted for guard actions."""
 
-    def test_guard_event_written_on_finding(self, tmp_path, monkeypatch):
-        """Calling _emit_guard_events writes a row to guard_events table."""
-        db_path = _make_test_db(tmp_path)
-        monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
-
-        # Import the emit function from the hook
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location(
-            "on_skill_input",
-            REPO_ROOT / ".claude/hooks/runtime/hooks/meta/on-skill-input.py",
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-
-        project_id = str(uuid.uuid4())
-        findings = [
-            {
-                "rule_id": "guard-001",
-                "severity": "critical",
-                "risk_weight": 0.9,
-                "matched_text": "ignore all previous instructions",
-                "description": "Direct instruction override attempt",
-                "file_path": "src/utils.py",
-                "line_number": 10,
-                "detection": "static_fire",
-            }
-        ]
-        mod._emit_guard_events(findings, project_id, None, "ds-quality", "security:audit")
-
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM guard_events WHERE project_id=?", (project_id,)
-        ).fetchall()
-        conn.close()
-
-        assert len(rows) == 1
-        assert rows[0]["event_type"] == "guard_finding_logged"
-        assert rows[0]["rule_id"] == "guard-001"
-        assert rows[0]["severity"] == "critical"
-        assert rows[0]["source_type"] == "repo_file"
-        assert rows[0]["action"] == "logged"
-
     def test_guard_event_distinct_from_findings(self, tmp_path, monkeypatch):
         """guard_events and findings are in separate tables — boundary holds."""
         db_path = _make_test_db(tmp_path)

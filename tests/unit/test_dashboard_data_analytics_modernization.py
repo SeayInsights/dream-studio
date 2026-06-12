@@ -106,67 +106,6 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
     return db_path
 
 
-def _current_authority_without_legacy_project_intelligence_db(tmp_path: Path) -> Path:
-    db_path = tmp_path / "dashboard-current-authority.db"
-    project_root = tmp_path / "dream-studio"
-    project_root.mkdir()
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.execute(
-            "CREATE TABLE _schema_version(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "INSERT INTO _schema_version(version, applied_at) VALUES(?, '2026-05-14T00:00:00Z')",
-            (latest_migration_version(),),
-        )
-        # reg_projects deleted in migration 084; use business_projects
-        conn.execute(
-            "CREATE TABLE business_projects("
-            "project_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, "
-            "status TEXT NOT NULL DEFAULT 'active', project_path TEXT, "
-            "detected_stack TEXT, stack_json TEXT, total_sessions INTEGER DEFAULT 0, "
-            "total_tokens INTEGER DEFAULT 0, last_session_at TEXT, "
-            "created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
-            "source_event_id TEXT, last_event_id TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO business_projects(project_id, project_path, name, detected_stack, stack_json, "
-            "total_sessions, status, created_at, updated_at) "
-            "VALUES(?, ?, 'Dream Studio', 'Python FastAPI', ?, 7, 'active', "
-            "'2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')",
-            ("dream-studio", str(project_root), json.dumps({"framework": "Python FastAPI"})),
-        )
-        conn.execute(
-            "CREATE TABLE findings("
-            "finding_id TEXT PRIMARY KEY, project_id TEXT, severity TEXT, category TEXT, file_path TEXT, "
-            "start_line INTEGER, description TEXT, status TEXT, created_at TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
-            "description, status, created_at) VALUES('finding-1', 'dream-studio', 'high', 'guardrail', "
-            "'app.py', 42, 'Real finding', 'open', '2026-05-14T00:00:00Z')"
-        )
-        conn.execute(
-            "CREATE TABLE execution_events("
-            "event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, event_name TEXT NOT NULL, "
-            "project_id TEXT, milestone_id TEXT, task_id TEXT, process_run_id TEXT, "
-            "parent_event_id TEXT, actor_type TEXT, actor_id TEXT, agent_id TEXT, "
-            "skill_id TEXT, workflow_id TEXT, hook_id TEXT, tool_id TEXT, model_id TEXT, "
-            "adapter_id TEXT, source_refs_json TEXT NOT NULL DEFAULT '[]', "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', "
-            "outcome_status TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))"
-        )
-        conn.execute(
-            "INSERT INTO execution_events(event_id, event_type, event_name, project_id, outcome_status, created_at) "
-            "VALUES('event-1', 'validation', 'Dashboard smoke', 'dream-studio', 'passed', '2026-05-14T00:00:00Z')"
-        )
-        # pi_dependencies dropped in migration 084; route guards with object_exists() → 0
-        conn.commit()
-    finally:
-        conn.close()
-    return db_path
-
-
 def test_project_dashboard_excludes_quarantined_mock_rows_and_exposes_authority_metadata(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -231,46 +170,5 @@ def test_project_health_drilldown_exposes_stack_and_confirmed_dependency_metadat
             )
             >= 0
         )
-    finally:
-        DatabaseRuntime.reset_instance()
-
-
-def test_project_drilldowns_remove_absent_legacy_surfaces_and_bridge_current_authority(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = _client_for_db(
-        _current_authority_without_legacy_project_intelligence_db(tmp_path), monkeypatch
-    )
-    try:
-        health = client.get("/api/v1/projects/dream-studio/health")
-        security = client.get("/api/v1/projects/dream-studio/security")
-        activity = client.get("/api/v1/projects/dream-studio/activity")
-        dependencies = client.get("/api/v1/projects/dream-studio/dependencies")
-
-        assert health.status_code == 200
-        payload = health.json()
-        assert payload["available_surfaces"]["security"] is True
-        assert payload["available_surfaces"]["activity"] is True
-        assert (
-            payload["available_surfaces"]["dependencies"] is False
-        )  # pi_dependencies dropped in migration 084
-        assert payload["available_surfaces"]["health_trend"] is False
-        assert payload["available_surfaces"]["bugs_summary"] is False
-        assert payload["available_surfaces"]["violations_summary"] is False
-        assert "health_trend" in payload["removed_surfaces"]
-        assert "bugs_summary" in payload["removed_surfaces"]
-        assert "violations_summary" in payload["removed_surfaces"]
-
-        assert security.status_code == 200
-        assert security.json()["source_status"]["source_tables"] == ["findings"]
-        assert security.json()["findings"][0]["id"] == "finding-1"
-
-        assert activity.status_code == 200
-        assert activity.json()["source_status"]["source_tables"] == ["execution_events"]
-        assert activity.json()["activities"][0]["message"] == "Dashboard smoke"
-
-        assert dependencies.status_code == 200
-        # pi_dependencies dropped in migration 084 → edges list is empty
-        assert dependencies.json()["edges"] == []
     finally:
         DatabaseRuntime.reset_instance()

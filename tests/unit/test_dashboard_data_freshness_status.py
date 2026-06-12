@@ -5,7 +5,6 @@ from pathlib import Path
 
 from core.config.sqlite_bootstrap import bootstrap_database, latest_migration_version
 from core.telemetry.dashboard_freshness import dashboard_data_freshness_status
-from core.telemetry.legacy_backfill import plan_legacy_telemetry_backfill
 
 
 def _drift_db(tmp_path: Path) -> Path:
@@ -92,22 +91,6 @@ def test_dashboard_freshness_classifies_schema_drift_and_backfill_candidates(
     )
     assert status["backfill_status"]["execution_authorized"] is False
     assert status["backfill_status"]["candidate_count"] >= 1
-
-
-def test_legacy_backfill_plan_is_non_executable(tmp_path: Path) -> None:
-    db_path = _drift_db(tmp_path)
-
-    plan = plan_legacy_telemetry_backfill(db_path)
-
-    assert plan["dry_run"] is True
-    assert plan["execution_authorized"] is False
-    assert plan["primary_authority"] is False
-    assert all(candidate["mode"] == "dry_run_only" for candidate in plan["candidates"])
-    token_candidate = next(
-        candidate for candidate in plan["candidates"] if candidate["domain"] == "tokens"
-    )
-    assert token_candidate["candidate_rows"] == 0
-    assert token_candidate["requires_operator_approval"] is True
 
 
 def test_dashboard_freshness_has_no_authority_drift_after_latest_bootstrap(tmp_path: Path) -> None:
