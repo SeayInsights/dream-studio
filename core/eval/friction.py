@@ -6,11 +6,19 @@ Three friction sources:
   (c) guardrail_decisions WHERE action='block' for hook targets
 
 Runs as a scheduled/on-demand aggregation — not inline in the request path.
+
+Operator config:
+  DREAM_STUDIO_FRICTION_THRESHOLD=<int>
+      Global threshold override. When set, every eval_registry target must
+      accumulate this many signals before friction_flag is set to 1,
+      overriding the per-row friction_threshold column (default 3).
+      Example: DREAM_STUDIO_FRICTION_THRESHOLD=5 ds eval queue aggregate
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 
@@ -27,6 +35,10 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
         from core.config.database import _default_db_path
 
         db_path = _default_db_path()
+
+    # Operator-level threshold override — reads at call time so tests can patch env.
+    env_val = os.environ.get("DREAM_STUDIO_FRICTION_THRESHOLD", "")
+    effective_threshold: int | None = int(env_val) if env_val.isdigit() else None
 
     try:
         conn = sqlite3.connect(str(db_path))
@@ -86,8 +98,8 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
             logger.debug("Friction source (c) skipped — guardrail_decisions: %s", exc)
 
         # Increment signal counts and gate friction_flag on threshold.
-        # friction_threshold defaults to 3 (column default); friction_flag is only
-        # set to 1 when friction_signal_count reaches the per-row threshold.
+        # Uses DREAM_STUDIO_FRICTION_THRESHOLD env var as a global override when set;
+        # otherwise falls back to the per-row friction_threshold column (default 3).
         updated = 0
         for target_id in flagged:
             conn.execute(
@@ -97,13 +109,22 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
                 " WHERE target_id=?",
                 (target_id,),
             )
-            cursor = conn.execute(
-                "UPDATE eval_registry"
-                " SET friction_flag=1, updated_at=datetime('now')"
-                " WHERE target_id=? AND friction_flag=0"
-                "   AND friction_signal_count >= friction_threshold",
-                (target_id,),
-            )
+            if effective_threshold is not None:
+                cursor = conn.execute(
+                    "UPDATE eval_registry"
+                    " SET friction_flag=1, updated_at=datetime('now')"
+                    " WHERE target_id=? AND friction_flag=0"
+                    "   AND friction_signal_count >= ?",
+                    (target_id, effective_threshold),
+                )
+            else:
+                cursor = conn.execute(
+                    "UPDATE eval_registry"
+                    " SET friction_flag=1, updated_at=datetime('now')"
+                    " WHERE target_id=? AND friction_flag=0"
+                    "   AND friction_signal_count >= friction_threshold",
+                    (target_id,),
+                )
             updated += cursor.rowcount
 
         conn.commit()
@@ -119,6 +140,7 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
             "sources_checked": sources_ok,
             "new_flags": updated,
             "total_signaled": len(flagged),
+            "effective_threshold": effective_threshold if effective_threshold is not None else "per-row",
         }
     except Exception as exc:
         logger.error("Friction aggregation failed: %s", exc)

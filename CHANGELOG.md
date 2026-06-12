@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `DREAM_STUDIO_FRICTION_THRESHOLD` env var added to `aggregate_friction_signals()` as a global operator-level threshold override. When set, all targets use that threshold instead of the per-row `friction_threshold` column (default 3). Result dict gains `effective_threshold` field reporting the active threshold.
+
 ### Fixed
 - `eval_registry` friction threshold logic (WO-EVAL-LOOP-THRESHOLD): `aggregate_friction_signals()` now increments `friction_signal_count` per run and only sets `friction_flag=1` when the count reaches `friction_threshold` (default 3 per row). Migration 121 adds `friction_signal_count INTEGER NOT NULL DEFAULT 0` and `friction_threshold INTEGER NOT NULL DEFAULT 3` to `eval_registry`. Source (a) table reference (`raw_skill_telemetry` vs non-existent `skill_invocations`) documented in code.
 
