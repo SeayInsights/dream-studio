@@ -269,6 +269,24 @@ def _direct_insert_project(db_path: Path, project_id: str, name: str = "Test Pro
     conn.close()
 
 
+def _direct_insert_milestone(
+    db_path: Path, milestone_id: str, project_id: str, title: str = "Test Milestone"
+) -> None:
+    """Insert a milestone directly — satisfies create_work_order FK check."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_milestones"
+        " (milestone_id, project_id, title, status, created_at, updated_at)"
+        " VALUES (?, ?, ?, 'active', ?, ?)",
+        (milestone_id, project_id, title, now, now),
+    )
+    conn.commit()
+    conn.close()
+
+
 def _insert_canonical_event(db_path: Path, event: dict) -> None:
     """Insert directly into business_canonical_events (simulates the ingestor)."""
     import json as _json
@@ -399,6 +417,7 @@ def test_create_work_order_materialises_on_return(sdlc_env):
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
     _direct_insert_project(db_path, project_id)
+    _direct_insert_milestone(db_path, milestone_id, project_id)
 
     result = create_work_order(
         project_id=project_id,
@@ -430,6 +449,7 @@ def test_create_task_resolves_milestone_id_from_materialised_wo(sdlc_env):
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
     _direct_insert_project(db_path, project_id)
+    _direct_insert_milestone(db_path, milestone_id, project_id)
 
     wo_result = create_work_order(
         project_id=project_id,

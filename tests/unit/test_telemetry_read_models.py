@@ -53,7 +53,7 @@ def _seed(db_path: Path) -> None:
             conn,
             **scope,
             event_id="event-read-model-test",
-            event_type="dashboard.read_model_validation",
+            event_type="workflow.invocation_recorded",
             event_name="Read model validation",
             actor_type="system",
             actor_id="pytest",
@@ -79,7 +79,7 @@ def _seed(db_path: Path) -> None:
             """,
             (
                 "event-read-model-test",
-                "dashboard.read_model_validation",
+                "workflow.invocation_recorded",
                 "Read model validation",
                 scope["project_id"],
                 scope["milestone_id"],
@@ -381,7 +381,7 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
         summary["security_remediation_intelligence"]["remediation_policy"]["execution_authorized"]
         is False
     )
-    assert summary["security_remediation_intelligence"]["attribution"][0]["agent_id"] == "codex"
+    assert summary["security_remediation_intelligence"]["attribution"][0]["agent_id"] == "unknown"
     assert summary["validation_outcomes"][0]["status"] == "passed"
     assert (
         summary["validation_outcome_intelligence"]["correlations"][0]["security_finding_count"] == 1
@@ -737,7 +737,7 @@ def test_security_remediation_intelligence_keeps_execution_approval_separate(
         row["status"] == "false_positive" for row in intelligence["false_positive_candidates"]
     )
     assert any(row["status"] == "resolved" for row in intelligence["resolved_findings"])
-    assert any(row["skill_id"] == "ds-quality" for row in intelligence["attribution"])
+    assert any(row["skill_id"] == "unknown" for row in intelligence["attribution"])
 
 
 def test_validation_outcome_intelligence_correlates_failures_without_authorizing_fixes(

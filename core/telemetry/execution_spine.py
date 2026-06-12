@@ -454,6 +454,17 @@ def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
     except Exception:
         pass
 
+    # If a non-open status was supplied, immediately write a status_changed event
+    # so FindingsProjection sees the correct current_status (not the default 'open').
+    initial_status = values.get("status", "open")
+    if initial_status and initial_status != "open":
+        try:
+            resolve_security_finding(
+                conn, finding_id=values["finding_id"], resolution=initial_status
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     # Eagerly refresh findings_current_status projection so read models see the
     # new finding immediately (FindingsProjection.fold_spine is idempotent).
     try:
@@ -477,7 +488,7 @@ def resolve_security_finding(
     import uuid as _uuid
     from datetime import datetime as _dt, timezone as _tz
 
-    valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive"}
+    valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive", "resolved", "closed"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
     try:
         row = conn.execute(

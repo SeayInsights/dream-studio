@@ -1082,7 +1082,13 @@ def _security_remediation_intelligence(
     scope: ScopeFilter | None = None,
 ) -> dict[str, Any]:
     # findings retired in migration 112 (WO-Y); read from findings_current_status spine.
-    where, params = _where_scope_project_only(scope)
+    # Use fcs.project_id to avoid "ambiguous column name" in the LEFT JOIN.
+    if scope and scope.project_id:
+        fcs_where = "WHERE fcs.project_id = ?"
+        params: tuple[Any, ...] = (scope.project_id,)
+    else:
+        fcs_where = ""
+        params = ()
     try:
         findings = _rows(
             conn,
@@ -1111,7 +1117,7 @@ def _security_remediation_intelligence(
                 fcs.updated_at
             FROM findings_current_status fcs
             LEFT JOIN security_events se ON se.event_id = fcs.finding_id
-            {where}
+            {fcs_where}
             ORDER BY
                 CASE fcs.severity
                 WHEN 'critical' THEN 0
