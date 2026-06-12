@@ -76,7 +76,29 @@ def main() -> None:
     if any(p in file_path for p in PROTECTED_PATHS):
         sys.exit(0)
 
+    _check_rubric_guardrail(file_path, event_id=data.get("event_id"))
+
     run_handlers(HANDLERS, raw_payload, "PostToolUse_Edit_Write", STATE_DIR)
+
+
+def _check_rubric_guardrail(file_path: str, event_id: str | None = None) -> None:
+    """Call check_rubric_write_guardrail for Write/Edit events. Non-fatal."""
+    try:
+        import sqlite3
+
+        from guardrails.evaluator import check_rubric_write_guardrail
+
+        db_path = STATE_DIR / "studio.db"
+        conn = sqlite3.connect(str(db_path))
+        decision = check_rubric_write_guardrail(file_path, conn=conn, event_id=event_id)
+        conn.close()
+        if decision is not None:
+            print(
+                f"\n[guardrails] BLOCK: {decision.message}",
+                file=sys.stderr,
+            )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

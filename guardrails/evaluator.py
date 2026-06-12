@@ -40,6 +40,7 @@ def check_rubric_write_guardrail(
     file_path: str | None,
     conn,
     event_id: str | None = None,
+    is_operator: bool = False,
 ) -> "GuardrailDecision | None":
     """Block runtime Write/Edit events targeting eval-rubric.yml.
 
@@ -47,9 +48,12 @@ def check_rubric_write_guardrail(
     rule_id='rubric-immutability-constraint'. Returns the decision if the
     path matches, None if it does not.
 
+    Pass is_operator=True to exempt operator-level sessions from the guardrail.
     Non-fatal on DB write failure — the return value is authoritative.
     """
     if not file_path:
+        return None
+    if is_operator:
         return None
     normalized = file_path.replace("\\", "/")
     if _RUBRIC_PATH_PATTERN not in normalized:

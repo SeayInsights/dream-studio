@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `check_rubric_write_guardrail(file_path, conn, event_id)` in `guardrails/evaluator.py`: runtime guardrail that records a `guardrail_decisions` block row with `rule_id='rubric-immutability-constraint'` when a Write/Edit targets `eval-rubric.yml` (WO 58890751).
-- `tests/evals/test_rubric_immutability_guardrail.py`: 4 gate tests verifying block decision creation, non-rubric path passthrough, event_id forwarding, and None file_path handling (WO 58890751).
+- `check_rubric_write_guardrail(file_path, conn, event_id, is_operator)` in `guardrails/evaluator.py`: runtime guardrail that records a `guardrail_decisions` block row with `rule_id='rubric-immutability-constraint'` when a Write/Edit targets `eval-rubric.yml`; `is_operator=True` exempts operator sessions (WO 58890751, b57c60eb).
+- `_check_rubric_guardrail()` in `runtime/hooks/meta/on-edit-dispatch.py`: wires `check_rubric_write_guardrail` into the PostToolUse Write/Edit dispatch pipeline; fires for every Edit/Write event (WO b57c60eb).
+- `tests/evals/test_rubric_immutability_guardrail.py`: 6 gate tests covering block decision creation, non-rubric passthrough, event_id forwarding, None file_path, operator-session exemption, and non-operator block (WO 58890751, b57c60eb).
 
 ### Fixed
 - `_run_case_live()` in `core/eval/runner.py` now checks `proc.returncode` after spawning the claude subprocess; a non-zero exit returns an `EvalResult` with `passed=False` and an `error` field including the returncode and stderr snippet, preventing a failed subprocess from silently yielding a misleading 0-score result (WO 312dc5ac).

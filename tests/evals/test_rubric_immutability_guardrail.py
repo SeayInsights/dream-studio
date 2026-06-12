@@ -91,3 +91,37 @@ def test_none_file_path_returns_none():
     assert decision is None
     rows = conn.execute("SELECT * FROM guardrail_decisions").fetchall()
     assert rows == []
+
+
+def test_operator_session_exemption_returns_none():
+    """is_operator=True returns None and writes zero rows for rubric path."""
+    from guardrails.evaluator import check_rubric_write_guardrail
+
+    conn = _make_conn()
+    decision = check_rubric_write_guardrail(
+        "canonical/skills/domains/eval-rubric.yml",
+        conn=conn,
+        is_operator=True,
+    )
+
+    assert decision is None
+    rows = conn.execute("SELECT * FROM guardrail_decisions").fetchall()
+    assert rows == []
+
+
+def test_non_operator_session_creates_block_row():
+    """is_operator=False (default) creates a block row for rubric path."""
+    from guardrails.evaluator import check_rubric_write_guardrail
+
+    conn = _make_conn()
+    decision = check_rubric_write_guardrail(
+        "canonical/skills/domains/eval-rubric.yml",
+        conn=conn,
+        is_operator=False,
+    )
+
+    assert decision is not None
+    assert decision.action.value == "block"
+    rows = conn.execute("SELECT action FROM guardrail_decisions").fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "block"
