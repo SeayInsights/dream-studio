@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `record_invocation()` in `core/telemetry/execution_spine.py` now logs skipped DB writes at DEBUG level instead of silently discarding the exception (WO 68fe6a1b). Adds `import logging` and a module-level logger.
 
 ### Added
+- `tests/unit/test_eval_runner_live_path.py`: 5 tests covering `EvalRunner.run_case(live=True)` routing to `_run_case_live`, `run_all(live=True/False)` kwarg pass-through, and CLI `--live` flag wiring to the runner (WO 63f09915).
 - `tests/unit/test_eval_dispatch_live_mode.py`: 4 tests covering `ds eval run --live` JSON output (delta_from_fixture_baseline, failure_reasons, non-live exclusion, passing run empty reasons) (WO 1ce3aad7). Also fixes pre-existing `AttributeError` on `result.behavior_score` via `getattr` fallback.
 - `ds eval run <id> --live` JSON output now includes `delta_from_fixture_baseline` (fixture_baseline_score − live_score, rounded to 4dp) and `failure_reasons` (list of missing_events + negative_violations) when run in live mode (WO c4c8d9aa).
 - `tests/unit/test_eval_registry_dispatch.py`: 8 tests covering `ds eval registry list` (all entries, filter by type, empty table), `ds eval registry show` (entry with runs, missing target), and `_write_hook_eval_run()` (pass insert, failure reasons JSON, noop on missing table) (WO 7ca96641).
