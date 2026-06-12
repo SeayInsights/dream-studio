@@ -346,9 +346,9 @@ class TestThresholdLogic:
         aggregate_friction_signals(db_path=db_path)
 
         row = _read_registry(db_path, "ds-quality:pending-check")
-        assert row["friction_flag"] == row["pending_rerun"], (
-            "friction_flag and pending_rerun must be set atomically"
-        )
+        assert (
+            row["friction_flag"] == row["pending_rerun"]
+        ), "friction_flag and pending_rerun must be set atomically"
 
 
 # ── Env var override ──────────────────────────────────────────────────────────
