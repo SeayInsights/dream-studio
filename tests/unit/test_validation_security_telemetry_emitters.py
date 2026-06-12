@@ -139,16 +139,20 @@ def test_security_finding_emitter_is_idempotent_and_records_file_line_attention(
     conn = _connect(db_path)
     try:
         finding = conn.execute(
-            "SELECT severity, file_path, start_line, end_line FROM findings WHERE finding_id = ?",
+            "SELECT severity, file_path, line_number FROM security_events WHERE event_id = ? AND event_kind = 'finding.recorded'",
             (first.record_id,),
         ).fetchone()
         assert dict(finding) == {
             "severity": "high",
             "file_path": "core/example.py",
-            "start_line": 12,
-            "end_line": 12,
+            "line_number": 12,
         }
-        assert conn.execute("SELECT COUNT(*) FROM findings").fetchone()[0] == 1
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM security_events WHERE event_kind = 'finding.recorded'"
+            ).fetchone()[0]
+            == 1
+        )
         assert (
             conn.execute(
                 "SELECT COUNT(*) FROM dashboard_attention_items WHERE event_id = ? AND attention_type = 'security_finding'",
@@ -181,12 +185,12 @@ def test_legacy_security_bug_bridge_dual_writes_finding(tmp_path: Path, monkeypa
     conn = _connect(db_path)
     try:
         row = conn.execute(
-            "SELECT severity, rule_id, file_path, start_line FROM findings"
+            "SELECT severity, vuln_class, file_path, line_number FROM security_events WHERE event_kind = 'finding.recorded'"
         ).fetchone()
         assert row["severity"] == "critical"
-        assert row["rule_id"] == "sql_injection"
+        assert row["vuln_class"] == "sql_injection"
         assert row["file_path"] == "core/query.py"
-        assert row["start_line"] == 44
+        assert row["line_number"] == 44
     finally:
         conn.close()
 

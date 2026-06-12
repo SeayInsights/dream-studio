@@ -167,7 +167,7 @@ class TestFix5InvisibleTables:
         """GET /hooks/tool-activity endpoint must exist."""
         source = (REPO_ROOT / "projections/api/routes/hooks.py").read_text(encoding="utf-8")
         assert '"/hooks/tool-activity"' in source, "tool_activity endpoint missing from hooks.py"
-        assert "tool_invocations" in source, "tool_activity must query tool_invocations table"
+        assert "execution_events" in source, "tool_activity must query execution_events table"
 
     def test_validation_failures_endpoint_exists(self):
         """GET /hooks/validation-failures endpoint must exist."""
@@ -210,13 +210,13 @@ class TestFix5InvisibleTables:
             conn = sqlite3.connect(":memory:")
             conn.row_factory = sqlite3.Row
             conn.execute(
-                "CREATE TABLE tool_invocations "
-                "(invocation_id TEXT, tool_id TEXT, status TEXT, project_id TEXT, "
-                "created_at TEXT, metadata_json TEXT)"
+                "CREATE TABLE execution_events "
+                "(event_id TEXT, tool_id TEXT, outcome_status TEXT, project_id TEXT, "
+                "created_at TEXT)"
             )
             for i in range(3):
                 conn.execute(
-                    "INSERT INTO tool_invocations VALUES (?,?,?,?,datetime('now'),'{}')",
+                    "INSERT INTO execution_events VALUES (?,?,?,?,datetime('now'))",
                     (f"id-{i}", "Edit", "completed", "proj-1"),
                 )
             conn.commit()
