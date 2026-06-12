@@ -54,7 +54,7 @@ def test_ingest_writes_to_env_override_db(monkeypatch, tmp_path: Path) -> None:
     assert target_db.is_file(), "ingest() did not write to the env-overridden DB"
     conn = sqlite3.connect(str(target_db))
     try:
-        rows = conn.execute("SELECT event_id FROM canonical_events").fetchall()
+        rows = conn.execute("SELECT event_id FROM business_canonical_events").fetchall()
     finally:
         conn.close()
     assert len(rows) == 1

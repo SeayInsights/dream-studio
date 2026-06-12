@@ -47,6 +47,8 @@ def db_with_canonical(tmp_path):
     """Migrated DB + canonical_events table (created by the ingestor at runtime, not migrations)."""
     db = tmp_path / "test.db"
     conn = _connect(db)
+    # canonical_events is a view post-migration; drop it so the backfill DDL can create the table
+    conn.execute("DROP VIEW IF EXISTS canonical_events")
     conn.execute(_CANONICAL_EVENTS_DDL)
     conn.commit()
     yield conn
@@ -60,9 +62,6 @@ class TestActivityIdNullable:
     TARGET_TABLES = [
         "hook_executions",
         "hook_findings",
-        "sec_sarif_findings",
-        "sec_manual_reviews",
-        "sec_cve_matches",
         "adapter_executions",
     ]
 
