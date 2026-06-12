@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- `count_degraded_skills()` now requires both `friction_flag=1` AND `rubric_score < baseline_score * 100` (WO 3ca8be3a). Previously counted any flagged target regardless of whether the score had actually degraded below baseline. Uses a LEFT JOIN with `ds_eval_baselines` so targets without a baseline are still counted as degraded.
+
+### Fixed
 - N+1 SQL patterns in `aggregate_friction_signals()` (WO c6b6f3ed): source (c) `guardrail_decisions` check now uses a single `JOIN eval_registry` instead of a per-row `SELECT 1` loop; the `friction_signal_count` increment and `friction_flag` gate now use batched `WHERE target_id IN (...)` instead of per-row UPDATE statements.
 
 ### Changed
