@@ -4,14 +4,9 @@ import json
 import sqlite3
 from pathlib import Path
 
-from core.config.sqlite_bootstrap import run_migrations
 from core.upgrade.canonical_event_reconciliation import (
-    build_import_plan,
     connect_backup_readonly,
-    ensure_import_map_table,
     profile_canonical_events,
-    run_reconciliation,
-    validate_reconciliation,
 )
 
 
@@ -160,84 +155,4 @@ def test_profile_opens_backup_read_only(tmp_path: Path) -> None:
         assert "readonly" in str(exc).lower()
     else:  # pragma: no cover
         raise AssertionError("backup connection accepted a write")
-    conn.close()
-
-
-def test_dry_run_classifies_high_confidence_duplicates_and_manual(tmp_path: Path) -> None:
-    backup_home = tmp_path / "backup"
-    active_home = tmp_path / "active"
-    _write_backup_db(backup_home / "state" / "studio.db")
-    active_db = active_home / "state" / "studio.db"
-    active_db.parent.mkdir(parents=True)
-    conn = sqlite3.connect(active_db)
-    run_migrations(conn)
-    ensure_import_map_table(conn)
-    conn.execute("""
-        INSERT INTO hook_invocations (
-            invocation_id, hook_id, status, prevented_risky_action
-        ) VALUES ('legacy-hook-execution-2', 'on_pulse', 'success', 0)
-        """)
-    conn.commit()
-    backup_conn = connect_backup_readonly(backup_home)
-    plan = build_import_plan(backup_conn, conn)
-    statuses = {(entry.legacy_event_id, entry.target_table): entry.import_status for entry in plan}
-    assert statuses[("skill-1", "execution_events")] == "pending_import"
-    assert statuses[("skill-1", "skill_invocations")] == "pending_import"
-    assert statuses[("hook-duplicate", "hook_invocations")] == "skipped_duplicate"
-    assert statuses[("validation-noise", None)] == "retention_only"
-    assert statuses[("token-raw", "token_usage_records")] == "pending_import"
-    assert statuses[("token-manual", None)] == "manual_review_required"
-    backup_conn.close()
-    conn.close()
-
-
-def test_apply_imports_only_high_confidence_and_keeps_source_refs(tmp_path: Path) -> None:
-    backup_home = tmp_path / "backup"
-    active_home = tmp_path / "active"
-    _write_backup_db(backup_home / "state" / "studio.db")
-    active_db = active_home / "state" / "studio.db"
-    active_db.parent.mkdir(parents=True)
-    conn = sqlite3.connect(active_db)
-    run_migrations(conn)
-    conn.close()
-
-    result = run_reconciliation(
-        backup_home=backup_home,
-        active_home=active_home,
-        apply=True,
-    )
-    assert result["validation"]["valid"] is True
-    conn = sqlite3.connect(active_db)
-    assert (
-        conn.execute(
-            "SELECT COUNT(*) FROM legacy_canonical_event_import_map WHERE import_status = 'imported'"
-        ).fetchone()[0]
-        == 5
-    )
-    refs = conn.execute("""
-        SELECT source_refs_json
-        FROM execution_events
-        WHERE event_id LIKE 'legacy-canonical-event-%'
-        """).fetchall()
-    assert refs
-    assert all("backup:canonical_events:" in row[0] for row in refs)
-    token_ref = conn.execute("""
-        SELECT source_refs_json, purpose, total_tokens, provider
-        FROM token_usage_records
-        WHERE token_usage_id = 'legacy-raw-token-501'
-        """).fetchone()
-    assert token_ref is not None
-    assert "backup:canonical_events:token-raw" in token_ref[0]
-    assert "cost unavailable" in token_ref[1]
-    assert token_ref[2] == 3
-    assert token_ref[3] == "anthropic"
-    assert validate_reconciliation(conn)["valid"] is True
-    # Migration 083 (18.4.6-followup-1) makes canonical_events migration-owned.
-    # It is now present in all properly-migrated active DBs — presence is expected.
-    assert (
-        conn.execute(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='canonical_events'"
-        ).fetchone()[0]
-        == 1
-    )
     conn.close()

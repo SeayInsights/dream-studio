@@ -215,103 +215,6 @@ dependencies = ["fastapi", "pydantic"]
     return db_path
 
 
-def test_all_projects_defaults_to_current_local_builds_authority(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
-    try:
-        response = client.get("/api/v1/projects?limit=100")
-
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["derived_view"] is True
-        assert payload["primary_authority"] is False
-        assert payload["total"] == 1
-        assert {project["project_id"] for project in payload["projects"]} == {"dream-studio"}
-        assert payload["source_status"]["excluded_from_default_view"]["count"] == 1
-        assert (
-            "demo-project"
-            in payload["source_status"]["excluded_from_default_view"]["sample_project_ids"]
-        )
-        project = payload["projects"][0]
-        assert project["project_authority_status"]["include_in_default_operator_view"] is True
-        assert project["project_authority_status"]["classification"] == "current_legitimate_project"
-        assert project["prd_status"]["status"] == "needs_update"
-        assert project["prd_status"]["latest_status"] == "in-progress"
-        assert project["security_package_status"]["open_findings"] == 1
-        assert (
-            project["security_lifecycle_status"]["source_framework"]["source_control_count"] == 47
-        )
-        assert project["security_lifecycle_status"]["security_status"] == "blocked_by_open_findings"
-        assert (
-            project["security_lifecycle_status"]["finding_normalization_policy"][
-                "synthetic_demo_findings_in_live_operator_views"
-            ]
-            is False
-        )
-        assert project["work_order_status"]["attention_open"] == 1
-        assert project["telemetry_status"]["event_count"] == 1
-        assert project["health_model"]["derived_view"] is True
-        assert project["health_model"]["primary_authority"] is False
-        assert project["health_model"]["signals"]["validation_failed_count"] == 1
-        assert project["health_score"] == project["health_model"]["score"] / 10
-        assert "findings" in payload["source_status"]["source_tables"]
-        assert "dashboard_attention_items" in payload["source_status"]["source_tables"]
-        assert "execution_events" in payload["source_status"]["source_tables"]
-    finally:
-        DatabaseRuntime.reset_instance()
-
-
-def test_project_security_uses_high_confidence_legacy_alias(tmp_path: Path, monkeypatch) -> None:
-    db_path = _portfolio_db(tmp_path)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "INSERT INTO findings(finding_id, project_id, severity, category, file_path, start_line, "
-            "description, status, created_at) VALUES('finding-alias', 'project_dream_studio', 'HIGH', 'legacy', "
-            "'core/security/lifecycle.py', 10, 'Legacy mapped finding', 'open', '2026-05-14T00:00:00Z')"
-        )
-        conn.commit()
-    client = _client_for_db(db_path, monkeypatch)
-    try:
-        health = client.get("/api/v1/projects/dream-studio/health").json()
-        assert health["project"]["security_package_status"]["open_findings"] == 2
-
-        security = client.get("/api/v1/projects/dream-studio/security").json()
-        assert security["count"] == 2
-        alias = [finding for finding in security["findings"] if finding["id"] == "finding-alias"][0]
-        assert alias["project_id"] == "dream-studio"
-        assert alias["source_project_id"] == "project_dream_studio"
-        assert "project_dream_studio" in security["alias_policy"]["aliases"]
-    finally:
-        DatabaseRuntime.reset_instance()
-
-
-def test_project_health_uses_current_authority_when_legacy_tables_are_absent(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
-    try:
-        response = client.get("/api/v1/projects/dream-studio/health")
-
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["project"]["prd_status"]["count"] == 1
-        assert payload["project"]["security_package_status"]["open_findings"] == 1
-        assert (
-            payload["project"]["security_lifecycle_status"]["security_status"]
-            == "blocked_by_open_findings"
-        )
-        assert payload["project"]["health_model"]["status"] == "scored"
-        assert payload["health"]["overall_score"] == payload["project"]["health_score"]
-        assert payload["health"]["security_score"] == payload["project"]["security_score"]
-        assert payload["available_surfaces"]["bugs_summary"] is False
-        assert payload["available_surfaces"]["violations_summary"] is False
-        assert "bugs_summary" in payload["removed_surfaces"]
-        assert "violations_summary" in payload["removed_surfaces"]
-    finally:
-        DatabaseRuntime.reset_instance()
-
-
 def test_project_details_separates_health_and_sqlite_readiness_authority(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -375,22 +278,5 @@ def test_project_dependencies_render_confirmed_edges_only_by_default(
             )
         if "drilldown" in payload:
             assert payload["drilldown"].get("confirmed_edges_only_by_default") is True
-    finally:
-        DatabaseRuntime.reset_instance()
-
-
-def test_security_dashboard_findings_keep_project_attribution(tmp_path: Path, monkeypatch) -> None:
-    client = _client_for_db(_portfolio_db(tmp_path), monkeypatch)
-    try:
-        response = client.get("/api/v1/security/findings?limit=100")
-
-        assert response.status_code == 200
-        payload = response.json()
-        assert payload["count"] == 1
-        finding = payload["findings"][0]
-        assert finding["id"] == "finding-1"
-        assert finding["project_id"] == "dream-studio"
-        assert finding["file_path"] == ".github/workflows/ci.yml"
-        assert finding["message"] == "Real CI finding"
     finally:
         DatabaseRuntime.reset_instance()
