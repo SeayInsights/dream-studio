@@ -281,3 +281,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Last reviewed 2026-06-10 — WO-DEBT-H (chore/wo-debt-h-hygiene): regenerated flake8-baseline.txt from 707 (stale, 126+ entries for deleted files) down to 509 clean entries. No change to baseline policy, publication boundary, privacy classification, Docker profiles, or release gate enforcement logic. Baseline content change only — dead-file violations removed. -->
 
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py updated to print failing check output to stderr before emitting JSON (avoids truncation in CI logs where the JSON output field is capped). Gate enforcement logic, publication boundary, and policy are unchanged. -->
+
+<!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: the test check result in the ci_gate.py JSON verdict now includes a failing_tests list (pytest FAILED node IDs when tests fail, empty list when they pass). No change to gate enforcement policy, publication boundary, privacy classification, or Docker profiles. Structured test output is operational diagnostic data, not a public claim. -->
