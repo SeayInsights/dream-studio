@@ -219,12 +219,12 @@ class TestSkillDispatcherAudit:
         """
         result = SkillDispatcher.audit(REPO_ROOT, skill_filter=["pre-launch"])
         pl009 = [f for f in result.findings if f.rule_id == "pl-009"]
-        assert len(pl009) == 1, (
-            f"Expected exactly 1 pl-009 finding (no tags), got {len(pl009)}: {pl009}"
-        )
-        assert pl009[0].excerpt == "no tags", (
-            f"Expected 'no tags' excerpt, got {pl009[0].excerpt!r}"
-        )
+        assert (
+            len(pl009) == 1
+        ), f"Expected exactly 1 pl-009 finding (no tags), got {len(pl009)}: {pl009}"
+        assert (
+            pl009[0].excerpt == "no tags"
+        ), f"Expected 'no tags' excerpt, got {pl009[0].excerpt!r}"
 
     def test_audit_pl001_silent_on_dream_studio_clean(self):
         """pl-001 (Terms of Service) should be SILENT on dream-studio-clean (developer-tool)."""
