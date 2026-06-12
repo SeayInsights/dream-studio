@@ -390,8 +390,7 @@ def build_secure_production_readiness_gate(
     if persist:
         if conn is None:
             raise ValueError("conn is required when persist=True")
-        record_production_readiness_assessment(conn, gate)
-        gate["persisted"] = True
+        gate["persisted"] = record_production_readiness_assessment(conn, gate)
     return gate
 
 
@@ -430,8 +429,13 @@ def classify_production_readiness_impact(
 def record_production_readiness_assessment(
     conn: sqlite3.Connection,
     gate: dict[str, Any],
-) -> None:
-    """Persist a gate result to SQLite authority using an injected connection."""
+) -> bool:
+    """Persist a gate result to SQLite authority using an injected connection.
+
+    Returns False (no-op) if production_readiness_assessment_runs has been retired (migration 112+).
+    """
+    if not _table_exists(conn, "production_readiness_assessment_runs"):
+        return False
 
     assessment_id = gate["assessment_id"]
     created_at = gate["created_at"]
@@ -583,6 +587,7 @@ def record_production_readiness_assessment(
     _record_scorecards(conn, gate, created_at)
     _record_compliance_flags(conn, gate, created_at)
     conn.commit()
+    return True
 
 
 def production_readiness_dashboard_summary(

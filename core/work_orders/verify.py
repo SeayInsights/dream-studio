@@ -168,6 +168,7 @@ Rules to check (flag violations, not warnings — be precise):
 (5) LAYER-MAP Rule 4: canonical_events must only be written by spool/ingestor.py.
 (6) TEST COVERAGE: new public functions or CLI commands added without corresponding tests; existing tests deleted without replacement.
 (7) MIGRATION HYGIENE (only if the diff adds a migration file): migration file added? released_version bumped? aspirational-schema-debt.md updated?
+(8) DEAD TABLE RESURRECTION: test diffs that add CREATE TABLE (or CREATE TABLE IF NOT EXISTS) for any table explicitly dropped in a numbered migration file are a violation. A dropped table has no production code creating it; the fixture would simulate a DB state that can never exist in reality. The correct fix is to DELETE the test (dead subject) or fix the root cause in the migration — never feed dead-table fixtures to keep the test alive.
 
 Return ONLY valid JSON (no prose, no markdown fences):
 {{

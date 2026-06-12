@@ -12,10 +12,12 @@
 
 PRAGMA foreign_keys = OFF;
 
--- Drop stale view left behind by migration 112 (which dropped sec_sarif_findings
--- but not this view). SQLite validates view references during ALTER TABLE RENAME,
--- so the rename fails if this view exists while its underlying table is missing.
+-- Drop views that reference tables absent from partial/test DBs before any RENAME.
+-- SQLite 3.26+ recompiles ALL views during ALTER TABLE RENAME; a single broken
+-- view reference aborts the entire rename. Pattern from migrations 062/088/089/102.
 DROP VIEW IF EXISTS vw_risk_hotspots;
+DROP VIEW IF EXISTS vw_approach_patterns;
+DROP VIEW IF EXISTS vw_guardrail_decisions;
 
 -- ── raw_workflow_runs ────────────────────────────────────────────────────────
 CREATE TABLE raw_workflow_runs_new (
@@ -116,5 +118,33 @@ ALTER TABLE raw_research_new RENAME TO raw_research;
 CREATE INDEX idx_raw_research_prd ON raw_research(prd_id);
 CREATE INDEX idx_raw_research_task ON raw_research(task_id);
 CREATE INDEX idx_raw_research_activity ON raw_research(activity_id);
+
+-- ── Recreate live views dropped above (base tables still exist) ───────────────
+CREATE VIEW IF NOT EXISTS vw_approach_patterns AS
+SELECT
+    skill_id,
+    approach,
+    COUNT(*) AS times_tried,
+    SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS successes,
+    ROUND(
+        CAST(SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS REAL)
+        / COUNT(*) * 100, 1
+    ) AS success_pct,
+    CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens,
+    ROUND(AVG(duration_s), 1) AS avg_duration
+FROM raw_approaches
+GROUP BY skill_id, approach
+HAVING COUNT(*) >= 2;
+
+CREATE VIEW IF NOT EXISTS vw_guardrail_decisions AS
+SELECT
+    decision_id,
+    rule_id,
+    action AS decision,
+    event_id,
+    evaluated_at AS event_timestamp,
+    message AS reason
+FROM guardrail_decisions
+ORDER BY evaluated_at DESC;
 
 PRAGMA foreign_keys = ON;

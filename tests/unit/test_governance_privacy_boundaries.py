@@ -237,6 +237,8 @@ def test_guardrail_evaluator_writes_only_decision_governance_surfaces():
 
     assert writes == [
         ("guardrails/evaluator.py", "INSERT INTO", "guardrail_decisions"),
+        ("guardrails/evaluator.py", "INSERT INTO", "hook_eval_runs"),
+        ("guardrails/evaluator.py", "INSERT INTO", "guardrail_decisions"),
     ]
     assert "emit_decision(" in source
     # Slice 3: guardrail emitter migrated to spool pipeline

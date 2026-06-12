@@ -500,7 +500,7 @@ def _check_pre_launch(scope_path: Path, context: dict | None = None) -> list[dic
             }
         )
 
-    # pl-009: non-semver tags
+    # pl-009: non-semver tags (also fires when no tags — no versioning established)
     try:
         import subprocess
 
@@ -512,20 +512,33 @@ def _check_pre_launch(scope_path: Path, context: dict | None = None) -> list[dic
         )
         if tags_result.returncode == 0:
             recent_tags = tags_result.stdout.strip().splitlines()[:3]
-            for tag in recent_tags:
-                if tag and not re.match(r"^v?\d+\.\d+\.\d+", tag.strip()):
-                    findings.append(
-                        {
-                            "rule_id": "pl-009",
-                            "severity": "high",
-                            "tier": "T1",
-                            "file_path": ".git/refs/tags",
-                            "line": 0,
-                            "excerpt": tag.strip(),
-                            "explanation": f"Non-semver release tag: `{tag.strip()}` (expected vX.Y.Z)",
-                        }
-                    )
-                    break
+            if not recent_tags:
+                findings.append(
+                    {
+                        "rule_id": "pl-009",
+                        "severity": "high",
+                        "tier": "T1",
+                        "file_path": ".git/refs/tags",
+                        "line": 0,
+                        "excerpt": "no tags",
+                        "explanation": "No release tags found — semver versioning not established",
+                    }
+                )
+            else:
+                for tag in recent_tags:
+                    if tag and not re.match(r"^v?\d+\.\d+\.\d+", tag.strip()):
+                        findings.append(
+                            {
+                                "rule_id": "pl-009",
+                                "severity": "high",
+                                "tier": "T1",
+                                "file_path": ".git/refs/tags",
+                                "line": 0,
+                                "excerpt": tag.strip(),
+                                "explanation": f"Non-semver release tag: `{tag.strip()}` (expected vX.Y.Z)",
+                            }
+                        )
+                        break
     except Exception:
         pass
 

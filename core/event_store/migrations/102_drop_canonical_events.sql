@@ -23,7 +23,19 @@
 --
 -- Idempotent: guarded with IF NOT EXISTS / IF EXISTS where applicable.
 -- legacy_canonical_event_import_map: per WO-E, retire after cutover parity check is complete.
+--
+-- View-safety: SQLite 3.26+ validates ALL existing views during ALTER TABLE RENAME.
+-- Drop views that reference tables absent from partial/test DBs before the rename,
+-- then recreate any live views afterwards (migration 062/088/089 pattern).
+-- prd_* views are not recreated here; migration 103 drops their base tables.
 
+-- ── Drop views before rename ──────────────────────────────────────────────────
+DROP VIEW IF EXISTS vw_approach_patterns;
+DROP VIEW IF EXISTS vw_guardrail_decisions;
+DROP VIEW IF EXISTS vw_prd_progress;
+DROP VIEW IF EXISTS vw_task_details;
+
+-- ── Rename ────────────────────────────────────────────────────────────────────
 ALTER TABLE canonical_events RENAME TO canonical_events_legacy_backup;
 
 CREATE VIEW canonical_events AS
@@ -60,3 +72,31 @@ CREATE VIEW canonical_events AS
         received_at                           AS created_at,
         NULL                                  AS invocation_mode
     FROM ai_canonical_events;
+
+-- ── Recreate live views (reference tables still exist after rename) ───────────
+CREATE VIEW IF NOT EXISTS vw_approach_patterns AS
+SELECT
+    skill_id,
+    approach,
+    COUNT(*) AS times_tried,
+    SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS successes,
+    ROUND(
+        CAST(SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS REAL)
+        / COUNT(*) * 100, 1
+    ) AS success_pct,
+    CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens,
+    ROUND(AVG(duration_s), 1) AS avg_duration
+FROM raw_approaches
+GROUP BY skill_id, approach
+HAVING COUNT(*) >= 2;
+
+CREATE VIEW IF NOT EXISTS vw_guardrail_decisions AS
+SELECT
+    decision_id,
+    rule_id,
+    action AS decision,
+    event_id,
+    evaluated_at AS event_timestamp,
+    message AS reason
+FROM guardrail_decisions
+ORDER BY evaluated_at DESC;

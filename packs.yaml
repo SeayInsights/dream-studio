@@ -26,7 +26,7 @@ packs:
     description: Stack-specific and domain builders
     skill: domains
     # fullstack and website — Flag 1 fix; devops, kubernetes — 18.9 Tier 1; technical-writing, terraform, mobile — 18.9 Tier 2-3; data-engineering — 18.9 Tier 4
-    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering]
+    modes: [game-dev, saas-build, mcp-build, dashboard-dev, client-work, design, fullstack, website, devops, kubernetes, technical-writing, terraform, mobile, data-engineering, idea-validation]
     agents: [game, client]
     hooks: [on-game-validate]
     rules: [game/ai-code.md, game/data-files.md, game/gameplay-code.md, game/networking-code.md, game/shader-code.md, game/ui-code.md]
@@ -72,7 +72,7 @@ packs:
   ds-project:
     description: Project lifecycle — scope, brief, resume, and portfolio-level management (list/switch/archive/delete)
     skill: ds-project
-    modes: [scope, resume, brief, manage]
+    modes: [scope, resume, brief, manage, brownfield]
 
   ds-workorder:
     description: Work order lifecycle — start, mark tasks done, close (with gate checks), block, and read-only status
