@@ -3,6 +3,8 @@
 Dream Studio can be published only when the public repository contains product
 source and sanitized public documentation without private operational history.
 
+**2026-06-12 (WO b1961e3e):** No privacy boundary changes. `tests/unit/test_gate_fixture_resurrection.py` added to ci.yml smoke suite — public test source, no private data.
+
 **2026-06-10 (WO-CONSTITUTION-GATES):** No privacy boundary changes. `core/gates/dependency_rules.py` and related tests added — public source, no private data.
 
 ## Publication Readiness Command

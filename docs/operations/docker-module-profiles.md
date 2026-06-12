@@ -2,6 +2,8 @@
 
 Lifecycle status: tested_only
 
+**2026-06-12 (WO b1961e3e):** No Docker profile changes. ci.yml smoke suite updated to include resurrection guard tests.
+
 **2026-06-10 (WO-CONSTITUTION-GATES):** No Docker profile changes. ci.yml smoke suite updated to include dependency rule gate tests.
 
 Docker is optional for Dream Studio core. The local-first SQLite authority model
