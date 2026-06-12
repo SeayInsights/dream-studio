@@ -12,7 +12,6 @@ import pytest
 
 import core.gates.test_fixture_resurrection_guard as guard
 
-
 # ---------------------------------------------------------------------------
 # build_dead_table_ledger
 # ---------------------------------------------------------------------------
@@ -46,9 +45,7 @@ def test_synthetic_migrations_create_then_drop(tmp_path: Path) -> None:
     (mig_dir / "001_create.sql").write_text(
         "CREATE TABLE zombie_table (id INTEGER PRIMARY KEY);", encoding="utf-8"
     )
-    (mig_dir / "002_drop.sql").write_text(
-        "DROP TABLE zombie_table;", encoding="utf-8"
-    )
+    (mig_dir / "002_drop.sql").write_text("DROP TABLE zombie_table;", encoding="utf-8")
     with patch.object(guard, "MIGRATIONS_DIR", mig_dir):
         dead = guard.build_dead_table_ledger()
     assert "zombie_table" in dead
@@ -124,9 +121,7 @@ def test_gate_fires_on_dead_table_in_diff(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_gate_passes_for_live_table_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.setattr(
-        guard, "_diff_text", lambda _base_ref: _make_diff("business_work_orders")
-    )
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("business_work_orders"))
     assert guard.main() == 0
 
 
@@ -134,9 +129,7 @@ def test_gate_passes_for_rename_intermediate_in_diff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.setattr(
-        guard, "_diff_text", lambda _base_ref: _make_diff("some_table_new")
-    )
+    monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("some_table_new"))
     assert guard.main() == 0
 
 
