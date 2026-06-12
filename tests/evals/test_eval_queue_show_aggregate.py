@@ -1,4 +1,4 @@
-"""Gate tests: ds eval queue show and aggregate commands (WO 7dc2f344).
+"""Gate tests: ds eval queue show, aggregate, and run commands (WO 7dc2f344, WO aa759063).
 
 Proving gate:
   show-pending:    returns count and rows for pending_rerun=1 entries
@@ -6,6 +6,8 @@ Proving gate:
   show-no-table:   returns ok=False when eval_registry table is absent
   aggregate-calls: aggregate_friction_signals called with correct db_path
   aggregate-print: aggregate result is forwarded to _print
+  run-pass-clears: run dispatches pending evals; passing result clears pending_rerun in DB
+  run-no-pending:  run with no pending items returns count=0 empty results
 """
 
 from __future__ import annotations
@@ -161,3 +163,74 @@ class TestEvalQueueAggregate:
 
         out = json.loads(capsys.readouterr().out)
         assert out == fake_result
+
+
+class TestEvalQueueRun:
+    def test_run_pass_clears_pending_rerun_in_db(self, db_path, evals_dir, capsys):
+        """run dispatches pending eval case; passing result clears pending_rerun=0 in DB."""
+        from interfaces.cli.ds import _eval_queue_dispatch
+        from core.eval.schema import EvalResult, MatchResult
+
+        target_id = "skill-run-test"
+        _seed_registry(db_path, target_id, pending_rerun=1)
+
+        case_json = evals_dir / f"{target_id}.json"
+        case_json.write_text(
+            json.dumps(
+                {
+                    "eval_id": target_id,
+                    "input_prompt": "test prompt",
+                    "expected_events": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        passing_result = EvalResult(
+            eval_id=target_id,
+            version="1.0.0",
+            passed=True,
+            composite_score=1.0,
+            event_score=1.0,
+            match_result=MatchResult(
+                score=1.0,
+                matched_required=0,
+                total_required=0,
+                negative_violations=[],
+                missing_events=[],
+                out_of_order=[],
+            ),
+        )
+
+        args = argparse.Namespace(queue_command="run")
+        with patch("core.config.database.DatabaseRuntime") as mock_dr:
+            mock_dr.get_instance.return_value = _mock_runtime(db_path)
+            with patch("core.eval.runner.EvalRunner.run_case", return_value=passing_result):
+                _eval_queue_dispatch(args, evals_dir=evals_dir)
+
+        out = json.loads(capsys.readouterr().out)
+        assert out["count"] == 1
+        assert out["results"][0]["passed"] is True
+        assert out["results"][0]["friction_cleared"] is True
+
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute(
+            "SELECT pending_rerun FROM eval_registry WHERE target_id = ?", (target_id,)
+        ).fetchone()
+        conn.close()
+        assert row[0] == 0, "pending_rerun must be cleared to 0 after a passing run"
+
+    def test_run_no_pending_returns_empty_results(self, db_path, evals_dir, capsys):
+        """run with no pending_rerun=1 entries returns count=0 and empty results list."""
+        from interfaces.cli.ds import _eval_queue_dispatch
+
+        _seed_registry(db_path, "skill-not-pending", pending_rerun=0)
+
+        args = argparse.Namespace(queue_command="run")
+        with patch("core.config.database.DatabaseRuntime") as mock_dr:
+            mock_dr.get_instance.return_value = _mock_runtime(db_path)
+            _eval_queue_dispatch(args, evals_dir=evals_dir)
+
+        out = json.loads(capsys.readouterr().out)
+        assert out["count"] == 0
+        assert out["results"] == []
