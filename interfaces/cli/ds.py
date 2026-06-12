@@ -3059,16 +3059,23 @@ def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:
                 return 1
             case = EvalCase.from_json(path)
             result = runner.run_case(case, live=live_mode)
-            return _print(
-                {
-                    "eval_id": result.eval_id,
-                    "passed": result.passed,
-                    "composite_score": result.composite_score,
-                    "event_score": result.event_score,
-                    "behavior_score": result.behavior_score,
-                    "run_mode": result.run_mode,
-                }
-            )
+            out: dict = {
+                "eval_id": result.eval_id,
+                "passed": result.passed,
+                "composite_score": result.composite_score,
+                "event_score": result.event_score,
+                "behavior_score": result.behavior_score,
+                "run_mode": result.run_mode,
+            }
+            if live_mode:
+                out["delta_from_fixture_baseline"] = round(
+                    (result.baseline_score or 0) - result.composite_score, 4
+                )
+                out["failure_reasons"] = list(
+                    result.match_result.missing_events
+                    + result.match_result.negative_violations
+                )
+            return _print(out)
         if run_all or skill_filter:
             results = runner.run_all(skill_filter=skill_filter, live=live_mode)
             report = format_results_report(results)

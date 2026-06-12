@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `record_invocation()` in `core/telemetry/execution_spine.py` now logs skipped DB writes at DEBUG level instead of silently discarding the exception (WO 68fe6a1b). Adds `import logging` and a module-level logger.
 
 ### Added
+- `ds eval run <id> --live` JSON output now includes `delta_from_fixture_baseline` (fixture_baseline_score − live_score, rounded to 4dp) and `failure_reasons` (list of missing_events + negative_violations) when run in live mode (WO c4c8d9aa).
 - `tests/unit/test_eval_registry_dispatch.py`: 8 tests covering `ds eval registry list` (all entries, filter by type, empty table), `ds eval registry show` (entry with runs, missing target), and `_write_hook_eval_run()` (pass insert, failure reasons JSON, noop on missing table) (WO 7ca96641).
 - `ci_gate.py` JSON verdict now includes a `failing_tests` list on the `test` check: empty when tests pass, populated with pytest node IDs (e.g. `tests/unit/test_foo.py::test_bar`) when tests fail (WO f0e8f2c0). Non-test checks are unaffected.
 - Pulse health now degrades to `DEGRADED` when the latest `full-ci` run on `main` has a `failure` conclusion (WO de7e86cd). Adds `check_full_ci_on_main()` to pulse_collector and `full_ci_conclusion` field to the pulse stats dict. Report CI section flags the failure with a warning line.
