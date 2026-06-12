@@ -78,54 +78,53 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
         except Exception as exc:
             logger.debug("Friction source (b) skipped — cor_skill_corrections: %s", exc)
 
-        # (c) Guardrail blocks on hook targets
+        # (c) Guardrail blocks on hook targets — single JOIN, no per-row SELECT.
         try:
             rows = conn.execute("""
-                SELECT DISTINCT rule_id AS candidate_hook_id
-                FROM guardrail_decisions
-                WHERE action = 'block'
-                  AND rule_id IS NOT NULL
+                SELECT DISTINCT gd.rule_id AS hook_id
+                FROM guardrail_decisions gd
+                JOIN eval_registry er
+                  ON er.target_id = gd.rule_id AND er.target_type = 'hook'
+                WHERE gd.action = 'block'
+                  AND gd.rule_id IS NOT NULL
                 """).fetchall()
             for r in rows:
-                hit = conn.execute(
-                    "SELECT 1 FROM eval_registry WHERE target_id=? AND target_type='hook'",
-                    (r["candidate_hook_id"],),
-                ).fetchone()
-                if hit:
-                    flagged.add(r["candidate_hook_id"])
+                flagged.add(r["hook_id"])
             sources_ok += 1
         except Exception as exc:
             logger.debug("Friction source (c) skipped — guardrail_decisions: %s", exc)
 
-        # Increment signal counts and gate friction_flag on threshold.
+        # Batch-increment signal counts and gate friction_flag on threshold.
         # Uses DREAM_STUDIO_FRICTION_THRESHOLD env var as a global override when set;
         # otherwise falls back to the per-row friction_threshold column (default 3).
         updated = 0
-        for target_id in flagged:
+        if flagged:
+            placeholders = ",".join("?" * len(flagged))
+            target_list = list(flagged)
             conn.execute(
-                "UPDATE eval_registry"
-                " SET friction_signal_count = friction_signal_count + 1,"
-                "     updated_at = datetime('now')"
-                " WHERE target_id=?",
-                (target_id,),
+                f"UPDATE eval_registry"
+                f" SET friction_signal_count = friction_signal_count + 1,"
+                f"     updated_at = datetime('now')"
+                f" WHERE target_id IN ({placeholders})",
+                target_list,
             )
             if effective_threshold is not None:
                 cursor = conn.execute(
-                    "UPDATE eval_registry"
-                    " SET friction_flag=1, updated_at=datetime('now')"
-                    " WHERE target_id=? AND friction_flag=0"
-                    "   AND friction_signal_count >= ?",
-                    (target_id, effective_threshold),
+                    f"UPDATE eval_registry"
+                    f" SET friction_flag=1, updated_at=datetime('now')"
+                    f" WHERE target_id IN ({placeholders}) AND friction_flag=0"
+                    f"   AND friction_signal_count >= ?",
+                    target_list + [effective_threshold],
                 )
             else:
                 cursor = conn.execute(
-                    "UPDATE eval_registry"
-                    " SET friction_flag=1, updated_at=datetime('now')"
-                    " WHERE target_id=? AND friction_flag=0"
-                    "   AND friction_signal_count >= friction_threshold",
-                    (target_id,),
+                    f"UPDATE eval_registry"
+                    f" SET friction_flag=1, updated_at=datetime('now')"
+                    f" WHERE target_id IN ({placeholders}) AND friction_flag=0"
+                    f"   AND friction_signal_count >= friction_threshold",
+                    target_list,
                 )
-            updated += cursor.rowcount
+            updated = cursor.rowcount
 
         conn.commit()
         conn.close()

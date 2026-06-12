@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- N+1 SQL patterns in `aggregate_friction_signals()` (WO c6b6f3ed): source (c) `guardrail_decisions` check now uses a single `JOIN eval_registry` instead of a per-row `SELECT 1` loop; the `friction_signal_count` increment and `friction_flag` gate now use batched `WHERE target_id IN (...)` instead of per-row UPDATE statements.
+
 ### Changed
 - `DREAM_STUDIO_FRICTION_THRESHOLD` env var added to `aggregate_friction_signals()` as a global operator-level threshold override. When set, all targets use that threshold instead of the per-row `friction_threshold` column (default 3). Result dict gains `effective_threshold` field reporting the active threshold.
 
