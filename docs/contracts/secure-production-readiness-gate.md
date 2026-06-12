@@ -218,3 +218,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- Last reviewed 2026-06-09 — WO-TS3 DuckDB-first read path: project_intelligence.py changes reviewed. Secure production readiness gate policy unchanged: same control framework, same evidence requirements, same authority boundaries. DuckDB analytics store is a read-only derived layer; production readiness evidence and control results remain in SQLite authority (readiness_events, findings_current_status). Gate contract is unaffected. -->
 
 <!-- Last reviewed 2026-06-09 — WO-TS4 correction: reverting wrong-scope DuckDB-first paths in project_intelligence.py and discovery_internal.py. No gate policy changes. Production readiness evidence remains in SQLite authority. Contract unchanged. -->
+
+<!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: no production readiness control change. core/production_readiness/controls.py record_production_readiness_assessment() returns bool and handles absent production_readiness_assessment_runs table gracefully (table dropped in migration 112). Gate contract unchanged. -->

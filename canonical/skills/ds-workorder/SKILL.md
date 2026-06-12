@@ -30,3 +30,5 @@ The Dream Studio source-of-truth is the SQLite authority. This pack does not rea
 6. **Task descriptions should include behavioral acceptance criteria.** When authoring tasks (via scope or during a WO), each task description should include an "Acceptance:" clause stating what the operator observes when the task is done. The independent review completion grader will emit a warning gap if feature/infrastructure WOs have no observable behavioral AC — this is not a fail, but it signals that the grader could not verify expected operator outcomes.
 
 <!-- Last reviewed 2026-06-12 — WO-SPAWN-DEDUPE: _insert_gap_work_orders in core/work_orders/verify.py gains title-match dedup; merges tasks into existing open WO instead of spawning duplicate. merged_into_existing field added to result. No skill instruction change required — existing mutation discipline unchanged. -->
+
+<!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: no work-order skill instruction change. core/work_orders/verify.py _CORRECTNESS_PROMPT_TEMPLATE gains rule (8) for dead-table resurrection detection. Skill surface and mutation discipline unchanged. -->
