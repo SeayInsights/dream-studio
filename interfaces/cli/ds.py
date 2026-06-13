@@ -3021,7 +3021,7 @@ def _config_dispatch(
     dream_studio_home: Path | None,
 ) -> int:
     """Dispatch ds config {set,show} commands (WO-FRICTION-CONFIG)."""
-    from core.config.authority import get_config_value, list_config, set_config_value
+    from core.config.authority import list_config, set_config_value
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root, dream_studio_home=dream_studio_home
