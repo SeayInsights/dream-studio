@@ -239,3 +239,5 @@ that fires on every baseline cleanup.
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py output truncation fix only — no private artifacts introduced, no publication boundary policy changed. -->
 
 <!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: ci_gate JSON verdict adds failing_tests list (pytest node IDs). Test output is operational diagnostic data — no private artifacts, no change to publication boundary policy. -->
+
+<!-- Last reviewed 2026-06-13 — fix/full-ci-duplicate-test-run: removed duplicate pytest+coverage step from full-ci.yml (ci_gate.py already runs the full test suite internally — the second step was re-running all 4700+ tests and causing 45m timeouts). Bumped timeout-minutes from 45 to 60 as headroom. No change to publication boundary, privacy classification, or release gate enforcement policy. -->
