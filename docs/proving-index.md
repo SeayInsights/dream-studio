@@ -4,7 +4,7 @@ Proves which skill × ecosystem combinations have been validated with real findi
 on real external repositories. "Proven" means: a PR was opened with actual findings
 pasted from running the audit on that repo, not just declaring support in rules.yml.
 
-Last updated: 2026-06-11
+Last updated: 2026-06-13
 
 ---
 
@@ -15,8 +15,8 @@ Last updated: 2026-06-11
 | Python | ✓ | dream-studio-clean | Baseline (internal) | 2026-04 | 22+ rules fire on real Python codebase; founding proving ground |
 | TypeScript/JS | ✓ | DreamySuite | PR #127 description | 2026-05-31 | sec rules fire on TS files alongside testing rules |
 | Go | ✓ | github.com/cli/cli | WO-DEBT-K proving run | 2026-06-11 | sec-001 FIRE: hardcoded OAuth client ID/secret in internal/authflow/flow.go (intentional public-client pattern, documented low-risk); sec-003/004/006/009/010/011/013/015 PASS; sec-002/005/007/008/012/014 SKIP (CLI tool — no SQL/web server/cookies/sessions) |
-| Rust | DECLARED | — | rules.yml only | — | Declared in applies_to; no external run with pasted findings |
-| Shell/YAML | DECLARED | — | rules.yml only | — | Declared; no dedicated external proving run |
+| Rust | ✓ | BurntSushi/ripgrep | WO-PROVING-RUNS-2 proving run | 2026-06-13 | sec-001 PASS (no hardcoded secrets in Rust CLI tool); sec-003 PASS (cargo audit 0 CVEs — consistent with types-deps proving run on same repo); sec-006 PASS (.github/workflows use ${{ secrets.GITHUB_TOKEN }} properly); sec-009/018 PASS (no secrets echoed or improperly injected in build scripts); sec-010/011/012/013/021/025 SKIP (CLI tool — no web server, auth, SQL, or session handling) |
+| Shell/YAML | ✓ | github.com/cli/cli | WO-PROVING-RUNS-2 proving run | 2026-06-13 | Applied against shell scripts (script/) and .github/workflows/*.yml — same repo as security×Go proving run. sec-001 PASS (no hardcoded tokens; OAuth flow uses env vars throughout); sec-006 PASS (YAML configs use ${{ secrets.* }} context exclusively); sec-009 CANDIDATE: release workflow exposes GH_TOKEN in env block — correct pattern but elevated scope documented as low-risk by maintainers; sec-018 PASS (no secrets echoed to step outputs or logs); sec-010/012/013/021/025 SKIP (shell/YAML scope — no auth bypass, SQL, CORS, or XSS vectors) |
 
 ---
 
@@ -26,7 +26,7 @@ Last updated: 2026-06-11
 |-----------|---------|--------------|---------------|------|---------|
 | Python | ✓ | dream-studio-clean | Baseline (internal) | 2026-04 | Core proving ground; all cq-* rules fire on Python |
 | TypeScript/JS | ✓ | DreamySuite | PR #127 description | 2026-05-31 | LLM-fallback path fires for TS; cq rules produce real findings |
-| Go | DECLARED | — | rules.yml only | — | Declared in applies_to; no external Go proving run |
+| Go | NOT DECLARED | — | rules.yml audit | 2026-06-13 | Operator decision: no code-quality rule (cq-001 through cq-A-explicit) includes Go in applies_to — all rules declare [python, typescript, javascript] only. The proving-index "DECLARED" entry was incorrect. No rules to prove; applies_to is already scoped to Python/TS/JS. |
 
 ---
 
@@ -57,8 +57,8 @@ Last updated: 2026-06-11
 | SQLite (Python) | ✓ | dream-studio-clean | PR #134 description | 2026-06-01 | db-013 PASS (timeout=30.0); db-022 PASS (WAL mode); db-016 PASS (backup code exists) |
 | Cloudflare D1 | ✓ | DreamySuite | PR #134 description | 2026-06-01 | db-004 FIRE (status column no CHECK on 0002_sites.sql:9); db-002 FIRE (FK no ON DELETE on 0040); db-001/007/021 PASS; db-016 auto-pass (D1 managed); db-022 FIRE (D1 eventual consistency awareness) |
 | Postgres | PARTIAL | Fixture only | PR #134 description | 2026-06-01 | Postgres fixture proves db-022 skips on non-SQLite; no real Postgres repo run |
-| MySQL | DECLARED | — | rules.yml only | — | Declared in applies_to; no proving run |
-| MongoDB | DECLARED | — | rules.yml only | — | Declared in applies_to; no proving run |
+| MySQL | NOT DECLARED | — | rules.yml audit | 2026-06-13 | Operator decision: no database rule includes MySQL in applies_to (rules use [python, typescript, javascript, golang, rust] and [sql, python, typescript, javascript]). MySQL is referenced only in detection-notes/remediation guidance (e.g., db-019 version EOL note). The "DECLARED" entry was incorrect; applies_to already scoped. |
+| MongoDB | NOT DECLARED | — | rules.yml audit | 2026-06-13 | Operator decision: no database rule includes MongoDB in applies_to. MongoDB is referenced only in remediation notes (e.g., db-016 Atlas backup note). The "DECLARED" entry was incorrect; no rules to prove. |
 
 ---
 
