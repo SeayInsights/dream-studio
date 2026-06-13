@@ -534,6 +534,11 @@ def _collect_grader(proc: subprocess.Popen, timeout: int = 360) -> dict[str, Any
             feeder.join(timeout=120)
         stdout, _ = proc.communicate(timeout=timeout)
         output = stdout.strip()
+        # T1: empty/whitespace-only output → unreviewable, not a hard failure.
+        # Graders sometimes return nothing when the model is busy or the prompt
+        # is truncated — treat as unreviewable so close_work_order is not blocked.
+        if not output:
+            return {"unreviewable": True, "reason": "grader_no_summary"}
         # Strip leading/trailing fences when the entire output is a fenced block.
         if output.startswith("```"):
             lines = output.splitlines()
@@ -575,10 +580,21 @@ def _run_graders_parallel(
     results: dict[str, dict[str, Any]] = {}
     for name, proc in procs.items():
         try:
-            results[name] = _collect_grader(proc)
+            result = _collect_grader(proc)
         except Exception as exc:
             # Grader failure is non-fatal; return a safe default so the rest proceeds.
-            results[name] = {"_grader_error": str(exc)}
+            result = {"_grader_error": str(exc)}
+        # T2: retry once on unreviewable (empty LLM output). Short timeout so
+        # retries add at most ~30s to the close path.
+        if result.get("unreviewable") and not result.get("_grader_error"):
+            try:
+                retry_proc = _spawn_grader(prompts[name])
+                retry_result = _collect_grader(retry_proc, timeout=30)
+                if not retry_result.get("unreviewable"):
+                    result = retry_result
+            except Exception:
+                pass  # keep original unreviewable on retry failure
+        results[name] = result
     return results
 
 
@@ -1061,6 +1077,79 @@ def verify_work_order(
         correctness = grader_results.get("correctness", _MOCK_CORRECTNESS.copy())
         quality = grader_results.get("quality", _MOCK_QUALITY.copy())
         migration: dict[str, Any] | None = grader_results.get("migration")
+
+        # T1/T3: Detect unreviewable graders (empty LLM output after retry).
+        # Record and surface a warning instead of scoring — there is nothing to
+        # remediate and spawning gap WOs for an empty diff would be unactionable.
+        # Mock mode bypasses this so CI fixtures keep exercising the grader path.
+        unreviewable_graders = [
+            name
+            for name in ("completion", "correctness", "quality", "migration")
+            if name in grader_results and grader_results[name].get("unreviewable")
+        ]
+        if unreviewable_graders and not os.environ.get(_MOCK_ENV):
+            reason_str = ", ".join(unreviewable_graders)
+            warning = (
+                f"independent review unreviewable: grader(s) [{reason_str}] returned empty output. "
+                f"Work is NOT certified — review manually."
+            )
+            scores = {
+                "completion_score": 0.0,
+                "correctness_score": 0.0,
+                "quality_score": 0.0,
+                "composite_score": 0.0,
+            }
+            completed_at = datetime.now(timezone.utc).isoformat()
+            _write_eval_run(
+                conn,
+                work_order_id=work_order_id,
+                scores=scores,
+                passed=False,
+                failure_reasons=["unreviewable_grader_no_summary"],
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+            verdict_dir = p_root / "work-orders" / work_order_id
+            verdict_dir.mkdir(parents=True, exist_ok=True)
+            verdict_path = verdict_dir / "review-verdict.json"
+            verdict_path.write_text(
+                json.dumps(
+                    {
+                        "work_order_id": work_order_id,
+                        "passed": False,
+                        "unreviewable": True,
+                        "unreviewable_graders": unreviewable_graders,
+                        "unreviewable_reason": warning,
+                        "scores": scores,
+                        "auto_continue_warning": warning,
+                        "completion": completion,
+                        "correctness": correctness,
+                        "quality": quality,
+                        "gaps": [],
+                        "spawned_work_orders": [],
+                        "verified_at": completed_at,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            return {
+                "ok": True,
+                "work_order_id": work_order_id,
+                "passed": False,
+                "unreviewable": True,
+                "unreviewable_graders": unreviewable_graders,
+                "summary": warning,
+                "completion": completion,
+                "correctness": correctness,
+                "quality": quality,
+                "migration": migration,
+                "scores": scores,
+                "auto_continue_warning": warning,
+                "gaps": [],
+                "spawned_work_orders": [],
+                "verdict_path": str(verdict_path),
+            }
 
         # Compute scores.
         scores = _compute_scores(completion, correctness, quality, total_tasks=len(tasks))

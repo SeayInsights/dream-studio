@@ -553,6 +553,9 @@ def close_work_order(
         result["verify_warning"] = _verify_result.get("summary") or (
             "independent review unreviewable: no commit evidence found."
         )
+        _unreviewable_graders = _verify_result.get("unreviewable_graders")
+        if _unreviewable_graders:
+            result["unreviewable_graders"] = _unreviewable_graders
     if next_wo:
         result["next_work_order"] = next_wo
         result["next_command"] = next_wo["next_command"]
