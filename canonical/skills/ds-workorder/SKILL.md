@@ -29,8 +29,12 @@ The Dream Studio source-of-truth is the SQLite authority. This pack does not rea
 5. **No raw UUIDs to the user unless asked.** Use the work_order_id internally; refer to the work order by its `title` in conversation. The user can ask for the ID.
 6. **Task descriptions should include behavioral acceptance criteria.** When authoring tasks (via scope or during a WO), each task description should include an "Acceptance:" clause stating what the operator observes when the task is done. The independent review completion grader will emit a warning gap if feature/infrastructure WOs have no observable behavioral AC — this is not a fail, but it signals that the grader could not verify expected operator outcomes.
 
+7. **SQL-CHECK lines for DB-state ACs.** A task's `acceptance_criteria` field may include one or more `SQL-CHECK:` lines (format: `SQL-CHECK: <SELECT statement>`). The completion grader executes these read-only against the authority DB before analyzing the diff. A query returning a non-zero/non-null first column passes; zero/null/no rows or any error fails. A `SQL-CHECK RESULT: FAIL` annotation forces that task to verdict `"missing"` regardless of diff evidence. Use SQL-CHECK when the task outcome is a database state change not visible in the diff (e.g. a migration row, a column added by bootstrap). See `docs/authoring/work-orders.md` for the full convention.
+
 <!-- Last reviewed 2026-06-12 — WO-SPAWN-DEDUPE: _insert_gap_work_orders in core/work_orders/verify.py gains title-match dedup; merges tasks into existing open WO instead of spawning duplicate. merged_into_existing field added to result. No skill instruction change required — existing mutation discipline unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: no work-order skill instruction change. core/work_orders/verify.py _CORRECTNESS_PROMPT_TEMPLATE gains rule (8) for dead-table resurrection detection. Skill surface and mutation discipline unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO-2dbcdc63: core/work_orders/verify.py _find_migration_files gains Path(source_root) coercion to handle os.getcwd() returning str. Pure bug fix, no skill interface change. -->
+
+<!-- Last reviewed 2026-06-13 — WO-AUTHORITY-GRADER: core/work_orders/verify.py gains _run_sql_checks() and _format_sql_checks(). SQL-CHECK: lines in acceptance_criteria are now executed against the authority DB before graders run. Results injected into task_list_str as ground truth. Rule 7 added above; docs/authoring/work-orders.md created. -->
