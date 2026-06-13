@@ -88,6 +88,9 @@ def _make_db() -> tuple[sqlite3.Connection, Path]:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+        -- ds_* tables below are the pre-migration-070 source tables that migration 061
+        -- (backfill_sdlc_creation_events) reads from. They are intentionally recreated
+        -- here so that TestBackfillMigration can exercise the migration 061 SQL path.
         CREATE TABLE IF NOT EXISTS ds_projects (
             project_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -131,6 +134,7 @@ def _seed_project(conn: sqlite3.Connection) -> str:
         " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
         (pid,),
     )
+    # ds_projects is the pre-migration-070 source table read by migration 061 backfill.
     conn.execute(
         "INSERT INTO ds_projects (project_id, name, description, status, created_at, updated_at)"
         " VALUES (?, 'Test Project', 'desc', 'active', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')",
@@ -147,6 +151,7 @@ def _seed_milestone(conn: sqlite3.Connection, project_id: str) -> str:
         " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
         (mid, project_id),
     )
+    # ds_milestones is the pre-migration-070 source table read by migration 061 backfill.
     conn.execute(
         "INSERT INTO ds_milestones (milestone_id, project_id, title, status, created_at, updated_at)"
         " VALUES (?, ?, 'M1', 'pending', '2026-01-02T00:00:00+00:00', '2026-01-02T00:00:00+00:00')",
@@ -162,12 +167,6 @@ def _seed_work_order(conn: sqlite3.Connection, project_id: str, milestone_id: st
         "INSERT INTO business_work_orders"
         " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
         " VALUES (?, ?, ?, 'WO1', 'created', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
-        (wid, project_id, milestone_id),
-    )
-    conn.execute(
-        "INSERT INTO ds_work_orders"
-        " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
-        " VALUES (?, ?, ?, 'WO1', 'open', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
         (wid, project_id, milestone_id),
     )
     conn.commit()
