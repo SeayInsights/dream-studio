@@ -285,3 +285,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py updated to print failing check output to stderr before emitting JSON (avoids truncation in CI logs where the JSON output field is capped). Gate enforcement logic, publication boundary, and policy are unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: the test check result in the ci_gate.py JSON verdict now includes a failing_tests list (pytest FAILED node IDs when tests fail, empty list when they pass). No change to gate enforcement policy, publication boundary, privacy classification, or Docker profiles. Structured test output is operational diagnostic data, not a public claim. -->
+
+<!-- Last reviewed 2026-06-13 — fix/full-ci-duplicate-test-run: removed duplicate pytest+coverage step from full-ci.yml; ci_gate.py already runs the full test suite internally. Bumped timeout-minutes from 45 to 60 as headroom. No change to publication boundary, privacy classification, or gate enforcement policy. -->

@@ -9,7 +9,7 @@ without burning a full matrix on every push.
 | Workflow | Trigger | Purpose | Cost posture |
 | --- | --- | --- | --- |
 | `.github/workflows/ci.yml` | pull request, manual | **3-platform matrix** (ubuntu-latest, macos-latest, windows-latest): docs drift, Contract Atlas lifecycle, format, lint baseline, focused release/atlas tests. `fail-fast: false` — all platforms run to completion even if one fails. | Required remote confidence |
-| `.github/workflows/full-ci.yml` | push to main, manual | Remote run of `python interfaces/cli/ci_gate.py` + full test suite with coverage. Ubuntu-only. Post-merge verification that the merge commit is healthy on Linux. | Comprehensive ubuntu check |
+| `.github/workflows/full-ci.yml` | push to main, manual | Remote run of `python interfaces/cli/ci_gate.py` (which internally runs the full test suite, format, lint, docs-drift, atlas, and security checks). Ubuntu-only. `timeout-minutes: 60`. The former standalone coverage step was removed — it re-ran all tests a second time and caused 45m timeouts once ci_gate started passing. | Comprehensive ubuntu check |
 | `.github/workflows/release-validation.yml` | manual or `v*` tag | Release-candidate evidence; runs the local release gate and release profile tests | Release-only evidence |
 | `.github/workflows/validate-skills.yml` | PRs changing `skills/**/*.md` | Path-scoped skill standards validation | Optional/path-scoped |
 
