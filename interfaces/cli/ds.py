@@ -648,6 +648,14 @@ def main(argv: list[str] | None = None) -> int:
         "aggregate", help="Aggregate friction signals from raw_sessions, corrections, guardrails"
     )
 
+    # config subcommand group (WO-FRICTION-CONFIG)
+    config_cmd = subcommands.add_parser("config", help="Operator-local key/value config")
+    config_sub = config_cmd.add_subparsers(dest="config_command", required=True)
+    config_set_cmd = config_sub.add_parser("set", help="Set a config value")
+    config_set_cmd.add_argument("key", help="Config key (e.g. eval.friction_threshold)")
+    config_set_cmd.add_argument("value", help="Value to store")
+    config_sub.add_parser("show", help="Show all config values")
+
     # diagnostics subcommand group (TA3)
     diag_cmd = subcommands.add_parser(
         "diagnostics", help="Read or clear the TA3 diagnostic log stream"
@@ -978,6 +986,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_projection_command(args)
         if args.command == "diagnostics":
             return _diagnostics_dispatch(args)
+        if args.command == "config":
+            return _config_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "analyze":
             return _analyze_dispatch(args, source_root=source_root, dream_studio_home=home)
         if args.command == "eval":
@@ -3002,6 +3012,29 @@ def _analyze_intake(
 def _print(payload: dict[str, Any]) -> int:
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 0
+
+
+def _config_dispatch(
+    args: argparse.Namespace,
+    *,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Dispatch ds config {set,show} commands (WO-FRICTION-CONFIG)."""
+    from core.config.authority import get_config_value, list_config, set_config_value
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    )
+    db_path = paths.sqlite_path
+
+    if args.config_command == "set":
+        set_config_value(args.key, args.value, db_path)
+        return _print({"ok": True, "key": args.key, "value": args.value})
+
+    if args.config_command == "show":
+        rows = list_config(db_path)
+        return _print({"ok": True, "config": rows, "count": len(rows)})
 
 
 def _changed_files_from_args(args: argparse.Namespace) -> list[str]:
