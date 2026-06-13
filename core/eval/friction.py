@@ -36,9 +36,16 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
 
         db_path = _default_db_path()
 
-    # Operator-level threshold override — reads at call time so tests can patch env.
+    # Threshold resolution: env var > ds_config row > per-row default.
+    # Reads at call time so tests can patch env or the DB without restart.
     env_val = os.environ.get("DREAM_STUDIO_FRICTION_THRESHOLD", "")
     effective_threshold: int | None = int(env_val) if env_val.isdigit() else None
+    if effective_threshold is None:
+        from core.config.authority import get_config_value
+
+        db_val = get_config_value("eval.friction_threshold", db_path)
+        if db_val is not None and db_val.isdigit():
+            effective_threshold = int(db_val)
 
     try:
         conn = sqlite3.connect(str(db_path))
