@@ -352,7 +352,7 @@ def _run_sql_checks(tasks: list[dict[str, Any]], db_path: Path) -> dict[str, lis
                 line = raw_line.strip()
                 if not line.upper().startswith("SQL-CHECK:"):
                     continue
-                sql = line[len("SQL-CHECK:") :].strip()
+                sql = line[len("SQL-CHECK:") :].strip()  # noqa: E203
                 check: dict[str, Any] = {
                     "sql": sql,
                     "passed": False,
