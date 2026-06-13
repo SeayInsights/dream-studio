@@ -56,4 +56,4 @@ Operator-local runtime state is never committed:
 
 `.claude/` describes the Claude Code adapter projection. Dream Studio supports adapter projections for other tools (Codex, Cursor, Copilot, MCP systems, shell tools). No adapter is the source of truth — `~/.dream-studio/state/studio.db` is.
 
-<!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: core/gates/ gains test_fixture_resurrection_guard.py (dead-table ledger builder + test diff scanner). No module boundary or architecture change. -->
+<!-- Last reviewed 2026-06-13 — WO 20ead828: idea-validation mode removed from ds-domains (packs.yaml line 29); it correctly lives under ds-analyze. No directory-tree layout change. -->
