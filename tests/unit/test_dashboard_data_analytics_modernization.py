@@ -72,23 +72,6 @@ def _modern_dashboard_db(tmp_path: Path) -> Path:
         )
         # pi_bugs, pi_violations, pi_dependencies, pi_improvements dropped in migration 084
         # The route guards with object_exists() → returns 0 for their counts
-        conn.execute(
-            "CREATE TABLE pi_improvements(project_id TEXT, status TEXT, priority_score REAL)"
-        )
-        conn.execute(
-            "INSERT INTO pi_improvements(project_id, status, priority_score) VALUES('dream-studio', 'open', 8.5)"
-        )
-        conn.execute(
-            "CREATE TABLE pi_analysis_runs("
-            "run_id TEXT, project_id TEXT, run_type TEXT, started_at TEXT, completed_at TEXT, duration_seconds REAL, "
-            "status TEXT, violations_found INTEGER, bugs_found INTEGER, improvements_suggested INTEGER)"
-        )
-        conn.execute(
-            "INSERT INTO pi_analysis_runs(run_id, project_id, run_type, started_at, completed_at, duration_seconds, "
-            "status, violations_found, bugs_found, improvements_suggested) "
-            "VALUES('run-1', 'dream-studio', 'dashboard_authority', '2026-05-14T00:00:00Z', "
-            "'2026-05-14T00:01:00Z', 60, 'completed', 1, 1, 1)"
-        )
         # execution_events from migration 037 (_built_from_event_id added by migration 059)
         conn.execute(
             "CREATE TABLE execution_events("

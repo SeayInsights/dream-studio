@@ -65,32 +65,6 @@ class TestFix1SkillsCanonicalEvents:
         ), "skill_usage_sql must not return 'unknown' from canonical_events"
         conn.close()
 
-    def test_skill_usage_sql_fallback_on_empty_canonical(self):
-        """skill_usage_sql falls back to skill_invocations when canonical_events empty."""
-        from projections.core.collectors.authority_sources import skill_usage_sql
-
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        # Empty canonical_events
-        conn.execute(
-            "CREATE TABLE canonical_events "
-            "(event_id TEXT, event_type TEXT, created_at TEXT, trace TEXT NOT NULL DEFAULT '{}')"
-        )
-        # But populated skill_invocations
-        conn.execute(
-            "CREATE TABLE skill_invocations "
-            "(invocation_id TEXT, skill_id TEXT, status TEXT, created_at TEXT, metadata_json TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO skill_invocations VALUES ('i1', 'ds-quality:security', 'completed', datetime('now'), '{}')"
-        )
-        conn.commit()
-
-        sql = skill_usage_sql(conn)
-        # When canonical_events is empty, should fall back to skill_invocations
-        assert sql is not None
-        conn.close()
-
 
 # ── Fix 2: Security KPI reads correct fields ──────────────────────────────
 

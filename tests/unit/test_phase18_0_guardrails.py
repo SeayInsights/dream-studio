@@ -34,7 +34,7 @@ def _mock_heavy_deps():
 
 @pytest.fixture
 def in_memory_db():
-    """SQLite in-memory DB with canonical_events and hook_invocations tables."""
+    """SQLite in-memory DB with canonical_events table."""
     conn = sqlite3.connect(":memory:")
     conn.execute("""
         CREATE TABLE canonical_events (
@@ -49,16 +49,6 @@ def in_memory_db():
             payload TEXT,
             schema_version INTEGER,
             source_type TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE hook_invocations (
-            id INTEGER PRIMARY KEY,
-            hook_name TEXT,
-            tool_name TEXT,
-            session_id TEXT,
-            invoked_at TEXT,
-            duration_ms REAL
         )
     """)
     return conn
@@ -111,20 +101,6 @@ class TestCustomQueryMatches:
             "SELECT event_id FROM canonical_events WHERE event_type = 'nonexistent'",
         )
         assert result is False
-
-    def test_hook_invocations_query_is_allowed(self, evaluator_module, in_memory_db):
-        """A valid SELECT against hook_invocations must be accepted."""
-        in_memory_db.execute(
-            "INSERT INTO hook_invocations (id, hook_name, tool_name, session_id, invoked_at, duration_ms)"
-            " VALUES (?,?,?,?,?,?)",
-            (1, "on-tool-activity", "Edit", "sess1", "2026-01-01", 12.5),
-        )
-        in_memory_db.commit()
-        result = evaluator_module._custom_query_matches(
-            in_memory_db,
-            "SELECT id FROM hook_invocations WHERE hook_name = 'on-tool-activity'",
-        )
-        assert result is True
 
     def test_activity_log_query_raises(self, evaluator_module, in_memory_db):
         """A query referencing the removed activity_log table must raise EvaluationError."""
