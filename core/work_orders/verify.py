@@ -325,9 +325,7 @@ def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
 # ── SQL-CHECK executor ─────────────────────────────────────────────────────────
 
 
-def _run_sql_checks(
-    tasks: list[dict[str, Any]], db_path: Path
-) -> dict[str, list[dict[str, Any]]]:
+def _run_sql_checks(tasks: list[dict[str, Any]], db_path: Path) -> dict[str, list[dict[str, Any]]]:
     """Execute SQL-CHECK lines from task acceptance_criteria read-only against the authority DB.
 
     Convention: a line in acceptance_criteria starting with ``SQL-CHECK:`` (case-insensitive)
@@ -354,7 +352,7 @@ def _run_sql_checks(
                 line = raw_line.strip()
                 if not line.upper().startswith("SQL-CHECK:"):
                     continue
-                sql = line[len("SQL-CHECK:"):].strip()
+                sql = line[len("SQL-CHECK:") :].strip()
                 check: dict[str, Any] = {
                     "sql": sql,
                     "passed": False,
