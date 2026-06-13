@@ -17,9 +17,7 @@ def get_config_value(key: str, db_path: Path) -> str | None:
     """Return the stored value for *key*, or None if unset."""
     try:
         with sqlite3.connect(str(db_path)) as conn:
-            row = conn.execute(
-                "SELECT value FROM ds_config WHERE key = ?", (key,)
-            ).fetchone()
+            row = conn.execute("SELECT value FROM ds_config WHERE key = ?", (key,)).fetchone()
             return row[0] if row else None
     except Exception:
         return None
