@@ -123,3 +123,5 @@ Static validation checks that:
 <!-- Last reviewed 2026-06-11 — WO-FULLCI-RED ci_gate.py truncation fix: ci_gate.py updated to emit failures to stderr before JSON truncation. External project validation pipeline logic is unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: ci_gate JSON verdict adds failing_tests list. External project validation pipeline is unchanged — failing_tests is an internal diagnostic field only. -->
+
+<!-- Last reviewed 2026-06-13 — fix/full-ci-duplicate-test-run: removed duplicate pytest+coverage step from full-ci.yml; ci_gate.py already runs the full test suite internally. Bumped timeout-minutes from 45 to 60 as headroom. No change to publication boundary, privacy classification, or gate enforcement policy. -->
