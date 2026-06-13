@@ -102,6 +102,13 @@ Work order type: {work_order_type}
 Tasks that were supposed to be completed:
 {task_list}
 
+IMPORTANT — SQL-CHECK RESULTS: Any task line annotated with "SQL-CHECK RESULT: PASS" or
+"SQL-CHECK RESULT: FAIL" was verified by executing a SQL query directly against the authority
+database. These results are ground truth — they take precedence over diff inference.
+A task with SQL-CHECK RESULT: FAIL MUST receive verdict "missing" regardless of what the diff shows.
+A task with SQL-CHECK RESULT: PASS may still receive "partial" if the diff evidence is otherwise
+incomplete, but the SQL check passing is strong evidence of completion.
+
 Git commits and diffs for this work order:
 {git_diff}
 
@@ -313,6 +320,78 @@ def _read_work_order(conn: Any, work_order_id: str) -> dict[str, Any] | None:
         "sequence_order": row[4],
         "work_order_type": row[5],
     }
+
+
+# ── SQL-CHECK executor ─────────────────────────────────────────────────────────
+
+
+def _run_sql_checks(
+    tasks: list[dict[str, Any]], db_path: Path
+) -> dict[str, list[dict[str, Any]]]:
+    """Execute SQL-CHECK lines from task acceptance_criteria read-only against the authority DB.
+
+    Convention: a line in acceptance_criteria starting with ``SQL-CHECK:`` (case-insensitive)
+    followed by a SELECT statement. The check passes if the query returns at least one row
+    with a truthy first-column value (e.g. a non-zero COUNT). Fails on zero/null/no rows or
+    on any query error.
+
+    Returns a mapping of task_title -> list of {sql, passed, result, error}.
+    Only tasks that have at least one SQL-CHECK line produce an entry.
+    """
+    import sqlite3 as _sqlite3
+
+    results: dict[str, list[dict[str, Any]]] = {}
+    try:
+        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except Exception:
+        return {}
+
+    try:
+        for task in tasks:
+            ac = task.get("acceptance_criteria", "") or ""
+            checks: list[dict[str, Any]] = []
+            for raw_line in ac.splitlines():
+                line = raw_line.strip()
+                if not line.upper().startswith("SQL-CHECK:"):
+                    continue
+                sql = line[len("SQL-CHECK:"):].strip()
+                check: dict[str, Any] = {
+                    "sql": sql,
+                    "passed": False,
+                    "result": None,
+                    "error": None,
+                }
+                try:
+                    row = conn.execute(sql).fetchone()
+                    if row is not None:
+                        val = row[0]
+                        check["result"] = val
+                        check["passed"] = bool(val)
+                    # else: no rows → passed stays False
+                except Exception as exc:
+                    check["error"] = str(exc)
+                checks.append(check)
+            if checks:
+                results[task["title"]] = checks
+    finally:
+        conn.close()
+
+    return results
+
+
+def _format_sql_checks(checks: list[dict[str, Any]]) -> str:
+    """Render SQL-CHECK results as annotated lines for the completion grader prompt."""
+    if not checks:
+        return ""
+    lines: list[str] = []
+    for c in checks:
+        if c.get("error"):
+            lines.append(f"\n   SQL-CHECK RESULT: FAIL (error: {c['error']})")
+        elif c["passed"]:
+            lines.append(f"\n   SQL-CHECK RESULT: PASS (result={c['result']})")
+        else:
+            lines.append(f"\n   SQL-CHECK RESULT: FAIL (result={c['result']})")
+    return "".join(lines)
 
 
 # ── Git diff collection ─────────────────────────────────────────────────────────
@@ -863,8 +942,10 @@ def verify_work_order(
         if not tasks:
             return {"ok": False, "error": f"No tasks found for work order: {work_order_id}"}
 
+        sql_check_results = _run_sql_checks(tasks, db_path)
+
         task_list_str = "\n".join(
-            "{n}. [{st}] {title}: {desc}{ac}".format(
+            "{n}. [{st}] {title}: {desc}{ac}{sql}".format(
                 n=i + 1,
                 st=t["status"],
                 title=t["title"],
@@ -874,6 +955,7 @@ def verify_work_order(
                     if t.get("acceptance_criteria")
                     else ""
                 ),
+                sql=_format_sql_checks(sql_check_results.get(t["title"], [])),
             )
             for i, t in enumerate(tasks)
         )
