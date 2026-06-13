@@ -430,3 +430,70 @@ def test_completion_prompt_template_behavioral_ac_check_not_emit_conditions() ->
 
     assert "Do NOT emit" in _COMPLETION_PROMPT_TEMPLATE
     assert "already present" in _COMPLETION_PROMPT_TEMPLATE
+
+
+# ---------------------------------------------------------------------------
+# _run_sql_checks: pass path
+# ---------------------------------------------------------------------------
+
+
+def test_sql_check_pass(tmp_path: pytest.TempPathFactory) -> None:
+    """SQL-CHECK query returning a non-zero count gives passed=True."""
+    db_path = _make_db(tmp_path)
+
+    import sqlite3 as _sqlite3
+
+    conn = _sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO business_projects"
+        " (project_id, name, description, status, created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?)",
+        ("sql-check-test-id", "SQLCheck", "", "active", NOW, NOW),
+    )
+    conn.commit()
+    conn.close()
+
+    from core.work_orders.verify import _run_sql_checks
+
+    tasks = [
+        {
+            "title": "T1",
+            "description": "insert a row",
+            "acceptance_criteria": (
+                "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
+                " WHERE project_id='sql-check-test-id'"
+            ),
+        }
+    ]
+    results = _run_sql_checks(tasks, db_path)
+    assert "T1" in results
+    assert len(results["T1"]) == 1
+    assert results["T1"][0]["passed"] is True
+    assert results["T1"][0]["error"] is None
+
+
+# ---------------------------------------------------------------------------
+# _run_sql_checks: fail path
+# ---------------------------------------------------------------------------
+
+
+def test_sql_check_fail(tmp_path: pytest.TempPathFactory) -> None:
+    """SQL-CHECK query returning zero gives passed=False."""
+    db_path = _make_db(tmp_path)
+
+    from core.work_orders.verify import _run_sql_checks
+
+    tasks = [
+        {
+            "title": "T1",
+            "description": "check absent row",
+            "acceptance_criteria": (
+                "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
+                " WHERE project_id='does-not-exist'"
+            ),
+        }
+    ]
+    results = _run_sql_checks(tasks, db_path)
+    assert "T1" in results
+    assert results["T1"][0]["passed"] is False
+    assert results["T1"][0]["error"] is None
