@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -100,11 +101,13 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "schema_version INTEGER NOT NULL DEFAULT 1, "
             "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, invocation_mode TEXT)"
         )
+        recent_ts = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         conn.execute(
             "INSERT INTO canonical_events(event_id, event_type, timestamp, trace, severity, payload) "
-            "VALUES('token-evt-1', 'token.consumed', '2026-05-14T00:00:00Z', "
+            "VALUES('token-evt-1', 'token.consumed', ?, "
             "'{\"project_id\": \"dream-studio\"}', 'info', "
-            '\'{"input_tokens": 10, "output_tokens": 20}\')'
+            '\'{"input_tokens": 10, "output_tokens": 20}\')',
+            (recent_ts,),
         )
         conn.commit()
     finally:
