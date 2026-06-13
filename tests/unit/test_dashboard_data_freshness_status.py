@@ -36,12 +36,6 @@ def _drift_db(tmp_path: Path) -> Path:
             "INSERT INTO execution_events(event_id, created_at) VALUES('event-1', '2026-05-14T00:00:00Z')"
         )
         conn.execute("CREATE TABLE dashboard_attention_items(attention_id TEXT, created_at TEXT)")
-        conn.execute("CREATE TABLE skill_invocations(invocation_id TEXT, created_at TEXT)")
-        conn.execute(
-            "CREATE TABLE hook_invocations(invocation_id TEXT, hook_id TEXT, status TEXT, created_at TEXT)"
-        )
-        conn.execute("CREATE TABLE tool_invocations(invocation_id TEXT, created_at TEXT)")
-        conn.execute("CREATE TABLE workflow_invocations(invocation_id TEXT, created_at TEXT)")
         conn.execute(
             "CREATE TABLE token_usage_records("
             "token_usage_id TEXT, input_tokens INTEGER, output_tokens INTEGER, created_at TEXT)"
@@ -51,7 +45,6 @@ def _drift_db(tmp_path: Path) -> Path:
             "VALUES('token-1', 10, 15, '2026-05-14T00:00:00Z')"
         )
         conn.execute("CREATE TABLE validation_results(validation_id TEXT, created_at TEXT)")
-        conn.execute("CREATE TABLE findings(finding_id TEXT, severity TEXT, created_at TEXT)")
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
         conn.commit()
     finally:

@@ -71,25 +71,7 @@ def _schema_drift_db(tmp_path: Path) -> Path:
             "VALUES('pytest-temp-project', 'pytest-temp-project', '', 'deleted', "
             "'C:/Temp/pytest-temp-project', 'python', 0, '2026-05-01T00:00:00Z', '2026-05-14T00:00:00Z')"
         )
-        conn.execute(
-            "CREATE TABLE findings("
-            "finding_id TEXT, scan_id TEXT, category TEXT, severity TEXT, file_path TEXT, start_line INTEGER, "
-            "description TEXT, status TEXT, created_at TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO findings(finding_id, scan_id, category, severity, file_path, start_line, description, status, created_at) "
-            "VALUES('finding-1', 'scan-1', 'test', 'high', 'app.py', 12, 'simulated finding', 'open', '2026-05-14T00:00:00Z')"
-        )
         conn.execute("CREATE VIEW vw_security_summary AS SELECT 1 AS placeholder")
-        conn.execute(
-            "CREATE TABLE hook_invocations("
-            "invocation_id TEXT, project_id TEXT, milestone_id TEXT, task_id TEXT, process_run_id TEXT, "
-            "event_id TEXT, hook_id TEXT, status TEXT, prevented_risky_action INTEGER, purpose TEXT, metadata_json TEXT, created_at TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO hook_invocations(invocation_id, event_id, hook_id, status, purpose, created_at) "
-            "VALUES('hook-1', 'event-1', 'UserPromptSubmit', 'success', 'prompt_guard', '2026-05-14T00:00:00Z')"
-        )
         # canonical_events required by /api/v1/metrics/tokens (canonical_token_metrics reads from it).
         conn.execute(
             "CREATE TABLE canonical_events("
