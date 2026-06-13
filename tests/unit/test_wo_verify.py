@@ -433,6 +433,69 @@ def test_completion_prompt_template_behavioral_ac_check_not_emit_conditions() ->
 
 
 # ---------------------------------------------------------------------------
+# T4: unreviewable grader → close proceeds, verify_warning set, no force needed
+# ---------------------------------------------------------------------------
+
+
+def test_close_proceeds_on_unreviewable_grader(tmp_path: pytest.TempPathFactory) -> None:
+    """close_work_order proceeds when _collect_grader returns no-summary (unreviewable).
+
+    WO-VERIFY-NOSUMMARY T4: mock _collect_grader to return unreviewable; verify
+    close returns ok=True without force=True and records unreviewable_graders.
+    """
+    db_path = _make_db(tmp_path)
+    project_id = str(uuid.uuid4())
+    milestone_id = str(uuid.uuid4())
+    work_order_id = str(uuid.uuid4())
+    # 'infrastructure' type has post_build_gate = 'independent_review'
+    _seed(
+        db_path,
+        project_id=project_id,
+        milestone_id=milestone_id,
+        work_order_id=work_order_id,
+        wo_type="infrastructure",
+    )
+    _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
+
+    planning_root = tmp_path / "planning"
+    mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
+
+    with _patch_db(db_path):
+        with patch(
+            "core.work_orders.verify._collect_grader",
+            return_value=mock_no_summary,
+        ):
+            with patch(
+                "core.work_orders.verify._spawn_grader",
+                return_value=MagicMock(),
+            ):
+                with patch(
+                    "core.work_orders.verify._collect_git_commits",
+                    return_value="diff --git a/fake.py b/fake.py\n+# change",
+                ):
+                    from core.work_orders.close import close_work_order
+
+                    result = close_work_order(
+                        work_order_id=work_order_id,
+                        source_root=REPO_ROOT,
+                        dream_studio_home=tmp_path,
+                        planning_root=planning_root,
+                    )
+
+    assert result["ok"] is True, f"Expected ok=True, got: {result}"
+    assert result.get("forced") is False
+    assert "verify_warning" in result
+
+    # Verdict file must record unreviewable_graders
+    verdict_path = planning_root / "work-orders" / work_order_id / "review-verdict.json"
+    assert verdict_path.is_file()
+    data = json.loads(verdict_path.read_text())
+    assert data["unreviewable"] is True
+    assert "unreviewable_graders" in data
+    assert len(data["unreviewable_graders"]) > 0
+
+
+# ---------------------------------------------------------------------------
 # _run_sql_checks: pass path
 # ---------------------------------------------------------------------------
 
