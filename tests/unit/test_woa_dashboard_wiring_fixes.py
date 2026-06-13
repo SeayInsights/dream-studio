@@ -66,7 +66,6 @@ class TestFix1SkillsCanonicalEvents:
         conn.close()
 
 
-
 # ── Fix 2: Security KPI reads correct fields ──────────────────────────────
 
 
