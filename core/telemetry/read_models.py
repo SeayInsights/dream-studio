@@ -21,7 +21,8 @@ from core.telemetry.execution_spine import dashboard_module_declarations
 
 CORE_TABLES: tuple[str, ...] = (
     "execution_events",
-    "process_runs",
+    # process_runs: empty in production (no process.* events emitted); removed from
+    # core required tables — summaries derive from execution_events.process_run_id.
     "route_decision_records",
     "dashboard_attention_items",
 )
@@ -252,7 +253,17 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                 "scope": _scope_dict(scope),
                 "process_run": _first(
                     conn,
-                    "SELECT * FROM process_runs WHERE process_run_id = ?",
+                    """
+                    SELECT process_run_id,
+                           min(project_id) AS project_id,
+                           min(milestone_id) AS milestone_id,
+                           min(task_id) AS task_id,
+                           min(created_at) AS started_at,
+                           max(created_at) AS ended_at
+                    FROM execution_events
+                    WHERE process_run_id = ?
+                    GROUP BY process_run_id
+                    """,
                     (process_run_id,),
                 ),
                 "events": _rows(
@@ -524,9 +535,7 @@ def _scoped_summary(
         {
             "scope": _scope_dict(scope),
             "entity_counts": _entity_counts(conn, scope),
-            "process_runs": _scoped_rows(
-                conn, "process_runs", scope, order_by="started_at DESC, process_run_id"
-            ),
+            "process_runs": _process_runs_from_events(conn, scope),
             "events": _scoped_rows(
                 conn, "execution_events", scope, order_by="created_at DESC, event_id"
             ),
@@ -1749,6 +1758,33 @@ def _scoped_rows(
 ) -> list[dict[str, Any]]:
     where, params = _where_scope(scope)
     return _rows(conn, f"SELECT * FROM {table} {where} ORDER BY {order_by}", params)
+
+
+def _process_runs_from_events(
+    conn: sqlite3.Connection, scope: ScopeFilter | None
+) -> list[dict[str, Any]]:
+    """Derive process-run summaries from execution_events.process_run_id.
+
+    process_runs is an empty table because no process.* events are emitted by
+    the current runtime. This helper builds equivalent summaries from the
+    execution_events rows that carry process_run_id, which have real data.
+    """
+    where, params = _where_scope(scope)
+    extra = f" AND {where[6:]}" if where else ""
+    return _rows(
+        conn,
+        f"SELECT process_run_id,"
+        f"  min(project_id) AS project_id,"
+        f"  min(milestone_id) AS milestone_id,"
+        f"  min(task_id) AS task_id,"
+        f"  min(created_at) AS started_at,"
+        f"  max(created_at) AS ended_at"
+        f" FROM execution_events"
+        f" WHERE process_run_id IS NOT NULL{extra}"
+        f" GROUP BY process_run_id"
+        f" ORDER BY started_at DESC",
+        params,
+    )
 
 
 def _where_scope(scope: ScopeFilter | None) -> tuple[str, tuple[Any, ...]]:

@@ -381,3 +381,5 @@ controls instead of creating a competing PRD-specific security system.
 <!-- Last reviewed 2026-06-09 — WO-TS3 DuckDB-first read path: project_intelligence.py route changes reviewed. No security review profile pack schema changes. DuckDB analytics store is a derived read model; all security scan, finding, and review evidence still written to SQLite authority (security_events, findings_current_status). The scanner→evidence-surface boundary enforced by this contract is unchanged. -->
 
 <!-- Last reviewed 2026-06-09 — WO-TS4 correction: reverting wrong-scope DuckDB-first paths. No security review profile pack schema changes. Security evidence remains in SQLite authority. Contract unchanged. -->
+
+<!-- Last reviewed 2026-06-14 — WO-DASH-VALIDATION-GAPS (T3): project_intelligence.py classifier change reviewed. No review profile pack schema changes. No security control, scan definition, finding contract, or evidence model changed. Contract unchanged. -->

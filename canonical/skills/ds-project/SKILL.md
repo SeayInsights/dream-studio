@@ -376,3 +376,5 @@ A scoped project passes quality review if:
 A scope session that produces "TBD" in any field has failed the quality bar. Ask for the missing information instead.
 
 <!-- Last reviewed 2026-06-11 — WO-MARKER-FORMAT + remediation (993ba17a): no skill surface change in either PR. PR #278: cross-project overwrite guard + JSON/UUID emitter parse. PR #279 (remediation): added db_path param to _write_project_marker() for project-existence validation against business_projects before writing. Root-cause audit note written to decision_log (decision_id 8cc3a6d0). Neither change affects the skill API seen by the adapter. -->
+
+<!-- Last reviewed 2026-06-14 — WO-DASH-VALIDATION-GAPS (T3): update_project_path() added to core/projects/mutations.py — backfill utility for projects registered without a local directory path (e.g. via early CLI or bulk brownfield import). Emits project.path_set event for audit trail. No new skill mode, no new ds-project routing surface, no skill behavior change. Skill contract unchanged. -->
