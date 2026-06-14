@@ -1281,19 +1281,20 @@ def insert_handoff(
     lessons_json: list | None = None,
     gotchas_hit: list | None = None,
     approaches_json: list | None = None,
+    file_id: str | None = None,
+    checksum: str | None = None,
     db_path: Path | None = None,
 ) -> int | None:
     try:
         with _db_transaction(db_path) as c:
-            # Insert into raw_handoffs (original behavior)
             cur = c.execute(
                 """INSERT INTO raw_handoffs
                    (session_id, project_id, topic, plan_path, pipeline_phase,
                     current_task_id, current_task_name, tasks_completed, tasks_total,
                     branch, last_commit, working, broken, pending_decisions,
                     active_files, next_action, lessons_json, gotchas_hit,
-                    approaches_json, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    approaches_json, file_id, checksum, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id,
                     project_id,
@@ -1314,6 +1315,8 @@ def insert_handoff(
                     json.dumps(lessons_json) if lessons_json is not None else None,
                     json.dumps(gotchas_hit) if gotchas_hit is not None else None,
                     json.dumps(approaches_json) if approaches_json is not None else None,
+                    file_id,
+                    checksum,
                     _NOW(),
                 ),
             )

@@ -173,6 +173,24 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
     except Exception as e:
         print(f"[on-context-threshold] recap write failed: {e}", file=sys.stderr, flush=True)
 
+    # Store recap blob in files.db (category='handoff') so it persists beyond loose .md files.
+    try:
+        from core.files.store import write_file
+        from core.sdlc.cwd_resolver import resolve_project_from_cwd
+
+        ctx_obj = resolve_project_from_cwd()
+        project_id = ctx_obj.project_id if ctx_obj is not None else None
+        write_file(
+            name=f"recap-{sid}",
+            content=recap.encode("utf-8"),
+            content_type="text/markdown",
+            category="handoff",
+            project_id=project_id,
+            correlation_id=session_id,
+        )
+    except Exception:
+        pass
+
 
 def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bool = False) -> None:
     try:
