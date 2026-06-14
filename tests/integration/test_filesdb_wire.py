@@ -188,6 +188,7 @@ def test_write_recap_stores_to_files_db(isolated_home, monkeypatch):
 
         rows = list_files(category="handoff", db_path=files_db)
         assert isinstance(rows, list)
+<<<<<<< HEAD
         assert any(
             "recap" in r["name"] for r in rows
         ), f"Expected a recap row in files.db, got: {[r['name'] for r in rows]}"
