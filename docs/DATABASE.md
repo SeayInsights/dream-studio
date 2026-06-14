@@ -2,6 +2,12 @@
 
 Dream Studio uses SQLite as the local structured authority for operational intelligence. The public repo contains schema migrations, bootstrap code, read models, tests, and docs. The operator's live database is private runtime state.
 
+> **Verify against the live DB, not this doc.** Schema evolves via numbered migrations.
+> Run `py -m interfaces.cli.ds doctor schema_coherence` or query `studio.db` directly
+> to confirm which tables and columns exist. This guide describes the intended authority
+> structure; individual migration files under `core/event_store/migrations/` are the
+> authoritative DDL source.
+
 ## Three-Store Architecture
 
 Dream Studio uses three stores with distinct authority roles:
