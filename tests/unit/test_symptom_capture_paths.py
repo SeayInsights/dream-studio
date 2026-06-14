@@ -71,9 +71,9 @@ def test_create_work_order_accepts_originating_symptom():
     from core.work_orders.mutations import create_work_order
 
     sig = inspect.signature(create_work_order)
-    assert "originating_symptom" in sig.parameters, (
-        "create_work_order() missing originating_symptom parameter — registration path incomplete"
-    )
+    assert (
+        "originating_symptom" in sig.parameters
+    ), "create_work_order() missing originating_symptom parameter — registration path incomplete"
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +111,7 @@ def test_defect_wo_requires_symptom(tmp_path):
     conn.close()
 
     assert row is not None
-    assert row[0] == "SQL-CHECK: SELECT 1", (
-        f"Expected symptom to be stored, got: {row[0]!r}"
-    )
+    assert row[0] == "SQL-CHECK: SELECT 1", f"Expected symptom to be stored, got: {row[0]!r}"
 
 
 def test_set_originating_symptom_returns_error_for_unknown_wo(tmp_path):

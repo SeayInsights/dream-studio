@@ -103,9 +103,9 @@ def test_migration_125_adds_originating_symptom_column(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cols = {row[1] for row in conn.execute("PRAGMA table_info(business_work_orders)").fetchall()}
     conn.close()
-    assert "originating_symptom" in cols, (
-        "originating_symptom column missing from business_work_orders after migration 125"
-    )
+    assert (
+        "originating_symptom" in cols
+    ), "originating_symptom column missing from business_work_orders after migration 125"
 
 
 # ---------------------------------------------------------------------------
@@ -141,9 +141,9 @@ def test_close_blocked_when_symptom_persists(tmp_path):
         )
 
     assert result["ok"] is False, f"Expected close to be blocked, got: {result}"
-    assert any("originating_symptom" in f for f in result.get("failures", [])), (
-        f"Expected originating_symptom failure in result, got failures={result.get('failures')}"
-    )
+    assert any(
+        "originating_symptom" in f for f in result.get("failures", [])
+    ), f"Expected originating_symptom failure in result, got failures={result.get('failures')}"
 
 
 def test_close_blocked_when_symptom_returns_zero(tmp_path):
