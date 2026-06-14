@@ -310,22 +310,19 @@ class TestSessionAccumulator:
 
 
 def _load_dispatch_hooks():
-    """Load .claude/hooks/dispatch/hooks.py by explicit path under a unique name.
+    """Import the canonical dispatch module, ``runtime/dispatch/hooks.py``.
 
-    A bare ``import hooks`` resolves to the top-level ``hooks/`` namespace package
-    (which has no ``_resolve_handlers``). Once any earlier test in the suite caches
-    that module in ``sys.modules``, a later ``import hooks`` returns the cached
-    namespace package regardless of ``sys.path`` insertion — so the dispatch module
-    is loaded directly from its file path here to avoid the collision. This passed in
-    isolation but failed in the full suite (full-ci #359 post-merge).
+    Use the fully-qualified ``runtime.dispatch.hooks`` name — NOT a bare
+    ``import hooks``, which resolves to the top-level ``hooks/`` namespace package
+    (no ``_resolve_handlers``) and, once cached in ``sys.modules`` by an earlier
+    test, shadows any ``sys.path`` insertion. The canonical module is the verbatim
+    source the installer copies to ``.claude/hooks/dispatch/hooks.py`` (which is
+    generated/gitignored and absent in a fresh checkout — full-ci #360 post-merge
+    hit FileNotFoundError loading that path).
     """
-    import importlib.util  # noqa: PLC0415
+    import runtime.dispatch.hooks as dispatch_hooks  # noqa: PLC0415
 
-    path = REPO_ROOT / ".claude" / "hooks" / "dispatch" / "hooks.py"
-    spec = importlib.util.spec_from_file_location("_dispatch_hooks_under_test", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return dispatch_hooks
 
 
 class TestDispatchHookRouting:
