@@ -78,7 +78,14 @@ def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
 
 
 def token_usage_sql(conn: sqlite3.Connection) -> str | None:
-    """Return a dashboard-safe token usage subquery from token_usage_records."""
+    """Return a dashboard-safe token usage subquery.
+
+    Primary: token_usage_records when it has rows — the authoritative write-side store.
+    Fallback: ai_canonical_events WHERE event_type='token.consumed' when
+    token_usage_records is empty but canonical events exist (e.g. PostToolUse hook
+    fired before the materializer ran). Ensures Cost Over Time + Model Distribution
+    charts show real data as soon as events arrive.
+    """
 
     required = {
         "token_usage_id",
@@ -104,6 +111,93 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
     cost_source_expr = _column_or_literal(columns, "cost_source", "'unknown'")
     confidence_expr = _column_or_literal(columns, "accounting_confidence", "'medium'")
     cache_read_expr = _column_or_literal(columns, "cache_read_tokens", "0")
+
+    primary_count = conn.execute("SELECT COUNT(*) FROM token_usage_records").fetchone()[0]
+    if primary_count > 0:
+        return """
+            SELECT
+                token_usage_id AS id,
+                process_run_id AS session_id,
+                project_id,
+                skill_id AS skill_name,
+                input_tokens,
+                output_tokens,
+                model_id AS model,
+                created_at AS recorded_at,
+                NULL AS event_id,
+                total_tokens,
+                estimated_cost,
+                {adapter_expr} AS adapter_id,
+                {provider_expr} AS provider,
+                {billing_expr} AS billing_mode,
+                {token_visibility_expr} AS token_visibility,
+                {cost_visibility_expr} AS cost_visibility,
+                {usage_source_expr} AS usage_source,
+                {cost_source_expr} AS cost_source,
+                {confidence_expr} AS accounting_confidence,
+                {cache_read_expr} AS cache_read_tokens
+            FROM token_usage_records
+        """.format(
+            adapter_expr=adapter_expr,
+            provider_expr=provider_expr,
+            billing_expr=billing_expr,
+            token_visibility_expr=token_visibility_expr,
+            cost_visibility_expr=cost_visibility_expr,
+            usage_source_expr=usage_source_expr,
+            cost_source_expr=cost_source_expr,
+            confidence_expr=confidence_expr,
+            cache_read_expr=cache_read_expr,
+        )
+
+    # Fallback: token_usage_records is empty — project from ai_canonical_events.
+    # token.consumed events carry per-tool-invocation usage from the PostToolUse hook.
+    # Suppressed once token_usage_records is populated to prevent double-counting.
+    try:
+        canonical_count = conn.execute(
+            "SELECT COUNT(*) FROM ai_canonical_events"
+            " WHERE event_type='token.consumed'"
+            " AND json_extract(payload, '$.input_tokens') IS NOT NULL"
+        ).fetchone()[0]
+        if canonical_count > 0:
+            return """
+                SELECT
+                    event_id AS id,
+                    session_id AS session_id,
+                    json_extract(trace, '$.project_id') AS project_id,
+                    NULL AS skill_name,
+                    CAST(COALESCE(json_extract(payload, '$.input_tokens'), 0) AS INTEGER)
+                        AS input_tokens,
+                    CAST(COALESCE(json_extract(payload, '$.output_tokens'), 0) AS INTEGER)
+                        AS output_tokens,
+                    COALESCE(model_id, json_extract(payload, '$.model')) AS model,
+                    received_at AS recorded_at,
+                    event_id AS event_id,
+                    CAST(
+                        COALESCE(json_extract(payload, '$.input_tokens'), 0)
+                        + COALESCE(json_extract(payload, '$.output_tokens'), 0)
+                        AS INTEGER
+                    ) AS total_tokens,
+                    NULL AS estimated_cost,
+                    NULL AS adapter_id,
+                    NULL AS provider,
+                    'unknown' AS billing_mode,
+                    'exact' AS token_visibility,
+                    'unknown' AS cost_visibility,
+                    'canonical_events' AS usage_source,
+                    'unknown' AS cost_source,
+                    'low' AS accounting_confidence,
+                    CAST(
+                        COALESCE(json_extract(payload, '$.cache_read_input_tokens'), 0)
+                        AS INTEGER
+                    ) AS cache_read_tokens
+                FROM ai_canonical_events
+                WHERE event_type = 'token.consumed'
+                  AND json_extract(payload, '$.input_tokens') IS NOT NULL
+            """
+    except Exception:
+        pass
+
+    # token_usage_records exists but is empty and no canonical fallback available.
     return """
         SELECT
             token_usage_id AS id,
