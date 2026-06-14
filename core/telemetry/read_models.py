@@ -752,21 +752,23 @@ def _entity_drilldowns(
 
 
 def _process_run_drilldowns(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    # process_runs table is empty (no process.* events are emitted by the current
+    # runtime). Derive process run drilldowns from execution_events.process_run_id,
+    # which has real data (hook.tool_activity + skill.invoked events carry process_run_id).
     rows = _rows(
         conn,
         """
         SELECT
             process_run_id,
-            project_id,
-            milestone_id,
-            task_id,
-            run_type,
-            status,
-            started_at,
-            ended_at
-        FROM process_runs
+            MAX(project_id) AS project_id,
+            MAX(milestone_id) AS milestone_id,
+            MAX(task_id) AS task_id,
+            COUNT(*) AS event_count,
+            MAX(created_at) AS latest_created_at
+        FROM execution_events
         WHERE process_run_id IS NOT NULL AND TRIM(process_run_id) != ''
-        ORDER BY COALESCE(started_at, ended_at, '') DESC, process_run_id
+        GROUP BY process_run_id
+        ORDER BY latest_created_at DESC, process_run_id
         LIMIT 5
         """,
     )
@@ -776,12 +778,12 @@ def _process_run_drilldowns(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "entity_id": row["process_run_id"],
             "label": row["process_run_id"],
             "api_path": f"/api/telemetry/process-runs/{quote(str(row['process_run_id']), safe='')}",
-            "status": row.get("status"),
-            "run_type": row.get("run_type"),
+            "status": None,
+            "run_type": None,
             "project_id": row.get("project_id"),
             "milestone_id": row.get("milestone_id"),
             "task_id": row.get("task_id"),
-            "latest_created_at": row.get("ended_at") or row.get("started_at"),
+            "latest_created_at": row.get("latest_created_at"),
         }
         for row in rows
     ]

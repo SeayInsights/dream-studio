@@ -43,6 +43,8 @@ def _fallback_hook_invocations(
         conn, "execution_events", ["event_id", "hook_id", "outcome_status", "created_at"]
     ):
         return []
+    # hook.tool_activity is emitted by the hook execution system (5000+ rows in execution_events).
+    # hook_executions is the primary table; this fallback is used only when it is absent.
     query = """
         SELECT
             event_id,
