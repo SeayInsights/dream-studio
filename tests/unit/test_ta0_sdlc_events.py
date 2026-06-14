@@ -169,6 +169,13 @@ def _seed_work_order(conn: sqlite3.Connection, project_id: str, milestone_id: st
         " VALUES (?, ?, ?, 'WO1', 'created', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
         (wid, project_id, milestone_id),
     )
+    # ds_work_orders is the pre-migration-070 source table read by migration 061 backfill.
+    conn.execute(
+        "INSERT INTO ds_work_orders"
+        " (work_order_id, project_id, milestone_id, title, status, work_order_type, created_at, updated_at)"
+        " VALUES (?, ?, ?, 'WO1', 'open', 'feature', '2026-01-03T00:00:00+00:00', '2026-01-03T00:00:00+00:00')",
+        (wid, project_id, milestone_id),
+    )
     conn.commit()
     return wid
 
