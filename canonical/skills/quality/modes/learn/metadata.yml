@@ -48,4 +48,4 @@ compatibility:
 tags: [analysis]
 category: workflow
 triggers: []
-description: "Capture and promote lessons from builds — draft to `meta/draft-lessons/`, Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`. Trigger on `learn:`, `capture lesson:`, or when something notably works or breaks."
+description: "Capture and promote lessons from builds — record to raw_lessons DB, Director review via lesson_queue, promote to memory / skill / agent updates. Trigger on `learn:`, `capture lesson:`, or when something notably works or breaks."

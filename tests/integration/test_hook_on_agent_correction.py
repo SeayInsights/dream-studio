@@ -57,6 +57,8 @@ def test_non_target_file_is_ignored(isolated_home, monkeypatch, handler):
 
 
 def test_pattern_accumulation_drafts_lesson(isolated_home, monkeypatch, handler):
+    import sqlite3
+
     target = isolated_home / ".dream-studio" / "planning" / "director-corrections.md"
     _write_corrections(target, count=3)
     monkeypatch.setenv("CLAUDE_FILE_PATH", str(target))
@@ -73,8 +75,12 @@ def test_pattern_accumulation_drafts_lesson(isolated_home, monkeypatch, handler)
 
     mod.main()
 
-    drafts = list(
-        (isolated_home / ".dream-studio" / "meta" / "draft-lessons").glob("correction-pattern-*.md")
-    )
-    assert len(drafts) == 1
-    assert "route game builds to game agent" in drafts[0].read_text(encoding="utf-8")
+    db_path = isolated_home / ".dream-studio" / "state" / "studio.db"
+    assert db_path.exists(), "studio.db should have been created by insert_lesson()"
+    con = sqlite3.connect(str(db_path))
+    rows = con.execute(
+        "SELECT lesson_id, what_happened FROM raw_lessons WHERE source='on-agent-correction'"
+    ).fetchall()
+    con.close()
+    assert len(rows) == 1
+    assert "route game builds to game agent" in (rows[0][1] or "")

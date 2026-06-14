@@ -100,24 +100,38 @@ def test_write_recap_no_handoff_path(tmp_path, monkeypatch):
 
 
 def test_draft_handoff_lesson_creates_draft(tmp_path, monkeypatch):
+    import sqlite3
+
     monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(
         65.0, "branch: main | last commit: abc | repo: /project", "sess9999", is_pct=True
     )
-    drafts = list((tmp_path / ".dream-studio" / "meta" / "draft-lessons").glob("handoff-*.md"))
-    assert len(drafts) == 1
-    content = drafts[0].read_text(encoding="utf-8")
-    assert "Context Budget Exceeded" in content
+    db_path = tmp_path / ".dream-studio" / "state" / "studio.db"
+    assert db_path.exists(), "studio.db should have been created by insert_lesson()"
+    con = sqlite3.connect(str(db_path))
+    rows = con.execute(
+        "SELECT title FROM raw_lessons WHERE source='on-context-threshold'"
+    ).fetchall()
+    con.close()
+    assert len(rows) == 1
+    assert "Context Budget Exceeded" in rows[0][0]
 
 
 def test_draft_handoff_lesson_no_duplicate(tmp_path, monkeypatch):
+    import sqlite3
+
     monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
-    drafts = list((tmp_path / ".dream-studio" / "meta" / "draft-lessons").glob("handoff-*.md"))
-    assert len(drafts) == 1  # second call is a no-op
+    db_path = tmp_path / ".dream-studio" / "state" / "studio.db"
+    con = sqlite3.connect(str(db_path))
+    rows = con.execute(
+        "SELECT lesson_id FROM raw_lessons WHERE source='on-context-threshold'"
+    ).fetchall()
+    con.close()
+    assert len(rows) == 1  # second call is a no-op (INSERT OR IGNORE)
 
 
 # ── git subprocess exception (lines 40-41) ────────────────────────────────

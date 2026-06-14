@@ -23,35 +23,24 @@ Read `gotchas.yml` in this directory before every invocation.
 Extract lessons from builds and promote them to studio knowledge.
 
 ## Draft lesson format
-Write to `meta/draft-lessons/YYYY-MM-DD-<topic>.md`:
-```markdown
-# Draft Lesson: [topic]
-Date: YYYY-MM-DD
-Source: [what build/session this came from]
-Status: COMPLETE
-
-## What happened
-[Concrete description — what worked or what broke]
-
-## Lesson
-[The reusable insight — stated as a rule or pattern]
-
-## Evidence
-[Specific files, commits, errors, or outcomes that support this]
-
-## Applies to
-[When should this lesson be applied? Which domains/tools/patterns?]
-```
+Lessons are recorded in the authority DB (`studio.db` raw_lessons table), NOT as files.
+Call `insert_lesson()` or use `ds lesson-queue` CLI. Fields:
+- `source` — e.g. `daily-harvest`, `on-build`, `on-debug`
+- `title` — short descriptive title
+- `what_happened` — concrete description of what worked or broke
+- `lesson` — the reusable insight as a rule or pattern
+- `evidence` — specific files, commits, errors, or outcomes
+- `confidence` — `low`, `medium`, or `high`
 
 ## Promotion flow
-1. **Capture** — Write the draft lesson to `meta/draft-lessons/`. If a maintained Dream Studio lesson persistence interface is available, record the lesson through it as well.
-2. **Accumulate** — Drafts sit until Director reviews (via `on-meta-review` or manual check)
-3. **Review** — Director approves, edits, or rejects each draft
+1. **Capture** — Record via the DB interface: call `insert_lesson()` or invoke this skill.
+2. **Accumulate** — Draft rows in raw_lessons sit until Director reviews
+3. **Review** — Director runs `ds lesson-queue list` to see pending lessons
 4. **Promote** — Approved lessons become:
    - Memory entries (if long-term knowledge)
    - Skill updates (if pattern should change a skill's instructions)
    - Agent updates (if behavior should change an agent's config)
-5. **Archive** — Promoted drafts move to `meta/lessons/` with status: PROMOTED
+5. **Archive** — Mark promoted via `ds lesson-queue promote <lesson_id> --target ...`
 
 ## Harvest Mode
 
@@ -68,15 +57,16 @@ If missing or empty: stop and output — "Harvest not configured. Run `workflow:
 ### Scan protocol (run in this order)
 
 **Step 1 — Backlog first**
-Scan `meta/draft-lessons/`. For each file, present inline:
+Query pending lessons: `py -m interfaces.cli.ds lesson-queue list` (reads raw_lessons WHERE status='draft'). For each, present inline:
 ```
 Draft: [title]
-File: meta/draft-lessons/[filename]
+ID: [lesson_id]
+Source: [source]
 Lesson: [one-line summary]
 Target: skills/[skill]/gotchas.yml → [avoid|best_practices|edge_cases]
 Action? [promote / reject / defer]
 ```
-Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml. On "reject" → move file to `meta/lessons/` with `Status: REJECTED`. On "defer" → leave as-is.
+Wait for Director response before writing anything. On "promote" → write entry to target gotchas.yml + `ds lesson-queue promote <lesson_id> --target ...`. On "reject" → `ds lesson-queue reject <lesson_id>`. On "defer" → leave as-is.
 
 **Step 2 — Session history**
 Determine scan scope from `config.yml`:
@@ -138,13 +128,13 @@ Lightweight end-of-day learning capture. Scoped to today only — no cross-proje
    - Any recap `Risk flags` with identified root causes
    - Any commit that was a fix for something that broke during the build
 3. Apply anti-bloat rules from Harvest Mode:
-   - Dedup against existing `meta/draft-lessons/` and `skills/*/gotchas.yml`
-   - Only draft lessons with evidence from the day's work
-   - ≤5 new drafts per daily run — rank by significance
-4. Write drafts to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` with:
-   - `Source: daily-harvest`
-   - `Confidence: medium` (single-day evidence)
-5. Output summary: "Daily harvest: N candidates found, M drafts written, K skipped (already captured)"
+   - Dedup against existing raw_lessons rows and `skills/*/gotchas.yml` (INSERT OR IGNORE handles duplicates)
+   - Only record lessons with evidence from the day's work
+   - ≤5 new records per daily run — rank by significance
+4. Record via `insert_lesson()` with:
+   - `source: daily-harvest`
+   - `confidence: medium` (single-day evidence)
+5. Output summary: "Daily harvest: N candidates found, M recorded, K skipped (already captured)"
 
 ### No-harvest conditions
 If no corrections, risk flags, or notable patterns found today: output "Clean day — no new patterns." Do not create empty drafts.
@@ -158,7 +148,7 @@ If no corrections, risk flags, or notable patterns found today: output "Clean da
 
 ## Rules
 - Draft lessons are proposals — Director decides what gets promoted
-- One lesson per file — don't combine unrelated insights
+- One lesson per DB row — don't combine unrelated insights
 - Be specific: "D1 doesn't enforce foreign keys" not "databases are tricky"
 - Include evidence — lessons without evidence are opinions
-- Create `meta/draft-lessons/` directory if it doesn't exist
+- Lessons live in studio.db raw_lessons — never write lesson .md files to meta/draft-lessons/

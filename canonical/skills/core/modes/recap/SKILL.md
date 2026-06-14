@@ -45,11 +45,11 @@ Record what happened in a build so future sessions and the Improvement Loop (Eng
 7. **Auto-draft** — After writing the recap file, scan what was captured for:
    - Any Director correction or approach override during the session
    - Any "Risk flags" entry that has an identified root cause (not just "risk exists" but "why it happened")
-   If found: write a draft lesson to `meta/draft-lessons/YYYY-MM-DD-<topic>.md` using the standard draft lesson format, with:
-   - `Source: auto-harvest (recap)`
-   - `Confidence: high` (session context is still active — this is the richest capture moment)
-   - Pre-fill "What happened", "Lesson", "Evidence", and "Applies to" from the recap content
-   If nothing qualifies: skip silently — do not create an empty draft file.
+   If found: record a draft lesson via `insert_lesson()` (DB, NOT a file) with:
+   - `source: auto-harvest (recap)`
+   - `confidence: high` (session context is still active — this is the richest capture moment)
+   - Pre-fill `what_happened`, `lesson`, `evidence` from the recap content
+   If nothing qualifies: skip silently — do not write lesson files.
 
 ## Output format
 ```markdown

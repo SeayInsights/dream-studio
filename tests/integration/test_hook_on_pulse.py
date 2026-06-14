@@ -43,10 +43,16 @@ def test_respects_github_repo_from_config(isolated_home, monkeypatch, handler):
 
 
 def test_pending_drafts_are_counted(isolated_home, handler):
-    drafts = isolated_home / ".dream-studio" / "meta" / "draft-lessons"
-    drafts.mkdir(parents=True, exist_ok=True)
-    (drafts / "one.md").write_text("x", encoding="utf-8")
-    (drafts / "two.md").write_text("x", encoding="utf-8")
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+    from core.event_store.studio_db import insert_lesson
+    from core.config import paths
+
+    db_path = paths.state_dir() / "studio.db"
+    insert_lesson("test-lesson-1", "test-source", "Lesson One", db_path=db_path)
+    insert_lesson("test-lesson-2", "test-source", "Lesson Two", db_path=db_path)
 
     mod = handler("on-pulse")
     mod.main()

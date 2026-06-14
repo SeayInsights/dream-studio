@@ -148,7 +148,9 @@ def log_correction(correction: dict, meta_dir: Path) -> None:
 
 
 def check_and_draft_lesson(correction: dict, meta_dir: Path) -> None:
-    """Check for pattern accumulation and draft lesson if threshold met."""
+    """Check for pattern accumulation and draft lesson in DB if threshold met."""
+    from core.event_store.studio_db import insert_lesson
+
     pattern = correction.get("Pattern to apply", "").strip()
     if not pattern:
         return
@@ -160,50 +162,37 @@ def check_and_draft_lesson(correction: dict, meta_dir: Path) -> None:
     if match_count < ACCUMULATION_THRESHOLD:
         return
 
-    drafts_dir = meta_dir / "draft-lessons"
-    drafts_dir.mkdir(parents=True, exist_ok=True)
     slug = re.sub(r"[^a-z0-9]+", "-", pattern.lower())[:50].strip("-") or "pattern"
-    draft_path = drafts_dir / f"correction-pattern-{slug}.md"
+    lesson_id = f"correction-pattern-{slug}"
 
-    if draft_path.exists():
-        return
-
-    timestamp = datetime.now(timezone.utc).isoformat()
-    evidence = []
+    evidence_lines = []
     try:
         for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
             parts = line.split("\t")
             if len(parts) >= 3 and parts[2].strip() == pattern:
-                evidence.append(f"- {parts[0]} (session: {parts[1]})")
+                evidence_lines.append(f"- {parts[0]} (session: {parts[1]})")
     except Exception:
         pass
 
-    draft = (
-        f"---\n"
-        f"type: draft-lesson\n"
-        f"source: on-agent-correction\n"
-        f"status: draft\n"
-        f"created: {timestamp}\n"
-        f"---\n\n"
-        f"## Proposed Lesson\n\n"
-        f"**Pattern:** {pattern}\n\n"
-        f"This pattern has appeared in {match_count} corrections. Consider promoting "
-        f"it to a permanent Derived Rule in director-corrections.md.\n\n"
-        f"## Evidence ({match_count} occurrences)\n\n"
-        + "\n".join(evidence)
-        + "\n\n"
-        + "## Director Action\n\n"
-        + "- [ ] Promote to Derived Rule\n"
-        + "- [ ] Edit and promote\n"
-        + "- [ ] Reject (delete this file)\n"
+    db_path = paths.state_dir() / "studio.db"
+    inserted = insert_lesson(
+        lesson_id,
+        "on-agent-correction",
+        f"Correction Pattern: {pattern}",
+        what_happened=(
+            f"Pattern '{pattern}' appeared {match_count}x in corrections. "
+            f"Consider promoting to a permanent Derived Rule."
+        ),
+        evidence="\n".join(evidence_lines) if evidence_lines else None,
+        confidence="medium",
+        db_path=db_path,
     )
-    draft_path.write_text(draft, encoding="utf-8")
-    print(
-        f"\n[dream-studio] SENSOR: Pattern repeated {match_count}x — draft lesson created\n"
-        f"  -> Pattern: {pattern}\n"
-        f"  -> Review: {draft_path}\n",
-        flush=True,
-    )
+    if inserted:
+        print(
+            f"\n[dream-studio] SENSOR: Pattern repeated {match_count}x — draft lesson captured (DB lesson_id: {lesson_id})\n"
+            f"  -> Pattern: {pattern}\n",
+            flush=True,
+        )
 
 
 def print_logged_message(correction: dict) -> None:

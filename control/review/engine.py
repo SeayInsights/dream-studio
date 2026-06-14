@@ -221,36 +221,34 @@ def generate_review(
 
 
 def get_pending_drafts() -> list[str]:
-    """Get list of pending draft lessons."""
-    drafts_dir = paths.meta_dir() / "draft-lessons"
-    return sorted(f.name for f in drafts_dir.glob("*.md")) if drafts_dir.exists() else []
+    """Get lesson_ids of pending draft lessons from DB."""
+    from core.event_store.studio_db import get_pending_lessons
+
+    return [row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")]
 
 
 def draft_theme_lessons(themes: list[tuple[str, int]], timestamp: str) -> list[str]:
-    """Draft lessons for recurring themes."""
-    drafts_dir = paths.meta_dir() / "draft-lessons"
-    drafts_dir.mkdir(parents=True, exist_ok=True)
+    """Draft lessons for recurring themes into the DB. Returns list of lesson_ids drafted."""
+    from core.event_store.studio_db import insert_lesson
+
+    db_path = paths.state_dir() / "studio.db"
     drafted = []
     for keyword, count in themes:
         if count < THEME_DRAFT_THRESHOLD:
             continue
         slug = keyword.lower().strip()
-        draft_path = drafts_dir / f"theme-{slug}-{timestamp[:10]}.md"
-        if draft_path.exists():
-            continue
-        draft = (
-            f"---\ntype: draft-lesson\nsource: on-meta-review\nstatus: draft\ncreated: {timestamp}\n---\n\n"
-            f"## Recurring Theme: {keyword}\n\n"
-            f"This theme appeared {count}x across the last {SESSION_COUNT} sessions.\n\n"
-            f"A recurring theme may indicate:\n"
-            f"- A sustained initiative (good — track progress)\n"
-            f"- A recurring problem (needs a permanent fix or new skill)\n"
-            f"- A workflow gap (the system keeps needing manual intervention)\n\n"
-            f"## Director Action\n\n"
-            f"- [ ] Sustained initiative — no action needed\n"
-            f"- [ ] Recurring problem — create a skill or rule to address it\n"
-            f"- [ ] Reject (delete this file)\n"
+        lesson_id = f"theme-{slug}-{timestamp[:10]}"
+        inserted = insert_lesson(
+            lesson_id,
+            "on-meta-review",
+            f"Recurring Theme: {keyword}",
+            what_happened=(
+                f"Theme '{keyword}' appeared {count}x across the last {SESSION_COUNT} sessions. "
+                f"May indicate a sustained initiative, recurring problem, or workflow gap."
+            ),
+            confidence="low",
+            db_path=db_path,
         )
-        draft_path.write_text(draft, encoding="utf-8")
-        drafted.append(draft_path.name)
+        if inserted:
+            drafted.append(lesson_id)
     return drafted

@@ -7,7 +7,7 @@ avoid:
     discovered: 2026-04-29
     title: "Never write harvest output directly to skills/*/gotchas.yml or memory files"
     context: "Harvest runs with broad context across sessions and projects. Auto-promoting findings without Director review risks writing incorrect, stale, or domain-specific patterns into core skill files that affect every future session."
-    fix: "All harvest output goes to meta/draft-lessons/ first. Director must explicitly say 'promote this' in conversation before any gotchas.yml or memory file is written."
+    fix: "All harvest output goes to the raw_lessons DB (raw_lessons table) first via insert_lesson(). Director must explicitly say 'promote this' in conversation before any gotchas.yml or memory file is written."
 
   - id: dedup-before-draft
     severity: high

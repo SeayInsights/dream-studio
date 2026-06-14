@@ -124,35 +124,21 @@ def check_full_ci_on_main(repo: str) -> str | None:
 
 
 def check_pending_drafts() -> list[str]:
-    drafts_dir = paths.meta_dir() / "draft-lessons"
-    if not drafts_dir.exists():
-        return []
+    """Return lesson_ids of pending draft lessons from DB."""
     try:
-        files = sorted(drafts_dir.glob("*.md"))
-    except OSError:
+        from core.event_store.studio_db import get_pending_lessons
+
+        return [row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")]
+    except Exception:
         return []
-    return [f.name for f in files]
 
 
 def auto_archive_stale_drafts() -> int:
-    """Move drafts older than DRAFT_STALE_DAYS to draft-lessons/archive/. Returns count moved."""
-    drafts_dir = paths.meta_dir() / "draft-lessons"
-    if not drafts_dir.exists():
-        return 0
-    import time as _time
+    """No-op: stale-archiving is a file-system concept; DB rows don't expire this way.
 
-    cutoff = _time.time() - (DRAFT_STALE_DAYS * 86400)
-    archive_dir = drafts_dir / "archive"
-    moved = 0
-    try:
-        for f in drafts_dir.glob("*.md"):
-            if f.stat().st_mtime < cutoff:
-                archive_dir.mkdir(exist_ok=True)
-                f.rename(archive_dir / f.name)
-                moved += 1
-    except Exception:
-        pass
-    return moved
+    Kept for API compatibility — returns 0. Lesson triage is via lesson_queue or the DB directly.
+    """
+    return 0
 
 
 def check_corrections_growth() -> tuple[int, str]:

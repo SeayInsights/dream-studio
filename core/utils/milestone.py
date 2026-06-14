@@ -68,8 +68,10 @@ def print_checkpoint(marker: dict) -> None:
     )
 
 
-def draft_lesson_if_long(marker: dict, meta_dir: Path) -> None:
-    """Draft retrospective lesson if milestone elapsed > DIFFICULTY_THRESHOLD_MINUTES."""
+def draft_lesson_if_long(marker: dict, meta_dir: Path, db_path: Path | None = None) -> None:
+    """Draft retrospective lesson in DB if milestone elapsed > DIFFICULTY_THRESHOLD_MINUTES."""
+    from core.event_store.studio_db import insert_lesson
+
     command = marker.get("command", "unknown")
     started_at = marker.get("started_at", "unknown")
     completed_at = marker.get("completed_at", "unknown")
@@ -84,45 +86,28 @@ def draft_lesson_if_long(marker: dict, meta_dir: Path) -> None:
     if elapsed_min < DIFFICULTY_THRESHOLD_MINUTES:
         return
 
-    drafts_dir = meta_dir / "draft-lessons"
-    drafts_dir.mkdir(parents=True, exist_ok=True)
-
     date_str = utcnow().strftime("%Y-%m-%d")
     slug = re.sub(r"[^a-z0-9]+", "-", command.lower())[:40].strip("-") or "milestone"
-    draft_path = drafts_dir / f"long-milestone-{date_str}-{slug}.md"
+    lesson_id = f"long-milestone-{date_str}-{slug}"
 
-    if draft_path.exists():
-        return
-
-    draft = (
-        f"---\n"
-        f"type: draft-lesson\n"
-        f"source: on-milestone-end\n"
-        f"status: draft\n"
-        f"created: {completed_at}\n"
-        f"---\n\n"
-        f"## Long-Running Milestone Detected\n\n"
-        f"**Command:** {command}\n"
-        f"**Started:** {started_at}\n"
-        f"**Completed:** {completed_at}\n"
-        f"**Elapsed:** {elapsed_min:.0f} minutes (threshold: {DIFFICULTY_THRESHOLD_MINUTES} min)\n\n"
-        f"## Retrospective Prompts\n\n"
-        f"1. Was the scope appropriate for a single milestone?\n"
-        f"2. Did the agent hit unexpected complexity or blockers?\n"
-        f"3. Should this task have been split into smaller milestones?\n"
-        f"4. Was there thrashing (repeated attempts at the same thing)?\n"
-        f"5. Any patterns here that apply to future similar tasks?\n\n"
-        f"## Director Action\n\n"
-        f"- [ ] Add lesson to patterns (scope/splitting guidance)\n"
-        f"- [ ] No action needed (task was legitimately complex)\n"
-        f"- [ ] Reject (delete this file)\n"
+    _db = db_path or (meta_dir.parent / "state" / "studio.db")
+    inserted = insert_lesson(
+        lesson_id,
+        "on-milestone-end",
+        "Long-Running Milestone Detected",
+        what_happened=(
+            f"Command '{command}' took {elapsed_min:.0f} min"
+            f" (threshold: {DIFFICULTY_THRESHOLD_MINUTES} min)."
+            f" Started: {started_at}. Completed: {completed_at}."
+        ),
+        confidence="medium",
+        db_path=_db,
     )
-    draft_path.write_text(draft, encoding="utf-8")
-    print(
-        f"  -> SENSOR: Milestone took {elapsed_min:.0f} min — draft lesson created\n"
-        f"     Review: {draft_path}\n",
-        flush=True,
-    )
+    if inserted:
+        print(
+            f"  -> SENSOR: Milestone took {elapsed_min:.0f} min — draft lesson captured (DB lesson_id: {lesson_id})\n",
+            flush=True,
+        )
 
 
 def write_marker(state_dir: Path, command: str) -> bool:
