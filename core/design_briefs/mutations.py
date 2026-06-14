@@ -151,11 +151,8 @@ def lock_design_brief(
             )
         except Exception:
             pass
-        conn.execute(
-            "UPDATE business_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
-            (now, brief_id),
-        )
-        conn.commit()
+        # DesignBriefProjection applies status='locked' from the design_brief.locked event.
+        # No direct UPDATE here — projection is the sole writer (Phase 18.2 Fix #2 contract).
     return {"ok": True, "brief_id": brief_id, "status": "locked", "locked_at": now}
 
 
