@@ -128,7 +128,9 @@ def check_pending_drafts() -> list[str]:
     try:
         from core.event_store.studio_db import get_pending_lessons
 
-        return [row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")]
+        return [
+            row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")
+        ]
     except Exception:
         return []
 

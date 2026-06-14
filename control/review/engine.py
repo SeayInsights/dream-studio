@@ -224,7 +224,9 @@ def get_pending_drafts() -> list[str]:
     """Get lesson_ids of pending draft lessons from DB."""
     from core.event_store.studio_db import get_pending_lessons
 
-    return [row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")]
+    return [
+        row["lesson_id"] for row in get_pending_lessons(db_path=paths.state_dir() / "studio.db")
+    ]
 
 
 def draft_theme_lessons(themes: list[tuple[str, int]], timestamp: str) -> list[str]:

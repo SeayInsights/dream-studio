@@ -113,8 +113,6 @@ def _scan_session_history(topic: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-
-
 def _scan_draft_lessons(topic: str) -> list[dict]:
     """Return up to MAX_LESSONS draft lessons matching topic keywords (from DB raw_lessons)."""
     tokens = _keywords(topic)
@@ -131,9 +129,22 @@ def _scan_draft_lessons(topic: str) -> list[dict]:
 
     matched: list[dict] = []
     for row in rows:
-        haystack = (row.get("title") or "") + " " + (row.get("what_happened") or "") + " " + (row.get("lesson") or "")
+        haystack = (
+            (row.get("title") or "")
+            + " "
+            + (row.get("what_happened") or "")
+            + " "
+            + (row.get("lesson") or "")
+        )
         if _matches(haystack, tokens):
-            matched.append({"title": row.get("title", ""), "date": (row.get("created_at", "") or "")[:10], "content": haystack, "path": row.get("lesson_id", "")})
+            matched.append(
+                {
+                    "title": row.get("title", ""),
+                    "date": (row.get("created_at", "") or "")[:10],
+                    "content": haystack,
+                    "path": row.get("lesson_id", ""),
+                }
+            )
             if len(matched) >= MAX_LESSONS:
                 break
 

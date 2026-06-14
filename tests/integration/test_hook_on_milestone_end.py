@@ -49,9 +49,7 @@ def test_long_milestone_drafts_lesson(isolated_home, handler):
     db_path = isolated_home / ".dream-studio" / "state" / "studio.db"
     assert db_path.exists(), "studio.db should have been created by insert_lesson()"
     con = sqlite3.connect(str(db_path))
-    rows = con.execute(
-        "SELECT title FROM raw_lessons WHERE source='on-milestone-end'"
-    ).fetchall()
+    rows = con.execute("SELECT title FROM raw_lessons WHERE source='on-milestone-end'").fetchall()
     con.close()
     assert len(rows) == 1
     assert "Long-Running Milestone" in rows[0][0]

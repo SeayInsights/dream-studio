@@ -195,7 +195,10 @@ def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bo
             db_path=paths.state_dir() / "studio.db",
         )
         if inserted:
-            print(f"  -> SENSOR: Handoff retrospective drafted (DB lesson_id: {lesson_id})\n", flush=True)
+            print(
+                f"  -> SENSOR: Handoff retrospective drafted (DB lesson_id: {lesson_id})\n",
+                flush=True,
+            )
     except Exception:
         pass
 
