@@ -34,6 +34,17 @@ def normalize_user_prompt_submit(
     ]
 
 
+def _read_session_accumulator(session_id: str) -> dict[str, Any]:
+    """Read per-session token totals written by token_capture after each tool call."""
+    import json as _json
+
+    acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
+    try:
+        return _json.loads(acc_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError, OSError):
+        return {}
+
+
 def normalize_stop(
     payload: dict[str, Any], root: Path | None = None
 ) -> list[CanonicalEventEnvelope]:
@@ -50,6 +61,10 @@ def normalize_stop(
         val = usage.get(key) if usage else payload.get(key)
         if val is not None:
             token_payload[key] = val
+    # Claude Code's Stop payload carries no usage field — fall back to the
+    # per-session accumulator written by token_capture after each tool call.
+    if not token_payload and session_id:
+        token_payload = _read_session_accumulator(session_id)
     return [
         CanonicalEventEnvelope(
             event_type=EventType.TOKEN_CONSUMPTION_RECORDED.value,

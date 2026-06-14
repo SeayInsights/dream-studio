@@ -478,6 +478,13 @@ def main() -> None:
     except ImportError:
         logger.warning("FindingsProjection not found — skipping spine registration.")
 
+    try:
+        from core.projections.token_projection import TokenConsumptionProjection
+
+        runner.register(TokenConsumptionProjection())
+    except ImportError:
+        logger.warning("TokenConsumptionProjection not found — skipping registration.")
+
     runner.run()
 
 

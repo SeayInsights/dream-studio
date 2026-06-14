@@ -6,8 +6,10 @@ All errors are logged to the diagnostic stream. This function never raises.
 
 from __future__ import annotations
 
+import json
 import subprocess
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from canonical.events.envelope import CanonicalEventEnvelope
@@ -204,6 +206,31 @@ def _capture_platform_context() -> dict[str, Any]:
     return {}
 
 
+def _update_session_accumulator(session_id: str, token_payload: dict[str, Any]) -> None:
+    """Merge new token counts into the per-session accumulator file.
+
+    The accumulator lets normalize_stop() reconstruct per-session totals when
+    Claude Code's Stop payload carries no usage field.
+    """
+    acc_path = Path.home() / ".dream-studio" / "state" / f"session-tokens-{session_id}.json"
+    try:
+        try:
+            existing: dict[str, Any] = json.loads(acc_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            existing = {}
+        for key in (
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_input_tokens",
+            "cache_read_input_tokens",
+        ):
+            existing[key] = int(existing.get(key) or 0) + int(token_payload.get(key) or 0)
+        acc_path.parent.mkdir(parents=True, exist_ok=True)
+        acc_path.write_text(json.dumps(existing), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def handle_post_tool_use(payload: dict[str, Any]) -> None:
     """Process a PostToolUse hook payload and emit token.consumed to spool.
 
@@ -332,6 +359,10 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
                 session_id=session_id,
                 machine_id=machine_id,
             )
+
+        # Step 8: Update per-session accumulator so normalize_stop can source totals.
+        if session_id:
+            _update_session_accumulator(session_id, token_payload)
 
     except Exception as exc:
         log_diagnostic(
