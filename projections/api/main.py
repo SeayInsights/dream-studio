@@ -90,6 +90,9 @@ app.include_router(extensions_api_router, prefix="/api/v1/intelligence", tags=["
 app.include_router(evals_router, prefix="/api/v1/evals", tags=["evals"])
 app.include_router(eval_registry_router, prefix="/api/v1/eval", tags=["evals"])
 app.include_router(config_router, prefix="/api/v1", tags=["config"])
+# v2 routes — new dashboard panels use /api/v2 by convention
+app.include_router(eval_registry_router, prefix="/api/v2/eval", tags=["evals-v2"])
+app.include_router(config_router, prefix="/api/v2", tags=["config-v2"])
 
 
 # Frontend routes

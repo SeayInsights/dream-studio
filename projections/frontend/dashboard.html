@@ -880,13 +880,6 @@
                     </div>
                 </div>
 
-                <div class="mt-5">
-                    <h4 class="text-sm font-semibold text-gray-800 mb-2">Drilldown Detail</h4>
-                    <div id="telemetry-drilldown-detail" class="rounded-md border border-gray-200 p-3 text-sm text-gray-600">
-                        Select a telemetry drilldown to inspect derived detail.
-                    </div>
-                </div>
-
                 <div class="mt-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
                         <h4 class="text-sm font-semibold text-gray-800 mb-2">Module Availability</h4>
@@ -925,55 +918,6 @@
                     <div class="control-plane-card p-4">
                         <h4 class="text-sm font-semibold text-gray-900">Dashboard Authority State</h4>
                         <div id="telemetry-authority-state-rollup" class="mt-3 space-y-2 text-sm text-gray-600">Authority state is loading.</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Shared Intelligence Authority Surface -->
-            <section id="shared-intelligence-section" class="bg-white rounded-lg shadow p-6 mb-8" data-derived-view="true" data-primary-authority="false" data-routing-authority="false">
-                <div class="flex flex-col gap-2 mb-5 md:flex-row md:items-start md:justify-between">
-                    <div>
-                        <h3 class="text-lg font-semibold text-gray-900">Shared Intelligence Authority</h3>
-                        <p class="text-sm text-gray-500">Adapter-neutral learning, hardening, context, and model/provider signals.</p>
-                    </div>
-                    <div class="text-xs text-gray-500 md:text-right">
-                        <div id="shared-intelligence-status">Loading shared intelligence...</div>
-                        <div id="shared-intelligence-generated-at">Snapshot: --</div>
-                    </div>
-                </div>
-
-                <div id="shared-intelligence-warning" class="hidden mb-4 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                    Shared intelligence routes are unavailable. Telemetry and legacy dashboard sections remain active.
-                </div>
-
-                <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Learning & Hardening</h4>
-                        <div id="shared-learning-list" class="mt-3 space-y-2 text-sm text-gray-600">No learning events recorded for this snapshot.</div>
-                        <div id="shared-hardening-list" class="mt-3 space-y-2 text-sm text-gray-600">No hardening candidates awaiting review.</div>
-                    </div>
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Adapter Projections</h4>
-                        <div id="shared-adapter-projection-list" class="mt-3 space-y-2 text-sm text-gray-600">Adapter projections are loading.</div>
-                        <div id="shared-adapter-staleness-list" class="mt-3 space-y-2 text-sm text-gray-600">Adapter staleness checks are loading.</div>
-                    </div>
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Context Packets</h4>
-                        <div id="shared-context-packet-summary" class="mt-3 space-y-2 text-sm text-gray-600">Context packet preview is loading.</div>
-                    </div>
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Capability Routing</h4>
-                        <div id="shared-capability-route-list" class="mt-3 space-y-2 text-sm text-gray-600">No capability route recommendations recorded for this snapshot.</div>
-                    </div>
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Model & Provider Registry</h4>
-                        <div id="shared-model-provider-list" class="mt-3 space-y-2 text-sm text-gray-600">No model/provider profiles recorded for this snapshot.</div>
-                    </div>
-                    <div class="control-plane-card p-4">
-                        <h4 class="text-sm font-semibold text-gray-900">Authority Boundary</h4>
-                        <div id="shared-authority-metadata" class="mt-3 space-y-2 text-sm text-gray-600">
-                            Dashboard output is a rendered view. Dream Studio authority remains in PRD, Work Orders, evidence, validations, and SQLite records.
-                        </div>
                     </div>
                 </div>
             </section>
@@ -1056,6 +1000,46 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Adapter Projections Panel (adapter_authority_profiles has data) -->
+            <div class="bg-white rounded-lg shadow p-6 mt-6">
+                <div class="flex items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Adapter Projections</h3>
+                    <span class="info-icon">i
+                        <span class="info-tooltip">Registered adapter projections from adapter_authority_profiles. Shows which adapters are active and whether config writes are authorized.</span>
+                    </span>
+                </div>
+                <div id="adapter-projections-body" class="space-y-2 text-sm text-gray-600">Loading...</div>
+            </div>
+
+            <!-- Development — Not Yet Wired -->
+            <details class="developer-diagnostics mt-8">
+                <summary>Development — Not Yet Wired (click to expand)</summary>
+                <p class="mt-2 mb-4 text-xs text-gray-500">These surfaces exist in the dashboard but are backed by empty or absent source tables. They will populate automatically once the indicated pipeline lands.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div class="rounded-md border border-gray-200 bg-white p-4">
+                        <div class="font-semibold text-gray-700 text-sm mb-1">Traceability Drilldown Detail</div>
+                        <div class="text-xs text-gray-500">Source: <code>process_runs</code> — 0 rows. Populates once WO-READMODEL-WIRING lands and process_runs are emitted.</div>
+                        <div id="telemetry-drilldown-detail" class="mt-2 rounded border border-gray-100 p-2 text-xs text-gray-400">Select a drilldown entry from Telemetry Traceability to inspect process-run detail.</div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-white p-4">
+                        <div class="font-semibold text-gray-700 text-sm mb-1">SI: Learning &amp; Hardening</div>
+                        <div class="text-xs text-gray-500">Source: <code>learning_event_records</code> — 0 rows. Populates once WO-LEARNING-PIPELINE lands.</div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-white p-4">
+                        <div class="font-semibold text-gray-700 text-sm mb-1">SI: Context Packets</div>
+                        <div class="text-xs text-gray-500">Source: <code>shared_context_packets</code> — populates once SI packet ingestion is wired.</div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-white p-4">
+                        <div class="font-semibold text-gray-700 text-sm mb-1">SI: Capability Routing</div>
+                        <div class="text-xs text-gray-500">Source: <code>capability_routes</code> — populates once routing events are ingested.</div>
+                    </div>
+                    <div class="rounded-md border border-gray-200 bg-white p-4">
+                        <div class="font-semibold text-gray-700 text-sm mb-1">SI: Model &amp; Provider Registry</div>
+                        <div class="text-xs text-gray-500">Source: <code>model_provider_registry</code> — table absent from migrations. Populates once WO-MODEL-REGISTRY lands.</div>
+                    </div>
+                </div>
+            </details>
         </div>
 
         <!-- Skills Tab -->
@@ -2608,14 +2592,6 @@
 
     <script>
         const DASHBOARD_PAGE_STORIES = {
-            overview: {
-                eyebrow: 'Command story',
-                title: 'Goal to next action',
-                summary: 'Dream Studio shows the operating loop: goal, plan, route, execute, validate, evidence, gate, and next action.',
-                means: 'The overview is the executive control surface for current work and attention.',
-                matters: 'It compresses telemetry, evidence, readiness, and approvals into a decision story.',
-                action: 'Review blocked or approval-needed loop nodes before starting new work.'
-            },
             projects: {
                 eyebrow: 'Portfolio health',
                 title: 'Projects by readiness and attention',
@@ -3137,8 +3113,6 @@
         // API Base URL
         const API_BASE = '/api/v1/metrics';
         const TELEMETRY_API_BASE = '/api/telemetry';
-        const SHARED_INTELLIGENCE_API_BASE = '/api/shared-intelligence';
-
         // Fetch data from API
         async function fetchMetrics(endpoint) {
             try {
@@ -3206,153 +3180,6 @@
         function setTelemetryText(id, value) {
             const element = document.getElementById(id);
             if (element) element.textContent = value;
-        }
-
-        async function fetchSharedIntelligence(endpoint) {
-            try {
-                const response = await fetch(`${SHARED_INTELLIGENCE_API_BASE}${endpoint}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return await response.json();
-            } catch (error) {
-                console.warn(`Shared intelligence fetch failed for ${endpoint}:`, error);
-                return null;
-            }
-        }
-
-        function sharedIntelligenceRow(label, value, note = '') {
-            return `
-                <div class="flex items-start justify-between gap-3 border-b border-gray-100 py-1.5">
-                    <span>${telemetryEscapeHtml(label)}</span>
-                    <span class="text-right font-medium text-gray-900">${telemetryEscapeHtml(value)}</span>
-                </div>
-                ${note ? `<div class="pb-1 text-xs text-gray-500">${telemetryEscapeHtml(note)}</div>` : ''}
-            `;
-        }
-
-        function renderSharedIntelligenceStatus(status) {
-            const surfaces = status?.surfaces || [];
-            setTelemetryText('shared-intelligence-status', status ? 'Shared intelligence loaded' : 'Shared intelligence unavailable');
-            setTelemetryText('shared-intelligence-generated-at', `Snapshot: ${status?.generated_at || '--'}`);
-            const metadata = document.getElementById('shared-authority-metadata');
-            if (metadata) {
-                metadata.innerHTML = [
-                    sharedIntelligenceRow('derived_view', status?.derived_view === true),
-                    sharedIntelligenceRow('primary_authority', status?.primary_authority === true),
-                    sharedIntelligenceRow('routing_authority', status?.routing_authority === true),
-                    sharedIntelligenceRow('surfaces available', telemetryNumber(surfaces.length)),
-                    sharedIntelligenceRow('source tables', (status?.source_tables || []).slice(0, 5).join(', ') || '--')
-                ].join('');
-            }
-        }
-
-        function renderSharedLearningDashboard(learning) {
-            const lessonContainer = document.getElementById('shared-learning-list');
-            const hardeningContainer = document.getElementById('shared-hardening-list');
-            const sections = learning?.sections || {};
-            const lessons = sections.lessons_learned?.items || [];
-            const hardening = sections.hardening_candidates?.items || [];
-            if (lessonContainer) {
-                lessonContainer.innerHTML = lessons.length
-                    ? lessons.slice(0, 4).map(item => `
-                        <div class="rounded-md border border-gray-200 p-3">
-                            <div class="font-medium text-gray-900">${telemetryEscapeHtml(item.summary || item.event_class || 'Learning event')}</div>
-                            <div class="text-xs text-gray-500">${telemetryEscapeHtml(item.event_class || 'learning')} / ${telemetryEscapeHtml(item.severity || 'info')}</div>
-                        </div>
-                    `).join('')
-                    : `<div class="text-gray-500">${telemetryEscapeHtml(sections.lessons_learned?.empty_state || 'No learning events recorded for this snapshot.')}</div>`;
-            }
-            if (hardeningContainer) {
-                hardeningContainer.innerHTML = hardening.length
-                    ? hardening.slice(0, 4).map(item => `
-                        <div class="rounded-md border border-gray-200 p-3">
-                            <div class="font-medium text-gray-900">${telemetryEscapeHtml(item.component_type || 'component')} / ${telemetryEscapeHtml(item.component_id || 'unknown')}</div>
-                            <div class="text-xs text-gray-500">${telemetryEscapeHtml(item.hardening_type || 'hardening')} / execution_authorized=${item.execution_authorized === true}</div>
-                        </div>
-                    `).join('')
-                    : `<div class="text-gray-500">${telemetryEscapeHtml(sections.hardening_candidates?.empty_state || 'No hardening candidates awaiting review.')}</div>`;
-            }
-        }
-
-        function renderSharedAdapterSurface(projections, staleness) {
-            const projectionContainer = document.getElementById('shared-adapter-projection-list');
-            const stalenessContainer = document.getElementById('shared-adapter-staleness-list');
-            const projectionRows = projections?.projections || [];
-            const checks = staleness?.checks || [];
-            if (projectionContainer) {
-                projectionContainer.innerHTML = projectionRows.length
-                    ? projectionRows.slice(0, 5).map(item => sharedIntelligenceRow(
-                        item.adapter_id || 'adapter',
-                        item.adapter_type || 'projection',
-                        `config_write_authorized=${item.config_write_authorized === true}`
-                    )).join('')
-                    : `<div class="text-gray-500">${telemetryEscapeHtml(projections?.empty_state || 'No adapter projections are registered.')}</div>`;
-            }
-            if (stalenessContainer) {
-                stalenessContainer.innerHTML = checks.length
-                    ? checks.slice(0, 5).map(item => sharedIntelligenceRow(
-                        item.adapter_id || 'adapter',
-                        item.status || 'unknown',
-                        `repair_authorized=${item.execution_authorized === true}`
-                    )).join('')
-                    : `<div class="text-gray-500">${telemetryEscapeHtml(staleness?.empty_state || 'No adapter staleness checks are registered.')}</div>`;
-            }
-        }
-
-        function renderSharedContextPacket(packet) {
-            const container = document.getElementById('shared-context-packet-summary');
-            if (!container) return;
-            if (!packet) {
-                container.innerHTML = '<div class="text-gray-500">Context packet preview unavailable.</div>';
-                return;
-            }
-            const alignment = packet.adapter_alignment || {};
-            container.innerHTML = [
-                sharedIntelligenceRow('packet schema', packet.packet_schema || '--'),
-                sharedIntelligenceRow('adapter', packet.adapter_id || '--'),
-                sharedIntelligenceRow('private memory required', packet.model_private_memory_required === true),
-                sharedIntelligenceRow('registered adapters', telemetryNumber((alignment.registered_adapter_ids || []).length)),
-                sharedIntelligenceRow('config write required', packet.adapter_config_write_required === true)
-            ].join('');
-        }
-
-        function renderSharedCapabilityRoutes(routes, recommendation) {
-            const container = document.getElementById('shared-capability-route-list');
-            if (!container) return;
-            const routeRows = routes?.routes || [];
-            if (routeRows.length) {
-                container.innerHTML = routeRows.slice(0, 5).map(item => sharedIntelligenceRow(
-                    item.task_class || 'task',
-                    item.selected_adapter_id || 'unassigned',
-                    `approval_required=${item.operator_approval_required === true}`
-                )).join('');
-                return;
-            }
-            if (recommendation) {
-                container.innerHTML = [
-                    sharedIntelligenceRow('preview adapter', recommendation.selected_adapter_id || '--'),
-                    sharedIntelligenceRow('preview model', recommendation.selected_model_profile_id || '--'),
-                    sharedIntelligenceRow('execution authorized', recommendation.execution_authorized === true),
-                    sharedIntelligenceRow('operator approval required', recommendation.operator_approval_required === true)
-                ].join('');
-                return;
-            }
-            container.innerHTML = `<div class="text-gray-500">${telemetryEscapeHtml(routes?.empty_state || 'No capability route recommendations recorded for this snapshot.')}</div>`;
-        }
-
-        function renderSharedModelProviders(providers, matrix) {
-            const container = document.getElementById('shared-model-provider-list');
-            if (!container) return;
-            const profiles = providers?.profiles || [];
-            const matches = matrix?.matches || [];
-            container.innerHTML = [
-                sharedIntelligenceRow('recorded models', telemetryNumber(providers?.model_count || profiles.length)),
-                sharedIntelligenceRow('providers', Object.keys(providers?.provider_counts || {}).join(', ') || '--'),
-                sharedIntelligenceRow('capability matches', telemetryNumber(matrix?.match_count || matches.length)),
-                sharedIntelligenceRow('provider API calls', providers?.provider_api_calls_performed === true),
-                sharedIntelligenceRow('billing authority', providers?.billing_authority === true)
-            ].join('');
         }
 
         function renderTelemetryOverview(summary) {
@@ -3681,43 +3508,6 @@
             renderTelemetryOperationsIntelligence(summary, attention, components, status);
         }
 
-        async function initSharedIntelligenceSurface() {
-            const [
-                status,
-                learning,
-                projections,
-                staleness,
-                contextPacket,
-                capabilityRoutes,
-                capabilityRecommendation,
-                modelProviders,
-                capabilityMatrix
-            ] = await Promise.all([
-                fetchSharedIntelligence('/status?project_id=dream-studio'),
-                fetchSharedIntelligence('/learning-dashboard?project_id=dream-studio'),
-                fetchSharedIntelligence('/adapters/projections?project_id=dream-studio'),
-                fetchSharedIntelligence('/adapters/staleness?project_id=dream-studio'),
-                fetchSharedIntelligence('/context-packets/codex?project_id=dream-studio&packet_type=resume&limit=5'),
-                fetchSharedIntelligence('/capability-routes?project_id=dream-studio'),
-                fetchSharedIntelligence('/capability-routes/recommendation?project_id=dream-studio&task_class=code&required_capabilities=code,tool_use&risk_level=medium'),
-                fetchSharedIntelligence('/model-providers'),
-                fetchSharedIntelligence('/model-providers/capability-matrix?required_capabilities=code')
-            ]);
-            const warning = document.getElementById('shared-intelligence-warning');
-            if (!status) {
-                if (warning) warning.classList.remove('hidden');
-                renderSharedIntelligenceStatus(null);
-                return;
-            }
-            if (warning) warning.classList.add('hidden');
-            renderSharedIntelligenceStatus(status);
-            renderSharedLearningDashboard(learning);
-            renderSharedAdapterSurface(projections, staleness);
-            renderSharedContextPacket(contextPacket);
-            renderSharedCapabilityRoutes(capabilityRoutes, capabilityRecommendation);
-            renderSharedModelProviders(modelProviders, capabilityMatrix);
-        }
-
         // Update KPI cards
         async function updateKPIs() {
             // Fetch all metrics
@@ -4010,10 +3800,37 @@
             });
         }
 
+        async function loadAdapterProjections() {
+            const container = document.getElementById('adapter-projections-body');
+            try {
+                const resp = await fetch('/api/shared-intelligence/adapters/projections?project_id=dream-studio');
+                if (!resp.ok) {
+                    if (container) container.textContent = 'Adapter projections unavailable.';
+                    return;
+                }
+                const data = await resp.json();
+                const rows = data?.projections || [];
+                if (!rows.length) {
+                    if (container) container.textContent = 'No adapter projections registered.';
+                    return;
+                }
+                if (container) {
+                    container.innerHTML = rows.slice(0, 10).map(item => `
+                        <div class="flex items-center justify-between border-b border-gray-100 py-1.5 last:border-0">
+                            <span class="font-mono text-xs text-gray-800">${item.adapter_id || 'adapter'}</span>
+                            <span class="text-xs text-gray-500">${item.adapter_type || 'projection'} &mdash; config_write_authorized=${item.config_write_authorized === true}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (e) {
+                if (container) container.textContent = 'Adapter projections unavailable.';
+            }
+        }
+
         async function loadDsConfig() {
             const tbody = document.getElementById('ds-config-body');
             try {
-                const resp = await fetch('/api/v1/config');
+                const resp = await fetch('/api/v2/config');
                 const data = await resp.json();
                 if (!Array.isArray(data) || data.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="3" class="text-gray-400 pt-3 text-sm">No configuration keys found.</td></tr>';
@@ -4035,7 +3852,7 @@
         async function loadEvalRegistry() {
             const tbody = document.getElementById('eval-registry-body');
             try {
-                const resp = await fetch('/api/v1/eval/registry');
+                const resp = await fetch('/api/v2/eval/registry');
                 const data = await resp.json();
                 if (!Array.isArray(data) || data.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" class="text-gray-400 pt-3 text-sm">No eval registry entries yet.</td></tr>';
@@ -4069,12 +3886,12 @@
                 await updateKPIs();
                 await Promise.all([
                     initTelemetrySurface(),
-                    initSharedIntelligenceSurface(),
                     initSessionTimelineChart(),
                     initTopSkillsChart(),
                     initModelDistributionChart(),
                     initCostOverTimeChart(),
-                    loadEvalRegistry()
+                    loadEvalRegistry(),
+                    loadAdapterProjections()
                 ]);
                 console.log('Overview tab initialized successfully');
             } catch (error) {
