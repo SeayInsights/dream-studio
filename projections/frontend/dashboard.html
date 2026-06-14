@@ -727,6 +727,10 @@
                     <span class="nav-mark">AN</span>
                     <span>Anomalies</span>
                 </div>
+                <div class="sidebar-item" onclick="navigate('config')">
+                    <span class="nav-mark">CF</span>
+                    <span>Config</span>
+                </div>
                 <div class="sidebar-item" onclick="navigate('learning')">
                     <span class="nav-mark">LR</span>
                     <span>Learning</span>
@@ -2461,6 +2465,30 @@
     </div>
 </div>
 
+<!-- Config Tab -->
+        <div id="config" class="tab-content">
+            <div class="mb-6">
+                <h2 class="text-xl font-bold text-gray-900">Platform Configuration</h2>
+                <p class="mt-1 text-sm text-gray-500">Active runtime configuration keys from ds_config.</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide">
+                                <th class="pb-2 pr-8">Key</th>
+                                <th class="pb-2 pr-8">Value</th>
+                                <th class="pb-2">Last Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ds-config-body">
+                            <tr><td colspan="3" class="text-gray-400 pt-3 text-sm">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
 <!-- Security Tab -->
         <div id="security" class="tab-content">
             <!-- Summary Cards -->
@@ -2876,7 +2904,8 @@
             graph: false,
             security: false,
             'audit-history': false,
-            evals: false
+            evals: false,
+            config: false
         };
 
         function switchTab(tabName) {
@@ -2949,6 +2978,9 @@
             } else if (tabName === 'evals' && !tabsInitialized.evals) {
                 tabsInitialized.evals = true;
                 initEvalsTab();
+            } else if (tabName === 'config' && !tabsInitialized.config) {
+                tabsInitialized.config = true;
+                loadDsConfig();
             }
         }
 
@@ -3976,6 +4008,28 @@
                     }
                 }
             });
+        }
+
+        async function loadDsConfig() {
+            const tbody = document.getElementById('ds-config-body');
+            try {
+                const resp = await fetch('/api/v1/config');
+                const data = await resp.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" class="text-gray-400 pt-3 text-sm">No configuration keys found.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.map(row => {
+                    const updated = row.updated_at ? formatDateTime(row.updated_at) : '&mdash;';
+                    return `<tr class="border-b border-gray-100 last:border-0">
+                        <td class="py-2 pr-8 font-mono text-xs text-gray-800">${row.key}</td>
+                        <td class="py-2 pr-8 text-sm text-gray-700">${row.value}</td>
+                        <td class="py-2 text-xs text-gray-500">${updated}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-gray-400 text-sm">Config unavailable.</td></tr>';
+            }
         }
 
         async function loadEvalRegistry() {

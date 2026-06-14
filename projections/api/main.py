@@ -26,6 +26,7 @@ from .routes.guard_metrics import router as guard_metrics_router
 from .routes.aggregate_metrics_route import router as aggregate_metrics_router
 from .routes.extensions_api import router as extensions_api_router
 from .routes.evals import router as evals_router, registry_router as eval_registry_router
+from .routes.config import router as config_router
 from .safety import localhost_origins, SAFE_DEFAULT_HOST
 
 
@@ -88,6 +89,7 @@ app.include_router(aggregate_metrics_router, prefix="/api/v1/metrics", tags=["ag
 app.include_router(extensions_api_router, prefix="/api/v1/intelligence", tags=["extensions"])
 app.include_router(evals_router, prefix="/api/v1/evals", tags=["evals"])
 app.include_router(eval_registry_router, prefix="/api/v1/eval", tags=["evals"])
+app.include_router(config_router, prefix="/api/v1", tags=["config"])
 
 
 # Frontend routes

@@ -151,8 +151,11 @@ def lock_design_brief(
             )
         except Exception:
             pass
-        # Direct UPDATE removed: DesignBriefProjection applies design_brief.locked
-        # to business_design_briefs asynchronously from the event above.
+        conn.execute(
+            "UPDATE business_design_briefs SET status = 'locked', updated_at = ? WHERE brief_id = ?",
+            (now, brief_id),
+        )
+        conn.commit()
     return {"ok": True, "brief_id": brief_id, "status": "locked", "locked_at": now}
 
 
@@ -203,8 +206,11 @@ def update_design_brief_field(
             )
         except Exception:
             pass
-        # Direct UPDATE removed: DesignBriefProjection applies design_brief.updated
-        # to business_design_briefs asynchronously from the event above.
+        conn.execute(
+            f"UPDATE business_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",  # noqa: S608
+            (value, now, brief_id),
+        )
+        conn.commit()
     return {"ok": True, "brief_id": brief_id, "field": field, "value": value}
 
 
@@ -261,6 +267,9 @@ def set_design_system(
             )
         except Exception:
             pass
-        # Direct UPDATE removed: DesignBriefProjection applies design_brief.updated
-        # to business_design_briefs asynchronously from the event above.
+        conn.execute(
+            "UPDATE business_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
+            (system_name, now, brief_id),
+        )
+        conn.commit()
     return {"ok": True, "brief_id": brief_id, "design_system": system_name}
