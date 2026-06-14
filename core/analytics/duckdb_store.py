@@ -1,8 +1,17 @@
 """DuckDB analytics store — connection layer for aggregate_metrics.db.
 
-aggregate_metrics.db is a DuckDB file (not SQLite) that holds analytics
+aggregate_metrics.db is a DuckDB file (NOT SQLite) that holds analytics
 rollup tables and DuckDB-side projection tables that mirror business_* from
 studio.db (read model for dashboard API routes and analytics queries).
+
+DECISION (WO-SCHEMA-TRUTH-DEBT): Keep DuckDB as the analytics store.
+  - aggregate_metrics.db must be a DuckDB file. Delete any legacy SQLite file
+    at that path before connecting if one exists from pre-DuckDB versions.
+  - dispatch_to_duckdb (framework.py) requires _analytics_conn to be set
+    (currently None — future wiring point, not wired yet).
+  - aggregate_metrics.py reads studio.db (SQLite) and writes aggregate_metrics.db
+    (DuckDB) via this module. These are distinct stores; no module should open
+    aggregate_metrics.db with sqlite3.connect().
 
 Authority boundary: this store is NEVER-AUTHORITY.
   - It receives aggregated data from studio.db (read-only source).

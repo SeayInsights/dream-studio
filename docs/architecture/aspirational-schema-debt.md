@@ -1,5 +1,16 @@
 # Aspirational Schema Debt
 
+> **HISTORICAL DEBT LOG — NOT THE LIVE SCHEMA**
+>
+> This file records past and resolved schema mismatches between Python code and
+> migration sequences. It is NOT an authoritative description of the current
+> database schema. Reading it as a live spec will mislead you.
+>
+> **Live schema:** query `studio.db` directly, or run `py -m interfaces.cli.ds doctor schema_coherence`.
+> Migration files under `core/event_store/migrations/` are the authoritative DDL source.
+
+---
+
 This document tracks schema-coherence issues where code references schema that
 doesn't exist yet (or never will) in the migration sequence. These surface late
 because SQLite and Python both allow forward references that compile successfully

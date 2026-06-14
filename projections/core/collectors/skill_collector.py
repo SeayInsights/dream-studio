@@ -8,7 +8,7 @@ from projections.core.collectors.authority_sources import skill_usage_sql
 
 
 class SkillCollector:
-    """Collects and aggregates skill metrics from skill_invocations authority."""
+    """Collects and aggregates skill metrics from execution_events.skill.invoked."""
 
     def __init__(self, db_path: Optional[str] = None):
         """
@@ -57,8 +57,8 @@ class SkillCollector:
                     "invocations": [],
                     "source_status": {
                         "classification": "empty by design",
-                        "reason": "skill_invocations is unavailable; skill metrics return an honest empty state.",
-                        "source_tables": ["skill_invocations"],
+                        "reason": "No skill.invoked events found; skill metrics return an honest empty state.",
+                        "source_tables": ["execution_events"],
                     },
                 }
 
@@ -195,8 +195,8 @@ class SkillCollector:
                 "invocations": invocations,
                 "source_status": {
                     "classification": "fresh",
-                    "reason": "Skill metrics are derived from current skill_invocations authority.",
-                    "source_tables": ["skill_invocations"],
+                    "reason": "Skill metrics are derived from execution_events WHERE event_type='skill.invoked'.",
+                    "source_tables": ["execution_events"],
                 },
             }
 
