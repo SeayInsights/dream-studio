@@ -1025,6 +1025,33 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Eval Health Panel -->
+            <div class="bg-white rounded-lg shadow p-6 mt-6">
+                <div class="flex items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900">Eval Health</h3>
+                    <span class="info-icon">i
+                        <span class="info-tooltip">Eval registry status: rubric scores, baseline scores, and friction flags for all registered skills, hooks, and workflows. Friction-flagged rows indicate degraded eval performance.</span>
+                    </span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide">
+                                <th class="pb-2 pr-6">Skill / Target</th>
+                                <th class="pb-2 pr-6">Type</th>
+                                <th class="pb-2 pr-6">Score</th>
+                                <th class="pb-2 pr-6">Baseline</th>
+                                <th class="pb-2 pr-6">Friction</th>
+                                <th class="pb-2">Last Run</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eval-registry-body">
+                            <tr><td colspan="6" class="text-gray-400 pt-3 text-sm">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <!-- Skills Tab -->
@@ -3951,6 +3978,37 @@
             });
         }
 
+        async function loadEvalRegistry() {
+            const tbody = document.getElementById('eval-registry-body');
+            try {
+                const resp = await fetch('/api/v1/eval/registry');
+                const data = await resp.json();
+                if (!Array.isArray(data) || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-gray-400 pt-3 text-sm">No eval registry entries yet.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = data.map(row => {
+                    const rowClass = row.friction_flag ? 'bg-yellow-50' : '';
+                    const friction = row.friction_flag
+                        ? '<span class="text-yellow-700 font-semibold">&#9888; Yes</span>'
+                        : '<span class="text-gray-400">No</span>';
+                    const score = row.rubric_score != null ? row.rubric_score : '&mdash;';
+                    const baseline = row.baseline_score != null ? parseFloat(row.baseline_score).toFixed(2) : '&mdash;';
+                    const lastRun = row.last_run_at ? formatDateTime(row.last_run_at) : '&mdash;';
+                    return `<tr class="${rowClass}">
+                        <td class="py-1.5 pr-6 font-mono text-xs text-gray-800">${row.target_id}</td>
+                        <td class="py-1.5 pr-6 text-xs text-gray-500">${row.target_type}</td>
+                        <td class="py-1.5 pr-6">${score}</td>
+                        <td class="py-1.5 pr-6">${baseline}</td>
+                        <td class="py-1.5 pr-6">${friction}</td>
+                        <td class="py-1.5 text-xs text-gray-500">${lastRun}</td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-gray-400 text-sm">Eval registry unavailable.</td></tr>';
+            }
+        }
+
         // Initialize all Overview tab components
         async function initOverviewTab() {
             try {
@@ -3961,7 +4019,8 @@
                     initSessionTimelineChart(),
                     initTopSkillsChart(),
                     initModelDistributionChart(),
-                    initCostOverTimeChart()
+                    initCostOverTimeChart(),
+                    loadEvalRegistry()
                 ]);
                 console.log('Overview tab initialized successfully');
             } catch (error) {
