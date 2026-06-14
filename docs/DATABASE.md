@@ -49,9 +49,16 @@ Dream Studio's SQLite authority covers:
 - project, session, milestone, task, and Work Order state;
 - route decisions and approval state;
 - hook, tool, skill, token, validation, security, workflow, research, decision, and outcome telemetry;
+  **[DROPPED — migration 106]** Per-type invocation tables (`skill_invocations`, `agent_invocations`,
+  `workflow_invocations`, `hook_invocations`, `tool_invocations`) were dropped; rows are covered by
+  `execution_events` (filtered by component column).
 - dashboard attention items and read-model inputs;
 - shared intelligence records including adapters, context packets, normalized results, model/provider metadata, learning events, hardening candidates, and evaluation records (eval_registry, ds_eval_runs, skill_evaluation_runs, hook_eval_runs — all primary authority, not analytics; guardrail pass/fail records such as hook_eval_runs follow the same authority classification as guardrail_decisions);
-- secure production readiness assessments, control applicability, findings, remediation Work Order links, project health/readiness scorecards, release readiness records, and compliance/legal review flags;
+- production readiness assessments, control applicability, findings, remediation Work Order links,
+  project health/readiness scorecards, release readiness records, and compliance/legal review flags;
+  **[DROPPED — migration 099]** `project_readiness_scorecards`, `project_health_scorecards` dropped.
+  **[DROPPED — migration 112]** `findings`, `sec_sarif_findings`, `sec_cve_matches`, `sec_manual_reviews`
+  and related cluster dropped; security findings now live in the `security_events` spine.
 - release/cutover evidence summaries where safe.
 
 Current Capability Center, scoped-agent, and GitHub repo intake
@@ -130,8 +137,15 @@ privacy/export checks, opt-in watchers, sanitized team rollups,
 installer/distribution checks, and demo/case-study packets queryable without
 promoting local files to authority.
 
-PRD lifecycle authority lives in migration
-`047_prd_lifecycle_authority.sql` and covers:
+**[DROPPED — migrations 099 + 103]** PRD lifecycle authority lived in migration
+`047_prd_lifecycle_authority.sql` and covered the tables listed below. All have since been dropped:
+`project_intake_records`, `project_intake_questions`, `project_assumption_records`,
+`project_milestone_records`, `project_work_order_authority_records`, `project_change_order_records`
+dropped at **migration 099**; `prd_version_records`, `prd_amendment_records`,
+`prd_route_reconciliation_records`, `prd_documents` dropped at **migration 103**.
+Authority is now in `business_projects` (see migration 102 + AD-10 decision).
+
+The original authority coverage was:
 
 - `project_intake_records` and `project_intake_questions` for adaptive
   new-project and import-existing-project intake;
@@ -150,11 +164,11 @@ PRD lifecycle authority lives in migration
 - `prd_route_reconciliation_records` for planned-vs-actual milestone, release,
   or project closeout reconciliation.
 
-`prd_documents` remains a compatibility/list surface. It is not sufficient as
-the only PRD authority for in-flight continuation because it lacks change-order
+**[DROPPED — migration 103]** `prd_documents` was a compatibility/list surface. It was not sufficient as
+the only PRD authority for in-flight continuation because it lacked change-order
 lineage, milestone impact, route reconciliation, and adapter context-scoping
 fields. PRD files, when generated, are exports and must not become a competing
-source of truth.
+source of truth. Authority now lives in `business_projects`.
 
 Legacy install upgrades do not add legacy tables to the current schema. The
 upgrade flow creates a fresh current SQLite database through the normal
