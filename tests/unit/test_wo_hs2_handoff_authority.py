@@ -49,7 +49,7 @@ def test_handle_handoff_calls_write_packet_to_db(tmp_path: Path) -> None:
 
         monitor.handle_handoff(projects, "sess-001", tmp_path, "~75%", 75.0, True)
 
-    mock_db.assert_called_once_with("sess-001", tmp_path)
+    mock_db.assert_called_once_with("sess-001", tmp_path, handoff_path=None)
 
 
 def test_write_handoff_packet_inserts_and_writes_pointer(tmp_path: Path) -> None:

@@ -326,11 +326,15 @@ def test_seed_gate_artifacts_website_discover_seeds_design_brief(
     assert result["ok"] is True
     assert result["design_brief_seeded"] is True
 
-    with sqlite3.connect(str(db_path)) as conn:
-        brief_count = conn.execute(
-            "SELECT COUNT(*) FROM business_design_briefs WHERE project_id = ?", (PROJECT_ID,)
-        ).fetchone()[0]
-    assert brief_count == 1
+    # Post-#355 emit-only contract: create_design_brief emits design_brief.created
+    # to the spool; DesignBriefProjection is the sole writer of business_design_briefs.
+    # Row materialization is covered by test_phase18_2_4_design_brief_projection.py — here
+    # we assert the seed emitted exactly one create event for the project.
+    created = [
+        e for e in _read_spool_events(spool_root) if e.get("event_type") == "design_brief.created"
+    ]
+    assert len(created) == 1, f"expected one design_brief.created event; got: {created}"
+    assert created[0]["payload"]["project_id"] == PROJECT_ID
 
 
 def test_seed_gate_artifacts_website_discover_skips_when_brief_exists(

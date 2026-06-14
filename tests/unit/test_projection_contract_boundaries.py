@@ -151,6 +151,9 @@ def test_core_projection_writers_only_touch_projection_owned_tables():
         "projection_state",
         "projection_retry_queue",
         "projection_dead_letter",
+        # TokenConsumptionProjection is the canonical owner of token_usage_records;
+        # it materializes token.consumed events into this derived table.
+        "token_usage_records",
     }
     # duckdb_projections.py writes to DuckDB (not SQLite studio.db) via a DuckDB connection;
     # its SQL is excluded from the SQLite boundary scan.

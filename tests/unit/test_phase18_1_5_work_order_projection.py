@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS business_work_orders (
     blocked_at TEXT,
     unblocked_at TEXT,
     block_reason TEXT,
+    originating_symptom TEXT,
     source_event_id TEXT,
     last_event_id TEXT,
     last_updated_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
