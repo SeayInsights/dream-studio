@@ -309,46 +309,49 @@ class TestSessionAccumulator:
 # ── T1: dispatch routing includes core/on-post-tool-use ──────────────────────
 
 
+def _load_dispatch_hooks():
+    """Load .claude/hooks/dispatch/hooks.py by explicit path under a unique name.
+
+    A bare ``import hooks`` resolves to the top-level ``hooks/`` namespace package
+    (which has no ``_resolve_handlers``). Once any earlier test in the suite caches
+    that module in ``sys.modules``, a later ``import hooks`` returns the cached
+    namespace package regardless of ``sys.path`` insertion — so the dispatch module
+    is loaded directly from its file path here to avoid the collision. This passed in
+    isolation but failed in the full suite (full-ci #359 post-merge).
+    """
+    import importlib.util  # noqa: PLC0415
+
+    path = REPO_ROOT / ".claude" / "hooks" / "dispatch" / "hooks.py"
+    spec = importlib.util.spec_from_file_location("_dispatch_hooks_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class TestDispatchHookRouting:
     def test_post_tool_use_includes_token_capture_handler(self):
         """_resolve_handlers returns core/on-post-tool-use as first PostToolUse handler."""
-        from pathlib import Path as _Path
+        from pathlib import Path as _Path  # noqa: PLC0415
 
-        from _pytest.monkeypatch import MonkeyPatch
-
-        mp = MonkeyPatch()
+        dispatch_hooks = _load_dispatch_hooks()
         fake_root = _Path("/fake/plugin-root")
-        sys.path.insert(0, str(REPO_ROOT / ".claude" / "hooks" / "dispatch"))
-        try:
-            import hooks as dispatch_hooks  # noqa: PLC0415
-
-            handlers = dispatch_hooks._resolve_handlers("PostToolUse", "Bash", fake_root)
-            names = [name for name, _ in handlers]
-            assert (
-                "on-post-tool-use" in names
-            ), f"core/on-post-tool-use missing from PostToolUse handlers; got: {names}"
-            assert (
-                names[0] == "on-post-tool-use"
-            ), f"on-post-tool-use must be first handler; got: {names}"
-        finally:
-            if str(REPO_ROOT / ".claude" / "hooks" / "dispatch") in sys.path:
-                sys.path.remove(str(REPO_ROOT / ".claude" / "hooks" / "dispatch"))
-            mp.undo()
+        handlers = dispatch_hooks._resolve_handlers("PostToolUse", "Bash", fake_root)
+        names = [name for name, _ in handlers]
+        assert (
+            "on-post-tool-use" in names
+        ), f"core/on-post-tool-use missing from PostToolUse handlers; got: {names}"
+        assert (
+            names[0] == "on-post-tool-use"
+        ), f"on-post-tool-use must be first handler; got: {names}"
 
     def test_post_tool_use_skill_still_gets_skill_handlers(self):
         """Skill tool still gets on-skill-metrics and on-skill-complete in addition to token capture."""
-        from pathlib import Path as _Path
+        from pathlib import Path as _Path  # noqa: PLC0415
 
+        dispatch_hooks = _load_dispatch_hooks()
         fake_root = _Path("/fake/plugin-root")
-        sys.path.insert(0, str(REPO_ROOT / ".claude" / "hooks" / "dispatch"))
-        try:
-            import hooks as dispatch_hooks  # noqa: PLC0415
-
-            handlers = dispatch_hooks._resolve_handlers("PostToolUse", "Skill", fake_root)
-            names = [name for name, _ in handlers]
-            assert "on-post-tool-use" in names
-            assert "on-skill-metrics" in names
-            assert "on-skill-complete" in names
-        finally:
-            if str(REPO_ROOT / ".claude" / "hooks" / "dispatch") in sys.path:
-                sys.path.remove(str(REPO_ROOT / ".claude" / "hooks" / "dispatch"))
+        handlers = dispatch_hooks._resolve_handlers("PostToolUse", "Skill", fake_root)
+        names = [name for name, _ in handlers]
+        assert "on-post-tool-use" in names
+        assert "on-skill-metrics" in names
+        assert "on-skill-complete" in names
