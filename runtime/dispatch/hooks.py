@@ -58,7 +58,10 @@ def _resolve_handlers(event_name: str, tool_name: str, plugin_root: Path) -> lis
     if event_name == "PostCompact":
         return [_h(plugin_root, "meta", "on-post-compact")]
     if event_name == "PostToolUse":
-        handlers = [_h(plugin_root, "meta", "on-tool-activity")]
+        handlers = [
+            _h(plugin_root, "core", "on-post-tool-use"),
+            _h(plugin_root, "meta", "on-tool-activity"),
+        ]
         if tool_name == "Skill":
             handlers += [
                 _h(plugin_root, "meta", "on-skill-metrics"),
