@@ -19,7 +19,6 @@ from pathlib import Path
 from core.config import paths
 from core.event_store.studio_db import (
     get_lessons,
-    get_pending_lessons,
     promote_lesson,
     reject_lesson,
 )
