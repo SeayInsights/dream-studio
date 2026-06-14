@@ -209,23 +209,59 @@ def run_gate_check(
     return True, ""
 
 
+def _check_originating_symptom(symptom: str, db_path: Path) -> str | None:
+    """Return failure reason if any SQL-CHECK line in symptom still fails, else None.
+
+    Mirrors _run_sql_checks() in verify.py but is a direct blocking check:
+    the first failing line returns a reason; if all pass, returns None.
+    """
+    import sqlite3 as _sqlite3
+
+    try:
+        conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    except Exception as exc:
+        return f"originating_symptom: could not open DB for symptom check: {exc}"
+
+    try:
+        for raw_line in symptom.splitlines():
+            line = raw_line.strip()
+            if not line.upper().startswith("SQL-CHECK:"):
+                continue
+            sql = line[len("SQL-CHECK:") :].strip()  # noqa: E203
+            try:
+                row = conn.execute(sql).fetchone()
+                val = row[0] if row is not None else None
+                if not val:
+                    return (
+                        f"originating_symptom: SQL-CHECK still failing —"
+                        f" {sql!r} returned {val!r}"
+                    )
+            except Exception as exc:
+                return f"originating_symptom: SQL-CHECK error — {exc}"
+    finally:
+        conn.close()
+
+    return None
+
+
 def _lookup_work_order_and_gates(conn: Any, work_order_id: str) -> dict[str, Any]:
     """Internal helper: read WO row + type row, return everything close needs.
 
     Returns either ``{"ok": False, "error": ...}`` or a dict with keys:
     ``work_order_id, title, wo_status, type_id, project_id, milestone_id,
-    pre_gate, post_gate``.
+    pre_gate, post_gate, originating_symptom``.
     """
 
     wo_row = conn.execute(
-        "SELECT work_order_id, title, status, work_order_type, project_id, milestone_id"
+        "SELECT work_order_id, title, status, work_order_type, project_id,"
+        " milestone_id, originating_symptom"
         " FROM business_work_orders WHERE work_order_id = ?",
         (work_order_id,),
     ).fetchone()
     if wo_row is None:
         return {"ok": False, "error": f"Work order not found: {work_order_id}"}
 
-    wo_id, title, wo_status, wo_type, project_id, milestone_id = wo_row
+    wo_id, title, wo_status, wo_type, project_id, milestone_id, orig_symptom = wo_row
 
     pre_gate = None
     post_gate = None
@@ -249,6 +285,7 @@ def _lookup_work_order_and_gates(conn: Any, work_order_id: str) -> dict[str, Any
         "milestone_id": milestone_id,
         "pre_gate": pre_gate,
         "post_gate": post_gate,
+        "originating_symptom": orig_symptom,
     }
 
 
@@ -434,6 +471,14 @@ def close_work_order(
             project_id=project_id,
             planning_root=p_root,
         )
+
+        # Re-run the originating symptom SQL-CHECK (if captured at registration).
+        # A still-failing symptom means the fix never landed — block close unless forced.
+        _orig_symptom = meta.get("originating_symptom")
+        if _orig_symptom:
+            _sym_failure = _check_originating_symptom(_orig_symptom, db_path)
+            if _sym_failure:
+                gate_failures.append(_sym_failure)
 
         # T3: Gaps found via inline verify — bypass only the independent_review gate
         # failure. The original WO closes with gaps registered; the gap WO remediates.

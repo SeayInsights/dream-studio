@@ -133,6 +133,7 @@ class WorkOrderProjection(Projection):
             "source_event_id": event_id,
             "last_event_id": event_id,
             "last_updated_at": now,
+            "originating_symptom": payload.get("originating_symptom"),
         }
         # INSERT OR IGNORE preserves an existing skeleton row written by an
         # out-of-order event while still recording source_event_id on a
@@ -141,10 +142,12 @@ class WorkOrderProjection(Projection):
             f"""
             INSERT OR IGNORE INTO {_TABLE}
                 (work_order_id, project_id, milestone_id, title, status,
-                 created_at, source_event_id, last_event_id, last_updated_at)
+                 created_at, source_event_id, last_event_id, last_updated_at,
+                 originating_symptom)
             VALUES
                 (:work_order_id, :project_id, :milestone_id, :title, :status,
-                 :created_at, :source_event_id, :last_event_id, :last_updated_at)
+                 :created_at, :source_event_id, :last_event_id, :last_updated_at,
+                 :originating_symptom)
             """,
             row,
         )
@@ -153,12 +156,13 @@ class WorkOrderProjection(Projection):
         conn.execute(
             f"""
             UPDATE {_TABLE}
-            SET project_id      = COALESCE(project_id, :project_id),
-                milestone_id    = COALESCE(milestone_id, :milestone_id),
-                title           = COALESCE(title, :title),
-                created_at      = COALESCE(created_at, :created_at),
-                source_event_id = COALESCE(source_event_id, :source_event_id),
-                last_updated_at = :last_updated_at
+            SET project_id           = COALESCE(project_id, :project_id),
+                milestone_id         = COALESCE(milestone_id, :milestone_id),
+                title                = COALESCE(title, :title),
+                created_at           = COALESCE(created_at, :created_at),
+                source_event_id      = COALESCE(source_event_id, :source_event_id),
+                originating_symptom  = COALESCE(originating_symptom, :originating_symptom),
+                last_updated_at      = :last_updated_at
             WHERE work_order_id = :work_order_id
             """,
             row,
