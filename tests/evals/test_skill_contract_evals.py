@@ -227,6 +227,16 @@ def test_eval_brief_contract(patched_paths, db_path: Path, tmp_path: Path) -> No
     assert create_result["status"] == "draft"
     brief_id = create_result["brief_id"]
 
+    # create_design_brief is now emit-only; DesignBriefProjection writes the row.
+    # Simulate the daemon so DB-read functions (update/lock) can find the brief.
+    with sqlite3.connect(str(db_path)) as _conn:
+        _conn.execute(
+            "INSERT OR IGNORE INTO business_design_briefs"
+            " (brief_id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (brief_id, PROJECT_ID, create_result["created_at"], create_result["created_at"]),
+        )
+        _conn.commit()
+
     update_result = update_design_brief_field(
         brief_id=brief_id,
         field="purpose",
