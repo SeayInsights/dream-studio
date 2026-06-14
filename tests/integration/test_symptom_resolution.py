@@ -15,13 +15,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-
-from core.config.sqlite_bootstrap import bootstrap_database
 
 NOW = "2026-01-01T00:00:00.000000+00:00"
 
@@ -32,6 +28,8 @@ NOW = "2026-01-01T00:00:00.000000+00:00"
 
 
 def _make_db(tmp_path: Path) -> Path:
+    from core.config.sqlite_bootstrap import bootstrap_database
+
     db_path = tmp_path / "state" / "studio.db"
     db_path.parent.mkdir(parents=True, exist_ok=True)
     bootstrap_database(db_path)
