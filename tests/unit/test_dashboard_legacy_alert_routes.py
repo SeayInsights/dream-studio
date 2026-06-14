@@ -54,7 +54,7 @@ def _legacy_db_with_alert_history_only(tmp_path: Path) -> Path:
         )
         conn.execute(
             "INSERT INTO alert_history(alert_id, rule_id, triggered_at, metric_value, severity) "
-            "VALUES('alert-1', 'rule-1', '2026-05-14T00:00:00Z', 10.0, 'warning')"
+            "VALUES('alert-1', 'rule-1', datetime('now', '-1 day'), 10.0, 'warning')"
         )
         conn.commit()
     finally:
