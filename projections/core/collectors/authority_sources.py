@@ -13,14 +13,43 @@ import sqlite3
 def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
     """Return a dashboard-safe skill usage subquery.
 
-    Reads from canonical_events WHERE event_type='skill.invoked' — the
-    authoritative source with real skill names (e.g. 'core:plan', 'core:build').
-    Falls back to skill_invocations if canonical_events is unavailable.
+    Primary: execution_events WHERE event_type='skill.invoked' — the richest
+    source (skill_id direct column, 199+ rows from hook execution telemetry).
+    Fallback: canonical_events WHERE event_type='skill.invoked' if
+    execution_events is unavailable.
 
-    The legacy skill_invocations table (1 row, skill_id='unknown') is NOT used
-    as the primary source because it predates the canonical event spine.
+    skill_invocations was dropped in migration 106 and is no longer referenced.
     """
-    # Prefer canonical_events — authoritative, contains real skill identifiers
+    # Primary: execution_events — direct skill_id column, richer dataset
+    if _has_columns(
+        conn, "execution_events", {"event_id", "skill_id", "outcome_status", "created_at"}
+    ):
+        count = conn.execute(
+            "SELECT COUNT(*) FROM execution_events WHERE event_type='skill.invoked' AND skill_id IS NOT NULL AND TRIM(skill_id) != ''"
+        ).fetchone()[0]
+        if count > 0:
+            return """
+                SELECT
+                    skill_id AS skill_name,
+                    created_at AS invoked_at,
+                    CASE
+                        WHEN outcome_status IN ('completed', 'passed', 'recorded', 'success', 'succeeded', 'ok') THEN 1
+                        ELSE 0
+                    END AS success,
+                    NULL AS execution_time_s,
+                    NULL AS model,
+                    NULL AS input_tokens,
+                    NULL AS output_tokens,
+                    event_id,
+                    project_id,
+                    process_run_id AS session_id
+                FROM execution_events
+                WHERE event_type = 'skill.invoked'
+                  AND skill_id IS NOT NULL
+                  AND TRIM(skill_id) != ''
+            """
+
+    # Fallback: canonical_events with skill_specifier in trace JSON
     try:
         count = conn.execute(
             "SELECT COUNT(*) FROM canonical_events WHERE event_type='skill.invoked'"
@@ -45,28 +74,7 @@ def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
     except Exception:
         pass
 
-    # Fallback: legacy skill_invocations (may return 'unknown' skill names)
-    required = {"skill_id", "status", "created_at", "metadata_json"}
-    if not _has_columns(conn, "skill_invocations", required):
-        return None
-    return """
-        SELECT
-            skill_id AS skill_name,
-            created_at AS invoked_at,
-            CASE
-                WHEN status IN ('completed', 'passed', 'recorded', 'success', 'succeeded', 'ok') THEN 1
-                ELSE 0
-            END AS success,
-            CAST(json_extract(metadata_json, '$.execution_time_s') AS REAL) AS execution_time_s,
-            json_extract(metadata_json, '$.model') AS model,
-            CAST(json_extract(metadata_json, '$.input_tokens') AS INTEGER) AS input_tokens,
-            CAST(json_extract(metadata_json, '$.output_tokens') AS INTEGER) AS output_tokens,
-            event_id,
-            project_id,
-            process_run_id AS session_id
-        FROM skill_invocations
-        WHERE skill_id IS NOT NULL AND TRIM(skill_id) != ''
-    """
+    return None
 
 
 def token_usage_sql(conn: sqlite3.Connection) -> str | None:
