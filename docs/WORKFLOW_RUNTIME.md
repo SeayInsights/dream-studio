@@ -5,6 +5,8 @@ Phase 5.5A — Workflow Runtime Reliability audit and classification.
 **2026-06-10 (WO-CONSTITUTION-GATES):** `canonical/workflows/pre-push.yaml` extended with four dependency rule gates
 (`rule1`–`rule4`). Implementation: `core/gates/dependency_rules.py`. Tests: `tests/unit/test_release_gates_dependency_rules.py`.
 
+**2026-06-14 (WO-LESSONS-DB-UNIFY):** `canonical/workflows/daily-close.yaml` node `daily-learn` updated: step 5 now uses `INSERT OR IGNORE` via `insert_lesson()` for dedup (was: file dedup against draft-lessons directory); step 6 now says "Record ≤5 new lessons via insert_lesson()" (was: "Write ≤5 new drafts to meta/draft-lessons/"). `canonical/workflows/self-audit.yaml` node `collect-signal` step 3 updated: draft lesson count now comes from `raw_lessons WHERE status='draft'` DB query (was: glob of draft-lessons/*.md). No workflow structural change (node dependencies, trigger_rule, model, timeout unchanged).
+
 ## Workflow Authority Model
 
 ### Canonical
