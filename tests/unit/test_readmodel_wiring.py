@@ -17,10 +17,8 @@ from core.config.database import DB_PATH_ENV, DatabaseRuntime
 from projections.api.main import app
 from projections.core.collectors.authority_sources import skill_usage_sql
 
-
 _SCHEMA_VER_DDL = (
-    "CREATE TABLE _schema_version("
-    "version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
+    "CREATE TABLE _schema_version(" "version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
 )
 
 
@@ -39,8 +37,7 @@ def _db_with_execution_events(tmp_path: Path) -> Path:
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, datetime('now'))",
             (_latest_version(),),
         )
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE execution_events(
                 event_id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
@@ -66,8 +63,7 @@ def _db_with_execution_events(tmp_path: Path) -> Path:
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 _built_from_event_id TEXT
             )
-            """
-        )
+            """)
         # Three skill.invoked rows with distinct skill_ids
         for i, (skill, status, run_id) in enumerate(
             [
@@ -117,8 +113,7 @@ def _db_with_process_run_events(tmp_path: Path) -> Path:
             "INSERT INTO _schema_version(version, applied_at) VALUES(?, datetime('now'))",
             (_latest_version(),),
         )
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE execution_events(
                 event_id TEXT PRIMARY KEY,
                 event_type TEXT NOT NULL,
@@ -144,8 +139,7 @@ def _db_with_process_run_events(tmp_path: Path) -> Path:
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 _built_from_event_id TEXT
             )
-            """
-        )
+            """)
         conn.execute(
             "CREATE TABLE process_runs("
             "process_run_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT, "
@@ -175,7 +169,9 @@ def test_skill_usage_sql_returns_execution_events_rows(tmp_path: Path) -> None:
     try:
         sql = skill_usage_sql(conn)
         assert sql is not None, "skill_usage_sql must return SQL when execution_events has rows"
-        rows = conn.execute(f"SELECT skill_name, success FROM ({sql}) s ORDER BY skill_name").fetchall()
+        rows = conn.execute(
+            f"SELECT skill_name, success FROM ({sql}) s ORDER BY skill_name"
+        ).fetchall()
         skill_names = {r["skill_name"] for r in rows}
         assert "project:resume" in skill_names
         assert "core:plan" in skill_names
