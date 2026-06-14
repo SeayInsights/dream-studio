@@ -33,10 +33,7 @@ def test_migration_124_adds_file_id_and_checksum_columns(tmp_path, monkeypatch):
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = _connect(db_path)
-    cols = {
-        row[1]
-        for row in conn.execute("PRAGMA table_info(raw_handoffs)").fetchall()
-    }
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(raw_handoffs)").fetchall()}
     conn.close()
 
     assert "file_id" in cols, "file_id column missing from raw_handoffs after migration 124"
@@ -191,6 +188,6 @@ def test_write_recap_stores_to_files_db(isolated_home, monkeypatch):
 
         rows = list_files(category="handoff", db_path=files_db)
         assert isinstance(rows, list)
-        assert any("recap" in r["name"] for r in rows), (
-            f"Expected a recap row in files.db, got: {[r['name'] for r in rows]}"
-        )
+        assert any(
+            "recap" in r["name"] for r in rows
+        ), f"Expected a recap row in files.db, got: {[r['name'] for r in rows]}"
