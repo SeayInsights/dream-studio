@@ -145,11 +145,18 @@ def _classify_project_authority(project: dict[str, Any]) -> dict[str, Any]:
         classification = "manual_review_required"
         retention_class = "manual_review_required"
         reasons.append("project_name is missing")
-    if not path_exists:
-        include_default = False
-        classification = "manual_review_required"
-        retention_class = "manual_review_required"
-        reasons.append("project path is missing or unverified")
+    if not raw_path:
+        # Registered without a path — legitimate but not tied to a local directory.
+        # Show in the default operator view; badge as registered_no_path.
+        # To backfill a path, call update_project_path(project_id, path) in
+        # core/projects/mutations.py — it emits project.path_set for audit trail.
+        classification = "registered_no_path"
+        reasons.append("project has no path (registered via API without local directory)")
+    elif not path_exists:
+        # Path is recorded but the directory does not exist on this machine;
+        # may be valid on another workstation. Keep in default view.
+        classification = "path_unverified"
+        reasons.append(f"project path not found locally: {path_text}")
     if status.lower() in {"inactive", "archived", "deactivated", "quarantined"}:
         include_default = False
         classification = "quarantined"

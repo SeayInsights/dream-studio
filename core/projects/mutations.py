@@ -648,6 +648,60 @@ def set_project_vision(project_id: str, vision_statement: str) -> dict:
     return {"ok": True, "project_id": project_id}
 
 
+def update_project_path(
+    project_id: str,
+    project_path: "Path | str",
+) -> dict[str, Any]:
+    """Set or update project_path on an already-registered project.
+
+    Use this instead of raw SQL to backfill project_path for projects that were
+    registered without a local directory (e.g. via early CLI or bulk brownfield
+    import). Emits project.path_set for audit trail so the operation is
+    reproducible via the event flow.
+
+    Returns {"ok": True, "project_id": str, "project_path": str}
+            or {"ok": False, "error": str}.
+    """
+    from core.event_store.studio_db import _connect
+
+    resolved = str(Path(project_path).resolve())
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        with _connect() as conn:
+            rows = conn.execute(
+                "UPDATE business_projects"
+                " SET project_path = ?, updated_at = ?"
+                " WHERE project_id = ?",
+                (resolved, now, project_id),
+            ).rowcount
+            conn.commit()
+        if rows == 0:
+            return {"ok": False, "error": f"project not found: {project_id}"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="project.path_set",
+                session_id=None,
+                payload={"project_path": resolved},
+                timestamp=now,
+                severity="info",
+                trace={"domain": "sdlc", "project_id": project_id},
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "project_id": project_id, "project_path": resolved}
+
+
 def defer_project_audit(
     project_id: str,
     audit_type: str = "security",
