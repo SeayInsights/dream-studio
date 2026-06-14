@@ -220,3 +220,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- Last reviewed 2026-06-09 — WO-TS4 correction: reverting wrong-scope DuckDB-first paths in project_intelligence.py and discovery_internal.py. No gate policy changes. Production readiness evidence remains in SQLite authority. Contract unchanged. -->
 
 <!-- Last reviewed 2026-06-12 — WO-VIEW-GHOSTS: no production readiness control change. core/production_readiness/controls.py record_production_readiness_assessment() returns bool and handles absent production_readiness_assessment_runs table gracefully (table dropped in migration 112). Gate contract unchanged. -->
+
+<!-- Last reviewed 2026-06-14 — WO-DASH-VALIDATION-GAPS (T3): project_intelligence.py classifier change reviewed. Softening path-less projects from manual_review_required to registered_no_path / path_unverified is a display-only change — it does not affect production readiness gate policy, evidence requirements, control authority, or score derivation. Gate contract unchanged. -->
