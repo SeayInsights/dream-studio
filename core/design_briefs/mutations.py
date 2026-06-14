@@ -60,7 +60,7 @@ def create_design_brief(
          "next_step": "Invoke website:discover with --work-order <wo_id> ..."}
     """
 
-    db_path = _require_db(source_root, dream_studio_home)
+    _require_db(source_root, dream_studio_home)  # validate DB exists before emitting
     brief_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     try:
