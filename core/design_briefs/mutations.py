@@ -85,13 +85,8 @@ def create_design_brief(
         )
     except Exception:
         pass
-    with _connect(db_path) as conn:
-        conn.execute(
-            "INSERT INTO business_design_briefs (brief_id, project_id, status, created_at, updated_at)"
-            " VALUES (?, ?, 'draft', ?, ?)",
-            (brief_id, project_id, now, now),
-        )
-        conn.commit()
+    # DesignBriefProjection applies the INSERT from design_brief.created.
+    # No direct write here — projection is the sole writer.
     return {
         "ok": True,
         "brief_id": brief_id,
@@ -203,11 +198,8 @@ def update_design_brief_field(
             )
         except Exception:
             pass
-        conn.execute(
-            f"UPDATE business_design_briefs SET {field} = ?, updated_at = ? WHERE brief_id = ?",  # noqa: S608
-            (value, now, brief_id),
-        )
-        conn.commit()
+        # DesignBriefProjection applies the field update from design_brief.updated.
+        # No direct UPDATE here — projection is the sole writer.
     return {"ok": True, "brief_id": brief_id, "field": field, "value": value}
 
 
@@ -264,9 +256,6 @@ def set_design_system(
             )
         except Exception:
             pass
-        conn.execute(
-            "UPDATE business_design_briefs SET design_system = ?, updated_at = ? WHERE brief_id = ?",
-            (system_name, now, brief_id),
-        )
-        conn.commit()
+        # DesignBriefProjection applies design_system from design_brief.updated.
+        # No direct UPDATE here — projection is the sole writer.
     return {"ok": True, "brief_id": brief_id, "design_system": system_name}

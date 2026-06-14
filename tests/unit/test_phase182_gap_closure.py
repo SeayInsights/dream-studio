@@ -103,6 +103,39 @@ class TestFix2DesignBriefEmits:
             "DesignBriefProjection applies the state change from the canonical event."
         )
 
+    def test_create_design_brief_no_direct_insert(self):
+        """create_design_brief() must not do direct INSERT — projection handles it."""
+        source = self._get_design_brief_source()
+        fn_start = source.find("def create_design_brief(")
+        fn_end = source.find("\ndef ", fn_start + 1)
+        fn_body = source[fn_start:fn_end]
+        assert "INSERT INTO business_design_briefs" not in fn_body, (
+            "create_design_brief() must not directly INSERT into business_design_briefs. "
+            "DesignBriefProjection applies the row from the design_brief.created event."
+        )
+
+    def test_update_design_brief_field_no_direct_update(self):
+        """update_design_brief_field() must not do direct UPDATE — projection handles it."""
+        source = self._get_design_brief_source()
+        fn_start = source.find("def update_design_brief_field(")
+        fn_end = source.find("\ndef ", fn_start + 1)
+        fn_body = source[fn_start:fn_end]
+        assert "UPDATE business_design_briefs" not in fn_body, (
+            "update_design_brief_field() must not directly UPDATE business_design_briefs. "
+            "DesignBriefProjection applies the field change from the design_brief.updated event."
+        )
+
+    def test_set_design_system_no_direct_update(self):
+        """set_design_system() must not do direct UPDATE — projection handles it."""
+        source = self._get_design_brief_source()
+        fn_start = source.find("def set_design_system(")
+        fn_end = source.find("\ndef ", fn_start + 1)
+        fn_body = source[fn_start:fn_end]
+        assert "UPDATE business_design_briefs" not in fn_body, (
+            "set_design_system() must not directly UPDATE business_design_briefs. "
+            "DesignBriefProjection applies the update from the design_brief.updated event."
+        )
+
 
 # ── Fix 3: _repo_stack_evidence not on critical path ─────────────────────
 
