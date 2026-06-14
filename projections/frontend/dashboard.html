@@ -2963,59 +2963,118 @@
         // Load initial hooks data from API
         async function loadHooksData() {
             try {
-                // Fetch hook executions
-                const execResponse = await fetch('/api/v1/hooks/executions?limit=50');
+                const [execResponse, statsResponse] = await Promise.all([
+                    fetch('/api/v1/hooks/executions?limit=200'),
+                    fetch('/api/v1/hooks/stats'),
+                ]);
                 const execData = await execResponse.json();
-
-                // Fetch hook stats
-                const statsResponse = await fetch('/api/v1/hooks/stats');
                 const statsData = await statsResponse.json();
 
-                // Populate table with executions
-                const hooksTableBody = document.querySelector('#hooks-table tbody');
-                if (hooksTableBody && execData.executions) {
-                    // Remove placeholder row if it exists
-                    const placeholder = hooksTableBody.querySelector('tr td[colspan]');
-                    if (placeholder) {
-                        placeholder.parentElement.remove();
-                    }
+                const executions = execData.executions || [];
+                const byHook = (statsData && statsData.by_hook) || {};
 
-                    // Add each execution as a table row
-                    execData.executions.forEach(exec => {
+                // ── Summary cards ─────────────────────────────────────────
+                if (statsData && statsData.summary) {
+                    const { total_executions, total_failures, overall_success_rate } = statsData.summary;
+                    document.getElementById('hooks-total-executions').textContent = total_executions.toLocaleString();
+                    document.getElementById('hooks-total-failures').textContent = total_failures.toLocaleString();
+                    document.getElementById('hooks-success-rate').textContent = `${(overall_success_rate * 100).toFixed(1)}%`;
+                    const anomalies = executions.filter(e => e.is_anomaly).length;
+                    document.getElementById('hooks-total-anomalies').textContent = anomalies.toLocaleString();
+                }
+
+                // ── Timeline chart (executions per day, last 7 days) ──────
+                const dayBuckets = {};
+                const today = new Date();
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    dayBuckets[d.toISOString().slice(0, 10)] = 0;
+                }
+                executions.forEach(exec => {
+                    const key = (exec.started_at || '').slice(0, 10);
+                    if (key in dayBuckets) dayBuckets[key]++;
+                });
+                if (charts.hooksTimeline) { charts.hooksTimeline.destroy(); charts.hooksTimeline = null; }
+                const timelineCtx = document.getElementById('hooksTimelineChart');
+                if (timelineCtx) {
+                    charts.hooksTimeline = new Chart(timelineCtx, {
+                        type: 'line',
+                        data: {
+                            labels: Object.keys(dayBuckets),
+                            datasets: [{ label: 'Executions', data: Object.values(dayBuckets),
+                                borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                tension: 0.4, fill: true }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+
+                // ── Performance distribution chart (avg ms per hook) ──────
+                const perfLabels = Object.keys(byHook);
+                const perfData = perfLabels.map(h => +(byHook[h].avg_duration_ms || 0).toFixed(1));
+                if (charts.hooksPerformance) { charts.hooksPerformance.destroy(); charts.hooksPerformance = null; }
+                const perfCtx = document.getElementById('hooksPerformanceChart');
+                if (perfCtx && perfLabels.length > 0) {
+                    charts.hooksPerformance = new Chart(perfCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: perfLabels,
+                            datasets: [{ label: 'Avg Duration (ms)', data: perfData,
+                                backgroundColor: 'rgba(147, 51, 234, 0.7)' }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                }
+
+                // ── Hook status cards ─────────────────────────────────────
+                const cardsContainer = document.getElementById('hooks-cards-container');
+                if (cardsContainer && Object.keys(byHook).length > 0) {
+                    cardsContainer.innerHTML = '';
+                    Object.entries(byHook).forEach(([hookName, stats]) => {
+                        const pct = ((stats.success_rate || 0) * 100).toFixed(1);
+                        const color = stats.failure_count > 0 ? 'red' : 'green';
+                        const card = document.createElement('div');
+                        card.className = 'bg-white rounded-lg shadow p-5';
+                        card.innerHTML = `
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-semibold text-gray-900 truncate">${hookName}</h4>
+                                <span class="px-2 py-1 text-xs font-semibold rounded bg-${color}-100 text-${color}-700">${pct}%</span>
+                            </div>
+                            <div class="text-xs text-gray-500 space-y-1">
+                                <div class="flex justify-between"><span>Executions</span><span class="font-medium">${stats.execution_count}</span></div>
+                                <div class="flex justify-between"><span>Failures</span><span class="font-medium text-red-600">${stats.failure_count}</span></div>
+                                <div class="flex justify-between"><span>Avg duration</span><span class="font-medium">${(+(stats.avg_duration_ms || 0)).toFixed(0)} ms</span></div>
+                            </div>`;
+                        cardsContainer.appendChild(card);
+                    });
+                }
+
+                // ── Detailed execution table ───────────────────────────────
+                const hooksTableBody = document.querySelector('#hooks-table tbody');
+                if (hooksTableBody && executions.length > 0) {
+                    const placeholder = hooksTableBody.querySelector('tr td[colspan]');
+                    if (placeholder) placeholder.parentElement.remove();
+                    executions.forEach(exec => {
                         const row = document.createElement('tr');
                         row.className = exec.is_anomaly ? 'anomaly-row hover:bg-yellow-100' : 'hover:bg-gray-50';
-
                         const statusColor = exec.status === 'success' ? 'green' : exec.status === 'failed' ? 'red' : 'yellow';
                         const badgeHtml = exec.is_anomaly
                             ? '<span class="ml-2 px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800">Anomaly</span>'
                             : '';
-
                         row.innerHTML = `
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${exec.hook_name}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${exec.hook_name || 'unknown'}</td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-${statusColor}-100 text-${statusColor}-800">
-                                    ${exec.status}
+                                    ${exec.status || 'unknown'}
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${exec.duration_ms || 0} ms</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(exec.started_at).toLocaleString()}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${exec.started_at ? new Date(exec.started_at).toLocaleString() : ''}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">${badgeHtml}</td>
                         `;
                         hooksTableBody.appendChild(row);
                     });
-                }
-
-                // Update summary cards with stats
-                if (statsData && statsData.summary) {
-                    const { total_executions, total_failures, overall_success_rate } = statsData.summary;
-
-                    document.getElementById('hooks-total-executions').textContent = total_executions.toLocaleString();
-                    document.getElementById('hooks-total-failures').textContent = total_failures.toLocaleString();
-                    document.getElementById('hooks-success-rate').textContent = `${(overall_success_rate * 100).toFixed(1)}%`;
-
-                    // Count anomalies from executions
-                    const anomalies = execData.executions?.filter(e => e.is_anomaly).length || 0;
-                    document.getElementById('hooks-total-anomalies').textContent = anomalies.toLocaleString();
                 }
             } catch (error) {
                 console.error('Error loading hooks data:', error);
@@ -4599,12 +4658,8 @@ function initHooksCharts() {
     }
 }
 
-// Initialize on load
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initHooksCharts);
-} else {
-    initHooksCharts();
-}
+// initHooksCharts() is called from loadHooksData() when the Hooks tab is opened,
+// so it can be populated with real API data rather than empty placeholders.
 
         // ==================== MOBILE TOUCH HANDLERS ====================
 
