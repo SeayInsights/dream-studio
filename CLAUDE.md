@@ -147,6 +147,12 @@ See `docs/operations/lightweight-github-ci-strategy.md` for the full rationale.
 ## Debug Workflow
 When `ds-quality debug` finds a root cause: register a Dream Studio authority work order first (status `created`, backlog sequence), then create the GitHub issue with the debug log and the WO id in the body, then follow Issue → PR workflow. A GitHub issue alone is NOT sufficient tracking — `get_next_work_order`, `ds project state`, and on-close routing only see the authority. Bugs found during Dream Command builds get tracked even if the fix is trivial.
 
+**Defect WOs require an originating symptom.** When registering a WO for a bug or regression, capture the root-cause SQL check via `set_originating_symptom()` (or `--originating-symptom` on the CLI) immediately after WO creation. Example:
+```python
+set_originating_symptom(work_order_id=wo_id, symptom="SQL-CHECK: SELECT COUNT(*) FROM token_usage_records", source_root=...)
+```
+The close command re-runs this SQL at close time. If the check still fails (returns 0 or no rows), the WO is blocked from closing — the fix must land before the WO can be marked done.
+
 ## Ship Gate
 Use `ds-core ship` (full quality gate) when user says "ship it", before major releases, client demos, or after risky refactors. Regular PRs do NOT need the ship gate — CI auto-deploys after merge.
 

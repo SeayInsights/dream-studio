@@ -275,6 +275,7 @@ def create_work_order(
     title: str,
     description: str = "",
     work_order_type: str | None = None,
+    originating_symptom: str | None = None,
     source_root: Path,
     dream_studio_home: Path | None = None,
 ) -> dict[str, Any]:
@@ -323,15 +324,18 @@ def create_work_order(
 
         from canonical.events.envelope import CanonicalEventEnvelope
 
+        _payload: dict[str, Any] = {
+            "title": title,
+            "status": "created",
+            "type": work_order_type or "",
+        }
+        if originating_symptom is not None:
+            _payload["originating_symptom"] = originating_symptom
         _spool_writer.write_event(
             CanonicalEventEnvelope(
                 event_type="work_order.created",
                 session_id=None,
-                payload={
-                    "title": title,
-                    "status": "created",
-                    "type": work_order_type or "",
-                },
+                payload=_payload,
                 timestamp=now,
                 severity="info",
                 trace={
@@ -447,6 +451,38 @@ def create_task(
     if acceptance_criteria is not None:
         result["acceptance_criteria"] = acceptance_criteria
     return result
+
+
+def set_originating_symptom(
+    *,
+    work_order_id: str,
+    symptom: str,
+    source_root: Path,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Set or update the originating_symptom on an existing work order.
+
+    Direct UPDATE — used for post-creation backfills and defect WOs registered
+    before the symptom was known. Emits no spool event (the field is metadata,
+    not a lifecycle transition).
+
+    Returns ``{"ok": True, "work_order_id": str}`` or ``{"ok": False, "error": ...}``.
+    """
+    db_path = _require_db(source_root, dream_studio_home)
+    now = datetime.now(timezone.utc).isoformat()
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT work_order_id FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if row is None:
+            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+        conn.execute(
+            "UPDATE business_work_orders SET originating_symptom = ?, updated_at = ?"
+            " WHERE work_order_id = ?",
+            (symptom, now, work_order_id),
+        )
+    return {"ok": True, "work_order_id": work_order_id}
 
 
 def _settings_path_for_todowrite(source_root: Path) -> Path:
