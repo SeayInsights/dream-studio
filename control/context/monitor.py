@@ -166,16 +166,24 @@ def handle_urgent_reminder(projects: Path, session_id: str | None, label: str) -
     print(f"\n[dream-studio] Context at {label} — urgent; run /compact now.\n", flush=True)
 
 
-def _write_handoff_packet_to_db(session_id: str | None, cwd: Path) -> int | None:
+def _write_handoff_packet_to_db(
+    session_id: str | None, cwd: Path, handoff_path: Path | None = None
+) -> int | None:
     """Insert a handoff packet into raw_handoffs and write a thin pending-handoff.json pointer.
+
+    If handoff_path is provided (the markdown file written by write_handoff), its content
+    is stored in files.db (category='handoff') and the returned file_id is recorded in
+    raw_handoffs so the two stores are linked.
 
     Returns the handoff_id on success, None on failure. Never raises.
     """
     try:
+        import hashlib
         import subprocess as _sp
         import time as _time
 
         from core.event_store.studio_db import insert_handoff
+        from core.files.store import write_file
         from core.sdlc.cwd_resolver import resolve_project_from_cwd
 
         ctx = resolve_project_from_cwd()
@@ -195,12 +203,32 @@ def _write_handoff_packet_to_db(session_id: str | None, cwd: Path) -> int | None
         except Exception:
             pass
 
+        # Store markdown content blob in files.db and capture the file_id pointer
+        file_id: str | None = None
+        checksum: str | None = None
+        if handoff_path is not None and handoff_path.exists():
+            try:
+                content_bytes = handoff_path.read_bytes()
+                checksum = hashlib.sha256(content_bytes).hexdigest()
+                file_id = write_file(
+                    name=f"handoff-{sid}",
+                    content=content_bytes,
+                    content_type="text/markdown",
+                    category="handoff",
+                    project_id=project_id,
+                    correlation_id=sid,
+                )
+            except Exception:
+                pass
+
         handoff_id = insert_handoff(
             sid,
             project_id,
             "context threshold handoff",
             branch=branch or None,
             next_action="invoke ds-project:resume to rehydrate work order context",
+            file_id=file_id,
+            checksum=checksum,
         )
         if handoff_id is None:
             return None
@@ -235,8 +263,8 @@ def handle_handoff(
             handoff_sentinel.write_text(label)
         except Exception:
             pass
-        _write_handoff_packet_to_db(session_id, cwd)
         handoff_path = write_handoff(cwd, kb_val, session_id, is_pct=using_pct)
+        _write_handoff_packet_to_db(session_id, cwd, handoff_path=handoff_path)
         write_recap(cwd, kb_val, session_id, handoff_path)
         draft_handoff_lesson(kb_val, git_context(cwd), session_id, is_pct=using_pct)
     else:
