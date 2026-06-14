@@ -6,7 +6,7 @@ CLI:
 Searches three sources for prior experience relevant to the topic:
   1. Gotchas scan     — relevant gotchas.yml entries across all skills
   2. Session history  — past handoff/recap sessions with matching topics
-  3. Draft lessons    — ~/.dream-studio/meta/draft-lessons/*.md keyword matches
+  3. Draft lessons    — raw_lessons DB rows (WHERE status='draft') keyword matches
 
 Outputs a formatted risk pre-population report (or JSON with --json).
 """
@@ -42,7 +42,6 @@ from control.session.parser import scan_sessions  # noqa: E402
 # Constants
 # ---------------------------------------------------------------------------
 
-DRAFT_LESSONS_DIR = Path.home() / ".dream-studio" / "meta" / "draft-lessons"
 SESSIONS_DIR = Path.home() / ".dream-studio" / ".sessions"
 
 MAX_GOTCHAS = 5
@@ -114,43 +113,38 @@ def _scan_session_history(topic: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def _parse_lesson_meta(path: Path) -> dict:
-    """Parse title, date, and content from a draft-lesson .md file."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return {}
-
-    title = ""
-    title_match = re.search(r"^#\s+Draft Lesson:\s*(.+)", text, re.MULTILINE)
-    if title_match:
-        title = title_match.group(1).strip()
-
-    date = ""
-    date_match = re.search(r"^Date:\s*(\S+)", text, re.MULTILINE)
-    if date_match:
-        date = date_match.group(1).strip()
-
-    return {"title": title, "date": date, "content": text, "path": str(path)}
-
-
 def _scan_draft_lessons(topic: str) -> list[dict]:
-    """Return up to MAX_LESSONS draft lessons matching topic keywords."""
+    """Return up to MAX_LESSONS draft lessons matching topic keywords (from DB raw_lessons)."""
     tokens = _keywords(topic)
     if not tokens:
         return []
 
-    if not DRAFT_LESSONS_DIR.is_dir():
+    try:
+        from core.config import paths
+        from core.event_store.studio_db import get_pending_lessons
+
+        rows = get_pending_lessons(db_path=paths.state_dir() / "studio.db")
+    except Exception:
         return []
 
     matched: list[dict] = []
-    for lesson_path in sorted(DRAFT_LESSONS_DIR.glob("*.md")):
-        meta = _parse_lesson_meta(lesson_path)
-        if not meta:
-            continue
-        haystack = meta.get("title", "") + " " + meta.get("content", "")
+    for row in rows:
+        haystack = (
+            (row.get("title") or "")
+            + " "
+            + (row.get("what_happened") or "")
+            + " "
+            + (row.get("lesson") or "")
+        )
         if _matches(haystack, tokens):
-            matched.append(meta)
+            matched.append(
+                {
+                    "title": row.get("title", ""),
+                    "date": (row.get("created_at", "") or "")[:10],
+                    "content": haystack,
+                    "path": row.get("lesson_id", ""),
+                }
+            )
             if len(matched) >= MAX_LESSONS:
                 break
 

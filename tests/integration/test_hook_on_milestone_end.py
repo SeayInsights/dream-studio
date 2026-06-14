@@ -36,6 +36,8 @@ def test_marker_cleared_and_logged(isolated_home, handler):
 
 @freeze_time(FROZEN)
 def test_long_milestone_drafts_lesson(isolated_home, handler):
+    import sqlite3
+
     mod = handler("on-milestone-end")
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
     marker.parent.mkdir(parents=True, exist_ok=True)
@@ -44,8 +46,10 @@ def test_long_milestone_drafts_lesson(isolated_home, handler):
 
     mod.main()
 
-    drafts = list(
-        (isolated_home / ".dream-studio" / "meta" / "draft-lessons").glob("long-milestone-*.md")
-    )
-    assert len(drafts) == 1
-    assert "Long-Running Milestone" in drafts[0].read_text(encoding="utf-8")
+    db_path = isolated_home / ".dream-studio" / "state" / "studio.db"
+    assert db_path.exists(), "studio.db should have been created by insert_lesson()"
+    con = sqlite3.connect(str(db_path))
+    rows = con.execute("SELECT title FROM raw_lessons WHERE source='on-milestone-end'").fetchall()
+    con.close()
+    assert len(rows) == 1
+    assert "Long-Running Milestone" in rows[0][0]

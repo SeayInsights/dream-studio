@@ -21,10 +21,10 @@ nodes:
          - Any micro-capture with outcome:correction
          - Any handoff lessons_this_session entry
          - Any recap Risk flags with root causes
-      5. Dedup against existing draft-lessons and gotchas.yml
-      6. Write <=5 new drafts to meta/draft-lessons/
+      5. Dedup against existing raw_lessons rows (INSERT OR IGNORE handles duplicates) and gotchas.yml
+      6. Record <=5 new lessons via insert_lesson() with source: daily-harvest
 
-      Output: "Daily harvest: N candidates found, M drafts written, K skipped"
+      Output: "Daily harvest: N candidates found, M recorded, K skipped"
       If nothing found: "Clean day — no new patterns."
 
       End with: PASSED: daily harvest complete

@@ -176,40 +176,29 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
 
 def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bool = False) -> None:
     try:
-        timestamp = utcnow().isoformat()
+        from core.event_store.studio_db import insert_lesson
+
         date_str = utcnow().strftime("%Y-%m-%d")
-        drafts_dir = paths.meta_dir() / "draft-lessons"
-        drafts_dir.mkdir(parents=True, exist_ok=True)
-
         sid = session_id or "unknown"
-        draft_path = drafts_dir / f"handoff-{date_str}-{sid[:8]}.md"
-        if draft_path.exists():
-            return
-
-        draft = (
-            f"---\n"
-            f"type: draft-lesson\n"
-            f"source: on-context-threshold\n"
-            f"status: draft\n"
-            f"created: {timestamp}\n"
-            f"---\n\n"
-            f"## Context Budget Exceeded\n\n"
-            f"Session hit auto-handoff at ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else HANDOFF_KB}{'%' if is_pct else ' KB'}).\n\n"
-            f"**Git state:** {ctx}\n"
-            f"**Session:** {sid}\n\n"
-            f"## Retrospective Prompts\n\n"
-            f"1. What task was being worked on when context blew up?\n"
-            f"2. Was there unnecessary exploration or thrashing?\n"
-            f"3. Could the task have been split into smaller milestones?\n"
-            f"4. Were large files read that didn't need to be?\n"
-            f"5. Should a /compact have been run earlier?\n\n"
-            f"## Director Action\n\n"
-            f"- [ ] Add lesson to patterns (what to avoid next time)\n"
-            f"- [ ] No action needed (one-off)\n"
-            f"- [ ] Reject (delete this file)\n"
+        lesson_id = f"handoff-{date_str}-{sid[:8]}"
+        threshold = f"{HANDOFF_PCT}%" if is_pct else f"{HANDOFF_KB} KB"
+        what_happened = (
+            f"Session hit auto-handoff at ~{kb:.0f}{'%' if is_pct else ' KB'}"
+            f" (threshold: {threshold}). Git state: {ctx}. Session: {sid}"
         )
-        draft_path.write_text(draft, encoding="utf-8")
-        print(f"  -> SENSOR: Handoff retrospective drafted: {draft_path}\n", flush=True)
+        inserted = insert_lesson(
+            lesson_id,
+            "on-context-threshold",
+            "Context Budget Exceeded",
+            what_happened=what_happened,
+            confidence="medium",
+            db_path=paths.state_dir() / "studio.db",
+        )
+        if inserted:
+            print(
+                f"  -> SENSOR: Handoff retrospective drafted (DB lesson_id: {lesson_id})\n",
+                flush=True,
+            )
     except Exception:
         pass
 

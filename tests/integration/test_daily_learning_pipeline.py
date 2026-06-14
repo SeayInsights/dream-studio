@@ -117,22 +117,18 @@ def test_read_today_returns_lines(isolated_home):
 
 
 def test_lesson_queue_list_empty(isolated_home, capsys):
-    """lesson_queue handles a missing draft-lessons directory gracefully."""
+    """lesson_queue handles an empty raw_lessons DB gracefully."""
     import argparse
     import importlib.util
 
-    # Load lesson_queue.py directly (scripts/ has no __init__.py)
+    # Load lesson_queue via the scripts/ shim (which re-exports from interfaces/cli/)
     _SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
     spec = importlib.util.spec_from_file_location("lesson_queue", _SCRIPTS_DIR / "lesson_queue.py")
     lq = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(lq)
 
-    # Patch LESSONS_DIR to point at a non-existent dir so _load_lessons returns []
-    empty_dir = isolated_home / ".dream-studio" / "meta" / "draft-lessons"
-    # Intentionally do NOT create the directory — test the missing-dir path
-    lq.LESSONS_DIR = empty_dir
-
     # Build minimal args for cmd_list (default: --pending)
+    # The DB is empty in the isolated_home — no rows exist yet.
     args = argparse.Namespace(promoted=False, rejected=False, pending=True, func=lq.cmd_list)
     lq.cmd_list(args)
 

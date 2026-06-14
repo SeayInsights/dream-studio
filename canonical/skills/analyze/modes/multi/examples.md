@@ -343,35 +343,17 @@ Check if mode config has `auto_learn: true`. If yes:
    - Prevention checklist items (from prevention analyst reasoning + key_factors)
    - Forensic patterns (from forensic analyst `key_factors`)
 
-2. Write lesson draft to `~/.dream-studio/meta/draft-lessons/repo-audit-{topic_slug}-{YYYY-MM-DD}.md`:
+2. Record lesson draft via `insert_lesson()`:
+   - `lesson_id`: `repo-audit-{topic_slug}-{YYYY-MM-DD}`
+   - `source`: `analyze/evaluate-repo`
+   - `title`: `Lessons: {topic_slug} Repo Audit`
+   - `what_happened`: top 3 risk findings + top 3 systemic gaps (one line each)
+   - `lesson`: top 3 forensic patterns + top 3 prevention items
+   - `evidence`: report_path
+   - `confidence`: medium
+   - `db_path`: paths.state_dir() / "studio.db"
 
-```markdown
----
-source: analyze/evaluate-repo
-repo: {topic_slug}
-date: {ISO-8601 date}
-report: {report_path}
----
-
-# Lessons: {topic_slug} Repo Audit
-
-## Before you start
-Read `gotchas.yml` in this directory before every invocation.
-
-## Top Risk Clusters
-{top 3 risk findings from repo-risk analyst, one bullet each}
-
-## Systemic Gaps Found
-{top 3 gaps from systemic analyst, one bullet each}
-
-## Key Forensic Patterns
-{top 3 decision patterns from forensic analyst, one bullet each}
-
-## Prevention Checklist (High Priority)
-{top 3 prevention items from prevention analyst, tagged [type]}
-```
-
-3. Notify user at end of Step 10: "Lesson draft saved to `meta/draft-lessons/` — run `/learn` to review and promote."
+3. Notify user at end of Step 10: "Lesson draft recorded in raw_lessons DB — run `ds lesson-queue list` to review and promote."
 
 If `auto_learn` is false or absent: skip this step entirely.
 

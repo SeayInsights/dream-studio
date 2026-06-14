@@ -23,8 +23,8 @@ nodes:
          Count hook events per hook name over the last 30 days.
          Hooks with 0 audit entries = possible dead hooks.
 
-      3. DRAFT LESSONS — list ~/.dream-studio/meta/draft-lessons/*.md
-         Count unreviewed lessons (Status: DRAFT) per skill.
+      3. DRAFT LESSONS — query raw_lessons WHERE status='draft' from studio.db
+         Count unreviewed lessons per source skill.
 
       4. SESSION COUNT — count .sessions/ directories if present.
 

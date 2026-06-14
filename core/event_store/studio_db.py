@@ -1726,6 +1726,38 @@ def insert_lesson(
         return False
 
 
+def draft_lesson(
+    source: str,
+    title: str,
+    *,
+    lesson_id: str | None = None,
+    what_happened: str | None = None,
+    lesson: str | None = None,
+    evidence: str | None = None,
+    confidence: str = "medium",
+    db_path: Path | None = None,
+) -> bool:
+    """Create a draft lesson in raw_lessons. Single authoritative entry point.
+
+    lesson_id defaults to a UUID if not supplied. Callers that need deterministic
+    deduplication (e.g., file-based writers that deduplicated by filename) should
+    supply a stable lesson_id (e.g., the old filename stem).
+    """
+    import uuid as _uuid
+
+    lid = lesson_id if lesson_id is not None else str(_uuid.uuid4())
+    return insert_lesson(
+        lid,
+        source,
+        title,
+        what_happened=what_happened,
+        lesson=lesson,
+        evidence=evidence,
+        confidence=confidence,
+        db_path=db_path,
+    )
+
+
 def get_lessons(
     source: str | None = None, status: str | None = None, db_path: Path | None = None
 ) -> list[dict]:
@@ -1759,6 +1791,19 @@ def promote_lesson(lesson_id: str, promoted_to: str, db_path: Path | None = None
                     status='promoted', promoted_to=?, reviewed_at=?
                    WHERE lesson_id=?""",
                 (promoted_to, _NOW(), lesson_id),
+            )
+        return True
+    except Exception as e:
+        _reraise_if_busy(e)
+        return False
+
+
+def reject_lesson(lesson_id: str, db_path: Path | None = None) -> bool:
+    try:
+        with _db_transaction(db_path) as c:
+            c.execute(
+                "UPDATE raw_lessons SET status='rejected', reviewed_at=? WHERE lesson_id=?",
+                (_NOW(), lesson_id),
             )
         return True
     except Exception as e:

@@ -6,6 +6,8 @@ Phase 5.4A — Hook Runtime Reliability audit and classification.
 `rule1-adapters-no-authority`, `rule2-projections-readonly`, `rule3-cli-business-state-writer` (advisory), `rule4-ingestor-sole-event-writer`.
 These enforce the layer boundary rules documented in `docs/reference/layer-map.md`.
 
+**2026-06-14 (WO-LESSONS-DB-UNIFY):** `on-agent-correction` hook (via `core/learning/correction_patterns.py`) and `on-milestone-end` hook (via `core/utils/milestone.py`) and `on-context-threshold` (via `control/context/handoff.py`) now call `insert_lesson()` to write to `raw_lessons` in studio.db instead of writing draft-lesson .md files. Hook behavior (trigger conditions, inputs) is unchanged; only the output sink changed from filesystem to SQLite. The `on-pulse` hook (via `interfaces/cli/pulse_collector.py`) now reads `pending_drafts` count from `get_pending_lessons()` (DB query) rather than globbing the meta/draft-lessons/ directory.
+
 ## Hook Authority Model
 
 ### Canonical (active, authoritative)

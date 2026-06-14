@@ -1,7 +1,7 @@
 name: learn
 model_tier: haiku
-description: 'Capture and promote lessons from builds — draft to `meta/draft-lessons/`,
-  Director review, promote to memory / skill / agent updates, archive to `meta/lessons/`.
+description: 'Capture and promote lessons from builds — record to raw_lessons DB,
+  Director review via lesson_queue, promote to memory / skill / agent updates.
   Trigger on `learn:`, `capture lesson:`, or `learn: harvest` for cross-project batch
   extraction.'
 pack: quality
