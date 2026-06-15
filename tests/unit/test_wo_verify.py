@@ -455,15 +455,22 @@ def test_completion_prompt_template_behavioral_ac_check_not_emit_conditions() ->
 
 
 # ---------------------------------------------------------------------------
-# T4: unreviewable grader → close proceeds, verify_warning set, no force needed
+# WO-REVIEW-TRACEABILITY T4: unreviewable grader is NOT a certified pass.
+#   - unreviewable + passing executable AC  → close PROCEEDS (AC gate compensates)
+#   - unreviewable + failing/absent AC      → close BLOCKED  (the #358 false-done guard)
 # ---------------------------------------------------------------------------
 
 
-def test_close_proceeds_on_unreviewable_grader(tmp_path: pytest.TempPathFactory) -> None:
-    """close_work_order proceeds when _collect_grader returns no-summary (unreviewable).
+def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory) -> None:
+    """Unreviewable grader + passing executable AC → close PROCEEDS (AC gate compensates).
 
-    WO-VERIFY-NOSUMMARY T4: mock _collect_grader to return unreviewable; verify
-    close returns ok=True without force=True and records unreviewable_graders.
+    WO-REVIEW-TRACEABILITY T4: an unreviewable independent_review verdict is NOT a
+    certified pass (close.py returns it as a gate failure). Close proceeds here ONLY
+    because the always-on executable-AC gate passes — the unreviewable gate failure is
+    bypassed when, and only when, every executable check passes. The dangerous
+    pre-WO-REVIEW-TRACEABILITY behavior (unreviewable ALONE → proceed) is asserted
+    against by test_unreviewable_without_ac_blocks_close below and by
+    tests/integration/test_review_traceability.py::test_unreviewable_blocks_close.
     """
     db_path = _make_db(tmp_path)
     project_id = str(uuid.uuid4())
@@ -526,6 +533,75 @@ def test_close_proceeds_on_unreviewable_grader(tmp_path: pytest.TempPathFactory)
     assert data["unreviewable"] is True
     assert "unreviewable_graders" in data
     assert len(data["unreviewable_graders"]) > 0
+
+
+def test_unreviewable_without_ac_blocks_close(tmp_path: pytest.TempPathFactory) -> None:
+    """Unreviewable grader + failing executable AC → close is BLOCKED.
+
+    The inverse of test_unreviewable_with_passing_ac_proceeds and the unit-level guard
+    against the #358 false-done hole: an unreviewable independent_review verdict must
+    never act as a certified pass. With no PASSING executable check to compensate,
+    close_work_order must return ok=False without force=True — the AC gate is the
+    authoritative blocker.
+    """
+    db_path = _make_db(tmp_path)
+    project_id = str(uuid.uuid4())
+    milestone_id = str(uuid.uuid4())
+    work_order_id = str(uuid.uuid4())
+    # 'infrastructure' type has post_build_gate = 'independent_review'
+    _seed(
+        db_path,
+        project_id=project_id,
+        milestone_id=milestone_id,
+        work_order_id=work_order_id,
+        wo_type="infrastructure",
+    )
+    # A FAILING SQL-CHECK: this project_id does not exist, so COUNT = 0 → falsy →
+    # the always-on AC gate fails. There is no passing check to compensate.
+    _add_task(
+        db_path,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        title="T1",
+        desc="do it",
+        acceptance_criteria=(
+            "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
+            " WHERE project_id='does-not-exist-00000000'"
+        ),
+    )
+
+    planning_root = tmp_path / "planning"
+    mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
+
+    with _patch_db(db_path):
+        with patch(
+            "core.work_orders.verify._collect_grader",
+            return_value=mock_no_summary,
+        ):
+            with patch(
+                "core.work_orders.verify._spawn_grader",
+                return_value=MagicMock(),
+            ):
+                with patch(
+                    "core.work_orders.verify._collect_git_commits",
+                    return_value="diff --git a/fake.py b/fake.py\n+# change",
+                ):
+                    from core.work_orders.close import close_work_order
+
+                    result = close_work_order(
+                        work_order_id=work_order_id,
+                        source_root=REPO_ROOT,
+                        dream_studio_home=tmp_path,
+                        planning_root=planning_root,
+                    )
+
+    assert (
+        result["ok"] is False
+    ), f"Expected close BLOCKED (unreviewable + failing AC); got ok=True: {result}"
+    # The AC gate must be the blocker — unreviewable alone must not pass the close.
+    assert any(
+        "executable_ac" in f for f in result.get("failures", [])
+    ), f"Expected an executable_ac failure in the block reasons; got: {result.get('failures')}"
 
 
 # ---------------------------------------------------------------------------
