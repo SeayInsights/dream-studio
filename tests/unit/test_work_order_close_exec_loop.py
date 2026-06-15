@@ -65,9 +65,9 @@ def db_path(tmp_path: Path) -> Path:
         )
         conn.execute(
             "INSERT INTO business_tasks"
-            " (task_id, work_order_id, project_id, title, description, status,"
-            " created_at, updated_at)"
-            " VALUES (?, ?, ?, 'T1', 'do thing', 'complete', ?, ?)",
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            " status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'T1', 'do thing', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
             ("task-exec-1", WO_INFRA, PROJECT_ID, NOW, NOW),
         )
         # Next WO used by the pass-path auto-start.

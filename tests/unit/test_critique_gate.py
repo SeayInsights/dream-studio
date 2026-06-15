@@ -42,6 +42,14 @@ def db_home(tmp_path):
             " VALUES (?, ?, NULL, 'Build hero component', NULL, 'created', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, NOW, NOW),
         )
+        # Seed a task with a passing executable AC so the always-on AC gate is satisfied.
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            " status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'T1', 'do thing', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
+            ("task-critique-gate-t1", WO_UI_ID, PROJECT_ID, NOW, NOW),
+        )
         # Locked design brief so the pre_build_gate (design_brief_locked) always passes
         conn.execute(
             "INSERT INTO business_design_briefs"
