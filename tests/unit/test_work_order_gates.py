@@ -46,6 +46,16 @@ def db_home(tmp_path):
                 " VALUES (?, ?, NULL, 'Test WO', NULL, 'in_progress', ?, ?, ?)",
                 (wo_id, PROJECT_ID, wo_type, NOW, NOW),
             )
+        # Seed a task with a passing executable AC for each WO so the always-on AC gate
+        # is satisfied when close_work_order is called without force=True.
+        for idx, wo_id in enumerate([WO_UI, WO_API, WO_GAME, WO_DOCS]):
+            conn.execute(
+                "INSERT INTO business_tasks"
+                " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+                " status, created_at, updated_at)"
+                " VALUES (?, ?, ?, 'T1', 'task', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
+                (f"task-gates-{idx}", wo_id, PROJECT_ID, NOW, NOW),
+            )
         conn.commit()
     finally:
         conn.close()

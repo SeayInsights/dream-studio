@@ -68,6 +68,15 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, NULL, ?, '', 'in_progress', 'api_endpoint', ?, ?)",
             (WO_API, PROJECT_ID, "API WO", NOW, NOW),
         )
+        # Seed a task with a passing executable AC so the always-on AC gate is satisfied
+        # for WO_DOCS (the WO closed without force in the close_work_order tests).
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description, acceptance_criteria,"
+            " status, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'T1', 'doc task', 'SQL-CHECK: SELECT 1', 'complete', ?, ?)",
+            ("task-close-ext-docs-t1", WO_DOCS, PROJECT_ID, NOW, NOW),
+        )
         conn.commit()
     finally:
         conn.close()
