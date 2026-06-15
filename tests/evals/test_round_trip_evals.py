@@ -64,10 +64,14 @@ def db_path(tmp_path: Path) -> Path:
             " VALUES (?, ?, ?, 'UI WO', '', 'in_progress', 'ui_component', ?, ?)",
             (WO_UI_ID, PROJECT_ID, MILESTONE_ID, NOW_LATE, NOW_LATE),
         )
+        # A trivially-passing executable AC: close_work_order now runs an always-on
+        # executable-AC gate (WO-AC-EXECUTABLE) and a WO cannot close without >=1
+        # executable check (SQL/TEST/API-CHECK) unless force=True.
         conn.execute(
             "INSERT INTO business_tasks"
-            " (task_id, work_order_id, project_id, title, status, created_at, updated_at)"
-            " VALUES (?, ?, ?, 'Write the doc', 'pending', ?, ?)",
+            " (task_id, work_order_id, project_id, title, status, acceptance_criteria,"
+            " created_at, updated_at)"
+            " VALUES (?, ?, ?, 'Write the doc', 'pending', 'SQL-CHECK: SELECT 1', ?, ?)",
             (TASK_ID, WO_DOCS_ID, PROJECT_ID, NOW, NOW),
         )
         conn.commit()

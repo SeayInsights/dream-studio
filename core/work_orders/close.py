@@ -64,8 +64,15 @@ def run_gate_check(
     work_order_id: str,
     project_id: str,
     conn: Any,
+    db_path: "Path | None" = None,
 ) -> tuple[bool, str]:
-    """Return (passed, failure_reason). failure_reason is empty string when passed=True."""
+    """Return (passed, failure_reason). failure_reason is empty string when passed=True.
+
+    The optional ``db_path`` argument is used by the ``all_tests_pass`` gate to
+    execute TEST-CHECKs from the WO's task acceptance criteria.  Callers that
+    don't hold a db_path (e.g. tests that invoke run_gate_check directly) may omit
+    it; in that case the gate falls back to the legacy file-presence check.
+    """
     if not gate_name:
         return True, ""
 
@@ -109,6 +116,26 @@ def run_gate_check(
         return True, ""
 
     if gate_name == "all_tests_pass":
+        # Real execution: run TEST-CHECKs from the WO's task ACs (via run_executable_checks).
+        # Falls back to file-presence check only when db_path is not provided or no
+        # TEST-CHECKs are registered across the WO's tasks.
+        if db_path is not None:
+            _tasks = _read_wo_tasks(conn, work_order_id)
+            from core.work_orders.verify import run_executable_checks
+
+            _ac_results = run_executable_checks(_tasks, db_path)
+            _test_checks: list[dict[str, Any]] = []
+            for _task_checks in _ac_results.values():
+                _test_checks.extend(c for c in _task_checks if c.get("kind") == "TEST-CHECK")
+            if _test_checks:
+                _failed = [c for c in _test_checks if not c.get("passed")]
+                if _failed:
+                    _detail = "; ".join(
+                        c.get("error") or f"TEST-CHECK {c['expr']!r} failed" for c in _failed[:3]
+                    )
+                    return False, f"all_tests_pass: {len(_failed)} TEST-CHECK(s) failed — {_detail}"
+                return True, ""
+            # No TEST-CHECKs registered — fall through to file-presence check below.
         results_path = wo_dir / "test-results.md"
         if not results_path.is_file():
             return False, "all_tests_pass: test-results.md not found"
@@ -209,6 +236,77 @@ def run_gate_check(
     return True, ""
 
 
+def _read_wo_tasks(conn: Any, work_order_id: str) -> list[dict[str, Any]]:
+    """Read tasks for a work order from the live connection.
+
+    Returns a list of dicts with at least ``title`` and ``acceptance_criteria`` keys.
+    Works whether or not the ``acceptance_criteria`` column exists.
+    """
+    has_ac = any(
+        r[1] == "acceptance_criteria"
+        for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
+    )
+    cols = "title, description, status" + (", acceptance_criteria" if has_ac else "")
+    rows = conn.execute(
+        f"SELECT {cols} FROM business_tasks WHERE work_order_id = ? ORDER BY created_at ASC",
+        (work_order_id,),
+    ).fetchall()
+    return [
+        {
+            "title": r[0],
+            "description": r[1] or "",
+            "status": r[2],
+            "acceptance_criteria": (r[3] or "") if has_ac else "",
+        }
+        for r in rows
+    ]
+
+
+def _run_ac_gate(
+    conn: Any,
+    *,
+    work_order_id: str,
+    db_path: Path,
+) -> list[str]:
+    """Run all executable checks across a WO's tasks.  Return list of failure reasons.
+
+    The AC gate is always-on regardless of WO type:
+    - If there are NO executable checks at all → returns a single failure reason
+      (at least one check is required unless ``force=True``).
+    - If any checks fail → returns a failure reason per failing check (up to 5).
+    - If all checks pass → returns ``[]``.
+    """
+    from core.work_orders.verify import run_executable_checks
+
+    tasks = _read_wo_tasks(conn, work_order_id)
+    ac_results = run_executable_checks(tasks, db_path)
+
+    # Flatten all check results.
+    all_checks: list[dict[str, Any]] = []
+    for task_checks in ac_results.values():
+        all_checks.extend(task_checks)
+
+    if not all_checks:
+        return [
+            "executable_ac: no executable checks (SQL-CHECK / TEST-CHECK / API-CHECK) found "
+            "across all tasks — at least one is required to close without force=True"
+        ]
+
+    failed = [c for c in all_checks if not c.get("passed")]
+    if not failed:
+        return []
+
+    reasons: list[str] = []
+    for c in failed[:5]:
+        kind = c.get("kind", "CHECK")
+        expr = c.get("expr", "")
+        err = c.get("error") or "check returned falsy"
+        reasons.append(f"executable_ac: {kind} {expr!r} FAILED — {err}")
+    if len(failed) > 5:
+        reasons.append(f"executable_ac: …and {len(failed) - 5} more failed check(s)")
+    return reasons
+
+
 def _check_originating_symptom(symptom: str, db_path: Path) -> str | None:
     """Return failure reason if any SQL-CHECK line in symptom still fails, else None.
 
@@ -297,6 +395,7 @@ def _evaluate_gates(
     work_order_id: str,
     project_id: str,
     planning_root: Path,
+    db_path: "Path | None" = None,
 ) -> list[str]:
     """Run pre+post gate checks (split on ``|``). Return list of failure reasons."""
 
@@ -312,6 +411,7 @@ def _evaluate_gates(
             work_order_id=work_order_id,
             project_id=project_id,
             conn=conn,
+            db_path=db_path,
         )
         if not passed:
             failures.append(reason)
@@ -360,7 +460,11 @@ def check_close_gates(
             work_order_id=work_order_id,
             project_id=meta["project_id"],
             planning_root=p_root,
+            db_path=db_path,
         )
+
+        # Always-on AC gate preview.
+        failures.extend(_run_ac_gate(conn, work_order_id=work_order_id, db_path=db_path))
 
     meta["gate_failures"] = failures
     meta["gates_pass"] = not failures
@@ -470,7 +574,13 @@ def close_work_order(
             work_order_id=work_order_id,
             project_id=project_id,
             planning_root=p_root,
+            db_path=db_path,
         )
+
+        # Always-on AC gate: run all executable checks across every task.
+        # Runs regardless of WO type; additional to (not replacing) the existing gates.
+        ac_failures = _run_ac_gate(conn, work_order_id=work_order_id, db_path=db_path)
+        gate_failures.extend(ac_failures)
 
         # Re-run the originating symptom SQL-CHECK (if captured at registration).
         # A still-failing symptom means the fix never landed — block close unless forced.

@@ -70,15 +70,37 @@ def _seed(
     conn.close()
 
 
-def _add_task(db_path: Path, *, work_order_id: str, project_id: str, title: str, desc: str) -> str:
+def _add_task(
+    db_path: Path,
+    *,
+    work_order_id: str,
+    project_id: str,
+    title: str,
+    desc: str,
+    acceptance_criteria: str = "",
+) -> str:
     task_id = str(uuid.uuid4())
     conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO business_tasks"
-        " (task_id, work_order_id, project_id, title, description, status, created_at, updated_at)"
-        " VALUES (?,?,?,?,?,'complete',?,?)",
-        (task_id, work_order_id, project_id, title, desc, NOW, NOW),
+    has_ac = any(
+        r[1] == "acceptance_criteria"
+        for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
     )
+    if has_ac and acceptance_criteria:
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description,"
+            "  acceptance_criteria, status, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,'complete',?,?)",
+            (task_id, work_order_id, project_id, title, desc, acceptance_criteria, NOW, NOW),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO business_tasks"
+            " (task_id, work_order_id, project_id, title, description,"
+            "  status, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,'complete',?,?)",
+            (task_id, work_order_id, project_id, title, desc, NOW, NOW),
+        )
     conn.commit()
     conn.close()
     return task_id
@@ -455,7 +477,18 @@ def test_close_proceeds_on_unreviewable_grader(tmp_path: pytest.TempPathFactory)
         work_order_id=work_order_id,
         wo_type="infrastructure",
     )
-    _add_task(db_path, work_order_id=work_order_id, project_id=project_id, title="T1", desc="do it")
+    # Add a passing SQL-CHECK so the always-on AC gate passes.
+    # The project row is already inserted by _seed() above.
+    _add_task(
+        db_path,
+        work_order_id=work_order_id,
+        project_id=project_id,
+        title="T1",
+        desc="do it",
+        acceptance_criteria=(
+            f"SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{project_id}'"
+        ),
+    )
 
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
