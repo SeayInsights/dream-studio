@@ -179,7 +179,11 @@ def test_verify_unreviewable_no_score_zero_no_spawned_wos(tmp_path, monkeypatch)
 # ---------------------------------------------------------------------------
 
 
-def test_gate_passes_on_unreviewable_verdict(tmp_path):
+def test_gate_does_not_pass_on_unreviewable_verdict(tmp_path):
+    """WO-REVIEW-TRACEABILITY inverted prior behavior: an unreviewable verdict is no
+    longer a certified pass. run_gate_check returns a blocking advisory failure;
+    close_work_order bypasses it only when the always-on executable-AC gate passes.
+    """
     from core.work_orders.close import run_gate_check
 
     wo_id = str(uuid.uuid4())
@@ -195,8 +199,9 @@ def test_gate_passes_on_unreviewable_verdict(tmp_path):
         project_id="p",
         conn=None,
     )
-    assert passed is True
-    assert reason == ""
+    assert passed is False
+    assert reason.startswith("independent_review")
+    assert "unreviewable" in reason
 
 
 def test_spawn_grader_feeds_prompt_via_stdin_not_argv():
