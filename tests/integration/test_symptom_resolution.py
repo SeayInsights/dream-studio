@@ -52,6 +52,7 @@ def _seed_wo(
     work_order_id: str,
     wo_type: str = "documentation",
     originating_symptom: str | None = None,
+    acceptance_criteria: str = "SQL-CHECK: SELECT 1",
 ) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
@@ -82,6 +83,24 @@ def _seed_wo(
             "in_progress",
             originating_symptom,
             NOW,
+            NOW,
+            NOW,
+        ),
+    )
+    # The always-on executable-AC close gate (WO-AC-EXECUTABLE) requires >=1
+    # executable check to close without force; seed a passing one by default.
+    conn.execute(
+        "INSERT INTO business_tasks"
+        " (task_id, work_order_id, project_id, title, status, acceptance_criteria,"
+        "  created_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()),
+            work_order_id,
+            project_id,
+            "Test task",
+            "pending",
+            acceptance_criteria,
             NOW,
             NOW,
         ),
