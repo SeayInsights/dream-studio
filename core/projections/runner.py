@@ -401,6 +401,7 @@ def sync_tick() -> None:
         from core.projections.milestone_projection import MilestoneProjection
         from core.projections.project_projection import ProjectProjection
         from core.projections.task_projection import TaskProjection
+        from core.projections.token_projection import TokenConsumptionProjection
         from core.projections.work_order_projection import WorkOrderProjection
 
         runner = ProjectionRunner()
@@ -408,6 +409,10 @@ def sync_tick() -> None:
         runner.register(TaskProjection())
         runner.register(MilestoneProjection())
         runner.register(ProjectProjection())
+        # token.consumed (AI-source) must project on the live emit-then-tick path,
+        # not only the dormant projection daemon — otherwise token_usage_records
+        # never grows after the one-time backfill (WO-TOKEN-BACKFILL T2).
+        runner.register(TokenConsumptionProjection())
         runner.tick()
     except Exception:
         logger.debug("sync_tick: projection cycle failed (non-fatal)", exc_info=True)
