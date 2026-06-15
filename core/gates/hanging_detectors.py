@@ -196,7 +196,10 @@ def detect_changed_signature_callers(
     if not changed_sigs:
         return []
 
-    ref_res = {name: re.compile(r"(?<![\w.])" + re.escape(name) + r"\b") for name in changed_sigs}
+    # Match the name as a whole word, but ALLOW a leading "." so attribute and
+    # patch-target references (e.g. monitor._write_handoff_packet_to_db, the real
+    # #353 caller) are caught — only a leading word char rules out a match.
+    ref_res = {name: re.compile(r"(?<!\w)" + re.escape(name) + r"\b") for name in changed_sigs}
     findings: list[Finding] = []
     for rel, text in _iter_code_files(root):
         if rel in changed_paths:
