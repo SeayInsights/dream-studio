@@ -115,3 +115,5 @@ the closeout route exists and requires operator approval before publication.
 <!-- Last reviewed 2026-06-12 — WO f0e8f2c0 ci_gate.py failing_tests field: ci_gate JSON verdict adds failing_tests list (pytest node IDs, empty on pass). Diagnostic output only — no private data in test node IDs. No change to privacy classification or publication privacy policy. -->
 
 <!-- Last reviewed 2026-06-13 — fix/full-ci-duplicate-test-run: removed duplicate pytest+coverage step from full-ci.yml; ci_gate.py already runs the full test suite internally. Bumped timeout-minutes from 45 to 60 as headroom. No change to publication boundary, privacy classification, or gate enforcement policy. -->
+
+<!-- Last reviewed 2026-06-15 — WO-BLAST-RADIUS-GATE: new merge gate analyzes the diff for stale tests / broken callers / table-ownership conflicts. Reads repo source only; emits no private data. No change to privacy classification or publication privacy policy. -->
