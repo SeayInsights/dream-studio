@@ -141,11 +141,17 @@ def test_task_done_updates_context_md_checkbox(db_home, tmp_path, monkeypatch):
 def test_task_done_emits_task_completed_event(db_home, tmp_path, monkeypatch):
     rc = _task_done(db_home, tmp_path, monkeypatch, WO_ID, TASK_B)
     assert rc == 0
+    # mark_task_done() now runs sync_tick() inline (WO-TASKDONE-SYNC), which moves
+    # the emitted event out of spool/ into processed/. Scan the whole spool tree,
+    # not just the unprocessed spool/ subdir, and scope to this task.
     events = [
-        json.loads(p.read_text(encoding="utf-8"))
-        for p in (tmp_path / "spool-root" / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8")) for p in (tmp_path / "spool-root").rglob("*.json")
     ]
-    task_events = [e for e in events if e.get("event_type") == "task.completed"]
+    task_events = [
+        e
+        for e in events
+        if e.get("event_type") == "task.completed" and e.get("payload", {}).get("task_id") == TASK_B
+    ]
     assert len(task_events) == 1
     ev = task_events[0]
     assert ev["payload"]["task_id"] == TASK_B
