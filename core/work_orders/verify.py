@@ -616,24 +616,36 @@ def _collect_git_commits(
 ) -> str | None:
     """Collect commit diffs referencing this work order.
 
-    Greps git log for the WO UUID's first 8 chars and, when that finds nothing,
-    for the WO title token (the part before ' - ', e.g. 'WO-DEBT-I') — squash-merge
-    commit messages carry the WO name, never the UUID (WO-GRADER-LOOKUP).
-    Returns None when neither pattern matches: the diff is unreviewable, which
-    callers must treat differently from a reviewable diff (no score-0 verdicts,
-    no remediation WOs, surface a warning instead).
+    Searches git history using multiple patterns so squash-merged WOs are still
+    found even when the commit subject does not carry the UUID:
+
+    1. Full UUID (``work_order_id``) — exact match.
+    2. Short 8-char id (``work_order_id[:8]``) — legacy and short-log references.
+    3. ``Work-Order: <uuid>`` trailer in commit body — squash-merge convention.
+    4. WO title token (the part before ' - ', e.g. 'WO-DEBT-I') — squash-merge
+       subjects carry the WO name.
+    5. Branch name containing the short id — commits reachable from a branch whose
+       name includes the WO id fragment.
+
+    Returns None when no pattern matches: callers must treat this as "no evidence",
+    NOT as a certified pass and NOT as an auto-score-0 verdict.
     """
+    full_id = work_order_id
     short_id = work_order_id[:8]
-    patterns = [short_id]
+    trailer_pattern = f"Work-Order: {full_id}"
+
+    # Build ordered pattern list (most precise first).
+    patterns: list[str] = [full_id, short_id, trailer_pattern]
     if title:
         token = title.split(" - ")[0].strip()
-        if token:
+        if token and token not in patterns:
             patterns.append(token)
+
     try:
         lines: list[str] = []
         for pattern in patterns:
             log_result = subprocess.run(
-                ["git", "log", "--oneline", "--all", "--fixed-strings", f"--grep={pattern}"],
+                ["git", "log", "--all", "--fixed-strings", f"--grep={pattern}", "--format=%H"],
                 cwd=str(source_root),
                 capture_output=True,
                 text=True,
@@ -641,12 +653,46 @@ def _collect_git_commits(
             )
             if log_result.stdout.strip():
                 lines = log_result.stdout.strip().splitlines()
-                break  # UUID hits are the precise match; only widen when empty
+                break  # Stop at the first pattern that finds commits.
+
+        # Pattern 5: branch-name grep — find branches whose name contains the short id,
+        # then collect commits reachable from those branches only (not already found).
+        if not lines:
+            try:
+                branch_result = subprocess.run(
+                    ["git", "branch", "--all", "--format=%(refname:short)"],
+                    cwd=str(source_root),
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                matching_branches = [
+                    b.strip()
+                    for b in branch_result.stdout.splitlines()
+                    if short_id in b or full_id in b
+                ]
+                for branch in matching_branches[:3]:
+                    log_result = subprocess.run(
+                        ["git", "log", branch, "--format=%H", "--max-count=20"],
+                        cwd=str(source_root),
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    if log_result.stdout.strip():
+                        lines = log_result.stdout.strip().splitlines()
+                        break
+            except Exception:
+                pass  # Branch lookup is best-effort; fall through to None.
+
         if not lines:
             return None
+
         diff_parts: list[str] = []
-        for line in lines[:10]:
-            commit_hash = line.split()[0]
+        for commit_hash in lines[:10]:
+            commit_hash = commit_hash.strip()
+            if not commit_hash:
+                continue
             show_result = subprocess.run(
                 ["git", "show", "--stat", "--patch", "--no-color", commit_hash],
                 cwd=str(source_root),
@@ -655,7 +701,7 @@ def _collect_git_commits(
                 timeout=30,
             )
             diff_parts.append(f"=== commit {commit_hash} ===\n{show_result.stdout[:8000]}")
-        return "\n\n".join(diff_parts)
+        return "\n\n".join(diff_parts) if diff_parts else None
     except Exception as exc:
         return f"(error collecting git commits: {exc})"
 

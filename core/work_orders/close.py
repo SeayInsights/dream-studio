@@ -221,11 +221,20 @@ def run_gate_check(
         except Exception as exc:
             return False, f"independent_review: review-verdict.json is not valid JSON: {exc}"
         if not verdict.get("passed"):
-            # Unreviewable verdicts (no commit evidence found — WO-GRADER-LOOKUP)
-            # pass the gate with a warning surfaced by close_work_order instead of
-            # blocking: there is nothing to remediate and no grade to enforce.
+            # Unreviewable verdicts are NOT a certified pass — they indicate no commit
+            # evidence was found (WO-REVIEW-TRACEABILITY).  Return a non-blocking failure
+            # so close_work_order can decide whether the always-on AC gate compensates.
+            # Do NOT hard-block here: close_work_order bypasses this failure when the
+            # AC gate passes (unreviewable + passing AC → closes without force).
             if verdict.get("unreviewable"):
-                return True, ""
+                # Always prefix with "independent_review:" so the caller's
+                # startswith("independent_review") filter works consistently.
+                inner = verdict.get("unreviewable_reason") or (
+                    "no commit evidence found; "
+                    "review manually or ensure commits carry the WO id / Work-Order: trailer"
+                )
+                reason = f"independent_review: unreviewable — {inner}"
+                return False, reason
             gap_ids = [w.get("work_order_id", "") for w in verdict.get("spawned_work_orders", [])]
             gap_msg = f" Gap WOs: {', '.join(gap_ids)}" if gap_ids else ""
             return False, (
@@ -593,6 +602,17 @@ def close_work_order(
         # T3: Gaps found via inline verify — bypass only the independent_review gate
         # failure. The original WO closes with gaps registered; the gap WO remediates.
         if _has_gaps:
+            gate_failures = [f for f in gate_failures if not f.startswith("independent_review")]
+
+        # WO-REVIEW-TRACEABILITY: Unreviewable + passing AC gate → close proceeds.
+        # The AC gate is the authoritative close blocker. When the grader is unreviewable
+        # (no commit evidence) but all executable checks pass, the independent_review
+        # gate failure is advisory only — bypass it so close is not hard-blocked.
+        # Unreviewable + failing/missing AC → the AC gate failure still blocks close.
+        _is_unreviewable = (
+            _verify_ran and _verify_result is not None and _verify_result.get("unreviewable")
+        )
+        if _is_unreviewable and not ac_failures:
             gate_failures = [f for f in gate_failures if not f.startswith("independent_review")]
 
         if gate_failures and not force:
