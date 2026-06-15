@@ -41,4 +41,4 @@ On success::
 
 ## Side effects
 
-- Emits a `task.completed` spool event with `tasks_remaining` in the payload; the TaskProjection applies it to the `business_tasks` row (status `complete`) on the next projection tick.
+- Emits a `task.completed` spool event with `tasks_remaining` in the payload, then runs a projection tick (`sync_tick()`) inline — so the TaskProjection applies it to the `business_tasks` row (status `complete`) before the call returns. No separate sync step is needed; `list_tasks` reflects the completion immediately (WO-TASKDONE-SYNC).
