@@ -221,7 +221,23 @@ def detect_changed_signature_callers(
 
 # --- (c) unowned / duplicate table writes -----------------------------------
 
-_WRITE_RE = re.compile(r"\b(?:INSERT\s+INTO|UPDATE)\s+([A-Za-z_]\w*)", re.IGNORECASE)
+# Match real SQL writes, not prose. INSERT must be followed by a column list,
+# VALUES, SELECT, or DEFAULT VALUES; UPDATE must be followed by SET. This keeps
+# docstrings like "INSERT/UPDATE to a table" from being read as writes to tables
+# named "to"/"or" (a false positive this gate caught on its own source).
+_INSERT_RE = re.compile(
+    r"\bINSERT\s+INTO\s+([A-Za-z_]\w*)\s*(?:\(|VALUES\b|SELECT\b|DEFAULT\b)",
+    re.IGNORECASE,
+)
+_UPDATE_RE = re.compile(r"\bUPDATE\s+([A-Za-z_]\w*)\s+SET\b", re.IGNORECASE)
+
+
+def _write_targets(text: str) -> set[str]:
+    """Return lower-cased table names written by INSERT/UPDATE statements in text."""
+    targets: set[str] = set()
+    for rx in (_INSERT_RE, _UPDATE_RE):
+        targets.update(m.group(1).lower() for m in rx.finditer(text))
+    return targets
 
 
 def _table_writers(table: str, repo_root: Path, *, exclude: str) -> list[str]:
@@ -230,10 +246,8 @@ def _table_writers(table: str, repo_root: Path, *, exclude: str) -> list[str]:
     for rel, text in _iter_code_files(repo_root):
         if rel == exclude or _is_test_path(rel):
             continue
-        for m in _WRITE_RE.finditer(text):
-            if m.group(1).lower() == table_l:
-                writers.append(rel)
-                break
+        if table_l in _write_targets(text):
+            writers.append(rel)
     return writers
 
 
@@ -247,10 +261,8 @@ def detect_unowned_table_writes(
         path = _normalize(f["path"])
         if _is_test_path(path):
             continue
-        added_targets = {m.group(1).lower() for ln in f["added"] for m in _WRITE_RE.finditer(ln)}
-        removed_targets = {
-            m.group(1).lower() for ln in f["removed"] for m in _WRITE_RE.finditer(ln)
-        }
+        added_targets = _write_targets("\n".join(f["added"]))
+        removed_targets = _write_targets("\n".join(f["removed"]))
         for table in sorted(added_targets - removed_targets):
             other = _table_writers(table, root, exclude=path)
             if other:

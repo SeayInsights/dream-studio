@@ -21,12 +21,18 @@ can run identically in pre-push and in the pr-smoke matrix.
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+BLAST_RADIUS_GATE_SCHEMA = "dream_studio.blast_radius_gate.v1"
 
 
 def _normalize(path: str) -> str:
@@ -123,3 +129,86 @@ def compute_impact_set(
         "impacted_contract_domains": impacted_domains,
         "module_tokens": sorted(module_tokens),
     }
+
+
+def evaluate(
+    diff_text: str,
+    changed_files: Iterable[str],
+    *,
+    repo_root: Path | str = REPO_ROOT,
+) -> dict[str, Any]:
+    """Run the merge-time blast-radius gate. Pure — no git, no exit.
+
+    Returns a report dict with ``status`` ``"pass"``/``"fail"``. Status is
+    ``"fail"`` when any nothing-left-hanging detector fires; the impact set is
+    always included so the matrix step can run the dependent tests.
+    """
+    from core.gates.hanging_detectors import run_all_detectors
+
+    findings = run_all_detectors(diff_text, repo_root=repo_root)
+    impact = compute_impact_set(changed_files, repo_root=repo_root)
+    return {
+        "schema": BLAST_RADIUS_GATE_SCHEMA,
+        "status": "fail" if findings else "pass",
+        "blocking_finding_count": len(findings),
+        "findings": findings,
+        "impact_set": impact,
+    }
+
+
+def _git(args: list[str], repo_root: Path) -> str:
+    try:
+        r = subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout if r.returncode == 0 else ""
+
+
+def _resolve_diff_and_changed(repo_root: Path, base_ref: str | None) -> tuple[str, list[str]]:
+    """Resolve the unified diff text and changed-file list against the base ref."""
+    if base_ref:
+        rng = f"{base_ref}...HEAD"
+        diff_text = _git(["diff", rng], repo_root)
+        names = _git(["diff", "--name-only", rng], repo_root)
+        if diff_text or names:
+            return diff_text, [ln.strip() for ln in names.splitlines() if ln.strip()]
+    # Fallback: staged + working-tree changes.
+    diff_text = _git(["diff", "HEAD"], repo_root)
+    names = _git(["diff", "--name-only", "HEAD"], repo_root)
+    return diff_text, [ln.strip() for ln in names.splitlines() if ln.strip()]
+
+
+def main() -> int:
+    base_ref = os.environ.get("DREAM_STUDIO_BASE_REF")
+    github_base = os.environ.get("GITHUB_BASE_REF")
+    if github_base and not base_ref:
+        base_ref = f"origin/{github_base}"
+    if not base_ref:
+        base_ref = "origin/main"
+
+    diff_text, changed = _resolve_diff_and_changed(REPO_ROOT, base_ref)
+    report = evaluate(diff_text, changed, repo_root=REPO_ROOT)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    if report["status"] != "pass":
+        print()
+        print("=" * 70)
+        print("BLAST-RADIUS GATE: nothing-left-hanging detector(s) fired")
+        print("=" * 70)
+        for finding in report["findings"]:
+            print(f"  [{finding['detector']}] {finding['message']}")
+        print()
+        print("These break main post-merge (the pr-smoke subset misses them).")
+        print("Fix the dangling reference/ownership, or delete the dead test.")
+        print("=" * 70)
+    return 0 if report["status"] == "pass" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

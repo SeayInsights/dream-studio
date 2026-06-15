@@ -35,6 +35,10 @@ CHECKS = [
         [_PYTHON, "interfaces/cli/contract_atlas_lifecycle_gate.py"],
     ),
     (
+        "blast-radius",
+        [_PYTHON, "-m", "core.gates.blast_radius"],
+    ),
+    (
         "security",
         [_PYTHON, "-m", "pip_audit", "-r", "requirements-dev.txt", "-r", "requirements.txt"],
     ),
