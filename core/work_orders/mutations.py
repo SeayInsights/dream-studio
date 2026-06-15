@@ -111,6 +111,17 @@ def mark_task_done(
     except Exception:
         pass
 
+    # Materialize the task.completed event into the business_tasks read model now,
+    # mirroring create_task/create_work_order. Without this, status stays 'pending'
+    # in the read model (and `ds work-order tasks`) until an unrelated sync_tick()
+    # runs — the WO-TASKDONE-SYNC defect.
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
+    except Exception:
+        pass
+
     try:
         from core.sdlc.active_task import clear_active_task as _clear_active_task
         from core.sdlc.active_task import get_active_task as _get_active_task
