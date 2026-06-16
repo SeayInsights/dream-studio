@@ -585,43 +585,28 @@ def _reopen_and_escalate(
     outcome: dict,
     *,
     db_path: Path,
+    source_root: Path | None = None,
     dream_studio_home: Path | None = None,
 ) -> None:
-    """Set a regressed WO back to in_progress and write an unresolved escalation file."""
-    import sqlite3
+    """Set a regressed WO back to in_progress and write an unresolved escalation file.
+
+    The business_work_orders status write goes through the work-order mutation
+    layer (reopen_work_order) — never a direct write from the eval layer — to
+    respect the authority boundary (dependency Rule 3). reopen_work_order also
+    emits work_order.reopened and syncs the read model.
+    """
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(str(db_path))
-    try:
-        conn.execute(
-            "UPDATE business_work_orders"
-            " SET status = 'in_progress', updated_at = ?, last_updated_at = ?"
-            " WHERE work_order_id = ?",
-            (now, now, work_order_id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
 
-    # Spool event for the canonical substrate (best-effort).
-    try:
-        import spool.writer as _spool_writer
+    from core.work_orders.mutations import reopen_work_order
 
-        from canonical.events.envelope import CanonicalEventEnvelope
-
-        _spool_writer.write_event(
-            CanonicalEventEnvelope(
-                event_type="work_order.outcome_failed",
-                session_id=None,
-                payload={"work_order_id": work_order_id, "failures": outcome["failures"]},
-                timestamp=now,
-                severity="warning",
-                trace={"domain": "sdlc", "work_order_id": work_order_id},
-            ).to_dict()
-        )
-    except Exception:
-        pass
+    reopen_work_order(
+        work_order_id=work_order_id,
+        reason="outcome_eval: symptom regressed after close",
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
 
     # Escalation file — counted by the pulse open-escalations scan
     # (meta_dir/*.md containing "ESC-" and "unresolved").
@@ -686,7 +671,11 @@ def run_outcome_eval(
         if not outcome["passed"] and auto_reopen:
             try:
                 _reopen_and_escalate(
-                    wo_id, outcome, db_path=db_path, dream_studio_home=dream_studio_home
+                    wo_id,
+                    outcome,
+                    db_path=db_path,
+                    source_root=source_root,
+                    dream_studio_home=dream_studio_home,
                 )
                 outcome["reopened"] = True
             except Exception as exc:  # pragma: no cover - defensive
