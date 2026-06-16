@@ -279,6 +279,86 @@ def unblock_work_order(
     }
 
 
+def reopen_work_order(
+    *,
+    work_order_id: str,
+    reason: str = "",
+    source_root: Path | None = None,
+    dream_studio_home: Path | None = None,
+) -> dict[str, Any]:
+    """Set a closed work order back to in_progress (designated business-state writer).
+
+    Used by the outcome eval (core/eval/runner.py) when a closed WO's symptom
+    regresses after close. Keeping this UPDATE in the work-order mutation layer —
+    rather than writing business_work_orders from the eval layer — respects the
+    authority boundary (dependency Rule 3: the work-order layer is the designated
+    writer of business_* state). Emits ``work_order.reopened`` and syncs the read
+    model, mirroring block/unblock.
+    """
+    db_path = _require_db(source_root or Path.cwd(), dream_studio_home)
+    with _connect(db_path) as conn:
+        wo_row = conn.execute(
+            "SELECT work_order_id, title, status, project_id FROM business_work_orders"
+            " WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if wo_row is None:
+            return {"ok": False, "error": f"Work order not found: {work_order_id}"}
+
+        _, title, prev_status, project_id = wo_row
+        now = datetime.now(timezone.utc).isoformat()
+
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = 'in_progress', updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (now, now, work_order_id),
+        )
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="work_order.reopened",
+                session_id=None,
+                payload={
+                    "work_order_id": work_order_id,
+                    "title": title,
+                    "project_id": project_id,
+                    "previous_status": prev_status,
+                    "reason": reason,
+                },
+                timestamp=now,
+                severity="warning",
+                trace={
+                    "domain": "sdlc",
+                    "work_order_id": work_order_id,
+                    "project_id": project_id,
+                    "attribution_status": "fully_attributed",
+                },
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "status": "in_progress",
+        "previous_status": prev_status,
+    }
+
+
 def create_work_order(
     *,
     project_id: str,

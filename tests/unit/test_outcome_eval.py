@@ -121,3 +121,23 @@ def test_outcome_eval_is_wired_to_a_runner() -> None:
         "run_outcome_eval is not wired into the pulse collector — it would be a dormant, "
         "never-run eval (the false-completion class WO-OUTCOME-EVAL T3 forbids)."
     )
+
+
+def test_runner_does_not_write_business_tables_directly() -> None:
+    """Dependency Rule 3: the eval layer must not write business_* directly.
+
+    The outcome eval reopens a regressed WO via core.work_orders.mutations
+    (the designated business-state writer), never a raw UPDATE from core/eval/.
+    """
+    import re
+    from pathlib import Path as _P
+
+    src = _P("core/eval/runner.py").read_text(encoding="utf-8")
+    writes = re.findall(
+        r"(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+business_\w*",
+        src,
+        re.IGNORECASE,
+    )
+    assert (
+        not writes
+    ), f"core/eval/runner.py writes business_* directly (Rule 3 violation): {writes}"
