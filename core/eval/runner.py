@@ -450,3 +450,252 @@ def format_results_report(results: list[EvalResult]) -> str:
     if regressions:
         lines.append(f"  ⚠  {regressions} regression(s) detected")
     return "\n".join(lines)
+
+
+# ── Outcome eval (WO-OUTCOME-EVAL) ──────────────────────────────────────────
+#
+# The eval runner above measures PROCESS (rail adherence from traces). The
+# outcome eval measures OUTCOME: for a recently-closed WO, re-run its
+# originating_symptom + task acceptance-criteria against live/seeded state and
+# report whether the symptom actually stayed resolved. On FAIL with
+# auto_reopen=True the WO is set back to in_progress and an escalation file is
+# written (consumed by the pulse open-escalations counter). This is the safety
+# net behind the close gate — a WO can close green and still regress later.
+
+
+def _read_wo_tasks_for_outcome(conn, work_order_id: str) -> list[dict]:
+    has_ac = any(
+        r[1] == "acceptance_criteria"
+        for r in conn.execute("PRAGMA table_info(business_tasks)").fetchall()
+    )
+    cols = "title, description, status" + (", acceptance_criteria" if has_ac else "")
+    rows = conn.execute(
+        f"SELECT {cols} FROM business_tasks WHERE work_order_id = ? ORDER BY created_at ASC",
+        (work_order_id,),
+    ).fetchall()
+    return [
+        {
+            "title": r[0],
+            "description": r[1] or "",
+            "status": r[2],
+            "acceptance_criteria": (r[3] or "") if has_ac else "",
+        }
+        for r in rows
+    ]
+
+
+def evaluate_wo_outcome(
+    work_order_id: str,
+    *,
+    db_path: Path,
+    source_root: Path | None = None,
+    symptom_only: bool = False,
+) -> dict:
+    """Re-run a closed WO's originating_symptom (+ task ACs unless symptom_only).
+
+    Returns ``{work_order_id, title, passed, failures}``. ``passed`` is False when
+    the symptom SQL-CHECK still fails or any executable AC fails.
+    """
+    import sqlite3
+
+    db_path = Path(db_path)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            "SELECT title, originating_symptom FROM business_work_orders WHERE work_order_id = ?",
+            (work_order_id,),
+        ).fetchone()
+        if row is None:
+            return {"work_order_id": work_order_id, "passed": True, "failures": [], "skipped": True}
+        title, symptom = row
+        tasks = [] if symptom_only else _read_wo_tasks_for_outcome(conn, work_order_id)
+    finally:
+        conn.close()
+
+    failures: list[str] = []
+
+    if symptom:
+        from core.work_orders.close import _check_originating_symptom
+
+        reason = _check_originating_symptom(symptom, db_path)
+        if reason:
+            failures.append(reason)
+
+    if tasks:
+        from core.work_orders.verify import run_executable_checks
+
+        try:
+            ac_results = run_executable_checks(tasks, db_path, source_root)
+        except TypeError:
+            # Older signature without source_root.
+            ac_results = run_executable_checks(tasks, db_path)
+        for t_title, checks in ac_results.items():
+            for c in checks:
+                if not c.get("passed"):
+                    failures.append(
+                        f"executable_ac[{t_title}]: {c.get('kind', 'CHECK')} "
+                        f"{c.get('expr', '')!r} FAILED — {c.get('error') or 'check returned falsy'}"
+                    )
+
+    return {
+        "work_order_id": work_order_id,
+        "title": title,
+        "passed": not failures,
+        "failures": failures,
+    }
+
+
+def _record_outcome_run(work_order_id: str, outcome: dict, db_path: Path) -> None:
+    """Best-effort: record the outcome eval to ds_eval_runs (never raises)."""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO ds_eval_runs"
+                " (run_id, eval_id, eval_version, started_at, completed_at,"
+                "  event_score, behavior_score, total_score, passed, failure_reasons, run_mode)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(uuid.uuid4()),
+                    f"outcome:{work_order_id[:8]}",
+                    "1",
+                    now,
+                    now,
+                    None,
+                    None,
+                    None,
+                    1 if outcome["passed"] else 0,
+                    json.dumps(outcome["failures"]),
+                    "outcome",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
+def _reopen_and_escalate(
+    work_order_id: str,
+    outcome: dict,
+    *,
+    db_path: Path,
+    dream_studio_home: Path | None = None,
+) -> None:
+    """Set a regressed WO back to in_progress and write an unresolved escalation file."""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET status = 'in_progress', updated_at = ?, last_updated_at = ?"
+            " WHERE work_order_id = ?",
+            (now, now, work_order_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    # Spool event for the canonical substrate (best-effort).
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        _spool_writer.write_event(
+            CanonicalEventEnvelope(
+                event_type="work_order.outcome_failed",
+                session_id=None,
+                payload={"work_order_id": work_order_id, "failures": outcome["failures"]},
+                timestamp=now,
+                severity="warning",
+                trace={"domain": "sdlc", "work_order_id": work_order_id},
+            ).to_dict()
+        )
+    except Exception:
+        pass
+
+    # Escalation file — counted by the pulse open-escalations scan
+    # (meta_dir/*.md containing "ESC-" and "unresolved").
+    home = Path(dream_studio_home) if dream_studio_home else Path.home() / ".dream-studio"
+    meta_dir = home / "meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    esc_path = meta_dir / f"ESC-OUTCOME-{work_order_id[:8]}.md"
+    reasons = "\n".join(f"- {r}" for r in outcome["failures"])
+    esc_path.write_text(
+        f"# ESC-OUTCOME-{work_order_id[:8]} — status: unresolved\n\n"
+        f"Outcome eval re-opened work order `{work_order_id}` "
+        f"({outcome.get('title', '')}). The symptom/ACs regressed after close:\n\n"
+        f"{reasons}\n",
+        encoding="utf-8",
+    )
+
+
+def run_outcome_eval(
+    *,
+    db_path: Path,
+    source_root: Path | None = None,
+    dream_studio_home: Path | None = None,
+    auto_reopen: bool = True,
+    symptom_only: bool = False,
+    window_hours: float | None = None,
+) -> dict:
+    """Re-run outcomes for closed WOs that have an originating symptom.
+
+    ``window_hours`` scopes to *recently*-closed WOs (closed_at within the window);
+    ``None`` evaluates all closed WOs. The pulse passes a finite window so the
+    safety net never auto-reopens ancient WOs whose symptom SQL is environment-
+    dependent. On FAIL with ``auto_reopen``: set the WO back to in_progress and
+    write an escalation file. Returns ``{ok, evaluated, failed, results}``.
+    """
+    import sqlite3
+    from datetime import datetime, timedelta, timezone
+
+    db_path = Path(db_path)
+    query = (
+        "SELECT work_order_id FROM business_work_orders"
+        " WHERE status = 'closed'"
+        " AND originating_symptom IS NOT NULL AND TRIM(originating_symptom) <> ''"
+    )
+    params: tuple = ()
+    if window_hours is not None:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        # closed_at is ISO-8601 → lexicographic comparison is chronological.
+        query += " AND closed_at IS NOT NULL AND closed_at >= ?"
+        params = (cutoff,)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        rows = conn.execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+    results: list[dict] = []
+    for (wo_id,) in rows:
+        outcome = evaluate_wo_outcome(
+            wo_id, db_path=db_path, source_root=source_root, symptom_only=symptom_only
+        )
+        _record_outcome_run(wo_id, outcome, db_path)
+        if not outcome["passed"] and auto_reopen:
+            try:
+                _reopen_and_escalate(
+                    wo_id, outcome, db_path=db_path, dream_studio_home=dream_studio_home
+                )
+                outcome["reopened"] = True
+            except Exception as exc:  # pragma: no cover - defensive
+                outcome["reopen_error"] = str(exc)
+        results.append(outcome)
+
+    return {
+        "ok": True,
+        "evaluated": len(results),
+        "failed": [r for r in results if not r["passed"]],
+        "results": results,
+    }
