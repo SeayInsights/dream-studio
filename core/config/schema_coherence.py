@@ -83,6 +83,10 @@ _SELF_SCAN_EXCLUDE: frozenset[str] = frozenset(
         # Gate docstring contains prose like "CREATE TABLE for a table" and
         # "CREATE TABLE or a RENAME TO target" — pattern text, not DDL.
         "core/gates/test_fixture_resurrection_guard.py",
+        # Nothing-left-hanging detectors contain SQL-pattern prose/regex
+        # ("a migration CREATE TABLE for a table ...", INSERT/UPDATE matchers) —
+        # detection rule text, not DDL call sites.
+        "core/gates/hanging_detectors.py",
         # Independent review prompt template contains "CREATE TABLE IF NOT EXISTS"
         # as an example pattern to detect — not an actual DDL call site.
         "core/work_orders/verify.py",
