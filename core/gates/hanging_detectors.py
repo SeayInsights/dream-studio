@@ -132,12 +132,31 @@ def detect_stale_removed_symbol_tests(
         return []
 
     patterns = {s: re.compile(r"(?<![\w-])" + re.escape(s) + r"(?![\w-])") for s in truly_removed}
-    findings: list[Finding] = []
+
+    # A removed symbol is only stale-test-worthy if it is ABSENT from the current
+    # NON-TEST source tree. A symbol removed from one diff line but still present
+    # elsewhere in source (e.g. a common word like "failures"/"in_progress", or a
+    # dict key still used) is NOT a genuinely-removed API symbol — flagging tests
+    # that merely mention it produces a flood of false positives.
+    present_in_source: set[str] = set()
+    test_files: list[tuple[str, str]] = []
     for rel, text in _iter_code_files(root):
-        if not _is_test_path(rel) or rel in changed_paths:
+        if _is_test_path(rel):
+            if rel not in changed_paths:
+                test_files.append((rel, text))
             continue
         for sym, pat in patterns.items():
-            if pat.search(text):
+            if sym not in present_in_source and pat.search(text):
+                present_in_source.add(sym)
+
+    genuinely_removed = {s for s in truly_removed if s not in present_in_source}
+    if not genuinely_removed:
+        return []
+
+    findings: list[Finding] = []
+    for rel, text in test_files:
+        for sym in genuinely_removed:
+            if patterns[sym].search(text):
                 findings.append(
                     {
                         "detector": "stale_removed_symbol_test",
@@ -145,8 +164,8 @@ def detect_stale_removed_symbol_tests(
                         "path": rel,
                         "symbol": sym,
                         "message": (
-                            f"{rel} still references {sym!r}, which the diff removed and did "
-                            f"not re-add. Update or delete the stale test."
+                            f"{rel} still references {sym!r}, which the diff removed and which "
+                            f"is now absent from non-test source. Update or delete the stale test."
                         ),
                     }
                 )
@@ -254,6 +273,20 @@ def _table_writers(table: str, repo_root: Path, *, exclude: str) -> list[str]:
     return writers
 
 
+# Authority tables are multi-writer BY DESIGN — the work-order/mutation layer has
+# many legitimate writers (close, start, block, unblock, reopen, …). Single-writer
+# ownership only applies to derived/projection tables (e.g. token_usage_records),
+# which are what this detector targets (#354). Skip the authority prefixes so a new
+# business_* mutation is not flagged against every other mutation that writes it.
+_AUTHORITY_TABLE_PREFIXES = ("business_", "raw_", "reg_")
+_AUTHORITY_TABLE_EXACT = {"canonical_events"}
+
+
+def _is_authority_table(table: str) -> bool:
+    t = table.lower()
+    return t in _AUTHORITY_TABLE_EXACT or t.startswith(_AUTHORITY_TABLE_PREFIXES)
+
+
 def detect_unowned_table_writes(
     diff_text: str, *, repo_root: Path | str = REPO_ROOT
 ) -> list[Finding]:
@@ -267,6 +300,8 @@ def detect_unowned_table_writes(
         added_targets = _write_targets("\n".join(f["added"]))
         removed_targets = _write_targets("\n".join(f["removed"]))
         for table in sorted(added_targets - removed_targets):
+            if _is_authority_table(table):
+                continue
             other = _table_writers(table, root, exclude=path)
             if other:
                 findings.append(

@@ -121,3 +121,62 @@ def test_detects_unowned_table_write(tmp_path: Path) -> None:
         "core/telemetry/execution_spine.py" in by_symbol["token_usage_records"]["message"]
     ), "finding should name the conflicting writer"
     assert "sole_owner_table" not in by_symbol, "a table with a single writer must not be flagged"
+
+
+def test_stale_symbol_ignores_words_still_in_source(tmp_path: Path) -> None:
+    """WO-BLAST-FALSEPOS: a removed line's common word still present in source → NO finding.
+
+    Removing a line containing "failures" must not flag every test mentioning "failures"
+    when "failures" still exists elsewhere in non-test source (the PR #374 false positive).
+    """
+    repo = tmp_path
+    # Non-test source still uses the word "failures".
+    _write(
+        repo / "core" / "svc" / "mod.py",
+        "def go(result):\n    return result['failures']\n",
+    )
+    # A test that merely mentions "failures".
+    _write(
+        repo / "tests" / "unit" / "test_mentions.py",
+        "def test_x():\n    assert 'failures' in {'failures': []}\n",
+    )
+    # Diff removes a line containing "failures" (still present in mod.py).
+    diff = (
+        "diff --git a/core/svc/other.py b/core/svc/other.py\n"
+        "--- a/core/svc/other.py\n"
+        "+++ b/core/svc/other.py\n"
+        "@@ -1,2 +1,1 @@\n"
+        '-    payload = {"failures": items}\n'
+        "+    payload = {}\n"
+    )
+
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "failures" for f in findings
+    ), f"'failures' still in source must not be flagged; got {findings}"
+
+
+def test_unowned_table_write_skips_authority_tables(tmp_path: Path) -> None:
+    """WO-BLAST-FALSEPOS: business_* authority tables are multi-writer; not flagged.
+
+    business_work_orders is written by many work-order mutations by design; a new
+    mutation that writes it must not be flagged against the others.
+    """
+    repo = tmp_path
+    # Another legitimate writer of the authority table (the mutation layer).
+    _write(
+        repo / "core" / "work_orders" / "close.py",
+        'def close():\n    conn.execute("UPDATE business_work_orders SET status=? WHERE id=?", (s, i))\n',
+    )
+    diff = (
+        "diff --git a/core/work_orders/mutations.py b/core/work_orders/mutations.py\n"
+        "--- a/core/work_orders/mutations.py\n"
+        "+++ b/core/work_orders/mutations.py\n"
+        "@@ -1,1 +1,2 @@\n"
+        '+    conn.execute("UPDATE business_work_orders SET status=? WHERE id=?", (s, i))\n'
+    )
+
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "business_work_orders" for f in findings
+    ), f"authority table business_work_orders must not be flagged; got {findings}"
