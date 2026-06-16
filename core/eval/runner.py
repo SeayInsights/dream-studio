@@ -595,10 +595,6 @@ def _reopen_and_escalate(
     respect the authority boundary (dependency Rule 3). reopen_work_order also
     emits work_order.reopened and syncs the read model.
     """
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc).isoformat()
-
     from core.work_orders.mutations import reopen_work_order
 
     reopen_work_order(
