@@ -169,6 +169,31 @@ def check_open_escalations() -> list[str]:
     return escalations
 
 
+def _run_outcome_eval_safe() -> dict | None:
+    """Run the WO-OUTCOME-EVAL safety net during the pulse (best-effort, never raises).
+
+    Re-runs each closed defect WO's originating symptom; a persisting symptom reopens
+    the WO and writes an unresolved escalation file (counted by check_open_escalations
+    below). symptom_only=True keeps this to cheap SQL re-checks on the pulse hot path —
+    the runner that ensures the outcome eval is never dormant (WO-OUTCOME-EVAL T3).
+    """
+    try:
+        db_path = paths.state_dir() / "studio.db"
+        if not db_path.exists():
+            return None
+        from core.eval.runner import run_outcome_eval
+
+        return run_outcome_eval(
+            db_path=db_path,
+            dream_studio_home=paths.meta_dir().parent,
+            auto_reopen=True,
+            symptom_only=True,
+            window_hours=168,  # only recently-closed (7d) — never reopen ancient WOs
+        )
+    except Exception:
+        return None
+
+
 def check_stale_agents(plugin_root: Path) -> list[str]:
     """Return repo_names of agent-type ingest-log entries whose refresh_due has passed."""
     ingest_log = plugin_root / "skills" / "domains" / "ingest-log.yml"
@@ -366,6 +391,7 @@ def generate_pulse() -> tuple[str, dict]:
     _run_memory_maintenance()
     pending_drafts = check_pending_drafts()
     corrections_count, last_correction = check_corrections_growth()
+    _run_outcome_eval_safe()
     open_escalations = check_open_escalations()
     stale_agents = check_stale_agents(Path(__file__).resolve().parents[2])
     mem_stats = collect_memory_stats()
