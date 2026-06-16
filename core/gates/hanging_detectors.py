@@ -60,7 +60,7 @@ def _parse_diff(diff_text: str) -> list[dict[str, Any]]:
                 cur["path"] = parts[1].strip()
         elif line.startswith("+++ b/"):
             if cur is not None:
-                cur["path"] = line[len("+++ b/") :].strip()
+                cur["path"] = line.removeprefix("+++ b/").strip()
         elif line.startswith("+++") or line.startswith("---"):
             continue
         elif line.startswith("+"):
