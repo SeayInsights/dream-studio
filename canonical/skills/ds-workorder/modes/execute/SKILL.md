@@ -21,7 +21,7 @@ A task within the active work order is done — either the user said so ("mark t
      - `tasks_remaining` (how many pending tasks are left in this WO)
    - Mark the matching native todo item completed (TodoWrite). SQLite is the authority; the todo list is a display-only mirror.
 
-4. **Chain forward.** If `all_tasks_complete` is True, invoke `ds-workorder:close` directly — do not stop to ask. Otherwise continue with the next pending task.
+4. **Chain forward.** If `all_tasks_complete` is True, invoke `ds-workorder:close` directly — do not stop to ask. Otherwise continue with the next pending task. **Do not attempt to close a WO with pending tasks** — close enforces a `tasks_done` gate and will refuse (no 0/N or partial closes); finish every task here first.
 
 ## Surface contract
 

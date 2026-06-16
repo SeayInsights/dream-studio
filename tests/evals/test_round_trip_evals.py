@@ -165,7 +165,7 @@ def test_eval_task_done(patched_paths, db_path: Path, tmp_path: Path) -> None:
 
 
 def test_eval_close_wo(patched_paths, db_path: Path, tmp_path: Path) -> None:
-    """close_work_order() on a gate-free WO reaches status=complete."""
+    """close_work_order() on a gate-free WO with all tasks done reaches status=closed."""
     from core.work_orders.close import close_work_order
     from core.work_orders.start import start_work_order
 
@@ -175,6 +175,18 @@ def test_eval_close_wo(patched_paths, db_path: Path, tmp_path: Path) -> None:
         dream_studio_home=tmp_path,
         planning_root=tmp_path / ".planning",
     )
+
+    # close_work_order now enforces a tasks_done gate (WO-TASKS-DONE-ENFORCE): a WO
+    # cannot close while any task is pending. mark_task_done is event-sourced and this
+    # patched-only harness does not wire its task.completed event into the temp DB's
+    # read model, so materialize the completed state directly — standing in for the
+    # TaskProjection that does this in production.
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("UPDATE business_tasks SET status = 'complete' WHERE task_id = ?", (TASK_ID,))
+        conn.commit()
+    finally:
+        conn.close()
 
     result = close_work_order(
         work_order_id=WO_DOCS_ID,
