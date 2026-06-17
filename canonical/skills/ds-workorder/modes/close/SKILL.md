@@ -10,6 +10,13 @@
 
 An active work order is done — the user said so ("close work order", "finish the auth WO", "wrap up this WO"), or `ds-workorder:execute` just reported `all_tasks_complete: True` (chain into close directly, no confirmation needed).
 
+**Every task must be marked done first.** Close enforces a `tasks_done` gate: a WO with any
+task not yet `complete` (or deliberately `cancelled`) cannot close without `force=True` — there
+are no 0/N or partial closes. Both the CLI close path and the autonomous execute-work-orders
+loop go through the same `close_work_order`, so this is enforced identically everywhere. If you
+believe the WO is done but close reports a `tasks_done` failure, mark the remaining tasks via
+`ds-workorder:execute` rather than force-closing.
+
 ## What to do
 
 1. **Preview gates first.** Call `check_close_gates(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)`. The returned dict tells you whether the WO would close cleanly without actually mutating anything.
@@ -17,7 +24,7 @@ An active work order is done — the user said so ("close work order", "finish t
 2. **If `gates_pass is True`:** call `close_work_order(work_order_id=<wo>, source_root=..., dream_studio_home=..., planning_root=...)` directly — no confirmation on the normal path. Surface the result dict (see contract below).
 
 3. **If `gates_pass is False`:** present the `gate_failures` list verbatim — one bullet per failure. Then offer two paths:
-   - **Fix the gates** (preferred): suggest the skill that addresses each failure. For example, `design_brief_locked` → invoke `ds-project:brief` to fill and then `ds-project:brief` lock mode; `design_critique` → invoke `website:critique`; `security_scan` → invoke `security:scan`; `api_contract_exists` → write the contract artifact.
+   - **Fix the gates** (preferred): suggest the skill that addresses each failure. For example, `tasks_done` → invoke `ds-workorder:execute` and mark the remaining tasks done (do NOT force past hanging tasks); `design_brief_locked` → invoke `ds-project:brief` to fill and then `ds-project:brief` lock mode; `design_critique` → invoke `website:critique`; `security_scan` → invoke `security:scan`; `api_contract_exists` → write the contract artifact.
    - **Force close** (requires explicit user approval — this is a stop condition): explain that `force=True` will bypass the failed gates and emit `gate.bypassed` spool events. Confirm: *"Bypass these gates? This is recorded for audit. (yes/no)"* — only on explicit yes, call `close_work_order(work_order_id=<wo>, force=True, ...)`.
 
 4. **Surface the close result and continue.**
@@ -84,6 +91,8 @@ Everything else flows continuously: start → execute each task → close → au
 
 ## Side effects
 
+- Runs a projection tick (`sync_tick`) before reading task statuses so freshly marked-done tasks are reflected (no false `tasks_done` failure from projection lag).
+- Blocks the close when any task is not done (`tasks_done` gate) unless `force=True`; a forced close records the bypass via a `gate.bypassed` event carrying the `tasks_done` reason.
 - Sets the WO row's `status` to `closed`.
 - Emits a `work_order.closed` spool event.
 - When `force=True` with failures, emits one `gate.bypassed` event per failure for audit.

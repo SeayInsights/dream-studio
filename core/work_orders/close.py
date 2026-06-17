@@ -567,6 +567,18 @@ def close_work_order(
     )
     _project_id_for_autostart = _pre_meta.get("project_id")
 
+    # T2: Flush any pending task.completed events into the read model BEFORE we read
+    # task statuses for the tasks_done gate below. mark_task_done already ticks inline
+    # (WO-TASKDONE-SYNC), but an externally-marked task — or a crash between the spool
+    # emit and the inline tick — could leave business_tasks behind. sync_tick never
+    # raises, so a transient projection failure degrades to the daemon's next cycle.
+    try:
+        from core.projections.runner import sync_tick as _sync_tick
+
+        _sync_tick()
+    except Exception:
+        pass
+
     with _connect(db_path) as conn:
         meta = _lookup_work_order_and_gates(conn, work_order_id)
         if not meta.get("ok"):
@@ -598,6 +610,26 @@ def close_work_order(
             _sym_failure = _check_originating_symptom(_orig_symptom, db_path)
             if _sym_failure:
                 gate_failures.append(_sym_failure)
+
+        # T1: Task-completeness gate — NOTHING LEFT HANGING. A WO with any task that
+        # is not done (or deliberately cancelled) cannot close without force=True.
+        # Mirrors mark_task_done's "remaining" predicate (status NOT IN complete|cancelled)
+        # so the close view agrees with the count surfaced as each task is completed.
+        # This failure is NOT subject to the independent_review bypass below — it always
+        # blocks unless forced, and a forced close records it via the gate.bypassed path.
+        _incomplete_tasks = conn.execute(
+            "SELECT title, status FROM business_tasks"
+            " WHERE work_order_id = ? AND status NOT IN ('complete', 'cancelled')"
+            " ORDER BY created_at ASC",
+            (work_order_id,),
+        ).fetchall()
+        if _incomplete_tasks:
+            _n_incomplete = len(_incomplete_tasks)
+            _preview = "; ".join(f"{_t!r} [{_s}]" for _t, _s in _incomplete_tasks[:3])
+            _more = f"; …and {_n_incomplete - 3} more" if _n_incomplete > 3 else ""
+            gate_failures.append(
+                f"tasks_done: {_n_incomplete} task(s) not marked done — {_preview}{_more}"
+            )
 
         # T3: Gaps found via inline verify — bypass only the independent_review gate
         # failure. The original WO closes with gaps registered; the gap WO remediates.

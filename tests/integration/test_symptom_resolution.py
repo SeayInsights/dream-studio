@@ -89,6 +89,8 @@ def _seed_wo(
     )
     # The always-on executable-AC close gate (WO-AC-EXECUTABLE) requires >=1
     # executable check to close without force; seed a passing one by default.
+    # Seed it as complete so the tasks_done gate (WO-TASKS-DONE-ENFORCE) is satisfied
+    # — these tests exercise the originating-symptom gate, not task completeness.
     conn.execute(
         "INSERT INTO business_tasks"
         " (task_id, work_order_id, project_id, title, status, acceptance_criteria,"
@@ -99,7 +101,7 @@ def _seed_wo(
             work_order_id,
             project_id,
             "Test task",
-            "pending",
+            "complete",
             acceptance_criteria,
             NOW,
             NOW,
