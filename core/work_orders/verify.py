@@ -707,15 +707,24 @@ def _collect_git_commits(
 
 
 def _find_migration_files(source_root: Path, git_diff: str) -> list[Path]:
-    """Return migration SQL files referenced in the git diff."""
+    """Return migration SQL files referenced in the git diff.
+
+    The filename portion comes from untrusted git-diff text, so each candidate is
+    resolved and confirmed to live inside the migrations directory — a crafted
+    ``../`` segment cannot escape it (defense in depth; WO-GATE-HARDEN-CLEANUP).
+    """
     import re
 
     source_root = Path(source_root)
+    migrations_dir = (source_root / "core" / "event_store" / "migrations").resolve()
     found: list[Path] = []
     for match in re.finditer(r"core/event_store/migrations/(\S+\.sql)", git_diff):
         candidate = source_root / "core" / "event_store" / "migrations" / match.group(1)
-        if candidate.is_file() and candidate not in found:
-            found.append(candidate)
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(migrations_dir):
+            continue
+        if resolved.is_file() and resolved not in found:
+            found.append(resolved)
     return found
 
 
