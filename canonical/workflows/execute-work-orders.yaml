@@ -27,8 +27,27 @@ nodes:
     context: fresh
     timeout_seconds: 30
 
-  - id: preflight-check
+  - id: escalation-probe
     depends_on: [capability-probe]
+    command: |
+      Resolve the executor (model) this work order must run on — escalation-aware.
+      Run: py -m interfaces.cli.ds work-order executor <active_work_order_id>
+
+      The JSON result has "executor" and "escalated". An ESCALATED work order
+      (reopened because the deterministic verifier said NOT FIXED) carries a
+      capability flag routing its retry to a more capable model (Opus).
+
+      Output one line and save it for downstream nodes:
+        EXECUTOR: <executor>   (e.g. EXECUTOR: opus when escalated, EXECUTOR: sonnet otherwise)
+
+      The implement-tasks and run-gates nodes MUST honor this executor — run the
+      retry on the designated model rather than the static default.
+    model: haiku
+    context: fresh
+    timeout_seconds: 30
+
+  - id: preflight-check
+    depends_on: [escalation-probe]
     command: |
       Call `py -m interfaces.cli.ds work-order tasks <active_work_order_id>`.
       Check business_work_order_preflights for any open critical/high findings
@@ -70,6 +89,10 @@ nodes:
       backoff_seconds: 30
     input: |
       You are executing the active work order autonomously.
+      HONOR THE ESCALATION EXECUTOR: if escalation-probe reported `EXECUTOR: opus`
+      (this WO was reopened as NOT FIXED), run this retry on Opus — the escalation
+      ladder routes escalated retries to the more capable model. Otherwise use the
+      default model.
       Read context.md for the active work order (under .planning/work-orders/<id>/context.md).
       Implement each open task in order. After implementing each task, call:
         py -m interfaces.cli.ds work-order task-done <work_order_id> <task_id>

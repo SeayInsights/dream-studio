@@ -619,6 +619,26 @@ def start_work_order(
         "project_id": brief_data["project_id"],
         "context_path": str(context_path),
     }
+
+    # WO-ESCALATION-LADDER T5: the manual path honors the escalation capability flag.
+    # An escalated WO routes its (re)try to a more capable model; surface the resolved
+    # executor so the operator/agent runs it there. The autonomous loop honors the same
+    # flag via `ds work-order executor` (resolve_executor is the single source of truth).
+    try:
+        from core.work_orders.escalation import read_escalation, resolve_executor
+
+        _esc_db = _require_db(source_root, dream_studio_home)
+        result["executor"] = resolve_executor(work_order_id, db_path=_esc_db)
+        _esc_row = read_escalation(work_order_id, db_path=_esc_db)
+        if _esc_row and (_esc_row.get("escalation_level") or 0) >= 1:
+            result["escalation"] = {
+                "level": _esc_row["escalation_level"],
+                "designated_executor": _esc_row.get("designated_executor"),
+                "retry_count": _esc_row.get("retry_count"),
+            }
+    except Exception:
+        pass
+
     workflow_template = brief_data.get("workflow_template")
     if workflow_template:
         result["workflow"] = {

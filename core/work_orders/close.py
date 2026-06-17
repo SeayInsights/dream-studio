@@ -631,9 +631,20 @@ def close_work_order(
                 f"tasks_done: {_n_incomplete} task(s) not marked done — {_preview}{_more}"
             )
 
+        # WO-ESCALATION-LADDER T3: an escalated WO (reopened because the deterministic
+        # verifier said NOT FIXED) must re-close through a PASSING independent review.
+        # For escalated WOs the independent_review gate is mandatory: the gaps/unreviewable
+        # bypasses below do NOT apply, and force cannot silently skip it (handled at the
+        # force check). Non-escalated WOs keep their existing bypass semantics.
+        from core.work_orders.escalation import read_escalation as _read_escalation
+
+        _esc_row = _read_escalation(work_order_id, db_path=db_path)
+        _is_escalated = bool(_esc_row and (_esc_row.get("escalation_level") or 0) >= 1)
+
         # T3: Gaps found via inline verify — bypass only the independent_review gate
         # failure. The original WO closes with gaps registered; the gap WO remediates.
-        if _has_gaps:
+        # Skipped for escalated WOs: a gappy (failed) review is not the required pass.
+        if _has_gaps and not _is_escalated:
             gate_failures = [f for f in gate_failures if not f.startswith("independent_review")]
 
         # WO-REVIEW-TRACEABILITY: Unreviewable + passing AC gate → close proceeds.
@@ -641,11 +652,29 @@ def close_work_order(
         # (no commit evidence) but all executable checks pass, the independent_review
         # gate failure is advisory only — bypass it so close is not hard-blocked.
         # Unreviewable + failing/missing AC → the AC gate failure still blocks close.
+        # Skipped for escalated WOs: re-close demands a genuine passing review, not an
+        # unreviewable verdict (WO-ESCALATION-LADDER T3).
         _is_unreviewable = (
             _verify_ran and _verify_result is not None and _verify_result.get("unreviewable")
         )
-        if _is_unreviewable and not ac_failures:
+        if _is_unreviewable and not ac_failures and not _is_escalated:
             gate_failures = [f for f in gate_failures if not f.startswith("independent_review")]
+
+        # T3: mandatory review for escalated WOs — independent_review failures block
+        # the close even under force. force may still bypass OTHER gates, but it can
+        # never silently re-close an escalated WO whose adversarial review did not pass.
+        if _is_escalated:
+            _ir_failures = [f for f in gate_failures if f.startswith("independent_review")]
+            if _ir_failures:
+                return {
+                    "ok": False,
+                    "error": (
+                        "Escalated work order requires a passing independent review before "
+                        "re-close — this gate cannot be bypassed with force."
+                    ),
+                    "failures": _ir_failures,
+                    "escalated": True,
+                }
 
         if gate_failures and not force:
             return {
