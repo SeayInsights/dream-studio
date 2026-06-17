@@ -856,6 +856,14 @@ def close_work_order(
                     result["auto_start_error"] = _started.get("error", "unknown error")
         else:
             # T2: Verify passed — find and auto-start the next WO in the project.
+            # WO-CLOSE-AUTOSTART-PARITY: the project-wide ready-set selector
+            # (get_next_work_order) is authoritative — it respects cross-milestone
+            # ordering, dependencies, and startability, whereas the same-milestone
+            # next_wo computed above is a naive status='created' query that can point
+            # at a WO start_work_order would refuse (e.g. an earlier milestone is still
+            # open). We auto-start the ready-set pick AND overwrite the advertised
+            # next_work_order/next_command/next_block to that same WO, so the WO we tell
+            # the operator is next is exactly the one we auto-start.
             from core.projects.queries import get_next_work_order as _get_next
             from core.work_orders.start import start_work_order as _start_wo
 
@@ -881,6 +889,20 @@ def close_work_order(
                         "title": _next_title,
                         "message": f"AUTO-STARTING: {_next_title} / ID: {_next_id}",
                     }
+                    # Parity: advertise exactly what we started.
+                    result["next_work_order"] = {
+                        "work_order_id": _next_id,
+                        "title": _next_title,
+                        "type": _next_wo.get("type") or _next_wo.get("work_order_type"),
+                        "sequence_order": _next_wo.get("sequence_order"),
+                        "next_command": f"ds work-order start {_next_id}",
+                    }
+                    result["next_command"] = f"ds work-order start {_next_id}"
+                    result["next_block"] = (
+                        f"NEXT WORK ORDER: {_next_title}"
+                        f" / ID: {_next_id}"
+                        f" / Run: py -m interfaces.cli.ds work-order start {_next_id}"
+                    )
                 else:
                     result["auto_start_error"] = _started.get("error", "unknown error")
             else:
