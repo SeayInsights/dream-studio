@@ -13,16 +13,13 @@ import time
 from pathlib import Path
 
 from control.context.handoff import (
-    COMPACT_KB,
     COMPACT_PCT,
-    HANDOFF_KB,
     HANDOFF_PCT,
-    URGENT_KB,
     URGENT_PCT,
-    WARN_KB,
     WARN_PCT,
     draft_handoff_lesson,
     git_context,
+    scaled_kb_thresholds,
     write_handoff,
     write_recap,
 )
@@ -63,15 +60,21 @@ def pct_to_band(pct: float) -> tuple[str, str]:
     return "ok", f"~{pct:.0f}%"
 
 
-def kb_to_band(kb: float) -> tuple[str, str]:
-    """Fallback: map JSONL KB to a threshold band."""
-    if kb >= URGENT_KB:
+def kb_to_band(kb: float, db_path: "Path | None" = None) -> tuple[str, str]:
+    """Fallback: map JSONL KB to a threshold band.
+
+    The KB thresholds are scaled to the active context window (WO-CONTEXT-THRESHOLD-SCALE)
+    so the same transcript size does not trip 'handoff'/'compact' at ~50% on the 1M-token
+    model the way the fixed 200k-tuned thresholds did.
+    """
+    th = scaled_kb_thresholds(db_path)
+    if kb >= th["urgent"]:
         return "urgent", f"~{kb:.0f} KB"
-    if kb >= HANDOFF_KB:
+    if kb >= th["handoff"]:
         return "handoff", f"~{kb:.0f} KB"
-    if kb >= COMPACT_KB:
+    if kb >= th["compact"]:
         return "compact", f"~{kb:.0f} KB"
-    if kb >= WARN_KB:
+    if kb >= th["warn"]:
         return "warn", f"~{kb:.0f} KB"
     return "ok", f"~{kb:.0f} KB"
 

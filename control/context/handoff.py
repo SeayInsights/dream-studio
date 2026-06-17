@@ -23,10 +23,69 @@ COMPACT_PCT = 70
 HANDOFF_PCT = 75
 URGENT_PCT = 82
 
+# KB-band thresholds — the FALLBACK used when no context percentage is available
+# (the bridge file is missing/stale). Tuned for a 200k-token window; on a larger
+# window the transcript grows proportionally more before hitting the same percentage,
+# so these are scaled by the active context window (WO-CONTEXT-THRESHOLD-SCALE) —
+# otherwise they trip at ~50% on the 1M-token model. The percentage path (pct_to_band)
+# is window-relative already and needs no scaling.
 WARN_KB = 800
 COMPACT_KB = 2000
 HANDOFF_KB = 2500
 URGENT_KB = 3000
+
+# Baseline window the fixed *_KB thresholds were tuned for.
+BASELINE_WINDOW_TOKENS = 200_000
+CONTEXT_WINDOW_ENV = "DREAM_STUDIO_CONTEXT_WINDOW_TOKENS"
+CONTEXT_WINDOW_CONFIG_KEY = "context.window_tokens"
+
+
+def context_window_tokens(db_path: "Path | None" = None) -> int:
+    """Resolve the active model's context window in tokens.
+
+    Resolution order: ``DREAM_STUDIO_CONTEXT_WINDOW_TOKENS`` env var > ds_config
+    ``context.window_tokens`` row > the 200k baseline. Set this for the 1M-token model
+    (``1000000``) so the KB-fallback thresholds scale up instead of tripping at ~50%.
+    Never raises — any resolution failure degrades to the baseline.
+    """
+    import os
+
+    env = os.environ.get(CONTEXT_WINDOW_ENV)
+    if env:
+        try:
+            return int(env)
+        except ValueError:
+            pass
+    try:
+        from core.config import paths as _paths
+        from core.config.authority import get_config_value
+
+        _db = db_path or (_paths.state_dir() / "studio.db")
+        raw = get_config_value(CONTEXT_WINDOW_CONFIG_KEY, _db)
+        if raw is not None:
+            return int(raw)
+    except Exception:
+        pass
+    return BASELINE_WINDOW_TOKENS
+
+
+def kb_threshold_scale(db_path: "Path | None" = None) -> float:
+    """Scale factor for the KB-band thresholds = active window / 200k baseline.
+
+    1.0 on a 200k window, 5.0 on the 1M model, 0.5 on a 100k window.
+    """
+    return context_window_tokens(db_path) / BASELINE_WINDOW_TOKENS
+
+
+def scaled_kb_thresholds(db_path: "Path | None" = None) -> dict[str, float]:
+    """The four KB-band thresholds scaled to the active context window."""
+    s = kb_threshold_scale(db_path)
+    return {
+        "warn": WARN_KB * s,
+        "compact": COMPACT_KB * s,
+        "handoff": HANDOFF_KB * s,
+        "urgent": URGENT_KB * s,
+    }
 
 
 def git(args: list[str], cwd: Path) -> str:
@@ -109,7 +168,7 @@ def write_handoff(
         f"## Current state\n"
         f"- **Branch:** {branch}\n"
         f"- **Last commit:** {last_commit}\n"
-        f"- **Context:** ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else HANDOFF_KB}{'%' if is_pct else ' KB'})\n\n"
+        f"- **Context:** ~{kb:.0f}{'%' if is_pct else ' KB'} (threshold: {HANDOFF_PCT if is_pct else scaled_kb_thresholds()['handoff']:.0f}{'%' if is_pct else ' KB'})\n\n"
         f"## Active files\n"
         f"{files_lines}\n\n"
         f"## Next action\n"
@@ -163,7 +222,7 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
         f"{changed_lines}\n"
         f"- Commits:\n{commits_lines}\n\n"
         f"## Risk flags\n"
-        f"- Context budget exceeded at ~{kb:.0f} KB (threshold: {HANDOFF_KB} KB)\n\n"
+        f"- Context budget exceeded at ~{kb:.0f} KB (threshold: {scaled_kb_thresholds()['handoff']:.0f} KB)\n\n"
         f"## Next step\n"
         f"{next_step}\n"
     )
@@ -199,7 +258,7 @@ def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bo
         date_str = utcnow().strftime("%Y-%m-%d")
         sid = session_id or "unknown"
         lesson_id = f"handoff-{date_str}-{sid[:8]}"
-        threshold = f"{HANDOFF_PCT}%" if is_pct else f"{HANDOFF_KB} KB"
+        threshold = f"{HANDOFF_PCT}%" if is_pct else f"{scaled_kb_thresholds()['handoff']:.0f} KB"
         what_happened = (
             f"Session hit auto-handoff at ~{kb:.0f}{'%' if is_pct else ' KB'}"
             f" (threshold: {threshold}). Git state: {ctx}. Session: {sid}"
