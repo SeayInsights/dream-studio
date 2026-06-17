@@ -2980,7 +2980,8 @@
                     document.getElementById('hooks-total-failures').textContent = total_failures.toLocaleString();
                     document.getElementById('hooks-success-rate').textContent = `${(overall_success_rate * 100).toFixed(1)}%`;
                     const anomalies = executions.filter(e => e.is_anomaly).length;
-                    document.getElementById('hooks-total-anomalies').textContent = anomalies.toLocaleString();
+                    const anomaliesEl = document.getElementById('hooks-total-anomalies');
+                    if (anomaliesEl) anomaliesEl.textContent = anomalies.toLocaleString();
                 }
 
                 // ── Timeline chart (executions per day, last 7 days) ──────
@@ -3015,21 +3016,27 @@
                 const perfData = perfLabels.map(h => +(byHook[h].avg_duration_ms || 0).toFixed(1));
                 if (charts.hooksPerformance) { charts.hooksPerformance.destroy(); charts.hooksPerformance = null; }
                 const perfCtx = document.getElementById('hooksPerformanceChart');
-                if (perfCtx && perfLabels.length > 0) {
-                    charts.hooksPerformance = new Chart(perfCtx, {
-                        type: 'bar',
-                        data: {
-                            labels: perfLabels,
-                            datasets: [{ label: 'Avg Duration (ms)', data: perfData,
-                                backgroundColor: 'rgba(147, 51, 234, 0.7)' }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-                    });
+                if (perfCtx) {
+                    if (perfLabels.length > 0) {
+                        charts.hooksPerformance = new Chart(perfCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: perfLabels,
+                                datasets: [{ label: 'Avg Duration (ms)', data: perfData,
+                                    backgroundColor: 'rgba(147, 51, 234, 0.7)' }]
+                            },
+                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                        });
+                    } else {
+                        const perfWrapper = perfCtx.parentElement;
+                        if (perfWrapper) perfWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No per-hook performance data yet</div>';
+                    }
                 }
 
                 // ── Hook status cards ─────────────────────────────────────
                 const cardsContainer = document.getElementById('hooks-cards-container');
-                if (cardsContainer && Object.keys(byHook).length > 0) {
+                if (cardsContainer) {
+                    if (Object.keys(byHook).length > 0) {
                     cardsContainer.innerHTML = '';
                     Object.entries(byHook).forEach(([hookName, stats]) => {
                         const pct = ((stats.success_rate || 0) * 100).toFixed(1);
@@ -3048,6 +3055,9 @@
                             </div>`;
                         cardsContainer.appendChild(card);
                     });
+                    } else {
+                        cardsContainer.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">No per-hook breakdown available yet — hook_executions data is loading or by_hook stats are not yet computed.</div>';
+                    }
                 }
 
                 // ── Detailed execution table ───────────────────────────────
@@ -3726,6 +3736,8 @@
             const data = await fetchMetrics('/models');
             if (!data || !data.model_distribution) {
                 console.warn('No model distribution data available');
+                const mdWrapper = document.getElementById('modelDistributionChart')?.parentElement;
+                if (mdWrapper) mdWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No model usage data yet</div>';
                 return;
             }
 
@@ -3793,6 +3805,8 @@
             const data = await fetchMetrics('/tokens');
             if (!data || !data.cost_timeline || !data.cost_timeline.some(d => d.cost !== null && d.cost !== undefined)) {
                 console.warn('No reportable cost timeline data available');
+                const cotWrapper = document.getElementById('costOverTimeChart')?.parentElement;
+                if (cotWrapper) cotWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">Cost data not yet reportable — token usage records exist but cost attribution is not available.</div>';
                 return;
             }
 
@@ -4745,6 +4759,7 @@ function initHooksCharts() {
                 const data = await fetchMetrics('/skills');
                 if (!data) {
                     console.warn('No skills data available');
+                    populateSkillsLeaderboard([]);
                     return;
                 }
 
@@ -4769,6 +4784,8 @@ function initHooksCharts() {
                 console.log('Skills tab initialized successfully');
             } catch (error) {
                 console.error('Error initializing Skills tab:', error);
+                // Ensure 'Loading skills data...' is never left as the final state
+                populateSkillsLeaderboard([]);
             }
         }
 
@@ -4878,6 +4895,8 @@ function initHooksCharts() {
 
             if (!trendData || trendData.length === 0) {
                 console.warn('No success rate trend data available');
+                const ssrWrapper = document.getElementById('skillSuccessRateChart')?.parentElement;
+                if (ssrWrapper) ssrWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No success rate trend data yet</div>';
                 return;
             }
 
@@ -4944,6 +4963,8 @@ function initHooksCharts() {
 
             if (!leaderboard || leaderboard.length === 0) {
                 console.warn('No execution time data available');
+                const etWrapper = document.getElementById('skillExecutionTimeChart')?.parentElement;
+                if (etWrapper) etWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No execution time data yet</div>';
                 return;
             }
 
@@ -5949,6 +5970,14 @@ function initHooksCharts() {
 
                 if (!workflowsApiData || !lessonsApiData) {
                     console.warn('No workflows/lessons data available');
+                    // Show honest empty-states on all summary cards
+                    ['workflows-total', 'workflows-active-count', 'workflows-lessons-total',
+                     'workflows-promoted-count', 'workflows-success-rate'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) el.textContent = id.includes('count') || id.includes('rate') ? '—' : '0';
+                    });
+                    const wb = document.getElementById('workflow-running-cards');
+                    if (wb) wb.innerHTML = '<div class="text-sm text-gray-500 text-center py-8">No workflow data yet</div>';
                     return;
                 }
 
@@ -6061,6 +6090,8 @@ function initHooksCharts() {
 
             if (!successRates || successRates.length === 0) {
                 console.warn('No workflow success rates data available');
+                const wsrWrapper = document.getElementById('workflowSuccessRatesChart')?.parentElement;
+                if (wsrWrapper) wsrWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No workflow run data yet</div>';
                 return;
             }
 
@@ -6165,6 +6196,8 @@ function initHooksCharts() {
 
             if (!timeline || timeline.length === 0) {
                 console.warn('No promoted vs draft timeline data available');
+                const pvdWrapper = document.getElementById('promotedVsDraftChart')?.parentElement;
+                if (pvdWrapper) pvdWrapper.innerHTML = '<div class="flex items-center justify-center h-full text-sm text-gray-400">No lesson timeline data yet — lessons will appear here as they are promoted.</div>';
                 return;
             }
 
