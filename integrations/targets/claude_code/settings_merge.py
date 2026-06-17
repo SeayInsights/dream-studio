@@ -245,6 +245,59 @@ def purge_all_hook_registrations(settings: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _entry_is_ds_owned(entry: Any) -> bool:
+    """Return True if a hook event entry was wired by Dream Studio.
+
+    Matches emitter, dispatcher, and legacy one-liner commands so uninstall can
+    remove every generation of DS wiring without touching foreign hooks.
+    """
+    if not isinstance(entry, dict):
+        return False
+    for h in entry.get("hooks", []):
+        if not isinstance(h, dict):
+            continue
+        command = h.get("command", "")
+        if (
+            _command_is_ds_emitter(command)
+            or _command_is_ds_dispatcher(command)
+            or _command_is_legacy_ds_hook(command)
+        ):
+            return True
+    return False
+
+
+def deregister_ds_hooks(settings: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """Remove every Dream-Studio-owned hook entry from a settings dict.
+
+    Inverse of the additive install merge. Foreign (non-DS) hook entries are
+    preserved. Events left empty are dropped; an emptied ``hooks`` section is
+    removed entirely so reinstall starts clean. Never touches settings.local.json
+    (the caller selects the path) or any non-``hooks`` key.
+
+    Returns ``(new_settings, removed_count)``.
+    """
+    import copy as _copy
+
+    result = _copy.deepcopy(settings)
+    hooks_section = result.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return result, 0
+    removed = 0
+    for event in list(hooks_section.keys()):
+        entries = hooks_section.get(event)
+        if not isinstance(entries, list):
+            continue
+        kept = [entry for entry in entries if not _entry_is_ds_owned(entry)]
+        removed += len(entries) - len(kept)
+        if kept:
+            hooks_section[event] = kept
+        else:
+            hooks_section.pop(event, None)
+    if not hooks_section:
+        result.pop("hooks", None)
+    return result, removed
+
+
 def load_settings(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}

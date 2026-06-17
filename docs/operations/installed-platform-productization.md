@@ -242,8 +242,15 @@ or delete anything.
 
 `ds uninstall-check` inventories local files without deleting anything.
 
-Live restore, update, or uninstall execution requires a separate
-operator-approved scope.
+`ds uninstall` performs the mutating teardown. With no flags it is a dry-run
+(plan only). `--execute` removes the `.claude` hook wiring from both generated
+settings.json copies and the global `ds` launchers, leaving `~/.dream-studio`
+state intact (reversible by reinstall). `--purge-state --force` additionally
+wipes the state tier, but only after taking an automatic backup outside the home
+first. The mandatory second confirmation (`--force`) is enforced. See the
+[uninstall contract](../contracts/uninstall-contract.md).
+
+Live restore or update execution requires a separate operator-approved scope.
 
 ## External Project Pipeline
 

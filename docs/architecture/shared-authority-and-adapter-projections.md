@@ -56,7 +56,10 @@ Unsupported tools remain context-packet-only rather than receiving overclaimed
 router support. Repo-owned launchers such as `ds.cmd` and `ds.ps1` may expose
 the global command surface, and `ds install-command` can materialize user-local
 launchers in a PATH directory. They still delegate back to Dream Studio source
-and SQLite authority.
+and SQLite authority. `ds uninstall` reverses this projection: it deregisters the
+Dream-Studio hook wiring from both generated `.claude/settings.json` copies and
+removes the launchers, while preserving the SQLite authority state tier unless
+`--purge-state --force` is given (which backs up before wiping).
 
 The installed dashboard command follows the same projection boundary. `ds
 dashboard --status` is the safe default/readiness mode, `--serve` starts the

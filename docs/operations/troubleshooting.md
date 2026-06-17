@@ -172,8 +172,12 @@ fake costs, or synthetic findings to make a dashboard look populated.
 ## Restore Or Uninstall Requested
 
 Use `ds restore-check` or `ds uninstall-check` first. These commands inspect the
-selected local runtime home and do not restore or delete data. Live restore,
-update, uninstall, cleanup, or deletion needs a separate approved scope.
+selected local runtime home and do not restore or delete data. To actually
+uninstall, `ds uninstall` (no flags) prints the same dry-run plan; `ds uninstall
+--execute` removes the `.claude` hook wiring + launchers but preserves
+`~/.dream-studio` state, and `ds uninstall --purge-state --force` wipes the state
+tier after an automatic backup. Live restore, update, cleanup, or deletion of
+other scopes needs a separate approved scope.
 
 ## Secrets And Auth Files
 

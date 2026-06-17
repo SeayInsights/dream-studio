@@ -46,6 +46,7 @@ from core.installed_productization import (  # noqa: E402
     repair_adapter_surfaces,
     rollback_runtime_check,
     restore_runtime_check,
+    uninstall_runtime,
     uninstall_runtime_check,
     update_runtime_check,
 )
@@ -205,6 +206,43 @@ def main(argv: list[str] | None = None) -> int:
 
     subcommands.add_parser("update-check", help="Check update readiness without mutation")
     subcommands.add_parser("uninstall-check", help="Inventory uninstall targets without deleting")
+
+    uninstall = subcommands.add_parser(
+        "uninstall",
+        help=(
+            "Uninstall DS adapter wiring. Default is a dry-run; --execute removes "
+            ".claude hook wiring + launchers (state preserved). --purge-state --force "
+            "additionally wipes ~/.dream-studio after an automatic backup."
+        ),
+    )
+    uninstall.add_argument(
+        "--execute",
+        action="store_true",
+        default=False,
+        help="Apply the teardown. Without it, only the inventory/plan is printed.",
+    )
+    uninstall.add_argument(
+        "--purge-state",
+        action="store_true",
+        default=False,
+        dest="purge_state",
+        help="Also wipe ~/.dream-studio state (requires --force as the second confirmation).",
+    )
+    uninstall.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Second confirmation for --purge-state. Backup is always taken first.",
+    )
+    uninstall.add_argument("--backup-dir", default=None, dest="backup_dir")
+    uninstall.add_argument("--command-dir", default=None, dest="command_dir")
+    uninstall.add_argument(
+        "--claude-settings-path",
+        action="append",
+        default=None,
+        dest="claude_settings_paths",
+        help="Override the .claude settings.json copies to clear (repeatable).",
+    )
 
     migrate_legacy = subcommands.add_parser(
         "migrate-legacy", help="Plan or execute a guarded legacy install migration"
@@ -922,6 +960,20 @@ def main(argv: list[str] | None = None) -> int:
                 uninstall_runtime_check(
                     source_root=source_root,
                     dream_studio_home=home,
+                )
+            )
+        if args.command == "uninstall":
+            settings_paths = args.claude_settings_paths or _default_claude_settings_paths()
+            return _print(
+                uninstall_runtime(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    claude_settings_paths=settings_paths,
+                    command_dir=args.command_dir,
+                    backup_dir=args.backup_dir,
+                    execute=bool(args.execute),
+                    purge_state=bool(args.purge_state),
+                    confirm_purge=bool(args.force),
                 )
             )
         if args.command == "migrate-legacy":
@@ -3091,6 +3143,33 @@ def _require_home_for_install(command: str) -> Path:
         f"{command} requires --home for this productization flow unless a live install scope "
         "has been explicitly approved."
     )
+
+
+def _default_claude_settings_paths() -> list[str]:
+    """Resolve the two generated .claude settings.json copies (hook-projection model).
+
+    Mirrors install: the detected (project or user) scope copy plus the user-global
+    copy. Returns deduped absolute path strings so uninstall clears both — nothing
+    left hanging.
+    """
+
+    paths: list[Path] = []
+    try:
+        from integrations.detector import detect_claude_code
+
+        detected = detect_claude_code()
+        paths.append(Path(detected.config_root) / "settings.json")
+    except Exception:  # noqa: BLE001 — detection is best-effort; user-global is the fallback
+        pass
+    paths.append(Path.home() / ".claude" / "settings.json")
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for p in paths:
+        key = str(p.resolve())
+        if key not in seen:
+            seen.add(key)
+            deduped.append(str(p))
+    return deduped
 
 
 def _eval_dispatch(args: argparse.Namespace, *, source_root: Path) -> int:

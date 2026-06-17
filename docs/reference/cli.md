@@ -48,6 +48,7 @@ Complete reference for all `ds` CLI commands.
 | `ds restore-check --backup-path PATH` | Validate a backup without restoring it |
 | `ds rollback-check --backup-path PATH` | Validate a legacy-upgrade backup |
 | `ds uninstall-check` | Inventory uninstall targets without deleting |
+| `ds uninstall [--execute] [--purge-state --force]` | Remove DS hook wiring + launchers (state preserved); `--purge-state --force` also wipes `~/.dream-studio` after an automatic backup. See [uninstall contract](../contracts/uninstall-contract.md) |
 | `ds migrate-legacy [--dry-run\|--execute]` | Plan or execute a guarded legacy install migration |
 | `ds repair-adapters [--execute]` | Plan or repair Dream-Studio-owned adapter surfaces |
 
