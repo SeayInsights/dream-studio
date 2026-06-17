@@ -554,3 +554,52 @@ def test_verify_exception_returns_ok_false(patched_paths) -> None:
     assert result["ok"] is False
     assert "Auto-verify raised an exception" in result["error"]
     assert "subprocess spawn failed" in result["error"]
+
+
+# ── WO-ESCALATION-FORCE-TEST: escalated WO + force cannot bypass review ────────
+
+
+def test_escalated_wo_force_cannot_bypass_independent_review(patched_paths) -> None:
+    """WO-ESCALATION-FORCE-TEST: the most critical Stop-False-Done invariant.
+
+    An escalated WO (reopened because the deterministic verifier said NOT FIXED)
+    must re-close only through a PASSING independent review. Even force=True
+    cannot silently re-close it when the adversarial review failed — close_work_order
+    returns ok=False with escalated=True and the independent_review failure intact.
+    """
+    _fake, db_path, tmp_path = patched_paths
+    planning = _planning(tmp_path, WO_INFRA)
+    # A genuine (non-unreviewable) FAILING verdict. The file exists, so auto-verify
+    # is skipped and the independent_review gate evaluates this verdict directly.
+    verdict_path = planning / "work-orders" / WO_INFRA / "review-verdict.json"
+    verdict_path.write_text(
+        json.dumps({"passed": False, "summary": "adversarial review found defects"}),
+        encoding="utf-8",
+    )
+    # Escalate the WO so close treats independent_review as mandatory (not bypassable).
+    from core.work_orders.escalation import mark_escalated, read_escalation
+
+    mark_escalated(WO_INFRA, db_path=db_path, reason="outcome-eval: not fixed", executor="opus")
+    assert (read_escalation(WO_INFRA, db_path=db_path) or {}).get("escalation_level", 0) >= 1
+
+    from core.work_orders.close import close_work_order
+
+    result = close_work_order(
+        work_order_id=WO_INFRA,
+        source_root=REPO_ROOT,
+        dream_studio_home=tmp_path,
+        planning_root=planning,
+        force=True,  # force must NOT bypass the mandatory review for an escalated WO
+    )
+
+    assert result["ok"] is False
+    assert result.get("escalated") is True
+    assert any(f.startswith("independent_review") for f in result["failures"])
+
+    # And the WO must NOT have been flipped to closed.
+    row = (
+        sqlite3.connect(str(db_path))
+        .execute("SELECT status FROM business_work_orders WHERE work_order_id = ?", (WO_INFRA,))
+        .fetchone()
+    )
+    assert row[0] != "closed"
