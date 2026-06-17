@@ -111,7 +111,11 @@ def main() -> None:
         kb = monitor.session_kb(projects, session_id)
         if kb == 0.0:
             return
-        band, label = monitor.kb_to_band(kb)
+        # KB-fallback band. kb_to_band scales its thresholds to the active context
+        # window (WO-CONTEXT-THRESHOLD-SCALE); db_path defaults to the live authority,
+        # where the context.window_tokens override (if any) is read — so on the 1M model
+        # this no longer trips 'handoff'/'compact' at ~50%.
+        band, label = monitor.kb_to_band(kb, db_path=None)
 
     if band == "ok":
         return
