@@ -442,12 +442,14 @@ def _emit_workflow_telemetry(
 def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute(
-            "SELECT run_key,status,started_at,finished_at FROM raw_workflow_runs WHERE workflow=? ORDER BY finished_at DESC LIMIT 1",
-            (workflow_name,),
-        ).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute(
+                "SELECT run_key,status,started_at,finished_at FROM raw_workflow_runs WHERE workflow=? ORDER BY finished_at DESC LIMIT 1",
+                (workflow_name,),
+            ).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -455,11 +457,13 @@ def last_run(workflow_name: str, db_path: Path | None = None) -> dict | None:
 def run_count(workflow_name: str, db_path: Path | None = None) -> int:
     try:
         c = _connect(db_path)
-        n = c.execute(
-            "SELECT COUNT(*) FROM raw_workflow_runs WHERE workflow=?", (workflow_name,)
-        ).fetchone()[0]
-        c.close()
-        return n
+        try:
+            n = c.execute(
+                "SELECT COUNT(*) FROM raw_workflow_runs WHERE workflow=?", (workflow_name,)
+            ).fetchone()[0]
+            return n
+        finally:
+            c.close()
     except Exception:
         return 0
 
@@ -533,18 +537,20 @@ def rolling_window_prune(db_path: Path | None = None) -> int:
 def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute("SELECT * FROM sum_skill_summary").fetchall()
-        result = []
-        for r in rows:
-            d = dict(r)
-            fail_ids = c.execute(
-                "SELECT id FROM effective_skill_runs WHERE skill_name=? AND success=0 ORDER BY id DESC LIMIT 3",
-                (d["skill_name"],),
-            ).fetchall()
-            d["recent_failure_ids"] = [row[0] for row in fail_ids]
-            result.append(d)
-        c.close()
-        return result
+        try:
+            rows = c.execute("SELECT * FROM sum_skill_summary").fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                fail_ids = c.execute(
+                    "SELECT id FROM effective_skill_runs WHERE skill_name=? AND success=0 ORDER BY id DESC LIMIT 3",
+                    (d["skill_name"],),
+                ).fetchall()
+                d["recent_failure_ids"] = [row[0] for row in fail_ids]
+                result.append(d)
+            return result
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -668,17 +674,19 @@ def insert_approach(
 def get_approach_patterns(skill_id: str | None = None, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        if skill_id:
-            rows = c.execute(
-                "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC",
-                (skill_id,),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                "SELECT * FROM vw_approach_patterns ORDER BY success_pct DESC"
-            ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            if skill_id:
+                rows = c.execute(
+                    "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC",
+                    (skill_id,),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT * FROM vw_approach_patterns ORDER BY success_pct DESC"
+                ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -686,12 +694,14 @@ def get_approach_patterns(skill_id: str | None = None, db_path: Path | None = No
 def get_best_approaches(skill_id: str, limit: int = 3, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC, times_tried DESC LIMIT ?",
-            (skill_id, limit),
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM vw_approach_patterns WHERE skill_id=? ORDER BY success_pct DESC, times_tried DESC LIMIT ?",
+                (skill_id, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -764,9 +774,11 @@ def upsert_skill(
 def get_skill(skill_id: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute("SELECT * FROM reg_skills WHERE skill_id=?", (skill_id,)).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute("SELECT * FROM reg_skills WHERE skill_id=?", (skill_id,)).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -774,11 +786,13 @@ def get_skill(skill_id: str, db_path: Path | None = None) -> dict | None:
 def find_skills_by_trigger(keyword: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM reg_skills WHERE triggers LIKE ?", (f"%{keyword}%",)
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM reg_skills WHERE triggers LIKE ?", (f"%{keyword}%",)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -830,20 +844,22 @@ def search_gotchas_db(keyword: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
         try:
-            rows = c.execute(
-                "SELECT g.* FROM reg_gotchas g "
-                "INNER JOIN fts_gotchas f ON g.rowid = f.rowid "
-                "WHERE fts_gotchas MATCH ? ORDER BY g.severity",
-                (keyword,),
-            ).fetchall()
-        except sqlite3.OperationalError:
-            rows = c.execute(
-                "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? "
-                "OR context LIKE ? ORDER BY severity",
-                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
-            ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+            try:
+                rows = c.execute(
+                    "SELECT g.* FROM reg_gotchas g "
+                    "INNER JOIN fts_gotchas f ON g.rowid = f.rowid "
+                    "WHERE fts_gotchas MATCH ? ORDER BY g.severity",
+                    (keyword,),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                rows = c.execute(
+                    "SELECT * FROM reg_gotchas WHERE keywords LIKE ? OR title LIKE ? "
+                    "OR context LIKE ? ORDER BY severity",
+                    (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -851,11 +867,13 @@ def search_gotchas_db(keyword: str, db_path: Path | None = None) -> list[dict]:
 def get_gotchas_for_skill(skill_id: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM reg_gotchas WHERE skill_id=? ORDER BY severity", (skill_id,)
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM reg_gotchas WHERE skill_id=? ORDER BY severity", (skill_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -899,9 +917,11 @@ def upsert_workflow(
 def get_workflows_by_category(category: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute("SELECT * FROM reg_workflows WHERE category=?", (category,)).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute("SELECT * FROM reg_workflows WHERE category=?", (category,)).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -925,9 +945,13 @@ def upsert_skill_dep(
 def get_skill_deps(skill_id: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute("SELECT * FROM reg_skill_deps WHERE from_skill=?", (skill_id,)).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM reg_skill_deps WHERE from_skill=?", (skill_id,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1003,16 +1027,18 @@ def get_project(project_id: str, db_path: Path | None = None) -> dict | None:
     # reg_projects deleted in migration 084. Query business_projects instead.
     try:
         c = _connect(db_path)
-        r = c.execute(
-            "SELECT project_id, name AS project_name, description, status,"
-            " project_path, detected_stack AS project_type,"
-            " total_sessions, total_tokens, last_session_at,"
-            " created_at, updated_at"
-            " FROM business_projects WHERE project_id = ?",
-            (project_id,),
-        ).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute(
+                "SELECT project_id, name AS project_name, description, status,"
+                " project_path, detected_stack AS project_type,"
+                " total_sessions, total_tokens, last_session_at,"
+                " created_at, updated_at"
+                " FROM business_projects WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -1021,15 +1047,17 @@ def list_projects(db_path: Path | None = None) -> list[dict]:
     # reg_projects deleted in migration 084. Query business_projects instead.
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT project_id, name AS project_name, description, status,"
-            " project_path, total_sessions, total_tokens, last_session_at,"
-            " created_at, updated_at"
-            " FROM business_projects"
-            " ORDER BY last_session_at DESC, updated_at DESC"
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT project_id, name AS project_name, description, status,"
+                " project_path, total_sessions, total_tokens, last_session_at,"
+                " created_at, updated_at"
+                " FROM business_projects"
+                " ORDER BY last_session_at DESC, updated_at DESC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1108,9 +1136,11 @@ def insert_session(
 def get_session(session_id: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute("SELECT * FROM raw_sessions WHERE session_id=?", (session_id,)).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute("SELECT * FROM raw_sessions WHERE session_id=?", (session_id,)).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -1118,12 +1148,14 @@ def get_session(session_id: str, db_path: Path | None = None) -> dict | None:
 def get_latest_session(project_id: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute(
-            "SELECT * FROM raw_sessions WHERE project_id=? ORDER BY started_at DESC LIMIT 1",
-            (project_id,),
-        ).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute(
+                "SELECT * FROM raw_sessions WHERE project_id=? ORDER BY started_at DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -1344,11 +1376,13 @@ def insert_handoff(
 def get_latest_handoff(project_id: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute(
-            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT 1",
-            (project_id,),
-        ).fetchone()
-        c.close()
+        try:
+            r = c.execute(
+                "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()
+        finally:
+            c.close()
         if not r:
             return None
         d = dict(r)
@@ -1378,13 +1412,15 @@ def get_latest_unconsumed_handoff(db_path: Path | None = None) -> dict | None:
     """Return the most recent handoff that has not been consumed, across all projects."""
     try:
         c = _connect(db_path)
-        r = c.execute(
-            """SELECT h.* FROM raw_handoffs h
+        try:
+            r = c.execute(
+                """SELECT h.* FROM raw_handoffs h
                LEFT JOIN raw_sessions s ON h.session_id = s.session_id
                WHERE COALESCE(s.handoff_consumed, 0) = 0
                ORDER BY h.created_at DESC LIMIT 1""",
-        ).fetchone()
-        c.close()
+            ).fetchone()
+        finally:
+            c.close()
         if not r:
             return None
         d = dict(r)
@@ -1415,12 +1451,14 @@ def get_handoffs_for_project(
 ) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
-            (project_id, limit),
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM raw_handoffs WHERE project_id=? ORDER BY created_at DESC LIMIT ?",
+                (project_id, limit),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1480,9 +1518,11 @@ def upsert_spec(
 def get_spec(spec_id: str, db_path: Path | None = None) -> dict | None:
     try:
         c = _connect(db_path)
-        r = c.execute("SELECT * FROM raw_specs WHERE spec_id=?", (spec_id,)).fetchone()
-        c.close()
-        return dict(r) if r else None
+        try:
+            r = c.execute("SELECT * FROM raw_specs WHERE spec_id=?", (spec_id,)).fetchone()
+            return dict(r) if r else None
+        finally:
+            c.close()
     except Exception:
         return None
 
@@ -1492,21 +1532,23 @@ def list_specs(
 ) -> list[dict]:
     try:
         c = _connect(db_path)
-        query = "SELECT * FROM raw_specs"
-        params: list = []
-        clauses: list[str] = []
-        if project_id:
-            clauses.append("project_id=?")
-            params.append(project_id)
-        if status:
-            clauses.append("status=?")
-            params.append(status)
-        if clauses:
-            query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY created_at DESC"
-        rows = c.execute(query, params).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            query = "SELECT * FROM raw_specs"
+            params: list = []
+            clauses: list[str] = []
+            if project_id:
+                clauses.append("project_id=?")
+                params.append(project_id)
+            if status:
+                clauses.append("status=?")
+                params.append(status)
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
+            query += " ORDER BY created_at DESC"
+            rows = c.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1554,12 +1596,14 @@ def upsert_task(
 def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM raw_tasks WHERE spec_id=? ORDER BY task_id",
-            (spec_id,),
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM raw_tasks WHERE spec_id=? ORDER BY task_id",
+                (spec_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1567,21 +1611,23 @@ def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:
 def get_blocked_tasks(project_id: str | None = None, db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        if project_id:
-            rows = c.execute(
-                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
-                "JOIN raw_specs s ON t.spec_id=s.spec_id "
-                "WHERE t.status='blocked' AND t.project_id=?",
-                (project_id,),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
-                "JOIN raw_specs s ON t.spec_id=s.spec_id "
-                "WHERE t.status='blocked'",
-            ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            if project_id:
+                rows = c.execute(
+                    "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                    "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                    "WHERE t.status='blocked' AND t.project_id=?",
+                    (project_id,),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
+                    "JOIN raw_specs s ON t.spec_id=s.spec_id "
+                    "WHERE t.status='blocked'",
+                ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1766,21 +1812,23 @@ def get_lessons(
 ) -> list[dict]:
     try:
         c = _connect(db_path)
-        query = "SELECT * FROM raw_lessons"
-        params: list = []
-        clauses: list[str] = []
-        if source:
-            clauses.append("source=?")
-            params.append(source)
-        if status:
-            clauses.append("status=?")
-            params.append(status)
-        if clauses:
-            query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY created_at DESC"
-        rows = c.execute(query, params).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            query = "SELECT * FROM raw_lessons"
+            params: list = []
+            clauses: list[str] = []
+            if source:
+                clauses.append("source=?")
+                params.append(source)
+            if status:
+                clauses.append("status=?")
+                params.append(status)
+            if clauses:
+                query += " WHERE " + " AND ".join(clauses)
+            query += " ORDER BY created_at DESC"
+            rows = c.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1817,11 +1865,13 @@ def reject_lesson(lesson_id: str, db_path: Path | None = None) -> bool:
 def get_pending_lessons(db_path: Path | None = None) -> list[dict]:
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            "SELECT * FROM raw_lessons WHERE status='draft' ORDER BY created_at DESC",
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+        try:
+            rows = c.execute(
+                "SELECT * FROM raw_lessons WHERE status='draft' ORDER BY created_at DESC",
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -1990,12 +2040,14 @@ def get_research_cache(topic: str, db_path: Path | None = None) -> dict | None:
     try:
         cache_id = hashlib.sha256(topic.encode()).hexdigest()[:16]
         c = _connect(db_path)
-        r = c.execute(
-            """SELECT * FROM research_cache
+        try:
+            r = c.execute(
+                """SELECT * FROM research_cache
                WHERE cache_id=? AND (expires_at IS NULL OR expires_at > ?)""",
-            (cache_id, _NOW()),
-        ).fetchone()
-        c.close()
+                (cache_id, _NOW()),
+            ).fetchone()
+        finally:
+            c.close()
         if not r:
             return None
         d = dict(r)
@@ -2018,13 +2070,15 @@ def get_research_by_task(task_id: str, db_path: Path | None = None) -> list[dict
     """Get all research linked to a specific task."""
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            """SELECT * FROM raw_research
+        try:
+            rows = c.execute(
+                """SELECT * FROM raw_research
                WHERE task_id=? ORDER BY created_at DESC""",
-            (task_id,),
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+                (task_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -2033,13 +2087,15 @@ def get_research_by_prd(prd_id: str, db_path: Path | None = None) -> list[dict]:
     """Get all research linked to a specific PRD."""
     try:
         c = _connect(db_path)
-        rows = c.execute(
-            """SELECT * FROM raw_research
+        try:
+            rows = c.execute(
+                """SELECT * FROM raw_research
                WHERE prd_id=? ORDER BY created_at DESC""",
-            (prd_id,),
-        ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+                (prd_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -2072,10 +2128,12 @@ def set_sentinel(
 def has_sentinel(sentinel_key: str, db_path: Path | None = None) -> bool:
     try:
         c = _connect(db_path)
-        r = c.execute(
-            "SELECT expires_at FROM raw_sentinels WHERE sentinel_key=?", (sentinel_key,)
-        ).fetchone()
-        c.close()
+        try:
+            r = c.execute(
+                "SELECT expires_at FROM raw_sentinels WHERE sentinel_key=?", (sentinel_key,)
+            ).fetchone()
+        finally:
+            c.close()
         if not r:
             return False
         if r["expires_at"]:
@@ -2433,10 +2491,11 @@ def get_token_summary(
 ) -> list[dict]:
     try:
         c = _connect(db_path)
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-        if project_id:
-            rows = c.execute(
-                """SELECT skill_name,
+        try:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            if project_id:
+                rows = c.execute(
+                    """SELECT skill_name,
                           SUM(input_tokens) AS total_input,
                           SUM(output_tokens) AS total_output,
                           SUM(input_tokens + output_tokens) AS total_tokens,
@@ -2444,11 +2503,11 @@ def get_token_summary(
                    FROM raw_token_usage
                    WHERE project_id=? AND recorded_at>=?
                    GROUP BY skill_name ORDER BY total_tokens DESC""",
-                (project_id, cutoff),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                """SELECT project_id,
+                    (project_id, cutoff),
+                ).fetchall()
+            else:
+                rows = c.execute(
+                    """SELECT project_id,
                           SUM(input_tokens) AS total_input,
                           SUM(output_tokens) AS total_output,
                           SUM(input_tokens + output_tokens) AS total_tokens,
@@ -2456,10 +2515,11 @@ def get_token_summary(
                    FROM raw_token_usage
                    WHERE recorded_at>=?
                    GROUP BY project_id ORDER BY total_tokens DESC""",
-                (cutoff,),
-            ).fetchall()
-        c.close()
-        return [dict(r) for r in rows]
+                    (cutoff,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            c.close()
     except Exception:
         return []
 
@@ -2470,9 +2530,11 @@ def get_token_summary(
 def schema_version(db_path: Path | None = None) -> int:
     try:
         c = _connect(db_path)
-        v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
-        c.close()
-        return v
+        try:
+            v = c.execute("SELECT MAX(version) FROM _schema_version").fetchone()[0] or 0
+            return v
+        finally:
+            c.close()
     except Exception:
         return 0
 
