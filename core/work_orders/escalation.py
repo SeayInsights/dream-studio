@@ -175,7 +175,9 @@ def mark_escalated(
         # error instead of an AssertionError so callers see a graceful failure
         # (WO-GATE-HARDEN-CLEANUP). The row was just upserted, so this is only
         # reachable if the DB became unreadable between write and re-read.
-        raise RuntimeError(f"mark_escalated: escalation row not readable after upsert for {work_order_id}")
+        raise RuntimeError(
+            f"mark_escalated: escalation row not readable after upsert for {work_order_id}"
+        )
     return row
 
 
