@@ -59,7 +59,10 @@ launchers in a PATH directory. They still delegate back to Dream Studio source
 and SQLite authority. `ds uninstall` reverses this projection: it deregisters the
 Dream-Studio hook wiring from both generated `.claude/settings.json` copies and
 removes the launchers, while preserving the SQLite authority state tier unless
-`--purge-state --force` is given (which backs up before wiping).
+`--purge-state --force` is given (which backs up before wiping). `ds restore
+<backup>` is the inverse of `ds backup`: it replaces the state-tier databases from
+a chosen backup, taking a pre-restore backup of current state first so the restore
+is itself reversible.
 
 The installed dashboard command follows the same projection boundary. `ds
 dashboard --status` is the safe default/readiness mode, `--serve` starts the

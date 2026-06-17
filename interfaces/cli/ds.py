@@ -44,6 +44,7 @@ from core.installed_productization import (  # noqa: E402
     migrate_legacy_install,
     productization_acceptance_report,
     repair_adapter_surfaces,
+    restore_runtime,
     rollback_runtime_check,
     restore_runtime_check,
     uninstall_runtime,
@@ -203,6 +204,19 @@ def main(argv: list[str] | None = None) -> int:
 
     restore = subcommands.add_parser("restore-check", help="Validate a backup without restoring it")
     restore.add_argument("--backup-path", required=True)
+
+    restore_cmd = subcommands.add_parser(
+        "restore",
+        help=(
+            "Restore state from a backup. Default is a dry-run; --execute applies, "
+            "taking a pre-restore backup of current state first. --force overrides "
+            "a not-restore-ready backup."
+        ),
+    )
+    restore_cmd.add_argument("backup_path", help="Path to the backup directory to restore from")
+    restore_cmd.add_argument("--execute", action="store_true", default=False)
+    restore_cmd.add_argument("--force", action="store_true", default=False)
+    restore_cmd.add_argument("--backup-dir", default=None, dest="backup_dir")
 
     subcommands.add_parser("update-check", help="Check update readiness without mutation")
     subcommands.add_parser("uninstall-check", help="Inventory uninstall targets without deleting")
@@ -946,6 +960,17 @@ def main(argv: list[str] | None = None) -> int:
                     source_root=source_root,
                     dream_studio_home=home or _require_home_for_install(args.command),
                     backup_path=args.backup_path,
+                )
+            )
+        if args.command == "restore":
+            return _print(
+                restore_runtime(
+                    source_root=source_root,
+                    dream_studio_home=home or _require_home_for_install(args.command),
+                    backup_path=args.backup_path,
+                    backup_dir=args.backup_dir,
+                    execute=bool(args.execute),
+                    force=bool(args.force),
                 )
             )
         if args.command == "update-check":

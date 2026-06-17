@@ -213,6 +213,12 @@ non-destructive backup in the selected Dream Studio home or explicit
 
 `ds restore-check` validates a backup but does not restore it.
 
+`ds restore <backup>` performs the mutating restore. With no flags it is a dry-run
+(validate + plan). `--execute` takes a pre-restore backup of the current state
+first (written outside the home so it survives), then replaces the state-tier
+databases (`studio.db` / `files.db`) from the chosen backup. `--force` overrides a
+not-restore-ready backup. See the [restore contract](../contracts/restore-contract.md).
+
 `ds update-check` compares installed SQLite state with the current migration
 level without mutating the database. It also reports legacy-install detection
 metadata so users who previously installed an old checkout do not accidentally
