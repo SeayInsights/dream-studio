@@ -52,6 +52,7 @@ ds analytics-ingest --file payload.json
 ds acceptance
 ds backup
 ds restore-check
+ds restore
 ds update-check
 ds migrate-legacy --dry-run
 ds repair-adapters

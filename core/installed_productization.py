@@ -278,6 +278,104 @@ def restore_runtime_check(
     }
 
 
+_RESTORABLE_STATE_FILES: tuple[str, ...] = ("studio.db", "files.db")
+
+
+def restore_runtime(
+    *,
+    source_root: str | Path,
+    dream_studio_home: str | Path,
+    backup_path: str | Path,
+    backup_dir: str | Path | None = None,
+    execute: bool = False,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Restore Dream Studio state from a backup, reversibly.
+
+    Companion to ``restore_runtime_check`` (validate-only) and to the
+    backup-before-mutation pattern used by install/update/uninstall.
+
+    - Default (``execute=False``): dry-run. Validates the backup via
+      ``restore_runtime_check`` and returns the plan. Mutates nothing.
+    - ``execute=True``: takes a pre-restore backup of the CURRENT state FIRST
+      (so the restore is itself reversible), then replaces the state-tier
+      databases (``studio.db`` / ``files.db``) from the chosen backup.
+
+    Refuses a backup that is not restore-ready unless ``force=True``.
+    """
+
+    paths = resolve_installed_runtime_paths(
+        source_root=source_root,
+        dream_studio_home=dream_studio_home,
+    )
+    home = paths.dream_studio_home
+    state_dir = home / "state"
+    backup = Path(backup_path).resolve()
+
+    check = restore_runtime_check(
+        source_root=paths.source_root,
+        dream_studio_home=home,
+        backup_path=backup,
+    )
+    # Restore exactly the state files present in the CHOSEN backup directory.
+    restorable = [name for name in _RESTORABLE_STATE_FILES if (backup / name).is_file()]
+
+    result: dict[str, Any] = {
+        "model_name": "dream_studio_runtime_restore",
+        "backup_path": str(backup),
+        "target_home": str(home),
+        "execute": execute,
+        "force": force,
+        "restore_check": check,
+        "restore_ready": check["restore_ready"],
+        "restorable_files": restorable,
+        "pre_restore_backup_path": None,
+        "restored_files": [],
+        "restore_executed": False,
+        "requires_operator_approval": True,
+    }
+
+    if not check["restore_ready"] and not force:
+        result["status"] = "refused"
+        result["error"] = (
+            "Backup is not restore-ready (missing backup dir or studio.db). "
+            "Use --force to override."
+        )
+        return result
+
+    if not execute:
+        result["status"] = "planned"
+        return result
+
+    # T2 — pre-restore safety backup of CURRENT state FIRST, written outside the
+    # home so a subsequent purge cannot destroy it. Makes the restore reversible.
+    backup_root = Path(backup_dir or home.parent / f"{home.name}-restore-backups").resolve()
+    pre = backup_runtime(
+        source_root=paths.source_root,
+        dream_studio_home=home,
+        backup_dir=backup_root,
+        execute=True,
+    )
+    result["pre_restore_backup_path"] = pre["backup_path"]
+
+    # Replace the state-tier databases from the chosen backup. Clear the live
+    # WAL/SHM sidecars first: copying only the main .db while a stale -wal exists
+    # would let uncommitted frames mask the restored data (WAL mode).
+    state_dir.mkdir(parents=True, exist_ok=True)
+    restored: list[str] = []
+    for name in restorable:
+        target = state_dir / name
+        for sidecar in (target, state_dir / f"{name}-wal", state_dir / f"{name}-shm"):
+            if sidecar.exists():
+                sidecar.unlink()
+        shutil.copy2(backup / name, target)
+        restored.append(name)
+    result["restored_files"] = restored
+    result["restore_executed"] = True
+    result["status"] = "restored"
+    return result
+
+
 def update_runtime_check(
     *,
     source_root: str | Path,

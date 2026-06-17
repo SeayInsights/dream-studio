@@ -176,8 +176,11 @@ selected local runtime home and do not restore or delete data. To actually
 uninstall, `ds uninstall` (no flags) prints the same dry-run plan; `ds uninstall
 --execute` removes the `.claude` hook wiring + launchers but preserves
 `~/.dream-studio` state, and `ds uninstall --purge-state --force` wipes the state
-tier after an automatic backup. Live restore, update, cleanup, or deletion of
-other scopes needs a separate approved scope.
+tier after an automatic backup. To actually restore, `ds restore <backup>` (no
+flags) validates and plans; `ds restore <backup> --execute` takes a pre-restore
+backup of current state first, then replaces the state-tier databases from the
+chosen backup. Live update, cleanup, or deletion of other scopes needs a separate
+approved scope.
 
 ## Secrets And Auth Files
 
