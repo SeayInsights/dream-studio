@@ -57,7 +57,14 @@ ds migrate-legacy --dry-run
 ds repair-adapters
 ds rollback-check
 ds uninstall-check
+ds uninstall
 ```
+
+`ds uninstall` is the mutating counterpart to `ds uninstall-check`. Default is a
+dry-run; `--execute` removes the `.claude` hook wiring (both generated copies) and
+the global launchers while preserving `~/.dream-studio` state. `--purge-state
+--force` additionally wipes the state tier after an automatic backup. See the
+[uninstall contract](../contracts/uninstall-contract.md).
 
 When running directly from a checkout before packaging, use:
 

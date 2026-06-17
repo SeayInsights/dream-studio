@@ -134,6 +134,7 @@ def installed_runtime_model(
             "ds repair-adapters",
             "ds rollback-check",
             "ds uninstall-check",
+            "ds uninstall",
         ],
         "productization_surface": {
             "windows_launchers": ["ds.cmd", "ds.ps1"],
@@ -149,6 +150,8 @@ def installed_runtime_model(
             "adapter_repair": "ds repair-adapters",
             "rollback_check": "ds rollback-check",
             "uninstall_check": "ds uninstall-check",
+            "uninstall": "ds uninstall --execute",
+            "uninstall_purge_state": "ds uninstall --execute --purge-state --force",
             "dashboard": {
                 "status": "ds dashboard --status",
                 "serve": "ds dashboard --serve",
