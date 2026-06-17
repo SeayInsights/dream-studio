@@ -595,7 +595,30 @@ def _reopen_and_escalate(
     respect the authority boundary (dependency Rule 3). reopen_work_order also
     emits work_order.reopened and syncs the read model.
     """
+    from core.work_orders.escalation import (
+        escalate_to_operator,
+        mark_escalated,
+        register_retry,
+    )
     from core.work_orders.mutations import reopen_work_order
+
+    _reason = "; ".join(str(f) for f in outcome.get("failures", [])) or "outcome regressed"
+
+    # WO-ESCALATION-LADDER T4: count this retry attempt. When the cap is reached, stop
+    # the auto-retry loop and hand the WO to the operator — do NOT silently reopen
+    # again. The escalation file below is replaced by an operator-action escalation.
+    _retry = register_retry(work_order_id, db_path=Path(db_path))
+    if _retry["capped"]:
+        escalate_to_operator(
+            work_order_id,
+            db_path=Path(db_path),
+            dream_studio_home=dream_studio_home,
+            reason=(
+                f"retry cap reached ({_retry['retry_count']}/{_retry['retry_cap']}); "
+                f"last failure: {_reason}"
+            ),
+        )
+        return
 
     reopen_work_order(
         work_order_id=work_order_id,
@@ -603,6 +626,11 @@ def _reopen_and_escalate(
         source_root=source_root,
         dream_studio_home=dream_studio_home,
     )
+
+    # Escalate: the reopened WO carries the Opus capability flag so its retry is
+    # routed to a more capable model (WO-ESCALATION-LADDER T2). Both execution
+    # surfaces read this via escalation.resolve_executor.
+    mark_escalated(work_order_id, db_path=Path(db_path), reason=_reason)
 
     # Escalation file — counted by the pulse open-escalations scan
     # (meta_dir/*.md containing "ESC-" and "unresolved").

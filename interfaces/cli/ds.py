@@ -497,6 +497,10 @@ def main(argv: list[str] | None = None) -> int:
         "verify", help="Run independent fresh-context review; gaps become new work orders"
     )
     wo_verify.add_argument("work_order_id", help="Work order UUID")
+    wo_executor = work_order_sub.add_parser(
+        "executor", help="Resolve which model should execute this WO (escalation-aware)"
+    )
+    wo_executor.add_argument("work_order_id", help="Work order UUID")
 
     # design-brief subcommand group (Slice 7a)
     design_brief_cmd = subcommands.add_parser("design-brief", help="Manage project design briefs")
@@ -2136,8 +2140,45 @@ def _work_order_dispatch(
             source_root=source_root,
             dream_studio_home=dream_studio_home,
         )
+    if args.work_order_command == "executor":
+        return _work_order_executor(
+            work_order_id=args.work_order_id,
+            source_root=source_root,
+            dream_studio_home=dream_studio_home,
+        )
     print(f"Unknown work-order command: {args.work_order_command}", file=sys.stderr)
     return 1
+
+
+def _work_order_executor(
+    *,
+    work_order_id: str,
+    source_root: Path,
+    dream_studio_home: Path | None,
+) -> int:
+    """Resolve and print the executor (model) for a WO — escalation-aware (T5).
+
+    The autonomous execute-work-orders loop calls this to honor the escalation
+    capability flag (route an escalated WO's retry to Opus); the manual path honors
+    the same flag via start_work_order's ``executor`` field. Both consume
+    ``escalation.resolve_executor`` so routing is identical on both surfaces.
+    """
+    from core.work_orders.escalation import read_escalation, resolve_executor
+
+    db_path = resolve_installed_runtime_paths(
+        source_root=source_root, dream_studio_home=dream_studio_home
+    ).sqlite_path
+    executor = resolve_executor(work_order_id, db_path=db_path)
+    esc = read_escalation(work_order_id, db_path=db_path)
+    result = {
+        "ok": True,
+        "work_order_id": work_order_id,
+        "executor": executor,
+        "escalated": bool(esc and (esc.get("escalation_level") or 0) >= 1),
+        "escalation_level": (esc or {}).get("escalation_level", 0),
+    }
+    print(json.dumps(result, indent=2))
+    return 0
 
 
 def _work_order_start(

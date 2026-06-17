@@ -93,6 +93,7 @@ Everything else flows continuously: start → execute each task → close → au
 
 - Runs a projection tick (`sync_tick`) before reading task statuses so freshly marked-done tasks are reflected (no false `tasks_done` failure from projection lag).
 - Blocks the close when any task is not done (`tasks_done` gate) unless `force=True`; a forced close records the bypass via a `gate.bypassed` event carrying the `tasks_done` reason.
+- For an **escalated** WO (reopened because the deterministic verifier said NOT FIXED), re-close REQUIRES a passing independent review: the unreviewable/gap bypasses are skipped and `force=True` cannot bypass the `independent_review` gate (the result carries `escalated: True`). Get a passing `review-verdict.json` rather than forcing.
 - Sets the WO row's `status` to `closed`.
 - Emits a `work_order.closed` spool event.
 - When `force=True` with failures, emits one `gate.bypassed` event per failure for audit.

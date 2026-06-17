@@ -88,3 +88,57 @@ def test_unreviewable_grader_alone_is_not_not_fixed() -> None:
 
     signal = compute_not_fixed_signal(grader_not_fixed=True, grader_confidence=0.0)
     assert signal["not_fixed"] is False
+
+
+def test_retry_cap_escalates_to_operator(tmp_path: Path) -> None:
+    """Retries are capped (configurable via ds_config); on cap the ladder escalates to
+    the operator instead of silently looping.
+
+    AC: tests/unit/test_escalation.py::test_retry_cap_escalates_to_operator
+    """
+    from core.config.authority import set_config_value
+    from core.work_orders.escalation import (
+        RETRY_CAP_CONFIG_KEY,
+        escalate_to_operator,
+        get_retry_cap,
+        register_retry,
+    )
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    wo = str(uuid.uuid4())
+
+    # Configurable via ds_config: set a low cap of 2.
+    set_config_value(RETRY_CAP_CONFIG_KEY, "2", db)
+    assert get_retry_cap(db_path=db) == 2
+
+    # First retry: under cap.
+    r1 = register_retry(wo, db_path=db)
+    assert r1["retry_count"] == 1
+    assert r1["capped"] is False
+
+    # Second retry: hits the cap → caller must escalate to the operator.
+    r2 = register_retry(wo, db_path=db)
+    assert r2["retry_count"] == 2
+    assert r2["retry_cap"] == 2
+    assert r2["capped"] is True
+
+    # Escalate to operator: writes an unresolved operator escalation file (no reopen).
+    esc_path = escalate_to_operator(
+        wo, db_path=db, dream_studio_home=tmp_path, reason="retry cap reached (2/2)"
+    )
+    assert esc_path.is_file()
+    body = esc_path.read_text(encoding="utf-8")
+    assert "unresolved" in body
+    assert "OPERATOR" in body.upper()
+
+
+def test_default_retry_cap_when_unset(tmp_path: Path) -> None:
+    """With no env var and no ds_config row, the retry cap falls back to the default (3)."""
+    from core.work_orders.escalation import DEFAULT_RETRY_CAP, get_retry_cap
+
+    db = tmp_path / "state" / "studio.db"
+    db.parent.mkdir(parents=True)
+    bootstrap_database(db)
+    assert get_retry_cap(db_path=db) == DEFAULT_RETRY_CAP
