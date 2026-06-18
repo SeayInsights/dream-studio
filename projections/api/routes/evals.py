@@ -36,13 +36,13 @@ async def get_eval_health() -> Dict[str, Any]:
             }
 
         baselines = conn.execute("""
-            SELECT eval_id, eval_version, score, passed, last_run_at
+            SELECT eval_id, version, baseline_score, regression_flag, last_run_at
             FROM ds_eval_baselines
             ORDER BY last_run_at DESC
             """).fetchall()
 
         total = len(baselines)
-        passing = sum(1 for r in baselines if r["passed"])
+        passing = sum(1 for r in baselines if not r["regression_flag"])
         failing = total - passing
         pass_rate = round(passing / total * 100, 1) if total > 0 else None
 
@@ -74,9 +74,9 @@ async def get_eval_health() -> Dict[str, Any]:
             "baselines": [
                 {
                     "eval_id": r["eval_id"],
-                    "version": r["eval_version"],
-                    "score": r["score"],
-                    "passed": bool(r["passed"]),
+                    "version": r["version"],
+                    "score": r["baseline_score"],
+                    "passed": not bool(r["regression_flag"]),
                     "last_run_at": r["last_run_at"],
                 }
                 for r in baselines
