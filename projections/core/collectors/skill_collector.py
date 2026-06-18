@@ -81,6 +81,8 @@ class SkillCollector:
                     COUNT(*) as count,
                     SUM(success) as successes,
                     AVG(execution_time_s) as avg_exec_time,
+                    MIN(execution_time_s) as min_exec_time,
+                    MAX(execution_time_s) as max_exec_time,
                     AVG(input_tokens) as avg_input_tokens,
                     AVG(output_tokens) as avg_output_tokens
                 FROM ({source_sql}) skill_usage
@@ -103,6 +105,12 @@ class SkillCollector:
                     "success_rate": round(success_rate, 1),
                     "avg_exec_time_s": (
                         round(row["avg_exec_time"], 2) if row["avg_exec_time"] else 0.0
+                    ),
+                    "min_exec_time_s": (
+                        round(row["min_exec_time"], 2) if row["min_exec_time"] else 0.0
+                    ),
+                    "max_exec_time_s": (
+                        round(row["max_exec_time"], 2) if row["max_exec_time"] else 0.0
                     ),
                     "avg_input_tokens": (
                         round(row["avg_input_tokens"], 0) if row["avg_input_tokens"] else 0

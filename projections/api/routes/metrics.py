@@ -251,6 +251,12 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
             avg_duration_minutes = avg_exec_s / 60 if avg_exec_s else 0
             ranges = exec_ranges.get(skill_name, {})
 
+            # Derive min/max from paired execution_events when canonical ranges absent
+            min_exec_s = skill_data.get("min_exec_time_s", 0)
+            max_exec_s = skill_data.get("max_exec_time_s", 0)
+            min_duration_minutes = ranges.get("min_m") or (min_exec_s / 60 if min_exec_s else 0)
+            max_duration_minutes = ranges.get("max_m") or (max_exec_s / 60 if max_exec_s else 0)
+
             input_tok = skill_data.get("avg_input_tokens", 0)
             output_tok = skill_data.get("avg_output_tokens", 0)
             leaderboard.append(
@@ -260,8 +266,8 @@ async def get_skill_metrics(days: int = Query(default=30, ge=1, le=365)):
                     "success_rate": skill_data.get("success_rate", 0) / 100,
                     "avg_exec_time_s": avg_exec_s,
                     "avg_duration_minutes": avg_duration_minutes,
-                    "min_duration_minutes": ranges.get("min_m", 0),
-                    "max_duration_minutes": ranges.get("max_m", 0),
+                    "min_duration_minutes": min_duration_minutes,
+                    "max_duration_minutes": max_duration_minutes,
                     "avg_cost": None,
                     "cost_visibility": "unavailable",
                     "cost_status": "unknown",
