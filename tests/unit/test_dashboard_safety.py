@@ -77,6 +77,17 @@ class TestNoWildcardBind:
         assert match, "launch_server host default not found"
         assert match.group(1) == "127.0.0.1"
 
+    def test_launch_server_reload_off_by_default(self):
+        """launch_server() gained a `reload` param (WO-DASH-RESTART); hot-reload must
+        be OFF by default — auto-reload is a dev convenience, not a default behavior."""
+        import inspect
+
+        from interfaces.cli import ds_dashboard
+
+        params = inspect.signature(ds_dashboard.launch_server).parameters
+        assert "reload" in params, "launch_server must accept a reload flag"
+        assert params["reload"].default is False, "reload must default to False (off)"
+
 
 # ── 3. CORS rejects non-localhost origins ────────────────────────────────────
 
