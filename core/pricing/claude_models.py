@@ -15,6 +15,13 @@ _log = logging.getLogger(__name__)
 # Keys are canonical model IDs as returned by the Claude API.
 # cache_write = 5-minute cache write price (the standard tier).
 CLAUDE_MODEL_PRICING: dict[str, dict[str, float]] = {
+    "claude-opus-4-8": {
+        # Current Opus tier — same published rates as opus-4-5/4-6/4-7.
+        "input": 5.00,
+        "output": 25.00,
+        "cache_write": 6.25,
+        "cache_read": 0.50,
+    },
     "claude-opus-4-7": {
         "input": 5.00,
         "output": 25.00,
