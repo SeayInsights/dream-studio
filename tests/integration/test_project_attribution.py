@@ -22,6 +22,38 @@ from core.config.sqlite_bootstrap import bootstrap_database
 DS_UUID = "29ff0914-b15a-4a84-8bc7-5619cc5240f6"
 
 
+def backfill_execution_events(conn: sqlite3.Connection) -> dict[str, int]:
+    """Test-local remap helper. Production code is intentionally write-free (the
+    one-time historical remap was an operator action), so this exercises the
+    resolver's decisions against a seeded temp DB without a committed writer."""
+    import re
+
+    from core.projects.attribution import resolve_project_uuid
+
+    raw_keys = conn.execute(
+        "SELECT DISTINCT project_id FROM execution_events WHERE project_id IS NOT NULL"
+    ).fetchall()
+    summary: dict[str, int] = {}
+    uuid_pat = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    for row in raw_keys:
+        key = row[0] if isinstance(row, tuple) else row["project_id"]
+        if not key or re.match(uuid_pat, key, re.IGNORECASE):
+            continue
+        resolved = resolve_project_uuid(key, conn)
+        if resolved is None or resolved == key:
+            continue
+        count = conn.execute(
+            "SELECT COUNT(*) FROM execution_events WHERE project_id = ?", (key,)
+        ).fetchone()[0]
+        if count > 0:
+            conn.execute(
+                "UPDATE execution_events SET project_id = ? WHERE project_id = ?",
+                (resolved, key),
+            )
+            summary[key] = count
+    return summary
+
+
 def _make_db(tmp_path: Path, name: str) -> Path:
     """Bootstrap a full-schema test DB with a seeded dream-studio project."""
     db_path = tmp_path / name
@@ -136,7 +168,6 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
     2. Backfill: old free-text key rows -> remapped to UUID
     3. Read: /api/v1/projects/{uuid}/activity returns events from both paths
     """
-    from projections.core.execution_events_projection import backfill_execution_events
     from core.telemetry.execution_spine import record_execution_event
 
     db_path = _make_db(tmp_path, "e2e-test.db")

@@ -78,6 +78,9 @@ def resolve_project_uuid(key: str, conn: sqlite3.Connection) -> Optional[str]:
     return None
 
 
-# NOTE: the execution_events backfill WRITER lives in the owning projection module
-# (projections/core/execution_events_projection.py) so execution_events keeps a single
-# writer. This module stays write-free: it only RESOLVES keys.
+# This module is intentionally WRITE-FREE: it only RESOLVES keys to UUIDs.
+# The forward fix lives at the capture sites (core/telemetry/execution_spine.py,
+# control/analysis/synthesis.py), which resolve project_id to the UUID on insert.
+# The one-time historical remap was run as an operator action (not a committed
+# writer), so execution_events keeps its existing writers and no single-writer
+# ownership boundary is crossed.

@@ -1,9 +1,7 @@
 from __future__ import annotations
 import json
-import re
 import sqlite3
 import uuid
-from pathlib import Path
 from typing import Any
 
 PROJECTED_EVENT_TYPES: frozenset[str] = frozenset(
@@ -91,62 +89,3 @@ def apply(event_data: dict[str, Any], conn: sqlite3.Connection) -> bool:
         ),
     )
     return True
-
-
-# ── Project-attribution backfill (WO-ATTRIBUTION-NORMALIZE) ───────────────────
-# execution_events is owned by this projection, so its remap writer lives here
-# (single-writer ownership). Resolution logic is the pure helper in
-# core.projects.attribution; the WRITE stays in the owning module.
-
-
-def backfill_execution_events(conn: sqlite3.Connection) -> dict[str, int]:
-    """Remap resolvable free-text project keys in execution_events to UUIDs.
-
-    Only updates rows whose project_id is a confidently-resolvable key (matches a
-    business_projects name, slug, or path basename). Already-UUID values and
-    unresolvable garbage keys are left untouched. Returns {key: rows_updated}.
-    """
-    from core.projects.attribution import resolve_project_uuid
-
-    try:
-        raw_keys = conn.execute(
-            "SELECT DISTINCT project_id FROM execution_events WHERE project_id IS NOT NULL"
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return {}
-
-    summary: dict[str, int] = {}
-    uuid_pat = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    for row in raw_keys:
-        key = row[0] if isinstance(row, tuple) else row["project_id"]
-        if not key or re.match(uuid_pat, key, re.IGNORECASE):
-            continue
-        resolved = resolve_project_uuid(key, conn)
-        if resolved is None or resolved == key:
-            continue
-        count = conn.execute(
-            "SELECT COUNT(*) FROM execution_events WHERE project_id = ?", (key,)
-        ).fetchone()[0]
-        if count > 0:
-            conn.execute(
-                "UPDATE execution_events SET project_id = ? WHERE project_id = ?",
-                (resolved, key),
-            )
-            summary[key] = count
-    return summary
-
-
-def run_live_backfill(db_path: Path) -> dict[str, int]:
-    """Connect to the live authority DB and run the backfill (commits on success)."""
-    conn = sqlite3.connect(str(db_path), timeout=30.0)
-    conn.row_factory = sqlite3.Row
-    try:
-        conn.execute("PRAGMA journal_mode = WAL")
-        summary = backfill_execution_events(conn)
-        conn.commit()
-        return summary
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
