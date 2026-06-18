@@ -28,25 +28,39 @@ def skill_usage_sql(conn: sqlite3.Connection) -> str | None:
             "SELECT COUNT(*) FROM execution_events WHERE event_type='skill.invoked' AND skill_id IS NOT NULL AND TRIM(skill_id) != ''"
         ).fetchone()[0]
         if count > 0:
+            # Derive execution_time_s by pairing execution.started ↔ execution.completed
+            # rows that share the same process_run_id as the skill.invoked event.
+            # Only invocations with BOTH phases present get a non-NULL duration;
+            # unpaired invocations yield NULL (excluded from AVG, never fabricated).
             return """
                 SELECT
-                    skill_id AS skill_name,
-                    created_at AS invoked_at,
+                    inv.skill_id AS skill_name,
+                    inv.created_at AS invoked_at,
                     CASE
-                        WHEN outcome_status IN ('completed', 'passed', 'recorded', 'success', 'succeeded', 'ok') THEN 1
+                        WHEN inv.outcome_status IN ('completed', 'passed', 'recorded', 'success', 'succeeded', 'ok') THEN 1
                         ELSE 0
                     END AS success,
-                    NULL AS execution_time_s,
+                    CASE
+                        WHEN es.created_at IS NOT NULL AND ec.created_at IS NOT NULL
+                        THEN (julianday(ec.created_at) - julianday(es.created_at)) * 86400.0
+                        ELSE NULL
+                    END AS execution_time_s,
                     NULL AS model,
                     NULL AS input_tokens,
                     NULL AS output_tokens,
-                    event_id,
-                    project_id,
-                    process_run_id AS session_id
-                FROM execution_events
-                WHERE event_type = 'skill.invoked'
-                  AND skill_id IS NOT NULL
-                  AND TRIM(skill_id) != ''
+                    inv.event_id,
+                    inv.project_id,
+                    inv.process_run_id AS session_id
+                FROM execution_events inv
+                LEFT JOIN execution_events es
+                    ON es.process_run_id = inv.process_run_id
+                    AND es.event_type = 'execution.started'
+                LEFT JOIN execution_events ec
+                    ON ec.process_run_id = inv.process_run_id
+                    AND ec.event_type = 'execution.completed'
+                WHERE inv.event_type = 'skill.invoked'
+                  AND inv.skill_id IS NOT NULL
+                  AND TRIM(inv.skill_id) != ''
             """
 
     # Fallback: canonical_events with skill_specifier in trace JSON
