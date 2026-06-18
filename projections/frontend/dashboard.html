@@ -731,6 +731,10 @@
                     <span class="nav-mark">CF</span>
                     <span>Config</span>
                 </div>
+                <div class="sidebar-item" onclick="navigate('developer-diagnostics')">
+                    <span class="nav-mark">DX</span>
+                    <span>Developer Diagnostics</span>
+                </div>
                 <div class="sidebar-item" onclick="navigate('learning')">
                     <span class="nav-mark">LR</span>
                     <span>Learning</span>
@@ -2418,36 +2422,6 @@
 </div>
 
 
-<!-- Previously-invisible tables panel (WO-A Fix #5) — appended to Hooks tab above -->
-<div id="hooks-invisible-tables" class="mt-6 space-y-4" style="display:none;">
-
-    <!-- Tool Activity -->
-    <div class="bg-white rounded-lg shadow p-5">
-        <h3 class="text-base font-semibold text-gray-900 mb-1">Tool Activity
-            <span class="ml-2 text-xs font-normal text-gray-400" id="tool-activity-count"></span>
-        </h3>
-        <p class="text-xs text-gray-400 mb-3">Every tool Claude used — previously invisible. Data from <code>tool_invocations</code>.</p>
-        <div id="tool-activity-list" class="text-sm text-gray-600">Loading…</div>
-    </div>
-
-    <!-- Validation Failures -->
-    <div class="bg-white rounded-lg shadow p-5">
-        <h3 class="text-base font-semibold text-gray-900 mb-1">Event Validation Failures
-            <span class="ml-2 text-xs font-normal text-gray-400" id="validation-failures-count"></span>
-        </h3>
-        <p class="text-xs text-gray-400 mb-3">Events rejected by the validation pipeline — previously invisible. Data from <code>validation_failures</code>.</p>
-        <div id="validation-failures-list" class="text-sm text-gray-600">Loading…</div>
-    </div>
-
-    <!-- Raw Events -->
-    <div class="bg-white rounded-lg shadow p-5">
-        <h3 class="text-base font-semibold text-gray-900 mb-1">Raw Event Stream
-            <span class="ml-2 text-xs font-normal text-gray-400" id="raw-events-count"></span>
-        </h3>
-        <p class="text-xs text-gray-400 mb-3">Raw Claude Code events before canonical processing — previously invisible. Data from <code>raw_claude_code_events</code>.</p>
-        <div id="raw-events-list" class="text-sm text-gray-600">Loading…</div>
-    </div>
-</div>
 
 <!-- Config Tab -->
         <div id="config" class="tab-content">
@@ -2578,6 +2552,49 @@
                     </table>
                 </div>
             </div>
+        </div>
+
+<!-- Developer Diagnostics Tab -->
+        <div id="developer-diagnostics" class="tab-content">
+            <div class="mb-6">
+                <h2 class="text-xl font-bold text-gray-900">Developer Diagnostics</h2>
+                <p class="mt-1 text-sm text-gray-500">Low-level event/tool diagnostics, consolidated. Previously duplicated across tabs.</p>
+            </div>
+            <!-- Tool Activity / Validation Failures / Raw Events three cards -->
+            <div id="devdiag-invisible-tables" class="space-y-4">
+
+                <!-- Tool Activity -->
+                <div class="bg-white rounded-lg shadow p-5">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Tool Activity
+                        <span class="ml-2 text-xs font-normal text-gray-400" id="tool-activity-count"></span>
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-3">Every tool Claude used — previously invisible. Data from <code>tool_invocations</code>.</p>
+                    <div id="tool-activity-list" class="text-sm text-gray-600">Loading&#8230;</div>
+                </div>
+
+                <!-- Validation Failures -->
+                <div class="bg-white rounded-lg shadow p-5">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Event Validation Failures
+                        <span class="ml-2 text-xs font-normal text-gray-400" id="validation-failures-count"></span>
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-3">Events rejected by the validation pipeline — previously invisible. Data from <code>validation_failures</code>.</p>
+                    <div id="validation-failures-list" class="text-sm text-gray-600">Loading&#8230;</div>
+                </div>
+
+                <!-- Raw Events -->
+                <div class="bg-white rounded-lg shadow p-5">
+                    <h3 class="text-base font-semibold text-gray-900 mb-1">Raw Event Stream
+                        <span class="ml-2 text-xs font-normal text-gray-400" id="raw-events-count"></span>
+                    </h3>
+                    <p class="text-xs text-gray-400 mb-3">Raw Claude Code events before canonical processing — previously invisible. Data from <code>raw_claude_code_events</code>.</p>
+                    <div id="raw-events-list" class="text-sm text-gray-600">Loading&#8230;</div>
+                </div>
+
+            </div>
+            <details class="developer-diagnostics mt-6">
+                <summary>Raw technical markers</summary>
+                <pre id="devdiag-raw-markers"></pre>
+            </details>
         </div>
     </main>
 
@@ -2793,7 +2810,6 @@
                 const loopHtml = pageId === 'overview' ? createOperatingLoopView() : '';
                 const stateHtml = createPageSourceStatePanel(pageId);
                 page.insertAdjacentHTML('afterbegin', storyHtml + loopHtml + stateHtml);
-                page.insertAdjacentHTML('beforeend', createDeveloperDiagnostics(pageId));
             });
         }
 
@@ -2881,7 +2897,8 @@
             security: false,
             'audit-history': false,
             evals: false,
-            config: false
+            config: false,
+            'developer-diagnostics': false
         };
 
         function switchTab(tabName) {
@@ -2957,6 +2974,9 @@
             } else if (tabName === 'config' && !tabsInitialized.config) {
                 tabsInitialized.config = true;
                 loadDsConfig();
+            } else if (tabName === 'developer-diagnostics' && !tabsInitialized['developer-diagnostics']) {
+                tabsInitialized['developer-diagnostics'] = true;
+                loadInvisibleTables();
             }
         }
 
@@ -4244,7 +4264,6 @@
         if (tabName === 'memory-surface') loadMemorySurface();
         if (tabName === 'adaptation') loadAdaptationPanels();
         if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionOrphans(); }
-        if (tabName === 'hooks') loadInvisibleTables();
     };
 
     // ── Fix #5: Surface previously-invisible tables on Hooks tab ─────────────
@@ -4253,9 +4272,11 @@
 
     async function loadInvisibleTables() {
         if (_invisibleTablesLoaded) return;
-        const container = document.getElementById('hooks-invisible-tables');
+        const container = document.getElementById('devdiag-invisible-tables');
         if (container) container.style.display = 'block';
         _invisibleTablesLoaded = true;
+        const rawMarkersEl = document.getElementById('devdiag-raw-markers');
+        if (rawMarkersEl) rawMarkersEl.textContent = RAW_TECHNICAL_MARKERS.join('\n');
         await Promise.all([loadToolActivity(), loadValidationFailures(), loadRawEvents()]);
     }
 
