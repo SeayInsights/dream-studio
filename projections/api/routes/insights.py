@@ -503,3 +503,108 @@ async def get_memory_surface(project_id: str = Query(default=None)) -> dict:
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error fetching memory surface: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Attribution Breakouts — token usage aggregated by dimension (18.x)
+# ---------------------------------------------------------------------------
+
+_BREAKOUT_REQUIRED_COLUMNS = {
+    "project_id",
+    "milestone_id",
+    "task_id",
+    "skill_id",
+    "agent_id",
+    "input_tokens",
+    "output_tokens",
+}
+
+
+@router.get("/attribution-breakouts")
+async def get_attribution_breakouts() -> dict:
+    """Return token usage aggregated by project, milestone, task, skill, and agent.
+
+    Reads directly from ``token_usage_records``. If the table does not exist or
+    lacks the expected columns, returns ``data_status="empty"`` with empty lists.
+    All breakouts are capped at 20 rows, ordered by tokens DESC.
+    """
+    import sqlite3 as _sqlite3
+    from core.config.database import get_connection
+    from projections.api.routes.sqlite_schema import has_columns, object_exists
+
+    _EMPTY = {
+        "schema": "dream_studio.attribution_breakouts.v1",
+        "total_tokens": 0,
+        "total_records": 0,
+        "by_project": [],
+        "by_milestone": [],
+        "by_task": [],
+        "by_skill": [],
+        "by_agent": [],
+        "data_status": "empty",
+        "generated_at": datetime.now().isoformat(),
+    }
+
+    try:
+        conn = get_connection()
+        conn.row_factory = _sqlite3.Row
+        try:
+            if not object_exists(conn, "token_usage_records"):
+                return _EMPTY
+
+            if not has_columns(conn, "token_usage_records", _BREAKOUT_REQUIRED_COLUMNS):
+                return _EMPTY
+
+            # Totals
+            totals_row = conn.execute(
+                "SELECT"
+                "  COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,"
+                "  COUNT(*) AS total_records"
+                " FROM token_usage_records"
+            ).fetchone()
+            total_tokens = int(totals_row["total_tokens"] or 0)
+            total_records = int(totals_row["total_records"] or 0)
+
+            def _breakout(column: str) -> list[dict]:
+                rows = conn.execute(
+                    f"SELECT {column} AS key,"
+                    f"  SUM(input_tokens + output_tokens) AS tokens,"
+                    f"  COUNT(*) AS records"
+                    f" FROM token_usage_records"
+                    f" WHERE {column} IS NOT NULL"
+                    f" GROUP BY {column}"
+                    f" ORDER BY tokens DESC"
+                    f" LIMIT 20"
+                ).fetchall()
+                return [
+                    {
+                        column: row["key"],
+                        "tokens": int(row["tokens"] or 0),
+                        "records": int(row["records"] or 0),
+                    }
+                    for row in rows
+                ]
+
+            by_project = _breakout("project_id")
+            by_milestone = _breakout("milestone_id")
+            by_task = _breakout("task_id")
+            by_skill = _breakout("skill_id")
+            by_agent = _breakout("agent_id")
+
+        finally:
+            conn.close()
+
+        return {
+            "schema": "dream_studio.attribution_breakouts.v1",
+            "total_tokens": total_tokens,
+            "total_records": total_records,
+            "by_project": by_project,
+            "by_milestone": by_milestone,
+            "by_task": by_task,
+            "by_skill": by_skill,
+            "by_agent": by_agent,
+            "data_status": "ok" if total_records > 0 else "empty",
+            "generated_at": datetime.now().isoformat(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error computing attribution breakouts: {exc}")

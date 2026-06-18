@@ -38,7 +38,7 @@ def _empty_anomalies() -> Dict[str, Any]:
 
 def _empty_performance() -> Dict[str, Any]:
     return {
-        "session_flow": {"started": 0, "completed": 0, "failed": 0, "timeout": 0},
+        "session_flow": {"started": 0, "completed": 0, "failed": 0, "timeout": 0, "other": 0},
         "day_of_week": [0, 0, 0, 0, 0, 0, 0],
         "hourly_activity": [[0 for _ in range(24)] for _ in range(7)],
         "performance": {},
@@ -282,9 +282,11 @@ async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> Dict[s
             "started": total,
             "completed": outcome_map.get("success", 0) + outcome_map.get("completed", 0),
             "failed": outcome_map.get("failed", 0) + outcome_map.get("error", 0),
-            "timeout": outcome_map.get("timeout", 0)
-            + outcome_map.get("unknown", 0)
-            + outcome_map.get("in_progress", 0),
+            # "timeout" is a real outcome; "unknown"/"in_progress" are distinct states.
+            # Previously all three were merged into "timeout", making it look like
+            # every unresolved session had timed out — that was misleading.
+            "timeout": outcome_map.get("timeout", 0),
+            "other": outcome_map.get("unknown", 0) + outcome_map.get("in_progress", 0),
         }
 
         dow_rows = conn.execute(

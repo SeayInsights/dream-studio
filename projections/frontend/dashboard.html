@@ -1676,6 +1676,90 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Token spend breakouts (T4) — aggregated from token_usage_records -->
+            <div class="bg-white rounded-lg shadow p-6 mt-6">
+                <h2 class="text-lg font-bold text-gray-900 mb-1">Token Spend Breakouts</h2>
+                <p class="text-sm text-gray-500 mb-4">
+                    Aggregated from <code>token_usage_records</code>. Shows top 20 consumers per
+                    dimension. Source: <code>GET /api/v1/insights/attribution-breakouts</code>.
+                </p>
+                <div id="attr-breakouts-status" class="text-xs text-gray-400 mb-4"></div>
+
+                <!-- Breakout tables grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- By Project -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-2">By Project</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead><tr class="bg-gray-50">
+                                    <th class="px-3 py-2 border-b">Project ID</th>
+                                    <th class="px-3 py-2 border-b text-right">Tokens</th>
+                                    <th class="px-3 py-2 border-b text-right">Records</th>
+                                </tr></thead>
+                                <tbody id="attr-breakout-project"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- By Milestone -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-2">By Milestone</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead><tr class="bg-gray-50">
+                                    <th class="px-3 py-2 border-b">Milestone ID</th>
+                                    <th class="px-3 py-2 border-b text-right">Tokens</th>
+                                    <th class="px-3 py-2 border-b text-right">Records</th>
+                                </tr></thead>
+                                <tbody id="attr-breakout-milestone"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- By Task -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-2">By Task</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead><tr class="bg-gray-50">
+                                    <th class="px-3 py-2 border-b">Task ID</th>
+                                    <th class="px-3 py-2 border-b text-right">Tokens</th>
+                                    <th class="px-3 py-2 border-b text-right">Records</th>
+                                </tr></thead>
+                                <tbody id="attr-breakout-task"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- By Skill -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-2">By Skill</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead><tr class="bg-gray-50">
+                                    <th class="px-3 py-2 border-b">Skill ID</th>
+                                    <th class="px-3 py-2 border-b text-right">Tokens</th>
+                                    <th class="px-3 py-2 border-b text-right">Records</th>
+                                </tr></thead>
+                                <tbody id="attr-breakout-skill"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- By Agent -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-700 mb-2">By Agent</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left text-gray-700 border-collapse">
+                                <thead><tr class="bg-gray-50">
+                                    <th class="px-3 py-2 border-b">Agent ID</th>
+                                    <th class="px-3 py-2 border-b text-right">Tokens</th>
+                                    <th class="px-3 py-2 border-b text-right">Records</th>
+                                </tr></thead>
+                                <tbody id="attr-breakout-agent"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Memory Surface Tab — Chain 7 (18.4.4) -->
@@ -1684,7 +1768,15 @@
                 <div class="flex items-start justify-between mb-4">
                     <div>
                         <h2 class="text-xl font-bold text-gray-900">Memory Surface (Chain 7)</h2>
-                        <p class="text-sm text-gray-500 mt-1">SQLite memory_entries injected before prompts via on-context-inject hook. Shows entries surfaced this session.</p>
+                        <p class="text-sm text-gray-500 mt-1">
+                            Entries from the <code>memory_entries</code> SQLite table that Dream Studio
+                            injects before prompts via the <code>on-context-inject</code> hook (Chain 7).
+                            Each entry has an importance score (0–1), a category, and a source type.
+                            "Surfaced this session" counts entries where <code>intelligence_surfaced_at</code>
+                            is set. Run <code>ds memory ingest</code> to populate from project files.
+                            If total_entries is 0, no memory has been ingested yet — this is an honest
+                            empty state, not a display error.
+                        </p>
                     </div>
                     <span id="c7-status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">loading</span>
                 </div>
@@ -2436,7 +2528,14 @@
         <div id="config" class="tab-content">
             <div class="mb-6">
                 <h2 class="text-xl font-bold text-gray-900">Platform Configuration</h2>
-                <p class="mt-1 text-sm text-gray-500">Active runtime configuration keys from ds_config.</p>
+                <p class="mt-1 text-sm text-gray-500">
+                    Operator-level settings stored in the <code>ds_config</code> SQLite table.
+                    These keys control runtime behaviour — for example <code>eval.friction_threshold</code>
+                    sets the score below which an eval is flagged as friction. Resolution order:
+                    environment variable &gt; ds_config row &gt; per-key default.
+                    Changes via <code>ds config set &lt;key&gt; &lt;value&gt;</code>.
+                    If the table is empty, no overrides have been set and all defaults apply.
+                </p>
             </div>
             <div class="bg-white rounded-lg shadow p-6">
                 <div class="overflow-x-auto">
@@ -4221,11 +4320,58 @@
         }
     }
 
+    // ── T4: Token attribution breakouts (token_usage_records → project/milestone/task/skill/agent)
+    async function loadAttributionBreakouts() {
+        const statusEl = document.getElementById('attr-breakouts-status');
+        function _emptyTable(tbodyId, keyLabel) {
+            const tb = document.getElementById(tbodyId);
+            if (tb) tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+        }
+        function _fillTable(tbodyId, rows, keyField) {
+            const tb = document.getElementById(tbodyId);
+            if (!tb) return;
+            if (!rows || rows.length === 0) {
+                tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+                return;
+            }
+            tb.innerHTML = rows.map(row => {
+                const keyVal = (row[keyField] || '').toString();
+                const displayKey = keyVal.length > 20 ? keyVal.slice(0, 8) + '…' + keyVal.slice(-8) : keyVal;
+                return `<tr class="border-b hover:bg-gray-50">
+                    <td class="px-3 py-2 font-mono text-xs text-gray-700" title="${escHtml(keyVal)}">${escHtml(displayKey)}</td>
+                    <td class="px-3 py-2 text-right font-mono">${(row.tokens || 0).toLocaleString()}</td>
+                    <td class="px-3 py-2 text-right text-gray-500">${row.records || 0}</td>
+                </tr>`;
+            }).join('');
+        }
+        try {
+            const resp = await fetch('/api/v1/insights/attribution-breakouts');
+            if (!resp.ok) throw new Error(resp.statusText);
+            const d = await resp.json();
+            if (statusEl) {
+                if (d.data_status === 'empty') {
+                    statusEl.textContent = 'token_usage_records: 0 rows — breakouts populate as token events are recorded.';
+                } else {
+                    statusEl.textContent = `${d.total_records.toLocaleString()} records, ${d.total_tokens.toLocaleString()} total tokens.`;
+                }
+            }
+            _fillTable('attr-breakout-project', d.by_project, 'project_id');
+            _fillTable('attr-breakout-milestone', d.by_milestone, 'milestone_id');
+            _fillTable('attr-breakout-task', d.by_task, 'task_id');
+            _fillTable('attr-breakout-skill', d.by_skill, 'skill_id');
+            _fillTable('attr-breakout-agent', d.by_agent, 'agent_id');
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Breakouts unavailable: ' + e.message;
+            ['attr-breakout-project', 'attr-breakout-milestone', 'attr-breakout-task',
+             'attr-breakout-skill', 'attr-breakout-agent'].forEach(id => _emptyTable(id));
+        }
+    }
+
     // Load attribution data when tab becomes active
     const _origNavigate = navigate;
     navigate = function(tabName) {
         _origNavigate(tabName);
-        if (tabName === 'attribution-coverage') loadAttributionCoverage();
+        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionBreakouts(); }
     };
 
     // ── Memory Surface panel (18.4.4 — Chain 7) ──────────────────────────
@@ -4272,7 +4418,7 @@
         _navigateWithC7(tabName);
         if (tabName === 'memory-surface') loadMemorySurface();
         if (tabName === 'adaptation') loadAdaptationPanels();
-        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionOrphans(); }
+        if (tabName === 'attribution-coverage') { loadAttributionCoverage(); loadAttributionBreakouts(); }
     };
 
     // ── Fix #5: Surface previously-invisible tables on Hooks tab ─────────────
@@ -4355,9 +4501,16 @@
     }
 
     async function loadAdaptationSummary() {
+        // Show 0 on any error path — never leave stats at '--' (honest empty-state).
+        function _setAdaptationZeros() {
+            document.getElementById('ad-active-count').textContent = '0';
+            document.getElementById('ad-experimental-count').textContent = '0';
+            document.getElementById('ad-signals-total').textContent = '0';
+            document.getElementById('ad-pending-review').textContent = '0';
+        }
         try {
             const r = await fetch('/api/v1/intelligence/extensions/summary');
-            if (!r.ok) return;
+            if (!r.ok) { _setAdaptationZeros(); return; }
             const d = await r.json();
             document.getElementById('ad-active-count').textContent = d.extensions?.active ?? 0;
             document.getElementById('ad-experimental-count').textContent = d.extensions?.experimental ?? 0;
@@ -4367,7 +4520,7 @@
             const pending = (d.friction_signals?.pending_review ?? 0) + (d.extensions?.proposed ?? 0);
             const badge = document.getElementById('adaptation-badge');
             if (badge && pending > 0) { badge.textContent = pending; badge.classList.remove('hidden'); }
-        } catch(e) { /* tables not ready */ }
+        } catch (e) { _setAdaptationZeros(); }
     }
 
     async function loadPersonalizationTimeline() {
@@ -7402,16 +7555,21 @@ function initHooksCharts() {
             }
 
             const datasets = [];
-            const metrics = ['sessions', 'tokens', 'cost'];
-            const colors = ['#3b82f6', '#10b981', '#f59e0b'];
+            // Route returns keys: sessions, tokens, reportable_cost (not 'cost').
+            // Display labels are human-friendly; internal keys match the API response.
+            const metricDefs = [
+                { key: 'sessions', label: 'Sessions', color: '#3b82f6' },
+                { key: 'tokens', label: 'Tokens', color: '#10b981' },
+                { key: 'reportable_cost', label: 'Cost', color: '#f59e0b' },
+            ];
 
-            metrics.forEach((metric, idx) => {
-                if (data.trends[metric]) {
+            metricDefs.forEach(({ key, label, color }) => {
+                if (data.trends[key]) {
                     // Actual data
                     datasets.push({
-                        label: `${metric.charAt(0).toUpperCase() + metric.slice(1)} (Actual)`,
-                        data: data.trends[metric].actual,
-                        borderColor: colors[idx],
+                        label: `${label} (Actual)`,
+                        data: data.trends[key].actual,
+                        borderColor: color,
                         backgroundColor: 'transparent',
                         borderWidth: 2,
                         pointRadius: 3,
@@ -7420,9 +7578,9 @@ function initHooksCharts() {
 
                     // Regression line
                     datasets.push({
-                        label: `${metric.charAt(0).toUpperCase() + metric.slice(1)} (Trend)`,
-                        data: data.trends[metric].regression,
-                        borderColor: colors[idx],
+                        label: `${label} (Trend)`,
+                        data: data.trends[key].regression,
+                        borderColor: color,
                         backgroundColor: 'transparent',
                         borderWidth: 2,
                         borderDash: [5, 5],
@@ -7477,47 +7635,65 @@ function initHooksCharts() {
             const svg = container.querySelector('svg');
             if (!svg) return;
 
-            // Define flow data
-            const flowData = data?.session_flow || {
-                started: 1000,
-                completed: 750,
-                failed: 150,
-                timeout: 100
-            };
+            // Use only real data; never fall back to fabricated counts.
+            const flowData = data?.session_flow;
+            const total = flowData?.started || 0;
 
-            // Calculate percentages
-            const total = flowData.started;
+            if (!flowData || total === 0) {
+                svg.innerHTML = '<text x="280" y="190" text-anchor="middle" fill="#9ca3af" font-size="14">No session data yet — outcomes populate as sessions run.</text>';
+                return;
+            }
+
+            // Calculate percentages from real outcomes.
+            // "timeout" = genuine timeouts; "other" = unknown/in_progress (separate state).
             const completedPct = (flowData.completed / total) * 100;
             const failedPct = (flowData.failed / total) * 100;
             const timeoutPct = (flowData.timeout / total) * 100;
+            const otherPct = ((flowData.other || 0) / total) * 100;
 
-            // Build Sankey-style flow diagram with SVG
+            const completedPctStr = completedPct.toFixed(1);
+            const failedPctStr = failedPct.toFixed(1);
+            const timeoutPctStr = timeoutPct.toFixed(1);
+            const otherPctStr = otherPct.toFixed(1);
+            const completedW = (completedPct * 0.8).toFixed(1);
+            const failedW = (failedPct * 0.8).toFixed(1);
+            const timeoutW = (timeoutPct * 0.8).toFixed(1);
+            const otherW = (otherPct * 0.8).toFixed(1);
+
+            // Build Sankey-style flow diagram with SVG (4 real outcome buckets)
             svg.innerHTML = `
                 <!-- Start Node -->
-                <rect x="50" y="142" width="120" height="100" fill="#3b82f6" rx="8"/>
-                <text x="110" y="192" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Started</text>
-                <text x="110" y="212" text-anchor="middle" fill="white" font-size="18">${total}</text>
+                <rect x="30" y="162" width="110" height="80" fill="#3b82f6" rx="8"/>
+                <text x="85" y="197" text-anchor="middle" fill="white" font-size="12" font-weight="bold">Started</text>
+                <text x="85" y="215" text-anchor="middle" fill="white" font-size="16">${total}</text>
 
                 <!-- Flow to Completed -->
-                <path d="M 170 192 Q 400 192 400 120" stroke="#10b981" stroke-width="${completedPct * 0.8}" fill="none" opacity="0.6"/>
-                <rect x="400" y="70" width="120" height="100" fill="#10b981" rx="8"/>
-                <text x="460" y="110" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Completed</text>
-                <text x="460" y="130" text-anchor="middle" fill="white" font-size="18">${flowData.completed}</text>
-                <text x="460" y="150" text-anchor="middle" fill="white" font-size="12">${completedPct.toFixed(1)}%</text>
+                <path d="M 140 202 Q 360 202 360 90" stroke="#10b981" stroke-width="${completedW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="50" width="120" height="80" fill="#10b981" rx="8"/>
+                <text x="420" y="83" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Completed</text>
+                <text x="420" y="100" text-anchor="middle" fill="white" font-size="14">${flowData.completed}</text>
+                <text x="420" y="118" text-anchor="middle" fill="white" font-size="10">${completedPctStr}%</text>
 
                 <!-- Flow to Failed -->
-                <path d="M 170 192 Q 400 192 400 192" stroke="#ef4444" stroke-width="${failedPct * 0.8}" fill="none" opacity="0.6"/>
-                <rect x="400" y="192" width="120" height="100" fill="#ef4444" rx="8"/>
-                <text x="460" y="232" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Failed</text>
-                <text x="460" y="252" text-anchor="middle" fill="white" font-size="18">${flowData.failed}</text>
-                <text x="460" y="272" text-anchor="middle" fill="white" font-size="12">${failedPct.toFixed(1)}%</text>
+                <path d="M 140 202 Q 360 202 360 162" stroke="#ef4444" stroke-width="${failedW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="142" width="120" height="80" fill="#ef4444" rx="8"/>
+                <text x="420" y="176" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Failed</text>
+                <text x="420" y="193" text-anchor="middle" fill="white" font-size="14">${flowData.failed}</text>
+                <text x="420" y="211" text-anchor="middle" fill="white" font-size="10">${failedPctStr}%</text>
 
                 <!-- Flow to Timeout -->
-                <path d="M 170 192 Q 400 192 400 314" stroke="#f59e0b" stroke-width="${timeoutPct * 0.8}" fill="none" opacity="0.6"/>
-                <rect x="400" y="264" width="120" height="100" fill="#f59e0b" rx="8"/>
-                <text x="460" y="304" text-anchor="middle" fill="white" font-size="14" font-weight="bold">Timeout</text>
-                <text x="460" y="324" text-anchor="middle" fill="white" font-size="18">${flowData.timeout}</text>
-                <text x="460" y="344" text-anchor="middle" fill="white" font-size="12">${timeoutPct.toFixed(1)}%</text>
+                <path d="M 140 202 Q 360 202 360 234" stroke="#f59e0b" stroke-width="${timeoutW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="234" width="120" height="80" fill="#f59e0b" rx="8"/>
+                <text x="420" y="267" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Timeout</text>
+                <text x="420" y="284" text-anchor="middle" fill="white" font-size="14">${flowData.timeout}</text>
+                <text x="420" y="302" text-anchor="middle" fill="white" font-size="10">${timeoutPctStr}%</text>
+
+                <!-- Flow to Other/Unknown -->
+                <path d="M 140 202 Q 360 202 360 324" stroke="#6b7280" stroke-width="${otherW}" fill="none" opacity="0.6"/>
+                <rect x="360" y="324" width="120" height="80" fill="#6b7280" rx="8"/>
+                <text x="420" y="357" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Other/Unknown</text>
+                <text x="420" y="374" text-anchor="middle" fill="white" font-size="14">${flowData.other || 0}</text>
+                <text x="420" y="392" text-anchor="middle" fill="white" font-size="10">${otherPctStr}%</text>
             `;
         }
 
@@ -8344,21 +8520,44 @@ function initHooksCharts() {
         async function initLearningTab() {
             console.log('Initializing Learning tab...');
 
-            const learningData = buildLearningEmptyState();
+            // learning_event_records has 0 rows — no pipeline wires data yet.
+            // Show honest empty-state rather than flat-zero charts that look broken.
+            const emptyMsg = 'No data yet — populates once the learning pipeline lands.';
+            const emptyChartIds = [
+                'cache-hit-rate-chart',
+                'trust-score-dist-chart',
+                'fp-rate-trends-chart',
+                'token-efficiency-chart',
+            ];
+            emptyChartIds.forEach(id => {
+                const canvas = document.getElementById(id);
+                if (canvas) {
+                    const parent = canvas.parentElement;
+                    if (parent) {
+                        canvas.style.display = 'none';
+                        if (!parent.querySelector('.ds-empty-state-overlay')) {
+                            const overlay = document.createElement('div');
+                            overlay.className = 'ds-empty-state-overlay flex items-center justify-center h-full text-gray-400 text-sm py-8';
+                            overlay.textContent = emptyMsg;
+                            parent.appendChild(overlay);
+                        }
+                    }
+                }
+            });
 
-            // Update summary stats
-            updateLearningSummary(learningData);
+            // Summary stats: show 0 rather than '--' so it's clear the data is absent
+            document.getElementById('learning-cache-hit-rate').textContent = '0%';
+            document.getElementById('learning-avg-trust').textContent = '0.00';
+            document.getElementById('learning-fp-rate').textContent = '0%';
+            document.getElementById('learning-token-efficiency').textContent = '0';
 
-            // Initialize charts
-            initCacheHitRateChart(learningData.cacheHitRate);
-            initTrustScoreDistChart(learningData.trustScores);
-            initFPRateTrendsChart(learningData.fpRates);
-            initTokenEfficiencyChart(learningData.tokenEfficiency);
+            // Insights panel: show honest empty-state message
+            updateLearningInsights([
+                { type: 'info', message: 'No learning_event_records yet — 0 rows. Charts will populate once the learning pipeline lands.' },
+                { type: 'info', message: 'This is an honest empty state, not a display bug.' }
+            ]);
 
-            // Update insights
-            updateLearningInsights(learningData.insights);
-
-            console.log('Learning tab initialized successfully');
+            console.log('Learning tab: honest empty-state rendered');
         }
 
         function buildLearningEmptyState() {
