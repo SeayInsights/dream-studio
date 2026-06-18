@@ -216,6 +216,36 @@ def record_process_run(conn: sqlite3.Connection, **values: Any) -> None:
     )
 
 
+def _resolve_event_project_id(raw_project_id: Any, conn: sqlite3.Connection) -> Any:
+    """Resolve a raw project key to a business_projects UUID when possible.
+
+    If raw_project_id is already a UUID or None, return it unchanged.
+    If it matches a registered project (by name, slug, or path basename),
+    return the UUID. Otherwise return raw_project_id unchanged (never fabricate).
+    """
+    import re as _re
+
+    if raw_project_id is None:
+        return None
+    pid = str(raw_project_id).strip()
+    if not pid:
+        return raw_project_id
+    # Already a UUID — skip the lookup
+    if _re.match(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        pid,
+        _re.IGNORECASE,
+    ):
+        return raw_project_id
+    try:
+        from core.projects.attribution import resolve_project_uuid as _resolve
+
+        resolved = _resolve(pid, conn)
+        return resolved if resolved is not None else raw_project_id
+    except Exception:
+        return raw_project_id
+
+
 def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
     # Direct DB write: keeps execution_events populated so FK-constrained tables
     # (agent_invocations, route_decision_records, etc.) remain valid with
@@ -229,6 +259,10 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
             except Exception:
                 return []
         return list(v)
+
+    # Resolve project key → UUID at write time so new events carry UUIDs.
+    raw_project_id = values.get("project_id")
+    resolved_project_id = _resolve_event_project_id(raw_project_id, conn)
 
     try:
         source_refs = _as_list(values.get("source_refs") or values.get("source_refs_json"))
@@ -246,7 +280,7 @@ def record_execution_event(conn: sqlite3.Connection, **values: Any) -> None:
                 values["event_id"],
                 values["event_type"],
                 values["event_name"],
-                values.get("project_id"),
+                resolved_project_id,
                 values.get("milestone_id"),
                 values.get("task_id"),
                 values.get("process_run_id"),

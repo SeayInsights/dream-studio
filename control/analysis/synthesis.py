@@ -233,6 +233,31 @@ def _generate_prd_content(
     return "\n".join(sections)
 
 
+def _resolve_project_id_for_name(project_name: str) -> str:
+    """Resolve a project name to a business_projects UUID if possible.
+
+    Falls back to the raw project_name when no registered project matches,
+    so ds_documents.project_id is never worse than before.
+    """
+    try:
+        from core.config.database import _default_db_path
+        import sqlite3 as _sqlite3
+        from core.projects.attribution import resolve_project_uuid as _resolve
+
+        _db = _default_db_path()
+        if not _db.exists():
+            return project_name
+        _conn = _sqlite3.connect(str(_db), timeout=5.0)
+        _conn.row_factory = _sqlite3.Row
+        try:
+            resolved = _resolve(project_name, _conn)
+            return resolved if resolved is not None else project_name
+        finally:
+            _conn.close()
+    except Exception:
+        return project_name
+
+
 def _store_in_documents(project_name: str, prd_path: Path, content: str) -> None:
     """Store PRD in ds_documents table."""
     try:
@@ -243,11 +268,12 @@ def _store_in_documents(project_name: str, prd_path: Path, content: str) -> None
 
         from core.storage.document_store import DocumentStore
 
+        project_id = _resolve_project_id_for_name(project_name)
         DocumentStore.create(
             doc_type="prd",
             title=f"PRD: {project_name}",
             content=content,
-            project_id=project_name,
+            project_id=project_id,
             format="markdown",
             metadata={
                 "project_name": project_name,
