@@ -1145,7 +1145,7 @@
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Reportable Cost</div>
                     <div class="mt-2 text-2xl font-bold text-gray-900" id="models-total-cost">--</div>
-                    <div class="mt-1 text-xs text-gray-500">Unknown unless source-backed</div>
+                    <div class="mt-1 text-xs text-gray-500">Provider-reported rows only — see Plan vs API-equivalent panel below for computed coverage</div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <div class="text-sm font-medium text-gray-600">Cache Hit Rate</div>
@@ -1194,6 +1194,15 @@
                     <div class="relative" style="height: 280px;">
                         <canvas id="costBySkillChart"></canvas>
                     </div>
+                </div>
+            </div>
+
+            <!-- Plan vs API-equivalent cost panel -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6" id="plan-vs-api-cost-panel">
+                <h3 class="text-lg font-semibold text-gray-900 mb-1">Plan vs API-equivalent cost</h3>
+                <p class="text-xs text-gray-500 mb-4">API-equivalent cost (all usage) is computed from published per-model rates applied to every token record. Reportable cost above reflects only provider-reported rows.</p>
+                <div id="plan-vs-api-cost-content">
+                    <div class="text-sm text-gray-500 text-center py-4">Loading plan comparison...</div>
                 </div>
             </div>
 
@@ -5218,6 +5227,9 @@ function initHooksCharts() {
                     initCacheHitRateTimelineChart(combinedData.cacheTimeline)
                 ]);
 
+                // Load plan vs API-equivalent cost panel (independent fetch)
+                initPlanVsApiCostPanel();
+
                 console.log('Models & Tokens tab initialized successfully');
             } catch (error) {
                 console.error('Error initializing Models & Tokens tab:', error);
@@ -5245,6 +5257,78 @@ function initHooksCharts() {
             document.getElementById('models-cache-hit-rate').textContent = `${(cacheHitRate * 100).toFixed(1)}%`;
             document.getElementById('models-most-efficient').textContent = mostEfficient;
             document.getElementById('models-most-efficient-rate').textContent = `${mostEfficientRate.toFixed(0)} tokens/sec`;
+        }
+
+        // Initialize Plan vs API-equivalent cost panel
+        async function initPlanVsApiCostPanel() {
+            const container = document.getElementById('plan-vs-api-cost-content');
+            if (!container) return;
+            try {
+                const resp = await fetch('/api/v1/cost/plan-comparison');
+                if (!resp.ok) {
+                    container.innerHTML = '<div class="text-sm text-red-500">Unable to load plan comparison data.</div>';
+                    return;
+                }
+                const data = await resp.json();
+                const apiTotal = (data.api_equivalent_total_usd || 0).toFixed(4);
+                const coverage = data.coverage || {};
+                const pricedCount = coverage.priced_record_count || 0;
+                const unpricedCount = coverage.unpriced_record_count || 0;
+                const totalCount = coverage.record_count || 0;
+
+                let planHtml = '';
+                if (!data.plan_configured) {
+                    planHtml = '<div class="mb-3 p-3 bg-gray-50 rounded text-sm text-gray-600">'
+                        + 'No subscription plan configured — set <code>cost.plan_name</code> and <code>cost.plan_monthly_usd</code> via <code>ds config set</code> to compare plan cost vs API-equivalent usage.'
+                        + '</div>';
+                } else {
+                    const planMonthly = (data.plan_monthly_usd || 0).toFixed(2);
+                    const delta = data.delta_usd;
+                    let deltaHtml = '';
+                    if (delta !== null && delta !== undefined) {
+                        const absDelta = Math.abs(delta).toFixed(4);
+                        if (delta < 0) {
+                            deltaHtml = '<div class="text-sm text-green-600 mt-1">Saved $' + absDelta + ' vs plan allowance</div>';
+                        } else {
+                            deltaHtml = '<div class="text-sm text-orange-600 mt-1">$' + absDelta + ' over plan allowance</div>';
+                        }
+                    }
+                    planHtml = '<div class="mb-3 p-3 bg-blue-50 rounded">'
+                        + '<div class="text-sm font-medium text-blue-800">Plan: ' + (data.plan_name || '') + '</div>'
+                        + '<div class="text-sm text-blue-700">Monthly allowance: $' + planMonthly + '</div>'
+                        + deltaHtml
+                        + '</div>';
+                }
+
+                let byModelHtml = '';
+                const byModel = data.by_model || [];
+                if (byModel.length > 0) {
+                    const rows = byModel.map(function(m) {
+                        return '<tr><td class="py-1 pr-4 text-xs text-gray-700">' + m.model_id + '</td>'
+                            + '<td class="py-1 pr-4 text-xs text-gray-500">' + (m.tokens || 0).toLocaleString() + '</td>'
+                            + '<td class="py-1 text-xs text-gray-700">$' + (m.usd || 0).toFixed(4) + '</td></tr>';
+                    }).join('');
+                    byModelHtml = '<div class="mt-3"><div class="text-xs font-medium text-gray-600 mb-1">Per-model breakdown</div>'
+                        + '<table class="w-full"><thead><tr>'
+                        + '<th class="py-1 pr-4 text-left text-xs text-gray-500">Model</th>'
+                        + '<th class="py-1 pr-4 text-left text-xs text-gray-500">Tokens</th>'
+                        + '<th class="py-1 text-left text-xs text-gray-500">API-equiv USD</th>'
+                        + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+                }
+
+                const coverageNote = '<div class="mt-2 text-xs text-gray-400">'
+                    + 'Coverage: ' + pricedCount + '/' + totalCount + ' records priced'
+                    + (unpricedCount > 0 ? ' (' + unpricedCount + ' unpriced rows contribute $0)' : '')
+                    + '</div>';
+
+                container.innerHTML = planHtml
+                    + '<div class="text-sm"><span class="font-medium text-gray-700">API-equivalent cost (all usage):</span> $' + apiTotal + '</div>'
+                    + coverageNote
+                    + byModelHtml;
+            } catch (err) {
+                container.innerHTML = '<div class="text-sm text-red-500">Error loading plan comparison: ' + err.message + '</div>';
+                console.error('Plan vs API-equivalent cost panel error:', err);
+            }
         }
 
         // Initialize Model Performance Comparison (Radar Chart)
