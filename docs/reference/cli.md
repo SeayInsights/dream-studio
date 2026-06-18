@@ -31,6 +31,9 @@ Complete reference for all `ds` CLI commands.
 | `ds dashboard --serve [--host HOST] [--port PORT]` | Serve the local dashboard |
 | `ds dashboard --open` | Open dashboard in browser |
 | `ds dashboard --check [--timeout-seconds N]` | Probe readiness without opening |
+| `ds dashboard --restart` | Stop the running server on the port, then relaunch on current code (use after merging) |
+| `ds dashboard stop` (or `--stop`) | Terminate the running dashboard server |
+| `ds dashboard --reload` | Launch with uvicorn `--reload` (dev hot-reload of `projections/`+`core/`; off by default) |
 
 ---
 
