@@ -59,6 +59,15 @@ def _resolve_attribution(
     tool_use_id: Optional[str],
 ) -> dict[str, Any]:
     """Resolve attribution trace: active_task → CWD marker → orphan."""
+    # Read active skill written by record_skill_invocation() (best-effort).
+    active_skill_id: Optional[str] = None
+    try:
+        _skill_path = Path.home() / ".dream-studio" / "state" / "active_skill.json"
+        _skill_data = json.loads(_skill_path.read_text(encoding="utf-8"))
+        active_skill_id = _skill_data.get("skill_id") or None
+    except Exception:
+        pass
+
     t0 = time.monotonic()
     task_ctx = None
     try:
@@ -93,6 +102,7 @@ def _resolve_attribution(
             "work_order_id": task_ctx.work_order_id,
             "milestone_id": task_ctx.milestone_id,
             "project_id": task_ctx.project_id,
+            "skill_id": active_skill_id,
             "tool_name": tool_name,
             "tool_use_id": tool_use_id,
             "session_id": session_id,
@@ -123,6 +133,7 @@ def _resolve_attribution(
             "work_order_id": None,
             "milestone_id": None,
             "project_id": cwd_ctx.project_id,
+            "skill_id": active_skill_id,
             "tool_name": tool_name,
             "tool_use_id": tool_use_id,
             "session_id": session_id,
@@ -137,6 +148,7 @@ def _resolve_attribution(
         "work_order_id": None,
         "milestone_id": None,
         "project_id": None,
+        "skill_id": active_skill_id,
         "tool_name": tool_name,
         "tool_use_id": tool_use_id,
         "session_id": session_id,

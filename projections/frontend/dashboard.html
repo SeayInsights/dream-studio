@@ -4355,7 +4355,25 @@
                     statusEl.textContent = `${d.total_records.toLocaleString()} records, ${d.total_tokens.toLocaleString()} total tokens.`;
                 }
             }
-            _fillTable('attr-breakout-project', d.by_project, 'project_id');
+            // by_project: show name when available, fall back to truncated UUID
+            (function() {
+                const tb = document.getElementById('attr-breakout-project');
+                if (!tb) return;
+                const rows = d.by_project || [];
+                if (rows.length === 0) {
+                    tb.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-gray-400">No data yet</td></tr>';
+                    return;
+                }
+                tb.innerHTML = rows.map(row => {
+                    const rawId = (row.project_id || '').toString();
+                    const displayName = row.project_name || (rawId.length > 20 ? rawId.slice(0, 8) + '…' + rawId.slice(-8) : rawId);
+                    return `<tr class="border-b hover:bg-gray-50">
+                        <td class="px-3 py-2 text-xs text-gray-700" title="${escHtml(rawId)}">${escHtml(displayName)}</td>
+                        <td class="px-3 py-2 text-right font-mono">${(row.tokens || 0).toLocaleString()}</td>
+                        <td class="px-3 py-2 text-right text-gray-500">${row.records || 0}</td>
+                    </tr>`;
+                }).join('');
+            })();
             _fillTable('attr-breakout-milestone', d.by_milestone, 'milestone_id');
             _fillTable('attr-breakout-task', d.by_task, 'task_id');
             _fillTable('attr-breakout-skill', d.by_skill, 'skill_id');

@@ -34,6 +34,7 @@ from `core.design_briefs.mutations` (lifted in A2.5).
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -225,6 +226,17 @@ def record_skill_invocation(
             }
         )
         event_emitted = True
+
+        # Persist active skill so token_capture can stamp skill_id on token.consumed.
+        try:
+            _state_dir = Path.home() / ".dream-studio" / "state"
+            _state_dir.mkdir(parents=True, exist_ok=True)
+            (_state_dir / "active_skill.json").write_text(
+                json.dumps({"skill_id": skill_id, "set_at": now}),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
     except Exception:
         pass
 
