@@ -27,6 +27,7 @@ from .routes.aggregate_metrics_route import router as aggregate_metrics_router
 from .routes.extensions_api import router as extensions_api_router
 from .routes.evals import router as evals_router, registry_router as eval_registry_router
 from .routes.config import router as config_router
+from .routes.cost_plan import router as cost_plan_router
 from .safety import localhost_origins, SAFE_DEFAULT_HOST
 
 
@@ -90,6 +91,7 @@ app.include_router(extensions_api_router, prefix="/api/v1/intelligence", tags=["
 app.include_router(evals_router, prefix="/api/v1/evals", tags=["evals"])
 app.include_router(eval_registry_router, prefix="/api/v1/eval", tags=["evals"])
 app.include_router(config_router, prefix="/api/v1", tags=["config"])
+app.include_router(cost_plan_router, prefix="/api/v1", tags=["cost-plan"])
 # v2 routes — new dashboard panels use /api/v2 by convention
 app.include_router(eval_registry_router, prefix="/api/v2/eval", tags=["evals-v2"])
 app.include_router(config_router, prefix="/api/v2", tags=["config-v2"])
