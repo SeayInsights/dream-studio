@@ -586,6 +586,35 @@ async def get_attribution_breakouts() -> dict:
                 ]
 
             by_project = _breakout("project_id")
+
+            # Enrich by_project rows with human-readable project names.
+            # Falls back to None per row if business_projects doesn't exist or lookup fails.
+            try:
+                if by_project and object_exists(conn, "business_projects"):
+                    project_ids = [row["project_id"] for row in by_project]
+                    placeholders = ",".join("?" * len(project_ids))
+                    name_rows = conn.execute(
+                        f"SELECT project_id, name FROM business_projects"
+                        f" WHERE project_id IN ({placeholders})",
+                        project_ids,
+                    ).fetchall()
+                    name_map: dict[str, str | None] = {
+                        r["project_id"]: r["name"] for r in name_rows
+                    }
+                    by_project = [
+                        {
+                            "project_id": row["project_id"],
+                            "project_name": name_map.get(row["project_id"]),
+                            "tokens": row["tokens"],
+                            "records": row["records"],
+                        }
+                        for row in by_project
+                    ]
+                else:
+                    by_project = [{**row, "project_name": None} for row in by_project]
+            except Exception:
+                by_project = [{**row, "project_name": None} for row in by_project]
+
             by_milestone = _breakout("milestone_id")
             by_task = _breakout("task_id")
             by_skill = _breakout("skill_id")
