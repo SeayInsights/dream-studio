@@ -66,6 +66,33 @@ def test_all_consumers_get_current_rates():
         assert (
             "claude_models" in src or "compute_cost" in src
         ), f"{rel} should source rates from core.pricing.claude_models, not its own table"
+        # Regression guard: no consumer may DEFINE its own per-model rate table
+        # (a private MODEL_PRICING drifts from canon — caused the opus-4-8 miss).
+        # Importing the shared CLAUDE_MODEL_PRICING is fine; defining a bare
+        # MODEL_PRICING name (assignment/annotation) is not.
+        import re as _re
+
+        assert not _re.search(
+            r"(?<!CLAUDE_)\bMODEL_PRICING\s*[:=]", src
+        ), f"{rel} must not define a private MODEL_PRICING table"
+
+    # Actually EXERCISE a consumer end-to-end: efficiency_analytics must price an
+    # opus-4-8 session through the shared table (was $0 / stale before).
+    from interfaces.cli.efficiency_analytics import compute_cost_analysis
+
+    sessions = [
+        {
+            "session_id": "s-opus-1",
+            "primary_model": "claude-opus-4-8",
+            "prompt_tokens": 1_000_000,
+            "completion_tokens": 1_000_000,
+            "date": "2026-06-18",
+        }
+    ]
+    result = compute_cost_analysis(sessions, total_tasks=0)
+    assert (
+        result["total_cost_usd"] == 30.0
+    ), f"efficiency_analytics must price opus-4-8 via the shared table ($30), got {result['total_cost_usd']}"
 
 
 def test_end_to_end(tmp_path):

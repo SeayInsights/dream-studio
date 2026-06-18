@@ -29,19 +29,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.config import paths
 from core.config.database import get_connection
+from core.pricing.claude_models import compute_cost  # noqa: E402
 
 CONTEXT_LIMIT_TOKENS = 400_000
 
-# Pricing in USD per 1M tokens: (input_price, output_price)
-MODEL_PRICING: dict[str, tuple[float, float]] = {
-    "claude-opus-4-6": (15.0, 75.0),
-    "claude-opus-4-7": (15.0, 75.0),
-    "claude-sonnet-4-6": (3.0, 15.0),
-    "claude-sonnet-4-5-20250929": (3.0, 15.0),
-    "claude-haiku-4-5-20251001": (0.80, 4.0),
-}
-
-_SONNET_FALLBACK: tuple[float, float] = (3.0, 15.0)
+# Model pricing is sourced from the single shared table in
+# core.pricing.claude_models (compute_cost) so this CLI never drifts from the
+# canonical rates — a local copy previously went stale (omitted claude-opus-4-8
+# and listed opus-4-6/4-7 at the wrong tier), under-counting cost.
 
 
 def parse_token_log(log_path: Path | None = None) -> list[dict]:
@@ -162,7 +157,7 @@ def get_handoff_tasks(db_path: Path | None = None) -> dict:
 
 
 def compute_cost_analysis(sessions: list[dict], total_tasks: int = 0) -> dict:
-    """Compute cost breakdown from session data using MODEL_PRICING table.
+    """Compute cost breakdown from session data using the shared pricing table.
 
     Args:
         sessions: output of build_sessions()
@@ -178,13 +173,9 @@ def compute_cost_analysis(sessions: list[dict], total_tasks: int = 0) -> dict:
 
     for s in sessions:
         model = s["primary_model"]
-        input_price, output_price = MODEL_PRICING.get(model, _SONNET_FALLBACK)
         prompt_tokens = s.get("prompt_tokens", 0)
         completion_tokens = s.get("completion_tokens", 0)
-        cost = (prompt_tokens / 1_000_000) * input_price + (
-            completion_tokens / 1_000_000
-        ) * output_price
-        cost = round(cost, 6)
+        cost = round(compute_cost(model, prompt_tokens, completion_tokens), 6)
 
         per_session_costs.append(
             {
