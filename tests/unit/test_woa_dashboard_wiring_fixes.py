@@ -165,12 +165,17 @@ class TestFix5InvisibleTables:
         assert "raw-events-list" in text, "Raw events panel missing from dashboard"
         assert "loadInvisibleTables" in text, "loadInvisibleTables function missing from dashboard"
 
-    def test_invisible_tables_load_on_hooks_navigate(self):
-        """navigate('hooks') must trigger loadInvisibleTables()."""
+    def test_invisible_tables_load_on_developer_diagnostics_navigate(self):
+        """navigate('developer-diagnostics') must trigger loadInvisibleTables().
+
+        WO-DASH-DEVDIAG-CONSOLIDATE (#387) moved the previously-invisible tables
+        out of the Hooks tab into the dedicated Developer Diagnostics tab, so the
+        load now fires on that tab instead of hooks.
+        """
         text = DASHBOARD_HTML.read_text(encoding="utf-8")
         assert (
-            "if (tabName === 'hooks') loadInvisibleTables()" in text
-        ), "loadInvisibleTables() must be called when navigating to the hooks tab"
+            "tabName === 'developer-diagnostics'" in text and "loadInvisibleTables()" in text
+        ), "loadInvisibleTables() must be called when navigating to the Developer Diagnostics tab"
 
     def test_tool_activity_endpoint_functional(self):
         """tool_activity endpoint returns correct structure from real or empty DB."""
