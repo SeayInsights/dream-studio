@@ -106,7 +106,7 @@ def test_slugify_normalization() -> None:
 
 def test_already_uuid_skipped_by_backfill(tmp_path) -> None:
     """Rows where project_id already holds a UUID must not be touched by backfill."""
-    from core.projects.attribution import backfill_execution_events
+    from projections.core.execution_events_projection import backfill_execution_events
 
     db_path = tmp_path / "uuid-skip.db"
     conn = sqlite3.connect(str(db_path))
@@ -150,7 +150,7 @@ def test_already_uuid_skipped_by_backfill(tmp_path) -> None:
 
 def test_unresolvable_key_not_remapped(tmp_path) -> None:
     """Garbage keys that match no project must be left untouched by backfill."""
-    from core.projects.attribution import backfill_execution_events
+    from projections.core.execution_events_projection import backfill_execution_events
 
     db_path = tmp_path / "garbage-keys.db"
     conn = sqlite3.connect(str(db_path))

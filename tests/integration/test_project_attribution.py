@@ -136,7 +136,7 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
     2. Backfill: old free-text key rows -> remapped to UUID
     3. Read: /api/v1/projects/{uuid}/activity returns events from both paths
     """
-    from core.projects.attribution import backfill_execution_events
+    from projections.core.execution_events_projection import backfill_execution_events
     from core.telemetry.execution_spine import record_execution_event
 
     db_path = _make_db(tmp_path, "e2e-test.db")
