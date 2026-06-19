@@ -289,3 +289,6 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 <!-- Last reviewed 2026-06-13 — fix/full-ci-duplicate-test-run: removed duplicate pytest+coverage step from full-ci.yml; ci_gate.py already runs the full test suite internally. Bumped timeout-minutes from 45 to 60 as headroom. No change to publication boundary, privacy classification, or gate enforcement policy. -->
 
 <!-- Last reviewed 2026-06-15 — WO-BLAST-RADIUS-GATE: a new blocking pr-smoke step (`python -m core.gates.blast_radius`) and the `blast-radius` check in ci_gate.py run the nothing-left-hanging detectors at merge time. Adds a blocking gate; no change to the black/flake8 baseline policy itself. -->
+
+
+<!-- Last reviewed 2026-06-19 — WO-LIVE-DATA-GATE: .github/workflows/ci.yml pr-smoke gains a "Dashboard truth gate" step (`ds doctor dashboard-truth`) — a read-only live-authority invariant check that vacuously passes on the fresh CI DB, so unrelated PRs are unaffected. No release/publication boundary, packaging, or module-profile change. -->
