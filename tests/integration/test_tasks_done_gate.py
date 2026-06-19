@@ -31,7 +31,9 @@ NOW = "2026-01-01T00:00:00.000000Z"
 
 # A passing SQL-CHECK template — satisfies the always-on executable-AC gate so the
 # only remaining close blocker under test is tasks_done.
-_PASS_AC = "SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{pid}'"
+_PASS_AC = (
+    "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects WHERE project_id='{pid}')"
+)
 
 
 # ---------------------------------------------------------------------------

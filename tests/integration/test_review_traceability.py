@@ -527,7 +527,8 @@ def test_end_to_end(tmp_path: Path) -> None:
         title="T1 - implement feature",
         desc="implement the feature",
         acceptance_criteria=(
-            f"SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{project_id}'"
+            f"SQL-CHECK: SELECT 1 WHERE EXISTS"
+            f" (SELECT 1 FROM business_projects WHERE project_id='{project_id}')"
         ),
     )
 

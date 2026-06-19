@@ -611,6 +611,34 @@ def close_work_order(
             if _sym_failure:
                 gate_failures.append(_sym_failure)
 
+        # WO-LIVE-DATA-GATE T3: Dashboard truth gate — runs for telemetry/dashboard WO
+        # types only.  A fresh/empty authority always vacuously passes, so this gate
+        # does not affect unrelated PRs.  Non-telemetry/dashboard types are not gated.
+        #
+        # No 'dashboard' or 'telemetry' type_ids exist in business_work_order_types as
+        # of this migration set; we gate on the explicit set below and document the
+        # intent so that future type additions are opt-in.
+        _DASHBOARD_TRUTH_GATED_TYPES: set[str] = {
+            "dashboard",
+            "telemetry",
+            "data_pipeline",
+            "saas_feature",
+        }
+        _wo_type_id = meta.get("type_id") or ""
+        if _wo_type_id in _DASHBOARD_TRUTH_GATED_TYPES:
+            from core.gates.dashboard_truth import run_dashboard_truth as _run_dt
+
+            _dt_result = _run_dt(db_path)
+            if not _dt_result["ok"]:
+                _dt_details = "; ".join(
+                    r["name"] + (f": {r['error']}" if r["error"] else "")
+                    for r in _dt_result["results"]
+                    if not r["passed"]
+                )
+                gate_failures.append(
+                    f"dashboard_truth: live-authority invariants failed — {_dt_details}"
+                )
+
         # T1: Task-completeness gate — NOTHING LEFT HANGING. A WO with any task that
         # is not done (or deliberately cancelled) cannot close without force=True.
         # Mirrors mark_task_done's "remaining" predicate (status NOT IN complete|cancelled)

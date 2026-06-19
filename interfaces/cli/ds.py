@@ -91,6 +91,15 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     _doctor_cmd.add_argument("--fix", action="store_true", help="Attempt to fix failing checks")
+    _doctor_cmd.add_argument(
+        "mode",
+        nargs="?",
+        default=None,
+        help=(
+            "Optional mode.  Supported values:\n"
+            "  dashboard-truth  Run live-authority invariant checks against the SQLite DB."
+        ),
+    )
     subcommands.add_parser("repair", help="Plan repair actions without mutating state")
     _update_cmd = subcommands.add_parser("update", help="Update Dream Studio integration pack")
     _update_cmd.add_argument(
@@ -765,6 +774,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "version":
             return _print(_version_status(source_root=source_root, dream_studio_home=home))
         if args.command == "doctor":
+            _doctor_mode = getattr(args, "mode", None)
+            if _doctor_mode == "dashboard-truth":
+                from core.gates.dashboard_truth import run_dashboard_truth
+
+                _dt_paths = resolve_installed_runtime_paths(
+                    source_root=source_root,
+                    dream_studio_home=home,
+                )
+                _dt_result = run_dashboard_truth(_dt_paths.sqlite_path)
+                for _inv in _dt_result["results"]:
+                    _status = "PASS" if _inv["passed"] else "FAIL"
+                    _err = f" — {_inv['error']}" if _inv["error"] else ""
+                    print(f"[dashboard-truth] {_status}: {_inv['name']}{_err}")
+                if not _dt_result["ok"]:
+                    print("[dashboard-truth] OVERALL: FAIL — one or more invariants failed")
+                    return 1
+                print("[dashboard-truth] OVERALL: PASS")
+                return 0
             return _print(
                 _doctor_status(
                     source_root=source_root,

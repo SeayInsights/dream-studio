@@ -59,7 +59,8 @@ def test_not_fixed_signal_fires_on_ac_fail(tmp_path: Path) -> None:
     bootstrap_database(db)
     # Failing SQL-CHECK (no such project).
     wo = _seed_closed_wo(
-        db, ac="SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='nope'"
+        db,
+        ac="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects WHERE project_id='nope')",
     )
 
     from core.work_orders.escalation import not_fixed_for_work_order

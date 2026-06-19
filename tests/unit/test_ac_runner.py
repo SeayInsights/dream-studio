@@ -54,17 +54,17 @@ def test_sql_test_and_api_checks_all_execute_and_fail_closed(tmp_path: Path) -> 
             "title": "sql-pass",
             "description": "",
             "acceptance_criteria": (
-                "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
-                " WHERE project_id='ac-runner-test-project'"
+                "SQL-CHECK: SELECT 1 WHERE EXISTS"
+                " (SELECT 1 FROM business_projects WHERE project_id='ac-runner-test-project')"
             ),
         },
-        # ── SQL-CHECK failing (count = 0) ──
+        # ── SQL-CHECK failing (no matching row → zero rows → hard fail) ──
         {
             "title": "sql-fail",
             "description": "",
             "acceptance_criteria": (
-                "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
-                " WHERE project_id='does-not-exist-xyz'"
+                "SQL-CHECK: SELECT 1 WHERE EXISTS"
+                " (SELECT 1 FROM business_projects WHERE project_id='does-not-exist-xyz')"
             ),
         },
         # ── TEST-CHECK passing ──

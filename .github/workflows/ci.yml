@@ -51,6 +51,9 @@ jobs:
           DREAM_STUDIO_BASE_REF: origin/${{ github.base_ref || 'main' }}
         run: python -m core.gates.blast_radius
 
+      - name: Dashboard truth gate
+        run: python -m interfaces.cli.ds doctor dashboard-truth
+
       - name: Format check
         run: python -m black --check .
 

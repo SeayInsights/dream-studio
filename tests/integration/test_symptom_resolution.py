@@ -141,9 +141,9 @@ def test_close_blocked_when_symptom_persists(tmp_path):
     milestone_id = str(uuid.uuid4())
     work_order_id = str(uuid.uuid4())
 
-    # Symptom SQL that will always return 0 (empty table that doesn't exist →
-    # SQLite raises an error, which the check maps to a failure).
-    failing_symptom = "SQL-CHECK: SELECT COUNT(*) FROM no_such_table_xyz_12345"
+    # Symptom SQL referencing a non-existent table → SQLite raises an error,
+    # which the check maps to a failure.
+    failing_symptom = "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM no_such_table_xyz_12345)"
 
     _seed_wo(
         db_path,
@@ -174,8 +174,10 @@ def test_close_blocked_when_symptom_returns_zero(tmp_path):
     milestone_id = str(uuid.uuid4())
     work_order_id = str(uuid.uuid4())
 
-    # business_work_order_types always has rows, so this WHERE makes it return 0
-    failing_symptom = "SQL-CHECK: SELECT COUNT(*) FROM business_work_order_types WHERE 1=0"
+    # No rows match WHERE 1=0 → zero rows → condition false → fails.
+    failing_symptom = (
+        "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_work_order_types WHERE 1=0)"
+    )
 
     _seed_wo(
         db_path,
@@ -209,8 +211,8 @@ def test_end_to_end(tmp_path):
     milestone_id = str(uuid.uuid4())
     work_order_id = str(uuid.uuid4())
 
-    # business_projects always has the seeded row, so COUNT > 0 → passes
-    passing_symptom = "SQL-CHECK: SELECT COUNT(*) FROM business_projects"
+    # business_projects has a seeded row → one row returned → truthy → passes.
+    passing_symptom = "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects)"
 
     _seed_wo(
         db_path,
