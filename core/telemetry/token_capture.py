@@ -40,6 +40,63 @@ def _extract_usage(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
     return usage
 
 
+# Synthetic / placeholder model labels that must never be recorded as a real model.
+_PLACEHOLDER_MODELS = {"<synthetic>", "synthetic", "unspecified", "unknown", ""}
+
+
+def _model_from_transcript(transcript_path: str) -> Optional[str]:
+    """Recover the model from the session transcript JSONL.
+
+    Claude Code's PostToolUse hook input carries ``transcript_path`` but not the
+    model for main-loop tool calls.  The transcript records ``message.model`` on
+    every assistant turn, so the model that issued this tool call is the model of
+    the most recent real (non-synthetic) assistant message.  This is recovered
+    truth, not a heuristic — the same value the API billed.
+
+    Returns the model string, or None if the transcript is unreadable / carries
+    only synthetic turns.  Never raises.
+    """
+    try:
+        path = Path(transcript_path)
+        if not path.is_file():
+            return None
+        # Scan from the end: the issuing turn is the last real assistant message.
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for line in reversed(lines):
+            line = line.strip()
+            if not line or '"model"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if rec.get("type") != "assistant":
+                continue
+            model = (rec.get("message") or {}).get("model")
+            if model and model not in _PLACEHOLDER_MODELS:
+                return model
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_model(payload: dict[str, Any]) -> Optional[str]:
+    """Resolve the model for this token event.
+
+    Order: explicit ``payload.model`` (subagent SDK supplies it) → the issuing
+    assistant turn's model recovered from ``transcript_path`` (main-loop tool
+    calls, where the hook omits the model).  Returns None when neither yields a
+    real model — NULL is recorded honestly rather than a placeholder.
+    """
+    model = payload.get("model")
+    if model and model not in _PLACEHOLDER_MODELS:
+        return model
+    transcript_path = payload.get("transcript_path")
+    if isinstance(transcript_path, str) and transcript_path:
+        return _model_from_transcript(transcript_path)
+    return None
+
+
 def _has_nonzero_tokens(usage: dict[str, Any]) -> bool:
     return any(
         int(usage.get(k) or 0) > 0
@@ -331,7 +388,7 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
             "cache_read_input_tokens": int(usage.get("cache_read_input_tokens") or 0),
             "granularity": "tool_invocation",
         }
-        model = payload.get("model")
+        model = _resolve_model(payload)
         if model:
             token_payload["model"] = model
 
