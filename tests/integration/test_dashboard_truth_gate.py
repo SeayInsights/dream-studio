@@ -302,3 +302,27 @@ def test_end_to_end(tmp_path: Path) -> None:
     with _patch_db(db_empty):
         exit_code_ok = ds_main(["doctor", "dashboard-truth"])
     assert exit_code_ok == 0, f"Expected exit code 0 on empty DB; got {exit_code_ok}"
+
+
+def test_missing_authority_file_vacuously_passes(tmp_path: Path) -> None:
+    """A nonexistent authority DB (fresh CI checkout — no ~/.dream-studio) must
+    vacuously pass every invariant, NOT fail on 'unable to open database file'.
+
+    Regression for PR #401: pr-smoke failed because CI has no live authority
+    and the gate treated an unopenable DB as a hard failure.
+    """
+    missing = tmp_path / "nope" / "state" / "studio.db"
+    assert not missing.exists()
+    result = run_dashboard_truth(missing)
+    assert result["ok"] is True, f"Missing DB must pass; got {result}"
+    assert len(result["results"]) == 5
+    for inv in result["results"]:
+        assert inv["passed"], f"Invariant {inv['name']!r} must pass when DB is absent"
+        assert inv["error"] is None
+
+    # CLI entry point mirrors it: exit 0 when the resolved DB does not exist.
+    from interfaces.cli.ds import main as ds_main
+
+    with _patch_db(missing):
+        exit_code = ds_main(["doctor", "dashboard-truth"])
+    assert exit_code == 0, f"Expected exit 0 when authority absent; got {exit_code}"

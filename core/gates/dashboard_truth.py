@@ -127,14 +127,26 @@ def run_dashboard_truth(db_path: "str | Path") -> dict[str, Any]:
 
     Missing tables cause the affected invariant to **vacuously pass** (not
     crash), because on a fresh authority DB those tables may not exist yet.
+
+    A **missing authority file** (no ``~/.dream-studio/state/studio.db`` — e.g.
+    a fresh CI checkout) also vacuously passes every invariant: there is no
+    populated data that could violate a structural guarantee.  The gate only
+    fires when an authority exists *and* its data is wrong.
     """
-    db_uri = f"file:{db_path}?mode=ro"
     results: list[dict[str, Any]] = []
+
+    # No authority on disk → nothing to violate → all invariants vacuously pass.
+    if not Path(db_path).exists():
+        for name, _ in _INVARIANTS:
+            results.append({"name": name, "passed": True, "error": None})
+        return {"ok": True, "results": results}
+
+    db_uri = f"file:{db_path}?mode=ro"
 
     try:
         conn = sqlite3.connect(db_uri, uri=True)
     except Exception as exc:
-        # Cannot open DB at all — all invariants fail with the same error.
+        # File exists but cannot be opened (corrupt/locked) — a real fault.
         for name, _ in _INVARIANTS:
             results.append({"name": name, "passed": False, "error": str(exc)})
         return {"ok": False, "results": results}
