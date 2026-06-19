@@ -190,7 +190,7 @@ def test_escalated_wo_routes_retry_to_opus(tmp_path: Path) -> None:
     # Symptom that will FAIL on re-eval (table does not exist → check errors → fail).
     wo = _seed_closed_wo(
         db,
-        symptom="SQL-CHECK: SELECT COUNT(*) FROM no_such_table_zzz",
+        symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM no_such_table_zzz)",
         ac="SQL-CHECK: SELECT 1",
     )
 
@@ -349,7 +349,7 @@ def test_end_to_end(tmp_path: Path) -> None:
     set_config_value(RETRY_CAP_CONFIG_KEY, "2", db)  # low cap for the test
     wo = _seed_closed_wo(
         db,
-        symptom="SQL-CHECK: SELECT COUNT(*) FROM no_such_table_zzz",  # always fails
+        symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM no_such_table_zzz)",  # always fails
         ac="SQL-CHECK: SELECT 1",
     )
     op_file = tmp_path / "meta" / f"ESC-RETRYCAP-{wo[:8]}.md"

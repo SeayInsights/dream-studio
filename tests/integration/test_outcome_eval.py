@@ -75,7 +75,7 @@ def test_failed_outcome_reopens_wo(tmp_path: Path) -> None:
     db.parent.mkdir(parents=True)
     bootstrap_database(db)
 
-    symptom = "SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='nope'"
+    symptom = "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects WHERE project_id='nope')"
     wo = _seed_closed_wo(db, symptom=symptom)
     assert _status(db, wo) == "closed"
 
@@ -102,7 +102,7 @@ def test_no_reopen_when_auto_reopen_false(tmp_path: Path) -> None:
     db.parent.mkdir(parents=True)
     bootstrap_database(db)
     wo = _seed_closed_wo(
-        db, symptom="SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='nope'"
+        db, symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects WHERE project_id='nope')"
     )
 
     run_outcome_eval(db_path=db, source_root=tmp_path, dream_studio_home=home, auto_reopen=False)
@@ -119,9 +119,9 @@ def test_end_to_end(tmp_path: Path) -> None:
     bootstrap_database(db)
 
     bad = _seed_closed_wo(
-        db, symptom="SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='nope'"
+        db, symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects WHERE project_id='nope')"
     )
-    good = _seed_closed_wo(db, symptom="SQL-CHECK: SELECT COUNT(*) FROM business_projects")
+    good = _seed_closed_wo(db, symptom="SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_projects)")
 
     result = run_outcome_eval(
         db_path=db, source_root=tmp_path, dream_studio_home=home, auto_reopen=True

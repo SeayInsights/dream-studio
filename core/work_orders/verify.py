@@ -400,9 +400,39 @@ _CHECK_PREFIXES = ("SQL-CHECK:", "TEST-CHECK:", "API-CHECK:")
 # Timeout in seconds for TEST-CHECK subprocess calls.
 _TEST_CHECK_TIMEOUT = 300
 
+# ── SQL-CHECK semantics (authoritative — see also docs/authoring/work-orders.md) ──
+#
+# A SQL-CHECK acceptance criterion MUST be written in the form:
+#
+#   SQL-CHECK: SELECT 1 WHERE <condition>
+#
+# so that a FALSE condition yields ZERO rows, which is an explicit HARD FAIL.
+#
+# HARD FAIL cases:
+#   1. Zero rows returned — the WHERE condition evaluated to false (or no table rows
+#      matched).  Error message: "SQL-CHECK returned no rows — condition false".
+#   2. The first column value is falsy (NULL, 0, empty string).
+#   3. The query raises an exception.
+#
+# PASS: exactly one or more rows are returned AND the first column value is truthy.
+#
+# Discouraged (but still handled) form:
+#   SQL-CHECK: SELECT COUNT(*) FROM t WHERE cond
+#
+# COUNT(*) always returns one row, so "zero rows = fail" cannot fire.  A COUNT
+# of zero (falsy) still fails via case 2, but a COUNT of 1 passes even when only
+# a single incidentally-matching row exists — this masks bulk/threshold errors.
+# Prefer the SELECT 1 WHERE form so false conditions yield zero rows.
+
 
 def _run_one_sql_check(expr: str, db_path: Path) -> dict[str, Any]:
-    """Execute a single SQL-CHECK expression. Returns {kind, expr, passed, result, error}."""
+    """Execute a single SQL-CHECK expression.  Returns {kind, expr, passed, result, error}.
+
+    Zero rows returned is an explicit HARD FAIL — it means the WHERE condition
+    evaluated to false.  Use ``SELECT 1 WHERE <condition>`` so that a false
+    condition yields zero rows = fail.  ``COUNT(*)`` forms always return one row
+    and cannot trigger the zero-row fail path; they are discouraged.
+    """
     import sqlite3 as _sqlite3
 
     check: dict[str, Any] = {
@@ -416,7 +446,10 @@ def _run_one_sql_check(expr: str, db_path: Path) -> dict[str, Any]:
         conn = _sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         try:
             row = conn.execute(expr).fetchone()
-            if row is not None:
+            if row is None:
+                # HARD FAIL: zero rows — condition evaluated to false.
+                check["error"] = "SQL-CHECK returned no rows — condition false"
+            else:
                 val = row[0]
                 check["result"] = val
                 check["passed"] = bool(val)

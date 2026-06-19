@@ -152,7 +152,8 @@ def test_close_blocked_when_any_ac_fails(tmp_path: Path) -> None:
         title="Task with failing SQL check",
         desc="desc",
         acceptance_criteria=(
-            "SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='no-such-project'"
+            "SQL-CHECK: SELECT 1 WHERE EXISTS"
+            " (SELECT 1 FROM business_projects WHERE project_id='no-such-project')"
         ),
     )
 
@@ -300,7 +301,8 @@ def test_close_ac_gate_end_to_end(tmp_path: Path) -> None:
         title="Passing task",
         desc="desc",
         acceptance_criteria=(
-            f"SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='{project_id}'\n"
+            f"SQL-CHECK: SELECT 1 WHERE EXISTS"
+            f" (SELECT 1 FROM business_projects WHERE project_id='{project_id}')\n"
             f"TEST-CHECK: {_TRIVIAL_PASS_NODE}"
         ),
     )
@@ -329,7 +331,8 @@ def test_close_ac_gate_end_to_end(tmp_path: Path) -> None:
         title="Failing task",
         desc="desc",
         acceptance_criteria=(
-            "SQL-CHECK: SELECT COUNT(*) FROM business_projects WHERE project_id='impossible-id-xyz'"
+            "SQL-CHECK: SELECT 1 WHERE EXISTS"
+            " (SELECT 1 FROM business_projects WHERE project_id='impossible-id-xyz')"
         ),
     )
 
