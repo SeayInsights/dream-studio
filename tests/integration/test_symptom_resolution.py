@@ -175,7 +175,9 @@ def test_close_blocked_when_symptom_returns_zero(tmp_path):
     work_order_id = str(uuid.uuid4())
 
     # No rows match WHERE 1=0 → zero rows → condition false → fails.
-    failing_symptom = "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_work_order_types WHERE 1=0)"
+    failing_symptom = (
+        "SQL-CHECK: SELECT 1 WHERE EXISTS (SELECT 1 FROM business_work_order_types WHERE 1=0)"
+    )
 
     _seed_wo(
         db_path,
