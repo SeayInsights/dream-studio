@@ -80,6 +80,75 @@ def _insert_event(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# WO-CAPTURE-COMPLETENESS T4 acceptance check (named node-id):
+# derived skill duration is available (non-zero) end to end.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_skill_duration_available() -> None:
+    """WO-CAPTURE-COMPLETENESS T4 AC: per-skill execution duration is available
+    and non-zero, derived from paired execution.started/completed events.
+
+    Asserts both layers used by the dashboard:
+    - skill_usage_sql() yields a non-NULL execution_time_s for a paired run;
+    - SkillCollector.collect() surfaces a >0 avg_exec_time_s for that skill.
+    """
+    import os
+    import tempfile
+
+    from core.config.sqlite_bootstrap import bootstrap_database
+    from projections.core.collectors.authority_sources import skill_usage_sql
+    from projections.core.collectors.skill_collector import SkillCollector
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+    try:
+        bootstrap_database(db_path)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        run_id = str(uuid.uuid4())
+        _insert_event(
+            conn,
+            "skill.invoked",
+            "skill.invoked",
+            run_id,
+            skill_id="ds-workorder",
+            outcome_status="completed",
+            created_at="2026-01-01 08:00:00",
+        )
+        _insert_event(
+            conn, "execution.started", "execution.started", run_id, created_at="2026-01-01 08:00:00"
+        )
+        _insert_event(
+            conn,
+            "execution.completed",
+            "execution.completed",
+            run_id,
+            created_at="2026-01-01 08:00:45",
+        )
+        conn.commit()
+
+        sql = skill_usage_sql(conn)
+        assert sql is not None, "skill_usage_sql must derive durations when events exist"
+        row = conn.execute(
+            f"SELECT execution_time_s FROM ({sql}) t WHERE session_id = ?", (run_id,)
+        ).fetchone()
+        assert row is not None and row["execution_time_s"] is not None
+        assert abs(row["execution_time_s"] - 45.0) < 0.01, "paired run must derive ~45 s"
+        conn.close()
+
+        result = SkillCollector(db_path).collect(days=3650)
+        by_skill = result.get("by_skill", {})
+        assert "ds-workorder" in by_skill, "seeded skill must surface in the collector"
+        avg_s = by_skill["ds-workorder"]["avg_exec_time_s"]
+        assert (
+            avg_s is not None and avg_s > 0
+        ), f"skill duration must be available (>0), got {avg_s}"
+    finally:
+        os.unlink(db_path)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # T1 — derivation returns correct duration, excludes unpaired events
 # ─────────────────────────────────────────────────────────────────────────────
 
