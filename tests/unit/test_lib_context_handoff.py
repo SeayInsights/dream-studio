@@ -99,39 +99,47 @@ def test_write_recap_no_handoff_path(tmp_path, monkeypatch):
 # ── draft_handoff_lesson ───────────────────────────────────────────────
 
 
-def test_draft_handoff_lesson_creates_draft(tmp_path, monkeypatch):
+def _ondisk_on_context_threshold_rows(tmp_path) -> int:
+    """Count any on-context-threshold raw_lessons rows in the isolated home DB."""
     import sqlite3
 
+    db_path = tmp_path / ".dream-studio" / "state" / "studio.db"
+    if not db_path.exists():
+        return 0
+    con = sqlite3.connect(str(db_path))
+    try:
+        # raw_lessons may not exist if nothing ever wrote a lesson — treat as 0.
+        try:
+            rows = con.execute(
+                "SELECT lesson_id FROM raw_lessons WHERE source='on-context-threshold'"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return 0
+        return len(rows)
+    finally:
+        con.close()
+
+
+def test_draft_handoff_lesson_does_not_create_draft(tmp_path, monkeypatch):
+    """WO-HANDOFF-LESSON-NOISE: the auto-handoff retrospective must NOT insert a
+    body-less draft lesson into raw_lessons (it polluted the lessons pipeline)."""
     monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(
         65.0, "branch: main | last commit: abc | repo: /project", "sess9999", is_pct=True
     )
-    db_path = tmp_path / ".dream-studio" / "state" / "studio.db"
-    assert db_path.exists(), "studio.db should have been created by insert_lesson()"
-    con = sqlite3.connect(str(db_path))
-    rows = con.execute(
-        "SELECT title FROM raw_lessons WHERE source='on-context-threshold'"
-    ).fetchall()
-    con.close()
-    assert len(rows) == 1
-    assert "Context Budget Exceeded" in rows[0][0]
+    assert (
+        _ondisk_on_context_threshold_rows(tmp_path) == 0
+    ), "handoff must not create an on-context-threshold draft lesson"
 
 
-def test_draft_handoff_lesson_no_duplicate(tmp_path, monkeypatch):
-    import sqlite3
-
+def test_draft_handoff_lesson_no_draft_on_repeat(tmp_path, monkeypatch):
+    """Repeated handoffs still create zero draft lessons (no accumulation)."""
     monkeypatch.delenv("DREAM_STUDIO_HOME", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
     draft_handoff_lesson(65.0, "ctx", "sessdupe1", is_pct=True)
-    db_path = tmp_path / ".dream-studio" / "state" / "studio.db"
-    con = sqlite3.connect(str(db_path))
-    rows = con.execute(
-        "SELECT lesson_id FROM raw_lessons WHERE source='on-context-threshold'"
-    ).fetchall()
-    con.close()
-    assert len(rows) == 1  # second call is a no-op (INSERT OR IGNORE)
+    assert _ondisk_on_context_threshold_rows(tmp_path) == 0
 
 
 # ── git subprocess exception (lines 40-41) ────────────────────────────────

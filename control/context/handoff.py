@@ -252,30 +252,22 @@ def write_recap(cwd: Path, kb: float, session_id: str | None, handoff_path: Path
 
 
 def draft_handoff_lesson(kb: float, ctx: str, session_id: str | None, is_pct: bool = False) -> None:
-    try:
-        from core.event_store.studio_db import insert_lesson
+    """Emit a console retrospective marker on auto-handoff.
 
-        date_str = utcnow().strftime("%Y-%m-%d")
+    WO-HANDOFF-LESSON-NOISE: this used to insert a body-less draft into raw_lessons
+    on every context-threshold trip ("Context Budget Exceeded"), which polluted the
+    lessons pipeline (every handoff became a stuck pending draft with no learning
+    content). A handoff is an operational event, not a learning — the handoff packet
+    (write_handoff) already persists it — so this no longer writes to raw_lessons.
+    """
+    try:
         sid = session_id or "unknown"
-        lesson_id = f"handoff-{date_str}-{sid[:8]}"
         threshold = f"{HANDOFF_PCT}%" if is_pct else f"{scaled_kb_thresholds()['handoff']:.0f} KB"
-        what_happened = (
-            f"Session hit auto-handoff at ~{kb:.0f}{'%' if is_pct else ' KB'}"
-            f" (threshold: {threshold}). Git state: {ctx}. Session: {sid}"
+        print(
+            f"  -> SENSOR: Handoff at ~{kb:.0f}{'%' if is_pct else ' KB'}"
+            f" (threshold: {threshold}, session: {sid})\n",
+            flush=True,
         )
-        inserted = insert_lesson(
-            lesson_id,
-            "on-context-threshold",
-            "Context Budget Exceeded",
-            what_happened=what_happened,
-            confidence="medium",
-            db_path=paths.state_dir() / "studio.db",
-        )
-        if inserted:
-            print(
-                f"  -> SENSOR: Handoff retrospective drafted (DB lesson_id: {lesson_id})\n",
-                flush=True,
-            )
     except Exception:
         pass
 
