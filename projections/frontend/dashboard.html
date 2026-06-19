@@ -1319,6 +1319,15 @@
 
         <!-- Eval Health Tab (18.8.3) -->
         <div id="evals" class="tab-content">
+            <!-- Needs Attention: regressions + friction queue (lead with action, not raw tables) -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6 border-l-4 border-yellow-400">
+                <h3 class="text-lg font-semibold text-gray-900 mb-1">&#9888; Needs Attention</h3>
+                <p class="text-sm text-gray-600 mb-4">Regressions and the friction queue — what is failing or declining, and the recommended action.</p>
+                <div id="evals-needs-attention" class="space-y-2">
+                    <div class="text-center text-gray-400 py-4">Loading regressions…</div>
+                </div>
+            </div>
+
             <!-- Summary Cards -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div class="bg-white rounded-lg shadow p-6">
@@ -2544,11 +2553,12 @@
                             <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide">
                                 <th class="pb-2 pr-8">Key</th>
                                 <th class="pb-2 pr-8">Value</th>
+                                <th class="pb-2 pr-8">What it does</th>
                                 <th class="pb-2">Last Updated</th>
                             </tr>
                         </thead>
                         <tbody id="ds-config-body">
-                            <tr><td colspan="3" class="text-gray-400 pt-3 text-sm">Loading...</td></tr>
+                            <tr><td colspan="4" class="text-gray-400 pt-3 text-sm">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -4028,13 +4038,28 @@
             }
         }
 
+        // What each operator setting controls. Falls back to a generic note for
+        // unknown keys so every row explains itself rather than being a bare value.
+        const DS_CONFIG_DESCRIPTIONS = {
+            'eval.friction_threshold': 'Rubric score below which an eval is flagged as friction (needs attention).',
+            'eval.pending_rerun_ttl_hours': 'How long a queued eval re-run stays pending before it is re-surfaced.',
+            'context.handoff_threshold': 'Context size at which an automatic session handoff is written.',
+            'context.compact_threshold': 'Context size at which the conversation is compacted.',
+            'escalation.retry_cap': 'Maximum automatic retries before a work order escalates to the operator.',
+        };
+        function dsConfigDescription(key) {
+            if (DS_CONFIG_DESCRIPTIONS[key]) return DS_CONFIG_DESCRIPTIONS[key];
+            const prefix = String(key || '').split('.')[0];
+            return `Operator override for ${prefix || 'runtime'} behaviour (env var &gt; this row &gt; default).`;
+        }
+
         async function loadDsConfig() {
             const tbody = document.getElementById('ds-config-body');
             try {
                 const resp = await fetch('/api/v2/config');
                 const data = await resp.json();
                 if (!Array.isArray(data) || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3" class="text-gray-400 pt-3 text-sm">No configuration keys found.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 pt-3 text-sm">No overrides set — all defaults apply. Set one with <code>ds config set &lt;key&gt; &lt;value&gt;</code>.</td></tr>';
                     return;
                 }
                 tbody.innerHTML = data.map(row => {
@@ -4042,11 +4067,12 @@
                     return `<tr class="border-b border-gray-100 last:border-0">
                         <td class="py-2 pr-8 font-mono text-xs text-gray-800">${row.key}</td>
                         <td class="py-2 pr-8 text-sm text-gray-700">${row.value}</td>
+                        <td class="py-2 pr-8 text-xs text-gray-600">${dsConfigDescription(row.key)}</td>
                         <td class="py-2 text-xs text-gray-500">${updated}</td>
                     </tr>`;
                 }).join('');
             } catch (e) {
-                if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="text-gray-400 text-sm">Config unavailable.</td></tr>';
+                if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-gray-400 text-sm">Config unavailable.</td></tr>';
             }
         }
 
@@ -4393,6 +4419,19 @@
     };
 
     // ── Memory Surface panel (18.4.4 — Chain 7) ──────────────────────────
+    // Explain why a surfaced memory is worth acting on, by category.
+    function memoryWhyItMatters(category) {
+        const map = {
+            gotcha: 'A known trap in this area — read it before changing related code to avoid repeating it.',
+            lesson: 'A captured lesson from prior work — apply it so the same mistake is not re-made.',
+            correction: 'An operator correction — your default behaviour here was wrong before; follow this instead.',
+            feedback: 'Operator guidance on how to work — align your approach with it.',
+            project: 'Ongoing project context not derivable from the code — keeps the work on-goal.',
+        };
+        return map[String(category || '').toLowerCase()]
+            || 'Surfaced because it is relevant to the current work context.';
+    }
+
     async function loadMemorySurface() {
         try {
             const resp = await fetch('/api/v1/insights/memory-surface');
@@ -4415,14 +4454,16 @@
 
             const list = document.getElementById('c7-surfaced-list');
             if (!d.recently_surfaced || d.recently_surfaced.length === 0) {
-                list.innerHTML = '<div class="text-gray-400">No memories surfaced yet this session.</div>';
+                list.innerHTML = '<div class="text-gray-400">No memories surfaced yet this session. Memories surface when a gotcha, lesson, or correction is relevant to current work — run <code>ds memory ingest</code> if this stays empty.</div>';
             } else {
-                list.innerHTML = d.recently_surfaced.map(m =>
-                    `<div class="border-l-2 border-blue-200 pl-3 py-1">
+                list.innerHTML = d.recently_surfaced.map(m => {
+                    const why = memoryWhyItMatters(m.category);
+                    return `<div class="border-l-2 border-blue-200 pl-3 py-1">
                         <span class="text-xs text-gray-400">[${m.importance_label}] ${m.category}</span>
                         <div>${(m.content || '').slice(0, 100)}${(m.content||'').length > 100 ? '…' : ''}</div>
-                    </div>`
-                ).join('');
+                        <div class="text-xs text-gray-600 mt-0.5"><span class="font-medium">Why it matters:</span> ${why}</div>
+                    </div>`;
+                }).join('');
             }
         } catch (e) {
             document.getElementById('c7-surfaced-list').innerHTML =
@@ -6176,11 +6217,71 @@ function initHooksCharts() {
         }
 
         // Eval Health tab (18.8.3)
+        async function renderEvalsNeedsAttention(health) {
+            // Lead with what needs attention: regressions (failing baselines) +
+            // the friction queue (friction_flag / pending_rerun from eval_registry).
+            const el = document.getElementById('evals-needs-attention');
+            if (!el) return;
+            const items = [];
+            // Failing baselines = regressions against the recorded baseline.
+            (health.baselines || []).forEach(b => {
+                if (b.passed === false) {
+                    items.push({
+                        sev: 'regression',
+                        label: b.eval_id,
+                        detail: `Score ${b.score !== null && b.score !== undefined ? Number(b.score).toFixed(3) : '--'} is below baseline`,
+                        action: 'Investigate the regression, then re-run to confirm or rebaseline.',
+                    });
+                }
+            });
+            // Friction queue from the eval registry.
+            try {
+                const r = await fetch('/api/v2/eval/registry');
+                if (r.ok) {
+                    const reg = await r.json();
+                    (Array.isArray(reg) ? reg : []).forEach(row => {
+                        if (row.friction_flag) {
+                            items.push({
+                                sev: 'friction',
+                                label: row.target_id,
+                                detail: `Friction-flagged (${row.target_type}), rubric ${row.rubric_score ?? '--'}`,
+                                action: 'Review the degraded target; re-run its eval to clear the flag.',
+                            });
+                        } else if (row.pending_rerun) {
+                            items.push({
+                                sev: 'pending',
+                                label: row.target_id,
+                                detail: `Pending re-run (${row.target_type})`,
+                                action: 'Run the queued eval to refresh its baseline.',
+                            });
+                        }
+                    });
+                }
+            } catch (e) { /* registry optional; regressions still surface */ }
+
+            if (items.length === 0) {
+                el.innerHTML = '<div class="text-green-700 text-sm py-2">&#10003; No regressions — all evals at or above baseline, no friction in the queue.</div>';
+                return;
+            }
+            const color = { regression: 'red', friction: 'yellow', pending: 'blue' };
+            el.innerHTML = items.map(it => `
+                <div class="flex items-start gap-3 border-l-2 border-${color[it.sev]}-300 pl-3 py-1.5">
+                    <span class="px-2 py-0.5 rounded text-xs font-medium bg-${color[it.sev]}-100 text-${color[it.sev]}-700 uppercase">${it.sev}</span>
+                    <div>
+                        <div class="text-sm font-mono text-gray-800">${it.label}</div>
+                        <div class="text-xs text-gray-500">${it.detail}</div>
+                        <div class="text-xs text-gray-700 mt-0.5"><span class="font-medium">Action:</span> ${it.action}</div>
+                    </div>
+                </div>`).join('');
+        }
+
         async function initEvalsTab() {
             try {
                 const resp = await fetch('/api/v1/evals/health');
                 if (!resp.ok) throw new Error(resp.statusText);
                 const d = await resp.json();
+
+                await renderEvalsNeedsAttention(d);
 
                 document.getElementById('evals-total').textContent = d.total_evals ?? '--';
                 document.getElementById('evals-status').textContent =
