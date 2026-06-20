@@ -27,6 +27,10 @@ CHECKS = [
     ("format", [_PYTHON, "-m", "black", "--check", "."]),
     ("lint-baseline", [_PYTHON, "interfaces/cli/lint_baseline.py", "check"]),
     (
+        "agents-md-fresh",
+        [_PYTHON, "-m", "integrations.compiler.agents_md", "--check"],
+    ),
+    (
         "contract-docs-drift",
         [_PYTHON, "interfaces/cli/contract_docs_drift_gate.py"],
     ),

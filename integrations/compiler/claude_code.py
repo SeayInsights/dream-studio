@@ -279,18 +279,33 @@ def _inject_routing_table(projection_content: str, routing_table: str) -> str:
     return before + "\n" + routing_table + after
 
 
+# Phase 20: CLAUDE.md no longer embeds the routing table — it imports the generated
+# universal target AGENTS.md, which is the single source of truth for routing /
+# work-order types / gate definitions. This eliminates routing/gate duplication
+# between the two adapter files.
+_AGENTS_IMPORT_BLOCK = (
+    "Skill routing, work-order types, and gate definitions are defined once in the"
+    " generated universal target. Import it here:\n\n@AGENTS.md\n\n"
+    "Regenerate it with `py -m integrations.compiler.agents_md --write` when canonical"
+    " skills/workflows/packs change (the AGENTS.md drift gate enforces freshness)."
+)
+
+
 def _build_claude_md(
     adapter_projection_path: Path,
     canonical_root: Path,
     packs_yaml_path: Path,
 ) -> str:
-    """Return enforcement block prepended to adapter projection with dynamic routing table."""
+    """Return the enforcement block prepended to the adapter projection.
+
+    The projection's AUTO-ROUTING block is replaced with an ``@AGENTS.md`` import
+    rather than an embedded routing table, so routing lives in exactly one place.
+    """
     projection = ""
     if adapter_projection_path.is_file():
         projection = adapter_projection_path.read_text(encoding="utf-8")
 
-    routing_table = _build_routing_table(canonical_root, packs_yaml_path)
-    projection = _inject_routing_table(projection, routing_table)
+    projection = _inject_routing_table(projection, _AGENTS_IMPORT_BLOCK)
     return _ENFORCEMENT_BLOCK + "\n" + projection
 
 
@@ -342,12 +357,26 @@ def compile_pack(
 
     hooks_template = _load_hooks_template()
 
+    # Phase 20: ship the generated universal AGENTS.md alongside CLAUDE.md so the
+    # `@AGENTS.md` import in the installed CLAUDE.md resolves. Lazy import avoids a
+    # module-load cycle (agents_md imports _build_routing_table from this module).
+    try:
+        from integrations.compiler.agents_md import build_agents_md
+
+        agents_md_content = build_agents_md(canonical_root=root, packs_yaml_path=_PACKS_YAML)
+    except Exception as exc:  # pragma: no cover - generation must not break installs
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning("AGENTS.md generation failed (non-blocking): %s", exc)
+        agents_md_content = ""
+
     pack: dict[str, Any] = {
         "tool": "claude_code",
         "canonical_root": str(root),
         "files": {
             "skills/ds-bootstrap/SKILL.md": skill_md_content,
             "CLAUDE.md": claude_md_content,
+            "AGENTS.md": agents_md_content,
         },
         "settings_hooks": hooks_template,
         "extension_additions": {},
