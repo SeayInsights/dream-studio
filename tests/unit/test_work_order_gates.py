@@ -167,8 +167,12 @@ def test_close_emits_work_order_closed_event(db_home, tmp_path, monkeypatch):
     spool_root = tmp_path / "spool-root"
     monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
     _close(db_home, tmp_path, monkeypatch, WO_DOCS)
+    # sync_tick() moves files from spool/ to processed/ after ingestion; check both.
     events = [
-        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8"))
+        for subdir in ("spool", "processed")
+        for p in (spool_root / subdir).glob("*.json")
+        if (spool_root / subdir).is_dir()
     ]
     assert any(e["event_type"] == "work_order.closed" for e in events)
 
@@ -200,8 +204,12 @@ def test_close_force_emits_gate_bypassed_events(db_home, tmp_path, monkeypatch):
             "--force",
         ]
     )
+    # sync_tick() moves files from spool/ to processed/ after ingestion; check both.
     events = [
-        json.loads(p.read_text(encoding="utf-8")) for p in (spool_root / "spool").glob("*.json")
+        json.loads(p.read_text(encoding="utf-8"))
+        for subdir in ("spool", "processed")
+        for p in (spool_root / subdir).glob("*.json")
+        if (spool_root / subdir).is_dir()
     ]
     bypassed = [e for e in events if e["event_type"] == "gate.bypassed"]
     assert len(bypassed) >= 1
