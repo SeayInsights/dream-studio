@@ -205,11 +205,26 @@ def test_authority_invariants_are_part_of_readiness_baseline():
         ),
     ]
 
+    # Phase 20 (WO-P20-MARKETPLACE) sanctions `dream-studio:` as the Claude plugin
+    # *namespace* for skill IDs (e.g. dream-studio:ds-core:build), distinct from the
+    # banned legacy authority identifier. These files implement/exercise that
+    # namespace and are exempt from the "forbidden legacy authority identifier" check
+    # only. The ban remains in force everywhere else.
+    _PHASE20_NAMESPACE_ALLOW = {
+        "core/skills/invocation.py",
+        "tests/unit/test_plugin_manifest.py",
+        # This file documents the sanctioned namespace in the comment above.
+        "tests/unit/test_product_readiness_baseline.py",
+    }
+
     offenders: list[str] = []
     for roots, pattern, label in checks:
         for path in _files_under(roots):
+            rel = _rel(path).replace("\\", "/")
+            if label == "forbidden legacy authority identifier" and rel in _PHASE20_NAMESPACE_ALLOW:
+                continue
             if pattern.search(_read(path)):
-                offenders.append(f"{label}: {_rel(path)}")
+                offenders.append(f"{label}: {rel}")
 
     assert offenders == []
 

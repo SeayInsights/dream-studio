@@ -46,6 +46,38 @@ from core.skills.queries import _load_packs
 
 _SKILL_SPECIFIER_RE = re.compile(r"^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$")
 
+# Phase 20 (WO-P20-MARKETPLACE): the Claude plugin marketplace namespaces every
+# skill under the plugin name. Accept `dream-studio:<spec>` as equivalent to the
+# bare `<spec>` so marketplace installs and direct installs invoke identically.
+_PLUGIN_NAMESPACE = "dream-studio:"
+
+
+def _strip_plugin_namespace(specifier: str) -> str:
+    """Drop a leading `dream-studio:` plugin namespace if present."""
+    if specifier.startswith(_PLUGIN_NAMESPACE):
+        return specifier[len(_PLUGIN_NAMESPACE) :]  # noqa: E203
+    return specifier
+
+
+def _resolve_pack_token(token: str, packs: dict) -> str | None:
+    """Resolve a pack token to a packs.yaml key.
+
+    Accepts either the pack key (e.g. ``core``) or the skill id (e.g. ``ds-core``),
+    so namespaced marketplace IDs (``dream-studio:ds-core:build``) and bare pack
+    IDs (``core:build``) both resolve. Returns the pack key or None.
+    """
+    if token in packs:
+        return token
+    for key, cfg in packs.items():
+        if not isinstance(cfg, dict):
+            continue
+        skill_id = cfg.get("skill", key)
+        if not skill_id.startswith("ds-"):
+            skill_id = f"ds-{skill_id}"
+        if token == skill_id:
+            return key
+    return None
+
 
 def _require_db(source_root: Path, dream_studio_home: Path | None) -> Path | None:
     """Like the other `_require_db` helpers, but returns None instead of
@@ -81,14 +113,18 @@ def load_skill_content(
 
     unknown = f"Unknown skill: {specifier}. Run `ds skill list` to see available skills."
 
-    if not _SKILL_SPECIFIER_RE.match(specifier):
+    # Accept an optional `dream-studio:` plugin namespace (marketplace installs).
+    bare = _strip_plugin_namespace(specifier)
+
+    if not _SKILL_SPECIFIER_RE.match(bare):
         return {"ok": False, "error": unknown, "specifier": specifier}
 
-    pack, mode = specifier.split(":", 1)
+    token, mode = bare.split(":", 1)
     packs_data = _load_packs(source_root)
     packs = packs_data.get("packs", {})
 
-    if pack not in packs:
+    pack = _resolve_pack_token(token, packs)
+    if pack is None:
         return {"ok": False, "error": unknown, "specifier": specifier}
     if mode not in packs[pack].get("modes", []):
         return {"ok": False, "error": unknown, "specifier": specifier}
