@@ -936,4 +936,14 @@ def close_work_order(
             else:
                 result["auto_start_message"] = "MILESTONE COMPLETE"
 
+    # Flush the work_order.closed spool event through the projection pipeline so
+    # callers see status='closed' in the read model without a manual sync_tick.
+    # Best-effort — a transient projection failure degrades to the daemon's next cycle.
+    try:
+        from core.projections.runner import sync_tick as _sync_tick_post
+
+        _sync_tick_post()
+    except Exception:
+        pass
+
     return result
