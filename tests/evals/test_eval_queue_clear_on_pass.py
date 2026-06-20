@@ -109,7 +109,7 @@ def _make_eval_result(*, passed: bool):
 class TestEvalQueueClearOnPass:
     def test_passing_run_clears_friction_flag_and_pending_rerun(self, db_path, evals_dir):
         """friction_flag=0 and pending_rerun=0 after a passing queue run."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         target_id = "test-skill-pass"
         _seed_pending(db_path, target_id)
@@ -133,7 +133,7 @@ class TestEvalQueueClearOnPass:
 
     def test_failing_run_preserves_friction_flag_and_pending_rerun(self, db_path, evals_dir):
         """friction_flag and pending_rerun unchanged after a failing queue run."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         target_id = "test-skill-fail"
         _seed_pending(db_path, target_id)

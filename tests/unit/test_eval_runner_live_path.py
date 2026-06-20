@@ -134,7 +134,7 @@ class TestRunAllLiveParameter:
 class TestEvalRunCliLiveFlag:
     def test_cli_live_flag_wires_live_true_to_runner(self, tmp_path):
         """ds eval run <id> --live passes live=True to EvalRunner.run_case."""
-        from interfaces.cli.ds import _eval_dispatch
+        from interfaces.cli.commands.eval import dispatch as _eval_dispatch
 
         evals_dir = tmp_path / "evals"
         evals_dir.mkdir()

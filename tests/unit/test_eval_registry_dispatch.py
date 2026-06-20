@@ -84,7 +84,7 @@ class TestEvalRegistryList:
         conn.commit()
         conn.close()
 
-        from interfaces.cli.ds import _eval_registry_dispatch
+        from interfaces.cli.commands.eval import _eval_registry_dispatch
 
         args = argparse.Namespace(registry_command="list", target_type=None)
         output = []
@@ -116,7 +116,7 @@ class TestEvalRegistryList:
         conn.commit()
         conn.close()
 
-        from interfaces.cli.ds import _eval_registry_dispatch
+        from interfaces.cli.commands.eval import _eval_registry_dispatch
 
         args = argparse.Namespace(registry_command="list", target_type="hook")
         output = []
@@ -133,7 +133,7 @@ class TestEvalRegistryList:
 
     def test_list_returns_empty_registry_when_no_entries(self, registry_db):
         """ds eval registry list on an empty table returns count=0."""
-        from interfaces.cli.ds import _eval_registry_dispatch
+        from interfaces.cli.commands.eval import _eval_registry_dispatch
 
         args = argparse.Namespace(registry_command="list", target_type=None)
         output = []
@@ -160,7 +160,7 @@ class TestEvalRegistryShow:
         conn.commit()
         conn.close()
 
-        from interfaces.cli.ds import _eval_registry_dispatch
+        from interfaces.cli.commands.eval import _eval_registry_dispatch
 
         args = argparse.Namespace(registry_command="show", target_id="my-skill")
         output = []
@@ -179,7 +179,7 @@ class TestEvalRegistryShow:
 
     def test_show_returns_error_for_missing_target(self, registry_db):
         """ds eval registry show <unknown> returns ok=False."""
-        from interfaces.cli.ds import _eval_registry_dispatch
+        from interfaces.cli.commands.eval import _eval_registry_dispatch
 
         args = argparse.Namespace(registry_command="show", target_id="does-not-exist")
         output = []

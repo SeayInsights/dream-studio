@@ -195,7 +195,7 @@ def test_project_list_shows_registered_projects(tmp_path, capsys):
     pid = "11111111-1111-1111-1111-111111111111"
     _seed_project(db_path, project_id=pid, name="Listed Project")
 
-    from interfaces.cli.ds import _project_list
+    from interfaces.cli.commands.project import _project_list
     from unittest.mock import MagicMock
 
     fake_paths = MagicMock()
@@ -226,7 +226,7 @@ def test_project_status_shows_milestone_and_work_order_counts(tmp_path, capsys):
     _seed_work_order(db_path, work_order_id="wo-1", project_id=pid, title="WO1", status="created")
     _seed_work_order(db_path, work_order_id="wo-2", project_id=pid, title="WO2", status="complete")
 
-    from interfaces.cli.ds import _project_status
+    from interfaces.cli.commands.project import _project_status
     from unittest.mock import MagicMock
 
     fake_paths = MagicMock()
@@ -265,7 +265,7 @@ def test_project_next_returns_first_open_work_order(tmp_path, capsys):
         status="created",
     )
 
-    from interfaces.cli.ds import _project_next
+    from interfaces.cli.commands.project import _project_next
     from unittest.mock import MagicMock
 
     fake_paths = MagicMock()
@@ -290,7 +290,7 @@ def test_project_next_returns_none_when_no_open_work_orders(tmp_path, capsys):
     pid = "44444444-4444-4444-4444-444444444444"
     _seed_project(db_path, project_id=pid, name="Empty Project")
 
-    from interfaces.cli.ds import _project_next
+    from interfaces.cli.commands.project import _project_next
     from unittest.mock import MagicMock
 
     fake_paths = MagicMock()

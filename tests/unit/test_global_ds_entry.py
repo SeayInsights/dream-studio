@@ -161,7 +161,7 @@ def _get_doctor_status():
 
     if str(REPO_ROOT_9C) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT_9C))
-    from interfaces.cli.ds import _doctor_status
+    from interfaces.cli.commands.system import _doctor_status
 
     return _doctor_status
 
@@ -288,7 +288,7 @@ def test_doctor_status_is_fail_when_dispatcher_hooks_not_installed(tmp_path):
     _minimal_sqlite(tmp_path)
     _doctor_status = _get_doctor_status()
 
-    from interfaces.cli.ds import _check_dispatcher_hooks, _check_version_current
+    from interfaces.cli.commands.system import _check_dispatcher_hooks, _check_version_current
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths") as mock_rip:
         mock_rt = MagicMock()
@@ -297,9 +297,9 @@ def test_doctor_status_is_fail_when_dispatcher_hooks_not_installed(tmp_path):
         mock_rt.sqlite_path = tmp_path / "state" / "studio.db"
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
-            with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=False):
+            with patch("interfaces.cli.commands.system._check_dispatcher_hooks", return_value=False):
                 with patch(
-                    "interfaces.cli.ds._check_version_current",
+                    "interfaces.cli.commands.system._check_version_current",
                     return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True},
                 ):
                     result = _doctor_status(source_root=REPO_ROOT_9C, dream_studio_home=tmp_path)
@@ -324,9 +324,9 @@ def test_doctor_status_is_fail_when_failed_events_nonzero(tmp_path):
         mock_rt.sqlite_path = tmp_path / "state" / "studio.db"
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
-            with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=True):
+            with patch("interfaces.cli.commands.system._check_dispatcher_hooks", return_value=True):
                 with patch(
-                    "interfaces.cli.ds._check_version_current",
+                    "interfaces.cli.commands.system._check_version_current",
                     return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True},
                 ):
                     result = _doctor_status(source_root=REPO_ROOT_9C, dream_studio_home=tmp_path)
@@ -349,12 +349,12 @@ def test_doctor_fix_calls_install_when_skills_missing(tmp_path):
         mock_rt.sqlite_path = tmp_path / "state" / "studio.db"
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
-            with patch("interfaces.cli.ds._check_dispatcher_hooks", return_value=True):
+            with patch("interfaces.cli.commands.system._check_dispatcher_hooks", return_value=True):
                 with patch(
-                    "interfaces.cli.ds._check_skills_installed", return_value=missing_skills
+                    "interfaces.cli.commands.system._check_skills_installed", return_value=missing_skills
                 ):
                     with patch(
-                        "interfaces.cli.ds._check_version_current",
+                        "interfaces.cli.commands.system._check_version_current",
                         return_value={
                             "repo": "2026-05-17",
                             "installed": "2026-05-17",

@@ -235,7 +235,7 @@ def test_loop_and_cli_enforce_tasks_done(tmp_path: Path) -> None:
 
     # ── CLI path: the operator-facing wrapper returns a non-zero exit code ──
     with _patch_close_runtime(db_path):
-        from interfaces.cli.ds import _work_order_close
+        from interfaces.cli.commands.work_order import _work_order_close
 
         exit_code = _work_order_close(
             work_order_id=work_order_id,

@@ -114,7 +114,7 @@ def test_reason_file_written_to_reasons_subdirectory(spool_root):
 def test_doctor_count_excludes_reasons_subdirectory(spool_root, tmp_path):
     from spool.states import SpoolState, state_dir
     from spool.ingestor import ingest
-    from interfaces.cli.ds import _check_failed_events
+    from interfaces.cli.commands.system import _check_failed_events
 
     spool_dir = state_dir(SpoolState.SPOOL, spool_root)
     spool_dir.mkdir(parents=True, exist_ok=True)

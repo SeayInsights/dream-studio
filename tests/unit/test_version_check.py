@@ -222,9 +222,9 @@ def test_no_output_when_both_checks_pass():
 
 
 def _get_update_command():
-    from interfaces.cli import ds as _ds
+    from interfaces.cli.commands.system import _update_command
 
-    return _ds._update_command
+    return _update_command
 
 
 def test_update_returns_already_current_when_version_matches(tmp_path, capsys):
@@ -392,7 +392,7 @@ def _make_manifest(files: list[dict]) -> dict:
 
 def test_canonical_hook_drift_returns_empty_when_no_meta_dir(tmp_path):
     """_canonical_hook_drift returns [] when source_root has no runtime/hooks/meta dir."""
-    from interfaces.cli.ds import _canonical_hook_drift
+    from interfaces.cli.commands.system import _canonical_hook_drift
 
     manifest = _make_manifest([])
     assert _canonical_hook_drift(tmp_path, manifest) == []
@@ -400,7 +400,7 @@ def test_canonical_hook_drift_returns_empty_when_no_meta_dir(tmp_path):
 
 def test_canonical_hook_drift_returns_empty_when_hashes_match(tmp_path):
     """_canonical_hook_drift returns [] when canonical hash matches manifest."""
-    from interfaces.cli.ds import _canonical_hook_drift
+    from interfaces.cli.commands.system import _canonical_hook_drift
     from integrations.manifest import compute_hash
 
     meta_dir = tmp_path / "runtime" / "hooks" / "meta"
@@ -431,7 +431,7 @@ def test_canonical_hook_drift_returns_empty_when_hashes_match(tmp_path):
 
 def test_canonical_hook_drift_returns_filename_when_hash_differs(tmp_path):
     """_canonical_hook_drift returns the filename when canonical source has changed."""
-    from interfaces.cli.ds import _canonical_hook_drift
+    from interfaces.cli.commands.system import _canonical_hook_drift
     from integrations.manifest import compute_hash
 
     meta_dir = tmp_path / "runtime" / "hooks" / "meta"
@@ -463,7 +463,7 @@ def test_canonical_hook_drift_returns_filename_when_hash_differs(tmp_path):
 
 def test_update_falls_through_on_version_match_with_hook_drift(tmp_path, capsys):
     """ds update must reinstall when version matches but canonical hooks have drifted."""
-    from interfaces.cli.ds import _update_command
+    from interfaces.cli.commands.system import _update_command
     from integrations.manifest import compute_hash, write_manifest
     from unittest.mock import MagicMock, patch
 

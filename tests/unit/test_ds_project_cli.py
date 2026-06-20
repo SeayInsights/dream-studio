@@ -61,7 +61,7 @@ def _run_cli(argv: list[str]) -> tuple[int, str]:
 def test_project_register_inserts_row(tmp_path):
     db_path = _make_db(tmp_path)
 
-    from interfaces.cli.ds import _project_register
+    from interfaces.cli.commands.project import _project_register
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -88,7 +88,7 @@ def test_project_register_inserts_row(tmp_path):
 def test_project_register_output_has_project_id(tmp_path, capsys):
     db_path = _make_db(tmp_path)
 
-    from interfaces.cli.ds import _project_register
+    from interfaces.cli.commands.project import _project_register
     from unittest.mock import MagicMock, patch
 
     fake_paths = MagicMock()
@@ -114,7 +114,7 @@ def test_project_register_output_has_project_id(tmp_path, capsys):
 
 
 def test_project_register_missing_db_raises(tmp_path):
-    from interfaces.cli.ds import _project_register
+    from interfaces.cli.commands.project import _project_register
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = tmp_path / "nonexistent.db"
@@ -146,7 +146,7 @@ def test_project_register_output_contains_set_active_hint(tmp_path, capsys):
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
-    from interfaces.cli.ds import _project_register
+    from interfaces.cli.commands.project import _project_register
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
         _project_register(
@@ -170,7 +170,7 @@ def test_set_active_makes_target_active(tmp_path, capsys):
     pid = "11111111-1111-1111-1111-111111111111"
     _seed_project(db_path, project_id=pid, name="Target", status="paused")
 
-    from interfaces.cli.ds import _project_set_active
+    from interfaces.cli.commands.project import _project_set_active
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -198,7 +198,7 @@ def test_set_active_deactivates_previously_active(tmp_path, capsys):
     _seed_project(db_path, project_id=pid_old, name="Old", status="active")
     _seed_project(db_path, project_id=pid_new, name="New", status="paused")
 
-    from interfaces.cli.ds import _project_set_active
+    from interfaces.cli.commands.project import _project_set_active
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -228,7 +228,7 @@ def test_set_active_returns_1_for_unknown_project(tmp_path, capsys):
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
-    from interfaces.cli.ds import _project_set_active
+    from interfaces.cli.commands.project import _project_set_active
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
         rc = _project_set_active(
@@ -247,7 +247,7 @@ def test_deactivate_changes_status_to_inactive(tmp_path, capsys):
     pid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
     _seed_project(db_path, project_id=pid, name="Deactivate Me", status="active")
 
-    from interfaces.cli.ds import _project_deactivate
+    from interfaces.cli.commands.project import _project_deactivate
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -276,7 +276,7 @@ def test_delete_removes_project_with_no_dependents(tmp_path, capsys):
     pid = "dddddddd-dddd-dddd-dddd-dddddddddddd"
     _seed_project(db_path, project_id=pid, name="Empty Project")
 
-    from interfaces.cli.ds import _project_delete
+    from interfaces.cli.commands.project import _project_delete
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -312,7 +312,7 @@ def test_delete_requires_confirm_when_dependents_exist(tmp_path, capsys):
     conn.commit()
     conn.close()
 
-    from interfaces.cli.ds import _project_delete
+    from interfaces.cli.commands.project import _project_delete
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -351,7 +351,7 @@ def test_delete_cascade_removes_all_dependents(tmp_path, capsys):
     conn.commit()
     conn.close()
 
-    from interfaces.cli.ds import _project_delete
+    from interfaces.cli.commands.project import _project_delete
 
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
@@ -392,7 +392,7 @@ def test_delete_returns_1_for_unknown_project(tmp_path, capsys):
     fake_paths = MagicMock()
     fake_paths.sqlite_path = db_path
 
-    from interfaces.cli.ds import _project_delete
+    from interfaces.cli.commands.project import _project_delete
 
     with patch("interfaces.cli.ds.resolve_installed_runtime_paths", return_value=fake_paths):
         rc = _project_delete(
