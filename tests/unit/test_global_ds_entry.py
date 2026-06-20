@@ -297,7 +297,9 @@ def test_doctor_status_is_fail_when_dispatcher_hooks_not_installed(tmp_path):
         mock_rt.sqlite_path = tmp_path / "state" / "studio.db"
         mock_rip.return_value = mock_rt
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
-            with patch("interfaces.cli.commands.system._check_dispatcher_hooks", return_value=False):
+            with patch(
+                "interfaces.cli.commands.system._check_dispatcher_hooks", return_value=False
+            ):
                 with patch(
                     "interfaces.cli.commands.system._check_version_current",
                     return_value={"repo": "2026-05-17", "installed": "2026-05-17", "current": True},
@@ -351,7 +353,8 @@ def test_doctor_fix_calls_install_when_skills_missing(tmp_path):
         with patch("interfaces.cli.ds.Path.home", return_value=tmp_path / "claude"):
             with patch("interfaces.cli.commands.system._check_dispatcher_hooks", return_value=True):
                 with patch(
-                    "interfaces.cli.commands.system._check_skills_installed", return_value=missing_skills
+                    "interfaces.cli.commands.system._check_skills_installed",
+                    return_value=missing_skills,
                 ):
                     with patch(
                         "interfaces.cli.commands.system._check_version_current",
