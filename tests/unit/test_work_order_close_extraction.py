@@ -115,10 +115,13 @@ def _insert_locked_brief(db_path: Path, project_id: str = PROJECT_ID) -> None:
 
 
 def _read_spool_events(spool_root: Path) -> list[dict]:
-    events_dir = spool_root / "spool"
-    if not events_dir.is_dir():
-        return []
-    return [json.loads(p.read_text(encoding="utf-8")) for p in events_dir.glob("*.json")]
+    # sync_tick() moves files from spool/ to processed/ after ingestion, so check both.
+    events: list[dict] = []
+    for subdir in ("spool", "processed"):
+        d = spool_root / subdir
+        if d.is_dir():
+            events.extend(json.loads(p.read_text(encoding="utf-8")) for p in d.glob("*.json"))
+    return events
 
 
 # ── run_gate_check ────────────────────────────────────────────────────────────
