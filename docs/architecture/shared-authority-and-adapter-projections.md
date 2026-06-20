@@ -277,3 +277,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 
 
 <!-- Last reviewed 2026-06-20 — WO-P20-AGENTS-GEN: AGENTS.md is now the GENERATED universal adapter target (integrations/compiler/agents_md.py) emitting the routing table + WO types + gate defs from packs.yaml + canonical. The Claude-Code compiler (claude_code.py) reduces CLAUDE.md to import @AGENTS.md instead of embedding the routing table, and ships AGENTS.md in the install pack. No authority/projection-boundary change: routing still derives from canonical; this de-duplicates it across adapter files. -->
+
+<!-- Last reviewed 2026-06-20 — WO-P20-FULLCI-FIX: the generated AGENTS.md header now includes the lowercase "projection" authority marker so the codex active_repo_surface staleness classification holds (it was lost when AGENTS.md became generated). No change to the staleness classifier or authority-marker set; AGENTS.md remains a generated projection consuming canonical authority. .claude-plugin/plugin.json is now committed (un-ignored) so the marketplace manifest ships with the repo. -->

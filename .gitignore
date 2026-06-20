@@ -140,7 +140,6 @@ docs/repo_actions/
 docs/audits/
 docs/publication/
 .claude/
-.claude-plugin/plugin.json
 
 # Test/diagnostic output captures — write to ~/.dream-studio/diagnostics/ instead
 pytest-*

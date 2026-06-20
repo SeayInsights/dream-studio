@@ -5,10 +5,11 @@
 # Dream Studio — Universal Agent Instructions
 
 Dream Studio is a local-first AI orchestration and operational intelligence
-platform. Any coding agent (Codex, Cursor, Gemini, Aider, Claude Code, …) is an
-*adapter surface* — it does not own Dream Studio authority. Canonical state lives
-in the repo source, the operator-local SQLite authority database, and evidence
-records. Dashboard output is derived; private model memory is not authority.
+platform. This file is a generated projection of Dream Studio authority; any
+coding agent (Codex, Cursor, Gemini, Aider, Claude Code, …) is an *adapter
+surface* — it does not own Dream Studio authority. Canonical state lives in the
+repo source, the operator-local SQLite authority database, and evidence records.
+Dashboard output is derived; private model memory is not authority.
 
 Projection source:
 - `sqlite:adapter_authority_profiles`, `sqlite:shared_context_packets`

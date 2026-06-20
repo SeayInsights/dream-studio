@@ -1,0 +1,29 @@
+{
+  "name": "dream-studio",
+  "version": "2026-05-17",
+  "description": "Dream Studio \u2014 local-first AI orchestration and operational intelligence platform.",
+  "author": {
+    "name": "Dream Studio"
+  },
+  "components": [
+    "commands",
+    "agents",
+    "skills",
+    ".mcp.json"
+  ],
+  "skills": [
+    "ds-analyze",
+    "ds-core",
+    "ds-domains",
+    "ds-fullstack",
+    "ds-milestone",
+    "ds-project",
+    "ds-quality",
+    "ds-security",
+    "ds-setup",
+    "ds-website",
+    "ds-workflow",
+    "ds-workorder"
+  ],
+  "mcpServers": ".mcp.json"
+}
