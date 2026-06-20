@@ -246,3 +246,6 @@ that fires on every baseline cleanup.
 
 
 <!-- Last reviewed 2026-06-19 — WO-LIVE-DATA-GATE: .github/workflows/ci.yml pr-smoke gains a "Dashboard truth gate" step (`ds doctor dashboard-truth`) — a read-only live-authority invariant check that vacuously passes on the fresh CI DB, so unrelated PRs are unaffected. No release/publication boundary, packaging, or module-profile change. -->
+
+
+<!-- Last reviewed 2026-06-20 — WO-P20-AGENTS-GEN: interfaces/cli/ci_gate.py adds an "agents-md-fresh" pre-push check (py -m integrations.compiler.agents_md --check) so a stale generated AGENTS.md is flagged. Read-only drift check; no release/publication boundary, packaging, or module-profile change. -->

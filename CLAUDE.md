@@ -27,24 +27,18 @@ Not every request needs a full skill. Casual lookups get dispatched as lightweig
 - **"research", "dig into", "explore options"** → If scoped to a codebase question, use Explore. If it needs design thinking or spec work, escalate to `ds-core` with arg `think`.
 - **"go find", "where is", "search for"** → Explore subagent or direct Grep/Glob — no skill needed.
 
-<!-- BEGIN AUTO-ROUTING -->
 ### Pack-Based Routing
 
-Each pack is one skill with modes. Invoke via `Skill(skill="ds-<pack>", args="<mode>")`. If the user's message matches a keyword, invoke the pack and let the router infer the mode.
+The full pack-based routing table, the work-order types, and the gate definitions
+are defined once in the generated universal target:
 
-| Pack | Skill | Mode keywords |
-|------|-------|---------------|
-| Build lifecycle | `ds-core` | **think:** think:, spec:, shape ux:, design brief:, research: · **plan:** plan:, /plan: · **build:** build:, execute plan: · **review:** review:, review code:, review PR: · **verify:** verify:, prove it: · **ship:** ship:, pre-deploy:, deploy: · **handoff:** handoff: · **recap:** recap:, session recap: · **explain:** explain:, how does:, walk me through:, what is this doing:, why does: |
-| Code quality | `ds-quality` | **debug:** debug:, diagnose: · **polish:** polish: · **harden:** harden: · **pr-security-scan:** pr-security-scan: · **structure-audit:** structure-audit: · **learn:** learn: · **coach:** coach: · **audit:** audit: |
-| Analysis engine | `ds-analyze` | **multi:** multi: · **domain-re:** domain-re: · **repo:** repo: · **intelligence:** analyze project:, project intelligence:, scan codebase: |
-| Domain builders | `ds-domains` | **game-dev:** game-dev: · **saas-build:** saas-build: · **mcp-build:** mcp-build: · **dashboard-dev:** dashboard-dev: · **client-work:** intake:, sow:, proposal:, build report:, review powerbi:, optimize dax:, build flow:, build app:, client handoff:, document: · **design:** design: · **fullstack:** fullstack:, build fullstack:, fullstack frontend:, fullstack backend:, fullstack integrate:, fullstack secure:, full-stack:, full stack: · **website:** website:, build website:, landing page:, build page:, prototype app:, pitch deck:, animate:, build site: |
-| Workflow orchestration | `ds-workflow` | workflow:, run workflow:, idea-to-pr:, studio-onboard:, feature-research:, start workflow:, execute work orders:, run the clean-state loop: |
-| Security analysis | `ds-security` | **scan:** scan: · **dast:** dast: · **binary-scan:** binary-scan: · **mitigate:** mitigate: · **comply:** comply: · **netcompat:** netcompat: · **dashboard:** dashboard: · **review:** review: |
-| Project lifecycle | `ds-project` | **scope:** scope project:, ds project scope:, create prd: · **resume:** resume:, pick up:, get back to:, what's next:, what's active:, start project:, start building:, continue:, where was I:, what am I working on:, what should I do: · **brief:** design brief:, fill brief:, brief:, lock brief: |
-| Website builder | `ds-website` | **discover:** discover: · **direction:** direction: · **page:** page: · **prototype:** prototype: · **animate:** animate: · **brand:** brand: · **cip:** cip: · **critique:** critique: · **deck:** deck: |
-| Fullstack builder | `ds-fullstack` | **frontend:** frontend: · **backend:** backend: · **integrate:** integrate: · **secure:** secure: |
-| Setup | `ds-setup` | **wizard:** wizard: · **status:** status: · **jit:** jit: |
-<!-- END AUTO-ROUTING -->
+@AGENTS.md
+
+Do **not** duplicate the routing table here — `AGENTS.md` is generated from
+`packs.yaml` + `canonical/skills` + `canonical/workflows` and is the single source
+of truth for routing. Regenerate it with
+`py -m integrations.compiler.agents_md --write` whenever canonical skills,
+workflows, or packs change (the AGENTS.md drift gate enforces this).
 
 ### Routing Fallback
 

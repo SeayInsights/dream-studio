@@ -1008,23 +1008,25 @@ def test_packs_yaml_has_ds_fullstack_skill_id():
 
 
 def test_compiled_claude_md_contains_ds_website_row(canonical_root):
-    """Compiled CLAUDE.md routing table must contain a ds-website row."""
+    """Phase 20: routing lives in the generated AGENTS.md; CLAUDE.md imports it."""
     from integrations.compiler.claude_code import compile_pack
 
     pack = compile_pack(canonical_root)
-    claude_md = pack["files"]["CLAUDE.md"]
-    assert "ds-website" in claude_md, "Compiled CLAUDE.md does not contain ds-website routing row"
+    agents_md = pack["files"]["AGENTS.md"]
+    assert "ds-website" in agents_md, "Generated AGENTS.md does not contain ds-website routing row"
+    assert "@AGENTS.md" in pack["files"]["CLAUDE.md"], "CLAUDE.md must import @AGENTS.md"
 
 
 def test_compiled_claude_md_contains_ds_fullstack_row(canonical_root):
-    """Compiled CLAUDE.md routing table must contain a ds-fullstack row."""
+    """Phase 20: routing lives in the generated AGENTS.md; CLAUDE.md imports it."""
     from integrations.compiler.claude_code import compile_pack
 
     pack = compile_pack(canonical_root)
-    claude_md = pack["files"]["CLAUDE.md"]
+    agents_md = pack["files"]["AGENTS.md"]
     assert (
-        "ds-fullstack" in claude_md
-    ), "Compiled CLAUDE.md does not contain ds-fullstack routing row"
+        "ds-fullstack" in agents_md
+    ), "Generated AGENTS.md does not contain ds-fullstack routing row"
+    assert "@AGENTS.md" in pack["files"]["CLAUDE.md"], "CLAUDE.md must import @AGENTS.md"
 
 
 def test_execute_installs_statusline_py(config_root, canonical_root, ds_home):
