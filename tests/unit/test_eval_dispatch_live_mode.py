@@ -55,7 +55,7 @@ def _make_eval_case_path(tmp_path: Path) -> Path:
 class TestEvalDispatchLiveMode:
     def test_live_mode_output_includes_delta_from_fixture_baseline(self, tmp_path):
         """--live output contains delta_from_fixture_baseline field."""
-        from interfaces.cli.ds import _eval_dispatch
+        from interfaces.cli.commands.eval import dispatch as _eval_dispatch
 
         evals_dir = _make_eval_case_path(tmp_path)
         result = _make_eval_result(passed=False, baseline_score=0.9, composite_score=0.75)
@@ -82,7 +82,7 @@ class TestEvalDispatchLiveMode:
 
     def test_live_mode_output_includes_failure_reasons(self, tmp_path):
         """--live output contains failure_reasons combining missing_events and negative_violations."""
-        from interfaces.cli.ds import _eval_dispatch
+        from interfaces.cli.commands.eval import dispatch as _eval_dispatch
 
         evals_dir = _make_eval_case_path(tmp_path)
         result = _make_eval_result(passed=False)
@@ -109,7 +109,7 @@ class TestEvalDispatchLiveMode:
 
     def test_non_live_mode_output_excludes_delta_and_failure_reasons(self, tmp_path):
         """Non-live run does NOT include delta_from_fixture_baseline or failure_reasons."""
-        from interfaces.cli.ds import _eval_dispatch
+        from interfaces.cli.commands.eval import dispatch as _eval_dispatch
 
         evals_dir = _make_eval_case_path(tmp_path)
         result = _make_eval_result(passed=False, baseline_score=0.9, composite_score=0.75)
@@ -137,7 +137,7 @@ class TestEvalDispatchLiveMode:
 
     def test_live_mode_passing_run_has_empty_failure_reasons(self, tmp_path):
         """--live passing run: failure_reasons is empty list, delta is baseline - 1.0."""
-        from interfaces.cli.ds import _eval_dispatch
+        from interfaces.cli.commands.eval import dispatch as _eval_dispatch
 
         evals_dir = _make_eval_case_path(tmp_path)
         result = _make_eval_result(passed=True, baseline_score=0.9, composite_score=1.0)

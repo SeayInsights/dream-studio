@@ -76,7 +76,7 @@ def _mock_runtime(db_path: Path) -> MagicMock:
 class TestEvalQueueShow:
     def test_show_returns_pending_rows(self, db_path, evals_dir, capsys):
         """show returns pending_rerun=1 rows with correct count."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         _seed_registry(db_path, "skill-a")
         _seed_registry(db_path, "skill-b")
@@ -94,7 +94,7 @@ class TestEvalQueueShow:
 
     def test_show_empty_when_no_pending(self, db_path, evals_dir, capsys):
         """show returns count=0 and empty list when no pending reruns."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         _seed_registry(db_path, "skill-a", pending_rerun=0)
 
@@ -109,7 +109,7 @@ class TestEvalQueueShow:
 
     def test_show_error_when_table_missing(self, tmp_path, evals_dir, capsys):
         """show returns ok=False when eval_registry table is absent."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         empty_db = tmp_path / "empty.db"
         sqlite3.connect(str(empty_db)).close()
@@ -127,7 +127,7 @@ class TestEvalQueueShow:
 class TestEvalQueueAggregate:
     def test_aggregate_calls_friction_with_db_path(self, db_path, evals_dir, capsys):
         """aggregate delegates to aggregate_friction_signals with the db_path."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         args = argparse.Namespace(queue_command="aggregate")
         fake_result = {
@@ -149,7 +149,7 @@ class TestEvalQueueAggregate:
 
     def test_aggregate_prints_result(self, db_path, evals_dir, capsys):
         """aggregate result dict is printed as JSON."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         args = argparse.Namespace(queue_command="aggregate")
         fake_result = {"ok": True, "new_flags": 2}
@@ -168,7 +168,7 @@ class TestEvalQueueAggregate:
 class TestEvalQueueRun:
     def test_run_pass_clears_pending_rerun_in_db(self, db_path, evals_dir, capsys):
         """run dispatches pending eval case; passing result clears pending_rerun=0 in DB."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
         from core.eval.schema import EvalResult, MatchResult
 
         target_id = "skill-run-test"
@@ -222,7 +222,7 @@ class TestEvalQueueRun:
 
     def test_run_no_pending_returns_empty_results(self, db_path, evals_dir, capsys):
         """run with no pending_rerun=1 entries returns count=0 and empty results list."""
-        from interfaces.cli.ds import _eval_queue_dispatch
+        from interfaces.cli.commands.eval import _eval_queue_dispatch
 
         _seed_registry(db_path, "skill-not-pending", pending_rerun=0)
 

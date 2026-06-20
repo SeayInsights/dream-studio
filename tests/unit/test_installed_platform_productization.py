@@ -28,7 +28,7 @@ from core.installed_productization import (
 )
 from core.module_profiles import module_profile_map
 from core.release.local_dogfood_stability import REQUIRED_MULTISESSION_CYCLES
-from interfaces.cli.ds import _dashboard_check
+from interfaces.cli.commands.system import _dashboard_check
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

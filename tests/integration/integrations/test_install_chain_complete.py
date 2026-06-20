@@ -208,7 +208,7 @@ def test_doctor_checks_pass_after_install(config_root, ds_home, tmp_path):
 
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
-    from interfaces.cli.ds import (
+    from interfaces.cli.commands.system import (
         _check_dispatcher_hooks,
         _check_skills_installed,
         _check_agents_installed,
