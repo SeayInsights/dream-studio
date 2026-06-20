@@ -24,3 +24,5 @@ A milestone is a verifiable delivery boundary that bundles several work orders. 
 3. **Milestone close is high-stakes.** It runs four gate checks (design audit, security audit, hardening, Core Web Vitals for UI milestones). Always preview gate status before mutating and require explicit user approval for `--force`.
 4. **Errors are operator-visible.** When a function returns `ok=False`, surface the `error` field verbatim. List the `failures` or `open_work_orders` exactly as returned.
 5. **No raw UUIDs to the user unless asked.** Refer to milestones by `title` in conversation; use the ID internally.
+
+<!-- Last reviewed 2026-06-20 — WO-P20-CLOSE-LAG (fix/wo-p20-close-lag): core/milestones/close.py close_milestone() now calls sync_tick() after emitting the milestone.completed spool event so business_milestones.status reflects 'complete' immediately — callers no longer need a manual flush. No skill-surface, mode, routing, or gate behavior change — close mode still calls close_milestone(). -->

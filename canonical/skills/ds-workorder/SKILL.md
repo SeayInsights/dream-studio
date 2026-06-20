@@ -67,3 +67,5 @@ The Dream Studio source-of-truth is the SQLite authority. This pack does not rea
 
 
 <!-- Last reviewed 2026-06-19 — WO-LIVE-DATA-GATE: core/work_orders/verify.py SQL-CHECK now hard-fails on zero rows (SELECT 1 WHERE convention); core/work_orders/close.py adds a dashboard-truth live-authority gate for dashboard/telemetry/data_pipeline/saas_feature WO types only (other types, incl. infrastructure/cleanup, unaffected). No ds-workorder skill mode/routing/CLI change; close still calls close_work_order(). -->
+
+<!-- Last reviewed 2026-06-20 — WO-P20-CLOSE-LAG (fix/wo-p20-close-lag): core/work_orders/close.py close_work_order() now calls sync_tick() after emitting the work_order.closed spool event (post-close flush), supplementing the existing pre-close sync_tick that flushes pending task.completed events before reading gate state. The direct business_work_orders UPDATE already reflects the closed status; this post-close flush makes the WorkOrderProjection record immediately consistent too. No mode, routing keyword, CLI surface, gate, or skill-surface change — close mode still calls close_work_order(). -->
