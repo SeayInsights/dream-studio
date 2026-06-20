@@ -435,16 +435,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     integrate_doctor.add_argument("tool", nargs="?", default="claude_code")
 
+    from integrations.detector import SUPPORTED_TOOLS as _SUPPORTED_TOOLS
+
     integrate_plan = integrate_sub.add_parser(
         "plan", help="Print the dry-run file operation plan for a tool"
     )
-    integrate_plan.add_argument("tool", choices=["claude_code"])
+    integrate_plan.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_plan.add_argument("--scope", choices=["user", "project"], default=None)
 
     integrate_install = integrate_sub.add_parser(
         "install", help="Install integration for a tool (requires --dry-run or --execute)"
     )
-    integrate_install.add_argument("tool", choices=["claude_code"])
+    integrate_install.add_argument("tool", choices=list(_SUPPORTED_TOOLS))
     integrate_install.add_argument("--scope", choices=["user", "project"], default=None)
     install_mode_group = integrate_install.add_mutually_exclusive_group()
     install_mode_group.add_argument(
@@ -2111,6 +2113,29 @@ def _integrate_dispatch(
             )
 
         mode = "dry_run" if dry_run else "execute"
+
+        # Phase 20: native-AGENTS.md tools use the generic installer (AGENTS.md only,
+        # no hooks/skills). Claude Code keeps its dedicated installer below.
+        tool_id = getattr(args, "tool", "claude_code")
+        if tool_id != "claude_code":
+            from integrations.installer.agents_target import AgentsTargetInstaller
+
+            installer = AgentsTargetInstaller(
+                tool_id,
+                project_root=Path.cwd(),
+                canonical_root=canonical_root,
+            )
+            result = installer.install(mode)
+            return _print(
+                {
+                    "model_name": "dream_studio_integrate_install",
+                    "derived_view": True,
+                    "primary_authority": False,
+                    "tool": tool_id,
+                    **result,
+                }
+            )
+
         detected = detect_claude_code(scope_override=scope)
         # B.3: install the git pre-push hook into the cwd's repo (if any).
         # Tests do NOT pass cwd, so the operator's real .git/hooks/ is untouched.
