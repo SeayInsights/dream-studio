@@ -383,3 +383,5 @@ controls instead of creating a competing PRD-specific security system.
 <!-- Last reviewed 2026-06-09 — WO-TS4 correction: reverting wrong-scope DuckDB-first paths. No security review profile pack schema changes. Security evidence remains in SQLite authority. Contract unchanged. -->
 
 <!-- Last reviewed 2026-06-14 — WO-DASH-VALIDATION-GAPS (T3): project_intelligence.py classifier change reviewed. No review profile pack schema changes. No security control, scan definition, finding contract, or evidence model changed. Contract unchanged. -->
+
+<!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->

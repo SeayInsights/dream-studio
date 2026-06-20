@@ -399,3 +399,5 @@ Migration 067 adds business_canonical_events and ai_canonical_events (L2a/L2b du
 
 <!-- Last reviewed 2026-06-17 — WO-GATE-HARDEN-CLEANUP (fix/gate-harden-cleanup): NO schema change. core/event_store/studio_db.py read helpers (last_run, get_skill_summaries, get_project, get_lessons, get_latest_handoff, et al.) now wrap their body in try/finally so the sqlite connection always closes even when a query raises — previously the outer `except` returned before c.close(), leaking the connection on the error path. Tables, columns, queries, and transaction semantics are unchanged; no DDL. -->
 
+
+<!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
