@@ -142,9 +142,15 @@ class TestFix2DesignBriefEmits:
 
 class TestFix3RepoStackEvidenceRefactor:
     def _get_handler_source(self):
-        return (REPO_ROOT / "projections/api/routes/project_intelligence.py").read_text(
+        # project_intelligence.py was split; handlers live in project_detail.py,
+        # _repo_stack_evidence lives in projections/api/lib/stack_helpers.py.
+        detail_source = (REPO_ROOT / "projections/api/routes/project_detail.py").read_text(
             encoding="utf-8"
         )
+        stack_source = (REPO_ROOT / "projections/api/lib/stack_helpers.py").read_text(
+            encoding="utf-8"
+        )
+        return detail_source + "\n" + stack_source
 
     def test_repo_stack_evidence_not_called_from_details_handler(self):
         """GET /details must not call _repo_stack_evidence() — filesystem walk removed."""
@@ -232,9 +238,14 @@ class TestFix3RepoStackEvidenceRefactor:
 class TestDashboardFilesystemCompliance:
     def test_no_rglob_in_handler_functions(self):
         """No dashboard handler function body should contain rglob calls."""
-        source = (REPO_ROOT / "projections/api/routes/project_intelligence.py").read_text(
-            encoding="utf-8"
-        )
+        # project_intelligence.py was split; combine all route files for the scan.
+        route_files = [
+            REPO_ROOT / "projections/api/routes/project_list.py",
+            REPO_ROOT / "projections/api/routes/project_detail.py",
+            REPO_ROOT / "projections/api/routes/project_artifacts.py",
+            REPO_ROOT / "projections/api/routes/project_security.py",
+        ]
+        source = "\n".join(f.read_text(encoding="utf-8") for f in route_files)
         # All router handlers (async def routes)
         lines = source.splitlines()
         in_handler = False

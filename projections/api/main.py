@@ -12,7 +12,6 @@ from .routes import (
     insights,
     alerts,
     analytics,
-    project_intelligence,
     discovery_internal,
     discovery_research,
     hooks,
@@ -22,6 +21,10 @@ from .routes import (
     telemetry,
     shared_intelligence,
 )
+from .routes.project_list import router as project_list_router
+from .routes.project_detail import router as project_detail_router
+from .routes.project_artifacts import router as project_artifacts_router
+from .routes.project_security import router as project_security_router
 from .routes.guard_metrics import router as guard_metrics_router
 from .routes.aggregate_metrics_route import router as aggregate_metrics_router
 from .routes.extensions_api import router as extensions_api_router
@@ -73,7 +76,10 @@ app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["metrics"])
 app.include_router(insights.router, prefix="/api/v1/insights", tags=["insights"])
 app.include_router(alerts.router, prefix="/api/v1/alerts", tags=["alerts"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
-app.include_router(project_intelligence.router, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(project_list_router, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(project_detail_router, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(project_artifacts_router, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(project_security_router, prefix="/api/v1/projects", tags=["projects"])
 
 app.include_router(discovery_internal.router, prefix="/api/discovery/internal", tags=["discovery"])
 app.include_router(discovery_research.router, prefix="/api/discovery/research", tags=["discovery"])

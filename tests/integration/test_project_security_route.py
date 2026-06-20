@@ -180,7 +180,7 @@ def test_end_to_end(tmp_path: Path, monkeypatch) -> None:
         conn.commit()
 
         # Verify surface availability while connection is open (same DB state)
-        from projections.api.routes.project_intelligence import _project_surface_availability
+        from projections.api.lib.project_helpers import _project_surface_availability
 
         availability = _project_surface_availability(conn)
         assert availability["security"] is True, (
