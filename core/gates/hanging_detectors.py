@@ -186,12 +186,17 @@ def detect_stale_removed_symbol_tests(
         for sym in genuinely_removed:
             if sym in test_defines or not patterns[sym].search(text):
                 continue
-            # A removed DEFINITION (function/class) is only genuinely stale if the
-            # test references it as CODE (call/import/attribute) — not as a bare
-            # string-literal value (e.g. a column/role data string that happens to
-            # share the name). HTML/JS-id removals stay stale even as quoted strings.
+            # A removed DEFINITION (function/class) is genuinely stale if the test
+            # references it as CODE (call/import/attribute) OR as a DOTTED target in
+            # a string (e.g. `mock.patch("mod.removed_func")`, `getattr(o,"x")` is not
+            # dotted so excluded) — but NOT as a bare string-literal value (e.g. a
+            # column/role data string "audit_report"). HTML/JS-id removals stay stale
+            # even as plain quoted strings.
             if sym in removed_def and sym not in removed_attr:
-                if not patterns[sym].search(code_text):
+                dotted_ref = re.search(
+                    r"\." + re.escape(sym) + r"\b|\b" + re.escape(sym) + r"\s*\.", text
+                )
+                if not patterns[sym].search(code_text) and not dotted_ref:
                     continue
             findings.append(
                 {

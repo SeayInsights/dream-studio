@@ -86,6 +86,36 @@ def test_stale_symbol_ignores_deleted_test_data_literals(tmp_path: Path) -> None
     assert not findings, f"deleted test-data literals must not flag tests; got {findings}"
 
 
+def test_stale_symbol_flags_dotted_patch_target(tmp_path: Path) -> None:
+    """WO d3221b4d (recall): a removed def referenced as a DOTTED string target
+    (mock.patch("mod.removed_func")) is still genuinely stale and must flag —
+    even though it lives inside a string literal."""
+    repo = tmp_path
+    _write(
+        repo / "tests" / "unit" / "test_patches.py",
+        "from unittest import mock\n\n"
+        "def test_it():\n"
+        "    with mock.patch('core.svc.removed_func') as m:\n"
+        "        m.return_value = 1\n",
+    )
+    diff = (
+        "diff --git a/core/svc.py b/core/svc.py\n"
+        "--- a/core/svc.py\n"
+        "+++ b/core/svc.py\n"
+        "@@ -1,2 +1,1 @@\n"
+        "-def removed_func():\n"
+        "-    return 1\n"
+        "+pass\n"
+    )
+
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    flagged = {(f["path"], f["symbol"]) for f in findings}
+    assert (
+        "tests/unit/test_patches.py",
+        "removed_func",
+    ) in flagged, f"dotted patch-target of a removed def must be flagged; got {flagged}"
+
+
 def test_detects_changed_signature_caller(tmp_path: Path) -> None:
     """#353 class: a function gains a parameter; an un-updated caller still references it."""
     repo = tmp_path
