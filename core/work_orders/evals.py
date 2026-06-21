@@ -249,9 +249,7 @@ def create_skill_identifier_safety_eval(
         for skill in skills:
             if not isinstance(skill, str):
                 bad.append("<non-string>")
-            elif skill.startswith(legacy_product) or skill.startswith(legacy_ds):
-                bad.append(skill)
-            elif not SKILL_ID_RE.fullmatch(skill):
+            elif skill.startswith(legacy_product) or skill.startswith(legacy_ds) or not SKILL_ID_RE.fullmatch(skill):
                 bad.append(skill)
 
     pass_fail = "pass" if not bad else "fail"

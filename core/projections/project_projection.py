@@ -83,15 +83,14 @@ class ProjectProjection(Projection):
 
         if event_type == "project.created":
             return self._handle_created(conn, project_id, payload, event_id, ts, now)
-        else:
-            self._ensure_skeleton(conn, project_id, now)
+        self._ensure_skeleton(conn, project_id, now)
 
-            if event_type == "project.activated":
-                return self._handle_activated(conn, project_id, event_id, now)
-            elif event_type == "project.deactivated":
-                return self._handle_deactivated(conn, project_id, event_id, now)
-            elif event_type == "project.deleted":
-                return self._handle_deleted(conn, project_id, event_id, now)
+        if event_type == "project.activated":
+            return self._handle_activated(conn, project_id, event_id, now)
+        if event_type == "project.deactivated":
+            return self._handle_deactivated(conn, project_id, event_id, now)
+        if event_type == "project.deleted":
+            return self._handle_deleted(conn, project_id, event_id, now)
 
         logger.warning(
             "ProjectProjection: unhandled event_type '%s' for %s", event_type, project_id

@@ -254,7 +254,7 @@ def test_chain_3_link_5_spool_ingest_wo_events_post_a0():
         "schema_version": 1,
     }
     assert validate_envelope(sample) == []
-    assert REQUIRED_FIELDS == frozenset({"event_id", "event_type", "timestamp", "schema_version"})
+    assert frozenset({"event_id", "event_type", "timestamp", "schema_version"}) == REQUIRED_FIELDS
 
 
 # ═════════════════════════════════════════════════════════════════════════════

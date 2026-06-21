@@ -132,9 +132,8 @@ def cmd_status(args):
     if success:
         print(f"Updated {args.node_id} status: {args.status}")
         return 0
-    else:
-        print(f"Failed to update status")
-        return 1
+    print(f"Failed to update status")
+    return 1
 
 
 def cmd_tree(args):

@@ -82,13 +82,12 @@ class TaskProjection(Projection):
             return self._handle_created(
                 conn, task_id, work_order_id, project_id, payload, event_id, ts, now
             )
-        else:
-            self._ensure_skeleton(conn, task_id, work_order_id, project_id, now)
+        self._ensure_skeleton(conn, task_id, work_order_id, project_id, now)
 
-            if event_type == "task.completed":
-                return self._handle_completed(conn, task_id, event_id, now)
-            elif event_type == "task.deleted":
-                return self._handle_deleted(conn, task_id, event_id, now)
+        if event_type == "task.completed":
+            return self._handle_completed(conn, task_id, event_id, now)
+        if event_type == "task.deleted":
+            return self._handle_deleted(conn, task_id, event_id, now)
 
         logger.warning("TaskProjection: unhandled event_type '%s' for %s", event_type, task_id)
         return 0

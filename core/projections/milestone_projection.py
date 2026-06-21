@@ -74,13 +74,12 @@ class MilestoneProjection(Projection):
 
         if event_type == "milestone.created":
             return self._handle_created(conn, milestone_id, project_id, payload, event_id, ts, now)
-        else:
-            self._ensure_skeleton(conn, milestone_id, project_id, now)
+        self._ensure_skeleton(conn, milestone_id, project_id, now)
 
-            if event_type == "milestone.completed":
-                return self._handle_completed(conn, milestone_id, event_id, now)
-            elif event_type == "milestone.deleted":
-                return self._handle_deleted(conn, milestone_id, event_id, now)
+        if event_type == "milestone.completed":
+            return self._handle_completed(conn, milestone_id, event_id, now)
+        if event_type == "milestone.deleted":
+            return self._handle_deleted(conn, milestone_id, event_id, now)
 
         logger.warning(
             "MilestoneProjection: unhandled event_type '%s' for %s",

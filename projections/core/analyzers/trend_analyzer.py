@@ -11,7 +11,6 @@ class TrendAnalyzer:
 
     def __init__(self):
         """Initialize TrendAnalyzer"""
-        pass
 
     def analyze_timeline(
         self, timeline: List[Dict[str, Any]], metric_key: str = "count"

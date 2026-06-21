@@ -91,35 +91,32 @@ def handle_projection_command(args) -> int:
 
     if cmd == "list":
         return _cmd_list()
-    elif cmd == "status":
+    if cmd == "status":
         return _cmd_status(args.name)
-    elif cmd == "rebuild":
+    if cmd == "rebuild":
         return _cmd_rebuild(args.name)
-    elif cmd == "dead-letter":
+    if cmd == "dead-letter":
         dl_cmd = args.dl_command
         if dl_cmd == "list":
             return _cmd_dl_list(getattr(args, "projection", None))
-        elif dl_cmd == "retry":
+        if dl_cmd == "retry":
             return _cmd_dl_retry(args.event_id)
-        elif dl_cmd == "resolve":
+        if dl_cmd == "resolve":
             return _cmd_dl_resolve(args.event_id)
-        else:
-            print(f"Unknown dead-letter subcommand: {dl_cmd}", file=sys.stderr)
-            return 1
-    elif cmd == "daemon":
+        print(f"Unknown dead-letter subcommand: {dl_cmd}", file=sys.stderr)
+        return 1
+    if cmd == "daemon":
         daemon_cmd = args.daemon_command
         if daemon_cmd == "status":
             return _cmd_daemon_status()
-        elif daemon_cmd == "start":
+        if daemon_cmd == "start":
             return _cmd_daemon_start()
-        elif daemon_cmd == "stop":
+        if daemon_cmd == "stop":
             return _cmd_daemon_stop()
-        else:
-            print(f"Unknown daemon subcommand: {daemon_cmd}", file=sys.stderr)
-            return 1
-    else:
-        print(f"Unknown projection subcommand: {cmd}", file=sys.stderr)
+        print(f"Unknown daemon subcommand: {daemon_cmd}", file=sys.stderr)
         return 1
+    print(f"Unknown projection subcommand: {cmd}", file=sys.stderr)
+    return 1
 
 
 # ── Command implementations ───────────────────────────────────────────────────

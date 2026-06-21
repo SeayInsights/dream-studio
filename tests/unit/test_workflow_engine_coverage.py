@@ -46,10 +46,9 @@ class TestFileLock:
 
     def test_lock_file_removed_on_exception(self, tmp_path: Path) -> None:
         lock = tmp_path / "test.lock"
-        with pytest.raises(ValueError):
-            with eng._file_lock(lock):
-                assert lock.exists()
-                raise ValueError("boom")
+        with pytest.raises(ValueError), eng._file_lock(lock):
+            assert lock.exists()
+            raise ValueError("boom")
         assert not lock.exists()
 
     def test_stale_lock_force_acquired_on_timeout(self, tmp_path: Path) -> None:

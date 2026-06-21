@@ -86,22 +86,21 @@ class WorkOrderProjection(Projection):
             return self._handle_created(
                 conn, work_order_id, project_id, milestone_id, payload, event_id, ts, now
             )
-        else:
-            # For every non-created event, ensure the row exists first.
-            # A closed or blocked event can legitimately arrive before created
-            # when events are ingested out of chronological order.
-            self._ensure_skeleton(conn, work_order_id, project_id, now)
+        # For every non-created event, ensure the row exists first.
+        # A closed or blocked event can legitimately arrive before created
+        # when events are ingested out of chronological order.
+        self._ensure_skeleton(conn, work_order_id, project_id, now)
 
-            if event_type == "work_order.started":
-                return self._handle_started(conn, work_order_id, event_id, ts, now)
-            elif event_type == "work_order.blocked":
-                return self._handle_blocked(conn, work_order_id, payload, event_id, ts, now)
-            elif event_type == "work_order.unblocked":
-                return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
-            elif event_type == "work_order.closed":
-                return self._handle_closed(conn, work_order_id, event_id, ts, now)
-            elif event_type == "work_order.deleted":
-                return self._handle_deleted(conn, work_order_id, event_id, now)
+        if event_type == "work_order.started":
+            return self._handle_started(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.blocked":
+            return self._handle_blocked(conn, work_order_id, payload, event_id, ts, now)
+        if event_type == "work_order.unblocked":
+            return self._handle_unblocked(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.closed":
+            return self._handle_closed(conn, work_order_id, event_id, ts, now)
+        if event_type == "work_order.deleted":
+            return self._handle_deleted(conn, work_order_id, event_id, now)
 
         # Declared in consumed_event_types but not handled — defensive fallback.
         logger.warning(

@@ -206,8 +206,7 @@ def _parse_gotchas_yml(path: Path) -> list[dict[str, str]]:
             if indent >= 6 or stripped.startswith('"') or not re.match(r"^\w[\w_-]*:", stripped):
                 multiline_buf.append(stripped)
                 continue
-            else:
-                _flush_multiline()
+            _flush_multiline()
 
         # New list item entry: "  - id: ..."
         new_entry_m = re.match(r"^\s*-\s+id:\s*(.+)", line)
@@ -382,9 +381,8 @@ def _parse_workflow_yaml(path: Path) -> dict[str, Any]:
             if stripped and (line.startswith("  ") or line.startswith("\t")):
                 desc_lines.append(stripped)
                 continue
-            else:
-                result["description"] = " ".join(desc_lines)
-                in_desc = False
+            result["description"] = " ".join(desc_lines)
+            in_desc = False
 
         # Count node ids
         node_id_m = re.match(r"^\s+-\s+id:\s*(.+)", line)

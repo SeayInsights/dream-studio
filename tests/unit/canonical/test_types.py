@@ -36,7 +36,7 @@ def test_exercised_types_flagged():
         EventType.CONTEXT_THRESHOLD_CROSSED,
         EventType.TOKEN_CONSUMED,  # added TA3
     }
-    assert EMITTER_IMPLEMENTED == expected
+    assert expected == EMITTER_IMPLEMENTED
 
 
 def test_hook_reserved_types_not_implemented():

@@ -477,15 +477,14 @@ class TestHookInto195:
         with patch(
             "core.expansion.disambiguation.check_extension_description",
             return_value=critical_result,
-        ):
-            with patch("core.eval.runner.EvalRunner") as MockRunner:
-                MockRunner.return_value.run_case.return_value = mock_eval
-                with patch(
-                    "core.expansion.validation.CapabilityValidator._read_baseline",
-                    return_value=0.85,
-                ):
-                    v = RetroactiveValidator(full_conn)
-                    v.validate(ext_id)
+        ), patch("core.eval.runner.EvalRunner") as MockRunner:
+            MockRunner.return_value.run_case.return_value = mock_eval
+            with patch(
+                "core.expansion.validation.CapabilityValidator._read_baseline",
+                return_value=0.85,
+            ):
+                v = RetroactiveValidator(full_conn)
+                v.validate(ext_id)
 
         row = full_conn.execute(
             "SELECT status FROM ds_user_extensions WHERE extension_id = ?", (ext_id,)

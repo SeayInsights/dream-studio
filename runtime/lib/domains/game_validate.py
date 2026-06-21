@@ -179,7 +179,7 @@ def _parse_godot_version(godot_file: Path) -> str:
             cv = int(config_match.group(1))
             if cv == 5:
                 return "4.x"
-            elif cv == 4:
+            if cv == 4:
                 return "3.x"
     except Exception:
         pass

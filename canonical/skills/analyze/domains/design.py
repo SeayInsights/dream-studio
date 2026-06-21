@@ -102,7 +102,7 @@ class DesignSkillAnalyzer(BaseAnalyzer):
             scores[capability] = result["score"]
 
         # Calculate weighted overall score
-        overall = sum(scores[cap] * self.WEIGHTS[cap] for cap in scores.keys())
+        overall = sum(scores[cap] * self.WEIGHTS[cap] for cap in scores)
         scores["overall_score"] = round(overall, 1)
 
         return scores

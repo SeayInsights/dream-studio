@@ -168,9 +168,8 @@ def main() -> int:
 
     if command == "check-mode":
         return cli_check_mode()
-    else:
-        print(f"Unknown command: {command}", file=sys.stderr)
-        return 1
+    print(f"Unknown command: {command}", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

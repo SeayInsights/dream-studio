@@ -92,15 +92,14 @@ class DesignBriefProjection(Projection):
 
         if event_type == "design_brief.created":
             return self._handle_created(conn, brief_id, project_id, payload, event_id, ts, now)
-        else:
-            self._ensure_skeleton(conn, brief_id, project_id, now)
+        self._ensure_skeleton(conn, brief_id, project_id, now)
 
-            if event_type == "design_brief.updated":
-                return self._handle_updated(conn, brief_id, payload, event_id, now)
-            elif event_type == "design_brief.locked":
-                return self._handle_locked(conn, brief_id, event_id, now)
-            elif event_type == "design_brief.deleted":
-                return self._handle_deleted(conn, brief_id, event_id, now)
+        if event_type == "design_brief.updated":
+            return self._handle_updated(conn, brief_id, payload, event_id, now)
+        if event_type == "design_brief.locked":
+            return self._handle_locked(conn, brief_id, event_id, now)
+        if event_type == "design_brief.deleted":
+            return self._handle_deleted(conn, brief_id, event_id, now)
 
         logger.warning(
             "DesignBriefProjection: unhandled event_type '%s' for %s", event_type, brief_id

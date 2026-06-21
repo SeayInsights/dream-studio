@@ -161,7 +161,7 @@ class Context7Manager:
 
         if ext == ".py":
             return self._extract_python_skeleton(file_path, content)
-        elif ext in {".js", ".ts", ".tsx", ".jsx"}:
+        if ext in {".js", ".ts", ".tsx", ".jsx"}:
             return self._extract_js_skeleton(file_path, content)
 
         return None

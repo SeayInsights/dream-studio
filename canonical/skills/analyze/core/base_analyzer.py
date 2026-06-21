@@ -55,7 +55,6 @@ class BaseAnalyzer(ABC):
         Returns:
             Domain name string
         """
-        pass
 
     @abstractmethod
     def get_capabilities(self) -> List[str]:
@@ -71,7 +70,6 @@ class BaseAnalyzer(ABC):
         Returns:
             List of capability names
         """
-        pass
 
     @abstractmethod
     def analyze_capability(self, capability: str) -> Dict[str, Any]:
@@ -90,7 +88,6 @@ class BaseAnalyzer(ABC):
                 'quality': str              # 'excellent' | 'good' | 'adequate' | 'weak'
             }
         """
-        pass
 
     @abstractmethod
     def score_repository(self) -> Dict[str, float]:
@@ -105,7 +102,6 @@ class BaseAnalyzer(ABC):
                 'overall_score': 7.8
             }
         """
-        pass
 
     # Optional methods - can be overridden by subclasses
 
@@ -147,23 +143,22 @@ class BaseAnalyzer(ABC):
         """
         if case_sensitive:
             return list(self.repo_path.rglob(pattern))
-        else:
-            # Case-insensitive matching
-            pattern_lower = pattern.lower()
-            all_files = list(self.repo_path.rglob("*"))
-            matches = []
+        # Case-insensitive matching
+        pattern_lower = pattern.lower()
+        all_files = list(self.repo_path.rglob("*"))
+        matches = []
 
-            for f in all_files:
-                if f.is_file():
-                    relative = str(f.relative_to(self.repo_path)).lower()
-                    # Simple glob matching (supports * wildcard)
-                    regex_pattern = (
-                        pattern_lower.replace("**/", ".*").replace("*", "[^/]*").replace("?", ".")
-                    )
-                    if re.match(regex_pattern, relative):
-                        matches.append(f)
+        for f in all_files:
+            if f.is_file():
+                relative = str(f.relative_to(self.repo_path)).lower()
+                # Simple glob matching (supports * wildcard)
+                regex_pattern = (
+                    pattern_lower.replace("**/", ".*").replace("*", "[^/]*").replace("?", ".")
+                )
+                if re.match(regex_pattern, relative):
+                    matches.append(f)
 
-            return matches
+        return matches
 
     def count_files(self, pattern: str, case_sensitive: bool = False) -> int:
         """
@@ -330,17 +325,16 @@ class BaseAnalyzer(ABC):
         """
         if count >= thresholds.get("excellent", 8):
             return (10.0, "excellent")
-        elif count >= thresholds.get("good", 5):
+        if count >= thresholds.get("good", 5):
             ratio = count / thresholds["excellent"]
             return (round(7.0 + ratio * 3, 1), "good")
-        elif count >= thresholds.get("adequate", 2):
+        if count >= thresholds.get("adequate", 2):
             ratio = count / thresholds["good"]
             return (round(4.0 + ratio * 3, 1), "adequate")
-        elif count > 0:
+        if count > 0:
             ratio = count / thresholds["adequate"]
             return (round(1.0 + ratio * 3, 1), "weak")
-        else:
-            return (0.0, "weak")
+        return (0.0, "weak")
 
     def __repr__(self) -> str:
         return (

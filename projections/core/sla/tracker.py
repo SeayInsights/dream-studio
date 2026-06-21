@@ -327,7 +327,7 @@ class SLATracker:
                 result = cursor.fetchone()
                 return result["avg_duration"] if result["avg_duration"] else 0.0
 
-            elif metric == "skills_success_rate":
+            if metric == "skills_success_rate":
                 # Success rate as percentage
                 cursor.execute(
                     """
@@ -345,7 +345,7 @@ class SLATracker:
                     return 100.0  # No data = assume compliant
                 return result["successes"] / total * 100.0
 
-            elif metric == "workflows_success_rate":
+            if metric == "workflows_success_rate":
                 # Workflow success rate as percentage
                 cursor.execute(
                     """
@@ -363,10 +363,9 @@ class SLATracker:
                     return 100.0
                 return result["successes"] / total * 100.0
 
-            else:
-                # Unknown metric - return 0 and log warning
-                logger.warning(f"Unknown metric '{metric}' - cannot calculate value. Returning 0.")
-                return 0.0
+            # Unknown metric - return 0 and log warning
+            logger.warning(f"Unknown metric '{metric}' - cannot calculate value. Returning 0.")
+            return 0.0
 
         except sqlite3.OperationalError as e:
             # Handle missing tables gracefully (e.g., in test environments)
@@ -395,13 +394,12 @@ class SLATracker:
             # Target is maximum - lower is better
             return current_value <= target
 
-        elif sla_type in ["availability", "success_rate"]:
+        if sla_type in ["availability", "success_rate"]:
             # Target is minimum - higher is better
             return current_value >= target
 
-        else:
-            logger.warning(f"Unknown SLA type '{sla_type}' - assuming non-compliant")
-            return False
+        logger.warning(f"Unknown SLA type '{sla_type}' - assuming non-compliant")
+        return False
 
     def _calculate_breach_percentage(
         self, current_value: float, target: float, sla_type: str
@@ -426,12 +424,11 @@ class SLATracker:
             # Lower is better - calculate how much over target
             return ((current_value - target) / target) * 100.0
 
-        elif sla_type in ["availability", "success_rate"]:
+        if sla_type in ["availability", "success_rate"]:
             # Higher is better - calculate how much under target
             return ((target - current_value) / target) * 100.0
 
-        else:
-            return 0.0
+        return 0.0
 
     def get_sla_report(self) -> Dict[str, Any]:
         """

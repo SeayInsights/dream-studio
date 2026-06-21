@@ -72,12 +72,11 @@ def convert_dates_to_strings(obj):
     """Recursively convert date/datetime objects to ISO format strings."""
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
-    elif isinstance(obj, dict):
+    if isinstance(obj, dict):
         return {k: convert_dates_to_strings(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [convert_dates_to_strings(item) for item in obj]
-    else:
-        return obj
+    return obj
 
 
 def safe_print(msg: str):
@@ -127,7 +126,7 @@ def extract_skill_id_from_path(path: Path) -> str | None:
             mode = parts[skills_idx + 3]
             return f"{pack}:{mode}"
         # Pack-level skill
-        elif len(parts) > skills_idx + 1:
+        if len(parts) > skills_idx + 1:
             pack = parts[skills_idx + 1]
             return pack
     except (ValueError, IndexError):

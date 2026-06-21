@@ -78,7 +78,6 @@ class ExecutionGraphManager:
 
     def __init__(self):
         """Initialize graph manager."""
-        pass
 
     def create_node(
         self,

@@ -307,7 +307,7 @@ class DocumentStore:
         fields["updated_at"] = _NOW()
 
         # Build SET clause
-        set_clause = ", ".join(f"{key} = ?" for key in fields.keys())
+        set_clause = ", ".join(f"{key} = ?" for key in fields)
         values = list(fields.values())
         values.append(doc_id)
 

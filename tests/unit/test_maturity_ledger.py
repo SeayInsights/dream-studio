@@ -15,7 +15,7 @@ def test_maturity_ledger_covers_required_dream_studio_areas() -> None:
     assert ledger["primary_authority"] is False
     assert ledger["db_write_authorized"] is False
     area_ids = {area["area_id"] for area in ledger["areas"]}
-    assert REQUIRED_AREA_IDS <= area_ids
+    assert area_ids >= REQUIRED_AREA_IDS
     assert ledger["status_counts"]["runtime_validated"] >= 8
     assert ledger["status_counts"]["tested_only"] >= 4
     assert ledger["status_counts"].get("designed_not_proven", 0) >= 0

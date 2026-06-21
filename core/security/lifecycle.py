@@ -39,13 +39,13 @@ FULL_REVIEW_EVENTS = {
 }
 
 CATEGORY_BY_SOURCE_NUMBER = {
-    **{number: "source_code_analysis" for number in range(1, 15)},
-    **{number: "dependency_supply_chain" for number in range(15, 21)},
-    **{number: "secrets_credentials" for number in range(21, 25)},
-    **{number: "container_image_security" for number in range(25, 30)},
-    **{number: "infrastructure_as_code" for number in range(30, 36)},
-    **{number: "dynamic_runtime_testing" for number in range(36, 42)},
-    **{number: "compliance_governance_operational" for number in range(42, 48)},
+    **dict.fromkeys(range(1, 15), "source_code_analysis"),
+    **dict.fromkeys(range(15, 21), "dependency_supply_chain"),
+    **dict.fromkeys(range(21, 25), "secrets_credentials"),
+    **dict.fromkeys(range(25, 30), "container_image_security"),
+    **dict.fromkeys(range(30, 36), "infrastructure_as_code"),
+    **dict.fromkeys(range(36, 42), "dynamic_runtime_testing"),
+    **dict.fromkeys(range(42, 48), "compliance_governance_operational"),
 }
 
 IMPACT_FILE_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (

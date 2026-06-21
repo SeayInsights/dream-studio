@@ -154,10 +154,9 @@ class CachedGraphBuilder:
             if not self._is_expired(timestamp):
                 logger.debug(f"Cache hit for {project_id} (stale marker: {max_updated_at})")
                 return cached_graph.copy()
-            else:
-                # Entry expired, remove it
-                del self._cache[cache_key]
-                logger.debug(f"Cache expired for {cache_key}")
+            # Entry expired, remove it
+            del self._cache[cache_key]
+            logger.debug(f"Cache expired for {cache_key}")
 
         # Step 4: Cache miss - build graph
         logger.debug(f"Cache miss for {project_id}. Building graph...")

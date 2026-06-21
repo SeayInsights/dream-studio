@@ -137,17 +137,16 @@ class AlertEvaluator:
         """
         if condition == "gt":
             return value > threshold
-        elif condition == "gte":
+        if condition == "gte":
             return value >= threshold
-        elif condition == "lt":
+        if condition == "lt":
             return value < threshold
-        elif condition == "lte":
+        if condition == "lte":
             return value <= threshold
-        elif condition == "eq":
+        if condition == "eq":
             return value == threshold
-        else:
-            # Unknown condition - return False to avoid false positives
-            return False
+        # Unknown condition - return False to avoid false positives
+        return False
 
     def trigger_alert(self, rule: Dict[str, Any], value: float) -> Optional[Dict[str, Any]]:
         """

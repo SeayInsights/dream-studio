@@ -28,7 +28,6 @@ class BaseAdapter(ABC):
     @abstractmethod
     def normalize(self, raw_output: Any) -> CanonicalEvent:
         """Convert model-specific output to canonical event."""
-        pass
 
     def validate(self, event: CanonicalEvent) -> None:
         """Validate canonical event structure."""
@@ -92,18 +91,16 @@ class ClaudeAdapter(BaseAdapter):
         stop_reason = data.get("stop_reason", "unknown")
         if stop_reason == "tool_use":
             return "claude.tool_use.invoked"
-        elif msg_type == "message":
+        if msg_type == "message":
             return "claude.message.completed"
-        else:
-            return f"claude.{msg_type}.completed"
+        return f"claude.{msg_type}.completed"
 
     def _extract_entity_type(self, data: dict[str, Any]) -> str:
         if "error" in data:
             return "claude_error"
-        elif data.get("stop_reason") == "tool_use":
+        if data.get("stop_reason") == "tool_use":
             return "claude_tool_call"
-        else:
-            return "claude_message"
+        return "claude_message"
 
     def _extract_entity_id(self, data: dict[str, Any]) -> str:
         return data.get("id") or data.get("request_id", "unknown")
