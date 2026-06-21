@@ -20,8 +20,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# Core imports used in main()
+# Core imports used in main(). installed_runtime_model is re-exported here (not
+# called in this module) because core.health.status and test patches resolve it
+# via interfaces.cli.ds.installed_runtime_model — the single patch-point convention.
 from core.installed_runtime import resolve_installed_runtime_paths  # noqa: E402
+from core.installed_runtime import installed_runtime_model  # noqa: E402,F401
 
 # Per-group command modules
 from interfaces.cli.commands import analyze  # noqa: E402
