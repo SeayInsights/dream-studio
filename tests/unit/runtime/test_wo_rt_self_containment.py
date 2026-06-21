@@ -194,9 +194,9 @@ def test_work_order_next_cli_delegates_to_query(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[3]
 
     with patch("core.projects.queries.get_next_work_order", fake_get_next):
-        from interfaces.cli import ds as ds_mod
+        from interfaces.cli.commands.work_order import _work_order_next
 
-        result = ds_mod._work_order_next(
+        result = _work_order_next(
             project_id="test-proj-id",
             source_root=repo_root,
             dream_studio_home=None,

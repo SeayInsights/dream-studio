@@ -346,8 +346,11 @@ def dispatch(
     from core.installed_runtime import (
         adapter_router_status,
         bootstrap_rehearsal_runtime,
-        resolve_installed_runtime_paths,
     )
+
+    # Resolve via interfaces.cli.ds so the single patch point
+    # (interfaces.cli.ds.resolve_installed_runtime_paths) reaches CLI dispatch too.
+    from interfaces.cli.ds import resolve_installed_runtime_paths
     from core.installed_productization import (
         backup_runtime,
         detect_legacy_install,
@@ -709,7 +712,7 @@ def _analytics_ingest(
     execute: bool,
 ) -> int:
     from core.event_store.studio_db import _connect
-    from core.installed_runtime import resolve_installed_runtime_paths
+    from interfaces.cli.ds import resolve_installed_runtime_paths
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
@@ -776,7 +779,7 @@ def _dashboard_serve(
     host: str,
     port: int,
 ) -> int:
-    from core.installed_runtime import resolve_installed_runtime_paths
+    from interfaces.cli.ds import resolve_installed_runtime_paths
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
@@ -822,7 +825,7 @@ def _dashboard_open(
     port: int,
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    from core.installed_runtime import resolve_installed_runtime_paths
+    from interfaces.cli.ds import resolve_installed_runtime_paths
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
@@ -882,7 +885,7 @@ def _dashboard_check(
     port: int,
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    from core.installed_runtime import resolve_installed_runtime_paths
+    from interfaces.cli.ds import resolve_installed_runtime_paths
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
@@ -1133,7 +1136,7 @@ def _update_command(
     skips the interpreter overhead, keeps tracebacks intact, and lets
     callers patch the installer with ``unittest.mock``.
     """
-    from core.installed_runtime import resolve_installed_runtime_paths
+    from interfaces.cli.ds import resolve_installed_runtime_paths
 
     paths = resolve_installed_runtime_paths(
         source_root=source_root,
