@@ -1,10 +1,16 @@
-"""Gate tests: gap WO deduplication in _insert_gap_work_orders (WO-SPAWN-DEDUPE).
+"""Gate tests: gap WO deduplication in _insert_gap_work_orders.
+
+Dedup is keyed on a stable gap key — (reviewed_work_order_id + gap category) —
+stored as a ``[gap-key: ...]`` marker on each spawned WO's description, NOT on the
+free-text title (WO-SPAWN-LOOP-FIX). A re-review of the same gap therefore merges
+into (or is suppressed against) the prior spawn even if the grader reworded the
+title.
 
 Proving gate:
-  fresh-spawn:  no open WO with same title → new WO created, tasks appended to it
-  merge-into-existing: open WO with matching title exists → tasks merged, no new WO
-  merge-reports-existing-id: merged result carries the existing WO id and merged_into_existing=True
-  no-milestone-skips-dedup: None milestone → dedup query skipped, new WO always spawned
+  fresh-spawn:           first review of a gap → new WO created, tasks appended
+  merge-into-existing:   re-review of the same gap key (open WO) → tasks merged, no new WO
+  merge-reports-id:      merged result carries the existing WO id + merged_into_existing=True
+  null-milestone-dedups: dedup is scoped by project_id, so null-milestone gaps still dedup
 """
 
 from __future__ import annotations
@@ -41,6 +47,7 @@ CREATE TABLE IF NOT EXISTS business_tasks (
 
 _PROJECT_ID = "proj-test-001"
 _MILESTONE_ID = "ms-test-001"
+_REVIEWED_WO = "reviewed-wo-001"
 
 
 def _make_conn() -> sqlite3.Connection:
@@ -50,23 +57,12 @@ def _make_conn() -> sqlite3.Connection:
     return conn
 
 
-def _seed_open_wo(conn: sqlite3.Connection, title: str, *, wo_id: str | None = None) -> str:
-    wo_id = wo_id or str(uuid.uuid4())
-    conn.execute(
-        "INSERT INTO business_work_orders"
-        " (work_order_id, project_id, milestone_id, title, status)"
-        " VALUES (?, ?, ?, ?, 'created')",
-        (wo_id, _PROJECT_ID, _MILESTONE_ID, title),
-    )
-    conn.commit()
-    return wo_id
-
-
-def _gaps(title: str, *, tasks: list[str] | None = None) -> list[dict]:
+def _gaps(title: str, *, category: str = "the-gap", tasks: list[str] | None = None) -> list[dict]:
     task_list = [{"title": t, "description": ""} for t in (tasks or [title + " task"])]
     return [
         {
             "title": title,
+            "category": category,
             "description": "gap desc",
             "work_order_type": "infrastructure",
             "tasks": task_list,
@@ -76,16 +72,16 @@ def _gaps(title: str, *, tasks: list[str] | None = None) -> list[dict]:
 
 class TestGapWODedup:
     def test_fresh_spawn_creates_new_wo(self):
-        """No open WO with same title → new WO inserted."""
+        """First review of a gap → a new WO is inserted."""
         from core.work_orders.verify import _insert_gap_work_orders
 
         conn = _make_conn()
-        gaps = _gaps("Fix missing coverage")
         result = _insert_gap_work_orders(
             conn,
-            gaps=gaps,
+            gaps=_gaps("Fix missing coverage"),
             project_id=_PROJECT_ID,
             milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
             reviewed_wo_title="Parent WO",
             reviewed_wo_sequence=10,
         )
@@ -102,12 +98,12 @@ class TestGapWODedup:
         from core.work_orders.verify import _insert_gap_work_orders
 
         conn = _make_conn()
-        gaps = _gaps("Fix missing coverage", tasks=["Task A", "Task B"])
         result = _insert_gap_work_orders(
             conn,
-            gaps=gaps,
+            gaps=_gaps("Fix missing coverage", tasks=["Task A", "Task B"]),
             project_id=_PROJECT_ID,
             milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
             reviewed_wo_title="Parent WO",
             reviewed_wo_sequence=10,
         )
@@ -118,49 +114,62 @@ class TestGapWODedup:
         ).fetchall()
         assert {t[0] for t in tasks} == {"Task A", "Task B"}
 
-    def test_merge_into_existing_wo_when_title_matches(self):
-        """Open WO with same title → tasks merged, no new WO created."""
+    def test_merge_into_existing_wo_on_re_review(self):
+        """Re-reviewing the same gap key (open WO) merges; no new WO is created."""
         from core.work_orders.verify import _insert_gap_work_orders
 
         conn = _make_conn()
-        existing_id = _seed_open_wo(conn, "Fix missing coverage")
-
-        gaps = _gaps("Fix missing coverage")
-        result = _insert_gap_work_orders(
+        first = _insert_gap_work_orders(
             conn,
-            gaps=gaps,
+            gaps=_gaps("Fix missing coverage", category="coverage"),
             project_id=_PROJECT_ID,
             milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
+            reviewed_wo_title="Parent WO",
+            reviewed_wo_sequence=10,
+        )
+        existing_id = first[0]["work_order_id"]
+
+        # Re-review: same category, reworded title → must merge into the prior spawn.
+        second = _insert_gap_work_orders(
+            conn,
+            gaps=_gaps("Add the missing test coverage", category="coverage"),
+            project_id=_PROJECT_ID,
+            milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
             reviewed_wo_title="Parent WO",
             reviewed_wo_sequence=10,
         )
 
-        assert len(result) == 1
-        assert result[0]["work_order_id"] == existing_id
-        assert result[0].get("merged_into_existing") is True
+        assert len(second) == 1
+        assert second[0]["work_order_id"] == existing_id
+        assert second[0].get("merged_into_existing") is True
 
         wo_rows = conn.execute("SELECT work_order_id FROM business_work_orders").fetchall()
         assert len(wo_rows) == 1
 
     def test_merge_appends_tasks_to_existing_wo(self):
-        """Tasks from the gap are appended to the existing WO's task list."""
+        """Re-review tasks are appended to the existing WO's task list."""
         from core.work_orders.verify import _insert_gap_work_orders
 
         conn = _make_conn()
-        existing_id = _seed_open_wo(conn, "Fix missing coverage")
-        conn.execute(
-            "INSERT INTO business_tasks (task_id, work_order_id, project_id, title)"
-            " VALUES ('old-task', ?, ?, 'Pre-existing task')",
-            (existing_id, _PROJECT_ID),
-        )
-        conn.commit()
-
-        gaps = _gaps("Fix missing coverage", tasks=["New task from gap"])
-        _insert_gap_work_orders(
+        first = _insert_gap_work_orders(
             conn,
-            gaps=gaps,
+            gaps=_gaps("Fix coverage", category="coverage", tasks=["Pre-existing task"]),
             project_id=_PROJECT_ID,
             milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
+            reviewed_wo_title="Parent WO",
+            reviewed_wo_sequence=10,
+        )
+        existing_id = first[0]["work_order_id"]
+
+        _insert_gap_work_orders(
+            conn,
+            gaps=_gaps("Fix coverage (again)", category="coverage", tasks=["New task from gap"]),
+            project_id=_PROJECT_ID,
+            milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
             reviewed_wo_title="Parent WO",
             reviewed_wo_sequence=10,
         )
@@ -172,56 +181,85 @@ class TestGapWODedup:
         assert "Pre-existing task" in titles
         assert "New task from gap" in titles
 
-    def test_no_milestone_always_spawns_new_wo(self):
-        """milestone_id=None skips dedup query; new WO always created."""
+    def test_null_milestone_still_dedups(self):
+        """milestone_id=None still dedups — the dedup query is scoped by project_id."""
         from core.work_orders.verify import _insert_gap_work_orders
 
         conn = _make_conn()
-        gaps = _gaps("Fix missing coverage")
-        result = _insert_gap_work_orders(
-            conn,
-            gaps=gaps,
-            project_id=_PROJECT_ID,
-            milestone_id=None,
-            reviewed_wo_title="Parent WO",
-            reviewed_wo_sequence=10,
-        )
-
-        assert len(result) == 1
-        assert result[0].get("merged_into_existing") is not True
-
-    def test_multiple_gaps_independent_dedup(self):
-        """Each gap independently deduped: one merges, one spawns fresh."""
-        from core.work_orders.verify import _insert_gap_work_orders
-
-        conn = _make_conn()
-        _seed_open_wo(conn, "Gap A — existing")
-
-        gaps = [
-            {
-                "title": "Gap A — existing",
-                "description": "",
-                "work_order_type": "cleanup",
-                "tasks": [],
-            },
-            {"title": "Gap B — new", "description": "", "work_order_type": "cleanup", "tasks": []},
-        ]
-        result = _insert_gap_work_orders(
-            conn,
-            gaps=gaps,
-            project_id=_PROJECT_ID,
-            milestone_id=_MILESTONE_ID,
-            reviewed_wo_title="Parent WO",
-            reviewed_wo_sequence=10,
-        )
-
-        assert len(result) == 2
-        merged = [r for r in result if r.get("merged_into_existing")]
-        fresh = [r for r in result if not r.get("merged_into_existing")]
-        assert len(merged) == 1
-        assert merged[0]["title"] == "Gap A — existing"
-        assert len(fresh) == 1
-        assert fresh[0]["title"] == "Gap B — new"
+        for _ in range(2):
+            _insert_gap_work_orders(
+                conn,
+                gaps=_gaps("Fix missing coverage", category="coverage"),
+                project_id=_PROJECT_ID,
+                milestone_id=None,
+                reviewed_work_order_id=_REVIEWED_WO,
+                reviewed_wo_title="Parent WO",
+                reviewed_wo_sequence=10,
+            )
 
         wo_count = conn.execute("SELECT COUNT(*) FROM business_work_orders").fetchone()[0]
-        assert wo_count == 2
+        assert wo_count == 1
+
+    def test_multiple_gaps_independent_dedup(self):
+        """Distinct gap keys spawn independently; a repeated key merges."""
+        from core.work_orders.verify import _insert_gap_work_orders
+
+        conn = _make_conn()
+        # First review: two distinct gaps → two WOs.
+        _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "Gap A",
+                    "category": "a",
+                    "description": "",
+                    "work_order_type": "cleanup",
+                    "tasks": [],
+                },
+                {
+                    "title": "Gap B",
+                    "category": "b",
+                    "description": "",
+                    "work_order_type": "cleanup",
+                    "tasks": [],
+                },
+            ],
+            project_id=_PROJECT_ID,
+            milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
+            reviewed_wo_title="Parent WO",
+            reviewed_wo_sequence=10,
+        )
+        # Second review: Gap A reworded (key 'a') merges; Gap C (key 'c') is new.
+        result = _insert_gap_work_orders(
+            conn,
+            gaps=[
+                {
+                    "title": "Gap A reworded",
+                    "category": "a",
+                    "description": "",
+                    "work_order_type": "cleanup",
+                    "tasks": [],
+                },
+                {
+                    "title": "Gap C",
+                    "category": "c",
+                    "description": "",
+                    "work_order_type": "cleanup",
+                    "tasks": [],
+                },
+            ],
+            project_id=_PROJECT_ID,
+            milestone_id=_MILESTONE_ID,
+            reviewed_work_order_id=_REVIEWED_WO,
+            reviewed_wo_title="Parent WO",
+            reviewed_wo_sequence=10,
+        )
+
+        merged = [r for r in result if r.get("merged_into_existing")]
+        fresh = [r for r in result if not r.get("merged_into_existing")]
+        assert len(merged) == 1 and merged[0]["title"] == "Gap A reworded"
+        assert len(fresh) == 1 and fresh[0]["title"] == "Gap C"
+
+        wo_count = conn.execute("SELECT COUNT(*) FROM business_work_orders").fetchone()[0]
+        assert wo_count == 3
