@@ -163,3 +163,14 @@ gates:
       INSERT to the canonical_events VIEW name is an authority boundary violation.
     command: [py, -m, core.gates.dependency_rules, rule4]
     fail_hint: "Rule 4 violation — INSERT INTO canonical_events found outside spool/ingestor.py. Use the spool/emitter path instead."
+
+  - id: leanness
+    tier: advisory
+    description: >
+      Leanness signal. Runs ruff (SIM/C4/PERF/RET/PIE/UP) and vulture (>=80%)
+      over the source and prints over-engineering + dead-symbol counts so the
+      platform validates the simplicity of its own output. Advisory — surfaces
+      the hygiene signal without blocking; tighten to baseline-diff enforcement
+      once existing findings are cleaned (WO-LEANNESS-GATE).
+    command: [py, -m, core.gates.leanness]
+    warn_hint: "Over-engineering / dead symbols present — reuse > new, one line > many, native > custom."
