@@ -1,6 +1,5 @@
 """Unit tests for analytics analyzers"""
 
-import pytest
 from datetime import datetime, timedelta
 from projections.core.analyzers.performance_analyzer import PerformanceAnalyzer
 from projections.core.analyzers.trend_analyzer import TrendAnalyzer

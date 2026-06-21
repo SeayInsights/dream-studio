@@ -66,6 +66,7 @@ control/analysis/research.py:2:1: F401 'pathlib.Path' imported but unused
 control/analysis/synthesis.py:87:21: F541 f-string is missing placeholders
 control/analysis/synthesis.py:94:21: F541 f-string is missing placeholders
 control/context/context7_manager.py:16:1: F401 'heapq' imported but unused
+control/context/team.py:37:1: F401 'json' imported but unused
 control/execution/models/selector.py:11:16: E401 multiple imports on one line
 control/execution/models/selector.py:208:31: E203 whitespace before ':'
 control/execution/workflow/cost.py:148:26: F541 f-string is missing placeholders
@@ -148,6 +149,10 @@ core/execution/github_adapter.py:121:13: F841 local variable 'result' is assigne
 core/gates/migration_risk.py:96:11: F541 f-string is missing placeholders
 core/graph/query.py:872:49: E203 whitespace before ':'
 core/learning/correction_patterns.py:58:25: E203 whitespace before ':'
+core/learning/pattern_learning.py:13:1: E731 do not assign a lambda expression, use a def
+core/monitoring/validation_monitor.py:211:32: F541 f-string is missing placeholders
+core/monitoring/validation_monitor.py:218:32: F541 f-string is missing placeholders
+core/monitoring/validation_monitor.py:9:1: F401 'datetime.timedelta' imported but unused
 core/observability/trace_logger.py:177:15: F541 f-string is missing placeholders
 core/observability/trace_logger.py:187:15: F541 f-string is missing placeholders
 core/observability/trace_logger.py:198:15: F541 f-string is missing placeholders
@@ -218,6 +223,18 @@ guardrails/scanners/rebuff_validator.py:20:1: F401 'typing.Tuple' imported but u
 guardrails/scanners/rebuff_validator.py:21:1: F401 'dataclasses.asdict' imported but unused
 integrations/installer/claude_code.py:15:1: F401 'os' imported but unused
 integrations/installer/claude_code.py:312:21: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:112:15: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:114:13: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:150:11: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:161:11: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:162:11: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:168:15: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:20:1: F401 'typing.Optional' imported but unused
+interfaces/cli/analyze_project.py:85:15: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:87:13: F541 f-string is missing placeholders
+interfaces/cli/analyze_project.py:90:15: F541 f-string is missing placeholders
+interfaces/cli/backfill_components.py:183:13: F821 undefined name 'sys'
+interfaces/cli/backfill_components.py:195:13: F821 undefined name 'sys'
 interfaces/cli/backfill_task_status.py:20:1: E402 module level import not at top of file
 interfaces/cli/backfill_task_status.py:21:1: E402 module level import not at top of file
 interfaces/cli/backfill_token_sessions.py:25:1: E402 module level import not at top of file
@@ -228,13 +245,21 @@ interfaces/cli/benchmark_normalizer.py:16:1: F401 'core.adapters.normalizers.GPT
 interfaces/cli/benchmark_normalizer.py:17:1: F401 'core.events.trace.TraceContext' imported but unused
 interfaces/cli/benchmark_normalizer.py:97:11: F541 f-string is missing placeholders
 interfaces/cli/benchmark_normalizer.py:98:11: F541 f-string is missing placeholders
+interfaces/cli/benchmark_queries.py:38:5: F841 local variable 'args' is assigned to but never used
+interfaces/cli/benchmark_queries.py:76:9: F841 local variable 'e' is assigned to but never used
 interfaces/cli/benchmark_tokens.py:75:29: E203 whitespace before ':'
 interfaces/cli/build_adapters.py:46:34: E203 whitespace before ':'
+interfaces/cli/check_db_tables.py:1:1: F401 'sqlite3' imported but unused
 interfaces/cli/check_migrations.py:10:1: E402 module level import not at top of file
 interfaces/cli/check_repo_updates.py:223:19: F541 f-string is missing placeholders
 interfaces/cli/check_repo_updates.py:22:1: E731 do not assign a lambda expression, use a def
 interfaces/cli/check_repo_updates.py:241:23: F541 f-string is missing placeholders
 interfaces/cli/check_repo_updates.py:90:23: F541 f-string is missing placeholders
+interfaces/cli/check_schema_version.py:4:1: F401 'sqlite3' imported but unused
+interfaces/cli/compile_context.py:27:1: E402 module level import not at top of file
+interfaces/cli/compile_context.py:65:27: F541 f-string is missing placeholders
+interfaces/cli/compile_context.py:70:27: F541 f-string is missing placeholders
+interfaces/cli/create_refactor_issues.py:6:1: F401 'pathlib.Path' imported but unused
 interfaces/cli/dream_exec.py:33:1: F401 'datetime.datetime' imported but unused
 interfaces/cli/dream_exec.py:39:1: E402 module level import not at top of file
 interfaces/cli/dream_exec.py:40:1: E402 module level import not at top of file
@@ -259,15 +284,32 @@ interfaces/cli/efficiency_analytics.py:30:1: E402 module level import not at top
 interfaces/cli/efficiency_analytics.py:31:1: E402 module level import not at top of file
 interfaces/cli/exec_graph.py:136:15: F541 f-string is missing placeholders
 interfaces/cli/exec_graph.py:32:1: E402 module level import not at top of file
+interfaces/cli/find_automation_tables.py:1:1: F401 'sqlite3' imported but unused
 interfaces/cli/generate_routing.py:70:46: E203 whitespace before ':'
 interfaces/cli/generate_routing.py:80:44: E203 whitespace before ':'
 interfaces/cli/hydrate_registry.py:179:60: E741 ambiguous variable name 'l'
 interfaces/cli/hydrate_registry.py:44:24: E203 whitespace before ':'
+interfaces/cli/inspect_db_tables.py:4:1: F401 'sqlite3' imported but unused
 interfaces/cli/lint_skills.py:10:1: F401 'io' imported but unused
+interfaces/cli/list_tables.py:9:1: E402 module level import not at top of file
+interfaces/cli/manual_migrate.py:9:1: E402 module level import not at top of file
+interfaces/cli/memory_audit.py:15:1: F401 'os' imported but unused
+interfaces/cli/memory_audit.py:162:54: E203 whitespace before ':'
+interfaces/cli/memory_audit.py:168:62: E203 whitespace before ':'
+interfaces/cli/memory_audit.py:171:65: E203 whitespace before ':'
+interfaces/cli/memory_audit.py:378:22: F541 f-string is missing placeholders
+interfaces/cli/memory_audit.py:40:24: E203 whitespace before ':'
 interfaces/cli/migrate_files_to_sqlite.py:140:5: F841 local variable 'pattern' is assigned to but never used
 interfaces/cli/migrate_files_to_sqlite.py:14:1: E402 module level import not at top of file
 interfaces/cli/migrate_files_to_sqlite.py:15:1: E402 module level import not at top of file
 interfaces/cli/migrate_to_db.py:139:24: E203 whitespace before ':'
+interfaces/cli/migrate_to_option_c.py:146:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:337:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:425:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:430:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:434:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:440:11: F541 f-string is missing placeholders
+interfaces/cli/migrate_to_option_c.py:442:11: F541 f-string is missing placeholders
 interfaces/cli/pulse_collector.py:19:1: E402 module level import not at top of file
 interfaces/cli/pulse_collector.py:20:1: E402 module level import not at top of file
 interfaces/cli/pulse_collector.py:21:1: E402 module level import not at top of file
@@ -287,11 +329,15 @@ interfaces/cli/spec_risk_check.py:17:1: F401 'io' imported but unused
 interfaces/cli/studio_backup.py:34:1: E402 module level import not at top of file
 interfaces/cli/studio_backup.py:397:15: F541 f-string is missing placeholders
 interfaces/cli/studio_backup.py:429:15: F541 f-string is missing placeholders
+interfaces/cli/test_migration_021.py:3:1: F401 'sqlite3' imported but unused
 interfaces/cli/test_wave1_research_cache.py:128:15: F541 f-string is missing placeholders
 interfaces/cli/test_wave1_research_cache.py:15:1: E402 module level import not at top of file
 interfaces/cli/test_wave1_research_cache.py:16:1: E402 module level import not at top of file
 interfaces/cli/test_wave1_research_cache.py:49:29: E712 comparison to False should be 'if cond is False:' or 'if not cond:'
 interfaces/cli/test_wave1_research_cache.py:83:29: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+interfaces/cli/validation_health.py:20:1: E402 module level import not at top of file
+interfaces/cli/validation_health.py:50:22: F541 f-string is missing placeholders
+interfaces/cli/validation_health.py:57:22: F541 f-string is missing placeholders
 projections/api/models/insights.py:5:1: F401 'datetime.datetime' imported but unused
 projections/api/routes/audits.py:270:13: F841 local variable 'cursor' is assigned to but never used
 projections/api/routes/audits.py:4:1: F401 'typing.List' imported but unused
@@ -318,8 +364,17 @@ projections/core/analyzers/performance_analyzer.py:4:1: F401 'datetime.datetime'
 projections/core/analyzers/performance_analyzer.py:4:1: F401 'datetime.timedelta' imported but unused
 projections/core/analyzers/trend_analyzer.py:206:49: E203 whitespace before ':'
 projections/core/analyzers/trend_analyzer.py:3:1: F401 'typing.Optional' imported but unused
+projections/core/config/runtime_paths.py:16:1: E402 module level import not at top of file
+projections/core/config/runtime_paths.py:17:1: E402 module level import not at top of file
+projections/core/config/runtime_paths.py:18:1: E402 module level import not at top of file
+projections/core/config/runtime_paths.py:20:1: E402 module level import not at top of file
 projections/core/insights/root_cause.py:3:1: F401 'typing.Optional' imported but unused
 projections/core/insights/root_cause.py:3:1: F401 'typing.Tuple' imported but unused
+projections/tests/test_analyzers.py:3:1: F401 'pytest' imported but unused
+projections/tests/test_api.py:3:1: F401 'pytest' imported but unused
+projections/tests/test_insights.py:3:1: F401 'pytest' imported but unused
+projections/tests/validate_tests.py:108:19: F541 f-string is missing placeholders
+projections/tests/validate_tests.py:14:1: F401 'os' imported but unused
 runtime/hooks/core/on-changelog-nudge.py:38:1: E402 module level import not at top of file
 runtime/hooks/core/on-milestone-end.py:39:1: E402 module level import not at top of file
 runtime/hooks/core/on-milestone-start.py:38:1: E402 module level import not at top of file
@@ -352,10 +407,24 @@ runtime/hooks/quality/on-quality-score.py:15:1: F401 'sys' imported but unused
 runtime/hooks/quality/on-quality-score.py:16:1: F401 'pathlib.Path' imported but unused
 runtime/hooks/quality/on-security-scan.py:13:1: F401 'pathlib.Path' imported but unused
 runtime/hooks/quality/on-structure-check.py:13:1: F401 'pathlib.Path' imported but unused
+shared/paths.py:16:1: E402 module level import not at top of file
+shared/paths.py:17:1: E402 module level import not at top of file
+shared/paths.py:18:1: E402 module level import not at top of file
+shared/paths.py:20:1: E402 module level import not at top of file
 shared/repo_analysis/analyzer.py:369:19: F541 f-string is missing placeholders
 shared/repo_analysis/analyzer.py:373:19: F541 f-string is missing placeholders
 shared/repo_analysis/analyzer.py:8:1: F401 'json' imported but unused
 shared/repo_analysis/analyzer.py:92:9: E722 do not use bare 'except'
+shared/repo_analysis/pattern_extractors/cicd_patterns.py:11:1: F401 'typing.List' imported but unused
+shared/repo_analysis/pattern_extractors/code_quality_patterns.py:10:1: F401 'typing.List' imported but unused
+shared/repo_analysis/pattern_extractors/code_quality_patterns.py:8:1: F401 're' imported but unused
+shared/repo_analysis/pattern_extractors/decision_tables.py:10:1: F401 'typing.List' imported but unused
+shared/repo_analysis/pattern_extractors/do_dont_examples.py:71:51: E203 whitespace before ':'
+shared/repo_analysis/pattern_extractors/do_dont_examples.py:77:59: E203 whitespace before ':'
+shared/repo_analysis/pattern_extractors/frontmatter.py:8:1: F401 're' imported but unused
+shared/repo_analysis/pattern_extractors/progressive_disclosure.py:11:1: F401 'typing.List' imported but unused
+shared/repo_analysis/pattern_extractors/testing_patterns.py:10:1: F401 'typing.List' imported but unused
+shared/repo_analysis/pattern_extractors/version_guards.py:10:1: F401 'typing.Tuple' imported but unused
 spool/ingestor.py:14:1: E402 module level import not at top of file
 spool/ingestor.py:15:1: E402 module level import not at top of file
 spool/ingestor.py:5:1: F401 'signal' imported but unused
