@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-import heapq
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 
 

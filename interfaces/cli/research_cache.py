@@ -31,10 +31,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from core.research.store import (
     delete_research,
     get_research,
-    is_stale,
     list_topics,
     save_research,
-    search_research,
 )
 
 # ---------------------------------------------------------------------------
