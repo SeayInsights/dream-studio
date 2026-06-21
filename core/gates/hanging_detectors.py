@@ -105,15 +105,34 @@ def _iter_code_files(repo_root: Path) -> Iterable[tuple[str, str]]:
 
 _ATTR_RE = re.compile(r'\b(?:id|class|name|data-[\w-]+)\s*=\s*["\']([\w\-]{3,})["\']')
 _DEF_RE = re.compile(r"\b(?:def|class|function|const|let|var)\s+([A-Za-z_]\w{2,})")
-_QUOTED_RE = re.compile(r"""["']([A-Za-z_][\w\-]{3,})["']""")
+
+
+_STR_LITERAL_RE = re.compile(r"\"[^\"]*\"|'[^']*'")
+
+
+def _symbols_by_kind(lines: Iterable[str]) -> tuple[set[str], set[str]]:
+    """Extract removed/added symbols, partitioned by origin.
+
+    ``attrs`` = HTML/JS attribute ids (id=/class=/name=/data-) — the #347 target,
+    genuinely stale even when a test references them as a quoted string.
+    ``defs`` = real definitions (def/class/function/const/let/var).
+
+    Arbitrary quoted-string literals are deliberately NOT symbols: deleting a dead
+    file whose fixture-like literals (e.g. "token-1", "test_db") coincide with an
+    unchanged test's fixtures would otherwise flood this gate with false positives
+    on legitimate dead-code removal (WO d3221b4d, surfaced by the God File Cleanup).
+    """
+    attrs: set[str] = set()
+    defs: set[str] = set()
+    for ln in lines:
+        attrs.update(m.group(1) for m in _ATTR_RE.finditer(ln))
+        defs.update(m.group(1) for m in _DEF_RE.finditer(ln))
+    return attrs, defs
 
 
 def _symbols(lines: Iterable[str]) -> set[str]:
-    syms: set[str] = set()
-    for ln in lines:
-        for rx in (_ATTR_RE, _DEF_RE, _QUOTED_RE):
-            syms.update(m.group(1) for m in rx.finditer(ln))
-    return syms
+    attrs, defs = _symbols_by_kind(lines)
+    return attrs | defs
 
 
 def detect_stale_removed_symbol_tests(
@@ -122,12 +141,17 @@ def detect_stale_removed_symbol_tests(
     root = Path(repo_root)
     files = _parse_diff(diff_text)
     changed_paths = {_normalize(f["path"]) for f in files}
-    removed: set[str] = set()
+    removed_attr: set[str] = set()
+    removed_def: set[str] = set()
     added: set[str] = set()
     for f in files:
-        removed |= _symbols(f["removed"])
+        ra, rd = _symbols_by_kind(f["removed"])
+        removed_attr |= ra
+        removed_def |= rd
         added |= _symbols(f["added"])
-    truly_removed = {s for s in removed if s not in added}
+    removed_attr -= added
+    removed_def -= added
+    truly_removed = removed_attr | removed_def
     if not truly_removed:
         return []
 
@@ -155,20 +179,32 @@ def detect_stale_removed_symbol_tests(
 
     findings: list[Finding] = []
     for rel, text in test_files:
+        # Symbols the test DEFINES itself are its own helpers, not dangling
+        # references to removed source (e.g. a test-local `def _seed_db`).
+        test_defines = {m.group(1) for m in _DEF_RE.finditer(text)}
+        code_text = _STR_LITERAL_RE.sub(" ", text)  # test source minus string literals
         for sym in genuinely_removed:
-            if patterns[sym].search(text):
-                findings.append(
-                    {
-                        "detector": "stale_removed_symbol_test",
-                        "severity": "block",
-                        "path": rel,
-                        "symbol": sym,
-                        "message": (
-                            f"{rel} still references {sym!r}, which the diff removed and which "
-                            f"is now absent from non-test source. Update or delete the stale test."
-                        ),
-                    }
-                )
+            if sym in test_defines or not patterns[sym].search(text):
+                continue
+            # A removed DEFINITION (function/class) is only genuinely stale if the
+            # test references it as CODE (call/import/attribute) — not as a bare
+            # string-literal value (e.g. a column/role data string that happens to
+            # share the name). HTML/JS-id removals stay stale even as quoted strings.
+            if sym in removed_def and sym not in removed_attr:
+                if not patterns[sym].search(code_text):
+                    continue
+            findings.append(
+                {
+                    "detector": "stale_removed_symbol_test",
+                    "severity": "block",
+                    "path": rel,
+                    "symbol": sym,
+                    "message": (
+                        f"{rel} still references {sym!r}, which the diff removed and which "
+                        f"is now absent from non-test source. Update or delete the stale test."
+                    ),
+                }
+            )
     return findings
 
 

@@ -56,6 +56,36 @@ def test_detects_stale_removed_symbol_test(tmp_path: Path) -> None:
     ), "unrelated test must not be flagged"
 
 
+def test_stale_symbol_ignores_deleted_test_data_literals(tmp_path: Path) -> None:
+    """WO d3221b4d: deleting a dead file whose fixture-like string literals coincide
+    with an unchanged test's fixtures must NOT flag that test.
+
+    A bare quoted-string literal is not a removed API symbol; only definitions and
+    HTML/JS attribute ids are. Without this, large dead-code deletions flood the gate.
+    """
+    repo = tmp_path
+    # An unchanged test that uses 'token-1' / 'sess-1' as its own fixture data.
+    _write(
+        repo / "tests" / "unit" / "test_ingest.py",
+        "def test_ingest():\n"
+        "    rows = [{'id': 'token-1'}, {'session': 'sess-1'}]\n"
+        "    assert rows[0]['id'] == 'token-1'\n",
+    )
+    # The diff DELETES a dead non-test source file whose sample data used the same
+    # literals (e.g. a removed backfill script) — they are not API symbols.
+    diff = (
+        "diff --git a/scripts/backfill_components.py b/scripts/backfill_components.py\n"
+        "--- a/scripts/backfill_components.py\n"
+        "+++ /dev/null\n"
+        "@@ -1,2 +0,0 @@\n"
+        "-    sample = {'id': 'token-1', 'session': 'sess-1'}\n"
+        "-    return sample\n"
+    )
+
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    assert not findings, f"deleted test-data literals must not flag tests; got {findings}"
+
+
 def test_detects_changed_signature_caller(tmp_path: Path) -> None:
     """#353 class: a function gains a parameter; an un-updated caller still references it."""
     repo = tmp_path
