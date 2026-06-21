@@ -33,6 +33,15 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 
 If you haven't run the verification command in THIS message, you cannot claim it passes.
 
+## Forbidden — proxy / partial verification (these do NOT count)
+Each of these substitutes an easy proxy for real proof and produces false claims:
+- `pytest --collect-only` or a test SUBSET instead of the FULL suite — collection/imports ≠ runtime pass.
+- Hand-editing a GENERATED file (e.g. `.claude/…`) instead of regenerating from canonical — a stopgap to flag, never "done".
+- Stating a count, size, or "done" not computed against ground truth (live DB / real file / real import) in THIS message.
+- Static/heuristic analysis (regex, name-grep) where the real mechanism exists — use real imports/tools, not guesses.
+
+If full verification is too slow to finish now, state the claim as **UNVERIFIED** explicitly — never imply it passed.
+
 ## The Gate (run this every time)
 
 ```

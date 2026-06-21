@@ -22,7 +22,6 @@ import signal
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional
 
 from core.config.paths import state_dir
 from core.projections.framework import Projection, ProjectionEngine, ProjectionResult
@@ -70,17 +69,21 @@ class ProjectionRunner:
         self._spine_projections: list = []
 
     @staticmethod
-    def _open_analytics_conn() -> Optional[object]:
+    def _open_analytics_conn() -> object | None:
         """Open the DuckDB analytics store (read-write). Fail-open: returns None on error."""
         try:
-            from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+            from core.analytics.duckdb_store import (
+                connect_analytics,
+                ensure_analytics_schema,
+            )
 
             conn = connect_analytics(read_only=False)
             ensure_analytics_schema(conn)
             return conn
         except Exception:
             logger.debug(
-                "ProjectionRunner: DuckDB analytics conn unavailable (non-fatal)", exc_info=True
+                "ProjectionRunner: DuckDB analytics conn unavailable (non-fatal)",
+                exc_info=True,
             )
             return None
 
@@ -102,7 +105,7 @@ class ProjectionRunner:
 
     # ── Synchronous tick (Pattern C emit-then-tick) ───────────────────────────
 
-    def tick(self) -> List[ProjectionResult]:
+    def tick(self) -> list[ProjectionResult]:
         """Run one synchronous projection cycle without daemon overhead.
 
         Does not require write_pid() or _install_signal_handlers(). Safe to call
@@ -111,7 +114,24 @@ class ProjectionRunner:
         """
         results = self._engine.run_cycle()
         self._fold_spine_projections()
+        self._refresh_events_fact()
         return results
+
+    def _refresh_events_fact(self) -> None:
+        """Incrementally derive the DuckDB events_fact from SQLite canonical events.
+
+        Fail-open: the DuckDB dashboard read surface never blocks the SQLite
+        projection path. Runner is the sole writer of events_fact.
+        """
+        if self._analytics_conn is None:
+            return
+        try:
+            from core.analytics.duckdb_store import derive_events_fact
+            from core.config.database import get_db_path
+
+            derive_events_fact(self._analytics_conn, str(get_db_path()))
+        except Exception:
+            logger.debug("events_fact refresh failed (non-fatal)", exc_info=True)
 
     # ── Main daemon loop ──────────────────────────────────────────────────────
 
@@ -156,6 +176,7 @@ class ProjectionRunner:
                     for r in results:
                         self._total_events += r.events_processed
                         self._total_errors += len(r.errors)
+                    self._refresh_events_fact()
                 except Exception:
                     logger.exception("ProjectionRunner: unexpected error in run_cycle()")
 
@@ -288,7 +309,7 @@ class ProjectionRunner:
 
     # ── Logging ───────────────────────────────────────────────────────────────
 
-    def _log_cycle_summary(self, results: List[ProjectionResult]) -> None:
+    def _log_cycle_summary(self, results: list[ProjectionResult]) -> None:
         """Log one line summarising the completed cycle."""
         total_events = sum(r.events_processed for r in results)
         total_rows = sum(r.rows_written for r in results)
@@ -310,27 +331,6 @@ class ProjectionRunner:
         self._pid_path.write_text(str(os.getpid()), encoding="utf-8")
         logger.debug("PID file written: %s (pid=%d)", self._pid_path, os.getpid())
 
-    def read_pid(self) -> Optional[int]:
-        """Read PID from pid file. Returns None if the file does not exist."""
-        try:
-            return int(self._pid_path.read_text(encoding="utf-8").strip())
-        except (FileNotFoundError, ValueError):
-            return None
-
-    def is_running(self) -> bool:
-        """Return True if a daemon process is alive (PID file exists and process is live)."""
-        pid = self.read_pid()
-        if pid is None:
-            return False
-        # os.kill(pid, 0) checks process existence without sending a real signal.
-        try:
-            os.kill(pid, 0)
-            return True
-        except (ProcessLookupError, PermissionError):
-            # ProcessLookupError → process is gone.
-            # PermissionError on Unix → process exists but belongs to another user.
-            return False
-
     # ── Signal handling ───────────────────────────────────────────────────────
 
     def _install_signal_handlers(self) -> None:
@@ -342,7 +342,10 @@ class ProjectionRunner:
         """
 
         def _shutdown(signum: int, frame: object) -> None:
-            logger.info("ProjectionRunner: shutdown signal received (%d) — finishing cycle", signum)
+            logger.info(
+                "ProjectionRunner: shutdown signal received (%d) — finishing cycle",
+                signum,
+            )
             self._running = False
 
         for sig_name in ("SIGTERM", "SIGINT", "SIGBREAK"):

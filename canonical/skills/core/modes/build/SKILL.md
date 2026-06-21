@@ -39,6 +39,16 @@ Before dispatching any task, query the registry for relevant context:
 - Two-stage review after each task (spec then quality)
 - Pre-inline context — don't make agents Read files, provide full text
 
+## Before Writing Any Code — Leanness Checks (mandatory)
+Before writing ANY function, file, or script, validate:
+1. **Refactor over new** — is there existing code, a tool, or a method to extend instead of writing new?
+2. **Simplest form** — if one line suffices, don't write many; never write a function for what the language/stdlib handles natively.
+3. **No duplication** — am I duplicating a process that already exists (an installed tool, the `ds` CLI, a helper)?
+4. **Not dead** — am I building on, or validating against, architecture/code that has already been removed?
+5. **Efficient + principled** — is this the most efficient approach that still honors these principles?
+
+If any check fails, fix the approach before writing. Over-engineered, duplicated, or dead-targeting code is a defect, not a style preference. Reuse > new; one line > many; native > custom.
+
 ## Execution Modes
 
 ### Simple mode (≤3 tasks, tightly coupled)

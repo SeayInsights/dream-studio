@@ -21,6 +21,7 @@ from core.analytics.duckdb_store import connect_analytics, ensure_analytics_sche
 
 _EXPECTED_ANALYTICS_TABLES = {
     "duckdb_execution_events",
+    "events_fact",
 }
 
 _EXPECTED_ROLLUP_TABLES = {
@@ -31,6 +32,15 @@ _EXPECTED_ROLLUP_TABLES = {
     "pattern_catalog",
     "recommendation_outcomes",
     "_aggregate_meta",
+}
+
+# Read-model VIEWS over events_fact (WO-DBA-REPOINT). Readers connection-swap to these;
+# they present the old SQLite read-model shapes with complete (canonical-derived) data.
+_EXPECTED_PROJECTION_VIEWS = {
+    "token_usage_records",
+    "hook_executions",
+    "validation_failures",
+    "raw_sessions",
 }
 
 
@@ -88,5 +98,5 @@ class TestAnalyticsSchema:
         ensure_analytics_schema(conn)
         conn.close()
         tables = _tables(db)
-        expected = _EXPECTED_ANALYTICS_TABLES | _EXPECTED_ROLLUP_TABLES
-        assert len(tables) == len(expected)
+        expected = _EXPECTED_ANALYTICS_TABLES | _EXPECTED_ROLLUP_TABLES | _EXPECTED_PROJECTION_VIEWS
+        assert tables == expected, f"schema drift: {tables ^ expected}"

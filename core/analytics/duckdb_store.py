@@ -24,16 +24,38 @@ Authority boundary: this store is NEVER-AUTHORITY.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 try:
     import duckdb
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "duckdb is required for the analytics store. " "Run: pip install duckdb>=0.10"
+        "duckdb is required for the analytics store. Run: pip install duckdb>=0.10"
     ) from exc
 
 from core.config.paths import state_dir
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_native_duckdb(path: Path) -> None:
+    """Remove a legacy SQLite file masquerading at the DuckDB path.
+
+    DuckDB will silently open a SQLite file via its compat layer, defeating the
+    native columnar store (the WO-DUCKDB-REAL bug). The analytics store is
+    NEVER-AUTHORITY and fully rebuildable, so a legacy SQLite file is deleted
+    with a loud warning rather than silently used.
+    """
+    if path.exists() and path.read_bytes()[:16].startswith(b"SQLite format 3"):
+        logger.warning(
+            "aggregate_metrics.db at %s is a legacy SQLite file — removing and "
+            "recreating as a native DuckDB store (analytics is rebuildable).",
+            path,
+        )
+        for suffix in ("", "-wal", "-shm"):
+            Path(str(path) + suffix).unlink(missing_ok=True)
+
 
 _ROLLUP_TABLES_DDL = """
     CREATE TABLE IF NOT EXISTS finding_rollups (
@@ -135,6 +157,194 @@ _ANALYTICS_TABLES_DDL = """
 """
 
 
+# Read-model VIEWS over events_fact — present the old SQLite read-model shapes so
+# dashboard/CLI readers only swap their connection (SQLite→DuckDB), no SQL rewrite.
+# These are derived from canonical events (via events_fact), so they're complete
+# where the old SQLite projections were partial (e.g. token capture). Created after
+# events_fact in ensure_analytics_schema (they depend on it).
+_PROJECTION_VIEWS_DDL = """
+    CREATE OR REPLACE VIEW token_usage_records AS SELECT
+        event_id AS token_usage_id, project_id, milestone_id, task_id, NULL AS process_run_id,
+        agent_id, skill_id, workflow_id, hook_id, model_id, NULL AS provider,
+        input_tokens, output_tokens, NULL::BIGINT AS cached_tokens,
+        COALESCE(input_tokens,0)+COALESCE(output_tokens,0) AS total_tokens,
+        NULL::DOUBLE AS estimated_cost, NULL AS purpose, event_timestamp AS created_at,
+        NULL AS source_refs_json, NULL AS evidence_refs_json, adapter_id, NULL AS billing_mode,
+        NULL AS token_visibility, NULL AS cost_visibility, NULL AS usage_source, NULL AS cost_source,
+        NULL AS accounting_confidence, NULL::BIGINT AS cache_read_tokens
+    FROM events_fact WHERE event_type LIKE 'token%';
+    CREATE OR REPLACE VIEW hook_executions AS SELECT
+        event_id AS hook_exec_id, NULL::BIGINT AS activity_id,
+        json_extract_string(payload,'$.hook_name') AS hook_name,
+        json_extract_string(payload,'$.hook_type') AS hook_type,
+        json_extract_string(payload,'$.trigger_context') AS trigger_context,
+        json_extract_string(payload,'$.started_at') AS started_at,
+        json_extract_string(payload,'$.completed_at') AS completed_at,
+        duration_ms, exit_code, status, json_extract_string(payload,'$.output') AS output,
+        json_extract_string(payload,'$.error_message') AS error_message,
+        TRY_CAST(json_extract_string(payload,'$.cpu_time_ms') AS BIGINT) AS cpu_time_ms,
+        TRY_CAST(json_extract_string(payload,'$.memory_mb') AS DOUBLE) AS memory_mb
+    FROM events_fact WHERE event_type='system.hook.execution.logged';
+    CREATE OR REPLACE VIEW validation_failures AS SELECT
+        event_id AS failure_id, event_id, event_type AS vf_event_type,
+        json_extract_string(payload,'$.errors') AS errors,
+        json_extract_string(payload,'$.invalid_event_type') AS attempted_event,
+        event_timestamp AS attempted_at
+    FROM events_fact WHERE event_type='event.validation.failed';
+    CREATE OR REPLACE VIEW raw_sessions AS SELECT
+        session_id, project_id, json_extract_string(payload,'$.topic') AS topic,
+        event_timestamp AS started_at, NULL AS ended_at, NULL::DOUBLE AS duration_s,
+        input_tokens, output_tokens, NULL::BIGINT AS tasks_completed,
+        json_extract_string(payload,'$.pipeline_phase') AS pipeline_phase,
+        NULL::BIGINT AS handoff_consumed, outcome
+    FROM events_fact WHERE event_type='system.session.recorded';
+"""
+
+# (legacy) per-read-model tables — kept as a constant name only for transition; no longer used.
+_PROJECTION_TABLES_DDL_UNUSED = """
+    CREATE TABLE IF NOT EXISTS token_usage_records (
+        token_usage_id VARCHAR PRIMARY KEY, project_id VARCHAR, milestone_id VARCHAR,
+        task_id VARCHAR, process_run_id VARCHAR, agent_id VARCHAR, skill_id VARCHAR,
+        workflow_id VARCHAR, hook_id VARCHAR, model_id VARCHAR, provider VARCHAR,
+        input_tokens BIGINT, output_tokens BIGINT, cached_tokens BIGINT, total_tokens BIGINT,
+        estimated_cost DOUBLE, purpose VARCHAR, created_at VARCHAR, source_refs_json VARCHAR,
+        evidence_refs_json VARCHAR, adapter_id VARCHAR, billing_mode VARCHAR,
+        token_visibility VARCHAR, cost_visibility VARCHAR, usage_source VARCHAR,
+        cost_source VARCHAR, accounting_confidence VARCHAR, cache_read_tokens BIGINT
+    );
+    CREATE TABLE IF NOT EXISTS hook_executions (
+        hook_exec_id BIGINT PRIMARY KEY, activity_id BIGINT, hook_name VARCHAR, hook_type VARCHAR,
+        trigger_context VARCHAR, started_at TIMESTAMP, completed_at TIMESTAMP, duration_ms BIGINT,
+        exit_code BIGINT, status VARCHAR, output VARCHAR, error_message VARCHAR,
+        cpu_time_ms BIGINT, memory_mb DOUBLE
+    );
+    CREATE TABLE IF NOT EXISTS validation_failures (
+        failure_id VARCHAR PRIMARY KEY, event_id VARCHAR, event_type VARCHAR, errors VARCHAR,
+        attempted_event VARCHAR, attempted_at VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS ds_eval_runs (
+        run_id VARCHAR PRIMARY KEY, eval_id VARCHAR, eval_version VARCHAR, started_at VARCHAR,
+        completed_at VARCHAR, model_tested VARCHAR, skill_versions_snapshot VARCHAR,
+        event_score DOUBLE, behavior_score DOUBLE, total_score DOUBLE, passed BIGINT,
+        failure_reasons VARCHAR, token_cost_usd DOUBLE, baseline_run_id VARCHAR,
+        created_at VARCHAR, run_mode VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS ds_eval_baselines (
+        eval_id VARCHAR, version VARCHAR, baseline_score DOUBLE, last_run_score DOUBLE,
+        last_run_at VARCHAR, regression_flag BIGINT, regression_threshold DOUBLE,
+        run_count BIGINT, last_updated_at VARCHAR, label VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS eval_registry (
+        eval_id VARCHAR, target_type VARCHAR, target_id VARCHAR, rubric_score BIGINT,
+        last_run_at VARCHAR, last_run_id VARCHAR, baseline_run_id VARCHAR, friction_flag BIGINT,
+        created_at VARCHAR, updated_at VARCHAR, friction_signal_count BIGINT,
+        friction_threshold BIGINT, pending_rerun BIGINT
+    );
+    CREATE TABLE IF NOT EXISTS raw_sessions (
+        session_id VARCHAR PRIMARY KEY, project_id VARCHAR, topic VARCHAR, started_at VARCHAR,
+        ended_at VARCHAR, duration_s DOUBLE, input_tokens BIGINT, output_tokens BIGINT,
+        tasks_completed BIGINT, pipeline_phase VARCHAR, handoff_consumed BIGINT, outcome VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS raw_workflow_runs (
+        id BIGINT PRIMARY KEY, run_key VARCHAR, workflow VARCHAR, yaml_path VARCHAR, status VARCHAR,
+        started_at VARCHAR, finished_at VARCHAR, node_count BIGINT, nodes_done BIGINT,
+        activity_id BIGINT, prd_id VARCHAR, task_id VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS decision_log (
+        decision_id VARCHAR PRIMARY KEY, decision_type VARCHAR, context VARCHAR, outcome VARCHAR,
+        reasoning VARCHAR, confidence DOUBLE, policy_applied VARCHAR, source_subsystem VARCHAR,
+        timestamp VARCHAR
+    );
+    CREATE TABLE IF NOT EXISTS execution_events (
+        event_id VARCHAR PRIMARY KEY, event_type VARCHAR, event_name VARCHAR, project_id VARCHAR,
+        milestone_id VARCHAR, task_id VARCHAR, process_run_id VARCHAR, parent_event_id VARCHAR,
+        actor_type VARCHAR, actor_id VARCHAR, agent_id VARCHAR, skill_id VARCHAR, workflow_id VARCHAR,
+        hook_id VARCHAR, tool_id VARCHAR, model_id VARCHAR, adapter_id VARCHAR, source_refs_json VARCHAR,
+        evidence_refs_json VARCHAR, metadata_json VARCHAR, outcome_status VARCHAR, created_at VARCHAR,
+        _built_from_event_id VARCHAR
+    );
+"""
+
+
+_EVENTS_FACT_DDL = """
+    CREATE TABLE IF NOT EXISTS events_fact (
+        event_id VARCHAR, source VARCHAR, event_type VARCHAR, event_timestamp VARCHAR,
+        correlation_id VARCHAR, project_id VARCHAR, milestone_id VARCHAR, work_order_id VARCHAR,
+        task_id VARCHAR, session_id VARCHAR, skill_id VARCHAR, workflow_id VARCHAR, agent_id VARCHAR,
+        hook_id VARCHAR, tool_id VARCHAR, model_id VARCHAR, adapter_id VARCHAR, severity VARCHAR,
+        input_tokens BIGINT, output_tokens BIGINT, duration_ms BIGINT, exit_code BIGINT,
+        status VARCHAR, outcome VARCHAR, payload JSON
+    );
+"""
+
+_FACT_DIMS = [
+    "correlation_id",
+    "project_id",
+    "milestone_id",
+    "work_order_id",
+    "task_id",
+    "session_id",
+    "skill_id",
+    "workflow_id",
+    "agent_id",
+    "hook_id",
+    "tool_id",
+    "model_id",
+    "adapter_id",
+    "severity",
+]
+
+
+def derive_events_fact(conn, studio_db_path, *, full_rebuild: bool = False) -> int:
+    """Derive the wide events_fact in DuckDB from the SQLite dual canonical events.
+
+    The dashboard read surface — one wide fact serving token/hook/skill/workflow/
+    agent/session/execution analytics via filter+group. Runner is the sole writer;
+    fed read-only from SQLite (NEVER-AUTHORITY). Incremental by event_timestamp
+    unless full_rebuild. Returns rows written.
+    """
+    import sqlite3
+
+    conn.execute("INSTALL sqlite")
+    conn.execute("LOAD sqlite")
+    conn.execute(f"ATTACH '{studio_db_path}' AS s (TYPE SQLITE, READ_ONLY)")
+    try:
+        if full_rebuild:
+            conn.execute("DELETE FROM events_fact")
+        last = conn.execute(
+            "SELECT COALESCE(MAX(event_timestamp), '') FROM events_fact"
+        ).fetchone()[0]
+        before = conn.execute("SELECT COUNT(*) FROM events_fact").fetchone()[0]
+        for table, src in (
+            ("ai_canonical_events", "ai"),
+            ("business_canonical_events", "business"),
+        ):
+            cols = {
+                r[1] for r in sqlite3.connect(studio_db_path).execute(f"PRAGMA table_info({table})")
+            }
+
+            def d(n, cols=cols):
+                return f"e.{n}" if n in cols else "NULL"
+
+            conn.execute(
+                f"""
+                INSERT INTO events_fact SELECT e.event_id, '{src}', e.event_type, e.event_timestamp,
+                  {', '.join(d(c) for c in _FACT_DIMS[:13])}, {d('severity')},
+                  TRY_CAST(json_extract_string(e.payload,'$.input_tokens') AS BIGINT),
+                  TRY_CAST(json_extract_string(e.payload,'$.output_tokens') AS BIGINT),
+                  TRY_CAST(json_extract_string(e.payload,'$.duration_ms') AS BIGINT),
+                  TRY_CAST(json_extract_string(e.payload,'$.exit_code') AS BIGINT),
+                  json_extract_string(e.payload,'$.status'),
+                  json_extract_string(e.payload,'$.outcome_status'), e.payload
+                FROM s.{table} e WHERE e.event_timestamp > ?
+            """,
+                [last],
+            )
+        return conn.execute("SELECT COUNT(*) FROM events_fact").fetchone()[0] - before
+    finally:
+        conn.execute("DETACH s")
+
+
 def analytics_db_path() -> Path:
     """Return path to the DuckDB analytics store."""
     return state_dir() / "aggregate_metrics.db"
@@ -144,7 +354,7 @@ def connect_analytics(
     db_path: Path | None = None,
     *,
     read_only: bool = True,
-) -> "duckdb.DuckDBPyConnection":
+) -> duckdb.DuckDBPyConnection:
     """Open a DuckDB connection to the analytics store.
 
     API routes and CLI reads must use read_only=True (the default).
@@ -152,12 +362,18 @@ def connect_analytics(
     """
     path = db_path or analytics_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_native_duckdb(path)
+    if read_only and not path.exists():
+        # read-only cannot create the file; make an empty native store first
+        duckdb.connect(str(path)).close()
     return duckdb.connect(str(path), read_only=read_only)
 
 
 def ensure_analytics_schema(
-    conn: "duckdb.DuckDBPyConnection",
+    conn: duckdb.DuckDBPyConnection,
 ) -> None:
-    """Create all analytics tables (idempotent)."""
+    """Create all analytics tables + read-model views (idempotent)."""
     conn.execute(_ROLLUP_TABLES_DDL)
     conn.execute(_ANALYTICS_TABLES_DDL)
+    conn.execute(_EVENTS_FACT_DDL)
+    conn.execute(_PROJECTION_VIEWS_DDL)  # views over events_fact (after it exists)
