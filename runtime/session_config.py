@@ -146,7 +146,11 @@ def detect_invocation_flags() -> list[str]:
                 i = 0
                 while i < len(cmdline):
                     arg = cmdline[i]
-                    if arg == "--dangerously-skip-permissions" or arg == "--verbose" or arg == "--debug":
+                    if (
+                        arg == "--dangerously-skip-permissions"
+                        or arg == "--verbose"
+                        or arg == "--debug"
+                    ):
                         flags.append(arg)
                     elif arg in (
                         "--model",

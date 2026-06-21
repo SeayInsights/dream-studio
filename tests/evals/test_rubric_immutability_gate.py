@@ -16,10 +16,13 @@ def test_no_rubric_change_returns_zero():
     """Rubric not in diff → exit 0, _commit_messages never called."""
     from core.gates.rubric_immutability_gate import main
 
-    with patch(
-        "core.gates.rubric_immutability_gate._changed_files",
-        return_value=["src/other.py"],
-    ), patch("core.gates.rubric_immutability_gate._commit_messages") as mock_commits:
+    with (
+        patch(
+            "core.gates.rubric_immutability_gate._changed_files",
+            return_value=["src/other.py"],
+        ),
+        patch("core.gates.rubric_immutability_gate._commit_messages") as mock_commits,
+    ):
         rc = main()
 
     assert rc == 0

@@ -474,10 +474,13 @@ class TestHookInto195:
         mock_eval.tokens_consumed = 50
         mock_eval.passed = True
 
-        with patch(
-            "core.expansion.disambiguation.check_extension_description",
-            return_value=critical_result,
-        ), patch("core.eval.runner.EvalRunner") as MockRunner:
+        with (
+            patch(
+                "core.expansion.disambiguation.check_extension_description",
+                return_value=critical_result,
+            ),
+            patch("core.eval.runner.EvalRunner") as MockRunner,
+        ):
             MockRunner.return_value.run_case.return_value = mock_eval
             with patch(
                 "core.expansion.validation.CapabilityValidator._read_baseline",

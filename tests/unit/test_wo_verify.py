@@ -500,15 +500,20 @@ def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory)
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
 
-    with _patch_db(db_path), patch(
-        "core.work_orders.verify._collect_grader",
-        return_value=mock_no_summary,
-    ), patch(
-        "core.work_orders.verify._spawn_grader",
-        return_value=MagicMock(),
-    ), patch(
-        "core.work_orders.verify._collect_git_commits",
-        return_value="diff --git a/fake.py b/fake.py\n+# change",
+    with (
+        _patch_db(db_path),
+        patch(
+            "core.work_orders.verify._collect_grader",
+            return_value=mock_no_summary,
+        ),
+        patch(
+            "core.work_orders.verify._spawn_grader",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "core.work_orders.verify._collect_git_commits",
+            return_value="diff --git a/fake.py b/fake.py\n+# change",
+        ),
     ):
         from core.work_orders.close import close_work_order
 
@@ -570,15 +575,20 @@ def test_unreviewable_without_ac_blocks_close(tmp_path: pytest.TempPathFactory) 
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
 
-    with _patch_db(db_path), patch(
-        "core.work_orders.verify._collect_grader",
-        return_value=mock_no_summary,
-    ), patch(
-        "core.work_orders.verify._spawn_grader",
-        return_value=MagicMock(),
-    ), patch(
-        "core.work_orders.verify._collect_git_commits",
-        return_value="diff --git a/fake.py b/fake.py\n+# change",
+    with (
+        _patch_db(db_path),
+        patch(
+            "core.work_orders.verify._collect_grader",
+            return_value=mock_no_summary,
+        ),
+        patch(
+            "core.work_orders.verify._spawn_grader",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "core.work_orders.verify._collect_git_commits",
+            return_value="diff --git a/fake.py b/fake.py\n+# change",
+        ),
     ):
         from core.work_orders.close import close_work_order
 

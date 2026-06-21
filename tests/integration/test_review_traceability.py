@@ -341,9 +341,12 @@ def test_unreviewable_blocks_close(tmp_path: Path) -> None:
         "spawned_work_orders": [],
         "verdict_path": str(wo_dir / "review-verdict.json"),
     }
-    with _patch_db(db_path), patch(
-        "core.work_orders.verify.verify_work_order",
-        return_value=mock_verify_result,
+    with (
+        _patch_db(db_path),
+        patch(
+            "core.work_orders.verify.verify_work_order",
+            return_value=mock_verify_result,
+        ),
     ):
         # Remove the pre-existing verdict so auto-verify fires (verdict file absent).
         (wo_dir / "review-verdict.json").unlink()
@@ -451,9 +454,12 @@ def test_recent_squash_merges_are_reviewable(tmp_path: Path) -> None:
 
     planning_root = tmp_path / "planning2"
 
-    with _patch_db(db_path), patch(
-        "core.work_orders.verify._collect_git_commits",
-        return_value=None,
+    with (
+        _patch_db(db_path),
+        patch(
+            "core.work_orders.verify._collect_git_commits",
+            return_value=None,
+        ),
     ):
         env = {k: v for k, v in os.environ.items() if k != "DREAM_STUDIO_VERIFY_MOCK"}
         with patch.dict(os.environ, env, clear=True):

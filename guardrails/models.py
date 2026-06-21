@@ -93,7 +93,5 @@ class RuleLoadError(Exception):
     """Raised when rule YAML is malformed or invalid."""
 
 
-
 class EvaluationError(Exception):
     """Raised when rule evaluation fails."""
-
