@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -129,6 +130,7 @@ Return ONLY valid JSON with this exact schema (no prose, no markdown fences):
   "gaps": [
     {{
       "title": "<imperative title for the gap work order>",
+      "category": "<short stable slug naming the underlying gap, e.g. 'missing-tests' or 'task-3-incomplete'; keep it identical across re-reviews of the same gap so it dedups even if the title is reworded>",
       "description": "<what needs to be done and why, including what was missed>",
       "work_order_type": "cleanup" | "infrastructure" | "documentation",
       "tasks": [
@@ -143,6 +145,12 @@ Return ONLY valid JSON with this exact schema (no prose, no markdown fences):
 
 A gap entry is required for every task with verdict "partial" or "missing".
 If all tasks pass, return gaps as an empty array.
+
+GROUNDING RULE — NO INVENTED THRESHOLDS: Only flag a gap against the EXPLICIT
+acceptance-criteria text shown for each task above. Do NOT fabricate numeric
+thresholds (line counts, coverage percentages, file-size limits, etc.) that do
+not literally appear in a task's acceptance criteria. If the AC does not state a
+number, you may not invent one as the basis for a gap.
 
 BEHAVIORAL AC CHECK (warning only, never causes passed=false):
 If the work_order_type is "feature" or "infrastructure" AND none of the task descriptions
@@ -1099,12 +1107,81 @@ def _write_eval_run(
 # ── Gap WO insertion ────────────────────────────────────────────────────────────
 
 
+# WO-SPAWN-LOOP-FIX: regex for numeric thresholds (line counts, coverage %, etc.)
+# that a grader might fabricate. Used to reject gaps that invent a threshold absent
+# from the explicit acceptance-criteria text.
+_THRESHOLD_RE = re.compile(
+    r"(?:<=|>=|<|>|≤|≥|under|below|at most|no more than|at least|over)?\s*\d+\s*"
+    r"(?:lines?|%|percent|chars?|characters?|tokens?|loc)\b",
+    re.IGNORECASE,
+)
+
+
+def _gap_category(gap: dict[str, Any]) -> str:
+    """Return a stable category for a gap, independent of free-text phrasing.
+
+    Prefers an explicit ``category`` field emitted by the grader. Falls back to a
+    normalized form of the title (lowercased, alphanumerics only) so legacy gaps
+    without a category still dedup against an identical title. Rephrased titles
+    only dedup when the grader supplies a stable ``category`` (WO-SPAWN-LOOP-FIX T1).
+    """
+    explicit = (gap.get("category") or "").strip().lower()
+    if explicit:
+        return re.sub(r"[^a-z0-9]+", "-", explicit).strip("-")
+    title = (gap.get("title") or "").strip().lower()
+    return re.sub(r"[^a-z0-9]+", "-", title).strip("-")
+
+
+def _gap_key(reviewed_work_order_id: str, gap: dict[str, Any]) -> str:
+    """Stable dedup key for a spawned gap: (reviewed WO id + gap category).
+
+    Stored as a ``[gap-key: ...]`` marker on the spawned WO's description so later
+    re-reviews recognize prior spawns regardless of title phrasing (T1).
+    """
+    return f"{reviewed_work_order_id}::{_gap_category(gap)}"
+
+
+def _gap_key_marker(gap_key: str) -> str:
+    return f"[gap-key: {gap_key}]"
+
+
+def _filter_invented_threshold_gaps(
+    gaps: list[dict[str, Any]], acceptance_text: str
+) -> list[dict[str, Any]]:
+    """Drop gaps that fabricate a numeric threshold absent from the AC text.
+
+    A grader must only flag gaps against EXPLICIT acceptance criteria. If a gap's
+    title/description/tasks introduce a numeric threshold (e.g. "<=50 lines",
+    "90% coverage") that does not appear in *acceptance_text*, the gap is an
+    invented threshold and is rejected (WO-SPAWN-LOOP-FIX T2).
+    """
+    ac_thresholds = {
+        m.group(0).lower().replace(" ", "") for m in _THRESHOLD_RE.finditer(acceptance_text)
+    }
+    kept: list[dict[str, Any]] = []
+    for gap in gaps:
+        text_parts = [gap.get("title", ""), gap.get("description", "")]
+        for task in gap.get("tasks", []):
+            text_parts.append(task.get("title", ""))
+            text_parts.append(task.get("description", ""))
+        gap_text = " ".join(text_parts)
+        gap_thresholds = {
+            m.group(0).lower().replace(" ", "") for m in _THRESHOLD_RE.finditer(gap_text)
+        }
+        invented = gap_thresholds - ac_thresholds
+        if invented:
+            continue  # fabricated threshold not grounded in the AC — reject
+        kept.append(gap)
+    return kept
+
+
 def _insert_gap_work_orders(
     conn: Any,
     *,
     gaps: list[dict[str, Any]],
     project_id: str,
     milestone_id: str | None,
+    reviewed_work_order_id: str,
     reviewed_wo_title: str,
     reviewed_wo_sequence: int | None,
 ) -> list[dict[str, Any]]:
@@ -1124,18 +1201,35 @@ def _insert_gap_work_orders(
     for gap in gaps:
         wo_type = gap.get("work_order_type", "cleanup")
         gap_title = gap["title"]
+        gap_key = _gap_key(reviewed_work_order_id, gap)
+        marker = _gap_key_marker(gap_key)
 
-        # Dedup: if an open WO with the same title already exists in this milestone,
-        # append the tasks to it instead of spawning a duplicate (WO-SPAWN-DEDUPE).
-        existing_row = None
-        if milestone_id:
-            existing_row = conn.execute(
-                "SELECT work_order_id FROM business_work_orders"
-                " WHERE milestone_id = ? AND title = ?"
-                "   AND status IN ('created', 'in_progress')"
-                " LIMIT 1",
-                (milestone_id, gap_title),
-            ).fetchone()
+        # Dedup on the stable gap key, NOT the free-text title, scoped by project_id
+        # so null-milestone gaps still dedup (T3). Match across ANY status so a closed
+        # prior spawn is never re-spawned (T4 respawn cap). Prefer an open WO so we can
+        # merge tasks into it; a closed match means skip-and-log.
+        existing_row = conn.execute(
+            "SELECT work_order_id, status FROM business_work_orders"
+            " WHERE project_id = ? AND instr(description, ?) > 0"
+            " ORDER BY CASE status"
+            "   WHEN 'in_progress' THEN 0 WHEN 'created' THEN 1 ELSE 2 END"
+            " LIMIT 1",
+            (project_id, marker),
+        ).fetchone()
+
+        if existing_row and existing_row[1] not in ("created", "in_progress"):
+            # T4 respawn cap: a prior spawn for this gap key already exists (closed).
+            # Never spawn it again — skip and record the suppression.
+            spawned.append(
+                {
+                    "work_order_id": existing_row[0],
+                    "title": gap_title,
+                    "type": wo_type,
+                    "gap_key": gap_key,
+                    "respawn_suppressed": True,
+                }
+            )
+            continue
 
         if existing_row:
             target_wo_id = existing_row[0]
@@ -1161,6 +1255,7 @@ def _insert_gap_work_orders(
                     "work_order_id": target_wo_id,
                     "title": gap_title,
                     "type": wo_type,
+                    "gap_key": gap_key,
                     "merged_into_existing": True,
                 }
             )
@@ -1170,7 +1265,7 @@ def _insert_gap_work_orders(
             new_wo_counter += 1
             desc = (
                 f"Spawned by review of '{reviewed_wo_title}' on {now[:10]}: "
-                f"{gap.get('description', '')}"
+                f"{gap.get('description', '')} {marker}"
             )
             conn.execute(
                 "INSERT INTO business_work_orders"
@@ -1207,7 +1302,14 @@ def _insert_gap_work_orders(
                         now,
                     ),
                 )
-            spawned.append({"work_order_id": new_wo_id, "title": gap_title, "type": wo_type})
+            spawned.append(
+                {
+                    "work_order_id": new_wo_id,
+                    "title": gap_title,
+                    "type": wo_type,
+                    "gap_key": gap_key,
+                }
+            )
 
     return spawned
 
@@ -1505,14 +1607,23 @@ def verify_work_order(
         if not migration_safe:
             failure_reasons.append("migration_unsafe")
 
-        # Register gap WOs.
+        # T2: reject gaps that invent a numeric threshold absent from the AC text.
+        acceptance_text = " ".join(
+            f"{t.get('title', '')} {t.get('description', '')} {t.get('acceptance_criteria', '')}"
+            for t in tasks
+        )
+        all_gaps = _filter_invented_threshold_gaps(all_gaps, acceptance_text)
+
+        # Register gap WOs. milestone_id is no longer required (T3): null-milestone
+        # gaps still spawn and dedup, scoped by project_id.
         spawned: list[dict[str, Any]] = []
-        if all_gaps and wo.get("project_id") and wo.get("milestone_id"):
+        if all_gaps and wo.get("project_id"):
             spawned = _insert_gap_work_orders(
                 conn,
                 gaps=all_gaps,
                 project_id=wo["project_id"],
-                milestone_id=wo["milestone_id"],
+                milestone_id=wo.get("milestone_id"),
+                reviewed_work_order_id=work_order_id,
                 reviewed_wo_title=wo["title"],
                 reviewed_wo_sequence=wo.get("sequence_order"),
             )
