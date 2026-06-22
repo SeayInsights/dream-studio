@@ -489,6 +489,8 @@ def _run_one_test_check(expr: str) -> dict[str, Any]:
             [sys.executable, "-m", "pytest", expr, "-q", "--tb=short", "--no-header"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_TEST_CHECK_TIMEOUT,
         )
         stdout = (result.stdout or "") + (result.stderr or "")
@@ -690,6 +692,8 @@ def _collect_git_commits(
                 cwd=str(source_root),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=30,
             )
             if log_result.stdout.strip():
@@ -705,6 +709,8 @@ def _collect_git_commits(
                     cwd=str(source_root),
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=15,
                 )
                 matching_branches = [
@@ -718,6 +724,8 @@ def _collect_git_commits(
                         cwd=str(source_root),
                         capture_output=True,
                         text=True,
+                        encoding="utf-8",
+                        errors="replace",
                         timeout=15,
                     )
                     if log_result.stdout.strip():
@@ -739,6 +747,8 @@ def _collect_git_commits(
                 cwd=str(source_root),
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=30,
             )
             diff_parts.append(f"=== commit {commit_hash} ===\n{show_result.stdout[:8000]}")
@@ -790,6 +800,8 @@ def _spawn_grader(prompt: str) -> subprocess.Popen:  # type: ignore[type-arg]
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     def _feed() -> None:

@@ -673,3 +673,26 @@ def test_sql_check_fail(tmp_path: pytest.TempPathFactory) -> None:
     assert "T1" in results
     assert results["T1"][0]["passed"] is False
     assert results["T1"][0]["error"] is None
+
+
+def test_verify_subprocess_calls_force_utf8_encoding() -> None:
+    """WO a48ec9a2 regression: every subprocess.run/Popen in verify.py must pin
+    encoding='utf-8' so a grader/git/pytest output byte that isn't valid cp1252
+    (e.g. 0x90 on Windows) cannot crash the reader thread and degrade the verdict."""
+    import ast
+
+    src = (Path(__file__).resolve().parents[2] / "core" / "work_orders" / "verify.py").read_text(
+        encoding="utf-8"
+    )
+    offenders: list[int] = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call):
+            func = node.func
+            if (
+                getattr(func, "attr", None) in ("run", "Popen")
+                and getattr(getattr(func, "value", None), "id", None) == "subprocess"
+            ):
+                kwargs = {kw.arg for kw in node.keywords}
+                if "encoding" not in kwargs:
+                    offenders.append(node.lineno)
+    assert not offenders, f"subprocess calls in verify.py missing encoding= at lines {offenders}"
