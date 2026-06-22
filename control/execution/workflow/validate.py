@@ -217,7 +217,7 @@ def validate(data: dict, plugin_root: Path) -> list[str]:
                 errors.append(f'Node "{nid}": estimated_tokens must be a non-negative integer')
 
     # Cycle detection — Kahn's algorithm
-    in_degree = dict.fromkeys(node_ids, 0)
+    in_degree = {nid: 0 for nid in node_ids}
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
     for n in nodes:
         nid = n.get("id")
