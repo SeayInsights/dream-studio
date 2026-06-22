@@ -140,6 +140,25 @@ def reset_warnings():
     yield
 
 
+@pytest.fixture(autouse=True)
+def restore_stdin():
+    """Snapshot and restore ``sys.stdin`` around every test.
+
+    Some tests replace ``sys.stdin`` (e.g. with ``io.StringIO``) and "restore"
+    it to ``sys.__stdin__`` — the real console stream, whose ``isatty()`` is
+    True on Windows. That leaked tty-like stdin crosses into later tests and
+    makes CLI code paths that gate on ``sys.stdin.isatty()`` (notably
+    ``ds work-order start``'s no-brief confirmation prompt) mis-detect an
+    interactive operator and abort early — surfacing as an order-dependent
+    failure of an unrelated test (WO c2d21490). Restoring to the pre-test
+    value (pytest's captured stdin) keeps the leak from crossing test
+    boundaries regardless of how a test mutates stdin.
+    """
+    saved = sys.stdin
+    yield
+    sys.stdin = saved
+
+
 @pytest.fixture
 def spool_root(tmp_path, monkeypatch):
     """Isolated per-test spool root. Sets DS_SPOOL_ROOT via monkeypatch.setenv so subprocess emitters inherit it."""
