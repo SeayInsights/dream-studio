@@ -21,7 +21,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .document_store import DocumentStore
+from core.storage.document_store import DocumentStore
 from core.config.database import transaction
 
 from canonical.events.envelope import CanonicalEventEnvelope
