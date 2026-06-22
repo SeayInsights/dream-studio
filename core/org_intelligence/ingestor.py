@@ -240,9 +240,8 @@ class MultiRepoIngestor:
         """
         if repo_name:
             return f"repo:{repo_name}"
-        else:
-            # Use last directory name
-            return f"repo:{repo_path.name}"
+        # Use last directory name
+        return f"repo:{repo_path.name}"
 
     def _generate_module_id(self, repo_id: str, file_path: str) -> str:
         """Generate deterministic module ID.

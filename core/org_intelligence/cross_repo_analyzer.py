@@ -229,7 +229,6 @@ class CrossRepoAnalyzer:
         # Simple heuristic
         if module_count <= 3 and total_loc <= 1000:
             return "S"
-        elif module_count <= 10 and total_loc <= 5000:
+        if module_count <= 10 and total_loc <= 5000:
             return "M"
-        else:
-            return "L"
+        return "L"

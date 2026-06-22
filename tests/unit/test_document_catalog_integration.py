@@ -139,8 +139,8 @@ class TestDocumentConstants:
     def test_constants_derived_from_enum(self):
         from core.storage.document_store import _ACTIVE, _ARCHIVED
 
-        assert _ACTIVE == to_db_value(DocumentLifecycle.ACTIVE)
-        assert _ARCHIVED == to_db_value(DocumentLifecycle.ARCHIVED)
+        assert to_db_value(DocumentLifecycle.ACTIVE) == _ACTIVE
+        assert to_db_value(DocumentLifecycle.ARCHIVED) == _ARCHIVED
 
 
 # ── Document creation persists lowercase string ─────────────────────────────

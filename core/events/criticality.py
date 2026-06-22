@@ -73,10 +73,9 @@ def get_criticality(event_type: str) -> EventCriticality:
     """
     if event_type in CRITICAL_EVENT_TYPES:
         return EventCriticality.CRITICAL
-    elif event_type in IMPORTANT_EVENT_TYPES:
+    if event_type in IMPORTANT_EVENT_TYPES:
         return EventCriticality.IMPORTANT
-    else:
-        return EventCriticality.OPTIONAL
+    return EventCriticality.OPTIONAL
 
 
 def is_critical(event_type: str) -> bool:

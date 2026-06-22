@@ -212,16 +212,15 @@ class DecisionPointVisitor(ast.NodeVisitor):
 
         if "trust" in snippet_lower or "score" in snippet_lower:
             return "trust_score"
-        elif "ttl" in snippet_lower or "expire" in snippet_lower:
+        if "ttl" in snippet_lower or "expire" in snippet_lower:
             return "ttl_assignment"
-        elif "unlock" in snippet_lower or "pattern" in snippet_lower:
+        if "unlock" in snippet_lower or "pattern" in snippet_lower:
             return "unlock_pattern"
-        elif "block" in snippet_lower or "allow" in snippet_lower:
+        if "block" in snippet_lower or "allow" in snippet_lower:
             return "guardrail_policy"
-        elif "route" in snippet_lower or "dispatch" in snippet_lower:
+        if "route" in snippet_lower or "dispatch" in snippet_lower:
             return "routing"
-        else:
-            return "unknown"
+        return "unknown"
 
     def _get_code_snippet(self, lineno: int) -> str:
         """Extract code snippet around line number."""

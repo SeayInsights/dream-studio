@@ -342,17 +342,16 @@ class RebuffValidator:
                 "CRITICAL: Block this input immediately. "
                 "High-confidence prompt injection detected."
             )
-        elif risk_score >= 0.6:
+        if risk_score >= 0.6:
             return (
                 "HIGH: Strongly recommend blocking or sanitizing this input. "
                 "Multiple injection indicators detected."
             )
-        elif risk_score >= 0.4:
+        if risk_score >= 0.4:
             return "MEDIUM: Review this input carefully. " "Possible injection attempt detected."
-        elif risk_score >= 0.2:
+        if risk_score >= 0.2:
             return "LOW: Log this input for monitoring. " "Minor injection indicators present."
-        else:
-            return "Input appears safe. No significant injection indicators detected."
+        return "Input appears safe. No significant injection indicators detected."
 
     def batch_validate(self, inputs: List[str], context: dict = None) -> List[dict]:
         """

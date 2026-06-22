@@ -166,13 +166,13 @@ class TestExecutionConstants:
     def test_constants_derived_from_enum(self):
         from core.execution.graph import _PENDING, _ACTIVE, _TERMINAL_STATES
 
-        assert _PENDING == to_db_value(ExecutionLifecycle.PENDING)
-        assert _ACTIVE == to_db_value(ExecutionLifecycle.ACTIVE)
-        assert _TERMINAL_STATES == (
+        assert to_db_value(ExecutionLifecycle.PENDING) == _PENDING
+        assert to_db_value(ExecutionLifecycle.ACTIVE) == _ACTIVE
+        assert (
             to_db_value(ExecutionLifecycle.COMPLETED),
             to_db_value(ExecutionLifecycle.FAILED),
             to_db_value(ExecutionLifecycle.SKIPPED),
-        )
+        ) == _TERMINAL_STATES
 
 
 # ── Node creation persists lowercase string ─────────────────────────────────

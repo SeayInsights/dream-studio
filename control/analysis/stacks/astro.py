@@ -43,7 +43,7 @@ class AstroAdapter(StackAdapter):
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
                 if "astro" in deps:
                     confidence += 0.4
-                elif any(dep.startswith("@astrojs/") for dep in deps.keys()):
+                elif any(dep.startswith("@astrojs/") for dep in deps):
                     confidence += 0.3
             except (json.JSONDecodeError, OSError):
                 pass

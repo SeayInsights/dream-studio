@@ -180,12 +180,11 @@ class RealFeedbackEngine:
         if signals_available == 1:
             # Only 1 signal - less confidence, cap at 0.6
             return min(score, 0.6)
-        elif signals_available == 2:
+        if signals_available == 2:
             # 2 signals - moderate confidence, cap at 0.8
             return min(score, 0.8)
-        else:
-            # All signals available - full confidence
-            return score
+        # All signals available - full confidence
+        return score
 
     def store_real_feedback(self, feedback: RealActionFeedback):
         """Store real feedback in database.

@@ -500,27 +500,29 @@ def test_unreviewable_with_passing_ac_proceeds(tmp_path: pytest.TempPathFactory)
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
 
-    with _patch_db(db_path):
-        with patch(
+    with (
+        _patch_db(db_path),
+        patch(
             "core.work_orders.verify._collect_grader",
             return_value=mock_no_summary,
-        ):
-            with patch(
-                "core.work_orders.verify._spawn_grader",
-                return_value=MagicMock(),
-            ):
-                with patch(
-                    "core.work_orders.verify._collect_git_commits",
-                    return_value="diff --git a/fake.py b/fake.py\n+# change",
-                ):
-                    from core.work_orders.close import close_work_order
+        ),
+        patch(
+            "core.work_orders.verify._spawn_grader",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "core.work_orders.verify._collect_git_commits",
+            return_value="diff --git a/fake.py b/fake.py\n+# change",
+        ),
+    ):
+        from core.work_orders.close import close_work_order
 
-                    result = close_work_order(
-                        work_order_id=work_order_id,
-                        source_root=REPO_ROOT,
-                        dream_studio_home=tmp_path,
-                        planning_root=planning_root,
-                    )
+        result = close_work_order(
+            work_order_id=work_order_id,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning_root,
+        )
 
     assert result["ok"] is True, f"Expected ok=True, got: {result}"
     assert result.get("forced") is False
@@ -573,27 +575,29 @@ def test_unreviewable_without_ac_blocks_close(tmp_path: pytest.TempPathFactory) 
     planning_root = tmp_path / "planning"
     mock_no_summary = {"unreviewable": True, "reason": "grader_no_summary"}
 
-    with _patch_db(db_path):
-        with patch(
+    with (
+        _patch_db(db_path),
+        patch(
             "core.work_orders.verify._collect_grader",
             return_value=mock_no_summary,
-        ):
-            with patch(
-                "core.work_orders.verify._spawn_grader",
-                return_value=MagicMock(),
-            ):
-                with patch(
-                    "core.work_orders.verify._collect_git_commits",
-                    return_value="diff --git a/fake.py b/fake.py\n+# change",
-                ):
-                    from core.work_orders.close import close_work_order
+        ),
+        patch(
+            "core.work_orders.verify._spawn_grader",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "core.work_orders.verify._collect_git_commits",
+            return_value="diff --git a/fake.py b/fake.py\n+# change",
+        ),
+    ):
+        from core.work_orders.close import close_work_order
 
-                    result = close_work_order(
-                        work_order_id=work_order_id,
-                        source_root=REPO_ROOT,
-                        dream_studio_home=tmp_path,
-                        planning_root=planning_root,
-                    )
+        result = close_work_order(
+            work_order_id=work_order_id,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning_root,
+        )
 
     assert (
         result["ok"] is False

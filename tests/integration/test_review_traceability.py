@@ -341,22 +341,24 @@ def test_unreviewable_blocks_close(tmp_path: Path) -> None:
         "spawned_work_orders": [],
         "verdict_path": str(wo_dir / "review-verdict.json"),
     }
-    with _patch_db(db_path):
-        with patch(
+    with (
+        _patch_db(db_path),
+        patch(
             "core.work_orders.verify.verify_work_order",
             return_value=mock_verify_result,
-        ):
-            # Remove the pre-existing verdict so auto-verify fires (verdict file absent).
-            (wo_dir / "review-verdict.json").unlink()
-            from core.work_orders.close import close_work_order
+        ),
+    ):
+        # Remove the pre-existing verdict so auto-verify fires (verdict file absent).
+        (wo_dir / "review-verdict.json").unlink()
+        from core.work_orders.close import close_work_order
 
-            result = close_work_order(
-                work_order_id=work_order_id,
-                source_root=REPO_ROOT,
-                dream_studio_home=tmp_path,
-                planning_root=planning_root,
-                force=False,
-            )
+        result = close_work_order(
+            work_order_id=work_order_id,
+            source_root=REPO_ROOT,
+            dream_studio_home=tmp_path,
+            planning_root=planning_root,
+            force=False,
+        )
 
     # Close must be blocked: unreviewable without passing AC
     assert (
@@ -452,21 +454,23 @@ def test_recent_squash_merges_are_reviewable(tmp_path: Path) -> None:
 
     planning_root = tmp_path / "planning2"
 
-    with _patch_db(db_path):
-        with patch(
+    with (
+        _patch_db(db_path),
+        patch(
             "core.work_orders.verify._collect_git_commits",
             return_value=None,
-        ):
-            env = {k: v for k, v in os.environ.items() if k != "DREAM_STUDIO_VERIFY_MOCK"}
-            with patch.dict(os.environ, env, clear=True):
-                from core.work_orders.verify import verify_work_order
+        ),
+    ):
+        env = {k: v for k, v in os.environ.items() if k != "DREAM_STUDIO_VERIFY_MOCK"}
+        with patch.dict(os.environ, env, clear=True):
+            from core.work_orders.verify import verify_work_order
 
-                result = verify_work_order(
-                    work_order_id=wo2_id,
-                    source_root=REPO_ROOT,
-                    dream_studio_home=tmp_path,
-                    planning_root=planning_root,
-                )
+            result = verify_work_order(
+                work_order_id=wo2_id,
+                source_root=REPO_ROOT,
+                dream_studio_home=tmp_path,
+                planning_root=planning_root,
+            )
 
     # Grep-guard: unreviewable must NOT be passed=True
     assert (

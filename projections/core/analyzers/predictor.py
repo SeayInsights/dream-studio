@@ -10,7 +10,6 @@ class Predictor:
 
     def __init__(self):
         """Initialize Predictor"""
-        pass
 
     def forecast_linear(
         self, timeline: List[Dict[str, Any]], metric_key: str = "count", steps_ahead: int = 7
@@ -353,4 +352,4 @@ class Predictor:
             }
 
         # Default: no pattern
-        return {i: 1.0 for i in range(7)}
+        return dict.fromkeys(range(7), 1.0)

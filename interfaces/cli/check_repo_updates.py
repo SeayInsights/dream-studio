@@ -254,18 +254,17 @@ def main() -> int:
                 print(f"  * {error}")
 
         return 1  # Exit code 1 indicates updates found
+    if args.verbose:
+        print("All repos are up to date.")
     else:
-        if args.verbose:
-            print("All repos are up to date.")
-        else:
-            print("No updates found.")
+        print("No updates found.")
 
-        if errors:
-            print(f"\nErrors checking {len(errors)} repos:")
-            for error in errors:
-                print(f"  * {error}")
+    if errors:
+        print(f"\nErrors checking {len(errors)} repos:")
+        for error in errors:
+            print(f"  * {error}")
 
-        return 0
+    return 0
 
 
 if __name__ == "__main__":

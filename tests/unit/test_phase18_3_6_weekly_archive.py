@@ -47,7 +47,6 @@ def _set_mtime_in_prior_week(path: Path) -> None:
 def _set_mtime_in_current_week(path: Path) -> None:
     """Set file mtime to today (outside the prior-week archive window)."""
     # File already has current mtime from write; this is a no-op but makes intent clear.
-    pass
 
 
 # ---------------------------------------------------------------------------

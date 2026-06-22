@@ -265,10 +265,9 @@ def run_all_tests():
     if all(results):
         print("\n[OK] All write paths verified successfully")
         return 0
-    else:
-        print("\n[FAIL] Some write paths failed verification")
-        print("Review trace logs for breakpoints")
-        return 1
+    print("\n[FAIL] Some write paths failed verification")
+    print("Review trace logs for breakpoints")
+    return 1
 
 
 if __name__ == "__main__":

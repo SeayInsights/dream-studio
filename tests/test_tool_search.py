@@ -868,9 +868,8 @@ class TestSemanticSearch:
             if isinstance(texts, list) and len(texts) == 1:
                 # Query encoding
                 return np.array([query_embedding])
-            else:
-                # Corpus encoding
-                return np.array(tool_embeddings)
+            # Corpus encoding
+            return np.array(tool_embeddings)
 
         mock_model.encode.side_effect = encode_side_effect
 
@@ -956,8 +955,7 @@ class TestHybridSearch:
         def encode_side_effect(texts, show_progress_bar=False):
             if isinstance(texts, list) and len(texts) == 1:
                 return np.array([query_embedding])
-            else:
-                return np.array(tool_embeddings)
+            return np.array(tool_embeddings)
 
         mock_model.encode.side_effect = encode_side_effect
 
@@ -1008,8 +1006,7 @@ class TestHybridSearch:
         def encode_side_effect(texts, show_progress_bar=False):
             if isinstance(texts, list) and len(texts) == 1:
                 return np.array([query_embedding])
-            else:
-                return np.array(tool_embeddings)
+            return np.array(tool_embeddings)
 
         mock_model.encode.side_effect = encode_side_effect
 
@@ -1041,8 +1038,7 @@ class TestHybridSearch:
         def encode_side_effect(texts, show_progress_bar=False):
             if isinstance(texts, list) and len(texts) == 1:
                 return np.array([query_embedding])
-            else:
-                return np.array(tool_embeddings)
+            return np.array(tool_embeddings)
 
         mock_model.encode.side_effect = encode_side_effect
 

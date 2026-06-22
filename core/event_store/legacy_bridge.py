@@ -166,24 +166,21 @@ class LegacyBridge:
         if "workflow" in activity_type:
             if status == "failed":
                 return "workflow.execution.failed"
-            elif status == "started" or status == "pending" or status == "in_progress":
+            if status == "started" or status == "pending" or status == "in_progress":
                 return "workflow.execution.started"
-            else:
-                return "workflow.execution.completed"
+            return "workflow.execution.completed"
 
         if "skill" in activity_type:
             if status == "failed":
                 return "skill.execution.failed"
-            elif status == "started" or status == "pending" or status == "in_progress":
+            if status == "started" or status == "pending" or status == "in_progress":
                 return "skill.execution.started"
-            else:
-                return "skill.execution.completed"
+            return "skill.execution.completed"
 
         if "task" in activity_type:
             if status == "completed" or status == "done":
                 return "task.completed"
-            else:
-                return "task.updated"
+            return "task.updated"
 
         if "prd" in activity_type:
             return "prd.updated"
@@ -191,29 +188,27 @@ class LegacyBridge:
         # Ultimate fallback: generic execution event
         if status == "failed":
             return "execution.failed"
-        elif status == "started" or status == "pending" or status == "in_progress":
+        if status == "started" or status == "pending" or status == "in_progress":
             return "execution.started"
-        else:
-            return "execution.completed"
+        return "execution.completed"
 
     def _infer_domain(self, activity_type: str) -> str:
         """Infer domain from activity_type."""
         if "workflow" in activity_type or "session" in activity_type or "hook" in activity_type:
             return "execution"
-        elif "research" in activity_type:
+        if "research" in activity_type:
             return "research"
-        elif "prd" in activity_type:
+        if "prd" in activity_type:
             return "prd"
-        elif "task" in activity_type:
+        if "task" in activity_type:
             return "task"
-        elif "lesson" in activity_type:
+        if "lesson" in activity_type:
             return "ingestion"
-        elif "token" in activity_type:
+        if "token" in activity_type:
             return "telemetry"
-        elif "security" in activity_type:
+        if "security" in activity_type:
             return "security"
-        else:
-            return "unknown"
+        return "unknown"
 
     def _extract_entity(self, activity_type: str) -> str:
         """Extract entity from activity_type."""

@@ -282,7 +282,7 @@ def test_migration_creates_required_execution_telemetry_tables(tmp_path: Path) -
     finally:
         conn.close()
 
-    assert REQUIRED_TABLES <= tables
+    assert tables >= REQUIRED_TABLES
 
 
 def test_spine_writes_reads_and_global_analytics(tmp_path: Path) -> None:

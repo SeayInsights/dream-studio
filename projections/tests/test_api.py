@@ -1,6 +1,5 @@
 """Unit tests for analytics API"""
 
-import pytest
 from fastapi.testclient import TestClient
 from projections.api.main import app
 

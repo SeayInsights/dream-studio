@@ -349,7 +349,6 @@ class MemorySearch:
 
     def close(self) -> None:
         """No-op for compatibility. Connections are now managed per-operation."""
-        pass
 
     def __enter__(self) -> "MemorySearch":
         return self

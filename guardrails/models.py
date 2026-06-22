@@ -92,10 +92,6 @@ class GuardrailDecision(BaseModel):
 class RuleLoadError(Exception):
     """Raised when rule YAML is malformed or invalid."""
 
-    pass
-
 
 class EvaluationError(Exception):
     """Raised when rule evaluation fails."""
-
-    pass

@@ -38,7 +38,7 @@ def test_migration_038_creates_shared_intelligence_tables(tmp_path: Path) -> Non
             ).fetchall()
         }
 
-    assert REQUIRED_SHARED_INTELLIGENCE_TABLES <= tables
+    assert tables >= REQUIRED_SHARED_INTELLIGENCE_TABLES
 
 
 def test_records_make_sqlite_primary_authority_and_files_exports(tmp_path: Path) -> None:

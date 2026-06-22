@@ -172,9 +172,12 @@ def compute_analytics(sessions: list[dict], window_days: int) -> dict:
 
             # Failure: handoff with broken_items, recap with risk_flags
             is_failed = False
-            if s.get("type") == "handoff" and s.get("broken_items"):
-                is_failed = True
-            elif s.get("type") == "recap" and s.get("risk_flags"):
+            if (
+                s.get("type") == "handoff"
+                and s.get("broken_items")
+                or s.get("type") == "recap"
+                and s.get("risk_flags")
+            ):
                 is_failed = True
             if is_failed:
                 skill_failed[sk] += 1

@@ -162,7 +162,7 @@ def summarize_findings(text: str) -> dict:
     # Sort by severity order: critical → high → medium → low
     findings.sort(key=lambda f: _SEVERITY_ORDER.index(f["severity"]))
 
-    counts: dict[str, int] = {sev: 0 for sev in _SEVERITY_ORDER}
+    counts: dict[str, int] = dict.fromkeys(_SEVERITY_ORDER, 0)
     for f in findings:
         counts[f["severity"]] += 1
 

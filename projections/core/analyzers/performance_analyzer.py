@@ -9,7 +9,6 @@ class PerformanceAnalyzer:
 
     def __init__(self):
         """Initialize PerformanceAnalyzer"""
-        pass
 
     def analyze_skill_performance(self, skill_metrics: Dict[str, Any]) -> Dict[str, Any]:
         """

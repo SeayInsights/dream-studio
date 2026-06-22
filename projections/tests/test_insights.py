@@ -1,6 +1,5 @@
 """Unit tests for analytics insights"""
 
-import pytest
 from projections.core.insights.insight_engine import InsightEngine
 from projections.core.insights.root_cause import RootCauseAnalyzer
 from projections.core.insights.recommendations import RecommendationEngine

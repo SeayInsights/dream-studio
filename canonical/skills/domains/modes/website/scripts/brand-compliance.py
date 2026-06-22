@@ -276,9 +276,9 @@ def load_brand_tokens(path: str) -> dict:
         elif isinstance(obj, dict):
             # Common token shapes: {value: "#hex"}, {color: "#hex"}, or direct key-value
             for k, v in obj.items():
-                if k.lower() in ("value", "color", "hex", "default"):
-                    _collect_colors(v)
-                elif isinstance(v, (str, dict, list)):
+                if k.lower() in ("value", "color", "hex", "default") or isinstance(
+                    v, (str, dict, list)
+                ):
                     _collect_colors(v)
 
     color_data = (
@@ -311,9 +311,14 @@ def load_brand_tokens(path: str) -> dict:
                 _collect_fonts(item)
         elif isinstance(obj, dict):
             for k, v in obj.items():
-                if k.lower() in ("family", "font-family", "display", "body", "heading", "value"):
-                    _collect_fonts(v)
-                elif isinstance(v, (str, dict, list)):
+                if k.lower() in (
+                    "family",
+                    "font-family",
+                    "display",
+                    "body",
+                    "heading",
+                    "value",
+                ) or isinstance(v, (str, dict, list)):
                     _collect_fonts(v)
 
     _collect_fonts(font_data)

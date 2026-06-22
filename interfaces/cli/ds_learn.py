@@ -113,7 +113,7 @@ def cmd_review(args) -> int:
                 except Exception as exc:
                     print(f"  Error: {exc}", file=sys.stderr)
                 break
-            elif choice in ("s", "skip"):
+            if choice in ("s", "skip"):
                 try:
                     write_classifier, write_conn = _get_classifier(db_path)
                     try:
@@ -125,7 +125,7 @@ def cmd_review(args) -> int:
                 except Exception as exc:
                     print(f"  Error: {exc}", file=sys.stderr)
                 break
-            elif choice in ("d", "defer"):
+            if choice in ("d", "defer"):
                 try:
                     write_classifier, write_conn = _get_classifier(db_path)
                     try:
@@ -137,12 +137,11 @@ def cmd_review(args) -> int:
                 except Exception as exc:
                     print(f"  Error: {exc}", file=sys.stderr)
                 break
-            elif choice in ("q", "quit", "exit"):
+            if choice in ("q", "quit", "exit"):
                 print(f"\nStopped. {i - 1} reviewed.")
                 _print_summary(acted, skipped, deferred)
                 return 0
-            else:
-                print("  Invalid choice. Use: c=confirm  s=skip  d=defer  q=quit")
+            print("  Invalid choice. Use: c=confirm  s=skip  d=defer  q=quit")
 
     # Phase 19.7: confirm/skip/defer all change extension state
     if acted + skipped + deferred > 0:
@@ -281,7 +280,7 @@ def cmd_expand(args) -> int:
                         print("    (signal returned to deferred state)")
                     failed += 1
                 break
-            elif choice in ("r", "reject"):
+            if choice in ("r", "reject"):
                 conn3 = (
                     get_connection()
                     if db_path is None
@@ -303,12 +302,11 @@ def cmd_expand(args) -> int:
                 print("  → Rejected (extension row removed)")
                 rejected += 1
                 break
-            elif choice in ("q", "quit"):
+            if choice in ("q", "quit"):
                 print(f"\nStopped. {i - 1} processed.")
                 print(f"Summary: {accepted} compiled, {rejected} rejected, {failed} failed.")
                 return 0
-            else:
-                print("  Invalid. Use: c=compile+accept  r=reject  q=quit")
+            print("  Invalid. Use: c=compile+accept  r=reject  q=quit")
 
     # Phase 19.7: invalidate cache after any accept/reject (extension state changed)
     if accepted + rejected > 0:

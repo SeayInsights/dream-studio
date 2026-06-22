@@ -84,30 +84,29 @@ def save_run_result(
             conn.close()
             logger.info("Baseline established for eval %s: %.3f", eval_id, composite_score)
             return True, False
-        else:
-            baseline_score = existing["baseline_score"]
-            drop = baseline_score - composite_score
-            regression_flagged = drop > regression_threshold
-            conn.execute(
-                """UPDATE ds_eval_baselines
+        baseline_score = existing["baseline_score"]
+        drop = baseline_score - composite_score
+        regression_flagged = drop > regression_threshold
+        conn.execute(
+            """UPDATE ds_eval_baselines
                    SET last_run_score = ?, last_run_at = datetime('now'),
                        regression_flag = ?, run_count = run_count + 1,
                        last_updated_at = datetime('now')
                    WHERE eval_id = ? AND version = ?""",
-                (composite_score, 1 if regression_flagged else 0, eval_id, version),
+            (composite_score, 1 if regression_flagged else 0, eval_id, version),
+        )
+        conn.commit()
+        conn.close()
+        if regression_flagged:
+            logger.warning(
+                "REGRESSION flagged for eval %s: baseline=%.3f, current=%.3f, drop=%.3f (threshold=%.3f)",
+                eval_id,
+                baseline_score,
+                composite_score,
+                drop,
+                regression_threshold,
             )
-            conn.commit()
-            conn.close()
-            if regression_flagged:
-                logger.warning(
-                    "REGRESSION flagged for eval %s: baseline=%.3f, current=%.3f, drop=%.3f (threshold=%.3f)",
-                    eval_id,
-                    baseline_score,
-                    composite_score,
-                    drop,
-                    regression_threshold,
-                )
-            return False, regression_flagged
+        return False, regression_flagged
     except sqlite3.OperationalError:
         logger.debug("ds_eval_baselines table not found — skipping baseline check")
         return False, False

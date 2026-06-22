@@ -10,7 +10,7 @@ previously scattered across 72 database tables and 40+ event types.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import Dict, FrozenSet, List, Optional, Set
 
 # ============================================================================

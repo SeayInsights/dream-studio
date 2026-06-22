@@ -95,9 +95,8 @@ def analyze_repositories(
         return _analyze_domain_specific(
             validated_repos, domain, output_format, patterns_filter, verbose
         )
-    else:
-        # General SKILL.md pattern analysis (backward compatible)
-        return _analyze_general_patterns(validated_repos, output_format, patterns_filter, verbose)
+    # General SKILL.md pattern analysis (backward compatible)
+    return _analyze_general_patterns(validated_repos, output_format, patterns_filter, verbose)
 
 
 def analyze_single_repo(
@@ -283,12 +282,11 @@ def _estimate_effort(recommended_patterns: List[Dict]) -> str:
 
     if pattern_count == 0:
         return "0 hours (no patterns recommended)"
-    elif pattern_count <= 2:
+    if pattern_count <= 2:
         return f"{pattern_count * 4}-{pattern_count * 6} hours (small)"
-    elif pattern_count <= 5:
+    if pattern_count <= 5:
         return f"{pattern_count * 6}-{pattern_count * 10} hours (medium)"
-    else:
-        return f"{pattern_count * 8}-{pattern_count * 15} hours (large)"
+    return f"{pattern_count * 8}-{pattern_count * 15} hours (large)"
 
 
 def _analyze_general_patterns(
@@ -331,10 +329,10 @@ def _analyze_general_patterns(
     # Format output
     if output_format == "json":
         return json_formatter.format_report(report)
-    elif output_format == "markdown":
+    if output_format == "markdown":
         return markdown_formatter.format_report(report)
-    else:  # dict
-        return report
+    # dict
+    return report
 
 
 def _analyze_domain_specific(
@@ -422,10 +420,10 @@ def _analyze_domain_specific(
         import json
 
         return json.dumps(results, indent=2)
-    elif output_format == "markdown":
+    if output_format == "markdown":
         return _format_domain_results_markdown(results)
-    else:  # dict
-        return results
+    # dict
+    return results
 
 
 def _format_domain_results_markdown(results: Dict) -> str:

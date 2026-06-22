@@ -105,11 +105,11 @@ class TestDefaultRetrieveStates:
             assert type(s) is str
 
     def test_derived_from_enum(self):
-        assert _DEFAULT_RETRIEVE_STATES == (
+        assert (
             to_db_value(MemoryLifecycle.ACTIVE),
             to_db_value(MemoryLifecycle.PROMOTED),
             to_db_value(MemoryLifecycle.CANDIDATE),
-        )
+        ) == _DEFAULT_RETRIEVE_STATES
 
 
 # ── Catalog-backed transition validation ────────────────────────────────────

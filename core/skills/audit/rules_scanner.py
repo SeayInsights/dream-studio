@@ -235,13 +235,13 @@ def _run_skill_specific_checks(
     """Run hand-coded important checks for specific skills."""
     if skill_id == "architecture":
         return _check_architecture(scope_path, files)
-    elif skill_id == "ops":
+    if skill_id == "ops":
         return _check_ops(scope_path, files)
-    elif skill_id == "pre-launch":
+    if skill_id == "pre-launch":
         return _check_pre_launch(scope_path, context)
-    elif skill_id == "testing":
+    if skill_id == "testing":
         return _check_testing(scope_path, files)
-    elif skill_id == "types-deps":
+    if skill_id == "types-deps":
         return _check_types_deps(scope_path, files)
     return []
 
@@ -724,8 +724,8 @@ def _severity_to_tier(severity: str, skill_id: str) -> str:
     escalated = {"security", "database", "database-compliance"}
     if severity == "critical":
         return "T1"
-    elif severity == "high":
+    if severity == "high":
         return "T1" if skill_id in escalated else "T2"
-    elif severity == "medium":
+    if severity == "medium":
         return "T2"
     return "T3"

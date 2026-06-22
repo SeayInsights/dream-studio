@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-import heapq
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 
 
@@ -162,7 +161,7 @@ class Context7Manager:
 
         if ext == ".py":
             return self._extract_python_skeleton(file_path, content)
-        elif ext in {".js", ".ts", ".tsx", ".jsx"}:
+        if ext in {".js", ".ts", ".tsx", ".jsx"}:
             return self._extract_js_skeleton(file_path, content)
 
         return None

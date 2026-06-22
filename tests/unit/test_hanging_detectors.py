@@ -56,6 +56,66 @@ def test_detects_stale_removed_symbol_test(tmp_path: Path) -> None:
     ), "unrelated test must not be flagged"
 
 
+def test_stale_symbol_ignores_deleted_test_data_literals(tmp_path: Path) -> None:
+    """WO d3221b4d: deleting a dead file whose fixture-like string literals coincide
+    with an unchanged test's fixtures must NOT flag that test.
+
+    A bare quoted-string literal is not a removed API symbol; only definitions and
+    HTML/JS attribute ids are. Without this, large dead-code deletions flood the gate.
+    """
+    repo = tmp_path
+    # An unchanged test that uses 'token-1' / 'sess-1' as its own fixture data.
+    _write(
+        repo / "tests" / "unit" / "test_ingest.py",
+        "def test_ingest():\n"
+        "    rows = [{'id': 'token-1'}, {'session': 'sess-1'}]\n"
+        "    assert rows[0]['id'] == 'token-1'\n",
+    )
+    # The diff DELETES a dead non-test source file whose sample data used the same
+    # literals (e.g. a removed backfill script) — they are not API symbols.
+    diff = (
+        "diff --git a/scripts/backfill_components.py b/scripts/backfill_components.py\n"
+        "--- a/scripts/backfill_components.py\n"
+        "+++ /dev/null\n"
+        "@@ -1,2 +0,0 @@\n"
+        "-    sample = {'id': 'token-1', 'session': 'sess-1'}\n"
+        "-    return sample\n"
+    )
+
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    assert not findings, f"deleted test-data literals must not flag tests; got {findings}"
+
+
+def test_stale_symbol_flags_dotted_patch_target(tmp_path: Path) -> None:
+    """WO d3221b4d (recall): a removed def referenced as a DOTTED string target
+    (mock.patch("mod.removed_func")) is still genuinely stale and must flag —
+    even though it lives inside a string literal."""
+    repo = tmp_path
+    _write(
+        repo / "tests" / "unit" / "test_patches.py",
+        "from unittest import mock\n\n"
+        "def test_it():\n"
+        "    with mock.patch('core.svc.removed_func') as m:\n"
+        "        m.return_value = 1\n",
+    )
+    diff = (
+        "diff --git a/core/svc.py b/core/svc.py\n"
+        "--- a/core/svc.py\n"
+        "+++ b/core/svc.py\n"
+        "@@ -1,2 +1,1 @@\n"
+        "-def removed_func():\n"
+        "-    return 1\n"
+        "+pass\n"
+    )
+
+    findings = detect_stale_removed_symbol_tests(diff, repo_root=repo)
+    flagged = {(f["path"], f["symbol"]) for f in findings}
+    assert (
+        "tests/unit/test_patches.py",
+        "removed_func",
+    ) in flagged, f"dotted patch-target of a removed def must be flagged; got {flagged}"
+
+
 def test_detects_changed_signature_caller(tmp_path: Path) -> None:
     """#353 class: a function gains a parameter; an un-updated caller still references it."""
     repo = tmp_path

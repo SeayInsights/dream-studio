@@ -332,7 +332,7 @@ def score_repo(
     Returns a dict with all CSV column values for this repo.
     """
     # Count findings per category
-    counts: dict[str, int] = {cat: 0 for cat in DEDUCTIONS}
+    counts: dict[str, int] = dict.fromkeys(DEDUCTIONS, 0)
 
     for finding in findings:
         rule_id = finding.get("ruleId", "")

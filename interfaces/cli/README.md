@@ -9,8 +9,6 @@ All scripts are run from the repo root with `py scripts/<name>.py`.
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `session_analytics.py` | Parse session history for trends | `py scripts/session_analytics.py [--days 90]` |
-| `memory_audit.py` | Scan memory files for staleness/conflicts | `py scripts/memory_audit.py [--days 60]` |
 | `research_cache.py` | Manage the advisory local research cache | `py interfaces/cli/research_cache.py <command>` |
 | `source_ranker.py` | Score research source quality | `py interfaces/cli/source_ranker.py --sources <file>` |
 | `resume_from_handoff.py` | Generate a session resume briefing | `py scripts/resume_from_handoff.py [file]` |
@@ -29,58 +27,10 @@ All scripts are run from the repo root with `py scripts/<name>.py`.
 | `sync_docs.py` | Regenerate workflow table in README.md | `py scripts/sync_docs.py` |
 | `sync-cache.ps1` | Mirror skills into Claude plugin cache | `powershell.exe -ExecutionPolicy Bypass -File interfaces/cli/sync-cache.ps1` |
 | `sync-plugin-cache.ps1` | Refresh local Claude plugin cache from this repo | `powershell.exe -ExecutionPolicy Bypass -File interfaces/cli/sync-plugin-cache.ps1 -DryRun` |
-| `bom.py` | Emit a build snapshot as bom.json | `py scripts/bom.py [output.json]` |
 
 ---
 
 ## Detailed Usage
-
-### session_analytics.py
-
-Parses historical session data from `.sessions/` directories, detects patterns, and produces trend reports.
-
-**Arguments:**
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--days N` | 90 | Look-back window in days |
-| `--project PATH` | (all) | Limit to a specific project directory |
-| `--json` | off | Print raw JSON only (skip formatted table) |
-
-**Output:** `~/.dream-studio/state/session-analytics.json` plus a formatted summary table on stdout.
-
-**Examples:**
-```
-py scripts/session_analytics.py
-py scripts/session_analytics.py --days 30
-py scripts/session_analytics.py --project C:\Users\Example User\builds\dream-studio --json
-```
-
----
-
-### memory_audit.py
-
-Scans Claude memory files (`~/.claude/projects/*/memory/`) for staleness, conflicts, and gaps.
-Parses YAML frontmatter from each memory `.md` file to detect outdated entries.
-
-**Arguments:**
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--days N` | 60 | Files not updated within N days are flagged stale |
-| `--memory-path PATH` | (auto-discover) | Scan a specific memory directory instead of all |
-| `--verbose` | off | Show details for every file, not just flagged ones |
-| `--json` | off | Output results as JSON |
-
-**Examples:**
-```
-py scripts/memory_audit.py
-py scripts/memory_audit.py --days 30 --verbose
-py scripts/memory_audit.py --memory-path ~/.claude/projects/my-project/memory/
-py scripts/memory_audit.py --json
-```
-
----
 
 ### research_cache.py
 
@@ -431,21 +381,6 @@ powershell.exe -ExecutionPolicy Bypass -File interfaces/cli/sync-plugin-cache.ps
 Apply from the repo root:
 ```powershell
 powershell.exe -ExecutionPolicy Bypass -File interfaces/cli/sync-plugin-cache.ps1
-```
-
----
-
-### bom.py
-
-Emits a build snapshot as `bom.json`: current git SHA, Python version, installed pip packages,
-and a list of failed tests.
-
-**Arguments:** Optional output path (default: `bom.json`).
-
-**Examples:**
-```
-py scripts/bom.py
-py scripts/bom.py build/bom.json
 ```
 
 ---

@@ -145,7 +145,7 @@ class RuleManager:
             "severity",
             "enabled",
         ]
-        invalid_fields = [field for field in updates.keys() if field not in allowed_fields]
+        invalid_fields = [field for field in updates if field not in allowed_fields]
         if invalid_fields:
             raise ValueError(f"Invalid fields: {', '.join(invalid_fields)}")
 
