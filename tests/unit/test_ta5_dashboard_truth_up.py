@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -22,7 +23,10 @@ WO_A = "33333333-3333-3333-3333-333333333333"
 WO_B = "44444444-4444-4444-4444-444444444444"
 TASK_A = "55555555-5555-5555-5555-555555555555"
 TASK_B = "66666666-6666-6666-6666-666666666666"
-NOW = "2026-05-22T12:00:00+00:00"
+# Anchor test data relative to now so it stays inside any days=N query window.
+# A hardcoded absolute date is a time-bomb: it silently falls outside the 30-day
+# cutoff once wall-clock passes it (this broke CI on 2026-06-21).
+NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
 
 # ── in-memory DB helpers ───────────────────────────────────────────────────────
