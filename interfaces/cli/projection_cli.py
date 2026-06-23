@@ -10,9 +10,8 @@ from __future__ import annotations
 import os
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -288,7 +287,7 @@ def _cmd_rebuild(name: str) -> int:
     return 0
 
 
-def _cmd_dl_list(projection_filter: Optional[str]) -> int:
+def _cmd_dl_list(projection_filter: str | None) -> int:
     """List dead-letter entries, optionally filtered by projection name."""
     try:
         if projection_filter:
@@ -330,7 +329,7 @@ def _cmd_dl_list(projection_filter: Optional[str]) -> int:
     return 0
 
 
-def _fetch_dl_rows(projection_filter: Optional[str]) -> list:
+def _fetch_dl_rows(projection_filter: str | None) -> list:
     with get_connection(read_only=True) as conn:
         if projection_filter:
             return conn.execute(
@@ -353,7 +352,7 @@ def _fetch_dl_rows(projection_filter: Optional[str]) -> list:
 
 def _cmd_dl_retry(event_id: str) -> int:
     """Re-queue a dead-letter entry: set status='active', add to retry queue."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     try:
         with get_connection(read_only=True) as conn:
             dl_row = conn.execute(
@@ -418,7 +417,7 @@ def _cmd_dl_resolve(event_id: str) -> int:
 # ── Daemon commands ───────────────────────────────────────────────────────────
 
 
-def _read_pid() -> Optional[int]:
+def _read_pid() -> int | None:
     """Return the PID from the PID file, or None if file absent / unreadable."""
     pid_path = _pid_file()
     if not pid_path.exists():

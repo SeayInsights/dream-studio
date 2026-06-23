@@ -213,7 +213,7 @@ def main() -> int:
         return 1
 
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = yaml.safe_load(fh)
     except yaml.YAMLError as exc:
         print(f"ERROR: Failed to parse YAML: {exc}")

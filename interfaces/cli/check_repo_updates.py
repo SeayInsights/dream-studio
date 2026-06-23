@@ -8,7 +8,7 @@ database if changed.
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 from core.config.database import transaction, DatabaseContext  # noqa: E402
 from control.analysis.repo_analyzer import analyze_repo  # noqa: E402
 
-_NOW = lambda: datetime.now(timezone.utc).isoformat()
+_NOW = lambda: datetime.now(UTC).isoformat()
 
 
 def parse_github_url(url: str) -> tuple[str, str] | None:
@@ -87,7 +87,7 @@ def get_latest_commit_sha(repo_url: str, verbose: bool = False) -> str | None:
         if response.status_code == 403:
             # Rate limit hit
             if verbose:
-                print(f"  [!] GitHub API rate limit exceeded")
+                print("  [!] GitHub API rate limit exceeded")
             return None
 
         response.raise_for_status()
@@ -220,7 +220,7 @@ def main() -> int:
                 if args.verbose:
                     print(f"  [!] Error initializing SHA: {e}")
         elif args.verbose:
-            print(f"  [OK] No changes")
+            print("  [OK] No changes")
 
         if args.verbose:
             print()
@@ -238,7 +238,7 @@ def main() -> int:
                 and update["trust_score"] is not None
                 and update["trust_score"] >= 0.9
             ):
-                print(f"    (High-trust repo, queued for re-analysis)")
+                print("    (High-trust repo, queued for re-analysis)")
                 try:
                     # Re-analyze the repo to extract updated patterns/blocks
                     result = analyze_repo(update["repo_name"], shallow=True)

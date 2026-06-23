@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 import sys
 
@@ -219,7 +219,7 @@ def harvest_specs(db_path: Path | None = None, extra_roots: list[Path] | None = 
         return 0
 
     conn = get_connection()
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     count = 0
 
     for specs_root, project_root in roots:

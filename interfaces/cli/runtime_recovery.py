@@ -8,7 +8,7 @@ import hashlib
 import json
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -41,11 +41,7 @@ class RecoveryConfig:
 def _iso_mtime(path: Path) -> str | None:
     if not path.is_file():
         return None
-    return (
-        datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat().replace("+00:00", "Z")
 
 
 def _file_metadata(path: Path) -> dict[str, Any]:
