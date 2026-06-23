@@ -59,6 +59,10 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # duckdb_execution_events — DuckDB execution log created by DuckDBStore in a
     # separate analytics SQLite file (not studio.db). No migration file.
     "duckdb_execution_events": "core/analytics/duckdb_store.py:108",
+    # events_fact — DuckDB wide read-model fact table derived from canonical events
+    # by the projection runner. Separate analytics store (aggregate_metrics.db),
+    # not studio.db; no migration file.
+    "events_fact": "core/analytics/duckdb_store.py:270",
     # ds_files — file-tracking table created by FileStore at module load.
     # Not in studio.db; no migration file.
     "ds_files": "core/files/store.py:25",
