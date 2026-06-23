@@ -256,3 +256,46 @@ class TestStartWorkOrderSequenceGuard:
         assert result.get("ok") is True
         assert "sequence_warning" not in result
         assert "sequence_blockers" not in result
+
+
+class TestGatesReadResolvedDbPath:
+    """WO c68f9e14: `_check_preflight_gate` and `_get_pending_audits_for_project`
+    read the caller-resolved `db_path` (the DB the work order lives in), not an
+    ambient/singleton connection. Both now take an explicit `db_path` like
+    `_check_sequence_order`.
+    """
+
+    def test_preflight_gate_reads_the_passed_db(self, db_path):
+        from core.work_orders.start import _check_preflight_gate
+
+        # Clean DB → gate passes.
+        assert _check_preflight_gate(WO_FIRST, db_path) is None
+
+        # An open critical finding written to THIS db must be seen by the gate —
+        # proving it reads the passed db_path, not an ambient connection.
+        conn = sqlite3.connect(str(db_path))
+        try:
+            conn.execute(
+                "INSERT INTO business_work_order_preflights"
+                " (finding_id, work_order_id, finding_type, source, severity, summary,"
+                "  author_type, status, created_at, updated_at)"
+                " VALUES ('f-c68f9e14', ?, 'security', 'scanner', 'critical', 'boom',"
+                "         'agent', 'open', ?, ?)",
+                (WO_FIRST, NOW, NOW),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        blocked = _check_preflight_gate(WO_FIRST, db_path)
+        assert blocked is not None
+        assert blocked["preflight_blocked"] is True
+        assert blocked["finding_count"] == 1
+
+    def test_pending_audits_reads_the_passed_db(self, db_path):
+        from core.work_orders.start import _get_pending_audits_for_project
+
+        # No deferred/scheduled audits in this db → empty advisory.
+        assert _get_pending_audits_for_project(PROJECT_ID, db_path) == []
+        # None project_id short-circuits regardless of db.
+        assert _get_pending_audits_for_project(None, db_path) == []
