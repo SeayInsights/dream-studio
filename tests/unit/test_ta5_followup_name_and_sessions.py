@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import pytest
@@ -14,7 +15,10 @@ import pytest
 PROJECT_KNOWN = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 PROJECT_UNMAPPED = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 KNOWN_NAME = "Dream Studio"
-NOW = "2026-05-22T12:00:00+00:00"
+# Anchor test data relative to now so it stays inside any days=N query window.
+# A hardcoded absolute date is a time-bomb: it silently falls outside the 30-day
+# cutoff once wall-clock passes it (this broke CI on 2026-06-21).
+NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
 
 # ── in-memory DB helpers ───────────────────────────────────────────────────────
@@ -198,7 +202,7 @@ class TestSessionMetricsNoneOutcomes:
 
         db_file = tmp_path / "test.db"
         conn = _sqlite3.connect(str(db_file))
-        conn.executescript("""
+        conn.executescript(f"""
             CREATE TABLE raw_sessions (
                 session_id TEXT PRIMARY KEY,
                 started_at TEXT NOT NULL,
@@ -206,8 +210,8 @@ class TestSessionMetricsNoneOutcomes:
                 outcome TEXT,
                 project_id TEXT
             );
-            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '2026-05-22T10:00:00', '2026-05-22T10:05:00', NULL, NULL);
-            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '2026-05-22T10:10:00', '2026-05-22T10:15:00', 'completed', NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '{NOW[:10]}T10:00:00', '{NOW[:10]}T10:05:00', NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '{NOW[:10]}T10:10:00', '{NOW[:10]}T10:15:00', 'completed', NULL);
         """)
         conn.commit()
         conn.close()
@@ -227,7 +231,7 @@ class TestSessionMetricsNoneOutcomes:
 
         db_file = tmp_path / "test.db"
         conn = _sqlite3.connect(str(db_file))
-        conn.executescript("""
+        conn.executescript(f"""
             CREATE TABLE raw_sessions (
                 session_id TEXT PRIMARY KEY,
                 started_at TEXT NOT NULL,
@@ -235,9 +239,9 @@ class TestSessionMetricsNoneOutcomes:
                 outcome TEXT,
                 project_id TEXT
             );
-            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '2026-05-22T10:00:00', NULL, NULL, NULL);
-            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '2026-05-22T10:01:00', NULL, NULL, NULL);
-            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s3', '2026-05-22T10:02:00', NULL, 'completed', NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s1', '{NOW[:10]}T10:00:00', NULL, NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s2', '{NOW[:10]}T10:01:00', NULL, NULL, NULL);
+            INSERT INTO raw_sessions (session_id, started_at, ended_at, outcome, project_id) VALUES ('s3', '{NOW[:10]}T10:02:00', NULL, 'completed', NULL);
         """)
         conn.commit()
         conn.close()
