@@ -3,9 +3,9 @@
 import sqlite3
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from core.config.database import get_connection, transaction
 from core.event_store import studio_db
 
@@ -22,7 +22,7 @@ def _default_db_path() -> Path:
 class AlertEvaluator:
     """Evaluates alert rules against metrics and triggers alerts when thresholds are exceeded"""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize AlertEvaluator
 
@@ -61,7 +61,7 @@ class AlertEvaluator:
             with transaction() as conn:
                 yield conn
 
-    def evaluate_rules(self, metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def evaluate_rules(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Evaluate all active alert rules against current metrics
 
@@ -148,7 +148,7 @@ class AlertEvaluator:
         # Unknown condition - return False to avoid false positives
         return False
 
-    def trigger_alert(self, rule: Dict[str, Any], value: float) -> Optional[Dict[str, Any]]:
+    def trigger_alert(self, rule: dict[str, Any], value: float) -> dict[str, Any] | None:
         """
         Create an alert record and save to alert_history table
 
@@ -160,7 +160,7 @@ class AlertEvaluator:
             Alert data dictionary if successful, None if failed
         """
         alert_id = str(uuid.uuid4())
-        triggered_at = datetime.now(timezone.utc).isoformat()
+        triggered_at = datetime.now(UTC).isoformat()
 
         alert_data = {
             "alert_id": alert_id,

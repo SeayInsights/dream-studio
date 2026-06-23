@@ -1,6 +1,6 @@
 """TrendAnalyzer - Analyzes trends and patterns in time series data"""
 
-from typing import Dict, List, Any, Optional
+from typing import Any
 from datetime import datetime
 from collections import defaultdict
 import statistics
@@ -13,8 +13,8 @@ class TrendAnalyzer:
         """Initialize TrendAnalyzer"""
 
     def analyze_timeline(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> dict[str, Any]:
         """
         Analyze timeline data for trends
 
@@ -90,8 +90,8 @@ class TrendAnalyzer:
         }
 
     def detect_seasonality(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> dict[str, Any]:
         """
         Detect weekly/monthly patterns
 
@@ -160,8 +160,8 @@ class TrendAnalyzer:
         }
 
     def identify_growth_rate(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", window_days: int = 7
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", window_days: int = 7
+    ) -> dict[str, Any]:
         """
         Calculate growth rate using moving averages
 
@@ -229,8 +229,8 @@ class TrendAnalyzer:
         }
 
     def detect_anomalies_simple(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", threshold: float = 2.0
-    ) -> List[Dict[str, Any]]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", threshold: float = 2.0
+    ) -> list[dict[str, Any]]:
         """
         Detect statistical anomalies using standard deviation
 

@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
 
 ACTIVE_TASK_PATH_ENV = "DS_ACTIVE_TASK_PATH"
 
@@ -64,7 +63,7 @@ def set_active_task(task_id: str) -> ActiveTaskContext:
         work_order_id=work_order_id,
         milestone_id=milestone_id,
         project_id=project_id,
-        set_at=datetime.now(timezone.utc).isoformat(),
+        set_at=datetime.now(UTC).isoformat(),
     )
 
     path = _active_task_path()
@@ -74,7 +73,7 @@ def set_active_task(task_id: str) -> ActiveTaskContext:
     return ctx
 
 
-def get_active_task() -> Optional[ActiveTaskContext]:
+def get_active_task() -> ActiveTaskContext | None:
     """Returns the current active task context, or None if none set
     or the file is missing/corrupt.
     """

@@ -42,7 +42,7 @@ class TelemetryContext:
     next_milestone: str | None = None
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any] | None) -> "TelemetryContext":
+    def from_mapping(cls, value: Mapping[str, Any] | None) -> TelemetryContext:
         if not isinstance(value, Mapping):
             return cls()
         return cls(

@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any
 from core.config.database import get_connection, transaction
 from core.event_store import studio_db
 
@@ -21,7 +21,7 @@ def _default_db_path() -> Path:
 class RuleManager:
     """Manages alert rules in the alert_rules table"""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize RuleManager
 
@@ -207,7 +207,7 @@ class RuleManager:
         except Exception as e:
             raise RuntimeError(f"Failed to delete alert rule: {str(e)}")
 
-    def get_active_rules(self) -> List[Dict[str, Any]]:
+    def get_active_rules(self) -> list[dict[str, Any]]:
         """
         Get all enabled alert rules
 

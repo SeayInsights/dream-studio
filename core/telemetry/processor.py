@@ -3,7 +3,7 @@
 import json
 import sys
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 # Event store bridge for dual-write migration
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -87,7 +87,7 @@ def _get_bridge():
 
 def write_telemetry(buf_path: Path, skills: list[dict], success: bool) -> None:
     """Append skill telemetry records to buffer."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     skill_count = len(skills)
     success_rate = 1.0 if success else 0.0
 

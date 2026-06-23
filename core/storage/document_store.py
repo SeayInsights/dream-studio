@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any
 
@@ -40,7 +40,7 @@ except ImportError:
         return {"safe": True, "vulnerabilities": [], "risk_score": 0.0}
 
 
-_NOW = lambda: datetime.now(timezone.utc).isoformat()
+_NOW = lambda: datetime.now(UTC).isoformat()
 
 
 class DocumentStore:
@@ -87,7 +87,7 @@ class DocumentStore:
         expires_at = None
 
         if ttl_days is not None:
-            expires_dt = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+            expires_dt = datetime.now(UTC) + timedelta(days=ttl_days)
             expires_at = expires_dt.isoformat()
 
         # Security scan before storage (Wave 4)

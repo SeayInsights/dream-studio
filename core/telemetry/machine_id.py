@@ -10,11 +10,10 @@ from __future__ import annotations
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
 
 _DS_MACHINE_ID_PATH_ENV = "DS_MACHINE_ID_PATH"
 
-_cached_machine_id: Optional[str] = None
+_cached_machine_id: str | None = None
 
 
 def _machine_id_path() -> Path:
@@ -41,7 +40,7 @@ def get_machine_id() -> str:
         if text:
             _cached_machine_id = text
             return _cached_machine_id
-    except (OSError, IOError):
+    except OSError:
         pass
 
     # Generate, persist, return.
@@ -49,7 +48,7 @@ def get_machine_id() -> str:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_id, encoding="utf-8")
-    except (OSError, IOError):
+    except OSError:
         pass  # best-effort persistence; still return the ID this process will use
 
     _cached_machine_id = new_id

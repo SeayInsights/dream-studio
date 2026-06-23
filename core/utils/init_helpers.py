@@ -2,7 +2,7 @@
 
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 from core.config import paths
@@ -19,7 +19,7 @@ def hydrate_registry_once() -> None:
         return
 
     log_path = paths.meta_dir() / "first-run.log"
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     try:
         # Locate hydrate_registry.py — prefer plugin root

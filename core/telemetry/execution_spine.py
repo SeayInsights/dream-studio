@@ -10,10 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
+from datetime import UTC
 
 logger = logging.getLogger(__name__)
 
@@ -520,7 +520,7 @@ def resolve_security_finding(
     Returns True if the finding exists and the status event was written.
     """
     import uuid as _uuid
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
 
     valid_resolutions = {"fixed", "mitigated", "accepted", "false_positive", "resolved", "closed"}
     new_status = resolution if resolution in valid_resolutions else "fixed"
@@ -532,7 +532,7 @@ def resolve_security_finding(
         ).fetchone()
         if row is None:
             return False
-        now = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+        now = _dt.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
         conn.execute(
             "INSERT INTO security_events"
             " (event_id, parent_event_id, event_kind, body, created_at)"

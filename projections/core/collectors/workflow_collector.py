@@ -3,13 +3,13 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 
 class WorkflowCollector:
     """Collects and aggregates workflow metrics from raw_workflow_runs and raw_workflow_nodes tables"""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize WorkflowCollector
 
@@ -21,7 +21,7 @@ class WorkflowCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect workflow metrics
 
@@ -168,7 +168,7 @@ class WorkflowCollector:
         finally:
             conn.close()
 
-    def get_timeline(self, days: int = 30) -> List[Dict[str, Any]]:
+    def get_timeline(self, days: int = 30) -> list[dict[str, Any]]:
         """
         Get daily workflow execution timeline
 
@@ -204,7 +204,7 @@ class WorkflowCollector:
         finally:
             conn.close()
 
-    def get_node_performance(self, workflow_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_node_performance(self, workflow_name: str | None = None) -> list[dict[str, Any]]:
         """
         Analyze node execution performance
 

@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 from projections.api.routes.sqlite_schema import (
     has_columns,
     object_exists,
@@ -15,7 +15,7 @@ from projections.api.routes.sqlite_schema import (
 class SessionCollector:
     """Collects and aggregates session metrics from raw_sessions table"""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize SessionCollector
 
@@ -27,7 +27,7 @@ class SessionCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect session metrics
 
@@ -221,7 +221,7 @@ class SessionCollector:
         finally:
             conn.close()
 
-    def get_recent_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_sessions(self, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get most recent sessions with details
 
@@ -271,7 +271,7 @@ class SessionCollector:
         finally:
             conn.close()
 
-    def _empty_metrics(self, status: dict[str, object]) -> Dict[str, Any]:
+    def _empty_metrics(self, status: dict[str, object]) -> dict[str, Any]:
         return {
             "total_sessions": 0,
             "by_project": {},

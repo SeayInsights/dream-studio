@@ -17,7 +17,7 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 _MARKER = ".dream-studio-project"
 _UUID_RE = re.compile(
@@ -29,8 +29,8 @@ _UUID_RE = re.compile(
 @dataclass(frozen=True)
 class CWDProjectContext:
     project_id: str
-    project_name: Optional[str]  # None for plain-UUID legacy markers
-    marker_path: Optional[Path]  # None for project_path SQLite resolution
+    project_name: str | None  # None for plain-UUID legacy markers
+    marker_path: Path | None  # None for project_path SQLite resolution
     marker_format: Literal["json", "plain_uuid", "project_path"]
     # "project_path" = resolved via SQLite business_projects.project_path (no marker)
 
@@ -39,7 +39,7 @@ def _is_valid_uuid(text: str) -> bool:
     return bool(_UUID_RE.match(text.strip()))
 
 
-def _parse_marker(marker_path: Path) -> Optional[CWDProjectContext]:
+def _parse_marker(marker_path: Path) -> CWDProjectContext | None:
     """Parse a marker file, trying JSON first then plain-UUID fallback.
 
     Returns CWDProjectContext on success, None on unrecoverable failure.
@@ -47,7 +47,7 @@ def _parse_marker(marker_path: Path) -> Optional[CWDProjectContext]:
     """
     try:
         raw = marker_path.read_text(encoding="utf-8").strip()
-    except (OSError, IOError) as exc:
+    except OSError as exc:
         from core.telemetry.diagnostics import log_diagnostic
 
         log_diagnostic(
@@ -139,7 +139,7 @@ def _get_home() -> Path:
     return Path.home().resolve()
 
 
-def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
+def resolve_project_from_cwd() -> CWDProjectContext | None:
     """Walk up from cwd looking for .dream-studio-project marker.
 
     Bounded walk stops at the first of:
@@ -212,7 +212,7 @@ def resolve_project_from_cwd() -> Optional[CWDProjectContext]:
         current = parent
 
 
-def resolve_project_from_path(path: Path) -> Optional[CWDProjectContext]:
+def resolve_project_from_path(path: Path) -> CWDProjectContext | None:
     """SQLite fallback: resolve project from business_projects.project_path.
 
     Used when no .dream-studio-project marker is present (no-marker intake default).

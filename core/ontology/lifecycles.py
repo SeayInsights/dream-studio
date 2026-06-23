@@ -14,7 +14,7 @@ Persistence conventions (do NOT normalize globally):
 """
 
 from enum import Enum
-from typing import Optional, Type
+from typing import Optional
 
 from core.ontology.registry import LifecycleSpec, TypeCatalog
 
@@ -108,7 +108,7 @@ DOCUMENT_TRANSITIONS = {
 # ── Parse/normalize helpers ─────────────────────────────────────────────────
 
 
-def from_db_value(value: str, lifecycle_cls: Type[Enum]) -> Optional[Enum]:
+def from_db_value(value: str, lifecycle_cls: type[Enum]) -> Enum | None:
     """Parse a persisted string into its lifecycle enum member.
 
     Case-insensitive via _missing_ hook on each lifecycle enum.
@@ -127,7 +127,7 @@ def to_db_value(state: Enum) -> str:
     return state.value
 
 
-def normalize_lifecycle(value: str, lifecycle_cls: Type[Enum]) -> Optional[Enum]:
+def normalize_lifecycle(value: str, lifecycle_cls: type[Enum]) -> Enum | None:
     """Alias for from_db_value — normalize a raw string to a lifecycle enum."""
     return from_db_value(value, lifecycle_cls)
 

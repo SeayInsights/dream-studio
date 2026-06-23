@@ -1,6 +1,6 @@
 """RootCause - Root cause analysis for issues and anomalies"""
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any
 
 
 class RootCauseAnalyzer:
@@ -27,8 +27,8 @@ class RootCauseAnalyzer:
         }
 
     def analyze_issue(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Perform root cause analysis for a specific issue
 
@@ -77,8 +77,8 @@ class RootCauseAnalyzer:
         }
 
     def _analyze_skill_performance_issue(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Analyze skill performance issues"""
         causes = []
         evidence = issue.get("evidence", {})
@@ -137,8 +137,8 @@ class RootCauseAnalyzer:
         )
 
     def _analyze_quality_issue(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Analyze quality/success rate issues"""
         causes = []
         evidence = issue.get("evidence", {})
@@ -201,8 +201,8 @@ class RootCauseAnalyzer:
         )
 
     def _analyze_anomaly_issue(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Analyze anomaly detection issues"""
         causes = []
         evidence = issue.get("evidence", {})
@@ -244,8 +244,8 @@ class RootCauseAnalyzer:
         return causes
 
     def _analyze_decline_issue(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Analyze metric decline issues"""
         causes = []
         evidence = issue.get("evidence", {})
@@ -282,8 +282,8 @@ class RootCauseAnalyzer:
         return causes
 
     def _generic_analysis(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Generic analysis for uncategorized issues"""
         return [
             {
@@ -299,8 +299,8 @@ class RootCauseAnalyzer:
         ]
 
     def _calculate_correlations(
-        self, issue: Dict[str, Any], metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, issue: dict[str, Any], metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Calculate correlations between issue and other metrics
 
@@ -331,7 +331,7 @@ class RootCauseAnalyzer:
         return correlations
 
     def _calculate_confidence(
-        self, probable_causes: List[Dict[str, Any]], correlations: Dict[str, Any]
+        self, probable_causes: list[dict[str, Any]], correlations: dict[str, Any]
     ) -> float:
         """Calculate confidence in root cause analysis"""
         if not probable_causes:
@@ -350,8 +350,8 @@ class RootCauseAnalyzer:
         return min(round(confidence, 2), 1.0)
 
     def _generate_recommendations(
-        self, probable_causes: List[Dict[str, Any]], issue: Dict[str, Any]
-    ) -> List[str]:
+        self, probable_causes: list[dict[str, Any]], issue: dict[str, Any]
+    ) -> list[str]:
         """Generate actionable recommendations"""
         recommendations = []
 

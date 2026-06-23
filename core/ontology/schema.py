@@ -9,9 +9,8 @@ and artifacts have classification types. These replace the implicit ontology
 previously scattered across 72 database tables and 40+ event types.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, FrozenSet, List, Optional, Set
 
 # ============================================================================
 # ENTITY TYPES — canonical things that exist in the system
@@ -60,7 +59,7 @@ class LifecycleState(str, Enum):
 
 
 # DEPRECATED: use LIFECYCLE_CATALOG from core.ontology.lifecycles instead.
-ENTITY_LIFECYCLES: Dict[EntityType, List[LifecycleState]] = {
+ENTITY_LIFECYCLES: dict[EntityType, list[LifecycleState]] = {
     EntityType.PROJECT: [
         LifecycleState.CREATED,
         LifecycleState.ACTIVE,
@@ -129,7 +128,7 @@ class RelationshipSpec:
     cardinality: str  # "1:1", "1:N", "N:1", "N:M"
 
 
-CANONICAL_RELATIONSHIPS: List[RelationshipSpec] = [
+CANONICAL_RELATIONSHIPS: list[RelationshipSpec] = [
     RelationshipSpec(RelationType.CONTAINS, EntityType.PROJECT, EntityType.SESSION, "1:N"),
     RelationshipSpec(RelationType.CONTAINS, EntityType.SESSION, EntityType.EVENT, "1:N"),
     RelationshipSpec(RelationType.CONTAINS, EntityType.WORKFLOW, EntityType.WORKFLOW_NODE, "1:N"),
@@ -179,7 +178,7 @@ class EventCategory(str, Enum):
     SYSTEM = "system"  # health, validation, infrastructure
 
 
-EVENT_TYPE_CATEGORIES: Dict[str, EventCategory] = {
+EVENT_TYPE_CATEGORIES: dict[str, EventCategory] = {
     "session.": EventCategory.LIFECYCLE,
     "project.": EventCategory.LIFECYCLE,
     "workflow.": EventCategory.EXECUTION,
@@ -210,11 +209,11 @@ def classify_event(event_type: str) -> EventCategory:
 class SkillSpec:
     pack: str
     skill: str
-    modes: FrozenSet[str]
+    modes: frozenset[str]
     domain: str  # "core", "quality", "security", "analysis", "domain"
 
 
-SKILL_TAXONOMY: List[SkillSpec] = [
+SKILL_TAXONOMY: list[SkillSpec] = [
     SkillSpec(
         "core",
         "ds-core",
@@ -256,7 +255,7 @@ SKILL_TAXONOMY: List[SkillSpec] = [
 ]
 
 
-def get_skill_spec(pack_or_skill: str) -> Optional[SkillSpec]:
+def get_skill_spec(pack_or_skill: str) -> SkillSpec | None:
     for spec in SKILL_TAXONOMY:
         if spec.pack == pack_or_skill or spec.skill == pack_or_skill:
             return spec

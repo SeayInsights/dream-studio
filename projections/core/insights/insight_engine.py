@@ -1,7 +1,7 @@
 """InsightEngine - Generates actionable insights from analytics data"""
 
-from typing import Dict, List, Any
-from datetime import datetime, timezone
+from typing import Any
+from datetime import datetime, UTC
 
 
 class InsightEngine:
@@ -12,8 +12,8 @@ class InsightEngine:
         self.insight_categories = ["strengths", "issues", "opportunities", "risks"]
 
     def generate_insights(
-        self, metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Generate comprehensive insights from metrics and analysis
 
@@ -35,7 +35,7 @@ class InsightEngine:
             "issues": self._identify_issues(metrics, analysis),
             "opportunities": self._identify_opportunities(metrics, analysis),
             "risks": self._identify_risks(metrics, analysis),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "version": "1.0",
         }
 
@@ -48,8 +48,8 @@ class InsightEngine:
         return insights
 
     def _identify_strengths(
-        self, metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Identify what's working well"""
         strengths = []
 
@@ -145,8 +145,8 @@ class InsightEngine:
         )
 
     def _identify_issues(
-        self, metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Identify problems and underperformance"""
         issues = []
 
@@ -257,8 +257,8 @@ class InsightEngine:
         )
 
     def _identify_opportunities(
-        self, metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Identify growth and improvement opportunities"""
         opportunities = []
 
@@ -307,8 +307,8 @@ class InsightEngine:
         return opportunities
 
     def _identify_risks(
-        self, metrics: Dict[str, Any], analysis: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, metrics: dict[str, Any], analysis: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Identify potential risks and warning signs"""
         risks = []
 
@@ -374,7 +374,7 @@ class InsightEngine:
             reverse=True,
         )
 
-    def _generate_summary(self, insights: Dict[str, Any]) -> str:
+    def _generate_summary(self, insights: dict[str, Any]) -> str:
         """Generate executive summary from insights"""
         strengths_count = len(insights["strengths"])
         issues_count = len(insights["issues"])
@@ -409,7 +409,7 @@ class InsightEngine:
 
         return summary.strip()
 
-    def _calculate_confidence(self, metrics: Dict[str, Any], analysis: Dict[str, Any]) -> float:
+    def _calculate_confidence(self, metrics: dict[str, Any], analysis: dict[str, Any]) -> float:
         """
         Calculate confidence score for insights based on data quality
 
@@ -442,8 +442,8 @@ class InsightEngine:
         return round(confidence, 2)
 
     def get_insights_by_category(
-        self, insights: Dict[str, Any], category: str
-    ) -> List[Dict[str, Any]]:
+        self, insights: dict[str, Any], category: str
+    ) -> list[dict[str, Any]]:
         """
         Filter insights by category
 
@@ -459,7 +459,7 @@ class InsightEngine:
 
         return insights.get(category, [])
 
-    def get_high_priority_insights(self, insights: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def get_high_priority_insights(self, insights: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Get only high-priority/high-impact insights
 
@@ -486,8 +486,8 @@ class InsightEngine:
         return high_priority
 
     def generate_cross_project_insights(
-        self, project_metrics: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, project_metrics: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Identify patterns across multiple projects
 
@@ -565,8 +565,8 @@ class InsightEngine:
         return insights
 
     def generate_operational_insights(
-        self, pulse_data: List[Dict[str, Any]], session_data: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, pulse_data: list[dict[str, Any]], session_data: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Correlate operational health (pulse snapshots) with session outcomes
 

@@ -7,7 +7,7 @@ an explicit cost visibility/source that makes the amount reportable.
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 from projections.api.routes.sqlite_schema import source_status
 from projections.core.collectors.authority_sources import token_usage_sql
@@ -16,7 +16,7 @@ from projections.core.collectors.authority_sources import token_usage_sql
 class TokenCollector:
     """Collects and aggregates token usage metrics from token_usage_records."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize TokenCollector
 
@@ -28,7 +28,7 @@ class TokenCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect token usage metrics
 
@@ -277,7 +277,7 @@ class TokenCollector:
         finally:
             conn.close()
 
-    def _empty_metrics(self, status: dict[str, object]) -> Dict[str, Any]:
+    def _empty_metrics(self, status: dict[str, object]) -> dict[str, Any]:
         return {
             "total_tokens": 0,
             "input_tokens": 0,
@@ -297,7 +297,7 @@ class TokenCollector:
             "source_status": status,
         }
 
-    def get_timeline(self, days: int = 30) -> List[Dict[str, Any]]:
+    def get_timeline(self, days: int = 30) -> list[dict[str, Any]]:
         """
         Get daily token usage timeline
 
@@ -381,7 +381,7 @@ def _round_optional(value: float | None) -> float | None:
     return round(value, 2) if value is not None else None
 
 
-def _cost_policy() -> Dict[str, Any]:
+def _cost_policy() -> dict[str, Any]:
     return {
         "tokens_are_usage_not_cost": True,
         "plan_usage_does_not_infer_cost": True,

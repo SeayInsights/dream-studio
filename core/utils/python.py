@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import shutil
 import sys
-from typing import Sequence
+from collections.abc import Sequence
 
 _CANDIDATES: Sequence[str] = ("py", "python3", "python")
 

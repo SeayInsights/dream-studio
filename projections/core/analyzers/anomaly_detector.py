@@ -1,6 +1,6 @@
 """AnomalyDetector - Advanced anomaly detection for analytics data"""
 
-from typing import Dict, List, Any
+from typing import Any
 import statistics
 
 
@@ -22,8 +22,8 @@ class AnomalyDetector:
         self.threshold = self.thresholds.get(sensitivity, 2.0)
 
     def detect_outliers_zscore(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> List[Dict[str, Any]]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> list[dict[str, Any]]:
         """
         Detect outliers using z-score method
 
@@ -77,8 +77,8 @@ class AnomalyDetector:
         return sorted(outliers, key=lambda x: abs(x["z_score"]), reverse=True)
 
     def detect_trend_breaks(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", window: int = 5
-    ) -> List[Dict[str, Any]]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", window: int = 5
+    ) -> list[dict[str, Any]]:
         """
         Detect sudden changes in trend direction
 
@@ -145,10 +145,10 @@ class AnomalyDetector:
 
     def detect_pattern_deviation(
         self,
-        current_data: List[Dict[str, Any]],
-        historical_data: List[Dict[str, Any]],
+        current_data: list[dict[str, Any]],
+        historical_data: list[dict[str, Any]],
         metric_key: str = "count",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compare current pattern to historical baseline
 
@@ -211,8 +211,8 @@ class AnomalyDetector:
         }
 
     def comprehensive_anomaly_scan(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> dict[str, Any]:
         """
         Run all anomaly detection methods and aggregate results
 
@@ -284,7 +284,7 @@ class AnomalyDetector:
             "recommendations": recommendations,
         }
 
-    def _calculate_slope(self, values: List[float]) -> float:
+    def _calculate_slope(self, values: list[float]) -> float:
         """Calculate linear slope of values"""
         if not values or len(values) < 2:
             return 0.0
