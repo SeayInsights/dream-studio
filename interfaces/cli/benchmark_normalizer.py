@@ -10,11 +10,10 @@ Usage:
 """
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any
 
-from core.adapters.normalizers import ClaudeAdapter, DefaultAdapter, GPTAdapter, EventNormalizer
-from core.events.trace import TraceContext
+from core.adapters.normalizers import EventNormalizer
 
 
 def mock_claude_response() -> dict[str, Any]:
@@ -52,7 +51,7 @@ def mock_default_response() -> dict[str, Any]:
     """Generate generic API response."""
     return {
         "response": "Hello, world!",
-        "metadata": {"timestamp": datetime.now(timezone.utc).isoformat()},
+        "metadata": {"timestamp": datetime.now(UTC).isoformat()},
     }
 
 
@@ -94,8 +93,8 @@ def main():
     print("=" * 80)
     print("EventNormalizer Performance Benchmark")
     print("=" * 80)
-    print(f"Target: <10ms average overhead per event (CONSTITUTION.md)")
-    print(f"Iterations per adapter: 1000")
+    print("Target: <10ms average overhead per event (CONSTITUTION.md)")
+    print("Iterations per adapter: 1000")
     print()
 
     results = []

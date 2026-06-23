@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, UTC
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -214,7 +214,7 @@ def compute_analytics(sessions: list[dict], window_days: int) -> dict:
     sessions_per_week = [{"week": w, "count": c} for w, c in sorted(week_counts.items())]
 
     return {
-        "generated": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "window_days": window_days,
         "total_sessions": len(sessions),
         "skill_usage": dict(sorted(skill_usage.items(), key=lambda x: -x[1])),
@@ -252,7 +252,7 @@ def _print_table(analytics: dict) -> None:
 
     SEP = "-" * 56
     print(f"\n{'='*56}")
-    print(f"  dream-studio Session Analytics")
+    print("  dream-studio Session Analytics")
     print(f"  Generated : {generated}")
     print(f"  Window    : {w} days   |   Total sessions: {total}")
     print(f"{'='*56}")
@@ -269,7 +269,7 @@ def _print_table(analytics: dict) -> None:
         print("  (no skill data)")
 
     # Failure rates
-    print(f"\nFailure Rate per Skill")
+    print("\nFailure Rate per Skill")
     print(SEP)
     fr = analytics.get("failure_rates", {})
     if fr:
@@ -284,7 +284,7 @@ def _print_table(analytics: dict) -> None:
     print(f"\nAverage Tasks per Session (handoff): {avg}")
 
     # Common blockers
-    print(f"\nTop Common Blockers")
+    print("\nTop Common Blockers")
     print(SEP)
     blockers = analytics.get("common_blockers", [])
     if blockers:
@@ -296,7 +296,7 @@ def _print_table(analytics: dict) -> None:
         print("  (none found)")
 
     # Corrections by skill
-    print(f"\nCorrection Count by Skill")
+    print("\nCorrection Count by Skill")
     print(SEP)
     cc = analytics.get("correction_count_by_skill", {})
     if cc:
@@ -306,7 +306,7 @@ def _print_table(analytics: dict) -> None:
         print("  (no correction data)")
 
     # Sessions per week
-    print(f"\nSession Volume per Week")
+    print("\nSession Volume per Week")
     print(SEP)
     spw = analytics.get("sessions_per_week", [])
     if spw:
@@ -317,7 +317,7 @@ def _print_table(analytics: dict) -> None:
         print("  (no weekly data)")
 
     # Window breakdown
-    print(f"\nSkill Usage by Window")
+    print("\nSkill Usage by Window")
     print(SEP)
     sub = analytics.get("skill_usage_by_window", {})
     for win in ("30d", "60d", "90d"):

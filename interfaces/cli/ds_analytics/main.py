@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 _CLI_ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +12,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_CLI_ROOT))
 sys.path.insert(0, str(_PROJECT_ROOT / "scripts"))
-from core.config import paths  # noqa: E402
 from core.config.database import get_connection
 
 
@@ -156,13 +155,11 @@ def main() -> None:
     output_path = render_dashboard(data, output)
     print(f"  dashboard: {output_path}")
 
-    import sqlite3
-
     conn = get_connection()
     conn.execute(
         "INSERT INTO sum_analytics_run (run_at, pulse_rows, spec_rows, skill_rows, output_path) VALUES (?, ?, ?, ?, ?)",
         (
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(UTC).isoformat(),
             len(pulse_rows),
             spec_count,
             len(velocity_df),

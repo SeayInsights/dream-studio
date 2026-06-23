@@ -23,7 +23,7 @@ import re
 import sqlite3
 import sys
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -409,7 +409,7 @@ def main(argv: list[str] | None = None) -> None:
         print("No token-log.md data found.", file=sys.stderr)
         sys.exit(1)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
+    cutoff = datetime.now(UTC) - timedelta(days=args.days)
     sessions = build_sessions(records, cutoff)
     handoffs = get_handoff_tasks()
     report = compute_efficiency_report(sessions, handoffs)

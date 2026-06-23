@@ -24,7 +24,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -53,7 +53,7 @@ def _default_bak_path() -> Path:
 
 
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _sqlite_metadata(db_path: Path) -> dict:
@@ -394,7 +394,7 @@ def cloud_push() -> None:
 
     result = _rclone_run(["copyto", str(bak_path), dest])
     if result.returncode != 0:
-        print(f"ERROR: Push failed", file=sys.stderr)
+        print("ERROR: Push failed", file=sys.stderr)
         print(result.stderr, file=sys.stderr)
         sys.exit(1)
 
@@ -426,7 +426,7 @@ def cloud_pull() -> None:
     print(f"Pulling {src}...")
     result = _rclone_run(["copyto", src, str(pull_path)])
     if result.returncode != 0:
-        print(f"ERROR: Pull failed", file=sys.stderr)
+        print("ERROR: Pull failed", file=sys.stderr)
         print(result.stderr, file=sys.stderr)
         sys.exit(1)
 

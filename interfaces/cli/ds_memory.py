@@ -6,7 +6,7 @@ import json
 import re
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -90,9 +90,9 @@ def _discover_date_from_path(path: Path) -> str:
             return part
     try:
         mtime = path.stat().st_mtime
-        return datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(mtime, tz=UTC).strftime("%Y-%m-%d")
     except OSError:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 def _extract_fix(text: str) -> str | None:
@@ -214,7 +214,7 @@ def _find_project_id(conn: sqlite3.Connection, dir_name: str) -> str | None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ── Pass 1: Gotcha extraction ─────────────────────────────────────────────────
@@ -339,7 +339,7 @@ def _pass2_architecture(
 
         try:
             mtime = path.stat().st_mtime
-            created_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+            created_at = datetime.fromtimestamp(mtime, tz=UTC).isoformat()
         except OSError:
             created_at = now
 
@@ -397,7 +397,7 @@ def _pass3_session_handoffs(
 
         try:
             mtime = latest.stat().st_mtime
-            created_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+            created_at = datetime.fromtimestamp(mtime, tz=UTC).isoformat()
         except OSError:
             created_at = now
 

@@ -262,7 +262,7 @@ def main() -> None:
         if args.stdin:
             raw = sys.stdin.read()
         else:
-            with open(args.sources, "r", encoding="utf-8") as fh:
+            with open(args.sources, encoding="utf-8") as fh:
                 raw = fh.read()
         sources = json.loads(raw)
     except FileNotFoundError:

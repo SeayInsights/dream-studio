@@ -132,7 +132,7 @@ def find_latest_handoff(sessions_dir: str = ".sessions") -> str | None:
 
 
 def load_handoff(path: str) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
