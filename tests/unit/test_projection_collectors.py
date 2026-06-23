@@ -202,100 +202,57 @@ def test_skill_db(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    # Create raw_skill_telemetry table
+    # Seed execution_events — the current skill-telemetry authority. SkillCollector
+    # reads skill_usage_sql(), which projects event_type='skill.invoked' rows and
+    # derives execution_time_s by pairing execution.started/completed events that
+    # share the same process_run_id. (Model/token dimensions are not carried here.)
     cursor.execute("""
-        CREATE TABLE raw_skill_telemetry (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            skill_name TEXT NOT NULL,
-            invoked_at TEXT NOT NULL,
-            model TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            success INTEGER NOT NULL,
-            execution_time_s REAL,
+        CREATE TABLE execution_events (
+            event_id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            skill_id TEXT,
+            outcome_status TEXT,
+            process_run_id TEXT,
             project_id TEXT,
-            session_id TEXT
+            created_at TEXT NOT NULL
         )
     """)
 
-    # Insert sample data
     now = datetime.now()
-    test_data = [
-        (
-            "ds-core",
-            (now - timedelta(days=1)).isoformat(),
-            "sonnet",
-            1000,
-            500,
-            1,
-            12.5,
-            "proj-a",
-            "sess-1",
-        ),
-        (
-            "ds-core",
-            (now - timedelta(days=2)).isoformat(),
-            "sonnet",
-            1200,
-            600,
-            1,
-            15.2,
-            "proj-a",
-            "sess-2",
-        ),
-        (
-            "ds-quality",
-            (now - timedelta(days=3)).isoformat(),
-            "haiku",
-            500,
-            200,
-            0,
-            5.1,
-            "proj-b",
-            "sess-3",
-        ),
-        (
-            "ds-core",
-            (now - timedelta(days=4)).isoformat(),
-            "sonnet",
-            1100,
-            550,
-            1,
-            13.0,
-            "proj-a",
-            "sess-4",
-        ),
-        (
-            "ds-security",
-            (now - timedelta(days=5)).isoformat(),
-            "opus",
-            2000,
-            1000,
-            1,
-            25.0,
-            "proj-c",
-            "sess-5",
-        ),
-        (
-            "ds-quality",
-            (now - timedelta(days=100)).isoformat(),
-            "haiku",
-            450,
-            180,
-            1,
-            4.8,
-            "proj-b",
-            "sess-6",
-        ),  # Too old
+
+    def _ts(days_ago, secs=0):
+        return (now - timedelta(days=days_ago) + timedelta(seconds=secs)).isoformat()
+
+    # 5 in-window skill.invoked rows + 1 older than 90 days.
+    # (event_id, skill_id, outcome_status, process_run_id, project_id, days_ago)
+    invocations = [
+        ("inv-1", "ds-core", "completed", "run-1", "proj-a", 1),
+        ("inv-2", "ds-core", "completed", "run-2", "proj-a", 2),
+        ("inv-3", "ds-core", "completed", "run-3", "proj-a", 4),
+        ("inv-4", "ds-quality", "failed", "run-4", "proj-b", 3),
+        ("inv-5", "ds-security", "completed", "run-5", "proj-c", 5),
+        ("inv-old", "ds-quality", "completed", "run-old", "proj-b", 100),  # too old
+    ]
+    rows = [
+        (eid, "skill.invoked", skill, outcome, run, proj, _ts(ago))
+        for eid, skill, outcome, run, proj, ago in invocations
+    ]
+    # Timing pairs for the first two ds-core runs (durations ~12s and ~15s); run-3
+    # is intentionally unpaired (NULL duration, excluded from AVG, never fabricated).
+    rows += [
+        ("es-1", "execution.started", None, None, "run-1", "proj-a", _ts(1, 0)),
+        ("ec-1", "execution.completed", None, None, "run-1", "proj-a", _ts(1, 12)),
+        ("es-2", "execution.started", None, None, "run-2", "proj-a", _ts(2, 0)),
+        ("ec-2", "execution.completed", None, None, "run-2", "proj-a", _ts(2, 15)),
     ]
 
     cursor.executemany(
         """
-        INSERT INTO raw_skill_telemetry
-        (skill_name, invoked_at, model, input_tokens, output_tokens, success, execution_time_s, project_id, session_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO execution_events
+        (event_id, event_type, skill_id, outcome_status, process_run_id, project_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """,
-        test_data,
+        rows,
     )
 
     conn.commit()
@@ -346,9 +303,9 @@ def test_skill_overall_success_rate(test_skill_db):
     collector = SkillCollector(db_path=str(test_skill_db))
     metrics = collector.collect(days=90)
 
-    assert "success_rate_overall" in metrics
+    assert "overall_success_rate" in metrics
     # 4 successes out of 5 total = 80%
-    assert metrics["success_rate_overall"] == 80.0
+    assert metrics["overall_success_rate"] == 80.0
 
 
 def test_skill_failures(test_skill_db):
@@ -368,8 +325,9 @@ def test_skill_top_skills(test_skill_db):
 
     assert "top_skills" in metrics
     assert len(metrics["top_skills"]) > 0
-    # Most used should be ds-core with 3 invocations
-    assert metrics["top_skills"][0] == ("ds-core", 3)
+    # Most used should be ds-core with 3 invocations (entries are dicts).
+    assert metrics["top_skills"][0]["skill_name"] == "ds-core"
+    assert metrics["top_skills"][0]["count"] == 3
 
 
 def test_skill_performance_metrics(test_skill_db):
@@ -379,9 +337,11 @@ def test_skill_performance_metrics(test_skill_db):
 
     core_metrics = metrics["by_skill"]["ds-core"]
     assert "avg_exec_time_s" in core_metrics
+    # Two of three ds-core runs have execution.started/completed pairs → positive avg.
     assert core_metrics["avg_exec_time_s"] > 0
+    # Token dimensions are not carried by skill telemetry in the current authority.
     assert "avg_input_tokens" in core_metrics
-    assert core_metrics["avg_input_tokens"] > 0
+    assert core_metrics["avg_input_tokens"] == 0
 
 
 def test_skill_timeline(test_skill_db):
@@ -649,136 +609,69 @@ def test_model_db(tmp_path):
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
-    # Create tables
+    # Seed token_usage_records — the authoritative model-attributed source
+    # (model_id column). ModelCollector reads token_usage_sql() for per-model
+    # invocation counts and token volume; skill telemetry no longer carries the
+    # model dimension, so success/timing are not attributed per model.
     cursor.execute("""
-        CREATE TABLE raw_skill_telemetry (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            skill_name TEXT NOT NULL,
-            invoked_at TEXT NOT NULL,
-            model TEXT,
+        CREATE TABLE token_usage_records (
+            token_usage_id TEXT PRIMARY KEY,
+            process_run_id TEXT,
+            project_id TEXT,
+            skill_id TEXT,
             input_tokens INTEGER,
             output_tokens INTEGER,
-            success INTEGER NOT NULL,
-            execution_time_s REAL,
-            project_id TEXT,
-            session_id TEXT
+            total_tokens INTEGER,
+            model_id TEXT,
+            provider TEXT,
+            estimated_cost REAL,
+            cost_visibility TEXT,
+            created_at TEXT NOT NULL
         )
     """)
 
-    cursor.execute("""
-        CREATE TABLE raw_token_usage (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT,
-            project_id TEXT,
-            skill_name TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            model TEXT,
-            recorded_at TEXT NOT NULL
-        )
-    """)
-
-    # Insert sample skill telemetry data
     now = datetime.now()
-    skill_data = [
-        (
-            "ds-core",
-            (now - timedelta(days=1)).isoformat(),
-            "sonnet",
-            1000,
-            500,
-            1,
-            10.0,
-            "proj-a",
-            "sess-1",
-        ),
-        (
-            "ds-core",
-            (now - timedelta(days=2)).isoformat(),
-            "sonnet",
-            1200,
-            600,
-            1,
-            12.0,
-            "proj-a",
-            "sess-2",
-        ),
-        (
-            "ds-quality",
-            (now - timedelta(days=3)).isoformat(),
-            "haiku",
-            500,
-            200,
-            1,
-            5.0,
-            "proj-b",
-            "sess-3",
-        ),
-        (
-            "ds-core",
-            (now - timedelta(days=4)).isoformat(),
-            "opus",
-            2000,
-            1000,
-            0,
-            30.0,
-            "proj-a",
-            "sess-4",
-        ),
-        (
-            "ds-security",
-            (now - timedelta(days=5)).isoformat(),
-            "sonnet",
-            800,
-            400,
-            1,
-            11.0,
-            "proj-c",
-            "sess-5",
-        ),
-    ]
 
-    cursor.executemany(
-        """
-        INSERT INTO raw_skill_telemetry
-        (skill_name, invoked_at, model, input_tokens, output_tokens, success, execution_time_s, project_id, session_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        skill_data,
-    )
+    def _ts(days_ago):
+        return (now - timedelta(days=days_ago)).isoformat()
 
-    # Insert token usage data
+    # 5 in-window records: sonnet x3 (days 1,2,5), haiku x1 (day 3), opus x1 (day 4),
+    # plus one older-than-90-days record that must be excluded.
+    # (id, model_id, input, output, project, skill, days_ago)
     token_data = [
-        ("sess-1", "proj-a", "ds-core", 1000, 500, "sonnet", (now - timedelta(days=1)).isoformat()),
-        ("sess-2", "proj-a", "ds-core", 1200, 600, "sonnet", (now - timedelta(days=2)).isoformat()),
+        ("tok-1", "sonnet", 1000, 500, "proj-a", "ds-core", 1),
+        ("tok-2", "sonnet", 1200, 600, "proj-a", "ds-core", 2),
+        ("tok-3", "haiku", 500, 200, "proj-b", "ds-quality", 3),
+        ("tok-4", "opus", 2000, 1000, "proj-a", "ds-core", 4),
+        ("tok-5", "sonnet", 800, 400, "proj-c", "ds-security", 5),
+        ("tok-old", "haiku", 450, 180, "proj-b", "ds-quality", 100),  # too old
+    ]
+    rows = [
         (
-            "sess-3",
-            "proj-b",
-            "ds-quality",
-            500,
-            200,
-            "haiku",
-            (now - timedelta(days=3)).isoformat(),
-        ),
-        ("sess-4", "proj-a", "ds-core", 2000, 1000, "opus", (now - timedelta(days=4)).isoformat()),
-        (
-            "sess-5",
-            "proj-c",
-            "ds-security",
-            800,
-            400,
-            "sonnet",
-            (now - timedelta(days=5)).isoformat(),
-        ),
+            tid,
+            f"run-{tid}",
+            proj,
+            skill,
+            inp,
+            out,
+            inp + out,
+            model,
+            "anthropic",
+            0.01,
+            "exact",
+            _ts(ago),
+        )
+        for tid, model, inp, out, proj, skill, ago in token_data
     ]
 
     cursor.executemany(
         """
-        INSERT INTO raw_token_usage
-        (session_id, project_id, skill_name, input_tokens, output_tokens, model, recorded_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO token_usage_records
+        (token_usage_id, process_run_id, project_id, skill_id, input_tokens, output_tokens,
+         total_tokens, model_id, provider, estimated_cost, cost_visibility, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
-        token_data,
+        rows,
     )
 
     conn.commit()
@@ -808,14 +701,15 @@ def test_model_collect_by_model(test_model_db):
 
 
 def test_model_success_rates(test_model_db):
-    """Test model success rate calculation"""
+    """Success rates are surfaced per model. The current authority does not
+    attribute skill outcomes to a model (skill telemetry carries no model
+    dimension), so token-sourced models report 0.0 — honest, not fabricated."""
     collector = ModelCollector(db_path=str(test_model_db))
     metrics = collector.collect(days=90)
 
-    # Sonnet: 3/3 success = 100%
-    assert metrics["by_model"]["sonnet"]["success_rate"] == 100.0
-
-    # Opus: 0/1 success = 0%
+    assert "success_rates" in metrics
+    assert "sonnet" in metrics["success_rates"]
+    assert metrics["by_model"]["sonnet"]["success_rate"] == 0.0
     assert metrics["by_model"]["opus"]["success_rate"] == 0.0
 
 
@@ -824,14 +718,14 @@ def test_model_distribution(test_model_db):
     collector = ModelCollector(db_path=str(test_model_db))
     metrics = collector.collect(days=90)
 
-    assert "distribution" in metrics
-    assert "sonnet" in metrics["distribution"]
+    assert "distribution_pct" in metrics
+    assert "sonnet" in metrics["distribution_pct"]
 
-    # 5 total invocations, sonnet has 3 = 60%
-    assert metrics["distribution"]["sonnet"] == 60.0
+    # 5 in-window invocations, sonnet has 3 = 60%
+    assert metrics["distribution_pct"]["sonnet"] == 60.0
 
-    # Sum should be 100%
-    total = sum(metrics["distribution"].values())
+    # Sum should be ~100%
+    total = sum(metrics["distribution_pct"].values())
     assert 99 <= total <= 101
 
 
@@ -842,23 +736,20 @@ def test_model_performance_rank(test_model_db):
 
     assert "performance_rank" in metrics
     assert isinstance(metrics["performance_rank"], list)
-    assert len(metrics["performance_rank"]) > 0
+    # Ranking is a list of model names ordered by a speed-weighted score. It only
+    # includes models with attributed timing; the current authority has none per
+    # model, so the list is empty (but well-formed) until timing is attributed.
+    assert all(isinstance(m, str) for m in metrics["performance_rank"])
 
-    # Each entry should be (model, score) tuple
-    assert isinstance(metrics["performance_rank"][0], tuple)
-    assert len(metrics["performance_rank"][0]) == 2
 
-
-def test_model_token_efficiency(test_model_db):
-    """Test token efficiency calculation"""
+def test_model_token_totals(test_model_db):
+    """Per-model token volume is aggregated from token_usage_records."""
     collector = ModelCollector(db_path=str(test_model_db))
     metrics = collector.collect(days=90)
 
-    assert "token_efficiency" in metrics
-
-    # Models with execution time should have efficiency score
-    if "sonnet" in metrics["token_efficiency"]:
-        assert metrics["token_efficiency"]["sonnet"] > 0
+    # sonnet: (1000+500) + (1200+600) + (800+400) = 4500 tokens across 3 records.
+    assert metrics["by_model"]["sonnet"]["total_tokens"] == 4500
+    assert metrics["by_model"]["haiku"]["total_tokens"] == 700
 
 
 def test_model_timeline(test_model_db):
@@ -880,11 +771,11 @@ def test_model_performance_metrics(test_model_db):
     metrics = collector.collect(days=90)
 
     sonnet_metrics = metrics["by_model"]["sonnet"]
+    # Timing is not attributed per model in the current authority.
     assert "avg_exec_time_s" in sonnet_metrics
-    assert sonnet_metrics["avg_exec_time_s"] > 0
-    assert "avg_tokens_per_run" in sonnet_metrics
+    assert sonnet_metrics["avg_exec_time_s"] == 0.0
+    # Token volume IS attributed (from token_usage_records).
     assert sonnet_metrics["avg_tokens_per_run"] > 0
-    assert "total_tokens" in sonnet_metrics
     assert sonnet_metrics["total_tokens"] > 0
 
 
