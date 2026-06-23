@@ -67,9 +67,12 @@ class ModelCollector:
             else:
                 skill_rows = []
 
-            by_model = {}
-            total_invocations = 0
+            by_model: Dict[str, Dict[str, Any]] = {}
 
+            # Success/timing come from skill telemetry, keyed by model. The current
+            # authority resolves the skill model dimension to NULL (skill_usage_sql),
+            # so this loop contributes nothing today — it is kept so success/timing
+            # populate automatically if a model-carrying skill source returns later.
             for row in skill_rows:
                 model = row["model"]
                 invocations = row["invocations"]
@@ -85,17 +88,20 @@ class ModelCollector:
                     "avg_tokens_per_run": (
                         round(row["avg_tokens_per_run"], 0) if row["avg_tokens_per_run"] else 0
                     ),
+                    "total_tokens": 0,
                 }
 
-                total_invocations += invocations
-
-            # Add token totals from token usage
+            # token_usage_records is the authoritative model-attributed source
+            # (model_id column). Because skill telemetry no longer carries the model
+            # dimension, token records drive per-model invocation counts and tokens.
             if token_sql is not None:
                 cursor.execute(
                     f"""
                     SELECT
                         model,
-                        SUM(input_tokens + output_tokens) as total_tokens
+                        COUNT(*) as invocations,
+                        SUM(input_tokens + output_tokens) as total_tokens,
+                        AVG(input_tokens + output_tokens) as avg_tokens_per_run
                     FROM ({token_sql}) token_usage
                     WHERE recorded_at >= ?
                     AND model IS NOT NULL
@@ -109,8 +115,26 @@ class ModelCollector:
 
             for row in token_rows:
                 model = row["model"]
-                if model in by_model:
-                    by_model[model]["total_tokens"] = row["total_tokens"] or 0
+                tok_invocations = row["invocations"] or 0
+                entry = by_model.get(model)
+                if entry is None:
+                    # Model seen only in token telemetry: usage is known, but the
+                    # current authority does not attribute success/timing per model.
+                    by_model[model] = {
+                        "invocations": tok_invocations,
+                        "success_rate": 0.0,
+                        "avg_exec_time_s": 0.0,
+                        "avg_tokens_per_run": (
+                            round(row["avg_tokens_per_run"], 0) if row["avg_tokens_per_run"] else 0
+                        ),
+                        "total_tokens": row["total_tokens"] or 0,
+                    }
+                else:
+                    entry["total_tokens"] = row["total_tokens"] or 0
+                    if not entry.get("invocations"):
+                        entry["invocations"] = tok_invocations
+
+            total_invocations = sum(data["invocations"] for data in by_model.values())
 
             # Calculate distribution percentages
             distribution = {}
@@ -157,14 +181,19 @@ class ModelCollector:
 
     def get_model_timeline(self, model_name: str, days: int = 30) -> List[Dict[str, Any]]:
         """
-        Get daily usage timeline for a specific model
+        Get daily usage timeline for a specific model.
+
+        Sourced from token_usage_records (the model-attributed authority) since
+        skill telemetry no longer carries the model dimension. Daily invocation
+        counts and token volume are exact; success/timing are not attributed per
+        model in the current authority and are reported as 0.0.
 
         Args:
             model_name: Name of the model
             days: Number of days of history
 
         Returns:
-            List of dicts with date, invocations, success_rate
+            List of dicts with date, invocations, success_rate, avg_exec_time_s
         """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -173,21 +202,20 @@ class ModelCollector:
         cutoff_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
         try:
-            skill_sql = skill_usage_sql(conn)
-            if skill_sql is None:
+            token_sql = token_usage_sql(conn)
+            if token_sql is None:
                 return []
 
             cursor.execute(
                 f"""
                 SELECT
-                    DATE(invoked_at) as date,
+                    DATE(recorded_at) as date,
                     COUNT(*) as invocations,
-                    SUM(success) as successes,
-                    AVG(execution_time_s) as avg_exec_time
-                FROM ({skill_sql}) skill_usage
+                    SUM(input_tokens + output_tokens) as total_tokens
+                FROM ({token_sql}) token_usage
                 WHERE model = ?
-                AND invoked_at >= ?
-                GROUP BY DATE(invoked_at)
+                AND recorded_at >= ?
+                GROUP BY DATE(recorded_at)
                 ORDER BY date ASC
             """,
                 (model_name, cutoff_date),
@@ -195,18 +223,13 @@ class ModelCollector:
 
             timeline = []
             for row in cursor.fetchall():
-                invocations = row["invocations"]
-                successes = row["successes"] or 0
-                success_rate = (successes / invocations * 100) if invocations > 0 else 0.0
-
                 timeline.append(
                     {
                         "date": row["date"],
-                        "invocations": invocations,
-                        "success_rate": round(success_rate, 1),
-                        "avg_exec_time_s": (
-                            round(row["avg_exec_time"], 2) if row["avg_exec_time"] else 0.0
-                        ),
+                        "invocations": row["invocations"],
+                        "success_rate": 0.0,
+                        "avg_exec_time_s": 0.0,
+                        "total_tokens": row["total_tokens"] or 0,
                     }
                 )
 
