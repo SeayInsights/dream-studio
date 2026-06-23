@@ -12,7 +12,6 @@ Verifies:
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -234,8 +233,11 @@ def test_preflight_gate_passes_on_no_findings(tmp_path: Path) -> None:
     # No findings created — gate should not block
     from core.work_orders.start import _check_preflight_gate
 
-    # With a work order that has no preflight rows, gate passes silently
-    result = _check_preflight_gate("wo-empty-001")
+    # With a work order that has no preflight rows, gate passes silently.
+    # Pass an explicit clean DB — the gate reads the WO's own authority, not
+    # an ambient/singleton connection.
+    db_path = _db(tmp_path)
+    result = _check_preflight_gate("wo-empty-001", db_path)
     assert result is None
 
 

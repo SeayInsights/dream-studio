@@ -46,17 +46,19 @@ _BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "high"})
 _BLOCKING_STATUSES: frozenset[str] = frozenset({"open"})
 
 
-def _check_preflight_gate(work_order_id: str) -> dict[str, Any] | None:
+def _check_preflight_gate(work_order_id: str, db_path: Path) -> dict[str, Any] | None:
     """Return an error dict if there are unresolved critical/high preflight findings.
+
+    Reads the same authority DB the work order lives in (``db_path``), not an
+    ambient/singleton connection — otherwise the gate can inspect a different
+    database than the one the caller resolved via ``dream_studio_home``.
 
     Returns None (gate passes) if the table doesn't exist yet (WO-O not landed)
     or if no blocking findings are present.  Stub behind the gate-registry
     interface — full integration lands in WO-O.
     """
     try:
-        from core.config.database import get_connection
-
-        with get_connection(read_only=True) as conn:
+        with _connect(db_path) as conn:
             rows = conn.execute(
                 "SELECT finding_id, severity, summary FROM business_work_order_preflights"
                 " WHERE work_order_id = ? AND severity IN ('critical', 'high') AND status = 'open'",
@@ -80,17 +82,18 @@ def _check_preflight_gate(work_order_id: str) -> dict[str, Any] | None:
     }
 
 
-def _get_pending_audits_for_project(project_id: str | None) -> list[dict]:
+def _get_pending_audits_for_project(project_id: str | None, db_path: Path) -> list[dict]:
     """Return deferred pending_audits rows for a project, advisory only.
+
+    Reads ``db_path`` (the authority resolved by the caller) rather than an
+    ambient/singleton connection, so the advisory matches the work order's DB.
 
     Returns empty list if the table doesn't exist yet or project_id is None.
     """
     if not project_id:
         return []
     try:
-        from core.config.database import get_connection
-
-        with get_connection(read_only=True) as conn:
+        with _connect(db_path) as conn:
             rows = conn.execute(
                 "SELECT audit_id, audit_type, status, created_at FROM pending_audits"
                 " WHERE project_id = ? AND status IN ('deferred', 'scheduled')"
@@ -563,7 +566,7 @@ def start_work_order(
     # Preflight gate stub (WO-S): block on unresolved critical/high findings.
     # This stub queries business_work_order_preflights if the table exists.
     # Full gate-registry integration lands in WO-O.
-    _preflight_block = _check_preflight_gate(work_order_id)
+    _preflight_block = _check_preflight_gate(work_order_id, _db_path_for_seq)
     if _preflight_block:
         return _preflight_block
 
@@ -664,7 +667,7 @@ def start_work_order(
         result["sequence_blockers"] = _seq_blockers
 
     # Surface unresolved pending audits advisory (WO-W gate stub — WO-O lands full dispatch).
-    pending = _get_pending_audits_for_project(brief_data.get("project_id"))
+    pending = _get_pending_audits_for_project(brief_data.get("project_id"), _db_path_for_seq)
     if pending:
         result["pending_audits"] = pending
         result["pending_audits_notice"] = (
