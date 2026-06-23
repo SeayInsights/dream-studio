@@ -95,7 +95,7 @@ class MemorySearch:
     # Index building
     # ------------------------------------------------------------------
 
-    def build_index(self) -> "MemorySearch":
+    def build_index(self) -> MemorySearch:
         """Index all .md files in memory_dir (full rebuild)."""
         self._ensure_schema()
         if not self._fts5_ok:
@@ -110,7 +110,7 @@ class MemorySearch:
 
         return self
 
-    def refresh_if_stale(self) -> "MemorySearch":
+    def refresh_if_stale(self) -> MemorySearch:
         """Re-index only files whose mtime changed since last index."""
         self._ensure_schema()
         if not self._fts5_ok:
@@ -350,7 +350,7 @@ class MemorySearch:
     def close(self) -> None:
         """No-op for compatibility. Connections are now managed per-operation."""
 
-    def __enter__(self) -> "MemorySearch":
+    def __enter__(self) -> MemorySearch:
         return self
 
     def __exit__(self, *_) -> None:

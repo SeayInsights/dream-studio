@@ -22,7 +22,6 @@ import datetime
 import logging
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 from spool.config import get_spool_root
 from spool.states import SpoolState, ensure_dirs, state_dir
@@ -80,8 +79,8 @@ def _verify_zip(path: Path, expected_count: int) -> bool:
 
 
 def archive_week(
-    root: Optional[Path] = None,
-    today: Optional[datetime.date] = None,
+    root: Path | None = None,
+    today: datetime.date | None = None,
 ) -> dict:
     """Bundle prior-week processed files into a dated zip.
 
@@ -193,9 +192,9 @@ def archive_week(
 
 
 def consolidate_year(
-    year: Optional[int] = None,
-    root: Optional[Path] = None,
-    today: Optional[datetime.date] = None,
+    year: int | None = None,
+    root: Path | None = None,
+    today: datetime.date | None = None,
 ) -> dict:
     """Bundle prior-year weekly archives into a single yearly zip.
 
@@ -309,7 +308,7 @@ def consolidate_year(
     }
 
 
-def check_and_archive(root: Optional[Path] = None) -> None:
+def check_and_archive(root: Path | None = None) -> None:
     """Run lifecycle operations if scheduled conditions are met.
 
     Called by the projection runner daemon at startup and every 24 hours.

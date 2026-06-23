@@ -10,8 +10,8 @@ Phases:
 """
 
 from pathlib import Path
-from typing import Dict, Any
-from datetime import datetime, timezone
+from typing import Any
+from datetime import datetime, UTC
 import uuid
 import time
 
@@ -46,7 +46,7 @@ except ImportError:
     _NORMALIZER_AVAILABLE = False
 
 
-def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
+def analyze_project(path: Path, run_type: str = "full") -> dict[str, Any]:
     """
     Run full 5-phase project analysis.
 
@@ -72,7 +72,7 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
     """
     path = Path(path).resolve()
     run_id = f"run_{uuid.uuid4().hex[:12]}"
-    started_at = datetime.now(timezone.utc).isoformat()
+    started_at = datetime.now(UTC).isoformat()
     start_time = time.time()
 
     # Initialize adapter registry
@@ -354,9 +354,9 @@ def analyze_project(path: Path, run_type: str = "full") -> Dict[str, Any]:
 def _update_project_metadata(
     project_id: str,
     path: Path,
-    project_data: Dict[str, Any],
-    stack: Dict[str, Any],
-    audit: Dict[str, Any],
+    project_data: dict[str, Any],
+    stack: dict[str, Any],
+    audit: dict[str, Any],
 ) -> None:
     """Update project metadata in business_projects.
 
@@ -365,7 +365,7 @@ def _update_project_metadata(
     they need a dedicated project_analysis_metadata table when the analysis engine is
     rebuilt against business_projects. For now, emit the event for traceability only.
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     # Check if project exists in business_projects
     with transaction() as conn:
         cursor = conn.execute(

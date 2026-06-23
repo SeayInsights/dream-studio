@@ -18,7 +18,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 from core.storage.document_store import DocumentStore
@@ -29,7 +29,7 @@ from canonical.events.types import EventType as CanonicalEventType
 from canonical.events.redactor import redact_file_path
 from emitters.shared.spool_writer import write_envelopes
 
-_NOW = lambda: datetime.now(timezone.utc).isoformat()
+_NOW = lambda: datetime.now(UTC).isoformat()
 
 
 # ── Stack Detection ─────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ def detect_stack(repo_path: Path) -> str:
     package_json = repo_path / "package.json"
     if package_json.exists():
         try:
-            with open(package_json, "r", encoding="utf-8") as f:
+            with open(package_json, encoding="utf-8") as f:
                 data = json.load(f)
                 deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
 

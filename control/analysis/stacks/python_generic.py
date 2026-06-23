@@ -1,7 +1,7 @@
 """Generic Python stack adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 from compat import tomllib
 
 from control.analysis.stacks.base import StackAdapter
@@ -37,7 +37,7 @@ class PythonGenericAdapter(StackAdapter):
 
         return min(1.0, confidence)
 
-    def analyze_stack(self, path: Path) -> Dict[str, Any]:
+    def analyze_stack(self, path: Path) -> dict[str, Any]:
         """
         Analyze Python project.
 
@@ -148,7 +148,7 @@ class PythonGenericAdapter(StackAdapter):
             "entry_points": entry_points,
         }
 
-    def get_build_command(self) -> Optional[str]:
+    def get_build_command(self) -> str | None:
         """
         Return build command for Python.
 
@@ -160,7 +160,7 @@ class PythonGenericAdapter(StackAdapter):
         # This will be enhanced in Wave 3 when adapters get path context
         return None
 
-    def get_test_command(self) -> Optional[str]:
+    def get_test_command(self) -> str | None:
         """
         Return test command for Python.
 
@@ -169,7 +169,7 @@ class PythonGenericAdapter(StackAdapter):
         """
         return "pytest"
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self) -> list[dict[str, Any]]:
         """
         Return Python-specific analysis rules.
 

@@ -40,7 +40,7 @@ CONTEXT_WINDOW_ENV = "DREAM_STUDIO_CONTEXT_WINDOW_TOKENS"
 CONTEXT_WINDOW_CONFIG_KEY = "context.window_tokens"
 
 
-def context_window_tokens(db_path: "Path | None" = None) -> int:
+def context_window_tokens(db_path: Path | None = None) -> int:
     """Resolve the active model's context window in tokens.
 
     Resolution order: ``DREAM_STUDIO_CONTEXT_WINDOW_TOKENS`` env var > ds_config
@@ -69,7 +69,7 @@ def context_window_tokens(db_path: "Path | None" = None) -> int:
     return BASELINE_WINDOW_TOKENS
 
 
-def kb_threshold_scale(db_path: "Path | None" = None) -> float:
+def kb_threshold_scale(db_path: Path | None = None) -> float:
     """Scale factor for the KB-band thresholds = active window / 200k baseline.
 
     1.0 on a 200k window, 5.0 on the 1M model, 0.5 on a 100k window.
@@ -77,7 +77,7 @@ def kb_threshold_scale(db_path: "Path | None" = None) -> float:
     return context_window_tokens(db_path) / BASELINE_WINDOW_TOKENS
 
 
-def scaled_kb_thresholds(db_path: "Path | None" = None) -> dict[str, float]:
+def scaled_kb_thresholds(db_path: Path | None = None) -> dict[str, float]:
     """The four KB-band thresholds scaled to the active context window."""
     s = kb_threshold_scale(db_path)
     return {

@@ -1,7 +1,7 @@
 """Next.js stack adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 import json
 
 from control.analysis.stacks.base import StackAdapter
@@ -48,7 +48,7 @@ class NextJSAdapter(StackAdapter):
 
         return min(1.0, confidence)
 
-    def analyze_stack(self, path: Path) -> Dict[str, Any]:
+    def analyze_stack(self, path: Path) -> dict[str, Any]:
         """
         Analyze Next.js project.
 
@@ -97,7 +97,7 @@ class NextJSAdapter(StackAdapter):
             "entry_points": entry_points,
         }
 
-    def get_build_command(self) -> Optional[str]:
+    def get_build_command(self) -> str | None:
         """
         Return build command for Next.js.
 
@@ -106,7 +106,7 @@ class NextJSAdapter(StackAdapter):
         """
         return "npm run build"
 
-    def get_test_command(self) -> Optional[str]:
+    def get_test_command(self) -> str | None:
         """
         Return test command for Next.js.
 
@@ -115,7 +115,7 @@ class NextJSAdapter(StackAdapter):
         """
         return "npm test"
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self) -> list[dict[str, Any]]:
         """
         Return Next.js-specific analysis rules.
 

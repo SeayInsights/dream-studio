@@ -20,14 +20,11 @@ Usage:
 """
 
 from __future__ import annotations
-import io
 import json
 import logging
 import re
 import string
 from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional
 
 import cachetools
 import numpy as np
@@ -35,7 +32,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from core.event_store import studio_db
-from core.config.database import transaction, get_connection
+from core.config.database import transaction
 
 # Cache the vectorizer and fitted data globally
 _vectorizer = None
@@ -76,7 +73,7 @@ class CachedToolSearch:
         self.misses = 0
 
     @staticmethod
-    def normalize_query(query: str, category: Optional[str] = None) -> str:
+    def normalize_query(query: str, category: str | None = None) -> str:
         """Normalize query for consistent cache key generation.
 
         Performs:
@@ -107,7 +104,7 @@ class CachedToolSearch:
 
         return normalized
 
-    def get(self, key: str) -> Optional[List]:
+    def get(self, key: str) -> list | None:
         """Retrieve cached result if available.
 
         Args:
@@ -125,7 +122,7 @@ class CachedToolSearch:
             logger.debug(f"Cache MISS for: {key[:50]}... (misses: {self.misses})")
         return result
 
-    def set(self, key: str, value: List) -> None:
+    def set(self, key: str, value: list) -> None:
         """Store result in cache.
 
         Args:
@@ -213,7 +210,7 @@ class SearchResultWithStatus:
         disabled_by_default            — Embeddings not requested (use_embeddings=False).
     """
 
-    results: List[ToolMatch]
+    results: list[ToolMatch]
     retrieval_mode: str
     semantic_status: str
     embeddings_used: bool
@@ -338,7 +335,7 @@ def build_index() -> TfidfVectorizer:
         raise RuntimeError(f"Failed to build TF-IDF index: {e}") from e
 
 
-def build_embedding_index() -> "SentenceTransformer":
+def build_embedding_index() -> SentenceTransformer:
     """Build sentence-transformers embedding index with SQLite caching.
 
     Uses all-MiniLM-L6-v2 model (lightweight, 384-dim vectors).
@@ -502,8 +499,8 @@ def calculate_confidence(similarity: float, registry_score: float = 1.0) -> floa
 
 
 def search_tools(
-    query: str, top_k: int = 5, category: Optional[str] = None, use_embeddings: bool = False
-) -> List[ToolMatch]:
+    query: str, top_k: int = 5, category: str | None = None, use_embeddings: bool = False
+) -> list[ToolMatch]:
     """Search and rank tools using TF-IDF or semantic embeddings with caching.
 
     Queries are normalized and cached with a 1-hour TTL to improve performance.
@@ -559,7 +556,7 @@ def search_tools(
     return results
 
 
-def _search_with_tfidf(query: str, top_k: int, category: Optional[str] = None) -> List[ToolMatch]:
+def _search_with_tfidf(query: str, top_k: int, category: str | None = None) -> list[ToolMatch]:
     """Internal TF-IDF search implementation."""
     global _vectorizer, _tfidf_matrix, _tool_data
 
@@ -627,9 +624,7 @@ def _search_with_tfidf(query: str, top_k: int, category: Optional[str] = None) -
         return []
 
 
-def _search_with_embeddings(
-    query: str, top_k: int, category: Optional[str] = None
-) -> List[ToolMatch]:
+def _search_with_embeddings(query: str, top_k: int, category: str | None = None) -> list[ToolMatch]:
     """Internal semantic search implementation using sentence-transformers."""
     global _sentence_model, _embeddings_matrix, _embedding_tool_ids, _tool_data
 
@@ -709,7 +704,7 @@ def _search_with_embeddings(
         return _search_with_tfidf(query, top_k, category)
 
 
-def hybrid_search(query: str, top_k: int = 5, category: Optional[str] = None) -> List[ToolMatch]:
+def hybrid_search(query: str, top_k: int = 5, category: str | None = None) -> list[ToolMatch]:
     """Search and rank tools using hybrid scoring (TF-IDF + embeddings).
 
     Combines both TF-IDF (keyword-based) and semantic embedding scores using a
@@ -828,7 +823,7 @@ def hybrid_search(query: str, top_k: int = 5, category: Optional[str] = None) ->
         return _search_with_tfidf(query, top_k, category)
 
 
-def filter_by_category(results: List[ToolMatch], category: str) -> List[ToolMatch]:
+def filter_by_category(results: list[ToolMatch], category: str) -> list[ToolMatch]:
     """Filter results by category.
 
     Args:
@@ -907,7 +902,7 @@ def clear_cache() -> None:
 
 
 def search_tools_with_status(
-    query: str, top_k: int = 5, category: Optional[str] = None, use_embeddings: bool = False
+    query: str, top_k: int = 5, category: str | None = None, use_embeddings: bool = False
 ) -> SearchResultWithStatus:
     """search_tools() with explicit retrieval mode metadata.
 
@@ -954,7 +949,7 @@ def search_tools_with_status(
 
 
 def hybrid_search_with_status(
-    query: str, top_k: int = 5, category: Optional[str] = None
+    query: str, top_k: int = 5, category: str | None = None
 ) -> SearchResultWithStatus:
     """hybrid_search() with explicit retrieval mode metadata.
 

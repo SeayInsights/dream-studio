@@ -1,10 +1,10 @@
-import sys
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 import re
+from datetime import UTC
 
 
-def analyze_bugs(path: Path, project_data: Dict[str, Any], stack: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_bugs(path: Path, project_data: dict[str, Any], stack: dict[str, Any]) -> dict[str, Any]:
     """
     Analyze code for common bug patterns.
 
@@ -219,7 +219,7 @@ def _should_skip(file_path: Path) -> bool:
     return any(pattern in str(file_path) for pattern in skip_patterns)
 
 
-def _store_bugs(bugs: List[Dict]) -> None:
+def _store_bugs(bugs: list[dict]) -> None:
     """Store bugs in pi_bugs table."""
     try:
         import sys
@@ -228,7 +228,7 @@ def _store_bugs(bugs: List[Dict]) -> None:
         sys.path.insert(0, str(SysPath(__file__).resolve().parents[1] / "hooks"))
 
         from core.event_store.studio_db import _connect
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         conn = _connect()
         for bug in bugs:
@@ -263,7 +263,7 @@ def _store_bugs(bugs: List[Dict]) -> None:
                     bug.get("likelihood"),
                     bug.get("risk_score"),
                     "open",
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                 ),
             )
             if bug.get("category") == "security" or bug.get("type") == "security_flaw":
@@ -276,7 +276,7 @@ def _store_bugs(bugs: List[Dict]) -> None:
         print(f"Warning: Failed to store bugs in database: {e}", file=sys.stderr)
 
 
-def _emit_security_bug_telemetry(bug: Dict[str, Any], bug_id: str) -> None:
+def _emit_security_bug_telemetry(bug: dict[str, Any], bug_id: str) -> None:
     """Best-effort dual-write from legacy pi_bugs security findings."""
 
     try:

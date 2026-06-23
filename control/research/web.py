@@ -5,8 +5,7 @@ Provides multi-source research capabilities with tier-based trust scoring.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import List, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, UTC
 import json
 import sys
 import os
@@ -32,7 +31,7 @@ def _emit_metric(event: str, data: dict) -> None:
         data: Event data dict
     """
     try:
-        metric = {"event": event, "data": data, "timestamp": datetime.now(timezone.utc).isoformat()}
+        metric = {"event": event, "data": data, "timestamp": datetime.now(UTC).isoformat()}
         metric_json = json.dumps(metric)
 
         with transaction() as c:
@@ -73,14 +72,14 @@ class ResearchReport:
     """Complete research report with confidence metrics."""
 
     topic: str
-    sources: List[Source]
+    sources: list[Source]
     findings: str
     confidence: float
     triangulation: float
     verification_status: str = "unverified"
     cache_status: str = "not_cached"
     privacy_export_classification: str = "local_only"
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 def _source_to_cache_dict(source: Source) -> dict:
@@ -190,7 +189,7 @@ def _get_source_tier(url: str) -> int:
     return 2
 
 
-def extract_sources(search_results: List[dict]) -> List[Source]:
+def extract_sources(search_results: list[dict]) -> list[Source]:
     """Parse search results into Source objects with tier classification.
 
     Args:
@@ -223,7 +222,7 @@ def extract_sources(search_results: List[dict]) -> List[Source]:
     return sources
 
 
-def calculate_confidence(sources: List[Source]) -> float:
+def calculate_confidence(sources: list[Source]) -> float:
     """Calculate confidence score based on source quality and count.
 
     Formula: (tier1_weight * count1 + tier2_weight * count2 + tier3_weight * count3) / max_possible
@@ -257,7 +256,7 @@ def calculate_confidence(sources: List[Source]) -> float:
     return round(confidence, 2)
 
 
-def calculate_triangulation(sources: List[Source]) -> float:
+def calculate_triangulation(sources: list[Source]) -> float:
     """Calculate source triangulation score based on independent agreement.
 
     Triangulation improves with more sources (need 3+ for full confidence).
@@ -277,7 +276,7 @@ def calculate_triangulation(sources: List[Source]) -> float:
     return round(triangulation, 2)
 
 
-def summarize_findings(sources: List[Source]) -> str:
+def summarize_findings(sources: list[Source]) -> str:
     """Generate markdown summary of research findings.
 
     Args:
@@ -321,7 +320,7 @@ def summarize_findings(sources: List[Source]) -> str:
     return "\n".join(lines)
 
 
-def search_jina(query: str) -> List[Source]:
+def search_jina(query: str) -> list[Source]:
     """Execute Jina Search API and return higher-tier sources.
 
     Args:
@@ -341,7 +340,7 @@ def search_jina(query: str) -> List[Source]:
     if not api_key:
         _emit_metric(
             "web_research.jina_skip",
-            {"reason": "no_api_key", "timestamp": datetime.now(timezone.utc).isoformat()},
+            {"reason": "no_api_key", "timestamp": datetime.now(UTC).isoformat()},
         )
         return []
 
@@ -392,7 +391,7 @@ def search_jina(query: str) -> List[Source]:
             {
                 "query": query,
                 "result_count": len(sources),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             },
         )
 
@@ -401,12 +400,12 @@ def search_jina(query: str) -> List[Source]:
     except Exception as e:
         _emit_metric(
             "web_research.jina_error",
-            {"query": query, "error": str(e), "timestamp": datetime.now(timezone.utc).isoformat()},
+            {"query": query, "error": str(e), "timestamp": datetime.now(UTC).isoformat()},
         )
         return []
 
 
-def search_web(query: str, source: str = "websearch") -> List[Source]:
+def search_web(query: str, source: str = "websearch") -> list[Source]:
     """Execute web search and return parsed sources.
 
     Args:
@@ -422,7 +421,7 @@ def search_web(query: str, source: str = "websearch") -> List[Source]:
 
     _emit_metric(
         "web_research.search",
-        {"query": query, "source": source, "timestamp": datetime.now(timezone.utc).isoformat()},
+        {"query": query, "source": source, "timestamp": datetime.now(UTC).isoformat()},
     )
 
     # Placeholder: In real implementation, this would invoke WebSearch tool
@@ -432,7 +431,7 @@ def search_web(query: str, source: str = "websearch") -> List[Source]:
     return []
 
 
-def research_topic(topic: str, focus_areas: List[str]) -> ResearchReport:
+def research_topic(topic: str, focus_areas: list[str]) -> ResearchReport:
     """Main entry point for web research with confidence scoring.
 
     Performs multi-source research, calculates confidence metrics,
@@ -447,7 +446,7 @@ def research_topic(topic: str, focus_areas: List[str]) -> ResearchReport:
     Returns:
         ResearchReport with sources and metrics
     """
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
 
     # Build search query
     if focus_areas:
@@ -483,7 +482,7 @@ def research_topic(topic: str, focus_areas: List[str]) -> ResearchReport:
     )
 
     # Emit metrics
-    duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+    duration = (datetime.now(UTC) - start_time).total_seconds()
     _emit_metric(
         "web_research.complete",
         {
@@ -504,9 +503,9 @@ def _check_performance(func):
     """Decorator to ensure <10s performance for research operations."""
 
     def wrapper(*args, **kwargs):
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         result = func(*args, **kwargs)
-        duration = (datetime.now(timezone.utc) - start).total_seconds()
+        duration = (datetime.now(UTC) - start).total_seconds()
 
         if duration > 10.0:
             _emit_metric(
@@ -558,7 +557,7 @@ def save_to_cache(
         raise ValueError("TTL days must be non-negative")
 
     topic_key = topic.strip().lower()
-    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+    expires_at = datetime.now(UTC) + timedelta(days=ttl_days)
 
     # Serialize sources to JSON
     sources_json = json.dumps([_source_to_cache_dict(s) for s in report.sources])
@@ -677,7 +676,7 @@ def _emit_research_cache_telemetry(
         return
 
 
-def load_from_cache(topic: str) -> Optional[ResearchReport]:
+def load_from_cache(topic: str) -> ResearchReport | None:
     """Load research report from cache if not expired.
 
     Args:
@@ -692,7 +691,7 @@ def load_from_cache(topic: str) -> Optional[ResearchReport]:
         return None
 
     topic_key = topic.strip().lower()
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
 
     with get_connection() as c:
         row = c.execute(
@@ -721,7 +720,7 @@ def load_from_cache(topic: str) -> Optional[ResearchReport]:
             cache_status="cached",
         )
 
-        duration_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        duration_ms = (datetime.now(UTC) - start_time).total_seconds() * 1000
 
         _emit_metric(
             "web_research.cache_hit",
@@ -768,7 +767,7 @@ def invalidate_cache(topic: str, *, emit_events: bool = True) -> None:
     _emit_metric("web_research.cache_invalidate", {"topic": topic, "rows_deleted": rows_deleted})
 
 
-def load_from_cache_by_id(cache_id: str) -> Optional[ResearchReport]:
+def load_from_cache_by_id(cache_id: str) -> ResearchReport | None:
     """Load research report from cache by cache_id, or None if not found/expired."""
     with get_connection() as c:
         row = c.execute(

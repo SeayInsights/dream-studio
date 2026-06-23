@@ -60,7 +60,7 @@ def emit_memory_skip_event(
 
         conn = sqlite3.connect(str(path))
         try:
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now = datetime.datetime.now(datetime.UTC).isoformat()
             conn.execute(
                 """INSERT OR IGNORE INTO guard_events
                    (event_id, event_type, rule_id, severity, source_type, source_id,
@@ -115,7 +115,7 @@ def taint_project_memory(
 
         conn = sqlite3.connect(str(path))
         try:
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now = datetime.datetime.now(datetime.UTC).isoformat()
             cur = conn.execute(
                 """UPDATE memory_entries
                    SET tainted = 1, taint_reason = ?, taint_timestamp = ?

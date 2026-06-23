@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 # Add project root to path for canonical imports
@@ -84,7 +84,7 @@ def record_outcome(
     calibration_path = calibration_dir / "calibration.jsonl"
 
     record = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "skill": skill_name,
         "model": model_used,
         "outcome": outcome,

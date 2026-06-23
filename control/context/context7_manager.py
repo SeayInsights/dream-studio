@@ -11,7 +11,6 @@ Prevents context overflow on 10k+ file projects.
 
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
 
@@ -21,10 +20,10 @@ class FileSkeleton:
     """Lightweight representation of a source file."""
 
     path: Path
-    imports: List[str]
-    exports: List[str]
-    functions: List[str]
-    classes: List[str]
+    imports: list[str]
+    exports: list[str]
+    functions: list[str]
+    classes: list[str]
     estimated_tokens: int
     relevance_score: float = 0.0
 
@@ -59,7 +58,7 @@ class Context7Manager:
         self.max_tokens = max_tokens
         self.supported_extensions = {".py", ".js", ".ts", ".tsx", ".jsx"}
 
-    def load_codebase(self, path: Path, query: str) -> Dict:
+    def load_codebase(self, path: Path, query: str) -> dict:
         """
         Load codebase progressively based on relevance to query.
 
@@ -113,7 +112,7 @@ class Context7Manager:
             "loaded_files": len(details),
         }
 
-    def _scan_directory(self, path: Path) -> List[FileSkeleton]:
+    def _scan_directory(self, path: Path) -> list[FileSkeleton]:
         """
         Recursively scan directory for source files.
 
@@ -141,7 +140,7 @@ class Context7Manager:
 
         return skeletons
 
-    def _extract_skeleton(self, file_path: Path) -> Optional[FileSkeleton]:
+    def _extract_skeleton(self, file_path: Path) -> FileSkeleton | None:
         """
         Extract lightweight skeleton from source file.
 
@@ -267,7 +266,7 @@ class Context7Manager:
             estimated_tokens=tokens,
         )
 
-    def _rank_relevance(self, skeletons: List[FileSkeleton], query: str) -> List[FileSkeleton]:
+    def _rank_relevance(self, skeletons: list[FileSkeleton], query: str) -> list[FileSkeleton]:
         """
         Rank files by relevance to query using TF-IDF.
 
@@ -335,8 +334,8 @@ class Context7Manager:
         return sorted(skeletons, key=lambda s: s.relevance_score, reverse=True)
 
     def _progressive_load(
-        self, ranked_skeletons: List[FileSkeleton]
-    ) -> Tuple[List[FileDetail], int]:
+        self, ranked_skeletons: list[FileSkeleton]
+    ) -> tuple[list[FileDetail], int]:
         """
         Load file details progressively until token budget exhausted.
 

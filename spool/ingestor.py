@@ -2,10 +2,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import signal
 import sqlite3
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -277,7 +276,7 @@ def _write_to_dual_canonical(envelope: dict[str, Any], db_path: Path) -> None:
         return  # raw-only event (Commitment 9: mechanical detail stays in raw)
 
     ids = _extract_correlation_ids(envelope)
-    received_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    received_at = datetime.datetime.now(datetime.UTC).isoformat()
     trace = envelope.get("trace", {})
     if isinstance(trace, str):
         try:
@@ -425,7 +424,7 @@ def _write_to_raw_sqlite(envelope: dict[str, Any], db_path: Path) -> None:
     import datetime
 
     ids = _extract_correlation_ids(envelope)
-    received_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    received_at = datetime.datetime.now(datetime.UTC).isoformat()
     source_payload = json.dumps(envelope)
 
     db_path.parent.mkdir(parents=True, exist_ok=True)

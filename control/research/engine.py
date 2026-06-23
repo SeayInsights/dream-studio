@@ -9,8 +9,7 @@ execution, architecture, or semantic-memory authority by itself.
 from __future__ import annotations
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import datetime, timedelta, UTC
 
 from core.event_store.studio_db import _connect
 
@@ -25,7 +24,7 @@ from core.decisions import emit_decision
 # Transaction pattern for database writes
 from core.config.database import transaction
 
-_NOW = lambda: datetime.now(timezone.utc).isoformat()
+_NOW = lambda: datetime.now(UTC).isoformat()
 
 ENGINE_STATUS = "legacy_opt_in"
 ENGINE_AUTHORITY_CLASSIFICATION = "raw_research_advisory_lineage"
@@ -176,7 +175,7 @@ def research_with_cache(
     }
 
 
-def _check_cache(query_hash: str, min_trust: float) -> Optional[dict]:
+def _check_cache(query_hash: str, min_trust: float) -> dict | None:
     """
     Query cache for validated research with sufficient trust.
 
@@ -246,7 +245,7 @@ def _check_cache(query_hash: str, min_trust: float) -> Optional[dict]:
         return None
 
 
-def _check_analyzed_repos(query: str, _context: dict, min_trust: float) -> Optional[dict]:
+def _check_analyzed_repos(query: str, _context: dict, min_trust: float) -> dict | None:
     """
     Query analyzed repos (ds_documents) for matching knowledge.
 
@@ -355,7 +354,7 @@ def _store_research(
     try:
         expires_at = None
         if ttl_days > 0:
-            expires_dt = datetime.now(timezone.utc) + timedelta(days=ttl_days)
+            expires_dt = datetime.now(UTC) + timedelta(days=ttl_days)
             expires_at = expires_dt.isoformat()
 
         findings_json = json.dumps(findings)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 DEBUG_PATTERNS = [
@@ -186,7 +186,7 @@ def print_report(command: str, results: dict, score: float, label: str) -> None:
 
 
 def save_outputs(command: str, results: dict, score: float, label: str, meta_dir: Path) -> None:
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     try:
         score_path = meta_dir / "quality-score.json"
