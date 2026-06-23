@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 
@@ -43,7 +43,7 @@ def backup_before_write(target: Path, backup_dir: Path) -> Path:
 
     Returns the backup path (whether or not the source existed).
     """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     backup_path = backup_dir / f"{target.name}.{ts}.bak"
     backup_path.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():

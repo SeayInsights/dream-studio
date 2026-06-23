@@ -121,7 +121,7 @@ def _emit_delta_block_event(
 
         conn = sqlite3.connect(str(path))
         try:
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now = datetime.datetime.now(datetime.UTC).isoformat()
             critical_rules = [
                 f["rule_id"] for f in guard_findings if f.get("severity") == "critical"
             ]
@@ -184,7 +184,7 @@ def _emit_delta_advisory_events(
 
         conn = sqlite3.connect(str(path))
         try:
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now = datetime.datetime.now(datetime.UTC).isoformat()
             for prev_f, curr_f, findings in advisory_events:
                 for finding in findings:
                     conn.execute(

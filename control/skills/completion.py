@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 try:
@@ -215,7 +215,7 @@ def check_debug_iterations_gte(threshold: int) -> bool:
     if not usage_path.exists():
         return False
     count = 0
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     try:
         for line in usage_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
@@ -260,7 +260,7 @@ def log_suggestion(skill: str, suggested_next: str, condition: str) -> None:
     log_path = state_dir / "chain-suggestions.jsonl"
 
     record = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "skill": skill,
         "suggested_next": suggested_next,
         "condition": condition,

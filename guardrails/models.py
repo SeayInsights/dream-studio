@@ -6,7 +6,7 @@ They are deterministic (same input = same output) and YAML-driven.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any
 
@@ -82,7 +82,7 @@ class GuardrailDecision(BaseModel):
     action: GuardrailAction = Field(..., description="Decision made")
     message: str = Field(..., description="Message shown to user")
     evaluated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc), description="When evaluation happened"
+        default_factory=lambda: datetime.now(UTC), description="When evaluation happened"
     )
     metadata: dict[str, Any] | None = Field(
         None, description="Additional context (matched patterns, etc.)"

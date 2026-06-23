@@ -1,10 +1,8 @@
-import sys
-from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 import json
 
 
-def research_stack(stack: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[str, Any]:
+def research_stack(stack: dict[str, Any], project_data: dict[str, Any]) -> dict[str, Any]:
     """
     Research stack compatibility and best practices.
 
@@ -40,7 +38,7 @@ def research_stack(stack: Dict[str, Any], project_data: Dict[str, Any]) -> Dict[
     return knowledge
 
 
-def _get_stack_knowledge(stack_name: str) -> Dict[str, Any]:
+def _get_stack_knowledge(stack_name: str) -> dict[str, Any]:
     """Static knowledge base for known stacks."""
 
     knowledge_base = {
@@ -156,7 +154,7 @@ def _get_stack_knowledge(stack_name: str) -> Dict[str, Any]:
     )
 
 
-def _cache_research(stack_name: str, knowledge: Dict[str, Any]) -> None:
+def _cache_research(stack_name: str, knowledge: dict[str, Any]) -> None:
     """Cache research in ds_documents."""
     try:
         import sys

@@ -24,8 +24,6 @@ Known limitations of this stub:
 """
 
 import re
-from typing import Dict, List, Tuple
-from collections import Counter
 
 # Toxicity detection word lists
 TOXICITY_HIGH = {
@@ -229,7 +227,7 @@ UNSUPPORTED_MARKERS = {
 }
 
 
-def score_output_risk(output: str, prompt: str, context: Dict = None) -> Dict:
+def score_output_risk(output: str, prompt: str, context: dict = None) -> dict:
     """
     Score the risk level of an LLM output using multiple safety scanners.
 
@@ -298,7 +296,7 @@ def score_output_risk(output: str, prompt: str, context: Dict = None) -> Dict:
     }
 
 
-def scan_toxicity(text: str) -> Tuple[float, List[str]]:
+def scan_toxicity(text: str) -> tuple[float, list[str]]:
     """
     Detect toxic, offensive, or harmful content.
 
@@ -331,7 +329,7 @@ def scan_toxicity(text: str) -> Tuple[float, List[str]]:
     return score, details
 
 
-def scan_bias(text: str) -> Tuple[float, List[str]]:
+def scan_bias(text: str) -> tuple[float, list[str]]:
     """
     Detect stereotypes, discriminatory language, and loaded terms.
 
@@ -371,7 +369,7 @@ def scan_bias(text: str) -> Tuple[float, List[str]]:
     return score, details
 
 
-def scan_relevance(output: str, prompt: str) -> Tuple[float, List[str]]:
+def scan_relevance(output: str, prompt: str) -> tuple[float, list[str]]:
     """
     Measure topical alignment between prompt and output.
 
@@ -453,7 +451,7 @@ def scan_relevance(output: str, prompt: str) -> Tuple[float, List[str]]:
     return score, details
 
 
-def scan_factual_consistency(text: str) -> Tuple[float, List[str]]:
+def scan_factual_consistency(text: str) -> tuple[float, list[str]]:
     """
     Detect hedging language, unsupported claims, and hallucination markers.
 

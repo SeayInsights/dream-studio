@@ -19,7 +19,7 @@ import json
 import re
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -41,7 +41,7 @@ def check_rubric_write_guardrail(
     conn,
     event_id: str | None = None,
     is_operator: bool = False,
-) -> "GuardrailDecision | None":
+) -> GuardrailDecision | None:
     """Block runtime Write/Edit events targeting eval-rubric.yml.
 
     Records a guardrail_decisions row with action='block' and
@@ -68,7 +68,7 @@ def check_rubric_write_guardrail(
             "eval-rubric.yml is immutable at runtime. "
             "Changes require operator authorization and the [rubric-update] commit token."
         ),
-        evaluated_at=datetime.now(timezone.utc),
+        evaluated_at=datetime.now(UTC),
         metadata={"file_path": file_path},
     )
     try:
@@ -337,7 +337,7 @@ def evaluate(
             event_id=event_id,
             action=rule.action,
             message=rule.message,
-            evaluated_at=datetime.now(timezone.utc),
+            evaluated_at=datetime.now(UTC),
             metadata={"rule_name": rule.name, "severity": rule.severity.value},
         )
 
@@ -361,11 +361,11 @@ def evaluate(
         print(f"\n{severity_icon} [guardrails] {rule.name} ({rule.rule_id})", file=sys.stderr)
         print(f"   {rule.message}", file=sys.stderr)
         if rule.action == GuardrailAction.BLOCK:
-            print(f"   ACTION: BLOCKED\n", file=sys.stderr)
+            print("   ACTION: BLOCKED\n", file=sys.stderr)
         elif rule.action == GuardrailAction.REQUIRE_APPROVAL:
-            print(f"   ACTION: REQUIRES APPROVAL\n", file=sys.stderr)
+            print("   ACTION: REQUIRES APPROVAL\n", file=sys.stderr)
         else:
-            print(f"   ACTION: ADVISORY ONLY\n", file=sys.stderr)
+            print("   ACTION: ADVISORY ONLY\n", file=sys.stderr)
 
     if hook_id:
         _write_hook_eval_run(

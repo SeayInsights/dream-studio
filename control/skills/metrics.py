@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 # Add project root to path for canonical imports
@@ -68,7 +68,7 @@ def write_skill_usage(
     """Append skill usage record to skill-usage.jsonl."""
     state_dir.mkdir(parents=True, exist_ok=True)
     record = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "skill": display_name,
         "mode": mode or "",
         "session": session_id,

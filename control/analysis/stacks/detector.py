@@ -5,7 +5,6 @@ Combines multiple detection strategies to identify project stack with confidence
 
 import json
 from pathlib import Path
-from typing import Optional, List
 from dataclasses import dataclass
 
 
@@ -16,39 +15,39 @@ class StackSignal:
     name: str  # stack name
     confidence: float  # 0.0-1.0
     source: str  # where the signal came from
-    evidence: List[str]  # supporting evidence
+    evidence: list[str]  # supporting evidence
 
 
 @dataclass
 class DetectedStack:
     """Result of stack detection."""
 
-    adapter: Optional[str]  # adapter name to use
+    adapter: str | None  # adapter name to use
     confidence: float  # overall confidence
-    signals: List[StackSignal]  # all signals detected
-    framework: Optional[str]  # framework name
-    version: Optional[str]  # framework version if detected
-    test_framework: Optional[str] = (
+    signals: list[StackSignal]  # all signals detected
+    framework: str | None  # framework name
+    version: str | None  # framework version if detected
+    test_framework: str | None = (
         None  # test framework for coverage parser dispatch (vitest/jest/pytest/mocha)
     )
-    database_type: Optional[str] = (
+    database_type: str | None = (
         None  # primary database type for database skill dispatch
         # values: 'sqlite', 'postgres', 'mysql', 'mongodb', 'd1', 'dynamodb', or None
     )
-    web_framework: Optional[str] = (
+    web_framework: str | None = (
         None  # primary web/API framework for backend-api skill dispatch
         # values: 'fastapi', 'flask', 'django-rest', 'express', 'fastify', 'hono',
         #         'nextjs-api', 'gin', 'echo', 'chi', 'axum', 'actix', 'rocket', or None
     )
-    frontend_framework: Optional[str] = (
+    frontend_framework: str | None = (
         None  # primary frontend UI framework for frontend-ux skill dispatch
         # values: 'nextjs', 'react', 'remix', 'vue', 'svelte', 'angular', or None
     )
-    monorepo_type: Optional[str] = (
+    monorepo_type: str | None = (
         None  # monorepo tooling for architecture skill dispatch
         # values: 'npm-workspaces', 'pnpm', 'yarn-workspaces', 'cargo', 'gradle', 'lerna', or None
     )
-    architecture_framework: Optional[str] = (
+    architecture_framework: str | None = (
         None  # explicit architecture framework for architecture skill calibration
         # values: 'nestjs', 'spring', or None
     )
@@ -56,25 +55,25 @@ class DetectedStack:
     has_docker_compose: bool = False  # ops skill: docker-compose present → ops-013 resource check
     has_k8s_manifest: bool = False  # ops skill: k8s YAML present → ops-013 applies
     is_service: bool = False  # ops skill: True for web services; False for CLI tools and libraries
-    deployment_type: Optional[str] = (
+    deployment_type: str | None = (
         None  # ops skill deployment context
         # values: 'container', 'serverless', 'cli', or None
     )
     has_pii_schema: bool = False  # db-compliance skill: PII-suggestive columns detected in schema
     has_privacy_policy: bool = False  # db-compliance skill: privacy policy doc present in repo
-    compliance_hints: Optional[list] = None  # db-compliance skill: detected compliance signals
+    compliance_hints: list | None = None  # db-compliance skill: detected compliance signals
     # values: ['gdpr', 'hipaa', 'ccpa', 'coppa'] or [] or None
-    service_type: Optional[str] = (
+    service_type: str | None = (
         None  # pre-launch skill: service type for rule calibration
         # values: 'consumer', 'developer-tool', 'internal-service', 'library', or None
     )
     has_changelog: bool = False  # pre-launch skill: CHANGELOG.md or CHANGES.md present
     has_runbook: bool = False  # pre-launch skill: deployment runbook present
-    changelog_convention: Optional[str] = (
+    changelog_convention: str | None = (
         None  # pre-launch skill: detected changelog format
         # values: 'keep-a-changelog', 'conventional', 'custom', or None
     )
-    release_tooling: Optional[str] = (
+    release_tooling: str | None = (
         None  # pre-launch skill: release automation detected
         # values: 'semantic-release', 'standard-version', 'release-it', 'manual', or None
     )
@@ -158,7 +157,7 @@ def detect_stack(path: Path) -> DetectedStack:
     return result
 
 
-def _detect_by_files(path: Path) -> List[StackSignal]:
+def _detect_by_files(path: Path) -> list[StackSignal]:
     """Detect stack by checking for key files."""
     signals = []
 
@@ -238,7 +237,7 @@ def _detect_by_files(path: Path) -> List[StackSignal]:
     return signals
 
 
-def _detect_test_framework(path: Path) -> Optional[str]:
+def _detect_test_framework(path: Path) -> str | None:
     """
     Detect test framework for coverage parser dispatch (tst-001 and tst-010).
 
@@ -281,7 +280,7 @@ def _detect_test_framework(path: Path) -> Optional[str]:
     return None
 
 
-def _detect_database_type(path: Path) -> Optional[str]:
+def _detect_database_type(path: Path) -> str | None:
     """Detect database type for database skill dispatch.
 
     Returns the primary database type: 'sqlite', 'postgres', 'mysql',
@@ -378,7 +377,7 @@ def _detect_database_type(path: Path) -> Optional[str]:
     return None
 
 
-def _detect_web_framework(path: Path) -> Optional[str]:
+def _detect_web_framework(path: Path) -> str | None:
     """Detect the primary web/API framework for backend-api skill dispatch."""
     # Check package.json for JS/TS projects
     pkg_json = path / "package.json"
@@ -453,7 +452,7 @@ def _detect_web_framework(path: Path) -> Optional[str]:
     return None
 
 
-def _detect_frontend_framework(path: Path) -> Optional[str]:
+def _detect_frontend_framework(path: Path) -> str | None:
     """Detect the primary frontend UI framework for frontend-ux skill dispatch.
 
     Phase 1: React/Next.js focus. Phase 2 adds Vue/Svelte/Angular.
@@ -485,7 +484,7 @@ def _detect_frontend_framework(path: Path) -> Optional[str]:
     return None
 
 
-def _detect_monorepo_structure(path: Path) -> Optional[str]:
+def _detect_monorepo_structure(path: Path) -> str | None:
     """Detect monorepo tooling for architecture skill dispatch.
 
     Returns: 'npm-workspaces', 'pnpm', 'yarn-workspaces', 'cargo', 'gradle', 'lerna', or None.
@@ -535,7 +534,7 @@ def _detect_monorepo_structure(path: Path) -> Optional[str]:
     return None
 
 
-def _detect_architecture_framework(path: Path) -> Optional[str]:
+def _detect_architecture_framework(path: Path) -> str | None:
     """Detect explicit architecture frameworks for architecture skill calibration.
 
     Returns: 'nestjs', 'spring', or None.
@@ -806,7 +805,7 @@ def _detect_release_context(path: Path) -> dict:
     }
 
 
-def _infer_service_type(path: Path) -> Optional[str]:
+def _infer_service_type(path: Path) -> str | None:
     """Infer service type for pre-launch rule calibration.
 
     Inference priority:
@@ -892,7 +891,7 @@ def _infer_service_type(path: Path) -> Optional[str]:
     return "internal-service"
 
 
-def _combine_signals(signals: List[StackSignal]) -> DetectedStack:
+def _combine_signals(signals: list[StackSignal]) -> DetectedStack:
     """Combine signals and select best match."""
     if not signals:
         return DetectedStack(adapter=None, confidence=0.0, signals=[], framework=None, version=None)

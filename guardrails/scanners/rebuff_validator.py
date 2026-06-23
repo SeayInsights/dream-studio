@@ -17,8 +17,7 @@ Risk scoring:
 """
 
 import re
-from typing import Dict, List, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 
 @dataclass
@@ -283,8 +282,8 @@ class RebuffValidator:
         }
 
     def _check_patterns(
-        self, text: str, patterns: List[InjectionPattern], layer: str
-    ) -> List[dict]:
+        self, text: str, patterns: list[InjectionPattern], layer: str
+    ) -> list[dict]:
         """Check text against a list of patterns."""
         matches = []
 
@@ -305,7 +304,7 @@ class RebuffValidator:
 
         return matches
 
-    def _calculate_risk_score(self, detected_patterns: List[dict]) -> float:
+    def _calculate_risk_score(self, detected_patterns: list[dict]) -> float:
         """
         Calculate overall risk score from detected patterns.
 
@@ -335,7 +334,7 @@ class RebuffValidator:
 
         return total_score
 
-    def _generate_recommendation(self, risk_score: float, detected_patterns: List[dict]) -> str:
+    def _generate_recommendation(self, risk_score: float, detected_patterns: list[dict]) -> str:
         """Generate human-readable recommendation based on risk score."""
         if risk_score >= 0.8:
             return (
@@ -353,7 +352,7 @@ class RebuffValidator:
             return "LOW: Log this input for monitoring. " "Minor injection indicators present."
         return "Input appears safe. No significant injection indicators detected."
 
-    def batch_validate(self, inputs: List[str], context: dict = None) -> List[dict]:
+    def batch_validate(self, inputs: list[str], context: dict = None) -> list[dict]:
         """
         Validate multiple inputs in batch.
 

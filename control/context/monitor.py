@@ -60,7 +60,7 @@ def pct_to_band(pct: float) -> tuple[str, str]:
     return "ok", f"~{pct:.0f}%"
 
 
-def kb_to_band(kb: float, db_path: "Path | None" = None) -> tuple[str, str]:
+def kb_to_band(kb: float, db_path: Path | None = None) -> tuple[str, str]:
     """Fallback: map JSONL KB to a threshold band.
 
     The KB thresholds are scaled to the active context window (WO-CONTEXT-THRESHOLD-SCALE)

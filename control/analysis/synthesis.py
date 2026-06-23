@@ -4,19 +4,19 @@ Generates PRDs from discovery and analysis data.
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime, timezone
+from typing import Any
+from datetime import datetime, UTC
 
 from core.config.paths import project_planning_dir
 
 
 def generate_prd(
     project_id: str,
-    project_data: Dict[str, Any],
-    stack: Dict[str, Any],
-    research: Optional[Dict[str, Any]] = None,
-    audit: Optional[Dict[str, Any]] = None,
-    bugs: Optional[Dict[str, Any]] = None,
+    project_data: dict[str, Any],
+    stack: dict[str, Any],
+    research: dict[str, Any] | None = None,
+    audit: dict[str, Any] | None = None,
+    bugs: dict[str, Any] | None = None,
 ) -> Path:  # noqa: ARG001 (research/audit unused until Wave 3)
     """
     Generate PRD from project analysis data.
@@ -52,15 +52,15 @@ def generate_prd(
 
 def _generate_prd_content(
     project_id: str,
-    project_data: Dict[str, Any],
-    stack: Dict[str, Any],
-    research: Optional[Dict[str, Any]],
-    audit: Optional[Dict[str, Any]],
-    bugs: Optional[Dict[str, Any]],
+    project_data: dict[str, Any],
+    stack: dict[str, Any],
+    research: dict[str, Any] | None,
+    audit: dict[str, Any] | None,
+    bugs: dict[str, Any] | None,
 ) -> str:
     """Generate PRD markdown content."""
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     project_name = project_data.get("project_name", "unknown")
     detected_stack = project_data.get("detected_stack", "unknown")
 
@@ -84,14 +84,14 @@ def _generate_prd_content(
     # Header
     sections.append(f"# Project Requirements Document: {project_name}\n")
     sections.append(f"**Generated:** {timestamp}")
-    sections.append(f"**Analyzer:** Project Intelligence Platform v2.0")
+    sections.append("**Analyzer:** Project Intelligence Platform v2.0")
     sections.append(f"**Stack:** {detected_stack}\n")
     sections.append("---\n")
 
     # Executive Summary
     sections.append("## Executive Summary\n")
     sections.append(f"Project: **{project_name}**\n")
-    sections.append(f"**Key Metrics:**")
+    sections.append("**Key Metrics:**")
     sections.append(f"- Total Files: {total_files:,}")
     sections.append(f"- Lines of Code: {total_loc:,}")
     sections.append(f"- Primary Language: {primary_language}")

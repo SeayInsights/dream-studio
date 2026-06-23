@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class StackAdapter(ABC):
@@ -18,15 +18,15 @@ class StackAdapter(ABC):
     def detect(self, path: Path) -> float: ...
 
     @abstractmethod
-    def analyze_stack(self, path: Path) -> Dict[str, Any]: ...
+    def analyze_stack(self, path: Path) -> dict[str, Any]: ...
 
-    def get_build_command(self) -> Optional[str]:
+    def get_build_command(self) -> str | None:
         return None
 
-    def get_test_command(self) -> Optional[str]:
+    def get_test_command(self) -> str | None:
         return None
 
-    def get_rules(self) -> List[Dict[str, Any]]:
+    def get_rules(self) -> list[dict[str, Any]]:
         return []
 
 
@@ -34,10 +34,10 @@ class AdapterRegistry:
     """Registry that maps adapter names to adapter instances."""
 
     def __init__(self) -> None:
-        self._adapters: Dict[str, StackAdapter] = {}
+        self._adapters: dict[str, StackAdapter] = {}
 
     def register(self, adapter: StackAdapter) -> None:
         self._adapters[adapter.name] = adapter
 
-    def get_adapter(self, name: str) -> Optional[StackAdapter]:
+    def get_adapter(self, name: str) -> StackAdapter | None:
         return self._adapters.get(name)

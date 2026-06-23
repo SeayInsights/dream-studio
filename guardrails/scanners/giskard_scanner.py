@@ -18,8 +18,8 @@ Returns risk scores and detailed vulnerability findings.
 """
 
 import re
-from typing import Dict, List, Any, Tuple
-from dataclasses import dataclass, field
+from typing import Any
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -54,7 +54,7 @@ class Vulnerability:
     confidence: float = 1.0
     location: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary format."""
         return {
             "type": self.type.value,
@@ -168,9 +168,9 @@ class GiskardScanner:
 
     def __init__(self):
         """Initialize the scanner."""
-        self.vulnerabilities: List[Vulnerability] = []
+        self.vulnerabilities: list[Vulnerability] = []
 
-    def _check_prompt_injection(self, text: str) -> List[Vulnerability]:
+    def _check_prompt_injection(self, text: str) -> list[Vulnerability]:
         """
         Detect potential prompt injection attempts.
 
@@ -199,7 +199,7 @@ class GiskardScanner:
 
         return vulns
 
-    def _check_pii_leakage(self, text: str) -> List[Vulnerability]:
+    def _check_pii_leakage(self, text: str) -> list[Vulnerability]:
         """
         Detect personally identifiable information (PII).
 
@@ -248,7 +248,7 @@ class GiskardScanner:
             return f"***{value[-4:]}"
         return "***"
 
-    def _check_hallucinations(self, text: str, context: Dict[str, Any]) -> List[Vulnerability]:
+    def _check_hallucinations(self, text: str, context: dict[str, Any]) -> list[Vulnerability]:
         """
         Detect potential hallucinations (stub implementation).
 
@@ -281,7 +281,7 @@ class GiskardScanner:
 
         return vulns
 
-    def _check_toxicity(self, text: str) -> List[Vulnerability]:
+    def _check_toxicity(self, text: str) -> list[Vulnerability]:
         """
         Detect toxic content.
 
@@ -314,7 +314,7 @@ class GiskardScanner:
 
         return vulns
 
-    def _check_bias(self, text: str) -> List[Vulnerability]:
+    def _check_bias(self, text: str) -> list[Vulnerability]:
         """
         Detect biased language.
 
@@ -343,7 +343,7 @@ class GiskardScanner:
 
         return vulns
 
-    def _calculate_risk_score(self, vulnerabilities: List[Vulnerability]) -> float:
+    def _calculate_risk_score(self, vulnerabilities: list[Vulnerability]) -> float:
         """
         Calculate overall risk score from detected vulnerabilities.
 
@@ -373,7 +373,7 @@ class GiskardScanner:
         risk_score = min(1.0, weighted_sum / total_weight)
         return round(risk_score, 3)
 
-    def scan(self, output: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def scan(self, output: str, context: dict[str, Any] = None) -> dict[str, Any]:
         """
         Scan LLM output for vulnerabilities.
 
@@ -433,7 +433,7 @@ class GiskardScanner:
 
 
 # Public API function
-def scan_llm_output(output: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+def scan_llm_output(output: str, context: dict[str, Any] = None) -> dict[str, Any]:
     """
     Scan LLM output for security vulnerabilities.
 

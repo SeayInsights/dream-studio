@@ -15,10 +15,11 @@ import hashlib
 import json
 import re
 import sqlite3
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 # ── Sanitization ──────────────────────────────────────────────────────────────
 
@@ -367,7 +368,7 @@ class SessionHarvester:
                             "architecture_decision",
                             title,
                             abs_path,
-                            datetime.now(timezone.utc).isoformat(),
+                            datetime.now(UTC).isoformat(),
                         ),
                     )
             except sqlite3.Error:
@@ -392,9 +393,9 @@ def _extract_session_timestamp(records: list[dict], path: Path) -> str:
             return str(ts)
     try:
         mtime = path.stat().st_mtime
-        return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(mtime, tz=UTC).isoformat()
     except OSError:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
 
 def _extract_error_text(item: dict[str, Any]) -> str:
@@ -467,7 +468,7 @@ def _infer_skill_from_context(records: list[dict], idx: int) -> str:
 
 
 def _write_tech_signals(conn: sqlite3.Connection, ext_counts: dict[str, int]) -> None:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     for ext, count in ext_counts.items():
         signal_id = hashlib.sha256(ext.encode()).hexdigest()[:32]
         conn.execute(

@@ -10,10 +10,9 @@ Called by skill invocation hooks before loading a skill.
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any
 
 try:
     import yaml
@@ -73,7 +72,7 @@ def _get_bridge():
     return _bridge_instance
 
 
-def _load_progressive_config() -> Dict[str, Any]:
+def _load_progressive_config() -> dict[str, Any]:
     """Load progressive-disclosure.yml from setup skill."""
     try:
         config_path = (
@@ -97,7 +96,7 @@ def _load_progressive_config() -> Dict[str, Any]:
         return {"starter_modes": [], "total_modes": 40, "starter_count": 5}
 
 
-def _load_unlock_conditions() -> Dict[str, Any]:
+def _load_unlock_conditions() -> dict[str, Any]:
     """Load unlock-conditions.yml from setup skill."""
     try:
         config_path = (
@@ -121,7 +120,7 @@ def _load_unlock_conditions() -> Dict[str, Any]:
         return {"unlock_triggers": []}
 
 
-def _get_unlocked_modes() -> Set[str]:
+def _get_unlocked_modes() -> set[str]:
     """Get set of unlocked mode identifiers from config.
 
     Returns set of strings like "core:think", "security:scan", etc.
@@ -136,7 +135,7 @@ def _get_unlocked_modes() -> Set[str]:
         return set()
 
 
-def _save_unlocked_modes(unlocked: Set[str]) -> None:
+def _save_unlocked_modes(unlocked: set[str]) -> None:
     """Save unlocked mode identifiers to config."""
     try:
         cfg = state.read_config()
@@ -146,7 +145,7 @@ def _save_unlocked_modes(unlocked: Set[str]) -> None:
         pass
 
 
-def _get_starter_modes() -> Set[str]:
+def _get_starter_modes() -> set[str]:
     """Get set of starter mode identifiers (pack:mode format)."""
     config = _load_progressive_config()
     starter = config.get("starter_modes", [])
@@ -162,7 +161,7 @@ def _get_starter_modes() -> Set[str]:
     return modes
 
 
-def _check_unlock_patterns(user_message: str) -> List[Dict[str, Any]]:
+def _check_unlock_patterns(user_message: str) -> list[dict[str, Any]]:
     """Check if user's message contains any unlock trigger patterns.
 
     Returns list of unlock configs that matched, enriched with match reasoning.
@@ -230,7 +229,7 @@ def _check_unlock_patterns(user_message: str) -> List[Dict[str, Any]]:
     return matched
 
 
-def _unlock_modes(trigger_configs: List[Dict[str, Any]]) -> List[str]:
+def _unlock_modes(trigger_configs: list[dict[str, Any]]) -> list[str]:
     """Unlock modes from trigger configs and return unlock messages.
 
     Returns list of unlock messages to show to user.
@@ -362,7 +361,7 @@ def show_unlock_notification(message: str) -> None:
         print(f"\n{message}\n", flush=True)
 
 
-def get_progressive_status() -> Dict[str, Any]:
+def get_progressive_status() -> dict[str, Any]:
     """Get current progressive mode status for display.
 
     Returns dict with:

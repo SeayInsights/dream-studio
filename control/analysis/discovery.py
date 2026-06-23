@@ -14,10 +14,10 @@ Wave 4 Integration: Context7 for large projects (10k+ files)
 """
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 # Context7 integration for large codebases (Wave 4)
 try:
@@ -30,7 +30,7 @@ except ImportError:
     Context7Manager = None
 
 
-def discover_project(path: Path, use_context7: bool = False, query: str = "") -> Dict[str, Any]:
+def discover_project(path: Path, use_context7: bool = False, query: str = "") -> dict[str, Any]:
     """
     Discover project structure and metadata.
 
@@ -138,7 +138,7 @@ def _get_project_name(path: Path) -> str:
     return path.name
 
 
-def _inventory_files(path: Path) -> Dict[str, Any]:
+def _inventory_files(path: Path) -> dict[str, Any]:
     """
     Count files by extension and directory.
 
@@ -188,7 +188,7 @@ def _inventory_files(path: Path) -> Dict[str, Any]:
     return {"total_files": total_files, "by_extension": by_extension, "by_directory": by_directory}
 
 
-def _count_lines(path: Path) -> Dict[str, Any]:
+def _count_lines(path: Path) -> dict[str, Any]:
     """
     Count lines of code by language.
 
@@ -246,7 +246,7 @@ def _count_lines(path: Path) -> Dict[str, Any]:
     return {"total": total, "by_language": by_language, "by_file_type": by_file_type}
 
 
-def _detect_languages(path: Path) -> List[str]:
+def _detect_languages(path: Path) -> list[str]:
     """
     Detect programming languages used in project.
 
@@ -258,7 +258,7 @@ def _detect_languages(path: Path) -> List[str]:
     return [lang for lang, _ in languages]
 
 
-def _get_git_metadata(path: Path) -> Dict[str, Any]:
+def _get_git_metadata(path: Path) -> dict[str, Any]:
     """
     Extract git metadata if repo exists.
 
@@ -329,7 +329,7 @@ def _get_git_metadata(path: Path) -> Dict[str, Any]:
         if first_commit_date:
             try:
                 first_dt = datetime.fromisoformat(first_commit_date.replace("Z", "+00:00"))
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 repo_age_days = (now - first_dt).days
             except (ValueError, AttributeError):
                 pass
@@ -347,7 +347,7 @@ def _get_git_metadata(path: Path) -> Dict[str, Any]:
         return {"is_git_repo": False}
 
 
-def _find_entry_points(path: Path) -> List[str]:
+def _find_entry_points(path: Path) -> list[str]:
     """
     Find likely entry point files.
 
@@ -396,7 +396,7 @@ def _determine_project_type(path: Path) -> str:
     return "greenfield"
 
 
-def _find_config_files(path: Path) -> List[str]:
+def _find_config_files(path: Path) -> list[str]:
     """
     Find configuration files in project root.
 
@@ -435,7 +435,7 @@ def _find_config_files(path: Path) -> List[str]:
     return found
 
 
-def _detect_stack_wrapper(path: Path) -> Optional[str]:
+def _detect_stack_wrapper(path: Path) -> str | None:
     """
     Detect stack using detector.py.
 
