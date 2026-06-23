@@ -5,10 +5,9 @@ Runtime Verification of SQLite Write Paths
 Tests each critical write path end-to-end with full tracing.
 """
 
-import sqlite3
 import sys
 from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
 import json
 import os
 
@@ -41,7 +40,7 @@ def verify_write_path(
     write_func: Callable,
     verify_query: str,
     table_name: str,
-    cleanup_func: Optional[Callable] = None,
+    cleanup_func: Callable | None = None,
 ) -> bool:
     """
     Test a single write path end-to-end.
@@ -79,7 +78,7 @@ def verify_write_path(
         print(f"Rows BEFORE: {before_count}")
 
         # Execute the write
-        print(f"\nExecuting write function...")
+        print("\nExecuting write function...")
         try:
             result = write_func()
             print(f"Write function returned: {result}")
@@ -127,7 +126,7 @@ def verify_write_path(
 
         # Print results
         print(f"\n{'='*70}")
-        print(f"RESULTS")
+        print("RESULTS")
         print("=" * 70)
         print(f"Row count increased: {'PASS' if row_increased else 'FAIL'}")
         print(f"No errors: {'PASS' if no_errors else 'FAIL'}")
@@ -138,19 +137,19 @@ def verify_write_path(
             print("[BREAKPOINT] Write path incomplete - check instrumentation")
 
         if errors:
-            print(f"\nErrors encountered:")
+            print("\nErrors encountered:")
             for error in errors:
                 print(f"  - {error.get('error_type')}: {error.get('error')}")
 
         if not row_increased and not errors:
-            print(f"\n[CRITICAL] Row count did not increase but no errors logged")
-            print(f"This indicates a SILENT FAILURE")
+            print("\n[CRITICAL] Row count did not increase but no errors logged")
+            print("This indicates a SILENT FAILURE")
 
         # Cleanup
         if cleanup_func and success:
             try:
                 cleanup_func()
-                print(f"\nCleanup completed")
+                print("\nCleanup completed")
             except Exception as e:
                 print(f"[WARNING] Cleanup failed: {e}")
 
@@ -255,7 +254,7 @@ def run_all_tests():
 
     # Summary
     print(f"\n{'='*70}")
-    print(f"SUMMARY")
+    print("SUMMARY")
     print("=" * 70)
     print(f"Tests run: {len(results)}")
     print(f"Passed: {sum(results)}")

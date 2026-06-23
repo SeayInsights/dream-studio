@@ -9,11 +9,8 @@ Covers:
 
 from __future__ import annotations
 
-import sqlite3
 import sys
 from pathlib import Path
-
-import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
@@ -53,7 +50,7 @@ def _seed_project_and_session(conn, project_id: str, session_id: str) -> None:
     """
     import datetime
 
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now = datetime.datetime.now(datetime.UTC).isoformat()
     conn.execute(
         "INSERT OR IGNORE INTO raw_sessions (session_id, project_id, started_at)"
         " VALUES (?, ?, ?)",

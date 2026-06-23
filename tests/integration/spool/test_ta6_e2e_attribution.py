@@ -12,7 +12,7 @@ import json
 import sqlite3
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
@@ -41,7 +41,7 @@ def _bootstrap_db(db_path: Path) -> None:
 
 
 def _insert_project(conn: sqlite3.Connection, project_id: str, name: str) -> None:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         "INSERT INTO business_projects (project_id, name, status, created_at, updated_at)"
         " VALUES (?, ?, 'active', ?, ?)",
@@ -110,7 +110,7 @@ def sdlc_hierarchy(ta6_db):
     # 2. Milestone via direct SQL — create_milestone is projection-only and
     #    does not write to business_milestones synchronously, same as work_order.
     milestone_id = str(uuid.uuid4())
-    now_ms = datetime.now(timezone.utc).isoformat()
+    now_ms = datetime.now(UTC).isoformat()
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -128,7 +128,7 @@ def sdlc_hierarchy(ta6_db):
     #    does not write to business_work_orders synchronously, which breaks the
     #    immediate create_task lookup. Insert directly for test isolation.
     work_order_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:

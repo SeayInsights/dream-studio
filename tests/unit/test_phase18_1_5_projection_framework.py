@@ -15,10 +15,9 @@ import json
 import sqlite3
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 
@@ -192,7 +191,7 @@ class _CountingProjection:
     def __init__(self):
         from core.projections.framework import RetryPolicy
 
-        self.calls: List[Dict[str, Any]] = []
+        self.calls: list[dict[str, Any]] = []
         self._fail = False  # set True to make handle() raise
         self.retry_policy = RetryPolicy(max_retries=3, base_delay_seconds=1.0)
 
@@ -209,7 +208,7 @@ class _CountingProjection:
         self.calls.append(event)
         conn.execute(
             "INSERT OR IGNORE INTO test_projection_target (event_id, processed_at) VALUES (?, ?)",
-            (event["event_id"], datetime.now(timezone.utc).isoformat()),
+            (event["event_id"], datetime.now(UTC).isoformat()),
         )
         return 1
 
@@ -273,7 +272,7 @@ class TestRetryPolicy:
         from core.projections.framework import RetryPolicy
 
         policy = RetryPolicy(base_delay_seconds=5.0)
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         ts = policy.next_retry_at(0)
         _ = before  # before/after bracket the timestamp for ordering assertions below
 
@@ -754,7 +753,7 @@ class TestDeadLetterAndRetry:
                 conn.execute(
                     "INSERT OR IGNORE INTO test_projection_target (event_id, processed_at)"
                     " VALUES (?, ?)",
-                    (event["event_id"], datetime.now(timezone.utc).isoformat()),
+                    (event["event_id"], datetime.now(UTC).isoformat()),
                 )
                 return 1
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -16,7 +15,7 @@ from control.execution.workflow.registry import (  # noqa: E402
     _fmt_tokens,
     _fmt_last_run,
 )
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 def _write(path: Path, data: dict) -> None:
@@ -118,10 +117,10 @@ class TestHelpers:
         assert _fmt_tokens(3000) == "3k"
 
     def test_fmt_last_run_none(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         assert _fmt_last_run(None, now) == "never"
 
     def test_fmt_last_run_recent(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         lr = {"finished_at": (now - timedelta(hours=2)).isoformat()}
         assert "2h ago" in _fmt_last_run(lr, now)

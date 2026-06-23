@@ -51,7 +51,7 @@ class InvocationRecorder:
         self._originals: list[tuple[object, str, object]] = []
         self.invocations: list[str] = []
 
-    def __enter__(self) -> "InvocationRecorder":
+    def __enter__(self) -> InvocationRecorder:
         for module, name in self._targets:
             original = getattr(module, name)
             self._originals.append((module, name, original))

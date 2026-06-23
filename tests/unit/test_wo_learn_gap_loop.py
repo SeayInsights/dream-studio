@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
@@ -393,7 +393,7 @@ class TestWorkflowPatternAnalyzerDetectsPatterns:
             """ISO timestamp offset_minutes ago."""
             from datetime import timedelta
 
-            t = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
+            t = datetime(2026, 6, 8, 12, 0, 0, tzinfo=UTC)
             t -= timedelta(minutes=offset_minutes)
             return t.isoformat().replace("+00:00", "")
 

@@ -16,7 +16,6 @@ Coverage:
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import sys
 import uuid
@@ -24,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from datetime import UTC
 
 REPO_ROOT = Path(__file__).parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -256,9 +256,9 @@ def _fetch_row(db_path: Path, table: str, pk_col: str, pk_val: str) -> dict | No
 
 def _direct_insert_project(db_path: Path, project_id: str, name: str = "Test Project") -> None:
     """Insert a project directly — mirrors register_project's direct SQL path."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn = sqlite3.connect(str(db_path))
     conn.execute(
         "INSERT INTO business_projects (project_id, name, status, created_at, updated_at)"
@@ -273,9 +273,9 @@ def _direct_insert_milestone(
     db_path: Path, milestone_id: str, project_id: str, title: str = "Test Milestone"
 ) -> None:
     """Insert a milestone directly — satisfies create_work_order FK check."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn = sqlite3.connect(str(db_path))
     conn.execute(
         "INSERT INTO business_milestones"
@@ -343,15 +343,14 @@ def test_sync_tick_importable_and_non_raising(sdlc_env):
 
 
 def test_tick_materialises_milestone_from_canonical_event(sdlc_env):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    from core.projections.framework import ProjectionEngine
     from core.projections.milestone_projection import MilestoneProjection
 
     db_path = sdlc_env["db"]
     project_id = str(uuid.uuid4())
     milestone_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     _direct_insert_project(db_path, project_id)
 
@@ -612,7 +611,7 @@ def check_sdlc_consistency(db_path: Path) -> dict[str, Any]:
 
 def test_consistency_helper_reports_stranded_events(sdlc_env):
     """check_sdlc_consistency() correctly identifies events without read-model rows."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     db_path = sdlc_env["db"]
     project_id = str(uuid.uuid4())
@@ -623,7 +622,7 @@ def test_consistency_helper_reports_stranded_events(sdlc_env):
     orphan_event = {
         "event_id": str(uuid.uuid4()),
         "event_type": "milestone.created",
-        "event_timestamp": datetime.now(timezone.utc).isoformat(),
+        "event_timestamp": datetime.now(UTC).isoformat(),
         "trace": {"project_id": project_id, "milestone_id": orphan_ms_id, "domain": "sdlc"},
         "payload": {"title": "Orphan milestone", "status": "pending"},
     }

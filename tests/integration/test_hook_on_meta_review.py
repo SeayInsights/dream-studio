@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 
 
 def _make_session_context(path, themes: list[str]) -> None:
@@ -21,7 +21,7 @@ def _make_session_context(path, themes: list[str]) -> None:
 def test_no_context_file_is_noop(isolated_home, handler):
     mod = handler("on-meta-review")
     mod.main()
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
     assert not (isolated_home / ".dream-studio" / "meta" / f"review-{date_str}.md").exists()
 
 
@@ -38,7 +38,7 @@ def test_generates_review_and_drafts_theme_lessons(isolated_home, handler):
     mod = handler("on-meta-review")
     mod.main()
 
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
     review = (isolated_home / ".dream-studio" / "meta" / f"review-{date_str}.md").read_text(
         encoding="utf-8"
     )

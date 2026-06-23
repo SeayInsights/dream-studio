@@ -18,9 +18,9 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import patch
 
 import pytest
@@ -324,7 +324,7 @@ def test_get_cached_research_expired(client: TestClient, test_db: Path, sample_r
 
     # Manually expire the entry via a direct connection to the test DB file
     conn = sqlite3.connect(str(test_db))
-    past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    past_date = (datetime.now(UTC) - timedelta(days=1)).isoformat()
     conn.execute(
         "UPDATE research_cache SET expires_at = ? WHERE topic = ?",
         (past_date, "python async programming"),

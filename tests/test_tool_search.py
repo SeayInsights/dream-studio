@@ -15,10 +15,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-import tempfile
 from contextlib import contextmanager
-from pathlib import Path
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -33,7 +30,6 @@ if "sentence_transformers" not in sys.modules:
     sys.modules["sentence_transformers"] = _st_stub
 
 from control.research import tools as tool_search
-from core.config.database import get_connection, transaction
 
 
 @contextmanager
@@ -59,7 +55,7 @@ def _test_db_transaction(conn):
 
 
 @pytest.fixture
-def mock_tool_data() -> List[dict]:
+def mock_tool_data() -> list[dict]:
     """Create 20 test tools with realistic descriptions."""
     return [
         {

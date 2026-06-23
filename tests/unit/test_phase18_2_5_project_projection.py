@@ -20,9 +20,8 @@ from __future__ import annotations
 import sqlite3
 import sys
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -144,7 +143,7 @@ def _mk_project_event(
     project_id: str = _PROJECT_ID,
     event_timestamp: str = _TS,
     **payload_kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "event_id": str(uuid.uuid4()),
         "event_type": event_type,
@@ -209,7 +208,7 @@ def _setup_projection(db_path: Path):
     return proj
 
 
-def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
+def _call_handle(proj, event: dict[str, Any], db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -220,7 +219,7 @@ def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
         conn.close()
 
 
-def _fetch_project(db_path: Path, project_id: str) -> Dict[str, Any] | None:
+def _fetch_project(db_path: Path, project_id: str) -> dict[str, Any] | None:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
