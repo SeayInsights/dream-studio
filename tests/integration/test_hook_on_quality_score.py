@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,7 +24,7 @@ def test_runs_checks_with_marker(isolated_home, monkeypatch, handler):
     # Place marker, stub git helpers to return synthetic diff/file list
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
     marker.parent.mkdir(parents=True, exist_ok=True)
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     marker.write_text(json.dumps({"command": "build feature: y", "started_at": started}))
 
     mod = handler("on-quality-score")
@@ -51,7 +51,7 @@ def test_runs_checks_with_marker(isolated_home, monkeypatch, handler):
 def test_secret_pattern_fails(isolated_home, monkeypatch, handler):
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
     marker.parent.mkdir(parents=True, exist_ok=True)
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     marker.write_text(json.dumps({"command": "deploy: prod", "started_at": started}))
 
     mod = handler("on-quality-score")

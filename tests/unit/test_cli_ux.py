@@ -7,10 +7,8 @@ import sqlite3
 import subprocess
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,7 +39,7 @@ def _make_db_with_project(tmp_path: Path) -> tuple[Path, str]:
     milestone_id = str(uuid.uuid4())
     wo_id = str(uuid.uuid4())
     task_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with sqlite3.connect(str(db_path)) as conn:
         conn.executescript(f"""
@@ -285,7 +283,7 @@ def test_project_start_no_open_wos_prints_helpful_message(tmp_path):
     state_dir.mkdir(parents=True)
     db_path = state_dir / "studio.db"
     project_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     with sqlite3.connect(str(db_path)) as conn:
         conn.executescript(f"""

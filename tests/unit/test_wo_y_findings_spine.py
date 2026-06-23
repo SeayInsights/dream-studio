@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
@@ -57,7 +57,7 @@ def mem_conn():
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
 # ── record_finding ─────────────────────────────────────────────────────────────

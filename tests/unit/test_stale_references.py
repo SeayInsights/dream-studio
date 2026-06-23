@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Iterator
-
-import pytest
+from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_ROOT = REPO_ROOT / "canonical"

@@ -15,7 +15,7 @@ import sqlite3
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -146,7 +146,7 @@ def _mk_milestone_event(
     event_timestamp: str = "2026-05-27T12:00:00+00:00",
     project_id: str = "proj-test",
     **payload_kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a normalized event dict matching ProjectionEngine._row_to_event() format."""
     return {
         "event_id": str(uuid.uuid4()),
@@ -212,7 +212,7 @@ def _setup_projection(db_path: Path):
     return proj
 
 
-def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
+def _call_handle(proj, event: dict[str, Any], db_path: Path) -> int:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -223,7 +223,7 @@ def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
         conn.close()
 
 
-def _fetch_milestone(db_path: Path, milestone_id: str) -> Dict[str, Any] | None:
+def _fetch_milestone(db_path: Path, milestone_id: str) -> dict[str, Any] | None:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     row = conn.execute(

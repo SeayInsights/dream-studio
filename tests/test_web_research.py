@@ -10,10 +10,8 @@ Tests cover:
 
 from __future__ import annotations
 
-import json
 import sqlite3
-from datetime import datetime, timezone, timedelta
-from typing import List
+from datetime import datetime, timedelta, UTC
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -40,7 +38,7 @@ def disable_research_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def mock_search_results() -> List[dict]:
+def mock_search_results() -> list[dict]:
     """Create realistic WebSearch results with varied tier sources."""
     return [
         {
@@ -72,7 +70,7 @@ def mock_search_results() -> List[dict]:
 
 
 @pytest.fixture
-def tier1_only_results() -> List[dict]:
+def tier1_only_results() -> list[dict]:
     """WebSearch results with only tier 1 sources."""
     return [
         {
@@ -94,7 +92,7 @@ def tier1_only_results() -> List[dict]:
 
 
 @pytest.fixture
-def tier3_only_results() -> List[dict]:
+def tier3_only_results() -> list[dict]:
     """WebSearch results with only tier 3 sources."""
     return [
         {
@@ -532,7 +530,7 @@ class TestResearchCache:
         """Expired cache entry should return None."""
         web_research.save_to_cache("python async", sample_report, ttl_days=30)
 
-        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        past_date = (datetime.now(UTC) - timedelta(days=1)).isoformat()
         test_db.execute(
             "UPDATE research_cache SET expires_at = ? WHERE topic = ?", (past_date, "python async")
         )

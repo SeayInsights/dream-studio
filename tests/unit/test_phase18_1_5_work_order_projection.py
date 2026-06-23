@@ -15,9 +15,8 @@ import json
 import sqlite3
 import sys
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -37,7 +36,7 @@ def _mk_wo_event(
     event_timestamp: str = "2026-05-22T12:00:00+00:00",
     project_id: str = "proj-test",
     **payload_kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Build a normalized event dict matching ProjectionEngine._row_to_event() format."""
     return {
         "event_id": str(uuid.uuid4()),
@@ -210,7 +209,7 @@ def _setup_projection(db_path: Path):
     return proj
 
 
-def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
+def _call_handle(proj, event: dict[str, Any], db_path: Path) -> int:
     """Call proj.handle(event, conn) in a fresh connection and commit."""
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -222,7 +221,7 @@ def _call_handle(proj, event: Dict[str, Any], db_path: Path) -> int:
         conn.close()
 
 
-def _fetch_wo(db_path: Path, work_order_id: str) -> Dict[str, Any] | None:
+def _fetch_wo(db_path: Path, work_order_id: str) -> dict[str, Any] | None:
     """Return the business_work_orders row for the given work_order_id, or None."""
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row

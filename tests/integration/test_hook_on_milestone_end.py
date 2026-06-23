@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 from freezegun import freeze_time
 
@@ -23,7 +23,7 @@ def test_marker_cleared_and_logged(isolated_home, handler):
     mod = handler("on-milestone-end")
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
     marker.parent.mkdir(parents=True, exist_ok=True)
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     marker.write_text(json.dumps({"command": "build feature: x", "started_at": started}))
 
     mod.main()
@@ -41,7 +41,7 @@ def test_long_milestone_drafts_lesson(isolated_home, handler):
     mod = handler("on-milestone-end")
     marker = isolated_home / ".dream-studio" / "state" / "milestone-active.txt"
     marker.parent.mkdir(parents=True, exist_ok=True)
-    started = (datetime.now(timezone.utc) - timedelta(minutes=90)).isoformat()
+    started = (datetime.now(UTC) - timedelta(minutes=90)).isoformat()
     marker.write_text(json.dumps({"command": "build feature: huge", "started_at": started}))
 
     mod.main()
