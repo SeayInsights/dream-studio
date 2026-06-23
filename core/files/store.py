@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -105,7 +105,7 @@ def write_file(
         )
 
     file_id = str(uuid.uuid4())
-    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
+    created_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
     raw = content if isinstance(content, bytes) else content.encode("utf-8")
     chk = _checksum(raw)
 

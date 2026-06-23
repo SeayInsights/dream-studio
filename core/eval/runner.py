@@ -23,6 +23,7 @@ from pathlib import Path
 from core.eval.baseline import load_baseline, save_run_result
 from core.eval.matcher import match_events
 from core.eval.schema import EvalCase, EvalResult, MatchResult
+from datetime import UTC
 
 logger = logging.getLogger(__name__)
 
@@ -548,10 +549,10 @@ def evaluate_wo_outcome(
 def _record_outcome_run(work_order_id: str, outcome: dict, db_path: Path) -> None:
     """Best-effort: record the outcome eval to ds_eval_runs (never raises)."""
     import sqlite3
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     try:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn = sqlite3.connect(str(db_path))
         try:
             conn.execute(
@@ -666,7 +667,7 @@ def run_outcome_eval(
     write an escalation file. Returns ``{ok, evaluated, failed, results}``.
     """
     import sqlite3
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     db_path = Path(db_path)
     query = (
@@ -676,7 +677,7 @@ def run_outcome_eval(
     )
     params: tuple = ()
     if window_hours is not None:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=window_hours)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(hours=window_hours)).isoformat()
         # closed_at is ISO-8601 → lexicographic comparison is chronological.
         query += " AND closed_at IS NOT NULL AND closed_at >= ?"
         params = (cutoff,)

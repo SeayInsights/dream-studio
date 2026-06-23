@@ -50,7 +50,7 @@ class EvalCase:
         return self.event_weight
 
     @classmethod
-    def from_json(cls, path: Path) -> "EvalCase":
+    def from_json(cls, path: Path) -> EvalCase:
         """Load an eval case from a JSON file."""
         data = json.loads(path.read_text(encoding="utf-8"))
         expected_events = [

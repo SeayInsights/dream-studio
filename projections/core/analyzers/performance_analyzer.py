@@ -1,7 +1,6 @@
 """PerformanceAnalyzer - Analyzes performance metrics from collector data"""
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from typing import Any
 
 
 class PerformanceAnalyzer:
@@ -10,7 +9,7 @@ class PerformanceAnalyzer:
     def __init__(self):
         """Initialize PerformanceAnalyzer"""
 
-    def analyze_skill_performance(self, skill_metrics: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_skill_performance(self, skill_metrics: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze skill performance and identify trends
 
@@ -70,8 +69,8 @@ class PerformanceAnalyzer:
         }
 
     def analyze_model_efficiency(
-        self, model_metrics: Dict[str, Any], token_metrics: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, model_metrics: dict[str, Any], token_metrics: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Analyze model efficiency combining performance and cost
 
@@ -141,7 +140,7 @@ class PerformanceAnalyzer:
             "recommendations": recommendations,
         }
 
-    def analyze_session_health(self, session_metrics: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_session_health(self, session_metrics: dict[str, Any]) -> dict[str, Any]:
         """
         Analyze session health and productivity
 
@@ -219,8 +218,8 @@ class PerformanceAnalyzer:
         }
 
     def compare_periods(
-        self, current_metrics: Dict[str, Any], previous_metrics: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, current_metrics: dict[str, Any], previous_metrics: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Compare two time periods to identify trends
 

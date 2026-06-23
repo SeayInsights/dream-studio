@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
@@ -218,7 +218,7 @@ def record_skill_invocation(
         dream_studio_home=dream_studio_home,
     )
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     try:
         from core.sdlc.active_task import get_active_task as _get_active_task
 
@@ -359,7 +359,7 @@ def seed_gate_artifact_files(
 
     artifacts_written: list[str] = []
     design_brief_seeded = False
-    date_str = datetime.now(timezone.utc).isoformat()[:10]
+    date_str = datetime.now(UTC).isoformat()[:10]
 
     if specifier == "website:critique":
         artifact = target_dir / "design-critique.md"

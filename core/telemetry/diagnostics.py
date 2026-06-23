@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 _DS_DIAGNOSTICS_DIR_ENV = "DS_DIAGNOSTICS_DIR"
 
@@ -31,11 +31,11 @@ def _file_prefix_from_source(source: str) -> str:
 def log_diagnostic(
     category: Literal["failure", "anomaly", "performance"],
     source: str,
-    context: Optional[dict[str, Any]] = None,
-    details: Optional[dict[str, Any]] = None,
-    duration_ms: Optional[float] = None,
-    session_id: Optional[str] = None,
-    machine_id: Optional[str] = None,
+    context: dict[str, Any] | None = None,
+    details: dict[str, Any] | None = None,
+    duration_ms: float | None = None,
+    session_id: str | None = None,
+    machine_id: str | None = None,
 ) -> None:
     """Append a structured diagnostic entry to a source-prefixed JSONL file.
 
@@ -51,7 +51,7 @@ def log_diagnostic(
         log_path = diag_dir / f"{prefix}.jsonl"
 
         entry: dict[str, Any] = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "category": category,
             "source": source,
         }

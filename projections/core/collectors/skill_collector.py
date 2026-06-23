@@ -3,14 +3,14 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 from projections.core.collectors.authority_sources import skill_usage_sql
 
 
 class SkillCollector:
     """Collects and aggregates skill metrics from execution_events.skill.invoked."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize SkillCollector
 
@@ -22,7 +22,7 @@ class SkillCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect skill metrics
 
@@ -211,7 +211,7 @@ class SkillCollector:
         finally:
             conn.close()
 
-    def get_skill_timeline(self, skill_name: str, days: int = 30) -> List[Dict[str, Any]]:
+    def get_skill_timeline(self, skill_name: str, days: int = 30) -> list[dict[str, Any]]:
         """
         Get daily usage timeline for a specific skill
 

@@ -3,13 +3,13 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 
 class LessonCollector:
     """Collects and aggregates lesson metrics from raw_lessons table"""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize LessonCollector
 
@@ -21,7 +21,7 @@ class LessonCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect lesson metrics
 
@@ -142,7 +142,7 @@ class LessonCollector:
         finally:
             conn.close()
 
-    def get_timeline(self, days: int = 30) -> List[Dict[str, Any]]:
+    def get_timeline(self, days: int = 30) -> list[dict[str, Any]]:
         """
         Get daily lesson capture timeline
 
@@ -178,7 +178,7 @@ class LessonCollector:
         finally:
             conn.close()
 
-    def get_source_quality(self) -> List[Dict[str, Any]]:
+    def get_source_quality(self) -> list[dict[str, Any]]:
         """
         Analyze quality metrics by source
 

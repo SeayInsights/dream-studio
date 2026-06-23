@@ -10,7 +10,7 @@ import json
 import subprocess
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.types import EventType
@@ -27,7 +27,7 @@ _THRESH_ACTIVE_TASK = 20.0
 _SOURCE = "token_capture.handle_post_tool_use"
 
 
-def _extract_usage(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
+def _extract_usage(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Extract token usage from payload. Returns dict or None if absent."""
     usage = payload.get("usage")
     if not isinstance(usage, dict):
@@ -44,7 +44,7 @@ def _extract_usage(payload: dict[str, Any]) -> Optional[dict[str, Any]]:
 _PLACEHOLDER_MODELS = {"<synthetic>", "synthetic", "unspecified", "unknown", ""}
 
 
-def _model_from_transcript(transcript_path: str) -> Optional[str]:
+def _model_from_transcript(transcript_path: str) -> str | None:
     """Recover the model from the session transcript JSONL.
 
     Claude Code's PostToolUse hook input carries ``transcript_path`` but not the
@@ -80,7 +80,7 @@ def _model_from_transcript(transcript_path: str) -> Optional[str]:
     return None
 
 
-def _resolve_model(payload: dict[str, Any]) -> Optional[str]:
+def _resolve_model(payload: dict[str, Any]) -> str | None:
     """Resolve the model for this token event.
 
     Order: explicit ``payload.model`` (subagent SDK supplies it) → the issuing
@@ -110,14 +110,14 @@ def _has_nonzero_tokens(usage: dict[str, Any]) -> bool:
 
 
 def _resolve_attribution(
-    session_id: Optional[str],
+    session_id: str | None,
     machine_id: str,
     tool_name: str,
-    tool_use_id: Optional[str],
+    tool_use_id: str | None,
 ) -> dict[str, Any]:
     """Resolve attribution trace: active_task → CWD marker → orphan."""
     # Read active skill written by record_skill_invocation() (best-effort).
-    active_skill_id: Optional[str] = None
+    active_skill_id: str | None = None
     try:
         _skill_path = Path.home() / ".dream-studio" / "state" / "active_skill.json"
         _skill_data = json.loads(_skill_path.read_text(encoding="utf-8"))
@@ -218,7 +218,7 @@ def _capture_git_context(cwd_ctx: Any) -> dict[str, Any]:
     t0 = time.monotonic()
     git_ctx: dict[str, Any] = {}
 
-    def _run_git(*args: str) -> Optional[str]:
+    def _run_git(*args: str) -> str | None:
         try:
             result = subprocess.run(
                 ["git", *args],
@@ -306,7 +306,7 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
     Never raises.
     """
     t_total = time.monotonic()
-    session_id: Optional[str] = payload.get("session_id")
+    session_id: str | None = payload.get("session_id")
     machine_id = get_machine_id()
 
     try:
@@ -361,7 +361,7 @@ def handle_post_tool_use(payload: dict[str, Any]) -> None:
 
         # Step 2: Resolve attribution.
         tool_name: str = payload.get("tool_name", payload.get("tool", ""))
-        tool_use_id: Optional[str] = payload.get("tool_use_id")
+        tool_use_id: str | None = payload.get("tool_use_id")
         attr = _resolve_attribution(session_id, machine_id, tool_name, tool_use_id)
         cwd_ctx = attr.pop("_cwd_ctx", None)
 

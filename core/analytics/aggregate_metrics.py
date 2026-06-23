@@ -9,7 +9,7 @@ aggregate_metrics.db is a DuckDB file at state_dir() / "aggregate_metrics.db".
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 from core.analytics.duckdb_store import (
@@ -55,7 +55,7 @@ def run_aggregation(db_path: Path | None = None) -> dict:
     Idempotent: INSERT OR REPLACE overwrites stale rows.
     """
     ensure_aggregate_schema(db_path)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     summary = {}
 
     try:

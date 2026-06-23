@@ -7,7 +7,7 @@ import re
 import sys
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 from core.config import paths
@@ -100,9 +100,7 @@ def _archive_log_if_large(log_path: Path) -> None:
     """Archive corrections.log if it exceeds MAX_LOG_SIZE."""
     try:
         if log_path.exists() and log_path.stat().st_size > MAX_LOG_SIZE:
-            archive = (
-                log_path.parent / f"corrections-{datetime.now(timezone.utc).strftime('%Y%m%d')}.log"
-            )
+            archive = log_path.parent / f"corrections-{datetime.now(UTC).strftime('%Y%m%d')}.log"
             log_path.rename(archive)
     except OSError:
         pass
@@ -128,7 +126,7 @@ def log_correction(correction: dict, meta_dir: Path) -> None:
     """Append correction to log file."""
     pattern = correction.get("Pattern to apply", "").replace("\t", " ").strip()
     session = correction.get("Session", "unknown").replace("\t", " ").strip()
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
 
     log_path = meta_dir / "corrections.log"
     try:

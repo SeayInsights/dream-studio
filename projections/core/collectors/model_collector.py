@@ -3,14 +3,14 @@
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
 
 class ModelCollector:
     """Collects and aggregates model metrics from current telemetry authority."""
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize ModelCollector
 
@@ -22,7 +22,7 @@ class ModelCollector:
         else:
             self.db_path = db_path
 
-    def collect(self, days: int = 90) -> Dict[str, Any]:
+    def collect(self, days: int = 90) -> dict[str, Any]:
         """
         Collect model metrics
 
@@ -67,7 +67,7 @@ class ModelCollector:
             else:
                 skill_rows = []
 
-            by_model: Dict[str, Dict[str, Any]] = {}
+            by_model: dict[str, dict[str, Any]] = {}
 
             # Success/timing come from skill telemetry, keyed by model. The current
             # authority resolves the skill model dimension to NULL (skill_usage_sql),
@@ -179,7 +179,7 @@ class ModelCollector:
         finally:
             conn.close()
 
-    def get_model_timeline(self, model_name: str, days: int = 30) -> List[Dict[str, Any]]:
+    def get_model_timeline(self, model_name: str, days: int = 30) -> list[dict[str, Any]]:
         """
         Get daily usage timeline for a specific model.
 

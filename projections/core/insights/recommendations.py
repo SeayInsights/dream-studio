@@ -1,6 +1,6 @@
 """Recommendations - Strategic recommendations based on insights and analysis"""
 
-from typing import Dict, List, Any
+from typing import Any
 
 
 class RecommendationEngine:
@@ -11,8 +11,8 @@ class RecommendationEngine:
         self.priority_levels = ["critical", "high", "medium", "low"]
 
     def generate_recommendations(
-        self, insights: Dict[str, Any], root_causes: List[Dict[str, Any]] | None = None
-    ) -> List[Dict[str, Any]]:
+        self, insights: dict[str, Any], root_causes: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
         """
         Generate strategic recommendations
 
@@ -71,7 +71,7 @@ class RecommendationEngine:
 
         return recommendations
 
-    def _recommendation_from_issue(self, issue: Dict[str, Any]) -> Dict[str, Any]:
+    def _recommendation_from_issue(self, issue: dict[str, Any]) -> dict[str, Any]:
         """Convert issue to recommendation"""
         category = issue.get("category", "unknown")
         severity = issue.get("severity", "medium")
@@ -106,7 +106,7 @@ class RecommendationEngine:
             "details": issue.get("description", ""),
         }
 
-    def _recommendation_from_opportunity(self, opportunity: Dict[str, Any]) -> Dict[str, Any]:
+    def _recommendation_from_opportunity(self, opportunity: dict[str, Any]) -> dict[str, Any]:
         """Convert opportunity to recommendation"""
         title = opportunity.get("title", "Optimization opportunity")
         description = opportunity.get("description", "")
@@ -128,7 +128,7 @@ class RecommendationEngine:
             "details": description,
         }
 
-    def _recommendation_from_risk(self, risk: Dict[str, Any]) -> Dict[str, Any]:
+    def _recommendation_from_risk(self, risk: dict[str, Any]) -> dict[str, Any]:
         """Convert risk to recommendation"""
         mitigation = risk.get("mitigation", "Monitor and mitigate risk")
         risk_level = risk.get("risk_level", "medium")
@@ -147,7 +147,7 @@ class RecommendationEngine:
             "details": risk.get("description", ""),
         }
 
-    def _estimate_effort(self, issue: Dict[str, Any]) -> str:
+    def _estimate_effort(self, issue: dict[str, Any]) -> str:
         """Estimate implementation effort"""
         category = issue.get("category", "unknown")
         severity = issue.get("severity", "medium")
@@ -162,7 +162,7 @@ class RecommendationEngine:
 
         return "medium"
 
-    def _estimate_roi(self, recommendation: Dict[str, Any]) -> float:
+    def _estimate_roi(self, recommendation: dict[str, Any]) -> float:
         """
         Estimate ROI (impact vs effort) for prioritization
 
@@ -198,7 +198,7 @@ class RecommendationEngine:
 
         return roi
 
-    def _deduplicate(self, recommendations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _deduplicate(self, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Remove duplicate recommendations"""
         seen = set()
         unique = []
@@ -211,7 +211,7 @@ class RecommendationEngine:
 
         return unique
 
-    def get_quick_wins(self, recommendations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def get_quick_wins(self, recommendations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Filter for quick wins (high impact, low effort)
 
@@ -229,7 +229,7 @@ class RecommendationEngine:
 
         return sorted(quick_wins, key=lambda x: self._estimate_roi(x), reverse=True)
 
-    def format_for_executive(self, recommendations: List[Dict[str, Any]], limit: int = 5) -> str:
+    def format_for_executive(self, recommendations: list[dict[str, Any]], limit: int = 5) -> str:
         """
         Format recommendations for executive summary
 
@@ -263,8 +263,8 @@ class RecommendationEngine:
         return output.strip()
 
     def group_by_category(
-        self, recommendations: List[Dict[str, Any]]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self, recommendations: list[dict[str, Any]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """Group recommendations by category"""
         grouped = {"fix": [], "optimize": [], "mitigate": [], "investigate": []}
 

@@ -1,6 +1,6 @@
 """Predictor - Time series forecasting for analytics metrics"""
 
-from typing import Dict, List, Any, Tuple
+from typing import Any
 from datetime import datetime, timedelta
 import statistics
 
@@ -12,8 +12,8 @@ class Predictor:
         """Initialize Predictor"""
 
     def forecast_linear(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", steps_ahead: int = 7
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", steps_ahead: int = 7
+    ) -> dict[str, Any]:
         """
         Generate linear forecast for future values
 
@@ -109,8 +109,8 @@ class Predictor:
         }
 
     def predict_next_value(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> dict[str, Any]:
         """
         Predict the next single value with confidence interval
 
@@ -159,8 +159,8 @@ class Predictor:
         }
 
     def forecast_with_seasonality(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", steps_ahead: int = 7
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", steps_ahead: int = 7
+    ) -> dict[str, Any]:
         """
         Forecast with basic seasonality adjustment (weekly patterns)
 
@@ -221,8 +221,8 @@ class Predictor:
         }
 
     def calculate_forecast_accuracy(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count", validation_window: int = 7
-    ) -> Dict[str, Any]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count", validation_window: int = 7
+    ) -> dict[str, Any]:
         """
         Backtest forecast accuracy using recent data
 
@@ -288,7 +288,7 @@ class Predictor:
             "validation_points": validation_window,
         }
 
-    def _calculate_linear_regression(self, x: List[int], y: List[float]) -> Tuple[float, float]:
+    def _calculate_linear_regression(self, x: list[int], y: list[float]) -> tuple[float, float]:
         """
         Calculate linear regression slope and intercept
 
@@ -311,8 +311,8 @@ class Predictor:
         return slope, intercept
 
     def _calculate_dow_pattern(
-        self, timeline: List[Dict[str, Any]], metric_key: str = "count"
-    ) -> Dict[int, float]:
+        self, timeline: list[dict[str, Any]], metric_key: str = "count"
+    ) -> dict[int, float]:
         """
         Calculate day-of-week seasonal pattern
 

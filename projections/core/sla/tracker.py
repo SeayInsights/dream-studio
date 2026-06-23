@@ -1,9 +1,9 @@
 """SLATracker - Track and monitor SLA compliance for dream-studio metrics"""
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 import logging
 from core.config.database import get_connection, transaction
 
@@ -24,7 +24,7 @@ class SLATracker:
     historical metric data from the metric streamer.
     """
 
-    def __init__(self, db_path: Optional[str] = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize SLATracker and create SLA table if needed.
 
@@ -86,7 +86,7 @@ class SLATracker:
             raise
 
     def define_sla(
-        self, name: str, metric: str, target: float, window: int, sla_type: Optional[str] = None
+        self, name: str, metric: str, target: float, window: int, sla_type: str | None = None
     ) -> str:
         """
         Define a new SLA or update existing one.
@@ -119,7 +119,7 @@ class SLATracker:
         sla_id = name.lower().replace(" ", "_").replace("-", "_")
 
         try:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
 
             # Upsert SLA definition
             with transaction() as conn:
@@ -187,7 +187,7 @@ class SLATracker:
             f"Cannot infer SLA type from metric '{metric}'. " f"Please specify sla_type explicitly."
         )
 
-    def check_compliance(self) -> Dict[str, Any]:
+    def check_compliance(self) -> dict[str, Any]:
         """
         Check compliance status for all defined SLAs.
 
@@ -270,7 +270,7 @@ class SLATracker:
             compliance_pct = (compliant_count / total * 100) if total > 0 else 0.0
 
             return {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "slas": results,
                 "summary": {
                     "total_slas": total,
@@ -303,7 +303,7 @@ class SLATracker:
         Returns:
             Current metric value (averaged over window)
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+        cutoff = datetime.now(UTC) - timedelta(hours=window_hours)
         cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
 
         # Map metric names to queries
@@ -430,7 +430,7 @@ class SLATracker:
 
         return 0.0
 
-    def get_sla_report(self) -> Dict[str, Any]:
+    def get_sla_report(self) -> dict[str, Any]:
         """
         Generate comprehensive SLA report with historical trends.
 
@@ -524,7 +524,7 @@ class SLATracker:
             critical_breaches.sort(key=lambda x: x["breach_percentage"], reverse=True)
 
             return {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "generated_at": datetime.now(UTC).isoformat(),
                 "slas": slas,
                 "summary": {**compliance["summary"], "critical_breaches": critical_breaches},
             }

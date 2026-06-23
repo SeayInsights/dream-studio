@@ -128,7 +128,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
 
     primary_count = conn.execute("SELECT COUNT(*) FROM token_usage_records").fetchone()[0]
     if primary_count > 0:
-        return """
+        return f"""
             SELECT
                 token_usage_id AS id,
                 process_run_id AS session_id,
@@ -151,17 +151,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
                 {confidence_expr} AS accounting_confidence,
                 {cache_read_expr} AS cache_read_tokens
             FROM token_usage_records
-        """.format(
-            adapter_expr=adapter_expr,
-            provider_expr=provider_expr,
-            billing_expr=billing_expr,
-            token_visibility_expr=token_visibility_expr,
-            cost_visibility_expr=cost_visibility_expr,
-            usage_source_expr=usage_source_expr,
-            cost_source_expr=cost_source_expr,
-            confidence_expr=confidence_expr,
-            cache_read_expr=cache_read_expr,
-        )
+        """
 
     # Fallback: token_usage_records is empty — project from ai_canonical_events.
     # token.consumed events carry per-tool-invocation usage from the PostToolUse hook.
@@ -212,7 +202,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
         pass
 
     # token_usage_records exists but is empty and no canonical fallback available.
-    return """
+    return f"""
         SELECT
             token_usage_id AS id,
             process_run_id AS session_id,
@@ -235,17 +225,7 @@ def token_usage_sql(conn: sqlite3.Connection) -> str | None:
             {confidence_expr} AS accounting_confidence,
             {cache_read_expr} AS cache_read_tokens
         FROM token_usage_records
-    """.format(
-        adapter_expr=adapter_expr,
-        provider_expr=provider_expr,
-        billing_expr=billing_expr,
-        token_visibility_expr=token_visibility_expr,
-        cost_visibility_expr=cost_visibility_expr,
-        usage_source_expr=usage_source_expr,
-        cost_source_expr=cost_source_expr,
-        confidence_expr=confidence_expr,
-        cache_read_expr=cache_read_expr,
-    )
+    """
 
 
 def _has_columns(conn: sqlite3.Connection, table: str, required: set[str]) -> bool:

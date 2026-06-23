@@ -112,7 +112,7 @@ _INVARIANTS: list[tuple[str, str]] = [
 # ---------------------------------------------------------------------------
 
 
-def run_dashboard_truth(db_path: "str | Path") -> dict[str, Any]:
+def run_dashboard_truth(db_path: str | Path) -> dict[str, Any]:
     """Execute all five invariants read-only against *db_path*.
 
     Returns::

@@ -371,7 +371,7 @@ class SkillDispatcher:
         language_filter: list[str] | None = None,
         severity_threshold: str | None = None,
         _extra_context: dict | None = None,
-    ) -> "AuditResult":
+    ) -> AuditResult:
         """Run full-project audit across all quality skills.
 
         Hybrid dispatch (per 18.8.2 pre-flight Option C):
@@ -602,7 +602,7 @@ class SkillDispatcher:
         cls,
         scope_path: Path,
         service_type: str | None = None,
-    ) -> "LaunchResult":
+    ) -> LaunchResult:
         """Run launch-gate audit — .audit() + service-type-aware escalation.
 
         Reads escalation map from pre-launch skill config.yml (source of truth).
@@ -725,7 +725,7 @@ class LaunchResult:
 
     verdict: str  # "LAUNCH_READY" | "LAUNCH_WARNING" | "LAUNCH_BLOCKED"
     service_type: str
-    audit_result: "AuditResult"
+    audit_result: AuditResult
     blocking_findings: list[AuditFinding] = field(default_factory=list)
     warning_findings: list[AuditFinding] = field(default_factory=list)
     launch_summary: str = ""
@@ -747,7 +747,7 @@ def _meets_threshold(severity: str, threshold: str) -> bool:
     return order.get(severity, 0) >= order.get(threshold, 0)
 
 
-def _increment_stat(stats: "SkillAuditStats", severity: str) -> None:
+def _increment_stat(stats: SkillAuditStats, severity: str) -> None:
     if severity == "critical":
         stats.critical_count += 1
     elif severity == "high":

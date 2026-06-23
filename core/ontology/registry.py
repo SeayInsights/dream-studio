@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import FrozenSet, List, Mapping, Optional, Sequence, Type
+from collections.abc import Mapping, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +21,8 @@ class LifecycleSpec:
     """Declares the lifecycle binding for one entity type."""
 
     entity_type: str
-    lifecycle_enum: Type[Enum]
-    transitions: Mapping[str, FrozenSet[str]]
+    lifecycle_enum: type[Enum]
+    transitions: Mapping[str, frozenset[str]]
 
     def __post_init__(self) -> None:
         if not isinstance(self.transitions, MappingProxyType):
@@ -34,7 +34,7 @@ class ValidationResult:
     """Advisory validation outcome — never blocks, only reports."""
 
     valid: bool
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class TypeCatalog:
@@ -66,7 +66,7 @@ class TypeCatalog:
     def has_lifecycle(self, entity_type: str) -> bool:
         return entity_type in self._specs
 
-    def get_lifecycle(self, entity_type: str) -> Optional[Type[Enum]]:
+    def get_lifecycle(self, entity_type: str) -> type[Enum] | None:
         spec = self._specs.get(entity_type)
         return spec.lifecycle_enum if spec else None
 
