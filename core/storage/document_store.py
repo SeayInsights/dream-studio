@@ -141,9 +141,14 @@ def ensure_documents_schema(conn: sqlite3.Connection) -> None:
 
 
 @contextmanager
-def _docs_connection(db_path: Path | None = None):
-    """Open a read connection to files.db with ds_documents schema ensured."""
-    conn = connect_files(db_path)
+def _docs_connection():
+    """Open a read connection to files.db with ds_documents schema ensured.
+
+    Always resolves the path via connect_files() → files_db_path(); tests
+    isolate by monkeypatching files_db_path (see the _isolate_files_db fixture),
+    so no path parameter is threaded through DocumentStore's public API.
+    """
+    conn = connect_files()
     try:
         ensure_files_schema(conn)
         ensure_documents_schema(conn)
@@ -153,9 +158,13 @@ def _docs_connection(db_path: Path | None = None):
 
 
 @contextmanager
-def _docs_transaction(db_path: Path | None = None):
-    """Open a write transaction on files.db with ds_documents schema ensured."""
-    conn = connect_files(db_path)
+def _docs_transaction():
+    """Open a write transaction on files.db with ds_documents schema ensured.
+
+    Path resolution and test isolation follow the same rule as
+    _docs_connection(): connect_files() → files_db_path(), monkeypatched in tests.
+    """
+    conn = connect_files()
     try:
         ensure_files_schema(conn)
         ensure_documents_schema(conn)
@@ -192,7 +201,6 @@ class DocumentStore:
         tags: list | None = None,
         keywords: str | None = None,
         ttl_days: int | None = None,
-        db_path: Path | None = None,
     ) -> int:
         """
         Create a new document and return its doc_id.
@@ -209,7 +217,6 @@ class DocumentStore:
             tags: Optional list of tags (will be JSON-encoded)
             keywords: Optional space-separated keywords for FTS5
             ttl_days: Optional time-to-live in days (sets expires_at)
-            db_path: Override files.db path (for testing)
 
         Returns:
             doc_id of the newly created document
@@ -248,7 +255,7 @@ class DocumentStore:
         metadata_json = json.dumps(metadata) if metadata is not None else None
         tags_json = json.dumps(tags) if tags is not None else None
 
-        with _docs_transaction(db_path) as c:
+        with _docs_transaction() as c:
             cursor = c.execute(
                 """INSERT INTO ds_documents
                    (doc_type, title, content, project_id, skill_id, session_id,
@@ -302,13 +309,12 @@ class DocumentStore:
         return doc_id
 
     @staticmethod
-    def read(doc_id: int, *, db_path: Path | None = None) -> dict | None:
+    def read(doc_id: int) -> dict | None:
         """
         Read a document by ID and increment access_count.
 
         Args:
             doc_id: Document ID to retrieve
-            db_path: Override files.db path (for testing)
 
         Returns:
             Complete document record as dict, or None if not found
@@ -316,7 +322,7 @@ class DocumentStore:
         Note:
             Automatically increments access_count and updates last_accessed
         """
-        with _docs_transaction(db_path) as c:
+        with _docs_transaction() as c:
             # Increment access count
             c.execute(
                 "UPDATE ds_documents SET access_count = access_count + 1 WHERE doc_id = ?",
@@ -348,13 +354,7 @@ class DocumentStore:
             return doc
 
     @staticmethod
-    def search(
-        query: str,
-        doc_type: str | None = None,
-        limit: int = 50,
-        *,
-        db_path: Path | None = None,
-    ) -> list[dict]:
+    def search(query: str, doc_type: str | None = None, limit: int = 50) -> list[dict]:
         """
         Search documents using FTS5 full-text search.
 
@@ -362,7 +362,6 @@ class DocumentStore:
             query: FTS5 search query (searches title, content, keywords, tags)
             doc_type: Optional filter by document type
             limit: Maximum number of results (default 50)
-            db_path: Override files.db path (for testing)
 
         Returns:
             List of matching document dicts, sorted by relevance
@@ -371,7 +370,7 @@ class DocumentStore:
             Uses FTS5 MATCH syntax. Simple keywords work, but you can also use
             advanced FTS5 operators like AND, OR, NOT, "phrase", etc.
         """
-        with _docs_connection(db_path) as c:
+        with _docs_connection() as c:
             if doc_type:
                 rows = c.execute(
                     """SELECT d.* FROM ds_documents d
@@ -411,13 +410,12 @@ class DocumentStore:
             return results
 
     @staticmethod
-    def update(doc_id: int, _db_path: Path | None = None, **fields: Any) -> bool:
+    def update(doc_id: int, **fields: Any) -> bool:
         """
         Update specified fields of a document.
 
         Args:
             doc_id: Document ID to update
-            _db_path: Override files.db path (for testing)
             **fields: Field names and values to update
 
         Returns:
@@ -454,7 +452,7 @@ class DocumentStore:
         values = list(fields.values())
         values.append(doc_id)
 
-        with _docs_transaction(_db_path) as c:
+        with _docs_transaction() as c:
             cursor = c.execute(
                 f"UPDATE ds_documents SET {set_clause} WHERE doc_id = ?",  # noqa: S608
                 values,
@@ -486,18 +484,17 @@ class DocumentStore:
         return success
 
     @staticmethod
-    def archive(doc_id: int, *, db_path: Path | None = None) -> bool:
+    def archive(doc_id: int) -> bool:
         """
         Archive a document by setting status to 'archived'.
 
         Args:
             doc_id: Document ID to archive
-            db_path: Override files.db path (for testing)
 
         Returns:
             True if successful, False if document not found
         """
-        success = DocumentStore.update(doc_id, db_path, status=_ARCHIVED)
+        success = DocumentStore.update(doc_id, status=_ARCHIVED)
 
         # Emit event AFTER update (which already emits DOCUMENT_UPDATED)
         # STABILITY: fail if event fails — via spool (Slice 3)
@@ -522,21 +519,18 @@ class DocumentStore:
         return success
 
     @staticmethod
-    def get_by_type(
-        doc_type: str, status: str = _ACTIVE, *, db_path: Path | None = None
-    ) -> list[dict]:
+    def get_by_type(doc_type: str, status: str = _ACTIVE) -> list[dict]:
         """
         Get all documents of a given type with a given status.
 
         Args:
             doc_type: Type of document to retrieve
             status: Status filter (default 'active')
-            db_path: Override files.db path (for testing)
 
         Returns:
             List of document dicts, sorted by created_at DESC
         """
-        with _docs_connection(db_path) as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = ? AND status = ?
@@ -566,20 +560,19 @@ class DocumentStore:
             return results
 
     @staticmethod
-    def get_skill(pack: str, mode: str, *, db_path: Path | None = None) -> dict | None:
+    def get_skill(pack: str, mode: str) -> dict | None:
         """
         Get a skill document by pack and mode.
 
         Args:
             pack: Pack name (e.g., 'core', 'quality')
             mode: Mode name (e.g., 'build', 'debug')
-            db_path: Override files.db path (for testing)
 
         Returns:
             Skill document dict or None if not found
         """
         skill_id = f"{pack}:{mode}"
-        with _docs_connection(db_path) as c:
+        with _docs_connection() as c:
             row = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'skill' AND skill_id = ? AND status = ?
@@ -608,20 +601,19 @@ class DocumentStore:
             return doc
 
     @staticmethod
-    def get_skill_gotchas(pack: str, mode: str, *, db_path: Path | None = None) -> list[dict]:
+    def get_skill_gotchas(pack: str, mode: str) -> list[dict]:
         """
         Get gotcha documents for a specific skill mode.
 
         Args:
             pack: Pack name (e.g., 'core', 'quality')
             mode: Mode name (e.g., 'build', 'debug')
-            db_path: Override files.db path (for testing)
 
         Returns:
             List of gotcha document dicts
         """
         skill_id = f"{pack}:{mode}"
-        with _docs_connection(db_path) as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'gotcha' AND skill_id = ? AND status = ?
@@ -651,17 +643,14 @@ class DocumentStore:
             return results
 
     @staticmethod
-    def get_team_gotchas(*, db_path: Path | None = None) -> list[dict]:
+    def get_team_gotchas() -> list[dict]:
         """
         Get team-wide gotcha documents (not associated with a specific skill).
-
-        Args:
-            db_path: Override files.db path (for testing)
 
         Returns:
             List of gotcha document dicts
         """
-        with _docs_connection(db_path) as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'gotcha' AND skill_id IS NULL AND status = ?
