@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -21,7 +22,10 @@ PROJECT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 MILESTONE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 WO_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 TASK_A = "11111111-1111-1111-1111-111111111111"
-NOW = "2026-05-22T00:00:00+00:00"
+# Anchor relative to now so fixture data stays valid regardless of wall-clock date.
+# A hardcoded absolute date is a dormant time-bomb: if windowed queries are added
+# later, they would silently exclude stale fixture rows.
+NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 ORPHAN_PROJECT_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -19,7 +20,10 @@ from core.config.sqlite_bootstrap import bootstrap_database
 
 PROJECT_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 WO_ID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
-NOW = "2026-05-22T00:00:00+00:00"
+# Anchor relative to now so fixture data stays valid regardless of wall-clock date.
+# A hardcoded absolute date is a dormant time-bomb: if windowed queries are added
+# later, they would silently exclude stale fixture rows.
+NOW = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
 
 # ── unit: _validate_sdlc_event ────────────────────────────────────────────────
