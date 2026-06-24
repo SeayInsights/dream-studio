@@ -208,8 +208,9 @@ def test_gate_fires_on_prd_documents_in_diff(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_gate_fires_for_ds_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
     # ds_documents is now dead in studio.db (moved to files.db in migration 127).
-    # A test that tries to CREATE TABLE ds_documents in studio.db would resurrect
-    # a dead table — the gate must block it.
+    # A test diff that re-declares the dropped table in studio.db would resurrect
+    # a dead table — the gate must block it.  (The migration-127 drop is what makes
+    # ds_documents dead in the ledger; recreating it studio-side is the violation.)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("ds_documents"))
     assert guard.main() == 1
