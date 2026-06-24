@@ -240,3 +240,46 @@ def test_unowned_table_write_skips_authority_tables(tmp_path: Path) -> None:
     assert all(
         f["symbol"] != "business_work_orders" for f in findings
     ), f"authority table business_work_orders must not be flagged; got {findings}"
+
+
+def test_unowned_table_write_skips_migration_ddl_and_one_time_tooling(tmp_path: Path) -> None:
+    """Three-store docstore move: migration DDL and one-time CLI tooling are not
+    runtime writers, so a runtime owner that shares a table with them must not be
+    flagged. (ds_documents move: document_store.py vs 007_*.sql + migrate_*.py.)"""
+    repo = tmp_path
+    # Historical migration DDL/seed — NOT a runtime writer.
+    _write(
+        repo / "core" / "event_store" / "migrations" / "007_document_system.sql",
+        "INSERT INTO ds_documents (doc_id) VALUES (1);\n",
+    )
+    # One-time data-migration utility — NOT a runtime writer.
+    _write(
+        repo / "interfaces" / "cli" / "migrate_docstore_to_files_db.py",
+        'def migrate():\n    dst.execute("INSERT INTO ds_documents (doc_id) VALUES (?)", (1,))\n',
+    )
+    # The diff: the legitimate sole runtime writer adds the write.
+    diff = (
+        "diff --git a/core/storage/document_store.py b/core/storage/document_store.py\n"
+        "--- a/core/storage/document_store.py\n"
+        "+++ b/core/storage/document_store.py\n"
+        "@@ -1,1 +1,2 @@\n"
+        '+    c.execute("INSERT INTO ds_documents (doc_type) VALUES (?)", (t,))\n'
+    )
+    findings = detect_unowned_table_writes(diff, repo_root=repo)
+    assert all(
+        f["symbol"] != "ds_documents" for f in findings
+    ), f"runtime owner sharing a table only with DDL/one-time tooling must not be flagged; got {findings}"
+
+    # And the one-time migration script itself, when it is the diffed file, must
+    # not be flagged as the offending path either.
+    diff_migrate = (
+        "diff --git a/interfaces/cli/migrate_docstore_to_files_db.py b/interfaces/cli/migrate_docstore_to_files_db.py\n"
+        "--- a/interfaces/cli/migrate_docstore_to_files_db.py\n"
+        "+++ b/interfaces/cli/migrate_docstore_to_files_db.py\n"
+        "@@ -1,1 +1,2 @@\n"
+        '+    dst.execute("INSERT INTO ds_documents (doc_id) VALUES (?)", (1,))\n'
+    )
+    findings_migrate = detect_unowned_table_writes(diff_migrate, repo_root=repo)
+    assert (
+        findings_migrate == []
+    ), f"one-time migration script must not be flagged as an unowned writer; got {findings_migrate}"

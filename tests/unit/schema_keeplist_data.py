@@ -51,12 +51,8 @@ CLASSIFICATION: dict[str, str] = {
     "decision_records": "KEEP",
     "demo_case_study_packets": "RESURFACE",
     "ds_config": "KEEP",
-    "ds_documents": "KEEP",
-    "ds_documents_fts": "KEEP",
-    "ds_documents_fts_config": "KEEP",
-    "ds_documents_fts_data": "KEEP",
-    "ds_documents_fts_docsize": "KEEP",
-    "ds_documents_fts_idx": "KEEP",
+    # ds_documents cluster removed from classification: migration 127 dropped
+    # these tables from studio.db.  They now live in files.db (three-store arch).
     "ds_escalations": "KEEP",
     "ds_eval_baselines": "KEEP",
     "ds_eval_runs": "KEEP",

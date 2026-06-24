@@ -9,10 +9,28 @@ from pathlib import Path
 
 import pytest
 
+# ── Test isolation: redirect files.db to tmp_path ─────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _isolate_files_db(tmp_path, monkeypatch):
+    """Redirect files_db_path() to a per-test temp file so tests don't share state.
+
+    The session harvester's _record_arch_doc opens files.db via connect_files(),
+    which calls files_db_path().  Patching it here ensures each test starts with
+    a clean, isolated files.db.
+    """
+    files_db = tmp_path / "files.db"
+    monkeypatch.setattr("core.files.store.files_db_path", lambda: files_db)
+    yield files_db
+
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 
 def _make_db(tmp_path: Path) -> Path:
+    # studio.db fixture: reg_gotchas, raw_approaches, ds_technology_signals.
+    # ds_documents is NOT here — it lives in files.db (three-store architecture).
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
@@ -34,14 +52,6 @@ def _make_db(tmp_path: Path) -> Path:
             project_id  TEXT,
             created_at  TEXT
         );
-        CREATE TABLE ds_documents (
-            doc_id      TEXT,
-            doc_type    TEXT,
-            title       TEXT,
-            content     TEXT,
-            source_path TEXT UNIQUE,
-            created_at  TEXT
-        );
         CREATE TABLE ds_technology_signals (
             signal_id  TEXT PRIMARY KEY,
             extension  TEXT NOT NULL,
@@ -52,6 +62,17 @@ def _make_db(tmp_path: Path) -> Path:
     conn.commit()
     conn.close()
     return db
+
+
+def _connect_docs_files() -> sqlite3.Connection:
+    """Open files.db with ds_documents schema ensured."""
+    from core.files.store import connect_files, ensure_files_schema
+    from core.storage.document_store import ensure_documents_schema
+
+    conn = connect_files()
+    ensure_files_schema(conn)
+    ensure_documents_schema(conn)
+    return conn
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -335,7 +356,8 @@ def test_harvest_arch_doc_written_with_null_content(tmp_path):
     )
 
     assert result.arch_docs_found >= 1
-    conn = sqlite3.connect(str(db))
+    # ds_documents now lives in files.db (three-store architecture)
+    conn = _connect_docs_files()
     rows = conn.execute("SELECT content FROM ds_documents").fetchall()
     conn.close()
     assert len(rows) >= 1
@@ -523,6 +545,7 @@ def test_migration_055_applies_cleanly(tmp_path):
 
 def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
     """Harvester auto-creates ds_technology_signals if the DB lacks it."""
+    # ds_documents is NOT created here — it lives in files.db (three-store architecture).
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
@@ -533,10 +556,6 @@ def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
         CREATE TABLE raw_approaches (
             approach_id TEXT PRIMARY KEY, skill_id TEXT, approach TEXT,
             model TEXT, project_id TEXT, created_at TEXT
-        );
-        CREATE TABLE ds_documents (
-            doc_id TEXT, doc_type TEXT, title TEXT, content TEXT,
-            source_path TEXT UNIQUE, created_at TEXT
         );
         """)
     conn.commit()

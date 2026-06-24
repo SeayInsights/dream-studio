@@ -179,7 +179,7 @@ def test_gate_fires_only_on_added_lines(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 # ---------------------------------------------------------------------------
-# Explicit named-table coverage: prd_documents (dead) and ds_documents (live)
+# Explicit named-table coverage: prd_documents (dead) and ds_documents (dead)
 # Gate module: core/gates/test_fixture_resurrection_guard.py
 # Test file: tests/unit/test_gate_fixture_resurrection.py  (here)
 # ---------------------------------------------------------------------------
@@ -192,11 +192,12 @@ def test_prd_documents_is_dead_in_ledger() -> None:
     assert "prd_documents" in dead
 
 
-def test_ds_documents_is_live_in_ledger() -> None:
-    # ds_documents is a live table (Python-owned in core/files/store.py);
-    # it is registered in _PYTHON_OWNED_TABLES as a separate SQLite DB, not dropped.
+def test_ds_documents_is_dead_in_ledger() -> None:
+    # ds_documents was created in migration 007 and dropped in migration 127
+    # (127_drop_ds_documents_from_studio_db.sql — three-store architecture fix:
+    # ds_documents now lives in files.db, not studio.db).
     dead = guard.build_dead_table_ledger()
-    assert "ds_documents" not in dead
+    assert "ds_documents" in dead
 
 
 def test_gate_fires_on_prd_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,7 +206,11 @@ def test_gate_fires_on_prd_documents_in_diff(monkeypatch: pytest.MonkeyPatch) ->
     assert guard.main() == 1
 
 
-def test_gate_passes_for_ds_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_fires_for_ds_documents_in_diff(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ds_documents is now dead in studio.db (moved to files.db in migration 127).
+    # A test diff that re-declares the dropped table in studio.db would resurrect
+    # a dead table — the gate must block it.  (The migration-127 drop is what makes
+    # ds_documents dead in the ledger; recreating it studio-side is the violation.)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.setattr(guard, "_diff_text", lambda _base_ref: _make_diff("ds_documents"))
-    assert guard.main() == 0
+    assert guard.main() == 1

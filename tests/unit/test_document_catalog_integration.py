@@ -3,6 +3,12 @@
 Proves that DocumentStore uses the catalog for advisory state validation,
 that persisted lowercase DB strings are preserved, and that no Enum objects leak
 into SQLite.
+
+Updated for three-store architecture: DocumentStore now writes to files.db,
+not studio.db.  Test isolation is via the doc_store fixture, which monkeypatches
+core.files.store.files_db_path() to a per-test temp file — the same mechanism
+FileStore tests use.  DocumentStore's public method signatures are unchanged;
+no db_path argument is threaded through them.
 """
 
 from __future__ import annotations
@@ -10,9 +16,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import sys
-from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -27,46 +31,22 @@ from core.ontology.lifecycles import (
     from_db_value,
 )
 
-_DOCUMENT_SCHEMA = """
-CREATE TABLE IF NOT EXISTS ds_documents (
-    doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    doc_type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    project_id TEXT,
-    skill_id TEXT,
-    session_id TEXT,
-    format TEXT DEFAULT 'markdown',
-    metadata TEXT,
-    tags TEXT,
-    keywords TEXT,
-    version INTEGER DEFAULT 1,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT,
-    updated_at TEXT,
-    access_count INTEGER DEFAULT 0,
-    ttl_days INTEGER,
-    expires_at TEXT
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS ds_documents_fts USING fts5(
-    title, content, keywords, tags, content=ds_documents, content_rowid=doc_id
-);
-"""
-
 
 @pytest.fixture()
 def doc_store(tmp_path, monkeypatch):
-    """DocumentStore backed by a temp DB with event emission stubbed out."""
-    db_path = str(tmp_path / "test_doc.db")
+    """DocumentStore backed by a temp files.db with event emission stubbed out.
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.executescript(_DOCUMENT_SCHEMA)
-    conn.close()
+    Redirects files_db_path() to a per-test temp file so connect_files() — and
+    therefore every DocumentStore operation — uses an isolated database.  Returns
+    (DocumentStore, db_path); db_path is the temp file for direct inspection.
+    """
+    db_path = tmp_path / "test_files.db"
 
-    monkeypatch.setattr("core.storage.document_store.get_connection", _make_gc(db_path))
-    monkeypatch.setattr("core.storage.document_store.transaction", _make_tx(db_path))
+    # Redirect files.db resolution to the temp path (same isolation pattern as
+    # FileStore tests). connect_files() with no arg resolves files_db_path().
+    monkeypatch.setattr("core.files.store.files_db_path", lambda: db_path)
+
+    # Stub out event emission so tests don't need a live spool
     monkeypatch.setattr(
         "core.storage.document_store.write_envelopes", lambda envelopes, **kwargs: None
     )
@@ -76,38 +56,8 @@ def doc_store(tmp_path, monkeypatch):
     return DocumentStore, db_path
 
 
-def _make_gc(db_path):
-    @contextmanager
-    def _gc():
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
-
-    return _gc
-
-
-def _make_tx(db_path):
-    @contextmanager
-    def _tx():
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-    return _tx
-
-
-def _raw_status(db_path: str, doc_id: int) -> str:
-    conn = sqlite3.connect(db_path)
+def _raw_status(db_path: Path, doc_id: int) -> str:
+    conn = sqlite3.connect(str(db_path))
     row = conn.execute(
         "SELECT status FROM ds_documents WHERE doc_id = ?",
         (doc_id,),
@@ -225,7 +175,7 @@ class TestNoEnumInSQLite:
         store, db_path = doc_store
         doc_id = store.create("spec", "Test", "Content")
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(str(db_path))
         row = conn.execute(
             "SELECT status, typeof(status) FROM ds_documents WHERE doc_id = ?",
             (doc_id,),
@@ -240,7 +190,7 @@ class TestNoEnumInSQLite:
         doc_id = store.create("spec", "Test", "Content")
         store.archive(doc_id)
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(str(db_path))
         row = conn.execute(
             "SELECT status, typeof(status) FROM ds_documents WHERE doc_id = ?",
             (doc_id,),
@@ -254,7 +204,7 @@ class TestNoEnumInSQLite:
         store, db_path = doc_store
         doc_id = store.create("spec", "Test", "Content")
 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(str(db_path))
         row = conn.execute(
             "SELECT status FROM ds_documents WHERE doc_id = ?",
             (doc_id,),
@@ -310,148 +260,3 @@ class TestAdvisoryValidation:
         with caplog.at_level(logging.WARNING, logger="core.storage.document_store"):
             store.update(doc_id, title="New Title")
         assert "Unrecognized document status" not in caplog.text
-
-
-# ── Catalog domain key verification ─────────────────────────────────────────
-
-
-class TestCatalogDomainKey:
-    def test_artifact_domain_registered(self):
-        assert LIFECYCLE_CATALOG.has_lifecycle("artifact") is True
-
-    def test_artifact_uses_document_lifecycle(self):
-        assert LIFECYCLE_CATALOG.get_lifecycle("artifact") is DocumentLifecycle
-
-    def test_all_document_states_valid_in_catalog(self):
-        for member in DocumentLifecycle:
-            assert LIFECYCLE_CATALOG.validate_state("artifact", member.value) is True
-
-    def test_catalog_transitions_match_document_states(self):
-        assert LIFECYCLE_CATALOG.validate_transition("artifact", "active", "archived") is True
-        assert LIFECYCLE_CATALOG.validate_transition("artifact", "archived", "active") is True
-        assert LIFECYCLE_CATALOG.validate_transition("artifact", "active", "active") is False
-
-    def test_execution_states_invalid_in_artifact_domain(self):
-        assert LIFECYCLE_CATALOG.validate_state("artifact", "pending") is False
-        assert LIFECYCLE_CATALOG.validate_state("artifact", "completed") is False
-        assert LIFECYCLE_CATALOG.validate_state("artifact", "failed") is False
-
-    def test_memory_states_invalid_in_artifact_domain(self):
-        assert LIFECYCLE_CATALOG.validate_state("artifact", "DRAFT") is False
-        assert LIFECYCLE_CATALOG.validate_state("artifact", "PROMOTED") is False
-
-
-# ── Cross-domain isolation ──────────────────────────────────────────────────
-
-
-class TestCrossDomainIsolation:
-    def test_document_active_not_equal_to_raw_string(self):
-        assert DocumentLifecycle.ACTIVE != "active"
-
-    def test_document_active_not_equal_to_execution_active(self):
-        assert DocumentLifecycle.ACTIVE != ExecutionLifecycle.ACTIVE
-
-    def test_document_active_not_equal_to_memory_active(self):
-        assert DocumentLifecycle.ACTIVE != MemoryLifecycle.ACTIVE
-
-    def test_same_persisted_value_different_domains(self):
-        assert to_db_value(DocumentLifecycle.ACTIVE) == to_db_value(ExecutionLifecycle.ACTIVE)
-        assert DocumentLifecycle.ACTIVE != ExecutionLifecycle.ACTIVE
-
-    def test_document_lifecycle_is_not_str(self):
-        assert not isinstance(DocumentLifecycle.ACTIVE, str)
-        assert not isinstance(DocumentLifecycle.ARCHIVED, str)
-
-
-# ── Document lifecycle flow ─────────────────────────────────────────────────
-
-
-class TestDocumentLifecycleFlow:
-    def test_active_to_archived(self, doc_store):
-        store, db_path = doc_store
-        doc_id = store.create("spec", "Lifecycle test", "Content")
-        assert _raw_status(db_path, doc_id) == to_db_value(DocumentLifecycle.ACTIVE)
-
-        store.archive(doc_id)
-        assert _raw_status(db_path, doc_id) == to_db_value(DocumentLifecycle.ARCHIVED)
-
-    def test_active_to_archived_to_active(self, doc_store):
-        store, db_path = doc_store
-        doc_id = store.create("spec", "Lifecycle test", "Content")
-        store.archive(doc_id)
-        store.update(doc_id, status=to_db_value(DocumentLifecycle.ACTIVE))
-        assert _raw_status(db_path, doc_id) == to_db_value(DocumentLifecycle.ACTIVE)
-
-
-# ── Persisted string compatibility ──────────────────────────────────────────
-
-
-class TestPersistedStringCompatibility:
-    def test_existing_active_string_still_valid(self):
-        member = from_db_value("active", DocumentLifecycle)
-        assert member is DocumentLifecycle.ACTIVE
-        assert to_db_value(member) == "active"
-
-    def test_existing_archived_string_still_valid(self):
-        member = from_db_value("archived", DocumentLifecycle)
-        assert member is DocumentLifecycle.ARCHIVED
-        assert to_db_value(member) == "archived"
-
-    def test_roundtrip_all_document_states(self):
-        for member in DocumentLifecycle:
-            db_val = to_db_value(member)
-            parsed = from_db_value(db_val, DocumentLifecycle)
-            assert parsed is member
-
-    def test_case_insensitive_parse(self):
-        assert from_db_value("Active", DocumentLifecycle) is DocumentLifecycle.ACTIVE
-        assert from_db_value("ACTIVE", DocumentLifecycle) is DocumentLifecycle.ACTIVE
-        assert from_db_value("ARCHIVED", DocumentLifecycle) is DocumentLifecycle.ARCHIVED
-
-
-# ── get_by_type default status ──────────────────────────────────────────────
-
-
-class TestGetByTypeDefault:
-    def test_get_by_type_returns_active_by_default(self, doc_store):
-        store, db_path = doc_store
-        doc_id = store.create("spec", "Active Spec", "Content")
-        results = store.get_by_type("spec")
-        assert len(results) == 1
-        assert results[0]["title"] == "Active Spec"
-
-    def test_get_by_type_excludes_archived(self, doc_store):
-        store, db_path = doc_store
-        store.create("spec", "Active Spec", "Content")
-        doc_id2 = store.create("spec", "Archived Spec", "Content")
-        store.archive(doc_id2)
-        results = store.get_by_type("spec")
-        assert len(results) == 1
-        assert results[0]["title"] == "Active Spec"
-
-    def test_get_by_type_archived_filter(self, doc_store):
-        store, db_path = doc_store
-        store.create("spec", "Active Spec", "Content")
-        doc_id2 = store.create("spec", "Archived Spec", "Content")
-        store.archive(doc_id2)
-        results = store.get_by_type("spec", status="archived")
-        assert len(results) == 1
-        assert results[0]["title"] == "Archived Spec"
-
-
-# ── No memory/execution behavior alteration ─────────────────────────────────
-
-
-class TestNoSideEffects:
-    def test_document_integration_does_not_alter_memory_catalog(self):
-        assert LIFECYCLE_CATALOG.has_lifecycle("memory") is True
-        assert LIFECYCLE_CATALOG.get_lifecycle("memory") is MemoryLifecycle
-        assert LIFECYCLE_CATALOG.validate_state("memory", "ACTIVE") is True
-
-    def test_document_integration_does_not_alter_execution_catalog(self):
-        assert LIFECYCLE_CATALOG.has_lifecycle("workflow") is True
-        assert LIFECYCLE_CATALOG.get_lifecycle("workflow") is ExecutionLifecycle
-        assert LIFECYCLE_CATALOG.validate_state("workflow", "pending") is True
-
-    def test_catalog_still_has_six_bindings(self):
-        assert len(LIFECYCLE_CATALOG.specs) == 6

@@ -351,27 +351,37 @@ class SessionHarvester:
     ) -> None:
         result.arch_docs_found += 1
         if conn is not None:
+            # ds_documents now lives in files.db (three-store architecture).
+            # Open a separate connection to files.db for this write.
             abs_path = file_path
             try:
-                exists = conn.execute(
-                    "SELECT 1 FROM ds_documents WHERE source_path = ?", (abs_path,)
-                ).fetchone()
-                if not exists:
-                    doc_id = hashlib.sha256(abs_path.encode()).hexdigest()[:32]
-                    title = Path(abs_path).stem
-                    conn.execute(
-                        "INSERT OR IGNORE INTO ds_documents"
-                        " (doc_id, doc_type, title, content, source_path, created_at)"
-                        " VALUES (?, ?, ?, NULL, ?, ?)",
-                        (
-                            doc_id,
-                            "architecture_decision",
-                            title,
-                            abs_path,
-                            datetime.now(UTC).isoformat(),
-                        ),
-                    )
-            except sqlite3.Error:
+                from core.files.store import connect_files, ensure_files_schema
+                from core.storage.document_store import ensure_documents_schema
+
+                docs_conn = connect_files()
+                try:
+                    ensure_files_schema(docs_conn)
+                    ensure_documents_schema(docs_conn)
+                    exists = docs_conn.execute(
+                        "SELECT 1 FROM ds_documents WHERE source_path = ?", (abs_path,)
+                    ).fetchone()
+                    if not exists:
+                        title = Path(abs_path).stem
+                        docs_conn.execute(
+                            "INSERT INTO ds_documents"
+                            " (doc_type, title, content, source_path, created_at, status)"
+                            " VALUES (?, ?, NULL, ?, ?, 'active')",
+                            (
+                                "architecture_decision",
+                                title,
+                                abs_path,
+                                datetime.now(UTC).isoformat(),
+                            ),
+                        )
+                        docs_conn.commit()
+                finally:
+                    docs_conn.close()
+            except Exception:
                 pass
 
 

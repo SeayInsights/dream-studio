@@ -1,9 +1,16 @@
-"""Universal CRUD API for the document store (ds_documents table)."""
+"""Universal CRUD API for the document store (ds_documents table).
+
+ds_documents lives in files.db (the three-store document/artifact store),
+NOT in studio.db (the canonical event authority).  All reads and writes go
+through connect_files() / files_db_path() from core.files.store.
+"""
 
 from __future__ import annotations
 import json
 import logging
+import sqlite3
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any
@@ -12,7 +19,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.config.database import transaction, get_connection
+from core.files.store import connect_files, ensure_files_schema
 from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.types import EventType as CanonicalEventType
 from emitters.shared.spool_writer import write_envelopes
@@ -42,9 +49,143 @@ except ImportError:
 
 _NOW = lambda: datetime.now(UTC).isoformat()
 
+# ---------------------------------------------------------------------------
+# DDL for ds_documents in files.db
+# ---------------------------------------------------------------------------
+
+_DOCUMENTS_DDL = """
+CREATE TABLE IF NOT EXISTS ds_documents (
+    doc_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_type TEXT NOT NULL,
+    parent_doc_id INTEGER,
+    project_id TEXT,
+    skill_id TEXT,
+    session_id TEXT,
+    title TEXT NOT NULL,
+    content TEXT,
+    format TEXT DEFAULT 'markdown',
+    metadata TEXT,
+    tags TEXT,
+    keywords TEXT,
+    version INTEGER DEFAULT 1,
+    status TEXT DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    created_by TEXT,
+    updated_at TEXT,
+    access_count INTEGER DEFAULT 0,
+    last_accessed TEXT,
+    ttl_days INTEGER,
+    expires_at TEXT,
+    source_path TEXT,
+    FOREIGN KEY (parent_doc_id) REFERENCES ds_documents(doc_id)
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS ds_documents_fts USING fts5(
+    title, content, keywords, tags,
+    content=ds_documents, content_rowid=doc_id
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_documents_fts_ai AFTER INSERT ON ds_documents BEGIN
+    INSERT INTO ds_documents_fts(rowid, title, content, keywords, tags)
+    VALUES (new.doc_id, new.title, new.content, new.keywords, new.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_documents_fts_ad AFTER DELETE ON ds_documents BEGIN
+    INSERT INTO ds_documents_fts(ds_documents_fts, rowid, title, content, keywords, tags)
+    VALUES ('delete', old.doc_id, old.title, old.content, old.keywords, old.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_documents_fts_au AFTER UPDATE ON ds_documents BEGIN
+    INSERT INTO ds_documents_fts(ds_documents_fts, rowid, title, content, keywords, tags)
+    VALUES ('delete', old.doc_id, old.title, old.content, old.keywords, old.tags);
+    INSERT INTO ds_documents_fts(rowid, title, content, keywords, tags)
+    VALUES (new.doc_id, new.title, new.content, new.keywords, new.tags);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_documents_access_tracking
+    AFTER UPDATE OF access_count ON ds_documents
+    WHEN new.access_count > old.access_count
+BEGIN
+    UPDATE ds_documents SET last_accessed = datetime('now') WHERE doc_id = new.doc_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_documents_auto_archive
+    AFTER UPDATE OF expires_at ON ds_documents
+    WHEN new.expires_at IS NOT NULL AND datetime(new.expires_at) <= datetime('now')
+BEGIN
+    UPDATE ds_documents
+    SET status = 'archived'
+    WHERE doc_id = new.doc_id AND status != 'archived';
+END;
+
+CREATE INDEX IF NOT EXISTS idx_ds_documents_type ON ds_documents(doc_type, status);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_project ON ds_documents(project_id, doc_type);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_skill ON ds_documents(skill_id, doc_type);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_session ON ds_documents(session_id);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_created ON ds_documents(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_expires ON ds_documents(expires_at);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_parent ON ds_documents(parent_doc_id);
+CREATE INDEX IF NOT EXISTS idx_ds_documents_source_path ON ds_documents(source_path);
+"""
+
+
+def ensure_documents_schema(conn: sqlite3.Connection) -> None:
+    """Idempotently create ds_documents + FTS schema in the given connection.
+
+    Uses executescript() which correctly handles multi-statement DDL including
+    triggers with embedded semicolons in their BEGIN...END bodies.
+    executescript() issues an implicit COMMIT before running, which is fine for
+    DDL-only calls.
+    """
+    conn.executescript(_DOCUMENTS_DDL)
+
+
+@contextmanager
+def _docs_connection():
+    """Open a read connection to files.db with ds_documents schema ensured.
+
+    Always resolves the path via connect_files() → files_db_path(); tests
+    isolate by monkeypatching files_db_path (see the _isolate_files_db fixture),
+    so no path parameter is threaded through DocumentStore's public API.
+    """
+    conn = connect_files()
+    try:
+        ensure_files_schema(conn)
+        ensure_documents_schema(conn)
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def _docs_transaction():
+    """Open a write transaction on files.db with ds_documents schema ensured.
+
+    Path resolution and test isolation follow the same rule as
+    _docs_connection(): connect_files() → files_db_path(), monkeypatched in tests.
+    """
+    conn = connect_files()
+    try:
+        ensure_files_schema(conn)
+        ensure_documents_schema(conn)
+        conn.execute("BEGIN")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 class DocumentStore:
-    """Universal CRUD interface for ds_documents table with FTS5 search."""
+    """Universal CRUD interface for ds_documents table with FTS5 search.
+
+    The table lives in files.db (the three-store document/artifact store),
+    not in studio.db.  Canonical events (DOCUMENT_CREATED, DOCUMENT_UPDATED,
+    DOCUMENT_ARCHIVED) are still emitted via the spool pipeline so the event
+    spine remains intact.
+    """
 
     @staticmethod
     def create(
@@ -114,7 +255,7 @@ class DocumentStore:
         metadata_json = json.dumps(metadata) if metadata is not None else None
         tags_json = json.dumps(tags) if tags is not None else None
 
-        with transaction() as c:
+        with _docs_transaction() as c:
             cursor = c.execute(
                 """INSERT INTO ds_documents
                    (doc_type, title, content, project_id, skill_id, session_id,
@@ -140,32 +281,32 @@ class DocumentStore:
             )
             doc_id = cursor.lastrowid
 
-            # Emit event BEFORE commit (STABILITY: fail if event fails) — via spool (Slice 3)
-            _envelope = CanonicalEventEnvelope(
-                event_type=CanonicalEventType.DOCUMENT_CREATED.value,
-                session_id=None,
-                payload={
-                    "doc_id": doc_id,
-                    "doc_type": doc_type,
-                    "title": title,
-                    "format": format,
-                    "project_id": project_id,
-                    "skill_id": skill_id,
-                },
-                confidence="unavailable",
-                project_id=None,
+        # Emit event AFTER commit (document is durably stored) — via spool (Slice 3)
+        _envelope = CanonicalEventEnvelope(
+            event_type=CanonicalEventType.DOCUMENT_CREATED.value,
+            session_id=None,
+            payload={
+                "doc_id": doc_id,
+                "doc_type": doc_type,
+                "title": title,
+                "format": format,
+                "project_id": project_id,
+                "skill_id": skill_id,
+            },
+            confidence="unavailable",
+            project_id=None,
+        )
+        try:
+            write_envelopes([_envelope])
+        except Exception:
+            # spool write failure means the event will not reach SQLite;
+            # the calling operation must abort to preserve audit/consistency invariants.
+            raise RuntimeError(
+                f"Event emission failed for DOCUMENT_CREATED (doc_id={doc_id}). "
+                f"Aborting document creation to prevent audit gap."
             )
-            try:
-                write_envelopes([_envelope])
-            except Exception:
-                # spool write failure means the event will not reach SQLite;
-                # the calling operation must abort to preserve audit/consistency invariants.
-                raise RuntimeError(
-                    f"Event emission failed for DOCUMENT_CREATED (doc_id={doc_id}). "
-                    f"Aborting document creation to prevent audit gap."
-                )
 
-            return doc_id
+        return doc_id
 
     @staticmethod
     def read(doc_id: int) -> dict | None:
@@ -181,7 +322,7 @@ class DocumentStore:
         Note:
             Automatically increments access_count and updates last_accessed
         """
-        with transaction() as c:
+        with _docs_transaction() as c:
             # Increment access count
             c.execute(
                 "UPDATE ds_documents SET access_count = access_count + 1 WHERE doc_id = ?",
@@ -229,7 +370,7 @@ class DocumentStore:
             Uses FTS5 MATCH syntax. Simple keywords work, but you can also use
             advanced FTS5 operators like AND, OR, NOT, "phrase", etc.
         """
-        with get_connection() as c:
+        with _docs_connection() as c:
             if doc_type:
                 rows = c.execute(
                     """SELECT d.* FROM ds_documents d
@@ -311,36 +452,36 @@ class DocumentStore:
         values = list(fields.values())
         values.append(doc_id)
 
-        with transaction() as c:
+        with _docs_transaction() as c:
             cursor = c.execute(
                 f"UPDATE ds_documents SET {set_clause} WHERE doc_id = ?",  # noqa: S608
                 values,
             )
             success = cursor.rowcount > 0
 
-            # Emit event BEFORE commit (STABILITY: fail if event fails) — via spool (Slice 3)
-            if success:
-                _envelope = CanonicalEventEnvelope(
-                    event_type=CanonicalEventType.DOCUMENT_UPDATED.value,
-                    session_id=None,
-                    payload={
-                        "doc_id": doc_id,
-                        "fields_updated": list(fields.keys()),
-                    },
-                    confidence="unavailable",
-                    project_id=None,
+        # Emit event AFTER commit — via spool (Slice 3)
+        if success:
+            _envelope = CanonicalEventEnvelope(
+                event_type=CanonicalEventType.DOCUMENT_UPDATED.value,
+                session_id=None,
+                payload={
+                    "doc_id": doc_id,
+                    "fields_updated": list(fields.keys()),
+                },
+                confidence="unavailable",
+                project_id=None,
+            )
+            try:
+                write_envelopes([_envelope])
+            except Exception:
+                # spool write failure means the event will not reach SQLite;
+                # the calling operation must abort to preserve audit/consistency invariants.
+                raise RuntimeError(
+                    f"Event emission failed for DOCUMENT_UPDATED (doc_id={doc_id}). "
+                    f"Aborting update to prevent audit gap."
                 )
-                try:
-                    write_envelopes([_envelope])
-                except Exception:
-                    # spool write failure means the event will not reach SQLite;
-                    # the calling operation must abort to preserve audit/consistency invariants.
-                    raise RuntimeError(
-                        f"Event emission failed for DOCUMENT_UPDATED (doc_id={doc_id}). "
-                        f"Aborting update to prevent audit gap."
-                    )
 
-            return success
+        return success
 
     @staticmethod
     def archive(doc_id: int) -> bool:
@@ -389,7 +530,7 @@ class DocumentStore:
         Returns:
             List of document dicts, sorted by created_at DESC
         """
-        with get_connection() as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = ? AND status = ?
@@ -431,7 +572,7 @@ class DocumentStore:
             Skill document dict or None if not found
         """
         skill_id = f"{pack}:{mode}"
-        with get_connection() as c:
+        with _docs_connection() as c:
             row = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'skill' AND skill_id = ? AND status = ?
@@ -472,7 +613,7 @@ class DocumentStore:
             List of gotcha document dicts
         """
         skill_id = f"{pack}:{mode}"
-        with get_connection() as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'gotcha' AND skill_id = ? AND status = ?
@@ -509,7 +650,7 @@ class DocumentStore:
         Returns:
             List of gotcha document dicts
         """
-        with get_connection() as c:
+        with _docs_connection() as c:
             rows = c.execute(
                 """SELECT * FROM ds_documents
                    WHERE doc_type = 'gotcha' AND skill_id IS NULL AND status = ?

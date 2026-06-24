@@ -83,6 +83,33 @@ def _is_test_path(path: str) -> bool:
     return p.startswith("tests/") and p.endswith(".py") and Path(p).name.startswith("test_")
 
 
+def _is_non_runtime_writer(path: str) -> bool:
+    """True for files that are NOT live-runtime table writers.
+
+    Single-writer ownership (detect_unowned_table_writes) only governs *runtime*
+    modules competing for a derived/projection table. The following are excluded
+    because they are DDL or one-shot tooling, not the runtime owner — same
+    convention as tests/unit/test_schema_keep_list.py::_source_files:
+      - numbered migration DDL/seed (`core/event_store/migrations/*.sql`),
+        which is governed by detect_migration_file_db_duplication instead;
+      - one-time upgrade/migrate/reconcile/backfill CLI tooling, which writes
+        the table once during an upgrade, not on the live path.
+    """
+    p = _normalize(path)
+    if "core/event_store/migrations/" in p:
+        return True
+    if p.startswith("core/upgrade/"):
+        return True
+    for prefix in (
+        "interfaces/cli/migrate_",
+        "interfaces/cli/reconcile_",
+        "interfaces/cli/backfill_",
+    ):
+        if p.startswith(prefix):
+            return True
+    return False
+
+
 _CODE_SUFFIXES = (".py", ".html", ".js", ".ts", ".sql", ".yaml", ".yml")
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".dream-studio", "graphify-out"}
 
@@ -307,7 +334,7 @@ def _table_writers(table: str, repo_root: Path, *, exclude: str) -> list[str]:
     writers: list[str] = []
     table_l = table.lower()
     for rel, text in _iter_code_files(repo_root):
-        if rel == exclude or _is_test_path(rel):
+        if rel == exclude or _is_test_path(rel) or _is_non_runtime_writer(rel):
             continue
         if table_l in _write_targets(text):
             writers.append(rel)
@@ -336,7 +363,7 @@ def detect_unowned_table_writes(
     findings: list[Finding] = []
     for f in files:
         path = _normalize(f["path"])
-        if _is_test_path(path):
+        if _is_test_path(path) or _is_non_runtime_writer(path):
             continue
         added_targets = _write_targets("\n".join(f["added"]))
         removed_targets = _write_targets("\n".join(f["removed"]))

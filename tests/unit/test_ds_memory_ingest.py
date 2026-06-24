@@ -10,6 +10,22 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+# ── Test isolation: redirect files.db to tmp_path ─────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _isolate_files_db(tmp_path, monkeypatch):
+    """Redirect files_db_path() to a per-test temp file so tests don't share state.
+
+    Both the production code (run_memory_ingest → _connect_docs → connect_files)
+    and the test helper (_connect_docs) call core.files.store.files_db_path().
+    Patching it here gives every test function its own isolated files.db.
+    """
+    files_db = tmp_path / "files.db"
+    monkeypatch.setattr("core.files.store.files_db_path", lambda: files_db)
+    yield files_db
+
+
 # ── DB helper ─────────────────────────────────────────────────────────────────
 
 
@@ -22,9 +38,34 @@ def _make_db(tmp_path: Path) -> Path:
     return db_path
 
 
+def _files_db_path(tmp_path: Path) -> Path:
+    """Return the files.db path that run_memory_ingest will use.
+
+    run_memory_ingest calls _connect_docs() which uses core.files.store.connect_files(),
+    which in turn calls files_db_path() → state_dir() / 'files.db'.  In tests we
+    monkeypatch that path via the DREAM_STUDIO_STATE env var or accept the default.
+    Since tests don't set state_dir, the easiest approach is to connect to whatever
+    files.db the ingest wrote to and query it directly.
+    """
+    from core.files.store import files_db_path
+
+    return files_db_path()
+
+
 def _connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _connect_docs() -> sqlite3.Connection:
+    """Open a connection to files.db with ds_documents schema ensured."""
+    from core.files.store import connect_files, ensure_files_schema
+    from core.storage.document_store import ensure_documents_schema
+
+    conn = connect_files()
+    ensure_files_schema(conn)
+    ensure_documents_schema(conn)
     return conn
 
 
@@ -163,7 +204,8 @@ def test_architecture_doc_extracted_from_constitution(tmp_path):
     assert result["ok"] is True
     assert result["architecture_docs"]["new"] == 1
 
-    conn = _connect(db_path)
+    # ds_documents now lives in files.db, not studio.db
+    conn = _connect_docs()
     row = conn.execute(
         "SELECT title, doc_type FROM ds_documents WHERE doc_type = 'architecture_decision'"
     ).fetchone()
@@ -199,7 +241,8 @@ def test_session_handoff_picks_most_recent_by_date_dir(tmp_path):
     result = _run(tmp_path, db_path)
     assert result["session_handoffs"]["updated"] == 1
 
-    conn = _connect(db_path)
+    # ds_documents now lives in files.db, not studio.db
+    conn = _connect_docs()
     row = conn.execute(
         "SELECT content FROM ds_documents WHERE doc_type = 'session_handoff'"
     ).fetchone()
@@ -217,7 +260,8 @@ def test_session_handoff_picks_alphabetically_last_in_date_dir(tmp_path):
     result = _run(tmp_path, db_path)
     assert result["session_handoffs"]["updated"] == 1
 
-    conn = _connect(db_path)
+    # ds_documents now lives in files.db, not studio.db
+    conn = _connect_docs()
     row = conn.execute(
         "SELECT content FROM ds_documents WHERE doc_type = 'session_handoff'"
     ).fetchone()
@@ -236,8 +280,8 @@ def test_session_handoff_upsert_replaces_on_second_run(tmp_path):
     result2 = _run(tmp_path, db_path)
     assert result2["session_handoffs"]["updated"] == 1
 
-    # Verify only 1 row and content is updated
-    conn = _connect(db_path)
+    # Verify only 1 row and content is updated (ds_documents in files.db)
+    conn = _connect_docs()
     rows = conn.execute(
         "SELECT content FROM ds_documents WHERE doc_type = 'session_handoff'"
     ).fetchall()
@@ -276,12 +320,16 @@ def test_dry_run_reports_counts_without_writing(tmp_path):
     )
     assert total_found > 0
 
-    # Nothing actually written to SQLite
+    # Nothing actually written to SQLite (reg_gotchas in studio.db, ds_documents in files.db)
     conn = _connect(db_path)
     gotcha_count = conn.execute("SELECT COUNT(*) FROM reg_gotchas").fetchone()[0]
-    doc_count = conn.execute("SELECT COUNT(*) FROM ds_documents").fetchone()[0]
     conn.close()
     assert gotcha_count == 0
+
+    # ds_documents is in files.db — dry-run should leave it empty (or unchanged)
+    docs_conn = _connect_docs()
+    doc_count = docs_conn.execute("SELECT COUNT(*) FROM ds_documents").fetchone()[0]
+    docs_conn.close()
     assert doc_count == 0
 
 
@@ -302,7 +350,8 @@ def test_unknown_project_dir_gives_null_project_id(tmp_path):
     assert result["ok"] is True
     assert result["session_handoffs"]["updated"] == 1
 
-    conn = _connect(db_path)
+    # ds_documents now lives in files.db
+    conn = _connect_docs()
     row = conn.execute(
         "SELECT project_id FROM ds_documents WHERE doc_type = 'session_handoff'"
     ).fetchone()
