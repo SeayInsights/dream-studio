@@ -295,3 +295,5 @@ docs, and prove docs drift without weakening unrelated release-gate checks.
 
 
 <!-- Last reviewed 2026-06-20 — WO-P20-AGENTS-GEN: interfaces/cli/ci_gate.py adds an "agents-md-fresh" pre-push check (py -m integrations.compiler.agents_md --check) so a stale generated AGENTS.md is flagged. Read-only drift check; no release/publication boundary, packaging, or module-profile change. -->
+
+<!-- Last reviewed 2026-06-24 — chore/docstore-move-files-db (three-store architecture fix): flake8-baseline.txt gains 3 E402 entries for interfaces/cli/migrate_docstore_to_files_db.py (lines 24-26: module-level imports after sys.path.insert — unavoidable pattern for standalone CLI migration scripts, consistent with migrate_files_to_sqlite.py and other migration utilities). No change to lint policy, publication boundary, packaging, docker module profiles, or privacy classification. The three new baseline entries represent known unavoidable debt (path manipulation before imports is standard practice for CLI scripts that cannot be imported as packages). -->
