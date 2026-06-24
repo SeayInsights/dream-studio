@@ -73,6 +73,18 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
 # and the Python-side is a harmless idempotent fallback. Reported as informational.
 _DUAL_OWNED_TABLES: frozenset[str] = frozenset({"memory_fts"})
 
+# Tables that live in files.db (the three-store document/artifact store), NOT in
+# studio.db.  They are created by Python code (ensure_documents_schema in
+# document_store.py) and have no studio.db migration file.  The staleness guard
+# must recognise these as legitimate so it does not flag them as unregistered
+# studio.db tables.
+_FILES_DB_TABLES: frozenset[str] = frozenset(
+    {
+        "ds_documents",
+        "ds_documents_fts",
+    }
+)
+
 # Files excluded from the staleness-guard scan.
 # The guard's own source and its test file contain DDL-pattern text for
 # illustrative/test purposes; scanning them would produce false positives.
@@ -137,7 +149,12 @@ _SWALLOW_INVENTORY: list[dict[str, Any]] = [
     {
         "pattern": "no such table: ds_documents",
         "classification": "legitimate",
-        "explanation": "Legacy ds_documents absent in migration-only or partial DBs.",
+        "explanation": (
+            "ds_documents is absent in studio.db — it was created in migration 007 and "
+            "dropped in migration 127 (three-store architecture fix: ds_documents now "
+            "lives in files.db). Partial/migration-only DBs and fresh installs after "
+            "migration 127 will not have this table."
+        ),
     },
     {
         "pattern": "no such table: canonical_events",
@@ -381,7 +398,9 @@ def _staleness_guard(
         r"CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?['\"]?(\w+)['\"]?",
         re.IGNORECASE,
     )
-    known = set(_PYTHON_OWNED_TABLES.keys())
+    # Include files.db tables so the staleness guard does not flag them as
+    # unregistered studio.db tables (they live in a separate database).
+    known = set(_PYTHON_OWNED_TABLES.keys()) | _FILES_DB_TABLES
     findings: list[dict[str, Any]] = []
 
     if _override_python_files is not None:

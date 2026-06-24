@@ -12,6 +12,8 @@ import json
 from datetime import datetime, timedelta, UTC
 
 from core.event_store.studio_db import _connect
+from core.files.store import connect_files
+from core.storage.document_store import ensure_documents_schema
 
 from canonical.events.envelope import CanonicalEventEnvelope
 from canonical.events.types import EventType as CanonicalEventType
@@ -261,8 +263,10 @@ def _check_analyzed_repos(query: str, _context: dict, min_trust: float) -> dict 
         # Extract keywords from query for FTS search
         keywords = query.lower().strip()
 
-        with _connect() as c:
-            # Search for analyzed repos or code patterns
+        c = connect_files()
+        try:
+            ensure_documents_schema(c)
+            # Search for analyzed repos or code patterns in files.db
             rows = c.execute(
                 """SELECT d.doc_id, d.title, d.content, d.metadata
                    FROM ds_documents d
@@ -273,36 +277,38 @@ def _check_analyzed_repos(query: str, _context: dict, min_trust: float) -> dict 
                    LIMIT 3""",
                 (keywords,),
             ).fetchall()
+        finally:
+            c.close()
 
-            if not rows:
-                return None
+        if not rows:
+            return None
 
-            # Extract findings from top match
-            top_match = rows[0]
-            metadata = {}
-            if top_match["metadata"]:
-                try:
-                    metadata = json.loads(top_match["metadata"])
-                except (json.JSONDecodeError, TypeError):
-                    pass
+        # Extract findings from top match
+        top_match = rows[0]
+        metadata = {}
+        if top_match["metadata"]:
+            try:
+                metadata = json.loads(top_match["metadata"])
+            except (json.JSONDecodeError, TypeError):
+                pass
 
-            # Get trust score from metadata or use policy default for analyzed repos
-            trust_score = metadata.get("trust_score", TRUST_POLICY["analyzed_repo"]["score"])
+        # Get trust score from metadata or use policy default for analyzed repos
+        trust_score = metadata.get("trust_score", TRUST_POLICY["analyzed_repo"]["score"])
 
-            if trust_score < min_trust:
-                return None
+        if trust_score < min_trust:
+            return None
 
-            return {
-                "data": {
-                    "title": top_match["title"],
-                    "content": top_match["content"],
-                    "metadata": metadata,
-                    "source": "analyzed_repo",
-                },
-                "source_url": metadata.get("repo_url", f"doc://{top_match['doc_id']}"),
-                "trust_score": trust_score,
-                "trust_reason": TRUST_POLICY["analyzed_repo"]["reason"],
-            }
+        return {
+            "data": {
+                "title": top_match["title"],
+                "content": top_match["content"],
+                "metadata": metadata,
+                "source": "analyzed_repo",
+            },
+            "source_url": metadata.get("repo_url", f"doc://{top_match['doc_id']}"),
+            "trust_score": trust_score,
+            "trust_reason": TRUST_POLICY["analyzed_repo"]["reason"],
+        }
     except Exception:
         return None
 

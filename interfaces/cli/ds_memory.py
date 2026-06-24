@@ -9,6 +9,19 @@ import sys
 from datetime import datetime, UTC
 from pathlib import Path
 
+
+# Deferred import: avoid heavy top-level cost when ds_memory is imported as a CLI module.
+def _connect_docs() -> sqlite3.Connection:
+    """Open a connection to files.db with ds_documents schema ensured."""
+    from core.files.store import connect_files, ensure_files_schema
+    from core.storage.document_store import ensure_documents_schema
+
+    conn = connect_files()
+    ensure_files_schema(conn)
+    ensure_documents_schema(conn)
+    return conn
+
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -299,6 +312,7 @@ def _pass2_architecture(
     project: str | None,
     conn: sqlite3.Connection | None,
     dry_run: bool,
+    docs_conn: sqlite3.Connection | None = None,
 ) -> dict:
     files = _collect_architecture_files(planning_dir, project)
     new_count = 0
@@ -308,8 +322,8 @@ def _pass2_architecture(
     for path in files:
         source_path = str(path.resolve())
 
-        if conn is not None:
-            exists = conn.execute(
+        if docs_conn is not None:
+            exists = docs_conn.execute(
                 "SELECT 1 FROM ds_documents WHERE source_path = ?", (source_path,)
             ).fetchone()
             if exists:
@@ -343,8 +357,8 @@ def _pass2_architecture(
         except OSError:
             created_at = now
 
-        if not dry_run and conn is not None:
-            conn.execute(
+        if not dry_run and docs_conn is not None:
+            docs_conn.execute(
                 "INSERT INTO ds_documents"
                 " (doc_type, project_id, title, content, source_path, created_at, updated_at)"
                 " VALUES ('architecture_decision', ?, ?, ?, ?, ?, ?)",
@@ -364,6 +378,7 @@ def _pass3_session_handoffs(
     project: str | None,
     conn: sqlite3.Connection | None,
     dry_run: bool,
+    docs_conn: sqlite3.Connection | None = None,
 ) -> dict:
     if not sessions_dir.exists():
         return {"updated": 0}
@@ -401,13 +416,13 @@ def _pass3_session_handoffs(
         except OSError:
             created_at = now
 
-        if not dry_run and conn is not None:
+        if not dry_run and docs_conn is not None:
             # Upsert: delete existing entry for this project, then insert fresh
-            conn.execute(
+            docs_conn.execute(
                 "DELETE FROM ds_documents WHERE doc_type = 'session_handoff' AND title = ?",
                 (title,),
             )
-            conn.execute(
+            docs_conn.execute(
                 "INSERT INTO ds_documents"
                 " (doc_type, project_id, title, content, source_path, created_at, updated_at)"
                 " VALUES ('session_handoff', ?, ?, ?, ?, ?, ?)",
@@ -437,21 +452,34 @@ def run_memory_ingest(
             "Run rehearsal-install first."
         )
 
+    # studio.db connection for authority reads (reg_gotchas, business_projects)
     conn: sqlite3.Connection | None = None
     if db_path.exists():
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
 
+    # files.db connection for ds_documents reads/writes (three-store arch)
+    docs_conn: sqlite3.Connection | None = None
+    if not dry_run:
+        try:
+            docs_conn = _connect_docs()
+        except Exception:
+            pass  # docs writes are optional; degrade gracefully
+
     try:
         pass1 = _pass1_gotchas(sessions_dir, planning_dir, project, conn, dry_run)
-        pass2 = _pass2_architecture(planning_dir, project, conn, dry_run)
-        pass3 = _pass3_session_handoffs(sessions_dir, project, conn, dry_run)
+        pass2 = _pass2_architecture(planning_dir, project, conn, dry_run, docs_conn)
+        pass3 = _pass3_session_handoffs(sessions_dir, project, conn, dry_run, docs_conn)
 
         if conn is not None and not dry_run:
             conn.commit()
+        if docs_conn is not None and not dry_run:
+            docs_conn.commit()
     finally:
         if conn is not None:
             conn.close()
+        if docs_conn is not None:
+            docs_conn.close()
 
     total_rows = (pass1["new"] + pass2["new"] + pass3["updated"]) if not dry_run else 0
 

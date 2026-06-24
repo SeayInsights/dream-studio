@@ -299,6 +299,9 @@ interfaces/cli/memory_audit.py:168:62: E203 whitespace before ':'
 interfaces/cli/memory_audit.py:171:65: E203 whitespace before ':'
 interfaces/cli/memory_audit.py:378:22: F541 f-string is missing placeholders
 interfaces/cli/memory_audit.py:40:24: E203 whitespace before ':'
+interfaces/cli/migrate_docstore_to_files_db.py:24:1: E402 module level import not at top of file
+interfaces/cli/migrate_docstore_to_files_db.py:25:1: E402 module level import not at top of file
+interfaces/cli/migrate_docstore_to_files_db.py:26:1: E402 module level import not at top of file
 interfaces/cli/migrate_files_to_sqlite.py:140:5: F841 local variable 'pattern' is assigned to but never used
 interfaces/cli/migrate_files_to_sqlite.py:14:1: E402 module level import not at top of file
 interfaces/cli/migrate_files_to_sqlite.py:15:1: E402 module level import not at top of file
