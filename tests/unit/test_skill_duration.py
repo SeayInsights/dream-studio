@@ -14,10 +14,15 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
 DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
+
+# Anchor event timestamps relative to now so they remain inside any days=N
+# query window regardless of wall-clock date.
+_BASE = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,17 +119,17 @@ def test_skill_duration_available() -> None:
             run_id,
             skill_id="ds-workorder",
             outcome_status="completed",
-            created_at="2026-01-01 08:00:00",
+            created_at=f"{_BASE} 08:00:00",
         )
         _insert_event(
-            conn, "execution.started", "execution.started", run_id, created_at="2026-01-01 08:00:00"
+            conn, "execution.started", "execution.started", run_id, created_at=f"{_BASE} 08:00:00"
         )
         _insert_event(
             conn,
             "execution.completed",
             "execution.completed",
             run_id,
-            created_at="2026-01-01 08:00:45",
+            created_at=f"{_BASE} 08:00:45",
         )
         conn.commit()
 
@@ -172,21 +177,21 @@ def test_skill_duration_available_per_invocation() -> None:
         run_a,
         skill_id="ds-core",
         outcome_status="completed",
-        created_at="2026-01-01 10:00:00",
+        created_at=f"{_BASE} 10:00:00",
     )
     _insert_event(
         conn,
         "execution.started",
         "execution.started",
         run_a,
-        created_at="2026-01-01 10:00:00",
+        created_at=f"{_BASE} 10:00:00",
     )
     _insert_event(
         conn,
         "execution.completed",
         "execution.completed",
         run_a,
-        created_at="2026-01-01 10:00:30",
+        created_at=f"{_BASE} 10:00:30",
     )
 
     # Run B — invocation only (no started/completed) → NULL duration
@@ -197,7 +202,7 @@ def test_skill_duration_available_per_invocation() -> None:
         run_b,
         skill_id="ds-core",
         outcome_status="completed",
-        created_at="2026-01-01 11:00:00",
+        created_at=f"{_BASE} 11:00:00",
     )
 
     conn.commit()
@@ -300,21 +305,21 @@ def test_end_to_end() -> None:
             run_id,
             skill_id="ds-quality",
             outcome_status="completed",
-            created_at="2026-01-01 09:00:00",
+            created_at=f"{_BASE} 09:00:00",
         )
         _insert_event(
             conn,
             "execution.started",
             "execution.started",
             run_id,
-            created_at="2026-01-01 09:00:00",
+            created_at=f"{_BASE} 09:00:00",
         )
         _insert_event(
             conn,
             "execution.completed",
             "execution.completed",
             run_id,
-            created_at="2026-01-01 09:01:00",
+            created_at=f"{_BASE} 09:01:00",
         )
         conn.commit()
         conn.close()
