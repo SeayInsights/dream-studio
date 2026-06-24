@@ -3,7 +3,7 @@
 
 Three-store architecture fix: ds_documents belongs in files.db (the document/
 artifact store), not in studio.db (the canonical event authority).  This script
-is idempotent — rows that already exist in files.db (matched by doc_id) are
+is idempotent - rows that already exist in files.db (matched by doc_id) are
 skipped, so it is safe to re-run.
 
 Usage:
@@ -60,7 +60,7 @@ def migrate(
     dry_run: bool = False,
     verbose: bool = False,
 ) -> dict:
-    """Copy rows from studio.db ds_documents → files.db ds_documents.
+    """Copy rows from studio.db ds_documents -> files.db ds_documents.
 
     Returns a summary dict with keys: copied, skipped, total_in_source.
     """
@@ -81,7 +81,7 @@ def migrate(
             "copied": 0,
             "skipped": 0,
             "total_in_source": 0,
-            "note": "ds_documents does not exist in studio.db — nothing to migrate",
+            "note": "ds_documents does not exist in studio.db - nothing to migrate",
         }
 
     rows = src.execute(f"SELECT {_COL_LIST} FROM ds_documents").fetchall()  # noqa: S608
@@ -92,7 +92,7 @@ def migrate(
         print(f"Found {total} rows in studio.db ds_documents")
 
     if dry_run:
-        print(f"[dry-run] Would copy {total} rows from studio.db → files.db ds_documents")
+        print(f"[dry-run] Would copy {total} rows from studio.db -> files.db ds_documents")
         return {"ok": True, "dry_run": True, "total_in_source": total}
 
     dst = connect_files(files_db_path)
@@ -210,7 +210,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  rows in files.db ds_documents: {vr['row_count']}")
             print(f"  FTS functional: {vr['fts_ok']}")
             if vr["row_count"] == 0:
-                print("  WARNING: 0 rows — check that studio.db had rows to copy")
+                print("  WARNING: 0 rows - check that studio.db had rows to copy")
         else:
             print(f"  VERIFY FAILED: {vr.get('error')}", file=sys.stderr)
             return 1
