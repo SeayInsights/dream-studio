@@ -106,7 +106,7 @@ def test_state_contract_names_high_risk_duplicate_authority_surfaces():
         "`raw_sessions` and `prd_sessions`",
         "`raw_handoffs` and `prd_handoffs`",
         "`decision_log` and `decision.*` canonical events",
-        "`raw_skill_telemetry`, `activity_log`, and `adapter_executions`",
+        "`raw_skill_telemetry` and `activity_log`",
         "`memory_entries`, `memory_fts`, and `control.research.memory` indexes",
         "`research_cache` and `raw_research`",
     ]:

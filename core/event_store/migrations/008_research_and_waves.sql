@@ -26,21 +26,7 @@ CREATE TABLE IF NOT EXISTS raw_research (
     CONSTRAINT chk_source_type CHECK (source_type IN ('stack', 'security', 'docs', 'pattern', 'general'))
 );
 
--- ── Research source reliability tracking ────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS reg_research_sources (
-    source_url TEXT PRIMARY KEY,
-    source_type TEXT NOT NULL,
-    trust_score REAL DEFAULT 0.5,
-    total_queries INTEGER DEFAULT 0,
-    successful_queries INTEGER DEFAULT 0,
-    failed_queries INTEGER DEFAULT 0,
-    avg_validation_time REAL,
-    last_used TEXT,
-    first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_source_trust_range CHECK (trust_score >= 0.0 AND trust_score <= 1.0),
-    CONSTRAINT chk_source_type CHECK (source_type IN ('stack', 'security', 'docs', 'pattern', 'general'))
-);
+-- reg_research_sources removed in migration 128 (dead table; no live consumer)
 
 -- ── Wave execution tracking ──────────────────────────────────────────────────
 
@@ -82,43 +68,7 @@ CREATE TABLE IF NOT EXISTS pi_wave_tasks (
     FOREIGN KEY (wave_id) REFERENCES pi_waves(wave_id)
 );
 
--- ── Auto-adjust source trust on validation outcome ───────────────────────────
-
-CREATE TRIGGER IF NOT EXISTS trg_update_source_trust
-AFTER UPDATE OF validation_status ON raw_research
-WHEN old.validation_status != new.validation_status AND new.source_url IS NOT NULL
-BEGIN
-    -- Update trust score based on validation outcome
-    UPDATE reg_research_sources
-    SET trust_score = CASE
-        WHEN new.validation_status = 'validated' THEN MIN(trust_score + 0.1, 1.0)
-        WHEN new.validation_status = 'rejected' THEN MAX(trust_score - 0.2, 0.0)
-        ELSE trust_score
-    END,
-    total_queries = total_queries + 1,
-    successful_queries = CASE
-        WHEN new.validation_status = 'validated' THEN successful_queries + 1
-        ELSE successful_queries
-    END,
-    failed_queries = CASE
-        WHEN new.validation_status = 'rejected' THEN failed_queries + 1
-        ELSE failed_queries
-    END,
-    last_used = datetime('now')
-    WHERE source_url = new.source_url;
-
-    -- Insert source if it doesn't exist
-    INSERT OR IGNORE INTO reg_research_sources (source_url, source_type, trust_score, total_queries, successful_queries, failed_queries, last_used)
-    VALUES (
-        new.source_url,
-        new.source_type,
-        CASE WHEN new.validation_status = 'validated' THEN 0.6 ELSE 0.3 END,
-        1,
-        CASE WHEN new.validation_status = 'validated' THEN 1 ELSE 0 END,
-        CASE WHEN new.validation_status = 'rejected' THEN 1 ELSE 0 END,
-        datetime('now')
-    );
-END;
+-- trg_update_source_trust removed in migration 128: its target reg_research_sources is dropped.
 
 -- ── Indexes for query performance ────────────────────────────────────────────
 

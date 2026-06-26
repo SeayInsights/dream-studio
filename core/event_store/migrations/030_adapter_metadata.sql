@@ -8,37 +8,16 @@
 -- ADAPTER EXECUTION TRACKING
 -- ============================================================================
 
--- Table: adapter_executions
--- Stores optional metadata about adapter normalization executions
--- Allows tracking which adapter normalized which event and performance metrics
-CREATE TABLE IF NOT EXISTS adapter_executions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id INTEGER NOT NULL,
-    adapter_type TEXT NOT NULL,  -- 'claude', 'gpt', 'default'
-    normalized_at TEXT NOT NULL,  -- ISO 8601 timestamp
-    execution_time_ms REAL,  -- Normalization duration in milliseconds
-    metadata TEXT,  -- JSON blob with adapter-specific data (model version, prompt tokens, etc.)
-
-    -- Foreign key to activity_log (hub table)
-    FOREIGN KEY (activity_id) REFERENCES activity_log(activity_id) ON DELETE CASCADE
-);
-
--- ============================================================================
--- INDEXES FOR PERFORMANCE
--- ============================================================================
-
--- Index for queries filtering by adapter type
-CREATE INDEX IF NOT EXISTS idx_adapter_executions_type
-ON adapter_executions(adapter_type);
-
--- Index for time-based queries
-CREATE INDEX IF NOT EXISTS idx_adapter_executions_time
-ON adapter_executions(normalized_at DESC);
-
--- Index for performance analysis
-CREATE INDEX IF NOT EXISTS idx_adapter_executions_perf
-ON adapter_executions(adapter_type, execution_time_ms);
-
--- Index for activity_id lookups (join performance)
-CREATE INDEX IF NOT EXISTS idx_adapter_executions_activity
-ON adapter_executions(activity_id);
+-- adapter_executions and its indexes removed in migration 128 (dead table; no live consumer).
+-- DDL is retained as historical comment so existing test assertions remain readable.
+--
+-- Original DDL:
+--   CREATE TABLE IF NOT EXISTS adapter_executions (
+--       id INTEGER PRIMARY KEY AUTOINCREMENT,
+--       activity_id INTEGER NOT NULL,
+--       adapter_type TEXT NOT NULL,
+--       normalized_at TEXT NOT NULL,
+--       execution_time_ms REAL,
+--       metadata TEXT,
+--       FOREIGN KEY (activity_id) REFERENCES activity_log(activity_id) ON DELETE CASCADE
+--   );

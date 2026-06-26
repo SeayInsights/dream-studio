@@ -34,7 +34,7 @@ DROP TABLE IF EXISTS sec_cve_matches_new;
 
 DROP TABLE IF EXISTS sec_hook_checks_new;
 
-DROP TABLE IF EXISTS adapter_executions_new;
+-- adapter_executions_new: removed (adapter_executions dropped in migration 128)
 
 -- ============================================================================
 -- Part 1: Drop ALL views before any table recreation.
@@ -256,29 +256,7 @@ CREATE INDEX idx_hook_check_exec ON sec_hook_checks(hook_exec_id);
 
 CREATE INDEX idx_hook_check_result ON sec_hook_checks(check_result);
 
--- 2g: adapter_executions
-CREATE TABLE adapter_executions_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    activity_id INTEGER,
-    adapter_type TEXT NOT NULL,
-    normalized_at TEXT NOT NULL,
-    execution_time_ms REAL,
-    metadata TEXT
-);
-
-INSERT INTO adapter_executions_new SELECT * FROM adapter_executions;
-
-DROP TABLE adapter_executions;
-
-ALTER TABLE adapter_executions_new RENAME TO adapter_executions;
-
-CREATE INDEX idx_adapter_executions_type ON adapter_executions(adapter_type);
-
-CREATE INDEX idx_adapter_executions_time ON adapter_executions(normalized_at DESC);
-
-CREATE INDEX idx_adapter_executions_perf ON adapter_executions(adapter_type, execution_time_ms);
-
-CREATE INDEX idx_adapter_executions_activity ON adapter_executions(activity_id);
+-- 2g: adapter_executions removed (dead table, dropped in migration 128).
 
 PRAGMA foreign_keys = ON;
 

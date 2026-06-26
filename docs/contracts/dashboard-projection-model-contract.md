@@ -230,3 +230,5 @@ Static checks for this contract should verify:
 <!-- Last reviewed 2026-06-19 — WO-DASH-ACTIONABILITY: dashboard.html surfaces made actionable (presentation only, no projection/read-model contract change). Evals tab leads with a "Needs Attention" panel (regressions from /api/v1/evals/health baselines + friction/pending-rerun from /api/v2/eval/registry) before the raw tables; config tab adds a "What it does" column (client-side key descriptions); memory-surface adds a why-it-matters line per surfaced memory; learning tab retains its honest empty-state. No API response shape, projection, or SQLite boundary changed. -->
 
 <!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
+
+<!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->

@@ -29,16 +29,9 @@ if str(_PLUGIN_ROOT / "hooks") not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
 
 from core.config import state
-from core.utils.init_helpers import hydrate_registry_once
 
 
 def main() -> None:
-    # Always attempt registry hydration (idempotent via sentinel)
-    try:
-        hydrate_registry_once()
-    except Exception:
-        pass
-
     # Marker written by setup.py on install — triggers onboarding exactly once.
     marker = Path.home() / ".dream-studio" / "state" / "first-run-pending"
     if marker.exists():

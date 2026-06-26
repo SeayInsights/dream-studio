@@ -269,21 +269,9 @@ def build_contract_atlas(
             "connector_ingestion_status": platform_hardening["milestones"][
                 "engineering_connector_ingestion"
             ]["status"],
-            "privacy_redaction_status": platform_hardening["milestones"][
-                "privacy_redaction_secret_boundary"
-            ]["status"],
-            "local_watch_status": platform_hardening["milestones"][
-                "local_watch_scheduled_validation"
-            ]["status"],
-            "team_rollup_status": platform_hardening["milestones"]["team_pilot_rollup_reporting"][
-                "status"
-            ],
-            "installer_distribution_status": platform_hardening["milestones"][
-                "installer_distribution_hardening"
-            ]["status"],
-            "demo_case_study_status": platform_hardening["milestones"]["demo_case_study_system"][
-                "status"
-            ],
+            # privacy_redaction_status, local_watch_status, team_rollup_status,
+            # installer_distribution_status, demo_case_study_status removed —
+            # those milestones' backing tables were dead and dropped in migration 128.
             "validation_status": "pass" if not platform_hardening_errors else "attention_required",
             "validation_errors": platform_hardening_errors,
         },
@@ -1349,22 +1337,17 @@ def _source_tables() -> list[str]:
             "agent_registry_records",
             "agent_context_scope_policies",
             "github_repo_evaluations",
-            "github_repo_license_findings",
-            "github_repo_security_findings",
-            "github_repo_dependency_findings",
-            "github_repo_integration_candidates",
-            "github_repo_pattern_references",
             "github_repo_adoption_decisions",
-            "github_repo_attribution_records",
             "task_attribution_records",
             "skill_evaluation_runs",
             "policy_decision_records",
             "connector_ingestion_runs",
-            "privacy_redaction_export_records",
-            "local_watch_schedule_records",
-            "team_rollup_records",
-            "installer_distribution_checks",
-            "demo_case_study_packets",
+            # github_repo_license_findings, github_repo_security_findings,
+            # github_repo_dependency_findings, github_repo_integration_candidates,
+            # github_repo_pattern_references, github_repo_attribution_records,
+            # privacy_redaction_export_records, local_watch_schedule_records,
+            # team_rollup_records, installer_distribution_checks,
+            # demo_case_study_packets — dropped in migration 128 (dead tables).
         }
     )
     for module in DASHBOARD_MODULES:

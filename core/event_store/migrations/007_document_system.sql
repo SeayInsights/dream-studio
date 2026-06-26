@@ -1,4 +1,14 @@
 -- Migration 007: Document system and analyzed repos registry
+--
+-- ds_documents cluster: created here, dropped by migration 127
+--   (moved to files.db as part of three-store architecture).
+--   DDL is retained as historical reference so migration replays work;
+--   migration 127 drops the cluster afterwards.
+--
+-- reg_analyzed_repos, reg_repo_extractions, reg_repo_research_links:
+--   DDL removed from this migration (see migration 128).
+--   These tables are dead (no live consumer); migration 128 drops any
+--   existing instances on upgrade. Fresh installs never create them.
 
 -- ── Document storage table ──────────────────────────────────────────────────
 
@@ -25,58 +35,6 @@ CREATE TABLE IF NOT EXISTS ds_documents (
     ttl_days INTEGER,
     expires_at TEXT,
     FOREIGN KEY (parent_doc_id) REFERENCES ds_documents(doc_id)
-);
-
--- ── Analyzed repositories registry ──────────────────────────────────────────
-
-CREATE TABLE IF NOT EXISTS reg_analyzed_repos (
-    repo_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_url TEXT UNIQUE NOT NULL,
-    repo_name TEXT NOT NULL,
-    description TEXT,
-    first_analyzed TEXT,
-    last_analyzed TEXT,
-    last_commit_sha TEXT,
-    analysis_count INTEGER DEFAULT 0,
-    stars INTEGER,
-    language TEXT,
-    framework TEXT,
-    trust_score REAL DEFAULT 0.8,
-    patterns_extracted INTEGER DEFAULT 0,
-    building_blocks_extracted INTEGER DEFAULT 0,
-    research_queries_count INTEGER DEFAULT 0,
-    validation_success_rate REAL,
-    check_for_updates INTEGER DEFAULT 1,
-    last_update_check TEXT,
-    status TEXT DEFAULT 'active'
-);
-
--- ── Repository extractions (patterns, building blocks, techniques) ──────────
-
-CREATE TABLE IF NOT EXISTS reg_repo_extractions (
-    extraction_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_id INTEGER NOT NULL REFERENCES reg_analyzed_repos(repo_id),
-    extraction_type TEXT NOT NULL,
-    title TEXT,
-    file_path TEXT,
-    commit_sha TEXT,
-    code_sample TEXT,
-    description TEXT,
-    document_id INTEGER REFERENCES ds_documents(doc_id),
-    times_used INTEGER DEFAULT 0,
-    effectiveness_score REAL,
-    extracted_at TEXT
-);
-
--- ── Repository to research links (future-proofing for Wave 1) ───────────────
-
-CREATE TABLE IF NOT EXISTS reg_repo_research_links (
-    link_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    repo_id INTEGER NOT NULL REFERENCES reg_analyzed_repos(repo_id),
-    research_id INTEGER NOT NULL,
-    relevance_score REAL,
-    findings_from_repo TEXT,
-    created_at TEXT
 );
 
 -- ── FTS5 full-text search on documents ──────────────────────────────────────
@@ -130,23 +88,3 @@ CREATE INDEX IF NOT EXISTS idx_ds_documents_session ON ds_documents(session_id);
 CREATE INDEX IF NOT EXISTS idx_ds_documents_created ON ds_documents(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ds_documents_expires ON ds_documents(expires_at);
 CREATE INDEX IF NOT EXISTS idx_ds_documents_parent ON ds_documents(parent_doc_id);
-
--- ── Indexes on reg_analyzed_repos ────────────────────────────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_repos_framework ON reg_analyzed_repos(framework, status);
-CREATE INDEX IF NOT EXISTS idx_repos_trust ON reg_analyzed_repos(trust_score DESC);
-CREATE INDEX IF NOT EXISTS idx_repos_language ON reg_analyzed_repos(language, status);
-CREATE INDEX IF NOT EXISTS idx_repos_last_analyzed ON reg_analyzed_repos(last_analyzed);
-
--- ── Indexes on reg_repo_extractions ──────────────────────────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_repo_extractions_repo ON reg_repo_extractions(repo_id);
-CREATE INDEX IF NOT EXISTS idx_repo_extractions_type ON reg_repo_extractions(extraction_type);
-CREATE INDEX IF NOT EXISTS idx_repo_extractions_document ON reg_repo_extractions(document_id);
-CREATE INDEX IF NOT EXISTS idx_repo_extractions_effectiveness ON reg_repo_extractions(effectiveness_score DESC);
-
--- ── Indexes on reg_repo_research_links ───────────────────────────────────────
-
-CREATE INDEX IF NOT EXISTS idx_repo_research_repo ON reg_repo_research_links(repo_id);
-CREATE INDEX IF NOT EXISTS idx_repo_research_research ON reg_repo_research_links(research_id);
-CREATE INDEX IF NOT EXISTS idx_repo_research_relevance ON reg_repo_research_links(relevance_score DESC);

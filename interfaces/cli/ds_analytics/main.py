@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, UTC
 from pathlib import Path
 
 _CLI_ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +11,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_CLI_ROOT))
 sys.path.insert(0, str(_PROJECT_ROOT / "scripts"))
-from core.config.database import get_connection
 
 
 def main() -> None:
@@ -50,22 +48,10 @@ def main() -> None:
     print("DSAE: harvesting...")
 
     from ds_analytics.harvester import (
-        harvest_pulse,
-        harvest_specs,
-        detect_orphans,
         harvest_skill_velocity,
         harvest_operational,
         harvest_hook_timing,
     )
-
-    pulse_rows = harvest_pulse(db_path)
-    print(f"  pulse snapshots: {len(pulse_rows)}")
-
-    spec_count = harvest_specs(db_path, extra_roots=project_roots)
-    print(f"  planning specs:  {spec_count}")
-
-    orphans = detect_orphans(db_path, git_roots=project_roots or None)
-    print(f"  orphaned specs:  {len(orphans)}")
 
     velocity_df = harvest_skill_velocity(db_path)
     print(f"  skill telemetry: {len(velocity_df)} rows")
@@ -154,20 +140,6 @@ def main() -> None:
 
     output_path = render_dashboard(data, output)
     print(f"  dashboard: {output_path}")
-
-    conn = get_connection()
-    conn.execute(
-        "INSERT INTO sum_analytics_run (run_at, pulse_rows, spec_rows, skill_rows, output_path) VALUES (?, ?, ?, ?, ?)",
-        (
-            datetime.now(UTC).isoformat(),
-            len(pulse_rows),
-            spec_count,
-            len(velocity_df),
-            str(output_path),
-        ),
-    )
-    conn.commit()
-    conn.close()
 
     print(f"\nDSAE complete. Open: {output_path}")
 

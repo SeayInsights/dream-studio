@@ -57,68 +57,12 @@ CREATE TABLE IF NOT EXISTS connector_ingestion_runs (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS privacy_redaction_export_records (
-    export_id TEXT PRIMARY KEY,
-    visibility_mode TEXT NOT NULL CHECK (visibility_mode IN ('private_internal', 'operator_private', 'team_safe', 'client_safe', 'public_sanitized')),
-    export_type TEXT NOT NULL,
-    redaction_profile TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('pass', 'blocked', 'manual_review_required')),
-    blocked_reasons_json TEXT NOT NULL DEFAULT '[]',
-    sanitized_fields_json TEXT NOT NULL DEFAULT '[]',
-    leakage_checks_json TEXT NOT NULL DEFAULT '[]',
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS local_watch_schedule_records (
-    watch_id TEXT PRIMARY KEY,
-    watch_type TEXT NOT NULL,
-    schedule TEXT NOT NULL,
-    scope_json TEXT NOT NULL DEFAULT '{}',
-    opt_in_required INTEGER NOT NULL DEFAULT 1,
-    enabled INTEGER NOT NULL DEFAULT 0,
-    read_write_behavior TEXT NOT NULL DEFAULT 'read_only',
-    risk_level TEXT NOT NULL DEFAULT 'low',
-    evidence_output TEXT NOT NULL DEFAULT 'dashboard_attention',
-    failure_behavior TEXT NOT NULL DEFAULT 'attention_only',
-    disable_command TEXT NOT NULL DEFAULT 'ds watch disable',
-    approval_requirement TEXT NOT NULL DEFAULT 'operator_enable_required',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS team_rollup_records (
-    rollup_id TEXT PRIMARY KEY,
-    visibility_mode TEXT NOT NULL DEFAULT 'team_safe',
-    aggregation_scope_json TEXT NOT NULL DEFAULT '{}',
-    summary_json TEXT NOT NULL DEFAULT '{}',
-    excluded_private_data_json TEXT NOT NULL DEFAULT '[]',
-    status TEXT NOT NULL CHECK (status IN ('pass', 'blocked', 'manual_review_required')),
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS installer_distribution_checks (
-    check_id TEXT PRIMARY KEY,
-    check_type TEXT NOT NULL,
-    command TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('pass', 'warn', 'fail', 'manual_review_required')),
-    mutation_authorized INTEGER NOT NULL DEFAULT 0,
-    rollback_guidance TEXT,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS demo_case_study_packets (
-    packet_id TEXT PRIMARY KEY,
-    packet_type TEXT NOT NULL,
-    audience TEXT,
-    visibility_mode TEXT NOT NULL DEFAULT 'private_internal',
-    status TEXT NOT NULL CHECK (status IN ('draft', 'ready', 'blocked', 'manual_review_required')),
-    sanitized INTEGER NOT NULL DEFAULT 0,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    blocked_private_fields_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+-- privacy_redaction_export_records, local_watch_schedule_records,
+-- team_rollup_records, installer_distribution_checks, demo_case_study_packets
+-- removed in migration 128 (dead tables; sanitize_export_packet and similar
+-- functions in platform_hardening.py that wrote to them have been removed).
+-- skill_evaluation_runs, policy_decision_records, connector_ingestion_runs
+-- are KEPT (live consumers remain in platform_hardening.py).
 
 CREATE INDEX IF NOT EXISTS idx_skill_evaluation_runs_target
 ON skill_evaluation_runs(target_type, target_id);
@@ -129,8 +73,5 @@ ON policy_decision_records(action, decision_state);
 CREATE INDEX IF NOT EXISTS idx_connector_ingestion_runs_source
 ON connector_ingestion_runs(source_type, status);
 
-CREATE INDEX IF NOT EXISTS idx_privacy_redaction_export_records_visibility
-ON privacy_redaction_export_records(visibility_mode, status);
-
-CREATE INDEX IF NOT EXISTS idx_local_watch_schedule_records_enabled
-ON local_watch_schedule_records(watch_type, enabled);
+-- idx_privacy_redaction_export_records_visibility and
+-- idx_local_watch_schedule_records_enabled removed in migration 128 (dead tables).

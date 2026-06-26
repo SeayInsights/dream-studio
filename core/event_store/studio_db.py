@@ -732,72 +732,6 @@ def capture_approach(
 
 
 @_with_retry
-def upsert_skill(
-    skill_id: str,
-    pack: str,
-    mode: str,
-    skill_path: str,
-    *,
-    description: str = "",
-    triggers: str = "",
-    gotchas_path: str | None = None,
-    word_count: int | None = None,
-    chains_to: str | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT OR REPLACE INTO reg_skills
-                   (skill_id, pack, mode, description, triggers, skill_path,
-                    gotchas_path, word_count, chains_to, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    skill_id,
-                    pack,
-                    mode,
-                    description,
-                    triggers,
-                    skill_path,
-                    gotchas_path,
-                    word_count,
-                    chains_to,
-                    _NOW(),
-                ),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def get_skill(skill_id: str, db_path: Path | None = None) -> dict | None:
-    try:
-        c = _connect(db_path)
-        try:
-            r = c.execute("SELECT * FROM reg_skills WHERE skill_id=?", (skill_id,)).fetchone()
-            return dict(r) if r else None
-        finally:
-            c.close()
-    except Exception:
-        return None
-
-
-def find_skills_by_trigger(keyword: str, db_path: Path | None = None) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            rows = c.execute(
-                "SELECT * FROM reg_skills WHERE triggers LIKE ?", (f"%{keyword}%",)
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-@_with_retry
 def upsert_gotcha(
     gotcha_id: str,
     skill_id: str,
@@ -879,89 +813,10 @@ def get_gotchas_for_skill(skill_id: str, db_path: Path | None = None) -> list[di
 
 
 @_with_retry
-def upsert_workflow(
-    workflow_id: str,
-    yaml_path: str,
-    *,
-    description: str = "",
-    node_count: int | None = None,
-    skills_used: str = "",
-    category: str = "",
-    est_tokens: int | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT OR REPLACE INTO reg_workflows
-                   (workflow_id, yaml_path, description, node_count,
-                    skills_used, category, est_tokens, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    workflow_id,
-                    yaml_path,
-                    description,
-                    node_count,
-                    skills_used,
-                    category,
-                    est_tokens,
-                    _NOW(),
-                ),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def get_workflows_by_category(category: str, db_path: Path | None = None) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            rows = c.execute("SELECT * FROM reg_workflows WHERE category=?", (category,)).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-@_with_retry
-def upsert_skill_dep(
-    from_skill: str, to_skill: str, dep_type: str, db_path: Path | None = None
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                "INSERT OR REPLACE INTO reg_skill_deps VALUES (?, ?, ?)",
-                (from_skill, to_skill, dep_type),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def get_skill_deps(skill_id: str, db_path: Path | None = None) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            rows = c.execute(
-                "SELECT * FROM reg_skill_deps WHERE from_skill=?", (skill_id,)
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-@_with_retry
 def clear_registry(db_path: Path | None = None) -> bool:
     try:
         with _db_transaction(db_path) as c:
-            for t in ("reg_skills", "reg_gotchas", "reg_workflows", "reg_skill_deps"):
-                c.execute(f"DELETE FROM {t}")  # noqa: S608
+            c.execute("DELETE FROM reg_gotchas")  # noqa: S608
         return True
     except Exception as e:
         _reraise_if_busy(e)
@@ -1466,67 +1321,6 @@ def get_handoffs_for_project(
 # ── Spec + Task functions ──────────────────────────────────────────────────
 
 
-@_with_retry
-def upsert_spec(
-    spec_id: str,
-    project_id: str,
-    title: str,
-    *,
-    status: str = "draft",
-    task_count: int | None = None,
-    spec_content: str | None = None,
-    plan_content: str | None = None,
-    pr_numbers: list | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT INTO raw_specs
-                   (spec_id, project_id, title, status, task_count,
-                    spec_content, plan_content, created_at, pr_numbers)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(spec_id) DO UPDATE SET
-                    title=excluded.title,
-                    status=excluded.status,
-                    task_count=COALESCE(excluded.task_count, raw_specs.task_count),
-                    spec_content=COALESCE(excluded.spec_content, raw_specs.spec_content),
-                    plan_content=COALESCE(excluded.plan_content, raw_specs.plan_content),
-                    pr_numbers=COALESCE(excluded.pr_numbers, raw_specs.pr_numbers),
-                    completed_at=CASE WHEN excluded.status='completed'
-                                      THEN COALESCE(raw_specs.completed_at, ?)
-                                      ELSE raw_specs.completed_at END""",
-                (
-                    spec_id,
-                    project_id,
-                    title,
-                    status,
-                    task_count,
-                    spec_content,
-                    plan_content,
-                    _NOW(),
-                    json.dumps(pr_numbers) if pr_numbers else None,
-                    _NOW(),
-                ),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
-
-
-def get_spec(spec_id: str, db_path: Path | None = None) -> dict | None:
-    try:
-        c = _connect(db_path)
-        try:
-            r = c.execute("SELECT * FROM raw_specs WHERE spec_id=?", (spec_id,)).fetchone()
-            return dict(r) if r else None
-        finally:
-            c.close()
-    except Exception:
-        return None
-
-
 def list_specs(
     project_id: str | None = None, status: str | None = None, db_path: Path | None = None
 ) -> list[dict]:
@@ -1551,46 +1345,6 @@ def list_specs(
             c.close()
     except Exception:
         return []
-
-
-@_with_retry
-def upsert_task(
-    task_id: str,
-    spec_id: str,
-    project_id: str,
-    title: str,
-    *,
-    status: str = "planned",
-    depends_on: list | None = None,
-    estimated_hours: float | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            c.execute(
-                """INSERT INTO raw_tasks
-                   (task_id, spec_id, project_id, title, status,
-                    depends_on, estimated_hours)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(task_id, spec_id) DO UPDATE SET
-                    title=excluded.title,
-                    status=excluded.status,
-                    depends_on=COALESCE(excluded.depends_on, raw_tasks.depends_on),
-                    estimated_hours=COALESCE(excluded.estimated_hours, raw_tasks.estimated_hours)""",
-                (
-                    task_id,
-                    spec_id,
-                    project_id,
-                    title,
-                    status,
-                    json.dumps(depends_on) if depends_on else None,
-                    estimated_hours,
-                ),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
 
 
 def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:

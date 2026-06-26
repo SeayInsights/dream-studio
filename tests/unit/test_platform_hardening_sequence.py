@@ -18,7 +18,7 @@ from core.shared_intelligence.platform_hardening import (
     platform_hardening_summary,
     record_policy_decision,
     record_skill_evaluation,
-    sanitize_export_packet,
+    # sanitize_export_packet removed — privacy_redaction_export_records dropped in migration 128.
     validate_platform_hardening_summary,
 )
 from projections.api.main import app
@@ -32,24 +32,17 @@ def test_platform_hardening_summary_covers_all_milestones(tmp_path: Path) -> Non
 
     assert validate_platform_hardening_summary(conn) == []
     assert summary["validation"]["status"] == "pass"
+    # privacy_redaction_secret_boundary, local_watch_scheduled_validation,
+    # team_pilot_rollup_reporting, installer_distribution_hardening,
+    # demo_case_study_system removed — backing tables dropped in migration 128.
     assert set(summary["milestones"]) == {
         "skill_evaluation_harness",
         "policy_permission_engine",
         "engineering_connector_ingestion",
-        "privacy_redaction_secret_boundary",
-        "local_watch_scheduled_validation",
-        "team_pilot_rollup_reporting",
-        "installer_distribution_hardening",
-        "demo_case_study_system",
     }
     assert summary["milestones"]["skill_evaluation_harness"]["record_count"] == 0
     assert len(summary["milestones"]["skill_evaluation_harness"]["evaluated_workflows"]) == len(
         EVALUATED_WORKFLOWS
-    )
-    assert summary["milestones"]["local_watch_scheduled_validation"]["opt_in"] is True
-    assert (
-        summary["milestones"]["local_watch_scheduled_validation"]["background_processes_started"]
-        is False
     )
 
 
@@ -167,22 +160,8 @@ def test_connector_ingestion_normalizes_into_current_authority(tmp_path: Path) -
     )
 
 
-def test_privacy_redaction_blocks_private_fields_and_secret_like_keys() -> None:
-    sanitized = sanitize_export_packet(
-        {
-            "summary": "pilot safe",
-            "raw_work_orders": ["private"],
-            "local_paths": ["C:/Users/Example/private"],
-        },
-        visibility_mode="public_sanitized",
-    )
-    blocked = sanitize_export_packet({"summary": "bad", "api_key": "not-read"})
-
-    assert sanitized["status"] == "pass"
-    assert "raw_work_orders" not in sanitized["sanitized_packet"]
-    assert sanitized["secret_values_inspected"] is False
-    assert blocked["status"] == "blocked"
-    assert blocked["secret_values_inspected"] is False
+# test_privacy_redaction_blocks_private_fields_and_secret_like_keys removed —
+# sanitize_export_packet deleted; privacy_redaction_export_records dropped in migration 128.
 
 
 def test_contract_atlas_and_api_expose_platform_hardening(tmp_path: Path, monkeypatch) -> None:
@@ -207,11 +186,8 @@ def test_contract_atlas_and_api_expose_platform_hardening(tmp_path: Path, monkey
         "/api/shared-intelligence/platform-hardening/skill-evaluations",
         "/api/shared-intelligence/platform-hardening/policy-decision",
         "/api/shared-intelligence/platform-hardening/connectors",
-        "/api/shared-intelligence/platform-hardening/privacy",
-        "/api/shared-intelligence/platform-hardening/watchers",
-        "/api/shared-intelligence/platform-hardening/team-rollup",
-        "/api/shared-intelligence/platform-hardening/installer",
-        "/api/shared-intelligence/platform-hardening/demo",
+        # /privacy, /watchers, /team-rollup, /installer, /demo removed —
+        # backing tables dropped in migration 128.
     ):
         response = client.get(path)
         assert response.status_code == 200, response.text

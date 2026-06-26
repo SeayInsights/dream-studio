@@ -127,20 +127,6 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "pending_decisions TEXT, active_files TEXT, next_action TEXT, lessons_json TEXT, "
             "gotchas_hit TEXT, approaches_json TEXT, created_at TEXT NOT NULL)"
         )
-        conn.execute(
-            "CREATE TABLE raw_specs("
-            "spec_id TEXT PRIMARY KEY, project_id TEXT, title TEXT NOT NULL, "
-            "status TEXT DEFAULT 'draft', task_count INTEGER, tasks_done INTEGER DEFAULT 0, "
-            "spec_content TEXT, plan_content TEXT, created_at TEXT NOT NULL, "
-            "completed_at TEXT, pr_numbers TEXT)"
-        )
-        conn.execute(
-            "CREATE TABLE raw_tasks("
-            "task_id TEXT NOT NULL, spec_id TEXT NOT NULL, project_id TEXT, "
-            "title TEXT NOT NULL, status TEXT DEFAULT 'planned', depends_on TEXT, "
-            "estimated_hours REAL, actual_hours REAL, assigned_session TEXT, "
-            "commit_sha TEXT, completed_at TEXT, PRIMARY KEY (task_id, spec_id))"
-        )
         # Use security_findings (pre-migration-089 name) so migration 089 can rename it to findings.
         # Full migration 037 schema required so migration 112 can SELECT process_run_id,
         # project_id, recommendation etc. when migrating rows to security_events.
@@ -216,12 +202,6 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             "hook_check_id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
             "hook_exec_id INTEGER NOT NULL, check_type TEXT, check_result TEXT, "
             "details TEXT, remediation TEXT, created_at TEXT DEFAULT (datetime('now')))"
-        )
-        conn.execute(
-            "CREATE TABLE adapter_executions("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT, activity_id INTEGER, "
-            "adapter_type TEXT NOT NULL, normalized_at TEXT NOT NULL, "
-            "execution_time_ms REAL, metadata TEXT)"
         )
         # Migration 071 does CREATE TABLE ... AS SELECT * FROM raw_workflow_runs/nodes.
         conn.execute(

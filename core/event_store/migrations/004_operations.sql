@@ -53,34 +53,8 @@ CREATE TABLE IF NOT EXISTS raw_handoffs (
     created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS raw_specs (
-    spec_id TEXT PRIMARY KEY,
-    project_id TEXT REFERENCES reg_projects(project_id),
-    title TEXT NOT NULL,
-    status TEXT DEFAULT 'draft',
-    task_count INTEGER,
-    tasks_done INTEGER DEFAULT 0,
-    spec_content TEXT,
-    plan_content TEXT,
-    created_at TEXT NOT NULL,
-    completed_at TEXT,
-    pr_numbers TEXT
-);
-
-CREATE TABLE IF NOT EXISTS raw_tasks (
-    task_id TEXT NOT NULL,
-    spec_id TEXT NOT NULL,
-    project_id TEXT REFERENCES reg_projects(project_id),
-    title TEXT NOT NULL,
-    status TEXT DEFAULT 'planned',
-    depends_on TEXT,
-    estimated_hours REAL,
-    actual_hours REAL,
-    assigned_session TEXT,
-    commit_sha TEXT,
-    completed_at TEXT,
-    PRIMARY KEY (task_id, spec_id)
-);
+-- raw_specs and raw_tasks removed in migration 128
+-- (dead tables: migrate_to_db pipeline removed; no live consumer)
 
 CREATE TABLE IF NOT EXISTS raw_lessons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,11 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_wfnodes_runkey ON raw_workflow_nodes(run_key);
 CREATE INDEX IF NOT EXISTS idx_wfruns_workflow ON raw_workflow_runs(workflow, finished_at);
 CREATE INDEX IF NOT EXISTS idx_gotchas_skill ON reg_gotchas(skill_id);
 CREATE INDEX IF NOT EXISTS idx_gotchas_discovered ON reg_gotchas(discovered);
-CREATE INDEX IF NOT EXISTS idx_skills_pack ON reg_skills(pack);
-CREATE INDEX IF NOT EXISTS idx_workflows_category ON reg_workflows(category);
+-- idx_skills_pack, idx_workflows_category removed in migration 128 (dead tables)
 CREATE INDEX IF NOT EXISTS idx_opsnapshots_project ON raw_operational_snapshots(project_slug, snapshot_date);
-CREATE INDEX IF NOT EXISTS idx_pulse_date ON raw_pulse_snapshots(snapshot_date);
-CREATE INDEX IF NOT EXISTS idx_specs_path ON raw_planning_specs(spec_path);
+-- idx_pulse_date, idx_specs_path removed in migration 128 (dead tables)
 
 -- ── Indexes on new tables ───────────────────────────────────────────────────
 
@@ -138,9 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_project ON raw_sessions(project_id, star
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON raw_sessions(started_at);
 CREATE INDEX IF NOT EXISTS idx_handoffs_session ON raw_handoffs(session_id);
 CREATE INDEX IF NOT EXISTS idx_handoffs_project ON raw_handoffs(project_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_specs_project ON raw_specs(project_id, status);
-CREATE INDEX IF NOT EXISTS idx_tasks_spec ON raw_tasks(spec_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_project ON raw_tasks(project_id, status);
+-- idx_specs_project, idx_tasks_spec, idx_tasks_project removed in migration 128 (dead tables)
 CREATE INDEX IF NOT EXISTS idx_lessons_status ON raw_lessons(status);
 CREATE INDEX IF NOT EXISTS idx_lessons_source ON raw_lessons(source);
 CREATE INDEX IF NOT EXISTS idx_sentinels_type ON raw_sentinels(sentinel_type);

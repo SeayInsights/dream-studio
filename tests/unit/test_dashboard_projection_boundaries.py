@@ -76,7 +76,6 @@ CANONICAL_STATE_TABLES = {
     "decision_event_link",
     "memory_entries",
     "hook_executions",
-    "adapter_executions",
     "guardrail_decisions",
 }
 
