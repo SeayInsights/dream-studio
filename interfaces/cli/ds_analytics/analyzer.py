@@ -14,6 +14,9 @@ def compute_pulse_trend(db_path: Path | None = None) -> dict:
     """Compute health-score trend from pulse snapshots using linear regression.
 
     Returns a dict with dates, scores, trend_slope, and trend_direction.
+
+    raw_pulse_snapshots was dropped in migration 128; the OperationalError branch
+    now always returns the empty result on a current schema.
     """
     if db_path is None:
         db_path = paths.state_dir() / "studio.db"
@@ -112,6 +115,9 @@ def compute_conversion_rate(db_path: Path | None = None) -> dict:
     """Compute spec-to-build conversion rate from planning specs.
 
     Returns dict with total, orphaned, and rate keys.
+
+    raw_planning_specs was dropped in migration 128; the OperationalError branch
+    now always returns the empty result on a current schema.
     """
     if db_path is None:
         db_path = paths.state_dir() / "studio.db"

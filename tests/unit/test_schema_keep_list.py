@@ -74,6 +74,11 @@ def _source_files() -> list[Path]:
             continue
         if "/graphify-out/" in f"/{rel}" or "/.planning/" in f"/{rel}":
             continue
+        # Nested/sibling agent worktree copies under .claude/worktrees/ are duplicate
+        # source trees — scanning them yields false positives. Exclude them so the
+        # scan only sees the canonical checked-in source of this tree.
+        if rel.startswith(".claude/worktrees/") or "/.claude/worktrees/" in f"/{rel}":
+            continue
         out.append(p)
     return out
 
@@ -95,13 +100,26 @@ def _runtime_writers(table: str, files: list[Path]) -> list[str]:
 
 
 def test_census_complete():
-    """Classification covers exactly the canonical schema + runtime tables."""
-    expected = _bootstrapped_tables() | RUNTIME_TABLES
+    """Classification covers the live schema; DROP tables are allowed to be absent.
+
+    Every bootstrapped/runtime table must be classified (nothing unclassified).
+    KEEP and RESURFACE tables must exist in the live schema. DROP-classified
+    tables are expected to be ABSENT once their dropping migration has run
+    (migration 128 dropped 24 of them), so a DROP table missing from the schema
+    is not a phantom — only a KEEP/RESURFACE table not in the schema is.
+    """
+    live = _bootstrapped_tables() | RUNTIME_TABLES
     classified = set(CLASSIFICATION)
-    missing = expected - classified
-    phantom = classified - expected
+
+    # Every live table must be classified.
+    missing = live - classified
     assert not missing, f"tables in schema but not classified: {sorted(missing)}"
-    assert not phantom, f"classified tables not in schema: {sorted(phantom)}"
+
+    # Only KEEP/RESURFACE classifications must correspond to a live table.
+    # DROP classifications may have no live table (the table was dropped).
+    expected_present = {t for t, c in CLASSIFICATION.items() if c != "DROP"}
+    phantom = expected_present - live
+    assert not phantom, f"KEEP/RESURFACE tables not in schema: {sorted(phantom)}"
 
 
 def test_no_live_table_dropped():

@@ -1318,131 +1318,7 @@ def get_handoffs_for_project(
         return []
 
 
-# ── Spec + Task functions ──────────────────────────────────────────────────
-
-
-def list_specs(
-    project_id: str | None = None, status: str | None = None, db_path: Path | None = None
-) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            query = "SELECT * FROM raw_specs"
-            params: list = []
-            clauses: list[str] = []
-            if project_id:
-                clauses.append("project_id=?")
-                params.append(project_id)
-            if status:
-                clauses.append("status=?")
-                params.append(status)
-            if clauses:
-                query += " WHERE " + " AND ".join(clauses)
-            query += " ORDER BY created_at DESC"
-            rows = c.execute(query, params).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-def get_tasks_for_spec(spec_id: str, db_path: Path | None = None) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            rows = c.execute(
-                "SELECT * FROM raw_tasks WHERE spec_id=? ORDER BY task_id",
-                (spec_id,),
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-def get_blocked_tasks(project_id: str | None = None, db_path: Path | None = None) -> list[dict]:
-    try:
-        c = _connect(db_path)
-        try:
-            if project_id:
-                rows = c.execute(
-                    "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
-                    "JOIN raw_specs s ON t.spec_id=s.spec_id "
-                    "WHERE t.status='blocked' AND t.project_id=?",
-                    (project_id,),
-                ).fetchall()
-            else:
-                rows = c.execute(
-                    "SELECT t.*, s.title AS spec_title FROM raw_tasks t "
-                    "JOIN raw_specs s ON t.spec_id=s.spec_id "
-                    "WHERE t.status='blocked'",
-                ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            c.close()
-    except Exception:
-        return []
-
-
-@_with_retry
-def update_task_status(
-    task_id: str,
-    spec_id: str,
-    status: str,
-    *,
-    commit_sha: str | None = None,
-    actual_hours: float | None = None,
-    assigned_session: str | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    try:
-        with _db_transaction(db_path) as c:
-            completed_at = _NOW() if status == "completed" else None
-            c.execute(
-                """UPDATE raw_tasks SET
-                    status=?,
-                    commit_sha=COALESCE(?, commit_sha),
-                    actual_hours=COALESCE(?, actual_hours),
-                    assigned_session=COALESCE(?, assigned_session),
-                    completed_at=COALESCE(?, completed_at)
-                   WHERE task_id=? AND spec_id=?""",
-                (
-                    status,
-                    commit_sha,
-                    actual_hours,
-                    assigned_session,
-                    completed_at,
-                    task_id,
-                    spec_id,
-                ),
-            )
-            if status == "completed":
-                c.execute(
-                    "UPDATE raw_specs SET tasks_done = "
-                    "(SELECT COUNT(*) FROM raw_tasks WHERE spec_id=? AND status='completed') "
-                    "WHERE spec_id=?",
-                    (spec_id, spec_id),
-                )
-
-            # Event emission (additive side-effect) — TA0c: activity_log retired
-            _try_emit_canonical(
-                _CanonicalEventType.TASK_STATUS_UPDATED,
-                {
-                    "task_id": task_id,
-                    "spec_id": spec_id,
-                    "status": status,
-                    "commit_sha": commit_sha,
-                },
-                task_id=task_id,
-                prd_id=spec_id,
-                session_id=assigned_session,
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
+# Spec + Task functions removed — raw_specs / raw_tasks dropped in migration 128.
 
 
 # ── Lesson functions ───────────────────────────────────────────────────────
@@ -2331,20 +2207,12 @@ def main() -> None:
             "cor_skill_corrections",
             "sum_skill_summary",
             "log_batch_imports",
-            "raw_pulse_snapshots",
-            "raw_planning_specs",
-            "sum_analytics_run",
             "raw_operational_snapshots",
             "raw_approaches",
-            "reg_skills",
             "reg_gotchas",
-            "reg_workflows",
-            "reg_skill_deps",
             "reg_projects",
             "raw_sessions",
             "raw_handoffs",
-            "raw_specs",
-            "raw_tasks",
             "raw_lessons",
             "raw_sentinels",
             "raw_token_usage",
