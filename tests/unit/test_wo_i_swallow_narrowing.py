@@ -144,55 +144,32 @@ def test_insert_on_absent_ds_documents_still_swallowed():
     conn.close()
 
 
-# ── Integration: full migration sequence still creates ds_documents objects ───
+# ── Integration: full migration sequence drops ds_documents (moved to files.db) ───
+# Three-store architecture: ds_documents belongs in files.db, not studio.db.
+# Migrations 007/050 create the cluster mid-chain; migration 127 drops it. After the
+# full sequence, neither the table nor its indexes/triggers/FTS remain in studio.db.
 
 
-def test_full_migration_creates_ds_documents_indexes():
-    """Fresh full-migration sequence creates all ds_documents indexes (clean path)."""
+def test_full_migration_drops_ds_documents_from_studio_db():
+    """ds_documents + its indexes/triggers/FTS must be absent from studio.db after
+    the full migration (migration 127 moved the cluster to files.db)."""
     conn = sqlite3.connect(":memory:")
     run_migrations(conn)
 
-    expected_indexes = {
-        "idx_ds_documents_type",
-        "idx_ds_documents_project",
-        "idx_ds_documents_skill",
-        "idx_ds_documents_session",
-        "idx_ds_documents_created",
-        "idx_ds_documents_expires",
-        "idx_ds_documents_parent",
-        "idx_ds_documents_source_path",
-    }
-    actual = {
+    leftovers = {
         r[0]
         for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_ds_documents%'"
+            "SELECT name FROM sqlite_master WHERE "
+            "name = 'ds_documents' "
+            "OR name LIKE 'idx_ds_documents%' "
+            "OR name LIKE 'trg_documents%' "
+            "OR name LIKE 'ds_documents_fts%'"
         ).fetchall()
     }
-    missing = expected_indexes - actual
-    assert not missing, f"ds_documents indexes missing after full migration: {missing}"
-    conn.close()
-
-
-def test_full_migration_creates_ds_documents_triggers():
-    """Fresh full-migration sequence creates all ds_documents triggers (clean path)."""
-    conn = sqlite3.connect(":memory:")
-    run_migrations(conn)
-
-    expected_triggers = {
-        "trg_documents_fts_ai",
-        "trg_documents_fts_ad",
-        "trg_documents_fts_au",
-        "trg_documents_access_tracking",
-        "trg_documents_auto_archive",
-    }
-    actual = {
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'trg_documents%'"
-        ).fetchall()
-    }
-    missing = expected_triggers - actual
-    assert not missing, f"ds_documents triggers missing after full migration: {missing}"
+    assert not leftovers, (
+        f"ds_documents cluster should be dropped from studio.db by migration 127 "
+        f"(moved to files.db); found leftovers: {leftovers}"
+    )
     conn.close()
 
 
