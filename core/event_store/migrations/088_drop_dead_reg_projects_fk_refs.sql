@@ -88,51 +88,10 @@ ALTER TABLE raw_handoffs_new RENAME TO raw_handoffs;
 CREATE INDEX idx_handoffs_session ON raw_handoffs(session_id);
 CREATE INDEX idx_handoffs_project ON raw_handoffs(project_id, created_at);
 
--- ── raw_specs ─────────────────────────────────────────────────────────────────
-
-CREATE TABLE raw_specs_new (
-    spec_id TEXT PRIMARY KEY,
-    project_id TEXT,
-    title TEXT NOT NULL,
-    status TEXT DEFAULT 'draft',
-    task_count INTEGER,
-    tasks_done INTEGER DEFAULT 0,
-    spec_content TEXT,
-    plan_content TEXT,
-    created_at TEXT NOT NULL,
-    completed_at TEXT,
-    pr_numbers TEXT
-);
-INSERT INTO raw_specs_new (spec_id, project_id, title, status, task_count, tasks_done, spec_content, plan_content, created_at, completed_at, pr_numbers)
-SELECT spec_id, project_id, title, status, task_count, tasks_done, spec_content, plan_content, created_at, completed_at, pr_numbers FROM raw_specs;
-DROP TABLE raw_specs;
-ALTER TABLE raw_specs_new RENAME TO raw_specs;
-
-CREATE INDEX idx_specs_project ON raw_specs(project_id, status);
-
--- ── raw_tasks ─────────────────────────────────────────────────────────────────
-
-CREATE TABLE raw_tasks_new (
-    task_id TEXT NOT NULL,
-    spec_id TEXT NOT NULL,
-    project_id TEXT,
-    title TEXT NOT NULL,
-    status TEXT DEFAULT 'planned',
-    depends_on TEXT,
-    estimated_hours REAL,
-    actual_hours REAL,
-    assigned_session TEXT,
-    commit_sha TEXT,
-    completed_at TEXT,
-    PRIMARY KEY (task_id, spec_id)
-);
-INSERT INTO raw_tasks_new (task_id, spec_id, project_id, title, status, depends_on, estimated_hours, actual_hours, assigned_session, commit_sha, completed_at)
-SELECT task_id, spec_id, project_id, title, status, depends_on, estimated_hours, actual_hours, assigned_session, commit_sha, completed_at FROM raw_tasks;
-DROP TABLE raw_tasks;
-ALTER TABLE raw_tasks_new RENAME TO raw_tasks;
-
-CREATE INDEX idx_tasks_spec ON raw_tasks(spec_id);
-CREATE INDEX idx_tasks_project ON raw_tasks(project_id, status);
+-- ── raw_specs / raw_tasks ─────────────────────────────────────────────────────
+-- Dead tables removed in migration 128.  The FK-drop recreations that were
+-- here are no longer needed for fresh installs (tables never created) or for
+-- upgrade paths (migration 128 drops them after these migrations already ran).
 
 -- ── Recreate views dropped above ─────────────────────────────────────────────
 -- Exact DDL from migration 081 (idempotent via IF NOT EXISTS).

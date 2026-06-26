@@ -79,7 +79,6 @@ class TestActivityIdNullable:
     TARGET_TABLES = [
         "hook_executions",
         "hook_findings",
-        "adapter_executions",
     ]
 
     def test_activity_id_nullable_in_all_target_tables(self, tmp_path):

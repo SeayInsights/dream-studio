@@ -190,17 +190,28 @@ def detect_stale_removed_symbol_tests(
     # dict key still used) is NOT a genuinely-removed API symbol — flagging tests
     # that merely mention it produces a flood of false positives.
     present_in_source: set[str] = set()
+    defined_in_other_tests: set[str] = set()
     test_files: list[tuple[str, str]] = []
     for rel, text in _iter_code_files(root):
         if _is_test_path(rel):
             if rel not in changed_paths:
                 test_files.append((rel, text))
+                # A symbol still DEFINED in another unchanged test file (e.g. a
+                # shared test helper `def _seed` imported across test modules) is
+                # not genuinely removed — the diff merely deleted a same-named
+                # private helper elsewhere. Counting it as live prevents flagging
+                # references to a symbol that still exists (name-collision FP).
+                for sym in (m.group(1) for m in _DEF_RE.finditer(text)):
+                    if sym in patterns:
+                        defined_in_other_tests.add(sym)
             continue
         for sym, pat in patterns.items():
             if sym not in present_in_source and pat.search(text):
                 present_in_source.add(sym)
 
-    genuinely_removed = {s for s in truly_removed if s not in present_in_source}
+    genuinely_removed = {
+        s for s in truly_removed if s not in present_in_source and s not in defined_in_other_tests
+    }
     if not genuinely_removed:
         return []
 

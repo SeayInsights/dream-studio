@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Legacy opt-in diagnostic for Wave 1 research caching infrastructure.
 
-This script mutates ``raw_research`` and ``reg_research_sources`` and is not part
-of normal validation. It is retained only for explicit operator diagnostics and
-must not run against the native runtime DB without opt-in.
+This script mutates ``raw_research`` and is not part of normal validation. It is
+retained only for explicit operator diagnostics and must not run against the
+native runtime DB without opt-in.
+
+reg_research_sources was dropped in migration 128; the source-trust trigger it
+backed no longer exists, so this diagnostic only exercises the raw_research cache.
 """
 
 import os
@@ -33,7 +36,6 @@ def cleanup():
     """Remove test data from previous runs."""
     conn = _connect()
     conn.execute("DELETE FROM raw_research WHERE query LIKE '%Next.js%'")
-    conn.execute("DELETE FROM reg_research_sources WHERE source_url = 'internal://stub'")
     conn.commit()
     conn.close()
     print("[CLEANUP] Cleanup complete\n")
@@ -95,40 +97,24 @@ def test_cache_hit():
 
 
 def test_trust_adjustment():
-    """Test 3: Verify trust score adjustment after validation."""
+    """Test 3: Verify research record stays validated at its base trust score."""
     print("Test 3: Trust score adjustment (manual validation)")
 
     # Research is already validated from test 2
     conn = _connect()
     cursor = conn.execute(
-        "SELECT trust_score, validation_status, source_url FROM raw_research WHERE query LIKE '%Next.js%'"
+        "SELECT trust_score, validation_status FROM raw_research WHERE query LIKE '%Next.js%'"
     )
     row = cursor.fetchone()
+    conn.close()
 
     assert row is not None, "Record disappeared"
     assert row[1] == "validated", f"Expected validation_status='validated', got {row[1]}"
 
-    # The research record's trust_score stays at 0.5 (it's the source that gets adjusted)
+    # raw_research.trust_score stays at its base 0.5 (reg_research_sources, which the
+    # source-trust trigger updated, was dropped in migration 128).
     assert row[0] == 0.5, f"Expected raw_research.trust_score to remain at 0.5, got {row[0]}"
-
-    # Check reg_research_sources trust_score - this is what the trigger updates
-    source_url = row[2]
-    cursor = conn.execute(
-        "SELECT source_url, trust_score, total_queries, successful_queries FROM reg_research_sources WHERE source_url = ?",
-        (source_url,),
-    )
-    source_row = cursor.fetchone()
-    conn.close()
-
-    if source_row:
-        # Trigger should have inserted/updated the source with trust_score = 0.6 for validated research
-        assert source_row[1] == 0.6, f"Expected source trust_score=0.6, got {source_row[1]}"
-        assert source_row[2] >= 1, f"Expected total_queries >= 1, got {source_row[2]}"
-        assert source_row[3] >= 1, f"Expected successful_queries >= 1, got {source_row[3]}"
-        print(f"[PASS] Source trust score set to 0.6 (initial validated)")
-        print(f"[PASS] Trigger fired (source: {source_row[0]})\n")
-    else:
-        raise AssertionError(f"No source record found in reg_research_sources for {source_url}")
+    print("[PASS] Research record validated, trust_score=0.5\n")
 
 
 def test_metrics():

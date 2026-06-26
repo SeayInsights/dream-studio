@@ -36,11 +36,6 @@ TOP_LEVEL_ADAPTER_IMPORT_PATTERN = re.compile(
     re.MULTILINE,
 )
 
-SQL_ADAPTER_EXECUTION_WRITE_PATTERN = re.compile(
-    r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+adapter_executions\b",
-    re.IGNORECASE,
-)
-
 PROVIDER_OR_NETWORK_IMPORT_PREFIXES = {
     "openai",
     "anthropic",
@@ -217,31 +212,6 @@ def test_github_and_ci_execution_tools_remain_explicit_method_only_adapters():
                 offenders.append(f"{_rel(path)} imports DB authority module {module}")
 
     assert offenders == []
-
-
-def test_adapter_executions_stays_diagnostic_without_runtime_writer():
-    migration = _read(
-        REPO_ROOT / "core" / "event_store" / "migrations" / "030_adapter_metadata.sql"
-    )
-    writers: list[str] = []
-
-    for path in _python_files(
-        REPO_ROOT / "core",
-        REPO_ROOT / "control",
-        REPO_ROOT / "runtime",
-        REPO_ROOT / "projections",
-        REPO_ROOT / "integrations",
-        REPO_ROOT / "emitters",
-    ):
-        if "migrations" in path.parts or "tests" in path.parts:
-            continue
-        source = _read(path)
-        if SQL_ADAPTER_EXECUTION_WRITE_PATTERN.search(source):
-            writers.append(_rel(path))
-
-    assert "CREATE TABLE IF NOT EXISTS adapter_executions" in migration
-    assert "FOREIGN KEY (activity_id) REFERENCES activity_log" in migration
-    assert writers == []
 
 
 def test_runtime_hooks_do_not_import_provider_sdks_or_adapters_directly():

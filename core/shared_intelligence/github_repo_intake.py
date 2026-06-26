@@ -12,13 +12,7 @@ GITHUB_REPO_INTAKE_SCHEMA = "dream_studio.github_repo_intake.v1"
 
 GITHUB_REPO_TABLES: tuple[str, ...] = (
     "github_repo_evaluations",
-    "github_repo_license_findings",
-    "github_repo_security_findings",
-    "github_repo_dependency_findings",
-    "github_repo_integration_candidates",
-    "github_repo_pattern_references",
     "github_repo_adoption_decisions",
-    "github_repo_attribution_records",
 )
 
 OUTCOME_CLASSES: tuple[str, ...] = (

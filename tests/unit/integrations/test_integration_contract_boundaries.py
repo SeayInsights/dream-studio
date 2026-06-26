@@ -129,30 +129,6 @@ def test_legacy_top_level_adapters_imports_absent_from_new_layers():
     assert offenders == set()
 
 
-def test_adapter_metadata_table_remains_diagnostic_not_authoritative_writer():
-    migration = _read(
-        REPO_ROOT / "core" / "event_store" / "migrations" / "030_adapter_metadata.sql"
-    )
-    writers: list[str] = []
-
-    for path in _python_files(
-        REPO_ROOT / "core",
-        REPO_ROOT / "control",
-        REPO_ROOT / "runtime",
-        REPO_ROOT / "projections",
-        REPO_ROOT / "integrations",
-    ):
-        if "migrations" in path.parts:
-            continue
-        source = _read(path)
-        if re.search(r"\bINSERT\s+INTO\s+adapter_executions\b", source, re.IGNORECASE):
-            writers.append(_rel(path))
-
-    assert "CREATE TABLE IF NOT EXISTS adapter_executions" in migration
-    assert "FOREIGN KEY (activity_id) REFERENCES activity_log" in migration
-    assert writers == []
-
-
 def test_core_skill_logging_bootstrap_keeps_normalizer_available():
     from core.event_store import studio_db
 

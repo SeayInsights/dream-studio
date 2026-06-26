@@ -223,3 +223,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 
 <!-- Last reviewed 2026-06-14 — WO-DASH-VALIDATION-GAPS (T3): project_intelligence.py classifier change reviewed. Softening path-less projects from manual_review_required to registered_no_path / path_unverified is a display-only change — it does not affect production readiness gate policy, evidence requirements, control authority, or score derivation. Gate contract unchanged. -->
 <!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
+
+<!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->

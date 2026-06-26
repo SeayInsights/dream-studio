@@ -23,13 +23,6 @@ from core.event_store.studio_db import (  # noqa: E402
     insert_handoff,
     get_latest_handoff,
     get_handoffs_for_project,
-    upsert_spec,
-    get_spec,
-    list_specs,
-    upsert_task,
-    get_tasks_for_spec,
-    get_blocked_tasks,
-    update_task_status,
     insert_lesson,
     get_lessons,
     promote_lesson,
@@ -188,100 +181,6 @@ class TestHandoffs:
 
     def test_get_latest_nonexistent(self, db):
         assert get_latest_handoff("nope", db_path=db) is None
-
-
-# ── raw_specs + raw_tasks ──────────────────────────────────────────────────
-
-
-class TestSpecsAndTasks:
-    def _seed(self, db):
-        upsert_project("proj-1", "/path", db_path=db)
-
-    def test_spec_crud(self, db):
-        self._seed(db)
-        assert upsert_spec("spec-1", "proj-1", "SQLite Migration", task_count=26, db_path=db)
-        s = get_spec("spec-1", db_path=db)
-        assert s["title"] == "SQLite Migration"
-        assert s["status"] == "draft"
-        assert s["task_count"] == 26
-
-    def test_spec_upsert_updates(self, db):
-        self._seed(db)
-        upsert_spec("spec-1", "proj-1", "Old Title", db_path=db)
-        upsert_spec("spec-1", "proj-1", "New Title", status="active", db_path=db)
-        s = get_spec("spec-1", db_path=db)
-        assert s["title"] == "New Title"
-        assert s["status"] == "active"
-
-    def test_list_specs_filtered(self, db):
-        self._seed(db)
-        upsert_spec("s1", "proj-1", "Spec A", status="draft", db_path=db)
-        upsert_spec("s2", "proj-1", "Spec B", status="active", db_path=db)
-        all_specs = list_specs(project_id="proj-1", db_path=db)
-        assert len(all_specs) == 2
-        active = list_specs(project_id="proj-1", status="active", db_path=db)
-        assert len(active) == 1
-        assert active[0]["title"] == "Spec B"
-
-    def test_task_crud(self, db):
-        self._seed(db)
-        upsert_spec("spec-1", "proj-1", "Test Spec", db_path=db)
-        assert upsert_task(
-            "T001",
-            "spec-1",
-            "proj-1",
-            "Migration runner",
-            depends_on=[],
-            estimated_hours=1.5,
-            db_path=db,
-        )
-        assert upsert_task(
-            "T002",
-            "spec-1",
-            "proj-1",
-            "Retry decorator",
-            depends_on=["T001"],
-            estimated_hours=1.0,
-            db_path=db,
-        )
-        tasks = get_tasks_for_spec("spec-1", db_path=db)
-        assert len(tasks) == 2
-        assert tasks[0]["task_id"] == "T001"
-
-    def test_update_task_status_and_spec_count(self, db):
-        self._seed(db)
-        upsert_spec("spec-1", "proj-1", "Test", task_count=2, db_path=db)
-        upsert_task("T001", "spec-1", "proj-1", "Task A", db_path=db)
-        upsert_task("T002", "spec-1", "proj-1", "Task B", db_path=db)
-        update_task_status("T001", "spec-1", "completed", commit_sha="abc123", db_path=db)
-        s = get_spec("spec-1", db_path=db)
-        assert s["tasks_done"] == 1
-        update_task_status("T002", "spec-1", "completed", db_path=db)
-        s = get_spec("spec-1", db_path=db)
-        assert s["tasks_done"] == 2
-
-    def test_blocked_tasks(self, db):
-        self._seed(db)
-        upsert_spec("spec-1", "proj-1", "Test", db_path=db)
-        upsert_task("T001", "spec-1", "proj-1", "Blocked task", status="blocked", db_path=db)
-        upsert_task("T002", "spec-1", "proj-1", "Normal task", status="planned", db_path=db)
-        blocked = get_blocked_tasks(project_id="proj-1", db_path=db)
-        assert len(blocked) == 1
-        assert blocked[0]["task_id"] == "T001"
-        assert blocked[0]["spec_title"] == "Test"
-
-    def test_blocked_tasks_cross_project(self, db):
-        upsert_project("p1", "/p1", db_path=db)
-        upsert_project("p2", "/p2", db_path=db)
-        upsert_spec("s1", "p1", "Spec 1", db_path=db)
-        upsert_spec("s2", "p2", "Spec 2", db_path=db)
-        upsert_task("T1", "s1", "p1", "Blocked A", status="blocked", db_path=db)
-        upsert_task("T2", "s2", "p2", "Blocked B", status="blocked", db_path=db)
-        all_blocked = get_blocked_tasks(db_path=db)
-        assert len(all_blocked) == 2
-
-    def test_get_spec_nonexistent(self, db):
-        assert get_spec("nope", db_path=db) is None
 
 
 # ── raw_lessons ────────────────────────────────────────────────────────────
@@ -443,15 +342,3 @@ class TestFKConstraints:
         upsert_project("proj-1", "/path", db_path=db)
         result = insert_handoff("bad-session", "proj-1", "test", db_path=db)
         assert result is None
-
-    def test_task_allows_null_project(self, db):
-        """Tasks with NULL project_id should not trigger FK violation."""
-        upsert_project("proj-1", "/path", db_path=db)
-        upsert_spec("spec-1", "proj-1", "Test", db_path=db)
-        c = _connect(db)
-        c.execute(
-            "INSERT INTO raw_tasks (task_id, spec_id, project_id, title) VALUES (?, ?, NULL, ?)",
-            ("T001", "spec-1", "Orphan task"),
-        )
-        c.commit()
-        c.close()

@@ -33,8 +33,8 @@ def _seed_db(path: Path) -> Path:
     """Create a minimal studio.db with data for round-trip testing."""
     conn = _connect(path)
     conn.execute(
-        "INSERT OR IGNORE INTO reg_skills (skill_id, pack, mode, skill_path, updated_at) "
-        "VALUES ('core:build', 'core', 'build', 'skills/core/modes/build/SKILL.md', '2026-05-01')"
+        "INSERT OR IGNORE INTO raw_sentinels (sentinel_key, sentinel_type, created_at) "
+        "VALUES ('test-backup', 'test', '2026-06-26T00:00:00Z')"
     )
     conn.commit()
     conn.close()
@@ -76,10 +76,12 @@ class TestLocalBackup:
         restore(bak, db_path)
 
         conn = sqlite3.connect(str(db_path))
-        rows = conn.execute("SELECT pack FROM reg_skills WHERE skill_id='core:build'").fetchall()
+        rows = conn.execute(
+            "SELECT sentinel_key FROM raw_sentinels WHERE sentinel_key='test-backup'"
+        ).fetchall()
         conn.close()
         assert len(rows) == 1
-        assert rows[0][0] == "core"
+        assert rows[0][0] == "test-backup"
 
     def test_restore_creates_safety_copy(self, tmp_path, monkeypatch):
         db_path = _seed_db(tmp_path / "studio.db")

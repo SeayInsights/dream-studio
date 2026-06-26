@@ -49,14 +49,12 @@ from core.shared_intelligence.model_registry import (
 )
 from core.shared_intelligence.platform_hardening import (
     connector_ingestion_framework_status,
-    demo_case_study_system_status,
     evaluate_policy_decision,
-    installer_distribution_status,
-    local_watch_scheduler_status,
     platform_hardening_summary,
-    privacy_redaction_status,
     skill_evaluation_harness_status,
-    team_pilot_rollup_status,
+    # demo_case_study_system_status, installer_distribution_status,
+    # local_watch_scheduler_status, privacy_redaction_status,
+    # team_pilot_rollup_status removed — backing tables dropped in migration 128.
 )
 from core.shared_intelligence.scoped_agents import scoped_agent_registry, scoped_context_packet
 from core.shared_intelligence.task_attribution import (
@@ -420,39 +418,10 @@ async def get_connector_ingestion_framework() -> dict[str, Any]:
     return _with_connection(connector_ingestion_framework_status)
 
 
-@router.get("/platform-hardening/privacy")
-async def get_privacy_redaction_status() -> dict[str, Any]:
-    """Return privacy, redaction, and public-export boundary status."""
-
-    return _with_connection(privacy_redaction_status)
-
-
-@router.get("/platform-hardening/watchers")
-async def get_local_watch_scheduler_status() -> dict[str, Any]:
-    """Return opt-in local watch/scheduled validation declarations."""
-
-    return _with_connection(local_watch_scheduler_status)
-
-
-@router.get("/platform-hardening/team-rollup")
-async def get_team_pilot_rollup_status() -> dict[str, Any]:
-    """Return sanitized team-pilot rollup status."""
-
-    return _with_connection(team_pilot_rollup_status)
-
-
-@router.get("/platform-hardening/installer")
-async def get_installer_distribution_status() -> dict[str, Any]:
-    """Return installer/distribution hardening status."""
-
-    return _with_connection(installer_distribution_status)
-
-
-@router.get("/platform-hardening/demo")
-async def get_demo_case_study_system_status() -> dict[str, Any]:
-    """Return sanitized demo/case-study system status."""
-
-    return _with_connection(demo_case_study_system_status)
+# /platform-hardening/privacy, /watchers, /team-rollup, /installer, /demo
+# endpoints removed — backing tables (privacy_redaction_export_records,
+# local_watch_schedule_records, team_rollup_records, installer_distribution_checks,
+# demo_case_study_packets) dropped in migration 128.
 
 
 @router.get("/adapter-router")

@@ -225,7 +225,6 @@ def test_api_routes_do_not_directly_write_canonical_runtime_tables():
         "raw_sessions",
         "raw_workflow_runs",
         "hook_executions",
-        "adapter_executions",
         "guardrail_decisions",
         "sec_sarif_findings",
     }

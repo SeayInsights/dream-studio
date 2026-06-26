@@ -1,17 +1,6 @@
--- Migration 003: Skill registry (skills, gotchas, workflows, dependencies)
-
-CREATE TABLE IF NOT EXISTS reg_skills (
-    skill_id TEXT PRIMARY KEY,
-    pack TEXT NOT NULL,
-    mode TEXT NOT NULL,
-    description TEXT,
-    triggers TEXT,
-    skill_path TEXT NOT NULL,
-    gotchas_path TEXT,
-    word_count INTEGER,
-    chains_to TEXT,
-    updated_at TEXT
-);
+-- Migration 003: Skill registry (gotchas)
+-- reg_skills, reg_workflows, reg_skill_deps removed in migration 128
+-- (dead tables: hydrate_registry pipeline removed; no live consumer)
 
 CREATE TABLE IF NOT EXISTS reg_gotchas (
     gotcha_id TEXT NOT NULL,
@@ -27,20 +16,3 @@ CREATE TABLE IF NOT EXISTS reg_gotchas (
     PRIMARY KEY (gotcha_id, skill_id)
 );
 
-CREATE TABLE IF NOT EXISTS reg_workflows (
-    workflow_id TEXT PRIMARY KEY,
-    yaml_path TEXT NOT NULL,
-    description TEXT,
-    node_count INTEGER,
-    skills_used TEXT,
-    category TEXT,
-    est_tokens INTEGER,
-    updated_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS reg_skill_deps (
-    from_skill TEXT NOT NULL,
-    to_skill TEXT NOT NULL,
-    dep_type TEXT NOT NULL,
-    PRIMARY KEY (from_skill, to_skill, dep_type)
-);

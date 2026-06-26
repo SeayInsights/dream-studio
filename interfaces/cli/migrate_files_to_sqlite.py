@@ -23,12 +23,20 @@ _VALID_PROJECT_IDS: set[str] | None = None
 
 
 def get_valid_skill_ids() -> set[str]:
-    """Get set of valid skill_ids from reg_skills table."""
+    """Get set of valid skill_ids from reg_skills table.
+
+    reg_skills was dropped in migration 128. Returns empty set when the table
+    is absent so existing callers remain safe.
+    """
     global _VALID_SKILL_IDS
     if _VALID_SKILL_IDS is None:
-        with _connect() as conn:
-            rows = conn.execute("SELECT skill_id FROM reg_skills").fetchall()
-            _VALID_SKILL_IDS = {row[0] for row in rows}
+        try:
+            with _connect() as conn:
+                rows = conn.execute("SELECT skill_id FROM reg_skills").fetchall()
+                _VALID_SKILL_IDS = {row[0] for row in rows}
+        except Exception:
+            # reg_skills no longer exists (dropped in migration 128)
+            _VALID_SKILL_IDS = set()
     return _VALID_SKILL_IDS
 
 

@@ -30,8 +30,6 @@ from core.event_store.studio_db import (  # noqa: E402
     set_sentinel,
     has_sentinel,
     insert_token_usage,
-    upsert_spec,
-    upsert_task,
 )
 
 _COUNTS: dict[str, int] = {}
@@ -238,63 +236,6 @@ def _ingest_token_log(f: Path) -> None:
     set_sentinel("migration-token-log", "migration", db_path=studio_db._db_path())
 
 
-# ── Spec/task files ───────────────────────────────────────────────────────
-
-
-def _ingest_specs(specs_dir: Path) -> None:
-    if not specs_dir.is_dir():
-        return
-    for spec_dir in specs_dir.iterdir():
-        if not spec_dir.is_dir():
-            continue
-        spec_id = spec_dir.name
-        spec_file = spec_dir / "spec.md"
-        tasks_file = spec_dir / "tasks.md"
-
-        spec_content = None
-        title = spec_id.replace("-", " ").title()
-        if spec_file.is_file():
-            spec_content = spec_file.read_text(encoding="utf-8")
-            title_match = re.search(r"^#\s+(?:Spec:\s*)?(.+)", spec_content, re.MULTILINE)
-            if title_match:
-                title = title_match.group(1).strip()
-
-        plan_content = None
-        task_count = 0
-        if tasks_file.is_file():
-            plan_content = tasks_file.read_text(encoding="utf-8")
-            task_count = len(re.findall(r"^- \[ \] (T\d+)", plan_content, re.MULTILINE))
-
-        upsert_spec(
-            spec_id,
-            "dream-studio",
-            title,
-            task_count=task_count or None,
-            spec_content=spec_content,
-            plan_content=plan_content,
-            db_path=studio_db._db_path(),
-        )
-        _count("raw_specs")
-        _log(f"spec: {spec_id} ({task_count} tasks)")
-
-        if tasks_file.is_file() and plan_content:
-            for m in re.finditer(
-                r"^- \[ \] (T\d+)\s+\[est:([\d.]+)h\]\s+(.+?)$",
-                plan_content,
-                re.MULTILINE,
-            ):
-                task_id, est, task_title = m.group(1), float(m.group(2)), m.group(3)
-                upsert_task(
-                    task_id,
-                    spec_id,
-                    "dream-studio",
-                    task_title,
-                    estimated_hours=est,
-                    db_path=studio_db._db_path(),
-                )
-                _count("raw_tasks")
-
-
 # ── Main ──────────────────────────────────────────────────────────────────
 
 
@@ -342,9 +283,7 @@ def main() -> None:
     if token_log.is_file():
         _ingest_token_log(token_log)
 
-    # Spec/task files
-    specs_dir = Path.cwd() / ".planning" / "specs"
-    _ingest_specs(specs_dir)
+    # raw_specs / raw_tasks were dropped in migration 128; _ingest_specs removed.
 
     # Report
     print(f"\n{'Table':<25} {'Rows':>8}")

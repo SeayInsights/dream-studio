@@ -235,8 +235,6 @@ interfaces/cli/analyze_project.py:87:13: F541 f-string is missing placeholders
 interfaces/cli/analyze_project.py:90:15: F541 f-string is missing placeholders
 interfaces/cli/backfill_components.py:183:13: F821 undefined name 'sys'
 interfaces/cli/backfill_components.py:195:13: F821 undefined name 'sys'
-interfaces/cli/backfill_task_status.py:20:1: E402 module level import not at top of file
-interfaces/cli/backfill_task_status.py:21:1: E402 module level import not at top of file
 interfaces/cli/backfill_token_sessions.py:25:1: E402 module level import not at top of file
 interfaces/cli/backfill_token_sessions.py:26:1: E402 module level import not at top of file
 interfaces/cli/benchmark_normalizer.py:16:1: F401 'core.adapters.normalizers.ClaudeAdapter' imported but unused

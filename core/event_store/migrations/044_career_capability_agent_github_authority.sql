@@ -366,63 +366,11 @@ CREATE TABLE IF NOT EXISTS github_repo_evaluations (
     CHECK (security_review_required IN (0, 1))
 );
 
-CREATE TABLE IF NOT EXISTS github_repo_license_findings (
-    license_finding_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    license_status TEXT NOT NULL,
-    attribution_required INTEGER NOT NULL DEFAULT 0,
-    legal_review_required INTEGER NOT NULL DEFAULT 0,
-    finding_summary TEXT,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
-
-CREATE TABLE IF NOT EXISTS github_repo_security_findings (
-    security_finding_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    severity TEXT NOT NULL DEFAULT 'unknown',
-    status TEXT NOT NULL DEFAULT 'manual_review_required',
-    finding_summary TEXT,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
-
-CREATE TABLE IF NOT EXISTS github_repo_dependency_findings (
-    dependency_finding_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    dependency_name TEXT,
-    dependency_status TEXT NOT NULL DEFAULT 'unknown',
-    maintenance_risk TEXT NOT NULL DEFAULT 'unknown',
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
-
-CREATE TABLE IF NOT EXISTS github_repo_integration_candidates (
-    candidate_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    component_name TEXT NOT NULL,
-    candidate_type TEXT NOT NULL,
-    overlap_status TEXT NOT NULL DEFAULT 'manual_review_required',
-    recommended_strategy TEXT NOT NULL DEFAULT 'learn_pattern_only',
-    approval_required INTEGER NOT NULL DEFAULT 1,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
-
-CREATE TABLE IF NOT EXISTS github_repo_pattern_references (
-    pattern_reference_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    pattern_name TEXT NOT NULL,
-    reference_status TEXT NOT NULL DEFAULT 'reference_only',
-    source_refs_json TEXT NOT NULL DEFAULT '[]',
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
+-- github_repo_license_findings, github_repo_security_findings,
+-- github_repo_dependency_findings, github_repo_integration_candidates,
+-- github_repo_pattern_references, github_repo_attribution_records
+-- removed in migration 128 (dead sub-tables; no live consumer).
+-- github_repo_evaluations and github_repo_adoption_decisions are KEPT.
 
 CREATE TABLE IF NOT EXISTS github_repo_adoption_decisions (
     adoption_decision_id TEXT PRIMARY KEY,
@@ -436,17 +384,7 @@ CREATE TABLE IF NOT EXISTS github_repo_adoption_decisions (
     FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
 );
 
-CREATE TABLE IF NOT EXISTS github_repo_attribution_records (
-    attribution_record_id TEXT PRIMARY KEY,
-    evaluation_id TEXT NOT NULL,
-    attribution_status TEXT NOT NULL DEFAULT 'pending',
-    license_ref TEXT,
-    attribution_text TEXT,
-    legal_review_required INTEGER NOT NULL DEFAULT 0,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (evaluation_id) REFERENCES github_repo_evaluations(evaluation_id)
-);
+-- github_repo_attribution_records removed in migration 128 (dead table).
 
 CREATE INDEX IF NOT EXISTS idx_career_profiles_enabled ON career_profiles(enabled, privacy_scope);
 CREATE INDEX IF NOT EXISTS idx_career_applications_status ON career_applications(profile_id, application_status);

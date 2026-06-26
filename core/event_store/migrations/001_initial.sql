@@ -73,37 +73,8 @@ SELECT
 FROM raw_skill_telemetry t
 LEFT JOIN cor_skill_corrections c ON c.telemetry_id = t.id;
 
-CREATE TABLE IF NOT EXISTS raw_pulse_snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_date TEXT NOT NULL UNIQUE,
-    health_score INTEGER NOT NULL,
-    health_status TEXT NOT NULL,
-    ci_status TEXT,
-    open_prs INTEGER,
-    stale_branches INTEGER,
-    pending_drafts INTEGER,
-    open_escalations INTEGER,
-    raw_content TEXT
-);
-
-CREATE TABLE IF NOT EXISTS raw_planning_specs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    spec_path TEXT NOT NULL UNIQUE,
-    title TEXT,
-    created_date TEXT,
-    task_count INTEGER,
-    has_build_commit INTEGER DEFAULT 0,
-    last_checked TEXT
-);
-
-CREATE TABLE IF NOT EXISTS sum_analytics_run (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_at TEXT NOT NULL,
-    pulse_rows INTEGER,
-    spec_rows INTEGER,
-    skill_rows INTEGER,
-    output_path TEXT
-);
+-- raw_pulse_snapshots, raw_planning_specs, sum_analytics_run removed in migration 128
+-- (dead tables: no live consumer; ds_analytics pipeline removed)
 
 CREATE TABLE IF NOT EXISTS raw_operational_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

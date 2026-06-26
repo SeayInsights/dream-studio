@@ -24,11 +24,6 @@ PLATFORM_HARDENING_TABLES: tuple[str, ...] = (
     "skill_evaluation_runs",
     "policy_decision_records",
     "connector_ingestion_runs",
-    "privacy_redaction_export_records",
-    "local_watch_schedule_records",
-    "team_rollup_records",
-    "installer_distribution_checks",
-    "demo_case_study_packets",
 )
 
 EVALUATED_WORKFLOWS: tuple[str, ...] = (
@@ -279,11 +274,6 @@ def platform_hardening_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "skill_evaluation_harness": skill_evaluation_harness_status(conn),
             "policy_permission_engine": policy_engine_status(conn),
             "engineering_connector_ingestion": connector_ingestion_framework_status(conn),
-            "privacy_redaction_secret_boundary": privacy_redaction_status(conn),
-            "local_watch_scheduled_validation": local_watch_scheduler_status(conn),
-            "team_pilot_rollup_reporting": team_pilot_rollup_status(conn),
-            "installer_distribution_hardening": installer_distribution_status(conn),
-            "demo_case_study_system": demo_case_study_system_status(conn),
         },
         "validation": {
             "status": "pass" if not validate_platform_hardening_summary(conn) else "fail",
@@ -591,156 +581,6 @@ def _connector_project_records(records: Any, *, source_type: str) -> list[dict[s
     return normalized
 
 
-def privacy_redaction_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "privacy_redaction_export_records")
-    return {
-        "milestone_id": "privacy_redaction_and_secret_boundary_maturation",
-        "status": (
-            "runtime_validated"
-            if "privacy_redaction_export_records" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "visibility_modes": list(VISIBILITY_MODES),
-        "private_export_fields": list(PRIVATE_EXPORT_FIELDS),
-        "redaction_profiles": {
-            "private_internal": {"redact_private_fields": False, "public_export_allowed": False},
-            "operator_private": {"redact_private_fields": False, "public_export_allowed": False},
-            "team_safe": {"redact_private_fields": True, "public_export_allowed": False},
-            "client_safe": {"redact_private_fields": True, "public_export_allowed": False},
-            "public_sanitized": {"redact_private_fields": True, "public_export_allowed": True},
-        },
-        "export_count": len(rows),
-        "status_counts": dict(sorted(Counter(row.get("status") for row in rows).items())),
-    }
-
-
-def sanitize_export_packet(
-    packet: dict[str, Any],
-    *,
-    visibility_mode: str = "public_sanitized",
-) -> dict[str, Any]:
-    if visibility_mode not in VISIBILITY_MODES:
-        raise ValueError(f"unsupported visibility mode: {visibility_mode}")
-    sanitized = {key: value for key, value in packet.items() if key not in PRIVATE_EXPORT_FIELDS}
-    removed = [key for key in packet if key in PRIVATE_EXPORT_FIELDS]
-    blocked = []
-    if visibility_mode == "public_sanitized" and removed:
-        blocked.append("private_fields_removed_before_public_export")
-    return {
-        "visibility_mode": visibility_mode,
-        "status": "pass" if not _contains_secret_like_keys(sanitized) else "blocked",
-        "sanitized_packet": sanitized,
-        "sanitized_fields": removed,
-        "blocked_reasons": (
-            blocked if not _contains_secret_like_keys(sanitized) else ["secret_like_key_present"]
-        ),
-        "secret_values_inspected": False,
-    }
-
-
-def local_watch_scheduler_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "local_watch_schedule_records")
-    return {
-        "milestone_id": "local_watch_and_scheduled_validation_runtime",
-        "status": (
-            "runtime_validated"
-            if "local_watch_schedule_records" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "opt_in": True,
-        "background_processes_started": False,
-        "watch_tasks": [
-            {
-                **dict(task),
-                "opt_in_required": True,
-                "enabled_by_default": False,
-                "risk_level": "low",
-                "evidence_output": "dashboard_attention",
-                "failure_behavior": "attention_only",
-                "disable_command": "ds watch disable",
-                "approval_requirement": "operator_enable_required",
-            }
-            for task in WATCH_TASKS
-        ],
-        "configured_watch_count": len(rows),
-        "enabled_count": sum(1 for row in rows if row.get("enabled")),
-    }
-
-
-def team_pilot_rollup_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "team_rollup_records")
-    return {
-        "milestone_id": "team_pilot_rollup_and_sanitized_reporting",
-        "status": (
-            "runtime_validated"
-            if "team_rollup_records" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "local_first": True,
-        "sanitized_by_default": True,
-        "rollup_sections": [
-            "project_milestone_task_summary",
-            "security_readiness_summary",
-            "adapter_usage_summary",
-            "validation_release_summary",
-            "attention_blocker_summary",
-        ],
-        "excluded_private_data": list(PRIVATE_EXPORT_FIELDS),
-        "record_count": len(rows),
-        "status_counts": dict(sorted(Counter(row.get("status") for row in rows).items())),
-    }
-
-
-def installer_distribution_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "installer_distribution_checks")
-    return {
-        "milestone_id": "installer_distribution_hardening",
-        "status": (
-            "runtime_validated"
-            if "installer_distribution_checks" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "commands": list(INSTALLER_COMMANDS),
-        "normal_user_workflow": [
-            "install Dream Studio",
-            "select modules",
-            "run ds from anywhere",
-            "launch dashboard",
-            "validate runtime health",
-            "configure supported adapters",
-            "back up state",
-            "run restore-check, update-check, and uninstall-check",
-        ],
-        "mutation_default": "plan_or_check_only",
-        "check_count": len(rows),
-        "status_counts": dict(sorted(Counter(row.get("status") for row in rows).items())),
-    }
-
-
-def demo_case_study_system_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "demo_case_study_packets")
-    return {
-        "milestone_id": "dream_studio_demo_and_case_study_system",
-        "status": (
-            "runtime_validated"
-            if "demo_case_study_packets" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "packets": [
-            {
-                **dict(packet),
-                "evidence_backed": True,
-                "sanitized_required": True,
-                "private_fields_forbidden": list(PRIVATE_EXPORT_FIELDS),
-                "operator_approval_required_for_public_use": True,
-            }
-            for packet in DEMO_PACKETS
-        ],
-        "record_count": len(rows),
-        "status_counts": dict(sorted(Counter(row.get("status") for row in rows).items())),
-    }
-
-
 def validate_platform_hardening_summary(conn: sqlite3.Connection) -> list[str]:
     errors: list[str] = []
     tables = _existing_tables(conn)
@@ -760,16 +600,9 @@ def validate_platform_hardening_summary(conn: sqlite3.Connection) -> list[str]:
     ):
         if required not in policy_actions:
             errors.append(f"missing policy action: {required}")
-    if "public_sanitized" not in VISIBILITY_MODES:
-        errors.append("public_sanitized visibility mode missing")
     for connector in CONNECTOR_DEFINITIONS:
         if connector["read_write_mode"] not in {"read_only", "local_file_read"}:
             errors.append(f"connector {connector['connector_id']} is not read-only")
-    for task in WATCH_TASKS:
-        if task["read_write_behavior"] != "read_only":
-            errors.append(f"watch task {task['watch_id']} is not read-only")
-    if "ds doctor" not in INSTALLER_COMMANDS or "ds repair" not in INSTALLER_COMMANDS:
-        errors.append("installer doctor/repair commands missing")
     return errors
 
 

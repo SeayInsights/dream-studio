@@ -374,8 +374,8 @@ WO to decommission the consumers before the tables can be dropped.
 | `reg_analyzed_repos` | `interfaces/cli/check_repo_updates.py` (reader + writer) |
 | `reg_skills` | `interfaces/cli/migrate_files_to_sqlite.py` (reader) |
 | `raw_token_usage` | `interfaces/cli/backfill_token_sessions.py` (writer + reader) |
-| `raw_specs` | `interfaces/cli/backfill_task_status.py` (reader) |
-| `raw_tasks` | `interfaces/cli/backfill_task_status.py` (reader + writer) |
+| `raw_specs` | dropped in migration 128 — `backfill_task_status.py` deleted |
+| `raw_tasks` | dropped in migration 128 — `backfill_task_status.py` deleted |
 | `ds_technology_signals` | `spool/session_harvester.py` (writer) |
 | `raw_skill_telemetry` | `core/event_store/studio_db.py` (writer), `control/execution/models/selector.py` (reader) |
 
