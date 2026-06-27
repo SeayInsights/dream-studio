@@ -51,7 +51,8 @@ def test_rule_manager_honors_explicit_db_path(monkeypatch, tmp_path):
 
 def test_alert_evaluator_honors_explicit_db_path(monkeypatch, tmp_path):
     monkeypatch.setattr(alert_evaluator_module, "get_connection", _forbid_global_db)
-    monkeypatch.setattr(alert_evaluator_module, "transaction", _forbid_global_db)
+    # alert_evaluator no longer imports `transaction` — trigger_alert() (its only
+    # consumer) was removed when alert_history was dropped in migration 131.
 
     db_path = tmp_path / "alerts.db"
     manager = RuleManager(str(db_path))

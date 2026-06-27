@@ -122,9 +122,11 @@ Exported research must include source references and privacy classification. Red
 
 ## Legacy Diagnostics
 
-Legacy diagnostics such as `interfaces/cli/test_wave1_research_cache.py` are not normal validation. They must stay opt-in or become temp-home/tmp-DB isolated before promotion. They must not run against the native local runtime DB during standard verification.
-
-Current opt-in gate: `DREAM_STUDIO_RUN_LEGACY_RESEARCH_DIAGNOSTICS=1`.
+The `interfaces/cli/test_wave1_research_cache.py` legacy diagnostic was retired in
+migration 131 along with the dormant `raw_research` table it exercised. Any future
+research diagnostics must stay opt-in or become temp-home/tmp-DB isolated before
+promotion. They must not run against the native local runtime DB during standard
+verification.
 
 ## Violations
 
