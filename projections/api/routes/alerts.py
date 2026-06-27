@@ -1,6 +1,6 @@
 """Alert management API routes"""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 
@@ -51,19 +51,6 @@ class AlertRule(BaseModel):
     enabled: bool
 
 
-class AlertHistory(BaseModel):
-    """Alert history response model"""
-
-    alert_id: str
-    rule_id: str
-    rule_name: str
-    metric_path: str
-    metric_value: float
-    threshold: float
-    severity: str
-    triggered_at: str
-
-
 class RuleCreatedResponse(BaseModel):
     """Response when rule is created"""
 
@@ -83,24 +70,6 @@ def _alert_rules_readable(conn) -> bool:
         "alert_rules",
         ["rule_id", "rule_name", "metric_path", "condition", "threshold", "severity", "enabled"],
     )
-
-
-def _alert_history_readable(conn) -> bool:
-    return has_columns(
-        conn,
-        "alert_history",
-        ["alert_id", "rule_id", "triggered_at", "metric_value", "severity"],
-    )
-
-
-def _empty_resolution_buckets() -> list[dict[str, int | str]]:
-    return [
-        {"range": "< 5 min", "count": 0},
-        {"range": "5-15 min", "count": 0},
-        {"range": "15-30 min", "count": 0},
-        {"range": "30-60 min", "count": 0},
-        {"range": "> 60 min", "count": 0},
-    ]
 
 
 # Endpoints
@@ -326,98 +295,6 @@ async def delete_rule(rule_id: str):
         raise HTTPException(status_code=500, detail=f"Unexpected error deleting rule: {str(e)}")
 
 
-@router.get("/history", response_model=List[AlertHistory])
-async def get_alert_history(
-    limit: int = Query(
-        default=100, ge=1, le=1000, description="Maximum number of alerts to return"
-    ),
-    severity: Optional[str] = Query(
-        default=None, description="Filter by severity: info, warning, critical"
-    ),
-):
-    """
-    Get alert history with optional filters.
-
-    Args:
-        limit: Maximum number of alerts to return (default: 100, max: 1000)
-        severity: Optional severity filter (info, warning, critical)
-
-    Returns:
-        List of triggered alerts from history
-    """
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        if not _alert_history_readable(conn):
-            conn.close()
-            return []
-
-        # Build query with optional severity filter
-        has_rules = _alert_rules_readable(conn)
-        if has_rules:
-            query = """
-            SELECT
-                ah.alert_id,
-                ah.rule_id,
-                ar.rule_name,
-                ar.metric_path,
-                ah.metric_value,
-                ar.threshold,
-                ah.severity,
-                ah.triggered_at
-            FROM alert_history ah
-            LEFT JOIN alert_rules ar ON ah.rule_id = ar.rule_id
-            """
-        else:
-            query = """
-            SELECT
-                ah.alert_id,
-                ah.rule_id,
-                'Unknown' as rule_name,
-                'Unknown' as metric_path,
-                ah.metric_value,
-                0.0 as threshold,
-                ah.severity,
-                ah.triggered_at
-            FROM alert_history ah
-            """
-
-        params = []
-
-        if severity:
-            query += " WHERE ah.severity = ?"
-            params.append(severity)
-
-        query += " ORDER BY ah.triggered_at DESC LIMIT ?"
-        params.append(limit)
-
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        conn.close()
-
-        # Convert rows to response models
-        alerts = []
-        for row in rows:
-            alerts.append(
-                AlertHistory(
-                    alert_id=row["alert_id"],
-                    rule_id=row["rule_id"],
-                    rule_name=row["rule_name"] or "Unknown",
-                    metric_path=row["metric_path"] or "Unknown",
-                    metric_value=row["metric_value"],
-                    threshold=row["threshold"] or 0.0,
-                    severity=row["severity"],
-                    triggered_at=row["triggered_at"],
-                )
-            )
-
-        return alerts
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving alert history: {str(e)}")
-
-
 @router.get("/sla")
 async def get_sla_metrics() -> Dict[str, Any]:
     """
@@ -467,117 +344,3 @@ async def get_sla_metrics() -> Dict[str, Any]:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving SLA metrics: {str(e)}")
-
-
-@router.get("/analytics")
-async def get_alert_analytics() -> Dict[str, Any]:
-    """
-    Get alert analytics including top triggered rules and resolution times.
-
-    Returns:
-        Dict containing:
-            - top_triggered: List of most frequently triggered rules
-            - resolution_times: Distribution of alert resolution times
-    """
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        if not _alert_history_readable(conn):
-            conn.close()
-            return {
-                "top_triggered": [],
-                "resolution_times": _empty_resolution_buckets(),
-                "source_status": {
-                    "classification": "empty by design",
-                    "reason": "alert_history is absent or not compatible in this installed DB snapshot.",
-                    "derived_view": True,
-                    "primary_authority": False,
-                    "missing": ["alert_history"],
-                },
-            }
-
-        # Get top 5 most triggered rules (last 30 days)
-        if _alert_rules_readable(conn):
-            cursor.execute("""
-            SELECT
-                COALESCE(ar.rule_name, ah.rule_id, 'unknown') as rule_name,
-                COUNT(*) as trigger_count
-            FROM alert_history ah
-            LEFT JOIN alert_rules ar ON ah.rule_id = ar.rule_id
-            WHERE ah.triggered_at >= datetime('now', '-30 days')
-            GROUP BY ah.rule_id, ar.rule_name
-            ORDER BY trigger_count DESC
-            LIMIT 5
-            """)
-        else:
-            cursor.execute("""
-            SELECT
-                COALESCE(rule_id, 'unknown') as rule_name,
-                COUNT(*) as trigger_count
-            FROM alert_history
-            WHERE triggered_at >= datetime('now', '-30 days')
-            GROUP BY rule_id
-            ORDER BY trigger_count DESC
-            LIMIT 5
-            """)
-
-        top_triggered_rows = cursor.fetchall()
-        top_triggered = [
-            {"rule_name": row["rule_name"] or "Unknown", "count": row["trigger_count"]}
-            for row in top_triggered_rows
-        ]
-
-        if has_columns(conn, "alert_history", ["triggered_at", "resolved_at"]):
-            cursor.execute("""
-                SELECT
-                    (julianday(resolved_at) - julianday(triggered_at)) * 1440 as resolution_minutes
-                FROM alert_history
-                WHERE triggered_at >= datetime('now', '-30 days')
-                  AND resolved_at IS NOT NULL
-            """)
-            resolved_rows = cursor.fetchall()
-        else:
-            resolved_rows = []
-
-        buckets = [
-            {"range": "< 5 min", "count": 0, "max": 5},
-            {"range": "5-15 min", "count": 0, "max": 15},
-            {"range": "15-30 min", "count": 0, "max": 30},
-            {"range": "30-60 min", "count": 0, "max": 60},
-            {"range": "> 60 min", "count": 0, "max": float("inf")},
-        ]
-        for row in resolved_rows:
-            minutes = row["resolution_minutes"] or 0
-            for bucket in buckets:
-                if minutes < bucket["max"]:
-                    bucket["count"] += 1
-                    break
-
-        resolution_times = [{"range": b["range"], "count": b["count"]} for b in buckets]
-
-        source_tables = ["alert_history"]
-        if _alert_rules_readable(conn):
-            source_tables.append("alert_rules")
-
-        conn.close()
-
-        return {
-            "top_triggered": top_triggered,
-            "resolution_times": resolution_times,
-            "source_status": {
-                "classification": "fresh" if top_triggered else "empty by design",
-                "reason": (
-                    "Alert analytics read current alert authority tables."
-                    if top_triggered
-                    else "Alert authority tables exist and contain no active dashboard alert history."
-                ),
-                "derived_view": True,
-                "primary_authority": False,
-                "source_tables": source_tables,
-                "missing": [],
-            },
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving alert analytics: {str(e)}")

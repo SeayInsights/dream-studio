@@ -11,15 +11,14 @@ from core.shared_intelligence.adapter_alignment import (
 )
 from core.shared_intelligence.authority import (
     build_adapter_context_packet,
-    record_shared_context_packet,
     require_shared_intelligence_tables,
 )
+
+# record_shared_context_packet removed — shared_context_packets dropped migration 131
 from core.shared_intelligence.model_registry import model_provider_registry_summary
-from core.shared_intelligence.read_models import (
-    component_learning_health,
-    learning_event_summary,
-    learning_promotion_queue,
-)
+
+# learning_event_summary, component_learning_health, learning_promotion_queue removed —
+# learning_event_records and hardening_candidate_records dropped migration 131
 
 
 def generate_shared_context_packet(
@@ -44,25 +43,8 @@ def generate_shared_context_packet(
         project_id=project_id,
         limit=limit,
     )
-    learning_summary = learning_event_summary(
-        conn,
-        project_id=project_id,
-        milestone_id=milestone_id,
-        task_id=task_id,
-        limit=limit,
-    )
-    component_health = component_learning_health(
-        conn,
-        project_id=project_id,
-        milestone_id=milestone_id,
-        task_id=task_id,
-    )
-    promotion_queue = learning_promotion_queue(
-        conn,
-        project_id=project_id,
-        milestone_id=milestone_id,
-        task_id=task_id,
-    )
+    # learning_summary, component_health, promotion_queue removed —
+    # learning_event_records and hardening_candidate_records dropped migration 131
     payload = {
         "packet_schema": "dream_studio.shared_context.v2",
         "packet_id": packet_id,
@@ -85,9 +67,8 @@ def generate_shared_context_packet(
         "adapter_alignment": adapter_alignment_summary(conn),
         "model_provider_registry": model_provider_registry_summary(conn),
         "authority_context": authority_context,
-        "learning_event_summary": learning_summary,
-        "component_learning_health": component_health,
-        "learning_promotion_queue": promotion_queue,
+        # learning_event_summary, component_learning_health, learning_promotion_queue removed —
+        # backing tables dropped migration 131
         "resume_instructions": [
             "Use SQLite authority and evidence refs as the source of truth.",
             "Use current PRD, milestone, Work Order, change-order, and route reconciliation authority before relying on chat context.",
@@ -96,20 +77,7 @@ def generate_shared_context_packet(
             "Do not mutate live state without an approved Work Order boundary.",
         ],
     }
-    if persist:
-        record_shared_context_packet(
-            conn,
-            packet_id=packet_id,
-            adapter_id=adapter_id,
-            project_id=project_id,
-            milestone_id=milestone_id,
-            task_id=task_id,
-            process_run_id=process_run_id,
-            packet_type=packet_type,
-            payload=payload,
-            source_refs=["sqlite:shared_context_packets"],
-            evidence_refs=["wo-dream-studio-shared-context-packet-generation"],
-        )
+    # persist path removed — shared_context_packets dropped migration 131
     return payload
 
 

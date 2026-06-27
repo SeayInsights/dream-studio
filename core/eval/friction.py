@@ -1,9 +1,11 @@
 """Friction signal aggregation — updates eval_registry.friction_flag.
 
-Three friction sources:
+Two friction sources:
   (a) raw_skill_telemetry JOIN raw_sessions WHERE outcome IN ('failed','error')
-  (b) cor_skill_corrections JOIN raw_skill_telemetry
   (c) guardrail_decisions WHERE action='block' for hook targets
+
+  (Source (b) cor_skill_corrections retired migration 131 — table + dead writer
+   skill_correct() removed.)
 
 Runs as a scheduled/on-demand aggregation — not inline in the request path.
 
@@ -71,19 +73,8 @@ def aggregate_friction_signals(db_path: Path | None = None) -> dict:
         except Exception as exc:
             logger.debug("Friction source (a) skipped — raw_skill_telemetry/raw_sessions: %s", exc)
 
-        # (b) Skill corrections
-        try:
-            rows = conn.execute("""
-                SELECT DISTINCT rst.skill_name AS skill_id
-                FROM cor_skill_corrections csc
-                JOIN raw_skill_telemetry rst ON rst.id = csc.telemetry_id
-                WHERE rst.skill_name IS NOT NULL
-                """).fetchall()
-            for r in rows:
-                flagged.add(r["skill_id"])
-            sources_ok += 1
-        except Exception as exc:
-            logger.debug("Friction source (b) skipped — cor_skill_corrections: %s", exc)
+        # (b) Skill corrections — RETIRED migration 131 (cor_skill_corrections dropped;
+        # its writer skill_correct() was dead). Friction now has two live sources.
 
         # (c) Guardrail blocks on hook targets — single JOIN, no per-row SELECT.
         try:

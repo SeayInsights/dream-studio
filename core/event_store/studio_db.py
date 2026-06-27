@@ -555,20 +555,7 @@ def get_skill_summaries(db_path: Path | None = None) -> list[dict]:
         return []
 
 
-@_with_retry
-def skill_correct(
-    telemetry_id: int, success: int, reason: str = "", db_path: Path | None = None
-) -> bool:
-    try:
-        with _db_transaction(db_path) as conn:
-            conn.execute(
-                "INSERT INTO cor_skill_corrections(telemetry_id,corrected_success,reason,corrected_at) VALUES(?,?,?,?)",
-                (telemetry_id, success, reason, _NOW()),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
+# skill_correct removed — cor_skill_corrections dropped migration 131
 
 
 @_with_retry
@@ -1507,81 +1494,7 @@ def get_pending_lessons(db_path: Path | None = None) -> list[dict]:
 
 
 # ── Research functions ─────────────────────────────────────────────────────
-
-
-@_with_retry
-def insert_research(
-    query: str,
-    source_type: str,
-    findings: str,
-    *,
-    source_url: str | None = None,
-    confidence_score: float = 0.5,
-    trust_score: float = 0.5,
-    prd_id: str | None = None,
-    task_id: str | None = None,
-    session_id: str | None = None,
-    db_path: Path | None = None,
-) -> bool:
-    """
-    Insert research finding into raw_research table.
-
-    Writes to activity_log FIRST via EventNormalizer, then links via activity_id (Phase 3 traceability).
-
-    Args:
-        query: The research query/question
-        source_type: Type of source ('stack', 'security', 'docs', 'pattern', 'general')
-        findings: The research findings (markdown or text)
-        source_url: Optional URL of the source
-        confidence_score: Confidence in the findings (0.0-1.0)
-        trust_score: Trust level of the source (0.0-1.0)
-        prd_id: Optional PRD ID for cross-domain linkage
-        task_id: Optional task ID for cross-domain linkage
-        session_id: Optional session ID for cross-domain linkage
-        db_path: Optional database path
-    """
-    try:
-        query_hash = hashlib.sha256(query.encode()).hexdigest()[:16]
-
-        with _db_transaction(db_path) as c:
-            # 1. Emit canonical event (TA0c: activity_log retired)
-            _try_emit_canonical(
-                _CanonicalEventType.RESEARCH_COMPLETED,
-                {
-                    "query_hash": query_hash,
-                    "source_type": source_type,
-                    "source_url": source_url,
-                    "confidence_score": confidence_score,
-                },
-                session_id=session_id,
-                task_id=task_id,
-                prd_id=prd_id,
-            )
-            activity_id = None  # deprecated FK column
-
-            # 2. Insert into raw_research with activity_id FK
-            c.execute(
-                """INSERT INTO raw_research
-                   (query, query_hash, source_type, source_url, findings,
-                    confidence_score, trust_score, activity_id, prd_id, task_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    query,
-                    query_hash,
-                    source_type,
-                    source_url,
-                    findings,
-                    confidence_score,
-                    trust_score,
-                    activity_id,
-                    prd_id,
-                    task_id,
-                ),
-            )
-        return True
-    except Exception as e:
-        _reraise_if_busy(e)
-        return False
+# insert_research removed — raw_research dropped migration 131
 
 
 @_with_retry
@@ -2080,24 +1993,13 @@ def schema_version(db_path: Path | None = None) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(description="studio_db CLI")
     sub = ap.add_subparsers(dest="cmd")
-    sc = sub.add_parser("skill-correct")
-    sc.add_argument("telemetry_id")
-    sc.add_argument("result", choices=["success", "failure"])
-    sc.add_argument("--reason", default="")
+    # skill-correct subcommand removed — cor_skill_corrections dropped migration 131
     ib = sub.add_parser("import-and-rebuild")
     ib.add_argument("--buffer", required=True)
     sub.add_parser("prune")
     sub.add_parser("status")
     args = ap.parse_args()
-    if args.cmd == "skill-correct":
-        print(
-            "corrected"
-            if skill_correct(
-                int(args.telemetry_id), 1 if args.result == "success" else 0, args.reason
-            )
-            else "error"
-        )
-    elif args.cmd == "import-and-rebuild":
+    if args.cmd == "import-and-rebuild":
         n = import_buffer(Path(args.buffer))
         rebuild_summaries()
         print(f"imported {n} rows")
@@ -2109,7 +2011,7 @@ def main() -> None:
             "raw_workflow_runs",
             "raw_workflow_nodes",
             "raw_skill_telemetry",
-            "cor_skill_corrections",
+            # cor_skill_corrections dropped migration 131
             "sum_skill_summary",
             "log_batch_imports",
             "raw_operational_snapshots",

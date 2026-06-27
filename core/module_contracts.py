@@ -107,7 +107,11 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
         "security_readiness_impact": "Dashboard integrity and stale data detection affect health.",
         "contract_atlas_maturity_level": "runtime_validated",
         "validation_tests": [
-            "tests/unit/test_actual_shared_intelligence_routes.py",
+            # test_actual_shared_intelligence_routes.py retired migration 131 (it tested the
+            # dormant shared-intelligence dashboard surfaces — learning/hardening/model-provider/
+            # context-packet — that read tables with no live writer; those routes now return
+            # honest empty states and their live siblings are covered below).
+            "tests/unit/test_dashboard_safety.py",
             "tests/unit/test_module_contracts.py",
         ],
     },

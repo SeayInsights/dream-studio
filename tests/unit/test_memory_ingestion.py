@@ -12,7 +12,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from core.memory.ingestion import (
-    CorrectionIngestionConsumer,
     DecisionIngestionConsumer,
     GotchaIngestionConsumer,
     LessonIngestionConsumer,
@@ -107,15 +106,7 @@ def setup_db(db_path, monkeypatch):
         )
     """)
 
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS cor_skill_corrections (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            telemetry_id INTEGER NOT NULL REFERENCES raw_skill_telemetry(id),
-            corrected_success INTEGER NOT NULL,
-            reason TEXT,
-            corrected_at TEXT NOT NULL
-        )
-    """)
+    # cor_skill_corrections dropped migration 131 (ingestion consumer retired).
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS canonical_events (
@@ -332,77 +323,9 @@ def test_gotcha_severity_maps_to_importance(db_path, setup_db):
     assert high["importance"] == pytest.approx(0.8, abs=0.01)
 
 
-# ── Correction ingestion ─────────────────────────────────────────────────────
-
-
-def _seed_corrections(db_path):
-    conn = sqlite3.connect(db_path)
-    conn.execute("""
-        INSERT INTO raw_skill_telemetry (id, skill_name, invoked_at, success)
-        VALUES (1, 'build', '2026-05-01T10:00:00Z', 0)
-    """)
-    for i in range(4):
-        conn.execute(
-            """
-            INSERT INTO cor_skill_corrections (telemetry_id, corrected_success, reason, corrected_at)
-            VALUES (1, 1, 'wrong model selected for task', ?)
-        """,
-            (f"2026-05-0{i+1}T10:00:00Z",),
-        )
-    conn.execute("""
-        INSERT INTO cor_skill_corrections (telemetry_id, corrected_success, reason, corrected_at)
-        VALUES (1, 1, 'one-off mistake', '2026-05-05T10:00:00Z')
-    """)
-    conn.commit()
-    conn.close()
-
-
-def test_correction_ingestion_threshold(db_path, setup_db):
-    _seed_corrections(db_path)
-    store = MemoryStore(db_path)
-    consumer = CorrectionIngestionConsumer()
-    result = consumer.ingest(store)
-
-    assert result.records_found == 1
-    assert result.records_ingested == 1
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    row = conn.execute(
-        "SELECT * FROM memory_entries WHERE source_type = 'cor_skill_corrections'"
-    ).fetchone()
-    conn.close()
-
-    assert row is not None
-    assert "wrong model selected" in row["content"]
-    assert row["source"] == "correction"
-
-
-def test_correction_ingestion_is_idempotent(db_path, setup_db):
-    _seed_corrections(db_path)
-    store = MemoryStore(db_path)
-    consumer = CorrectionIngestionConsumer()
-    consumer.ingest(store)
-    r2 = consumer.ingest(store)
-    assert r2.records_found == 0
-
-
-def test_correction_below_threshold_not_ingested(db_path, setup_db):
-    conn = sqlite3.connect(db_path)
-    conn.execute("""
-        INSERT INTO raw_skill_telemetry (id, skill_name, invoked_at, success)
-        VALUES (1, 'build', '2026-05-01T10:00:00Z', 0)
-    """)
-    conn.execute("""
-        INSERT INTO cor_skill_corrections (telemetry_id, corrected_success, reason, corrected_at)
-        VALUES (1, 1, 'rare issue', '2026-05-01T10:00:00Z')
-    """)
-    conn.commit()
-    conn.close()
-
-    store = MemoryStore(db_path)
-    result = CorrectionIngestionConsumer().ingest(store)
-    assert result.records_found == 0
+# ── Correction ingestion — RETIRED migration 131 ─────────────────────────────
+# cor_skill_corrections table + CorrectionIngestionConsumer removed (the table's
+# only writer skill_correct() was dead). Correction-ingestion tests deleted.
 
 
 # ── Decision ingestion ───────────────────────────────────────────────────────
@@ -503,21 +426,20 @@ def test_decision_ingestion_is_idempotent(db_path, setup_db):
 
 
 def test_run_all_ingestion(db_path, setup_db):
+    # CorrectionIngestionConsumer retired migration 131 — 3 consumers remain.
     _seed_lessons(db_path)
     _seed_gotchas(db_path)
-    _seed_corrections(db_path)
     _seed_decisions(db_path)
     store = MemoryStore(db_path)
     results = run_all_ingestion(store)
 
-    assert len(results) == 4
+    assert len(results) == 3
 
     total_ingested = sum(r.records_ingested for r in results)
-    assert total_ingested == 7
+    assert total_ingested == 6
 
     stats = store.stats()
-    assert stats["total_entries"] == 7
+    assert stats["total_entries"] == 6
     assert stats["by_memory_type"]["lesson"] == 2
     assert stats["by_memory_type"]["gotcha"] == 2
-    assert stats["by_memory_type"]["correction"] == 1
     assert stats["by_memory_type"]["decision"] == 2

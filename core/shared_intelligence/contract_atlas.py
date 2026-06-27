@@ -45,7 +45,7 @@ from core.shared_intelligence.capability_center import (
     validate_capability_center_summary,
 )
 from core.shared_intelligence.github_repo_intake import (
-    github_repo_intake_dashboard_summary,
+    github_repo_intake_workflow,
     validate_github_repo_intake_workflow,
 )
 from core.shared_intelligence.maturity_ledger import (
@@ -141,7 +141,7 @@ def build_contract_atlas(
     capability_center_errors = validate_capability_center_summary(capability_center)
     scoped_agents = scoped_agent_registry(conn)
     scoped_agent_errors = validate_scoped_agent_registry(scoped_agents)
-    github_repo_intake = github_repo_intake_dashboard_summary(conn)
+    github_repo_intake = github_repo_intake_workflow()
     github_repo_intake_errors = validate_github_repo_intake_workflow(github_repo_intake)
     platform_hardening = platform_hardening_summary(conn)
     platform_hardening_errors = validate_platform_hardening_summary(conn)
@@ -195,7 +195,7 @@ def build_contract_atlas(
             "operational_record_count": usage_accounting["operational_record_count"],
             "token_record_count": usage_accounting["token_record_count"],
             "by_adapter": usage_accounting["by_adapter"],
-            "task_attribution": usage_accounting["task_attribution"],
+            # task_attribution key removed: task_attribution_records dropped migration 131
             "policy": usage_accounting["policy"],
             "source_tables": usage_accounting["source_tables"],
             "schema_status": usage_accounting.get("schema_status", "available"),

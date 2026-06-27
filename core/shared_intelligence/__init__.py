@@ -4,13 +4,7 @@ from core.shared_intelligence.authority import (
     REQUIRED_SHARED_INTELLIGENCE_TABLES,
     build_adapter_context_packet,
     record_adapter_authority_profile,
-    record_adapter_result,
-    record_artifact_authority,
     record_capability_route,
-    record_hardening_candidate,
-    record_learning_event,
-    record_model_provider_profile,
-    record_shared_context_packet,
     require_shared_intelligence_tables,
 )
 from core.shared_intelligence.adapter_alignment import (
@@ -46,14 +40,10 @@ from core.shared_intelligence.dashboard_views import (
 )
 from core.shared_intelligence.feedback_loop import cross_model_learning_feedback
 from core.shared_intelligence.github_repo_intake import (
-    github_repo_intake_dashboard_summary,
     github_repo_intake_workflow,
     validate_github_repo_intake_workflow,
 )
 from core.shared_intelligence.hardening_loop import (
-    create_hardening_candidate_from_learning_event,
-    hardening_candidate_lifecycle,
-    record_hardening_validation,
     validate_hardening_loop_report,
 )
 from core.shared_intelligence.model_registry import (
@@ -96,13 +86,7 @@ __all__ = [
     "REQUIRED_SHARED_INTELLIGENCE_TABLES",
     "build_adapter_context_packet",
     "record_adapter_authority_profile",
-    "record_adapter_result",
-    "record_artifact_authority",
     "record_capability_route",
-    "record_hardening_candidate",
-    "record_learning_event",
-    "record_model_provider_profile",
-    "record_shared_context_packet",
     "require_shared_intelligence_tables",
     "capability_route_summary",
     "recommend_capability_route",
@@ -113,7 +97,6 @@ __all__ = [
     "learning_hardening_dashboard_view",
     "validate_learning_hardening_dashboard_view",
     "cross_model_learning_feedback",
-    "github_repo_intake_dashboard_summary",
     "github_repo_intake_workflow",
     "validate_github_repo_intake_workflow",
     "adapter_alignment_summary",
@@ -125,17 +108,10 @@ __all__ = [
     "validate_adapter_config_projection_report",
     "adapter_staleness_report",
     "validate_adapter_staleness_report",
-    "agent_model_independence_validation",
-    "validate_agent_model_independence_report",
-    "create_hardening_candidate_from_learning_event",
-    "hardening_candidate_lifecycle",
-    "record_hardening_validation",
     "validate_hardening_loop_report",
     "model_provider_capability_matrix",
     "model_provider_registry_policy",
     "model_provider_registry_summary",
-    "multi_agent_shared_intelligence_demo_packet",
-    "validate_multi_agent_shared_intelligence_demo_packet",
     "learning_promotion_decision",
     "learning_promotion_policy_report",
     "component_learning_health",

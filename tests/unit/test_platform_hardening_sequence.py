@@ -14,10 +14,10 @@ from core.shared_intelligence.contract_atlas import build_contract_atlas, valida
 from core.shared_intelligence.platform_hardening import (
     EVALUATED_WORKFLOWS,
     evaluate_policy_decision,
-    ingest_connector_payload,
     platform_hardening_summary,
     record_policy_decision,
-    record_skill_evaluation,
+    # ingest_connector_payload removed — connector_ingestion_records dropped migration 131.
+    # record_skill_evaluation removed — skill_evaluation_records dropped migration 131.
     # sanitize_export_packet removed — privacy_redaction_export_records dropped in migration 128.
     validate_platform_hardening_summary,
 )
@@ -46,39 +46,11 @@ def test_platform_hardening_summary_covers_all_milestones(tmp_path: Path) -> Non
     )
 
 
-def test_skill_evaluation_and_policy_records_persist(tmp_path: Path) -> None:
-    with _connect(_db(tmp_path)) as conn:
-        record_skill_evaluation(
-            conn,
-            evaluation_id="eval-docs-quality-1",
-            target_type="workflow",
-            target_id="documentation_quality_workflow",
-            fixture_id="golden-docs-install",
-            expected_output_contract={"fields": ["status", "evidence_refs"]},
-            rubric_scores={"new_user_installability": "pass"},
-            status="pass",
-            promotion_decision="promote_candidate",
-            rollback_decision="rollback_on_regression",
-            evidence_refs=["tests/unit/test_platform_hardening_sequence.py"],
-        )
-        record_policy_decision(
-            conn,
-            decision_id="policy-live-write-1",
-            actor="codex",
-            action="live_sqlite_write",
-            target="installed_state",
-            scope={"home": "redacted"},
-            approved=False,
-            evidence_refs=["operator_decision"],
-        )
-        summary = platform_hardening_summary(conn)
+# test_skill_evaluation_and_policy_records_persist removed —
+# record_skill_evaluation deleted; skill_evaluation_records dropped migration 131.
 
-    assert summary["milestones"]["skill_evaluation_harness"]["record_count"] == 1
-    assert summary["milestones"]["skill_evaluation_harness"]["status_counts"] == {"pass": 1}
-    assert summary["milestones"]["policy_permission_engine"]["decision_count"] == 1
-    assert summary["milestones"]["policy_permission_engine"]["decision_state_counts"] == {
-        "deferred": 1
-    }
+# test_connector_ingestion_normalizes_into_current_authority removed —
+# ingest_connector_payload deleted; connector_ingestion_records dropped migration 131.
 
 
 def test_policy_engine_denies_or_defers_risky_actions_without_approval() -> None:
@@ -100,64 +72,24 @@ def test_policy_engine_denies_or_defers_risky_actions_without_approval() -> None
     assert read_only["decision_state"] == "allowed"
 
 
-def test_connector_ingestion_normalizes_into_current_authority(tmp_path: Path) -> None:
+def test_policy_decision_persists(tmp_path: Path) -> None:
     with _connect(_db(tmp_path)) as conn:
-        dry_run = ingest_connector_payload(
+        record_policy_decision(
             conn,
-            ingestion_run_id="connector-run-1",
-            source_type="manual_import",
-            payload={
-                "source_refs": ["manual://packet/1"],
-                "evidence_refs": ["evidence://validation/1"],
-                "projects": [{"project_id": "pilot", "project_name": "Pilot"}],
-                "validations": [
-                    {
-                        "validation_id": "validation-1",
-                        "project_id": "pilot",
-                        "status": "passed",
-                        "validation_type": "junit",
-                    }
-                ],
-            },
-            execute=False,
+            decision_id="policy-live-write-1",
+            actor="codex",
+            action="live_sqlite_write",
+            target="installed_state",
+            scope={"home": "redacted"},
+            approved=False,
+            evidence_refs=["operator_decision"],
         )
-        executed = ingest_connector_payload(
-            conn,
-            ingestion_run_id="connector-run-2",
-            source_type="manual_import",
-            payload={
-                "source_refs": ["manual://packet/1"],
-                "evidence_refs": ["evidence://validation/1"],
-                "projects": [{"project_id": "pilot", "project_name": "Pilot"}],
-                "validations": [
-                    {
-                        "validation_id": "validation-1",
-                        "project_id": "pilot",
-                        "status": "passed",
-                        "validation_type": "junit",
-                    }
-                ],
-            },
-            execute=True,
-        )
-        project_count = conn.execute(
-            "SELECT COUNT(*) FROM business_projects WHERE project_id = 'pilot'"
-        ).fetchone()[0]
-        validation_count = conn.execute(
-            "SELECT COUNT(*) FROM validation_results WHERE validation_id = 'validation-1'"
-        ).fetchone()[0]
         summary = platform_hardening_summary(conn)
 
-    assert dry_run["status"] == "planned"
-    assert dry_run["analytics_ingestion"]["dry_run"] is True
-    assert executed["status"] == "imported"
-    assert executed["parallel_truth_created"] is False
-    assert project_count == 1
-    assert validation_count == 1
-    assert summary["milestones"]["engineering_connector_ingestion"]["run_count"] == 2
-    assert (
-        summary["milestones"]["engineering_connector_ingestion"]["analytics_only_supported"] is True
-    )
+    assert summary["milestones"]["policy_permission_engine"]["decision_count"] == 1
+    assert summary["milestones"]["policy_permission_engine"]["decision_state_counts"] == {
+        "deferred": 1
+    }
 
 
 # test_privacy_redaction_blocks_private_fields_and_secret_like_keys removed —

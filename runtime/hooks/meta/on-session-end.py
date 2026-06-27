@@ -29,7 +29,6 @@ if str(_PLUGIN_ROOT) not in sys.path:
 if str(_PLUGIN_ROOT / "hooks") not in sys.path:
     sys.path.insert(0, str(_PLUGIN_ROOT / "hooks"))
 
-from control.session.manager import validate_session_research
 from core.event_store.studio_db import end_session, has_sentinel, set_sentinel
 
 
@@ -57,10 +56,7 @@ def main() -> None:
     except Exception:
         pass
 
-    try:
-        validate_session_research(session_id)
-    except Exception:
-        pass
+    # validate_session_research removed — raw_research dropped migration 131
 
     try:
         set_sentinel(sentinel_key, "session")

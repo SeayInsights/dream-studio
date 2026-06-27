@@ -7,7 +7,6 @@ from core.telemetry.emitters import (
     MODE_STRICT,
     TelemetryContext,
     emit_hook_tool_activity,
-    emit_route_decision,
     emit_skill_invocations,
     emit_token_usage_record,
 )
@@ -21,52 +20,6 @@ def _db(tmp_path: Path) -> Path:
     conn = _connect(path)
     conn.close()
     return path
-
-
-def test_route_decision_emitter_writes_event_and_route_record(tmp_path: Path) -> None:
-    db_path = _db(tmp_path)
-    result = emit_route_decision(
-        {
-            "route_decision": "continue_internal",
-            "handoff_required": False,
-            "operator_action_required": False,
-            "current_stage_gate": "structured_authority_projection",
-            "current_milestone": "runtime_projection_update",
-            "next_milestone": "instrument_highest_value_emitters",
-            "recommended_next_work_order": "none",
-            "decision_rationale": "low-risk route instrumentation",
-        },
-        context=TelemetryContext(
-            project_id="dream-studio",
-            milestone_id="telemetry_emitter_integration",
-            task_id="route-test",
-            process_run_id="process-route-test",
-            source_refs=("core/work_orders/handoff.py",),
-            evidence_refs=("validation_evidence.yaml",),
-        ),
-        db_path=db_path,
-        mode=MODE_STRICT,
-    )
-
-    assert result.emitted is True
-    conn = _connect(db_path)
-    try:
-        route = conn.execute(
-            "SELECT route_decision, handoff_required, recommended_next_work_order FROM route_decision_records WHERE route_id = ?",
-            (result.record_id,),
-        ).fetchone()
-        assert route["route_decision"] == "continue_internal"
-        assert route["handoff_required"] == 0
-        assert route["recommended_next_work_order"] == "none"
-        assert (
-            conn.execute(
-                "SELECT COUNT(*) FROM execution_events WHERE event_id = ?",
-                (result.event_id,),
-            ).fetchone()[0]
-            == 1
-        )
-    finally:
-        conn.close()
 
 
 def test_hook_tool_emitter_writes_event_and_invocations(tmp_path: Path) -> None:
@@ -158,15 +111,8 @@ def test_skill_and_token_paths_dual_write_without_losing_legacy_outputs(
         conn.close()
 
 
-def test_best_effort_failure_does_not_raise(tmp_path: Path) -> None:
-    empty_db = tmp_path / "empty.db"
-    result = emit_route_decision(
-        {"route_decision": "continue_internal", "handoff_required": False},
-        db_path=empty_db,
-    )
-
-    assert result.emitted is False
-    assert result.error
+# test_best_effort_failure_does_not_raise RETIRED migration 131:
+# emit_route_decision + route_decision_records dropped (dead writer, no live caller).
 
 
 def test_missing_context_ids_are_recorded_as_null(tmp_path: Path) -> None:
@@ -193,35 +139,5 @@ def test_missing_context_ids_are_recorded_as_null(tmp_path: Path) -> None:
         conn.close()
 
 
-def test_mapping_context_aliases_populate_scope_ids(tmp_path: Path) -> None:
-    db_path = _db(tmp_path)
-    result = emit_route_decision(
-        {
-            "route_decision": "continue_internal",
-            "handoff_required": False,
-            "recommended_next_work_order": "none",
-        },
-        context={
-            "project_name": "Dream Studio",
-            "current_milestone": "telemetry_context_completeness_maturation",
-            "work_order_id": "wo-telemetry-context",
-            "session_name": "session-telemetry-context",
-        },
-        db_path=db_path,
-        mode=MODE_STRICT,
-    )
-
-    conn = _connect(db_path)
-    try:
-        row = conn.execute(
-            "SELECT project_id, milestone_id, task_id, process_run_id FROM route_decision_records WHERE route_id = ?",
-            (result.record_id,),
-        ).fetchone()
-        assert dict(row) == {
-            "project_id": "Dream Studio",
-            "milestone_id": "telemetry_context_completeness_maturation",
-            "task_id": "wo-telemetry-context",
-            "process_run_id": "session-telemetry-context",
-        }
-    finally:
-        conn.close()
+# test_mapping_context_aliases_populate_scope_ids RETIRED migration 131:
+# emit_route_decision + route_decision_records dropped (dead writer, no live caller).

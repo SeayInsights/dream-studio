@@ -7,11 +7,15 @@ from core.telemetry.execution_spine import (
     record_dashboard_attention,
     record_execution_event,
     record_invocation,
-    record_process_run,
-    record_route_decision,
     record_security_finding,
     record_token_usage,
 )
+
+# record_process_run + record_route_decision retired migration 131 (process_runs and
+# route_decision_records dropped; both writers were dead). Read-models now derive
+# process-run drilldowns from execution_events.process_run_id, and route_status /
+# route_explainability return empty. Tests seed process_run_id via the execution_event
+# scope and no longer assert on route_decision rollups.
 from core.telemetry.read_models import (
     dashboard_attention_summary,
     dashboard_module_read_models,
@@ -41,13 +45,8 @@ def _seed(db_path: Path) -> None:
         "process_run_id": "process-run-read-model-test",
     }
     with _connect(db_path) as conn:
-        record_process_run(
-            conn,
-            **scope,
-            run_type="validation",
-            status="completed",
-            summary="Read model validation process run.",
-        )
+        # process_runs dropped migration 131 — the read-model derives process runs from
+        # execution_events.process_run_id (carried in `scope`), so no record_process_run.
         record_execution_event(
             conn,
             **scope,
@@ -237,21 +236,8 @@ def _seed(db_path: Path) -> None:
                 "Read model validation passed.",
             ),
         )
-        record_route_decision(
-            conn,
-            **scope,
-            event_id="event-read-model-test",
-            route_id="route-read-model-test",
-            route_decision="continue_internal",
-            handoff_required=False,
-            operator_action_required=False,
-            prompt_required=False,
-            next_stage_gate="structured_authority_projection",
-            next_milestone="integrate_telemetry_read_models_into_dashboard_surface",
-            recommended_next_work_order="none",
-            source_refs=["docs/product/dream-studio-stage-gates.yaml"],
-            evidence_refs=["read_model_evidence.yaml"],
-        )
+        # route_decision_records dropped migration 131 — no record_route_decision; the
+        # global summary's route_status / route_explainability now return empty.
         record_dashboard_attention(
             conn,
             **scope,
@@ -353,14 +339,10 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(tmp_path: Path) 
     # research_blocker_resolution removed: blocker_resolution_records dropped migration 130
     # artifact_lineage_lifecycle removed: artifact_records dropped migration 130
     assert summary["dashboard_attention"][0]["prompt_required"] == 0
-    assert summary["route_status"][0]["recommended_next_work_order"] == "none"
-    assert summary["route_explainability"][0]["route_decision"] == "continue_internal"
-    assert summary["route_explainability"][0]["source_refs"] == [
-        "docs/product/dream-studio-stage-gates.yaml"
-    ]
-    assert summary["route_explainability"][0]["evidence_refs"] == ["read_model_evidence.yaml"]
-    assert summary["route_explainability"][0]["explainability"]["has_policy_gate_state"] is True
-    assert summary["route_explainability"][0]["explainability"]["primary_authority"] is False
+    # route_status / route_explainability dropped migration 131 (route_decision_records gone);
+    # both now return empty lists.
+    assert summary["route_status"] == []
+    assert summary["route_explainability"] == []
     assert (
         summary["drilldown_entry_points"]["projects"][0]["api_path"]
         == "/api/telemetry/projects/dream-studio"
@@ -518,7 +500,7 @@ def test_security_remediation_intelligence_keeps_execution_approval_separate(
         "process_run_id": "process-run-security-route-test",
     }
     with _connect(db_path) as conn:
-        record_process_run(conn, **scope, run_type="validation", status="completed")
+        # process_runs dropped migration 131 — scope's process_run_id flows via the events below.
         record_security_finding(
             conn,
             **scope,
@@ -659,7 +641,7 @@ def test_token_cost_intelligence_correlates_cost_with_outcomes_without_provider_
         "process_run_id": "process-run-token-cost-test",
     }
     with _connect(db_path) as conn:
-        record_process_run(conn, **scope, run_type="validation", status="completed")
+        # process_runs dropped migration 131 — scope's process_run_id flows via the events below.
         record_token_usage(
             conn,
             **scope,

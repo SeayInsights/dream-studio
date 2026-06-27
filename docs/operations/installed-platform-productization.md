@@ -397,3 +397,5 @@ the source repo.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- reviewed 2026-06-27: Wave 1 migration 130 — module_contracts.py: removed artifact_records from telemetry module owned_tables (table dropped in migration 130; 0 rows, aspirational telemetry). No installed adapter runtime behavior, state, routing, or productization change. No semantic change required. -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): platform-productization surface unchanged. core/shared_intelligence/platform_hardening.py drops the dormant ingest_connector_payload() and record_skill_evaluation() writers (connector_ingestion_runs, skill_evaluation_runs dropped migration 131); the live policy_decision_records path and the production-readiness / contract-atlas productization flow are retained. -->

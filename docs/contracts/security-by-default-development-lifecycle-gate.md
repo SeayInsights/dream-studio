@@ -201,3 +201,5 @@ The policy/permission engine is a supporting control-plane surface for the secur
 <!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no security-lifecycle-gate behavior change. The gate runs through core/shared_intelligence/contract_atlas.py, which migration 131 edited only to drop references to retired dormant tables (task_attribution_records, github_repo_* intake, skill_evaluation_runs, connector_ingestion_runs, etc.). Security finding flow (security_events, scan_runs, findings_current_status, compliance_review_flags, release_readiness_records) is unchanged. -->

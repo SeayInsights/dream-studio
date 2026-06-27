@@ -14,14 +14,14 @@ from typing import Any
 
 REQUIRED_SHARED_INTELLIGENCE_TABLES: frozenset[str] = frozenset(
     {
-        "artifact_authority_records",
-        "learning_event_records",
-        "hardening_candidate_records",
         "adapter_authority_profiles",
-        "model_provider_profiles",
-        "shared_context_packets",
-        "adapter_result_records",
         "capability_route_records",
+        # artifact_authority_records: dropped migration 131
+        # learning_event_records: dropped migration 131
+        # hardening_candidate_records: dropped migration 131
+        # model_provider_profiles: dropped migration 131
+        # shared_context_packets: dropped migration 131
+        # adapter_result_records: dropped migration 131
     }
 )
 
@@ -38,124 +38,6 @@ def require_shared_intelligence_tables(conn: sqlite3.Connection) -> None:
     missing = sorted(REQUIRED_SHARED_INTELLIGENCE_TABLES - found)
     if missing:
         raise RuntimeError(f"shared intelligence schema missing tables: {missing}")
-
-
-def record_artifact_authority(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO artifact_authority_records (
-            record_id, record_type, project_id, milestone_id, task_id,
-            process_run_id, source_path, source_hash, authority_status,
-            file_is_export, human_export_path, payload_json, source_refs_json,
-            evidence_refs_json, supersedes_record_id, updated_at
-        ) VALUES (
-            :record_id, :record_type, :project_id, :milestone_id, :task_id,
-            :process_run_id, :source_path, :source_hash, :authority_status,
-            :file_is_export, :human_export_path, :payload_json,
-            :source_refs_json, :evidence_refs_json, :supersedes_record_id,
-            datetime('now')
-        )
-        """,
-        {
-            "record_id": values["record_id"],
-            "record_type": values["record_type"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "source_path": values.get("source_path"),
-            "source_hash": values.get("source_hash"),
-            "authority_status": values.get("authority_status", "canonical"),
-            "file_is_export": _int_bool(values.get("file_is_export", True)),
-            "human_export_path": values.get("human_export_path"),
-            "payload_json": _json(values.get("payload"), {}),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-            "supersedes_record_id": values.get("supersedes_record_id"),
-        },
-    )
-
-
-def record_learning_event(conn: sqlite3.Connection, **values: Any) -> None:
-    # Superseded by Phase 19 friction/gap pipeline (WO-LEARN). The pipeline
-    # captures learning signals automatically via FrictionSignalHarvester +
-    # GapClassifier at end_session(). This function writes to
-    # learning_event_records (Shared Intelligence subsystem) which is
-    # separate from ds_friction_signals; it remains callable for legacy
-    # SI workflows but should not be wired into the Phase 19 loop.
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO learning_event_records (
-            learning_event_id, project_id, milestone_id, task_id,
-            process_run_id, component_type, component_id, event_class,
-            severity, summary, observed_pattern, root_cause, remediation_hint,
-            recurrence_key, promotion_status, source_refs_json,
-            evidence_refs_json, metadata_json
-        ) VALUES (
-            :learning_event_id, :project_id, :milestone_id, :task_id,
-            :process_run_id, :component_type, :component_id, :event_class,
-            :severity, :summary, :observed_pattern, :root_cause,
-            :remediation_hint, :recurrence_key, :promotion_status,
-            :source_refs_json, :evidence_refs_json, :metadata_json
-        )
-        """,
-        {
-            "learning_event_id": values["learning_event_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "component_type": values.get("component_type"),
-            "component_id": values.get("component_id"),
-            "event_class": values["event_class"],
-            "severity": values.get("severity", "info"),
-            "summary": values["summary"],
-            "observed_pattern": values.get("observed_pattern"),
-            "root_cause": values.get("root_cause"),
-            "remediation_hint": values.get("remediation_hint"),
-            "recurrence_key": values.get("recurrence_key"),
-            "promotion_status": values.get("promotion_status", "observed"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-            "metadata_json": _json(values.get("metadata"), {}),
-        },
-    )
-
-
-def record_hardening_candidate(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO hardening_candidate_records (
-            candidate_id, learning_event_id, component_type, component_id,
-            current_version, proposed_version, hardening_type, status,
-            validation_plan_json, recurrence_check_json, rollback_plan,
-            source_refs_json, evidence_refs_json, updated_at
-        ) VALUES (
-            :candidate_id, :learning_event_id, :component_type, :component_id,
-            :current_version, :proposed_version, :hardening_type, :status,
-            :validation_plan_json, :recurrence_check_json, :rollback_plan,
-            :source_refs_json, :evidence_refs_json, datetime('now')
-        )
-        """,
-        {
-            "candidate_id": values["candidate_id"],
-            "learning_event_id": values.get("learning_event_id"),
-            "component_type": values["component_type"],
-            "component_id": values["component_id"],
-            "current_version": values.get("current_version"),
-            "proposed_version": values.get("proposed_version"),
-            "hardening_type": values["hardening_type"],
-            "status": values.get("status", "candidate"),
-            "validation_plan_json": _json(values.get("validation_plan"), []),
-            "recurrence_check_json": _json(values.get("recurrence_check"), {}),
-            "rollback_plan": values.get("rollback_plan"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
 
 
 def record_adapter_authority_profile(conn: sqlite3.Connection, **values: Any) -> None:
@@ -186,111 +68,6 @@ def record_adapter_authority_profile(conn: sqlite3.Connection, **values: Any) ->
             "stale_detection_policy_json": _json(values.get("stale_detection_policy"), {}),
             "source_refs_json": _json(values.get("source_refs"), []),
             "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
-def record_model_provider_profile(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO model_provider_profiles (
-            model_profile_id, provider, model_id, capability_tags_json,
-            context_limit_tokens, cost_profile_json, token_behavior_json,
-            output_quality_json, failure_modes_json, best_use_patterns_json,
-            source_refs_json, evidence_refs_json, updated_at
-        ) VALUES (
-            :model_profile_id, :provider, :model_id, :capability_tags_json,
-            :context_limit_tokens, :cost_profile_json, :token_behavior_json,
-            :output_quality_json, :failure_modes_json, :best_use_patterns_json,
-            :source_refs_json, :evidence_refs_json, datetime('now')
-        )
-        """,
-        {
-            "model_profile_id": values["model_profile_id"],
-            "provider": values["provider"],
-            "model_id": values["model_id"],
-            "capability_tags_json": _json(values.get("capability_tags"), []),
-            "context_limit_tokens": values.get("context_limit_tokens"),
-            "cost_profile_json": _json(values.get("cost_profile"), {}),
-            "token_behavior_json": _json(values.get("token_behavior"), {}),
-            "output_quality_json": _json(values.get("output_quality"), {}),
-            "failure_modes_json": _json(values.get("failure_modes"), []),
-            "best_use_patterns_json": _json(values.get("best_use_patterns"), []),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
-def record_shared_context_packet(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO shared_context_packets (
-            packet_id, adapter_id, project_id, milestone_id, task_id,
-            process_run_id, packet_type, packet_status, source_authority,
-            model_private_memory_required, payload_json, source_refs_json,
-            evidence_refs_json
-        ) VALUES (
-            :packet_id, :adapter_id, :project_id, :milestone_id, :task_id,
-            :process_run_id, :packet_type, :packet_status, 'sqlite', 0,
-            :payload_json, :source_refs_json, :evidence_refs_json
-        )
-        """,
-        {
-            "packet_id": values["packet_id"],
-            "adapter_id": values["adapter_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "packet_type": values["packet_type"],
-            "packet_status": values.get("packet_status", "generated"),
-            "payload_json": _json(values.get("payload"), {}),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
-def record_adapter_result(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO adapter_result_records (
-            result_id, adapter_id, packet_id, project_id, milestone_id,
-            task_id, process_run_id, result_type, normalized_status,
-            decision_refs_json, code_change_refs_json, evidence_refs_json,
-            validation_refs_json, research_refs_json, risk_refs_json,
-            artifact_refs_json, outcome_refs_json, payload_json
-        ) VALUES (
-            :result_id, :adapter_id, :packet_id, :project_id, :milestone_id,
-            :task_id, :process_run_id, :result_type, :normalized_status,
-            :decision_refs_json, :code_change_refs_json, :evidence_refs_json,
-            :validation_refs_json, :research_refs_json, :risk_refs_json,
-            :artifact_refs_json, :outcome_refs_json, :payload_json
-        )
-        """,
-        {
-            "result_id": values["result_id"],
-            "adapter_id": values["adapter_id"],
-            "packet_id": values.get("packet_id"),
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "result_type": values["result_type"],
-            "normalized_status": values["normalized_status"],
-            "decision_refs_json": _json(values.get("decision_refs"), []),
-            "code_change_refs_json": _json(values.get("code_change_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-            "validation_refs_json": _json(values.get("validation_refs"), []),
-            "research_refs_json": _json(values.get("research_refs"), []),
-            "risk_refs_json": _json(values.get("risk_refs"), []),
-            "artifact_refs_json": _json(values.get("artifact_refs"), []),
-            "outcome_refs_json": _json(values.get("outcome_refs"), []),
-            "payload_json": _json(values.get("payload"), {}),
         },
     )
 
@@ -363,27 +140,9 @@ def build_adapter_context_packet(
         "project_id": project_id,
         "source_authority": "sqlite",
         "model_private_memory_required": False,
-        "artifact_authority_records": _select_records(
-            conn,
-            "artifact_authority_records",
-            project_id=project_id,
-            order_by="updated_at",
-            limit=limit,
-        ),
-        "learning_events": _select_records(
-            conn,
-            "learning_event_records",
-            project_id=project_id,
-            order_by="created_at",
-            limit=limit,
-        ),
-        "hardening_candidates": _select_records(
-            conn,
-            "hardening_candidate_records",
-            project_id=None,
-            order_by="updated_at",
-            limit=limit,
-        ),
+        # artifact_authority_records: dropped migration 131
+        # learning_event_records: dropped migration 131
+        # hardening_candidate_records: dropped migration 131
     }
 
 

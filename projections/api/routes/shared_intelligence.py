@@ -41,7 +41,7 @@ from core.shared_intelligence.contract_registry import change_impact_report
 from core.shared_intelligence.context_packets import generate_shared_context_packet
 from core.shared_intelligence.dashboard_views import learning_hardening_dashboard_view
 from core.shared_intelligence.expert_workflows import expert_workflow_catalog
-from core.shared_intelligence.github_repo_intake import github_repo_intake_dashboard_summary
+from core.shared_intelligence.github_repo_intake import github_repo_intake_workflow
 from core.shared_intelligence.maturity_ledger import maturity_ledger
 from core.shared_intelligence.model_registry import (
     model_provider_capability_matrix,
@@ -369,9 +369,13 @@ async def preview_scoped_agent_context_packet(
 
 @router.get("/github-repo-intake")
 async def get_github_repo_intake() -> dict[str, Any]:
-    """Return GitHub repo intake workflow and persisted evaluation summary."""
+    """Return GitHub repo intake workflow definition.
 
-    return _with_connection(github_repo_intake_dashboard_summary)
+    github_repo_evaluations and github_repo_adoption_decisions dropped migration 131;
+    evaluation dashboard summary removed.
+    """
+
+    return github_repo_intake_workflow()
 
 
 @router.get("/platform-hardening")

@@ -22,13 +22,13 @@ CLASSIFICATION: dict[str, str] = {
     "_schema_version": "KEEP",
     "adapter_authority_profiles": "KEEP",
     "adapter_executions": "DROP",
-    "adapter_result_records": "KEEP",
+    "adapter_result_records": "DROP",  # Dropped migration 131: dead writer record_adapter_result(), never called from production
     "ai_adapter_accounting_profiles": "KEEP",
     "ai_canonical_events": "KEEP",
-    "ai_usage_operational_records": "KEEP",
-    "alert_history": "KEEP",
+    "ai_usage_operational_records": "KEEP",  # LIVE writer: analytics_ingestion.ingest_analytics_payload() via `ds system analytics-ingest`; indexes managed by migrations 081/117
+    "alert_history": "DROP",  # Dropped migration 131: dead writer trigger_alert(), AlertEvaluator never instantiated in production
     "alert_rules": "KEEP",
-    "artifact_authority_records": "KEEP",
+    "artifact_authority_records": "DROP",  # Dropped migration 131: dead writer record_artifact_authority(), test-only callers
     "artifact_records": "DROP",  # Dropped migration 130: 0 rows, no production writer, aspirational telemetry
     "audit_runs": "KEEP",
     "authority_projection_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
@@ -44,8 +44,8 @@ CLASSIFICATION: dict[str, str] = {
     "canonical_events_legacy_backup": "DROP",
     "capability_route_records": "KEEP",
     "compliance_review_flags": "KEEP",
-    "connector_ingestion_runs": "KEEP",
-    "cor_skill_corrections": "KEEP",
+    "connector_ingestion_runs": "DROP",  # Dropped migration 131: dead writer ingest_connector_payload(), test-only callers
+    "cor_skill_corrections": "DROP",  # Dropped migration 131: dead writer skill_correct(), only reachable via unregistered __main__
     "dashboard_attention_items": "KEEP",
     "decision_event_link": "KEEP",
     "decision_log": "KEEP",
@@ -62,35 +62,35 @@ CLASSIFICATION: dict[str, str] = {
     "ds_user_extensions": "KEEP",
     "ds_workflow_pattern_signals": "KEEP",
     "eval_registry": "KEEP",
-    "execution_dependencies": "KEEP",
-    "execution_event_links": "KEEP",
+    "execution_dependencies": "DROP",  # Dropped migration 131: dead writer add_dependency(), dream_exec.py unregistered from ds CLI
+    "execution_event_links": "DROP",  # Dropped migration 131: dead writer link_event_to_node(), dream_exec.py unregistered from ds CLI
     "execution_events": "KEEP",
-    "execution_nodes": "KEEP",
-    "execution_outputs": "KEEP",
+    "execution_nodes": "DROP",  # Dropped migration 131: dead writer create_node(), dream_exec.py unregistered from ds CLI
+    "execution_outputs": "DROP",  # Dropped migration 131: dead writer add_output(), dream_exec.py unregistered from ds CLI
     "findings_current_status": "KEEP",
     "fts_gotchas": "KEEP",
     "fts_gotchas_config": "KEEP",
     "fts_gotchas_data": "KEEP",
     "fts_gotchas_docsize": "KEEP",
     "fts_gotchas_idx": "KEEP",
-    "github_repo_adoption_decisions": "KEEP",
+    "github_repo_adoption_decisions": "DROP",  # Dropped migration 131: dead writer record_github_repo_evaluation(), never called from production
     "github_repo_attribution_records": "DROP",
     "github_repo_dependency_findings": "DROP",
-    "github_repo_evaluations": "KEEP",
+    "github_repo_evaluations": "DROP",  # Dropped migration 131: dead writer record_github_repo_evaluation(), never called from production
     "github_repo_integration_candidates": "DROP",
     "github_repo_license_findings": "DROP",
     "github_repo_pattern_references": "DROP",
     "github_repo_security_findings": "DROP",
     "guard_events": "KEEP",
     "guardrail_decisions": "KEEP",
-    "hardening_candidate_records": "KEEP",
+    "hardening_candidate_records": "DROP",  # Dropped migration 131: dead writer record_hardening_candidate(), test-only callers
     "hook_eval_runs": "KEEP",
     "hook_executions": "DROP",  # Dropped mig 129: DuckDB hook_executions VIEW (over
     #                             system.hook.execution.logged) replaces it; writer now only
     #                             emits the canonical event; all reads repointed to DuckDB.
     "hook_findings": "DROP",  # Dropped migration 130: 0 rows, no live readers, writer removed
     "installer_distribution_checks": "DROP",
-    "learning_event_records": "KEEP",
+    "learning_event_records": "DROP",  # Dropped migration 131: dead writer record_learning_event(), test-only callers
     "legacy_canonical_event_import_map": "DROP",
     "local_watch_schedule_records": "DROP",
     "log_batch_imports": "KEEP",
@@ -101,13 +101,13 @@ CLASSIFICATION: dict[str, str] = {
     "memory_fts_data": "KEEP",
     "memory_fts_docsize": "KEEP",
     "memory_fts_idx": "KEEP",
-    "model_provider_profiles": "KEEP",
+    "model_provider_profiles": "DROP",  # Dropped migration 131: dead writer record_model_provider_profile(), test-only callers
     "outcome_records": "KEEP",
-    "pending_audits": "KEEP",
+    "pending_audits": "DROP",  # Dropped migration 131: dead writer defer_project_audit(), never called from any production path
     "policy_decision_records": "KEEP",
     "preflight_events": "KEEP",
     "privacy_redaction_export_records": "DROP",
-    "process_runs": "KEEP",
+    "process_runs": "DROP",  # Dropped migration 131: dead writer record_process_run(), test-only callers
     "projection_checkpoints": "KEEP",
     "projection_dead_letter": "KEEP",
     "projection_retry_queue": "KEEP",
@@ -119,7 +119,7 @@ CLASSIFICATION: dict[str, str] = {
     "raw_operational_snapshots": "KEEP",
     "raw_planning_specs": "DROP",
     "raw_pulse_snapshots": "DROP",
-    "raw_research": "KEEP",
+    "raw_research": "DROP",  # Dropped migration 131: dead writers insert_research()/_store_research(), test-only callers
     "raw_sentinels": "KEEP",
     "raw_sessions": "KEEP",  # Read-WRITE session-lifecycle authority, NOT a read-model:
     #                          end_session() UPDATEs ended_at/duration_s/outcome; record_session()
@@ -144,14 +144,14 @@ CLASSIFICATION: dict[str, str] = {
     "release_readiness_records": "KEEP",
     "research_cache": "KEEP",
     "research_evidence_records": "KEEP",
-    "route_decision_records": "KEEP",
+    "route_decision_records": "DROP",  # Dropped migration 131: dead writer emit_route_decision() via handoff.py, no live callers
     "scan_runs": "KEEP",
     "security_events": "KEEP",
-    "shared_context_packets": "KEEP",
-    "skill_evaluation_runs": "KEEP",
+    "shared_context_packets": "DROP",  # Dropped migration 131: writer record_shared_context_packet() exists but all callers use persist=False
+    "skill_evaluation_runs": "DROP",  # Dropped migration 131: dead writer record_skill_evaluation(), test-only callers
     "sum_analytics_run": "DROP",
     "sum_skill_summary": "KEEP",
-    "task_attribution_records": "KEEP",
+    "task_attribution_records": "DROP",  # Dropped migration 131: dead writer record_task_attribution(), test-only callers
     "team_rollup_records": "DROP",
     "token_usage_records": "KEEP",  # Not droppable: DuckDB token view derives from token events
     #                                 whose payloads carry NO model_id (0/1792) and NO cost, so
@@ -159,8 +159,8 @@ CLASSIFICATION: dict[str, str] = {
     #                                 the only model_id (32) + cost data. dashboard_truth gate
     #                                 (priceable_cost_present, wired into work_orders/close.py) reads
     #                                 it; usage_accounting forbids converting plan usage to API $.
-    "tool_embeddings_cache": "KEEP",
-    "tool_registry": "KEEP",
+    "tool_embeddings_cache": "DROP",  # Dropped migration 131: dead writer build_embedding_index(), never called from live path
+    "tool_registry": "DROP",  # Dropped migration 131: no production INSERT exists, only test fixtures
     "validation_failures": "DROP",  # Dropped mig 129: DuckDB validation_failures VIEW replaces it
     "validation_results": "KEEP",
     "work_order_dependencies": "KEEP",

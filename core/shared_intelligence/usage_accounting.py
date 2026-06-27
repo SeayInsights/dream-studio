@@ -13,15 +13,14 @@ from collections.abc import Mapping
 from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
-from core.shared_intelligence.task_attribution import task_attribution_summary
 
 ACCOUNTING_SOURCE_TABLES: tuple[str, ...] = (
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
     "token_usage_records",
     "adapter_authority_profiles",
-    "model_provider_profiles",
-    "task_attribution_records",
+    # model_provider_profiles: dropped migration 131 (dormant — no live writer)
+    # task_attribution_records: dropped migration 131 (dormant — no live writer)
 )
 
 REPORTABLE_COST_VISIBILITIES = {
@@ -290,7 +289,7 @@ def adapter_usage_accounting_summary(
     profiles = _accounting_profiles(conn)
     operations = _operational_records(conn, project_id=project_id)
     token_rows = _token_accounting_rows(conn, project_id=project_id)
-    task_attribution = task_attribution_summary(conn, project_id=project_id)
+    # task_attribution_records dropped migration 131 (dormant — no live writer)
     by_adapter: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "run_count": 0,
@@ -356,16 +355,7 @@ def adapter_usage_accounting_summary(
             adapter: _finalize_adapter_bucket(bucket)
             for adapter, bucket in sorted(by_adapter.items())
         },
-        "task_attribution": {
-            "record_count": task_attribution["record_count"],
-            "outcome_counts": task_attribution["summary"]["outcome_counts"],
-            "validation_counts": task_attribution["summary"]["validation_counts"],
-            "by_project_milestone_task": task_attribution["summary"]["by_project_milestone_task"],
-            "by_skill": task_attribution["summary"]["by_skill"],
-            "by_workflow": task_attribution["summary"]["by_workflow"],
-            "manual_review_count": task_attribution["summary"]["manual_review_count"],
-            "source_status": task_attribution["source_status"],
-        },
+        # task_attribution key removed: task_attribution_records dropped migration 131
         "policy": {
             "tokens_are_usage_not_cost": True,
             "no_token_to_dollar_conversion_without_cost_source": True,
@@ -408,16 +398,7 @@ def _empty_accounting_summary(*, project_id: str | None, missing: list[str]) -> 
         "operational_record_count": 0,
         "token_record_count": 0,
         "by_adapter": {},
-        "task_attribution": {
-            "record_count": 0,
-            "outcome_counts": {},
-            "validation_counts": {},
-            "by_project_milestone_task": {},
-            "by_skill": {},
-            "by_workflow": {},
-            "manual_review_count": 0,
-            "source_status": {"status": "unavailable", "missing_tables": missing},
-        },
+        # task_attribution key removed: task_attribution_records dropped migration 131
         "schema_status": "migration_required",
         "missing_tables": missing,
         "policy": {

@@ -14,7 +14,7 @@ import logging
 
 from core.execution.graph import ExecutionGraphManager
 from core.execution.context_compiler import ContextCompiler
-from core.config.database import get_connection, DatabaseContext
+from core.config.database import get_connection
 from core.ontology.lifecycles import ExecutionLifecycle, to_db_value
 
 logger = logging.getLogger(__name__)
@@ -210,31 +210,7 @@ class WorkflowGraphIntegration:
         logger.info(f"Failed node: {node_id}")
         return True
 
-    def link_event_to_node(self, event_id: str, node_id: str) -> bool:
-        """
-        Link a canonical event to an execution node.
-
-        Args:
-            event_id: Event ID from canonical_events
-            node_id: Node ID
-
-        Returns:
-            bool: True if linked
-        """
-        import uuid
-
-        link_id = str(uuid.uuid4())
-
-        with DatabaseContext() as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO execution_event_links (link_id, node_id, event_id)
-                VALUES (?, ?, ?)
-                """,
-                (link_id, node_id, event_id),
-            )
-
-        return True
+    # link_event_to_node removed — execution_event_links dropped migration 131
 
     def get_compiled_context_for_task(self, task_node_id: str) -> Optional[Dict[str, Any]]:
         """

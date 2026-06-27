@@ -132,14 +132,12 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
             "created_at",
         ],
     )
+    # alert_history dropped migration 131 (dormant) — alert authority readiness now
+    # depends only on the live alert_rules table.
     alert_authority_ready = _has_columns(
         conn,
         "alert_rules",
         ["rule_id", "rule_name", "metric_path", "condition", "threshold", "severity", "enabled"],
-    ) and _has_columns(
-        conn,
-        "alert_history",
-        ["alert_id", "rule_id", "triggered_at", "metric_value", "severity", "resolved_at"],
     )
     statuses = [
         _section(
@@ -270,17 +268,18 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
             "/api/v1/alerts/*",
             (
                 "fresh"
-                if alert_authority_ready and (counts["alert_rules"] or counts["alert_history"])
+                if alert_authority_ready and counts["alert_rules"]
                 else (
                     "empty by design"
                     if alert_authority_ready
                     else "missing because live DB schema is behind repo migrations"
                 )
             ),
-            "Alert dashboard reads alert_rules and alert_history authority tables; empty tables are a current empty state.",
-            ["alert_rules", "alert_history", "sla_definitions"],
-            counts["alert_rules"] + counts["alert_history"],
-            _latest_any(conn, ["alert_history"], "triggered_at"),
+            "Alert dashboard reads the alert_rules authority table; an empty table is a current "
+            "empty state. (alert_history dropped migration 131 — trigger history is in-memory only.)",
+            ["alert_rules", "sla_definitions"],
+            counts["alert_rules"],
+            _latest(conn, "alert_rules", "created_at"),
         ),
     ]
     return statuses
@@ -369,7 +368,7 @@ def _schema_drift(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         "raw_sessions": ["started_at", "project_id", "outcome", "ended_at"],
         "token_usage_records": ["input_tokens", "output_tokens", "created_at"],
         "vw_security_summary": ["source_type", "finding_id", "tool", "created_at"],
-        "hook_executions": ["hook_exec_id", "hook_name", "started_at", "status"],
+        # hook_executions dropped migration 129 (DuckDB view replaces it); not schema drift.
         "alert_rules": [
             "rule_id",
             "rule_name",
@@ -379,7 +378,7 @@ def _schema_drift(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             "severity",
             "enabled",
         ],
-        "alert_history": ["alert_id", "rule_id", "triggered_at", "metric_value", "severity"],
+        # alert_history dropped migration 131 (dormant feature); not schema drift.
     }
     drift = []
     for table, columns in required.items():

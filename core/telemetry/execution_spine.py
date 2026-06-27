@@ -46,7 +46,7 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
             "execution_events",
             "token_usage_records",
             "ai_adapter_accounting_profiles",
-            "ai_usage_operational_records",
+            # ai_usage_operational_records: dropped migration 131
         ],
         "dashboard_cards": [
             "tokens_by_model",
@@ -147,15 +147,16 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "module_name": "Route And Milestone Analytics",
         "module_type": "dashboard_projection",
         "docker_profile": None,
-        "owns_tables": ["route_decision_records", "dashboard_attention_items"],
+        # route_decision_records: dropped migration 131
+        "owns_tables": ["dashboard_attention_items"],
         "source_tables": [
             "execution_events",
-            "route_decision_records",
+            # route_decision_records: dropped migration 131
             "dashboard_attention_items",
         ],
-        "dashboard_cards": ["route_status", "dashboard_attention"],
-        "drilldown_paths": ["project", "milestone", "task", "route", "attention_item"],
-        "empty_state": "No route decisions or dashboard attention items for the selected scope.",
+        "dashboard_cards": ["dashboard_attention"],
+        "drilldown_paths": ["project", "milestone", "task", "attention_item"],
+        "empty_state": "No dashboard attention items for the selected scope.",
     },
 )
 
@@ -177,34 +178,6 @@ def _json(value: Any, default: Any) -> str:
 
 def _execute(conn: sqlite3.Connection, sql: str, values: Mapping[str, Any]) -> None:
     conn.execute(sql, dict(values))
-
-
-def record_process_run(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO process_runs (
-            process_run_id, project_id, milestone_id, task_id, run_type, status,
-            started_at, ended_at, route_id, summary, metadata_json
-        ) VALUES (
-            :process_run_id, :project_id, :milestone_id, :task_id, :run_type, :status,
-            COALESCE(:started_at, datetime('now')), :ended_at, :route_id, :summary, :metadata_json
-        )
-        """,
-        {
-            "process_run_id": values["process_run_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "run_type": values.get("run_type", "milestone"),
-            "status": values.get("status", "completed"),
-            "started_at": values.get("started_at"),
-            "ended_at": values.get("ended_at"),
-            "route_id": values.get("route_id"),
-            "summary": values.get("summary"),
-            "metadata_json": _json(values.get("metadata"), {}),
-        },
-    )
 
 
 def _resolve_event_project_id(raw_project_id: Any, conn: sqlite3.Connection) -> Any:
@@ -533,42 +506,6 @@ def resolve_security_finding(
         return True
     except Exception:
         return False
-
-
-def record_route_decision(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO route_decision_records (
-            route_id, project_id, milestone_id, task_id, process_run_id, event_id,
-            route_decision, handoff_required, operator_action_required,
-            prompt_required, next_stage_gate, next_milestone,
-            recommended_next_work_order, source_refs_json, evidence_refs_json
-        ) VALUES (
-            :route_id, :project_id, :milestone_id, :task_id, :process_run_id, :event_id,
-            :route_decision, :handoff_required, :operator_action_required,
-            :prompt_required, :next_stage_gate, :next_milestone,
-            :recommended_next_work_order, :source_refs_json, :evidence_refs_json
-        )
-        """,
-        {
-            "route_id": values["route_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "event_id": values.get("event_id"),
-            "route_decision": values["route_decision"],
-            "handoff_required": 1 if values.get("handoff_required") else 0,
-            "operator_action_required": 1 if values.get("operator_action_required") else 0,
-            "prompt_required": 1 if values.get("prompt_required") else 0,
-            "next_stage_gate": values.get("next_stage_gate"),
-            "next_milestone": values.get("next_milestone"),
-            "recommended_next_work_order": values.get("recommended_next_work_order"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
 
 
 def record_dashboard_attention(conn: sqlite3.Connection, **values: Any) -> None:

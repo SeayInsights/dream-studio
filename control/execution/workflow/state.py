@@ -395,18 +395,7 @@ def cmd_eval(args: argparse.Namespace) -> None:
     sys.exit(0 if result else 1)
 
 
-def cmd_skill_correct(args: argparse.Namespace) -> None:
-    try:
-        from core.event_store.studio_db import skill_correct
-    except ImportError:
-        print("Error: studio_db not available", file=sys.stderr)
-        sys.exit(1)
-    ok = skill_correct(args.telemetry_id, 1 if args.result == "success" else 0, args.reason)
-    if ok:
-        print(f"corrected: telemetry_id={args.telemetry_id} → {args.result}")
-    else:
-        print("Error: DB write failed", file=sys.stderr)
-        sys.exit(1)
+# cmd_skill_correct removed — cor_skill_corrections dropped migration 131
 
 
 def cmd_next(args: argparse.Namespace) -> None:
@@ -538,10 +527,7 @@ def main() -> None:
     p = sub.add_parser("next", help="List nodes ready to execute")
     p.add_argument("key")
 
-    p = sub.add_parser("skill-correct", help="Correct a skill telemetry signal")
-    p.add_argument("telemetry_id", type=int)
-    p.add_argument("result", choices=["success", "failure"])
-    p.add_argument("--reason", default="")
+    # skill-correct subcommand removed — cor_skill_corrections dropped migration 131
 
     args = parser.parse_args()
     cmds = {
@@ -553,7 +539,6 @@ def main() -> None:
         "status": cmd_status,
         "eval": cmd_eval,
         "next": cmd_next,
-        "skill-correct": cmd_skill_correct,
     }
     cmds[args.command](args)
 

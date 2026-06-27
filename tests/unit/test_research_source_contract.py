@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -252,9 +251,10 @@ def test_external_research_services_are_optional_and_degrade_cleanly():
     assert "return []" in web_source
     assert "sources = search_web(query)" in web_source
 
+    # tool_embeddings_cache + the sentence-transformers embedding/hybrid path were
+    # retired migration 131 (dormant — no live caller). tools.py keeps the TF-IDF
+    # default search; the embedding-fallback assertions are removed with that code.
     assert "use_embeddings: bool = False" in tools_source
-    assert "except (RuntimeError, ImportError)" in tools_source
-    assert "falling back to TF-IDF" in tools_source
 
     assert "external research providers are optional" in contract
     assert "base local runtime validation must not require an external research service" in contract
@@ -318,22 +318,9 @@ def test_private_research_payloads_are_local_private_unless_classified():
     assert "full db backups are not redacted exports" in governance_contract.lower()
 
 
-def test_legacy_research_diagnostics_remain_excluded_or_classified():
-    contract = _read(RESEARCH_CONTRACT)
-    dev_script = _read(REPO_ROOT / "scripts" / "dev.ps1")
-
-    legacy_paths = [
-        REPO_ROOT / "interfaces" / "cli" / "test_wave1_research_cache.py",
-    ]
-
-    for path in legacy_paths:
-        assert path.exists()
-        assert _rel(path) in contract
-        assert _rel(path) not in dev_script.replace("\\", "/")
-        assert not path.relative_to(REPO_ROOT).as_posix().startswith("tests/")
-
-    assert "not normal validation" in contract.lower()
-    assert "temp-home/tmp-DB isolated" in contract
+# test_legacy_research_diagnostics_remain_excluded_or_classified RETIRED migration 131:
+# the only legacy diagnostic (interfaces/cli/test_wave1_research_cache.py) was a
+# raw_research feature script; raw_research was dropped and the script deleted.
 
 
 def test_legacy_research_engine_imports_and_classifies_opt_in_status():
@@ -349,58 +336,11 @@ def test_legacy_research_engine_imports_and_classifies_opt_in_status():
     assert "from .studio_db import _connect" not in source
 
 
-def test_tool_detail_lookup_reads_catalog_metadata_only(tmp_path):
-    from control.research import tools
-
-    db_path = tmp_path / "tools.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE tool_registry (
-            tool_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            description TEXT,
-            source_url TEXT,
-            install_command TEXT,
-            tags TEXT,
-            confidence_score REAL DEFAULT 0.5
-        )
-        """)
-    conn.execute(
-        """
-        INSERT INTO tool_registry
-        (tool_id, name, category, description, source_url, install_command, tags, confidence_score)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "mcp:firecrawl",
-            "Firecrawl MCP",
-            "mcp",
-            "Catalog metadata only",
-            "https://github.com/firecrawl/mcp",
-            "npx @firecrawl/mcp",
-            '["web", "mcp"]',
-            0.91,
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-    def _connect():
-        c = sqlite3.connect(db_path)
-        c.row_factory = sqlite3.Row
-        return c
-
-    with patch("control.research.tools.studio_db._connect", side_effect=_connect):
-        detail = tools.get_tool_by_id("mcp:firecrawl")
-        missing = tools.get_tool_by_id("mcp:missing")
-
-    assert detail is not None
-    assert detail.tool_id == "mcp:firecrawl"
-    assert detail.tags == ["web", "mcp"]
-    assert detail.confidence_score == 0.91
-    assert missing is None
+# test_tool_detail_lookup_reads_catalog_metadata_only RETIRED migration 131:
+# tool_registry table dropped (no production INSERT ever existed) and the
+# control.research.tools catalog subsystem has no live caller. The test
+# resurrected tool_registry via a fixture to exercise dormant get_tool_by_id();
+# deleted per the no-resurrection rule.
 
 
 def test_research_artifacts_expose_compatibility_classification_fields():
@@ -483,14 +423,6 @@ def test_memory_search_uses_explicit_index_database(tmp_path):
     assert count == 1
 
 
-def test_legacy_research_diagnostics_require_explicit_opt_in():
-    diagnostics = {
-        "interfaces/cli/test_wave1_research_cache.py": "DREAM_STUDIO_RUN_LEGACY_RESEARCH_DIAGNOSTICS",
-    }
-
-    for rel_path, env_name in diagnostics.items():
-        source = _read(REPO_ROOT / rel_path)
-        assert env_name in source
-        assert "Refusing" in source
-        assert "isolated temp DB" in source
-        assert "_require_opt_in()" in source
+# test_legacy_research_diagnostics_require_explicit_opt_in RETIRED migration 131:
+# interfaces/cli/test_wave1_research_cache.py was a raw_research diagnostic script;
+# raw_research dropped and the script deleted, so there is no diagnostic to gate.

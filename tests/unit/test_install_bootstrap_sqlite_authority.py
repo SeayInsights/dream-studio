@@ -279,11 +279,12 @@ def test_temp_version_38_db_repairs_dashboard_authority_objects(tmp_path) -> Non
             ).fetchone()
             is not None
         )
+        # alert_history dropped migration 131 (Wave 2 substrate realignment — dormant feature)
         assert (
             conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='alert_history'"
             ).fetchone()
-            is not None
+            is None
         )
         security_view_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(vw_security_summary)")

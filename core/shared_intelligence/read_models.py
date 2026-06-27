@@ -236,36 +236,40 @@ def _learning_events(
     params: list[Any],
     limit: int,
 ) -> list[dict[str, Any]]:
+    # learning_event_records dropped migration 131 — return empty gracefully
     bounded_limit = max(1, min(int(limit), 100))
-    rows = conn.execute(
-        f"""
-        SELECT
-            le.learning_event_id,
-            le.project_id,
-            le.milestone_id,
-            le.task_id,
-            le.process_run_id,
-            le.component_type,
-            le.component_id,
-            le.event_class,
-            le.severity,
-            le.summary,
-            le.observed_pattern,
-            le.root_cause,
-            le.remediation_hint,
-            le.recurrence_key,
-            le.promotion_status,
-            le.source_refs_json,
-            le.evidence_refs_json,
-            le.metadata_json,
-            le.created_at
-        FROM learning_event_records le
-        {scope_filter}
-        ORDER BY le.created_at DESC, le.learning_event_id DESC
-        LIMIT ?
-        """,
-        (*params, bounded_limit),
-    ).fetchall()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT
+                le.learning_event_id,
+                le.project_id,
+                le.milestone_id,
+                le.task_id,
+                le.process_run_id,
+                le.component_type,
+                le.component_id,
+                le.event_class,
+                le.severity,
+                le.summary,
+                le.observed_pattern,
+                le.root_cause,
+                le.remediation_hint,
+                le.recurrence_key,
+                le.promotion_status,
+                le.source_refs_json,
+                le.evidence_refs_json,
+                le.metadata_json,
+                le.created_at
+            FROM learning_event_records le
+            {scope_filter}
+            ORDER BY le.created_at DESC, le.learning_event_id DESC
+            LIMIT ?
+            """,
+            (*params, bounded_limit),
+        ).fetchall()
+    except Exception:
+        return []
     return [_decode_learning_event(row) for row in rows]
 
 
@@ -274,32 +278,36 @@ def _hardening_candidates(
     scope_filter: str,
     params: list[Any],
 ) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        f"""
-        SELECT
-            hc.candidate_id,
-            hc.learning_event_id,
-            hc.component_type,
-            hc.component_id,
-            hc.current_version,
-            hc.proposed_version,
-            hc.hardening_type,
-            hc.status,
-            hc.validation_plan_json,
-            hc.recurrence_check_json,
-            hc.rollback_plan,
-            hc.source_refs_json,
-            hc.evidence_refs_json,
-            hc.created_at,
-            hc.updated_at
-        FROM hardening_candidate_records hc
-        LEFT JOIN learning_event_records le
-          ON le.learning_event_id = hc.learning_event_id
-        {scope_filter}
-        ORDER BY hc.updated_at DESC, hc.candidate_id DESC
-        """,
-        tuple(params),
-    ).fetchall()
+    # hardening_candidate_records dropped migration 131 — return empty gracefully
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT
+                hc.candidate_id,
+                hc.learning_event_id,
+                hc.component_type,
+                hc.component_id,
+                hc.current_version,
+                hc.proposed_version,
+                hc.hardening_type,
+                hc.status,
+                hc.validation_plan_json,
+                hc.recurrence_check_json,
+                hc.rollback_plan,
+                hc.source_refs_json,
+                hc.evidence_refs_json,
+                hc.created_at,
+                hc.updated_at
+            FROM hardening_candidate_records hc
+            LEFT JOIN learning_event_records le
+              ON le.learning_event_id = hc.learning_event_id
+            {scope_filter}
+            ORDER BY hc.updated_at DESC, hc.candidate_id DESC
+            """,
+            tuple(params),
+        ).fetchall()
+    except Exception:
+        return []
     return [_decode_hardening_candidate(row) for row in rows]
 
 

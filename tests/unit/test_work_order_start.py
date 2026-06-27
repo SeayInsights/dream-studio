@@ -140,7 +140,6 @@ class TestStartWorkOrderSequenceGuard:
             patch(
                 "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
             ),
-            patch("core.work_orders.start._get_pending_audits_for_project", return_value=[]),
             patch("spool.writer.write_event"),
         ):
             brief = {
@@ -221,7 +220,6 @@ class TestStartWorkOrderSequenceGuard:
             patch(
                 "core.work_orders.start.write_work_order_context", return_value=tmp_path / "ctx.md"
             ),
-            patch("core.work_orders.start._get_pending_audits_for_project", return_value=[]),
             patch("spool.writer.write_event"),
         ):
             brief = {
@@ -259,10 +257,12 @@ class TestStartWorkOrderSequenceGuard:
 
 
 class TestGatesReadResolvedDbPath:
-    """WO c68f9e14: `_check_preflight_gate` and `_get_pending_audits_for_project`
-    read the caller-resolved `db_path` (the DB the work order lives in), not an
-    ambient/singleton connection. Both now take an explicit `db_path` like
-    `_check_sequence_order`.
+    """WO c68f9e14: `_check_preflight_gate` reads the caller-resolved `db_path`
+    (the DB the work order lives in), not an ambient/singleton connection. It
+    takes an explicit `db_path` like `_check_sequence_order`.
+
+    (`_get_pending_audits_for_project` retired with migration 131 — pending_audits
+    table + its dead writer defer_project_audit() removed.)
     """
 
     def test_preflight_gate_reads_the_passed_db(self, db_path):
@@ -291,11 +291,3 @@ class TestGatesReadResolvedDbPath:
         assert blocked is not None
         assert blocked["preflight_blocked"] is True
         assert blocked["finding_count"] == 1
-
-    def test_pending_audits_reads_the_passed_db(self, db_path):
-        from core.work_orders.start import _get_pending_audits_for_project
-
-        # No deferred/scheduled audits in this db → empty advisory.
-        assert _get_pending_audits_for_project(PROJECT_ID, db_path) == []
-        # None project_id short-circuits regardless of db.
-        assert _get_pending_audits_for_project(None, db_path) == []
