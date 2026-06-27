@@ -76,8 +76,10 @@ def db_with_canonical(tmp_path):
 
 
 class TestActivityIdNullable:
+    # hook_executions was dropped in migration 129 (WO-READMODELS-DUCKDB) — it no longer
+    # survives to the end of the migration chain, so it cannot be probed here. Migration 062
+    # still makes its activity_id nullable while the table exists; hook_findings remains.
     TARGET_TABLES = [
-        "hook_executions",
         "hook_findings",
     ]
 
