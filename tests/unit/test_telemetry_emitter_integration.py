@@ -22,7 +22,6 @@ def _db(tmp_path: Path) -> Path:
     return path
 
 
-
 def test_hook_tool_emitter_writes_event_and_invocations(tmp_path: Path) -> None:
     db_path = _db(tmp_path)
     result = emit_hook_tool_activity(

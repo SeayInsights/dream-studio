@@ -288,8 +288,7 @@ def skill_evaluation_harness_status(conn: sqlite3.Connection) -> dict[str, Any]:
         "milestone_id": "skill_evaluation_harness",
         "status": "table_dropped",
         "evaluated_workflows": [
-            {"workflow_id": workflow_id}
-            for workflow_id in EVALUATED_WORKFLOWS
+            {"workflow_id": workflow_id} for workflow_id in EVALUATED_WORKFLOWS
         ],
         "record_count": 0,
         "status_counts": {},

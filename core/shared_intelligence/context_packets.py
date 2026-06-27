@@ -13,8 +13,10 @@ from core.shared_intelligence.authority import (
     build_adapter_context_packet,
     require_shared_intelligence_tables,
 )
+
 # record_shared_context_packet removed — shared_context_packets dropped migration 131
 from core.shared_intelligence.model_registry import model_provider_registry_summary
+
 # learning_event_summary, component_learning_health, learning_promotion_queue removed —
 # learning_event_records and hardening_candidate_records dropped migration 131
 

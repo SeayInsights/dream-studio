@@ -129,7 +129,6 @@ def test_import_buffer_batch_logged(tmp_path):
     assert batch_rows[0]["row_count"] == 2
 
 
-
 # ── 7. rebuild_summaries self-heals corrupted data ────────────────────────────
 
 

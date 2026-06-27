@@ -195,7 +195,7 @@ def build_contract_atlas(
             "operational_record_count": usage_accounting["operational_record_count"],
             "token_record_count": usage_accounting["token_record_count"],
             "by_adapter": usage_accounting["by_adapter"],
-            "task_attribution": usage_accounting["task_attribution"],
+            # task_attribution key removed: task_attribution_records dropped migration 131
             "policy": usage_accounting["policy"],
             "source_tables": usage_accounting["source_tables"],
             "schema_status": usage_accounting.get("schema_status", "available"),

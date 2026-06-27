@@ -178,6 +178,17 @@ def _versioned_candidates(
     component_id: str | None,
     limit: int,
 ) -> list[dict[str, Any]]:
+    # hardening_candidate_records and learning_event_records dropped migration 131
+    existing = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('hardening_candidate_records', 'learning_event_records')"
+        ).fetchall()
+    }
+    if "hardening_candidate_records" not in existing:
+        return []
+
     clauses = ["hc.component_type IN (?, ?, ?)"]
     params: list[Any] = sorted(VERSIONED_COMPONENT_TYPES)
     if component_type is not None:

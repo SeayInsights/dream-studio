@@ -700,5 +700,3 @@ def update_project_path(
         pass
 
     return {"ok": True, "project_id": project_id, "project_path": resolved}
-
-

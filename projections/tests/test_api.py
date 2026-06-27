@@ -157,39 +157,3 @@ def test_create_alert_rule_invalid_condition():
     response = client.post("/api/v1/alerts/rules", json=rule_data)
     # Should be either 400 (validation error) or 500 (DB error)
     assert response.status_code in [400, 500]
-
-
-def test_get_alert_history():
-    """Test get alert history endpoint"""
-    response = client.get("/api/v1/alerts/history")
-    # Accept 200 or 500 (DB might not exist in test env)
-    assert response.status_code in [200, 500]
-    if response.status_code == 200:
-        data = response.json()
-        assert isinstance(data, list)
-
-
-def test_get_alert_history_with_filters():
-    """Test get alert history with filters"""
-    # Test with limit
-    response = client.get("/api/v1/alerts/history?limit=10")
-    assert response.status_code in [200, 500]
-
-    # Test with severity filter
-    response = client.get("/api/v1/alerts/history?severity=critical")
-    assert response.status_code in [200, 500]
-
-    # Test with both filters
-    response = client.get("/api/v1/alerts/history?limit=5&severity=warning")
-    assert response.status_code in [200, 500]
-
-
-def test_alert_history_limit_validation():
-    """Test alert history limit parameter validation"""
-    # Limit too low
-    response = client.get("/api/v1/alerts/history?limit=0")
-    assert response.status_code == 422
-
-    # Limit too high
-    response = client.get("/api/v1/alerts/history?limit=2000")
-    assert response.status_code == 422

@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from core.config.database import get_connection, get_db_path
 from projections.core.alerts.rule_manager import RuleManager
 from projections.core.sla.tracker import SLATracker
+from projections.api.routes.sqlite_schema import has_columns
 
 router = APIRouter()
 
@@ -343,5 +344,3 @@ async def get_sla_metrics() -> Dict[str, Any]:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving SLA metrics: {str(e)}")
-
-

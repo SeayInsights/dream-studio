@@ -103,16 +103,18 @@ class AlertEvaluator:
 
                     if self.check_threshold(metric_value, condition, threshold):
                         # alert_history table dropped migration 131 — build alert dict in memory only
-                        triggered_alerts.append({
-                            "alert_id": str(uuid.uuid4()),
-                            "rule_id": rule["rule_id"],
-                            "rule_name": rule["rule_name"],
-                            "metric_path": rule["metric_path"],
-                            "metric_value": metric_value,
-                            "threshold": rule["threshold"],
-                            "severity": rule["severity"],
-                            "triggered_at": datetime.now(UTC).isoformat(),
-                        })
+                        triggered_alerts.append(
+                            {
+                                "alert_id": str(uuid.uuid4()),
+                                "rule_id": rule["rule_id"],
+                                "rule_name": rule["rule_name"],
+                                "metric_path": rule["metric_path"],
+                                "metric_value": metric_value,
+                                "threshold": rule["threshold"],
+                                "severity": rule["severity"],
+                                "triggered_at": datetime.now(UTC).isoformat(),
+                            }
+                        )
 
         except sqlite3.Error as e:
             # Log error but don't crash - return partial results
@@ -144,4 +146,3 @@ class AlertEvaluator:
             return value == threshold
         # Unknown condition - return False to avoid false positives
         return False
-

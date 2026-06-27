@@ -183,7 +183,7 @@ def test_core_projection_writers_only_touch_projection_owned_tables():
 def test_projection_service_state_writers_stay_limited_and_classified():
     allowed_service_tables = {
         "alert_rules",
-        "alert_history",
+        # alert_history dropped migration 131 — trigger_alert() writes are in-memory only
         "sla_definitions",
         "scheduled_reports",
         # execution_events_projection.py projects canonical execution events into this L3 table
@@ -271,5 +271,5 @@ def test_route_service_write_exceptions_are_visible_in_contract():
     assert "RuleManager" in alerts_source
     assert "SLATracker" in alerts_source
     assert "`alert_rules`" in contract
-    assert "`alert_history`" in contract
+    # alert_history dropped migration 131 — removed from contract tables list
     assert "`sla_definitions`" in contract

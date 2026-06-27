@@ -81,7 +81,7 @@ CANONICAL_STATE_TABLES = {
 
 PROJECTION_SERVICE_TABLES = {
     "alert_rules",
-    "alert_history",
+    # alert_history dropped migration 131: dormant feature, AlertEvaluator.trigger_alert() never wired to production
     "sla_definitions",
 }
 

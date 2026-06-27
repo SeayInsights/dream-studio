@@ -44,9 +44,8 @@ Dream Studio is a local-first, AI-agnostic, federated operational intelligence p
 | `vw_risk_hotspots` | SQL migration `029_analytics_views.sql` | `sec_sarif_findings` | rebuildable SQL view | Recreate view | Derived risk view. |
 | `vw_hook_performance` | RETIRED (migration 129, WO-READMODELS-DUCKDB) — formerly SQL migration `029_analytics_views.sql` | `hook_executions` | rebuildable SQL view | DuckDB hook_executions VIEW + /hooks/performance replace it | Dropped with the SQLite hook_executions table; dashboards read DuckDB. |
 | `vw_guardrail_decisions` | SQL migration `029_analytics_views.sql` | guardrail/activity tables | rebuildable SQL view | Recreate view | Derived governance view. |
-| `v_active_execution`, `v_blocked_nodes`, `v_completion_rate` | SQL migration `034_execution_graph.sql` | `execution_nodes`, `execution_dependencies` | rebuildable SQL views | Recreate views | Read-only execution graph projections. |
+| `v_active_execution`, `v_blocked_nodes`, `v_completion_rate` | RETIRED (migration 131, Wave 2 substrate drop) — formerly SQL migration `034_execution_graph.sql` | `execution_nodes`, `execution_dependencies` | rebuildable SQL views | N/A — source tables dropped | execution_nodes, execution_dependencies, execution_outputs, execution_event_links dropped; dream_exec.py unregistered from ds CLI, views no longer supported. |
 | `alert_rules` | `projections.core.alerts.RuleManager` | operator-defined alert config | projection service state | Persisted service configuration | Advisory alert rules, not canonical runtime truth. |
-| `alert_history` | `projections.core.alerts.AlertEvaluator` | evaluated metrics and `alert_rules` | advisory projection history | Recreated only as future alerts fire | Diagnostic/advisory alert evidence. |
 | `sla_definitions` | `projections.core.sla.SLATracker` | operator-defined SLA config | projection service state | Persisted service configuration | Advisory SLA rules, not canonical runtime truth. |
 | `scheduled_reports` | `projections.core.scheduler.ScheduleStorage` | operator-defined schedule config | projection service state | Persisted service configuration | Report scheduling state only; stored in the canonical local studio DB, not a separate scheduler DB. |
 | `research_cache` | `control.research.web` plus `discovery_research.py` advisory writes | web/research results | advisory cache | May expire or be invalidated | API-triggered cache writes suppress canonical event emission so dashboard/API cache mutation does not become hidden event authority. |
@@ -67,7 +66,7 @@ Dream Studio is a local-first, AI-agnostic, federated operational intelligence p
 | `security.py` GET routes | security tables and `vw_security_summary` | none | dashboard read API | Security reads do not own governance state. |
 | `security.py` SARIF import route | uploaded SARIF file | currently stubbed; parser path writes `activity_log` and `sec_sarif_findings` if enabled | governance ingestion exception | Must remain explicit before parser activation. |
 | `audits.py` | `audit_runs`, `activity_log` | `audit_runs` | governance ingestion exception | Explicit local audit write API. |
-| `alerts.py` | `alert_rules`, `alert_history`, SLA data | `alert_rules` through `RuleManager`; `sla_definitions` table initialization through `SLATracker` | projection service state | Alert config is advisory projection state. |
+| `alerts.py` | `alert_rules`, SLA data | `alert_rules` through `RuleManager`; `sla_definitions` table initialization through `SLATracker` | projection service state | Alert config is advisory projection state. `alert_history` dropped migration 131 — trigger_alert() writes are in-memory only. |
 | `schedules.py` | `scheduled_reports` | `scheduled_reports` through scheduler storage in the canonical local studio DB | projection service state | Report schedules do not own canonical runtime state or create a separate scheduler authority. |
 | `reports.py` | report service memory/store | in-memory report metadata | projection service state | Generated reports are derived artifacts. |
 | `exports.py` | export service memory/files | in-memory/file export metadata | projection service state | Exports are snapshots, not upstream authority. |
@@ -85,7 +84,7 @@ Dream Studio is a local-first, AI-agnostic, federated operational intelligence p
 Projection writes are allowed only when one of these classifications applies:
 
 - Derived rebuildable projection writes: `proj_*`, `workflow_executions`, `workflow_phases`, `workflow_kpis`, `phase_kpis`, `memory_fts`, `pi_components`, `pi_dependencies`, and SQL views.
-- Projection metadata writes: `projection_checkpoints`, `consumer_state`, `alert_rules`, `alert_history`, `sla_definitions`, `scheduled_reports`, in-memory report/export/realtime metadata.
+- Projection metadata writes: `projection_checkpoints`, `consumer_state`, `alert_rules`, `sla_definitions`, `scheduled_reports`, in-memory report/export/realtime metadata.
 - Explicit local governance/API write exceptions: `audit_runs`, SARIF ingestion to `sec_sarif_findings` and `activity_log`, risk-score enrichment to `activity_log`.
 - Advisory cache writes: `research_cache` updates and invalidations; projection API route cache writes must not emit canonical events unless a future contract names that event wrapper explicitly.
 
