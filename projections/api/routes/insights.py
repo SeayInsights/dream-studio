@@ -278,35 +278,36 @@ async def analyze_root_cause(
 
 @router.get("/rhythm")
 async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
-    """Get work rhythm analysis: heatmap, peak hours/days, productivity patterns"""
-    from collections import defaultdict
-    from core.config.database import get_connection
+    """Get work rhythm analysis: heatmap, peak hours/days, productivity patterns.
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact).
+    """
+    from collections import defaultdict
+    from core.analytics.duckdb_store import connect_analytics
+    from datetime import timedelta
+
+    conn = connect_analytics(read_only=True)
 
     try:
-        from datetime import timedelta
-
         cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
-        # Heatmap: 7 days x 24 hours
-        cursor.execute(
+        # Heatmap: 7 days x 24 hours — DuckDB strftime same format as SQLite
+        rows = conn.execute(
             """
             SELECT
-                CAST(strftime('%w', started_at) AS INTEGER) as dow,
-                CAST(strftime('%H', started_at) AS INTEGER) as hour,
+                CAST(strftime(started_at, '%w') AS INTEGER) as dow,
+                CAST(strftime(started_at, '%H') AS INTEGER) as hour,
                 COUNT(*) as count
             FROM raw_sessions
             WHERE started_at >= ?
             GROUP BY dow, hour
         """,
-            (cutoff,),
-        )
+            [cutoff],
+        ).fetchall()
 
         heatmap = [[0] * 24 for _ in range(7)]
-        for row in cursor.fetchall():
-            heatmap[row["dow"]][row["hour"]] = row["count"]
+        for row in rows:
+            heatmap[row[0]][row[1]] = row[2]
 
         # Peak hour
         hour_totals = defaultdict(int)
@@ -322,23 +323,23 @@ async def get_work_rhythm(days: int = Query(default=30, ge=1, le=365)):
         quietest_day_idx = min(day_totals, key=day_totals.get) if day_totals else 0
 
         # Completion rate by hour
-        cursor.execute(
+        comp_rows = conn.execute(
             """
             SELECT
-                CAST(strftime('%H', started_at) AS INTEGER) as hour,
+                CAST(strftime(started_at, '%H') AS INTEGER) as hour,
                 COUNT(*) as total,
                 SUM(CASE WHEN outcome = 'completed' THEN 1 ELSE 0 END) as completed
             FROM raw_sessions
             WHERE started_at >= ?
             GROUP BY hour
         """,
-            (cutoff,),
-        )
+            [cutoff],
+        ).fetchall()
         completion_by_hour = {}
-        for row in cursor.fetchall():
-            total = row["total"]
-            completed = row["completed"] or 0
-            completion_by_hour[str(row["hour"])] = round(completed / total, 3) if total > 0 else 0.0
+        for row in comp_rows:
+            total = row[1]
+            completed = row[2] or 0
+            completion_by_hour[str(row[0])] = round(completed / total, 3) if total > 0 else 0.0
 
         return {
             "heatmap": heatmap,

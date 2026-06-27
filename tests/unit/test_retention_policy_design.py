@@ -28,9 +28,10 @@ def test_retention_policy_classifies_core_table_groups() -> None:
     assert "telemetry_spine" in groups
     assert "security_validation" in groups
     assert "token_cost" in groups
-    assert "derived_dashboard_projections" in groups
+    # derived_dashboard_projections group removed in migration 129 (WO-READMODELS-DUCKDB):
+    # proj_sessions, proj_skill_stats, proj_workflow_runs were dropped; group has no tables.
+    assert "derived_dashboard_projections" not in groups
     assert groups["canonical_authority"]["retention_class"] == "retain_indefinitely"
-    assert groups["derived_dashboard_projections"]["retention_class"] == "rebuildable_projection"
     assert "execution_events" in groups["telemetry_spine"]["tables"]
     assert "token_usage_records" in groups["token_cost"]["tables"]
 

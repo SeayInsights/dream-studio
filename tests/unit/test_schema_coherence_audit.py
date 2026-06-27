@@ -122,7 +122,12 @@ def test_fixture_a_migrations_still_reference_canonical_events_structurally():
 
 
 def test_fixture_b_python_owned_no_migration_ref_is_low():
-    """Tables like proj_* that are Python-owned and unreferenced by migrations → low severity."""
+    """Tables like workflow_executions that are Python-owned and unreferenced by migrations → low severity.
+
+    Note: proj_* tables (proj_workflow_runs, proj_sessions, etc.) were dropped in migration 129
+    (WO-READMODELS-DUCKDB) and removed from _PYTHON_OWNED_TABLES. The spot-check now uses
+    workflow_executions (core/projections/workflow_metrics.py) which remains Python-owned.
+    """
     result = check_schema_coherence(_source_root())
     low_findings = [
         f
@@ -131,13 +136,13 @@ def test_fixture_b_python_owned_no_migration_ref_is_low():
     ]
     assert low_findings, (
         "Expected at least one low-severity python_owned_table_no_migration_ref finding "
-        "(e.g. proj_workflow_runs, proj_sessions, etc.)."
+        "(e.g. workflow_executions, action_feedback, consumer_state, etc.)."
     )
-    # Spot-check: proj_workflow_runs should be low
+    # Spot-check: workflow_executions should appear as a low finding
     tables_in_low = {f["table"] for f in low_findings}
-    assert "proj_workflow_runs" in tables_in_low or any(
-        t.startswith("proj_") for t in tables_in_low
-    ), "At least one proj_* table should appear as a low finding."
+    assert "workflow_executions" in tables_in_low or any(
+        t in tables_in_low for t in ("action_feedback", "consumer_state", "finding_rollups")
+    ), "At least one stable Python-owned table should appear as a low finding."
 
 
 # ── Fixture C: column mismatch → high finding ─────────────────────────────────
@@ -329,7 +334,9 @@ def test_swallow_classification_is_not_deceivable_by_relabeling():
     # - absent from migration_tables (not in any migration)
     # - present in _PYTHON_OWNED_TABLES (Python-owned → schema debt)
     # Pick any table we know is Python-owned and not in migrations.
-    python_owned_table = "validation_failures"
+    # Note: validation_failures was removed from _PYTHON_OWNED_TABLES in migration 129
+    # (WO-READMODELS-DUCKDB); use workflow_executions as a stable Python-owned table.
+    python_owned_table = "workflow_executions"
     assert python_owned_table in _PYTHON_OWNED_TABLES, f"{python_owned_table} not in registry"
     assert (
         python_owned_table not in migration_tables

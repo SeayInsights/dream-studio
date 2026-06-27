@@ -30,7 +30,12 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # EventStore._init_tables and spool/ingestor.py _write_to_sqlite are
     # idempotent fallbacks that defer to the migration. Removed from this
     # registry; the staleness guard will find it in migration_tables and skip it.
-    "validation_failures": "core/event_store/event_store.py:112 (EventStore._init_tables)",
+    # validation_failures + hook_executions: SQLite tables dropped in migration 129
+    # (WO-READMODELS-DUCKDB). They are NOT in this registry: their writers now only emit
+    # canonical events, the DuckDB VIEWs serve reads, and the dead duckdb_store.py
+    # _PROJECTION_TABLES_DDL_UNUSED constant (which held the only DuckDB-side CREATE TABLE
+    # statements) was removed in this WO — so the staleness guard finds no CREATE TABLE site.
+    # They are served as DuckDB CREATE OR REPLACE VIEW (not matched by the CREATE TABLE guard).
     "action_feedback": "core/repo_actions/feedback.py:244",
     "real_action_feedback": "core/execution/real_feedback.py:200",
     "workflow_executions": "core/projections/workflow_metrics.py:30",
@@ -39,11 +44,9 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     "phase_kpis": "core/projections/workflow_metrics.py:79",
     "consumer_state": "core/projections/workflow_consumer.py:158",
     "projection_checkpoints": "core/projections/framework.py:1186",
-    "proj_workflow_runs": "core/projections/consumers.py:27",
-    "proj_skill_stats": "core/projections/consumers.py:146",
-    "proj_sessions": "core/projections/consumers.py:241",
-    "proj_decision_patterns": "core/projections/consumers.py:335",
-    "proj_security_summary": "core/projections/consumers.py:409",
+    # proj_workflow_runs, proj_skill_stats, proj_sessions, proj_decision_patterns,
+    # proj_security_summary: REMOVED from registry — dropped in migration 129 (WO-READMODELS-DUCKDB).
+    # consumers.py consumers retired; no live readers existed; DuckDB events_fact is source of truth.
     # memory_fts: dual-owned — migration 079 + retrieval.py both use CREATE VIRTUAL TABLE
     # IF NOT EXISTS (idempotent). Listed here so the staleness guard does not
     # flag retrieval.py as an unregistered call site on FTS5-absent systems.

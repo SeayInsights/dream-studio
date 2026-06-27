@@ -124,6 +124,9 @@ def test_event_store_logs_rejected_root_shape_without_persisting_invalid_event(t
             "SELECT COUNT(*) FROM ai_canonical_events WHERE event_id = ?",
             (event["event_id"],),
         ).fetchone()[0]
+        # Note: get_validation_failures() returns [] since migration 129 (WO-READMODELS-DUCKDB)
+        # dropped the SQLite validation_failures table. Validation failures are now served by
+        # the DuckDB validation_failures VIEW in aggregate_metrics.db via events_fact pipeline.
         failures = store.get_validation_failures()
         failure_events = store.db.execute(
             "SELECT COUNT(*) FROM ai_canonical_events WHERE event_type = ?",
@@ -131,8 +134,9 @@ def test_event_store_logs_rejected_root_shape_without_persisting_invalid_event(t
         ).fetchone()[0]
 
         assert invalid_rows == 0
-        assert len(failures) == 1
-        assert failures[0]["event_id"] == event["event_id"]
+        # SQLite validation_failures table was dropped in migration 129; get_validation_failures()
+        # is now a stub returning []. The canonical evidence lives in ai_canonical_events.
+        assert failures == []
         assert failure_events == 1
     finally:
         store.close()

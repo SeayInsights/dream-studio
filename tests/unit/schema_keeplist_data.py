@@ -14,7 +14,8 @@ from __future__ import annotations
 # bootstrapped schema but present in the live authority.
 RUNTIME_TABLES = {
     "projection_checkpoints",  # core/projections/framework.py
-    "validation_failures",  # core/event_store/event_store.py
+    # validation_failures removed: dropped in migration 129 (WO-READMODELS-DUCKDB);
+    # DuckDB validation_failures VIEW replaces the SQLite projection table.
 }
 
 CLASSIFICATION: dict[str, str] = {
@@ -84,8 +85,11 @@ CLASSIFICATION: dict[str, str] = {
     "guardrail_decisions": "KEEP",
     "hardening_candidate_records": "KEEP",
     "hook_eval_runs": "KEEP",
-    "hook_executions": "KEEP",
-    "hook_findings": "KEEP",
+    "hook_executions": "DROP",  # Dropped mig 129: DuckDB hook_executions VIEW (over
+    #                             system.hook.execution.logged) replaces it; writer now only
+    #                             emits the canonical event; all reads repointed to DuckDB.
+    "hook_findings": "KEEP",  # Empty (0 rows), no readers (JOIN removed), writer uncalled;
+    #                           retained as harmless empty table — follow-up dead-table cleanup.
     "installer_distribution_checks": "DROP",
     "learning_event_records": "KEEP",
     "legacy_canonical_event_import_map": "DROP",
@@ -118,7 +122,12 @@ CLASSIFICATION: dict[str, str] = {
     "raw_pulse_snapshots": "DROP",
     "raw_research": "KEEP",
     "raw_sentinels": "KEEP",
-    "raw_sessions": "KEEP",
+    "raw_sessions": "KEEP",  # Read-WRITE session-lifecycle authority, NOT a read-model:
+    #                          end_session() UPDATEs ended_at/duration_s/outcome; record_session()
+    #                          INSERTs; mark_handoff_consumed() UPDATEs handoff_consumed (a mutable
+    #                          flag with NO canonical-event source). resume_from_handoff.py reads
+    #                          handoff_consumed to prevent handoff re-spawn. (DuckDB has a derived
+    #                          read VIEW for dashboards, but it cannot back the writes/flag.)
     "raw_skill_telemetry": "KEEP",
     "raw_specs": "DROP",
     "raw_tasks": "DROP",
@@ -145,10 +154,15 @@ CLASSIFICATION: dict[str, str] = {
     "sum_skill_summary": "KEEP",
     "task_attribution_records": "KEEP",
     "team_rollup_records": "DROP",
-    "token_usage_records": "KEEP",
+    "token_usage_records": "KEEP",  # Not droppable: DuckDB token view derives from token events
+    #                                 whose payloads carry NO model_id (0/1792) and NO cost, so
+    #                                 estimated_cost/cost_visibility can't be derived; SQLite holds
+    #                                 the only model_id (32) + cost data. dashboard_truth gate
+    #                                 (priceable_cost_present, wired into work_orders/close.py) reads
+    #                                 it; usage_accounting forbids converting plan usage to API $.
     "tool_embeddings_cache": "KEEP",
     "tool_registry": "KEEP",
-    "validation_failures": "KEEP",
+    "validation_failures": "DROP",  # Dropped mig 129: DuckDB validation_failures VIEW replaces it
     "validation_results": "KEEP",
     "work_order_dependencies": "KEEP",
 }

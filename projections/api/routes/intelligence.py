@@ -14,6 +14,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from core.config.database import get_connection
+from core.analytics.duckdb_store import connect_analytics
 from projections.api.safety import activity_log_filter_clause
 from projections.core.collectors.authority_sources import skill_usage_sql, token_usage_sql
 
@@ -59,8 +60,6 @@ def get_cost_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
         tokens = row["total_tokens"]
         sessions = row["sessions"]
         pct_budget = (tokens / MONTHLY_BUDGET) * 100
-        avg_per_session = tokens / sessions if sessions > 0 else 0
-
         # Calculate days since first seen to estimate burn rate
         first = datetime.fromisoformat(row["first_seen"].replace("Z", "+00:00"))
         last = datetime.fromisoformat(row["last_seen"].replace("Z", "+00:00"))
@@ -72,7 +71,7 @@ def get_cost_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
             {
                 "severity": "high" if pct_budget > 60 else "medium",
                 "category": "cost",
-                "title": f"High token usage detected",
+                "title": "High token usage detected",
                 "metric": f"{tokens/1e6:.1f}M tokens in 30 days",
                 "context": f"{pct_budget:.0f}% of monthly budget ({sessions} sessions)",
                 "action": "Review token usage patterns and enable caching",
@@ -126,7 +125,7 @@ def get_reliability_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
                 "metric": f"{rate*100:.0f}% failure rate ({failures}/{total} runs)",
                 "context": "Failing consistently over past 7 days",
                 "action": f"Debug {skill}: check error logs and recent changes",
-                "action_link": f"/dashboard_old#skills",
+                "action_link": "/dashboard_old#skills",
                 "impact": "Blocking workflows, causing user friction and delays",
             }
         )
@@ -137,48 +136,54 @@ def get_reliability_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
 def get_performance_alerts(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     """Detect slow hooks impacting developer experience.
 
-    Alert triggered when: avg_duration > 10s in past 7 days
+    Alert triggered when: avg_duration > 10s in past 7 days.
+    Reads hook_executions from DuckDB (derived from canonical events via events_fact).
+    The conn parameter is unused; kept for API compatibility with get_critical_issues().
     """
-    cursor = conn.cursor()
+    duck_conn = connect_analytics(read_only=True)
+    try:
+        query = """
+            SELECT
+                hook_name,
+                AVG(duration_ms) as avg_duration,
+                MAX(duration_ms) as max_duration,
+                COUNT(*) as execution_count
+            FROM hook_executions
+            WHERE duration_ms IS NOT NULL
+              AND started_at > (now() - INTERVAL '7 days')::VARCHAR
+            GROUP BY hook_name
+            HAVING avg_duration > 10000
+            ORDER BY avg_duration DESC
+            LIMIT 3
+        """
 
-    query = """
-        SELECT
-            hook_name,
-            AVG(duration_ms) as avg_duration,
-            MAX(duration_ms) as max_duration,
-            COUNT(*) as execution_count
-        FROM hook_executions
-        WHERE duration_ms IS NOT NULL
-          AND started_at > datetime('now', '-7 days')
-        GROUP BY hook_name
-        HAVING avg_duration > 10000
-        ORDER BY avg_duration DESC
-        LIMIT 3
-    """
+        rows = duck_conn.execute(query).fetchall()
 
-    rows = cursor.execute(query).fetchall()
+        alerts = []
+        for row in rows:
+            hook = row[0]
+            avg_ms = row[1]
+            max_ms = row[2]
+            count = row[3]
 
-    alerts = []
-    for row in rows:
-        hook = row["hook_name"]
-        avg_ms = row["avg_duration"]
-        max_ms = row["max_duration"]
-        count = row["execution_count"]
+            alerts.append(
+                {
+                    "severity": "medium",
+                    "category": "performance",
+                    "title": f"Slow hook: {hook}",
+                    "metric": f"{avg_ms/1000:.1f}s average (max: {max_ms/1000:.1f}s)",
+                    "context": f"{count} executions in past week",
+                    "action": f"Optimize {hook}: make async, reduce I/O, or add caching",
+                    "action_link": "/dashboard_old#hooks",
+                    "impact": "Slowing down developer workflows and reducing productivity",
+                }
+            )
 
-        alerts.append(
-            {
-                "severity": "medium",
-                "category": "performance",
-                "title": f"Slow hook: {hook}",
-                "metric": f"{avg_ms/1000:.1f}s average (max: {max_ms/1000:.1f}s)",
-                "context": f"{count} executions in past week",
-                "action": f"Optimize {hook}: make async, reduce I/O, or add caching",
-                "action_link": f"/dashboard_old#hooks",
-                "impact": "Slowing down developer workflows and reducing productivity",
-            }
-        )
-
-    return alerts
+        return alerts
+    except Exception:
+        return []
+    finally:
+        duck_conn.close()
 
 
 def get_critical_issues() -> List[Dict[str, Any]]:
@@ -248,15 +253,20 @@ def get_health_snapshot() -> Dict[str, Any]:
         tokens_30d = row["total"] if row and row["total"] else 0
         cost_status = "high" if tokens_30d > 100_000_000 else "ok"
 
-        # 3. Performance (avg hook duration in past 7 days)
-        query = """
-            SELECT AVG(duration_ms) as avg_duration
-            FROM hook_executions
-            WHERE duration_ms IS NOT NULL
-              AND started_at > datetime('now', '-7 days')
-        """
-        row = cursor.execute(query).fetchone()
-        avg_duration = row["avg_duration"] if row and row["avg_duration"] else 0
+        # 3. Performance (avg hook duration in past 7 days) — reads DuckDB hook_executions view
+        duck_conn = connect_analytics(read_only=True)
+        try:
+            hook_row = duck_conn.execute("""
+                SELECT AVG(duration_ms) as avg_duration
+                FROM hook_executions
+                WHERE duration_ms IS NOT NULL
+                  AND started_at > (now() - INTERVAL '7 days')::VARCHAR
+            """).fetchone()
+            avg_duration = hook_row[0] if hook_row and hook_row[0] else 0
+        except Exception:
+            avg_duration = 0
+        finally:
+            duck_conn.close()
         perf_status = "slow" if avg_duration > 5000 else "ok"
 
         # 4. Activity Level (events in past 7 days, excluding private)
@@ -356,25 +366,30 @@ def get_whats_working() -> List[Dict[str, Any]]:
                 }
             )
 
-        # Win 3: Hook reliability (if very high)
-        query = """
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success
-            FROM hook_executions
-            WHERE started_at > datetime('now', '-7 days')
-        """
-        row = cursor.execute(query).fetchone()
-        if row and row["total"] > 50:
-            success_rate = row["success"] / row["total"]
-            if success_rate >= 0.99:
-                wins.append(
-                    {
-                        "category": "reliability",
-                        "message": f"Hook execution: {success_rate*100:.1f}% success rate ({row['total']} runs)",
-                        "icon": "🎯",
-                    }
-                )
+        # Win 3: Hook reliability (if very high) — reads DuckDB hook_executions view
+        duck_conn_wins = connect_analytics(read_only=True)
+        try:
+            hook_row = duck_conn_wins.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success
+                FROM hook_executions
+                WHERE started_at > (now() - INTERVAL '7 days')::VARCHAR
+            """).fetchone()
+            if hook_row and hook_row[0] > 50:
+                success_rate = hook_row[1] / hook_row[0]
+                if success_rate >= 0.99:
+                    wins.append(
+                        {
+                            "category": "reliability",
+                            "message": f"Hook execution: {success_rate*100:.1f}% success rate ({hook_row[0]} runs)",
+                            "icon": "🎯",
+                        }
+                    )
+        except Exception:
+            pass
+        finally:
+            duck_conn_wins.close()
 
         # Win 4: Active event tracking (excluding private)
         _af = activity_log_filter_clause("ce", col="event_type")
@@ -479,7 +494,7 @@ async def get_token_intelligence() -> Dict[str, Any]:
                 {
                     "severity": "high",
                     "category": "cost",
-                    "title": f"High token usage detected",
+                    "title": "High token usage detected",
                     "metric": f"{tokens/1e6:.1f}M tokens in 30 days",
                     "context": f"{sessions} sessions, avg {tokens/sessions/1e3:.1f}K per session",
                     "action": "Review token usage patterns",
@@ -853,33 +868,32 @@ async def get_system_controls_intelligence() -> Dict[str, Any]:
     """Get hooks/security domain intelligence.
 
     Returns attention_needed, health metrics, and wins for system controls.
+    Reads hook_executions from DuckDB aggregate_metrics.db (derived from canonical events).
     """
-    conn = get_connection()
+    conn = connect_analytics(read_only=True)
     try:
-        cursor = conn.cursor()
         attention_needed = []
 
-        # Hook failures
-        query = """
+        # Hook failures — DuckDB hook_executions view, 7-day filter using ISO timestamp comparison
+        rows = conn.execute("""
             SELECT
                 hook_name,
                 COUNT(*) as total,
                 SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) as failures,
-                CAST(SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) as rate
+                CAST(SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) as rate
             FROM hook_executions
-            WHERE started_at > datetime('now', '-7 days')
+            WHERE started_at > (now() - INTERVAL '7 days')::VARCHAR
             GROUP BY hook_name
             HAVING rate > 0.1 AND total >= 5
             ORDER BY rate DESC
             LIMIT 3
-        """
-        rows = cursor.execute(query).fetchall()
+        """).fetchall()
 
         for row in rows:
-            hook = row["hook_name"]
-            total = row["total"]
-            failures = row["failures"]
-            rate = row["rate"]
+            hook = row[0]
+            total = row[1]
+            failures = row[2]
+            rate = row[3]
             attention_needed.append(
                 {
                     "severity": "high" if rate > 0.3 else "medium",
@@ -893,25 +907,24 @@ async def get_system_controls_intelligence() -> Dict[str, Any]:
             )
 
         # Slow hooks (>5s average)
-        query = """
+        rows = conn.execute("""
             SELECT
                 hook_name,
                 AVG(duration_ms) as avg_duration,
                 COUNT(*) as runs
             FROM hook_executions
-            WHERE started_at > datetime('now', '-7 days')
+            WHERE started_at > (now() - INTERVAL '7 days')::VARCHAR
             AND duration_ms IS NOT NULL
             GROUP BY hook_name
             HAVING avg_duration > 5000
             ORDER BY avg_duration DESC
             LIMIT 2
-        """
-        rows = cursor.execute(query).fetchall()
+        """).fetchall()
 
         for row in rows:
-            hook = row["hook_name"]
-            avg_ms = row["avg_duration"]
-            runs = row["runs"]
+            hook = row[0]
+            avg_ms = row[1]
+            runs = row[2]
             attention_needed.append(
                 {
                     "severity": "medium",
@@ -925,18 +938,17 @@ async def get_system_controls_intelligence() -> Dict[str, Any]:
             )
 
         # Health metrics
-        query = """
+        row = conn.execute("""
             SELECT
-                CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) as success_rate,
+                CAST(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(COUNT(*), 0) as success_rate,
                 AVG(duration_ms) as avg_duration,
                 COUNT(*) as total_runs
             FROM hook_executions
-            WHERE started_at > datetime('now', '-7 days')
-        """
-        row = cursor.execute(query).fetchone()
-        success_rate = row["success_rate"] if row and row["success_rate"] else 1.0
-        avg_duration = row["avg_duration"] if row and row["avg_duration"] else 0
-        total_runs = row["total_runs"] if row and row["total_runs"] else 0
+            WHERE started_at > (now() - INTERVAL '7 days')::VARCHAR
+        """).fetchone()
+        success_rate = row[0] if row and row[0] is not None else 1.0
+        avg_duration = row[1] if row and row[1] is not None else 0
+        total_runs = row[2] if row and row[2] is not None else 0
 
         health = {
             "hook_success_rate": {
@@ -971,15 +983,15 @@ async def get_system_controls_intelligence() -> Dict[str, Any]:
             )
 
         # Fast hooks
-        query = """
-            SELECT COUNT(DISTINCT hook_name) as fast_hooks
+        fast_rows = conn.execute("""
+            SELECT hook_name
             FROM hook_executions
-            WHERE started_at > datetime('now', '-7 days')
+            WHERE started_at > (now() - INTERVAL '7 days')::VARCHAR
             AND duration_ms IS NOT NULL
             GROUP BY hook_name
             HAVING AVG(duration_ms) < 1000
-        """
-        fast_count = len(cursor.execute(query).fetchall())
+        """).fetchall()
+        fast_count = len(fast_rows)
         if fast_count > 0:
             wins.append(
                 {"icon": "⚡", "message": f"{fast_count} hooks executing in under 1 second"}

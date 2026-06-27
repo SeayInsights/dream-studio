@@ -186,85 +186,52 @@ _PROJECTION_VIEWS_DDL = """
         TRY_CAST(json_extract_string(payload,'$.memory_mb') AS DOUBLE) AS memory_mb
     FROM events_fact WHERE event_type='system.hook.execution.logged';
     CREATE OR REPLACE VIEW validation_failures AS SELECT
-        event_id AS failure_id, event_id, event_type AS vf_event_type,
+        event_id AS failure_id, event_id,
+        event_type AS vf_event_type,
+        event_type,
         json_extract_string(payload,'$.errors') AS errors,
         json_extract_string(payload,'$.invalid_event_type') AS attempted_event,
         event_timestamp AS attempted_at
     FROM events_fact WHERE event_type='event.validation.failed';
-    CREATE OR REPLACE VIEW raw_sessions AS SELECT
-        session_id, project_id, json_extract_string(payload,'$.topic') AS topic,
-        event_timestamp AS started_at, NULL AS ended_at, NULL::DOUBLE AS duration_s,
-        input_tokens, output_tokens, NULL::BIGINT AS tasks_completed,
-        json_extract_string(payload,'$.pipeline_phase') AS pipeline_phase,
-        NULL::BIGINT AS handoff_consumed, outcome
-    FROM events_fact WHERE event_type='system.session.recorded';
+    CREATE OR REPLACE VIEW raw_sessions AS
+    WITH recorded AS (
+        SELECT
+            json_extract_string(payload,'$.session_id') AS session_id,
+            json_extract_string(payload,'$.project_id') AS project_id,
+            json_extract_string(payload,'$.topic') AS topic,
+            json_extract_string(payload,'$.pipeline_phase') AS pipeline_phase,
+            event_timestamp AS started_at,
+            input_tokens, output_tokens, outcome,
+            ROW_NUMBER() OVER (
+                PARTITION BY json_extract_string(payload,'$.session_id')
+                ORDER BY event_timestamp
+            ) AS rn
+        FROM events_fact WHERE event_type='system.session.recorded'
+    ),
+    closed AS (
+        SELECT
+            json_extract_string(payload,'$.session_id') AS session_id,
+            event_timestamp AS ended_at,
+            TRY_CAST(json_extract_string(payload,'$.duration_s') AS DOUBLE) AS duration_s,
+            TRY_CAST(json_extract_string(payload,'$.tasks_completed') AS BIGINT) AS tasks_completed,
+            json_extract_string(payload,'$.outcome') AS outcome,
+            ROW_NUMBER() OVER (
+                PARTITION BY json_extract_string(payload,'$.session_id')
+                ORDER BY event_timestamp DESC
+            ) AS rn
+        FROM events_fact WHERE event_type='system.session.closed'
+    )
+    SELECT
+        r.session_id, r.project_id, r.topic,
+        r.started_at, c.ended_at, c.duration_s,
+        r.input_tokens, r.output_tokens,
+        c.tasks_completed, r.pipeline_phase,
+        NULL::BIGINT AS handoff_consumed,
+        COALESCE(c.outcome, r.outcome) AS outcome
+    FROM recorded r
+    LEFT JOIN closed c ON c.session_id = r.session_id AND c.rn = 1
+    WHERE r.rn = 1;
 """
-
-# (legacy) per-read-model tables — kept as a constant name only for transition; no longer used.
-_PROJECTION_TABLES_DDL_UNUSED = """
-    CREATE TABLE IF NOT EXISTS token_usage_records (
-        token_usage_id VARCHAR PRIMARY KEY, project_id VARCHAR, milestone_id VARCHAR,
-        task_id VARCHAR, process_run_id VARCHAR, agent_id VARCHAR, skill_id VARCHAR,
-        workflow_id VARCHAR, hook_id VARCHAR, model_id VARCHAR, provider VARCHAR,
-        input_tokens BIGINT, output_tokens BIGINT, cached_tokens BIGINT, total_tokens BIGINT,
-        estimated_cost DOUBLE, purpose VARCHAR, created_at VARCHAR, source_refs_json VARCHAR,
-        evidence_refs_json VARCHAR, adapter_id VARCHAR, billing_mode VARCHAR,
-        token_visibility VARCHAR, cost_visibility VARCHAR, usage_source VARCHAR,
-        cost_source VARCHAR, accounting_confidence VARCHAR, cache_read_tokens BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS hook_executions (
-        hook_exec_id BIGINT PRIMARY KEY, activity_id BIGINT, hook_name VARCHAR, hook_type VARCHAR,
-        trigger_context VARCHAR, started_at TIMESTAMP, completed_at TIMESTAMP, duration_ms BIGINT,
-        exit_code BIGINT, status VARCHAR, output VARCHAR, error_message VARCHAR,
-        cpu_time_ms BIGINT, memory_mb DOUBLE
-    );
-    CREATE TABLE IF NOT EXISTS validation_failures (
-        failure_id VARCHAR PRIMARY KEY, event_id VARCHAR, event_type VARCHAR, errors VARCHAR,
-        attempted_event VARCHAR, attempted_at VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS ds_eval_runs (
-        run_id VARCHAR PRIMARY KEY, eval_id VARCHAR, eval_version VARCHAR, started_at VARCHAR,
-        completed_at VARCHAR, model_tested VARCHAR, skill_versions_snapshot VARCHAR,
-        event_score DOUBLE, behavior_score DOUBLE, total_score DOUBLE, passed BIGINT,
-        failure_reasons VARCHAR, token_cost_usd DOUBLE, baseline_run_id VARCHAR,
-        created_at VARCHAR, run_mode VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS ds_eval_baselines (
-        eval_id VARCHAR, version VARCHAR, baseline_score DOUBLE, last_run_score DOUBLE,
-        last_run_at VARCHAR, regression_flag BIGINT, regression_threshold DOUBLE,
-        run_count BIGINT, last_updated_at VARCHAR, label VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS eval_registry (
-        eval_id VARCHAR, target_type VARCHAR, target_id VARCHAR, rubric_score BIGINT,
-        last_run_at VARCHAR, last_run_id VARCHAR, baseline_run_id VARCHAR, friction_flag BIGINT,
-        created_at VARCHAR, updated_at VARCHAR, friction_signal_count BIGINT,
-        friction_threshold BIGINT, pending_rerun BIGINT
-    );
-    CREATE TABLE IF NOT EXISTS raw_sessions (
-        session_id VARCHAR PRIMARY KEY, project_id VARCHAR, topic VARCHAR, started_at VARCHAR,
-        ended_at VARCHAR, duration_s DOUBLE, input_tokens BIGINT, output_tokens BIGINT,
-        tasks_completed BIGINT, pipeline_phase VARCHAR, handoff_consumed BIGINT, outcome VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS raw_workflow_runs (
-        id BIGINT PRIMARY KEY, run_key VARCHAR, workflow VARCHAR, yaml_path VARCHAR, status VARCHAR,
-        started_at VARCHAR, finished_at VARCHAR, node_count BIGINT, nodes_done BIGINT,
-        activity_id BIGINT, prd_id VARCHAR, task_id VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS decision_log (
-        decision_id VARCHAR PRIMARY KEY, decision_type VARCHAR, context VARCHAR, outcome VARCHAR,
-        reasoning VARCHAR, confidence DOUBLE, policy_applied VARCHAR, source_subsystem VARCHAR,
-        timestamp VARCHAR
-    );
-    CREATE TABLE IF NOT EXISTS execution_events (
-        event_id VARCHAR PRIMARY KEY, event_type VARCHAR, event_name VARCHAR, project_id VARCHAR,
-        milestone_id VARCHAR, task_id VARCHAR, process_run_id VARCHAR, parent_event_id VARCHAR,
-        actor_type VARCHAR, actor_id VARCHAR, agent_id VARCHAR, skill_id VARCHAR, workflow_id VARCHAR,
-        hook_id VARCHAR, tool_id VARCHAR, model_id VARCHAR, adapter_id VARCHAR, source_refs_json VARCHAR,
-        evidence_refs_json VARCHAR, metadata_json VARCHAR, outcome_status VARCHAR, created_at VARCHAR,
-        _built_from_event_id VARCHAR
-    );
-"""
-
 
 _EVENTS_FACT_DDL = """
     CREATE TABLE IF NOT EXISTS events_fact (
