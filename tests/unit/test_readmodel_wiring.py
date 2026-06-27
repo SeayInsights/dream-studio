@@ -8,6 +8,7 @@ Verifies:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -83,25 +84,48 @@ def _db_with_execution_events(tmp_path: Path) -> Path:
     return db_path
 
 
-def _db_with_hook_executions(tmp_path: Path) -> Path:
-    from core.event_store.studio_db import _connect, insert_hook_execution
+def _home_with_duckdb_hook_executions(tmp_path: Path) -> Path:
+    """Seed the DuckDB hook_executions source under an isolated DREAM_STUDIO_HOME.
 
-    db_path = tmp_path / "hook-exec.db"
-    conn = _connect(db_path)
-    conn.close()
-    for hook_name, hook_type in [("on-pre-push", "pre_push"), ("on-post-commit", "post_commit")]:
-        insert_hook_execution(
-            hook_name=hook_name,
-            hook_type=hook_type,
-            trigger_context={},
-            started_at="2026-06-14T00:00:00Z",
-            completed_at="2026-06-14T00:00:01Z",
-            duration_ms=100,
-            exit_code=0,
-            status="success",
-            db_path=db_path,
-        )
-    return db_path
+    Migration 129 (WO-READMODELS-DUCKDB) dropped the SQLite hook_executions table;
+    /hooks/executions now reads the DuckDB hook_executions VIEW over
+    system.hook.execution.logged events in events_fact.
+    """
+    import json
+
+    from core.analytics.duckdb_store import connect_analytics, ensure_analytics_schema
+    from core.event_store.studio_db import _connect
+
+    home = tmp_path / "ds-home"
+    (home / "state").mkdir(parents=True, exist_ok=True)
+    os.environ["DREAM_STUDIO_HOME"] = str(home)
+    # Authority SQLite (empty) so DB_PATH_ENV injection has a valid target.
+    _connect(home / "state" / "studio.db").close()
+
+    conn = connect_analytics(home / "state" / "aggregate_metrics.db", read_only=False)
+    try:
+        ensure_analytics_schema(conn)
+        for i, (hook_name, hook_type) in enumerate(
+            [("on-pre-push", "pre_push"), ("on-post-commit", "post_commit")]
+        ):
+            payload = {
+                "hook_name": hook_name,
+                "hook_type": hook_type,
+                "started_at": "2026-06-14T00:00:00Z",
+                "completed_at": "2026-06-14T00:00:01Z",
+                "duration_ms": 100,
+                "exit_code": 0,
+                "status": "success",
+            }
+            conn.execute(
+                "INSERT INTO events_fact (event_id, source, event_type, event_timestamp, "
+                "duration_ms, exit_code, status, payload) VALUES "
+                "(?, 'ai', 'system.hook.execution.logged', ?, 100, 0, 'success', ?)",
+                [f"evt-hook-{i}", "2026-06-14T00:00:00Z", json.dumps(payload)],
+            )
+    finally:
+        conn.close()
+    return home / "state" / "studio.db"
 
 
 def _db_with_process_run_events(tmp_path: Path) -> Path:
@@ -216,7 +240,7 @@ def _client_for_db(db_path: Path, monkeypatch) -> TestClient:
 def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
     tmp_path: Path, monkeypatch
 ) -> None:
-    db_path = _db_with_hook_executions(tmp_path)
+    db_path = _home_with_duckdb_hook_executions(tmp_path)
     client = _client_for_db(db_path, monkeypatch)
     try:
         resp = client.get("/api/v1/hooks/executions")
@@ -228,6 +252,7 @@ def test_hooks_executions_returns_real_rows_when_hook_executions_populated(
         assert "on-post-commit" in hook_names
     finally:
         DatabaseRuntime.reset_instance()
+        os.environ.pop("DREAM_STUDIO_HOME", None)
 
 
 # ── T4: process_run_drilldowns reads from execution_events ─────────────────

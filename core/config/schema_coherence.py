@@ -30,12 +30,12 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # EventStore._init_tables and spool/ingestor.py _write_to_sqlite are
     # idempotent fallbacks that defer to the migration. Removed from this
     # registry; the staleness guard will find it in migration_tables and skip it.
-    # validation_failures: The SQLite table was dropped in migration 129 (WO-READMODELS-DUCKDB).
-    # event_store.py _init_tables() CREATE TABLE removed; _log_validation_failure() no-op'd.
-    # The name remains in _PYTHON_OWNED_TABLES because duckdb_store.py:_PROJECTION_TABLES_DDL_UNUSED
-    # still contains a CREATE TABLE IF NOT EXISTS for the DuckDB-side equivalent (not studio.db).
-    # The staleness guard would otherwise flag the DuckDB-side DDL as an unregistered table.
-    "validation_failures": "core/analytics/duckdb_store.py:231 (DuckDB table in _PROJECTION_TABLES_DDL_UNUSED — NOT studio.db; SQLite validation_failures dropped in migration 129)",
+    # validation_failures + hook_executions: SQLite tables dropped in migration 129
+    # (WO-READMODELS-DUCKDB). They are NOT in this registry: their writers now only emit
+    # canonical events, the DuckDB VIEWs serve reads, and the dead duckdb_store.py
+    # _PROJECTION_TABLES_DDL_UNUSED constant (which held the only DuckDB-side CREATE TABLE
+    # statements) was removed in this WO — so the staleness guard finds no CREATE TABLE site.
+    # They are served as DuckDB CREATE OR REPLACE VIEW (not matched by the CREATE TABLE guard).
     "action_feedback": "core/repo_actions/feedback.py:244",
     "real_action_feedback": "core/execution/real_feedback.py:200",
     "workflow_executions": "core/projections/workflow_metrics.py:30",

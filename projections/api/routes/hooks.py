@@ -44,7 +44,8 @@ def _fallback_hook_invocations(
     ):
         return []
     # hook.tool_activity is emitted by the hook execution system (5000+ rows in execution_events).
-    # hook_executions is the primary table; this fallback is used only when it is absent.
+    # The DuckDB hook_executions view is the primary source; this SQLite execution_events
+    # fallback is used only when the DuckDB events_fact is empty (e.g. fresh install).
     query = """
         SELECT
             event_id,
@@ -233,201 +234,77 @@ async def list_hook_executions(
 
 @router.get("/hooks/executions/{exec_id}")
 async def get_hook_execution_details(
-    exec_id: int = Path(..., description="Hook execution ID")
+    exec_id: str = Path(..., description="Hook execution ID (event_id UUID)")
 ) -> Dict[str, Any]:
     """
-    Get detailed information about a single hook execution, including findings.
+    Get detailed information about a single hook execution.
 
-    Returns full execution details with associated findings.
+    Reads from the DuckDB hook_executions view (derived from canonical events via
+    events_fact). The view's hook_exec_id is the canonical event_id (a UUID string).
+
+    Findings are no longer attached: hook_findings was a SQLite-only projection table
+    dropped in migration 129 (WO-READMODELS-DUCKDB) — it carried no data and has no
+    canonical-event source. The response keeps an empty findings list for shape stability.
     """
-    conn = get_connection()
+    conn = connect_analytics(read_only=True)
 
     try:
-        # Get execution details
+        # DuckDB view: hook_exec_id = event_id (TEXT UUID). Positional row access.
         row = conn.execute(
             """
             SELECT
-                he.hook_exec_id,
-                he.activity_id,
-                he.hook_name,
-                he.hook_type,
-                he.trigger_context,
-                he.started_at,
-                he.completed_at,
-                he.duration_ms,
-                he.exit_code,
-                he.status,
-                he.output,
-                he.error_message,
-                he.cpu_time_ms,
-                he.memory_mb,
-                he.started_at AS event_timestamp,
-                'info' AS severity,
-                0 AS is_anomaly,
-                0.0 AS anomaly_score
-            FROM hook_executions he
-            WHERE he.hook_exec_id = ?
+                hook_exec_id,
+                activity_id,
+                hook_name,
+                hook_type,
+                trigger_context,
+                started_at,
+                completed_at,
+                duration_ms,
+                exit_code,
+                status,
+                output,
+                error_message,
+                cpu_time_ms,
+                memory_mb,
+                started_at AS event_timestamp
+            FROM hook_executions
+            WHERE hook_exec_id = ?
         """,
-            (exec_id,),
+            [exec_id],
         ).fetchone()
 
         if not row:
             raise HTTPException(status_code=404, detail=f"Hook execution {exec_id} not found")
 
-        # Get findings for this execution
-        findings = conn.execute(
-            """
-            SELECT
-                finding_id,
-                finding_type,
-                severity,
-                message,
-                context,
-                recommendation,
-                status,
-                resolved_at,
-                resolution_notes,
-                created_at
-            FROM hook_findings
-            WHERE hook_exec_id = ?
-            ORDER BY created_at DESC
-        """,
-            (exec_id,),
-        ).fetchall()
-
-        findings_list = []
-        for f in findings:
-            findings_list.append(
-                {
-                    "finding_id": f["finding_id"],
-                    "finding_type": f["finding_type"],
-                    "severity": f["severity"],
-                    "message": f["message"],
-                    "context": f["context"],
-                    "recommendation": f["recommendation"],
-                    "status": f["status"],
-                    "resolved_at": f["resolved_at"],
-                    "resolution_notes": f["resolution_notes"],
-                    "created_at": f["created_at"],
-                }
-            )
-
         return {
             "execution": {
-                "hook_exec_id": row["hook_exec_id"],
-                "activity_id": row["activity_id"],
-                "hook_name": row["hook_name"],
-                "hook_type": row["hook_type"],
-                "trigger_context": row["trigger_context"],
-                "started_at": row["started_at"],
-                "completed_at": row["completed_at"],
-                "duration_ms": row["duration_ms"],
-                "exit_code": row["exit_code"],
-                "status": row["status"],
-                "output": row["output"],
-                "error_message": row["error_message"],
-                "cpu_time_ms": row["cpu_time_ms"],
-                "memory_mb": row["memory_mb"],
-                "event_timestamp": row["event_timestamp"],
-                "severity": row["severity"],
-                "is_anomaly": bool(row["is_anomaly"]),
-                "anomaly_score": row["anomaly_score"],
+                "hook_exec_id": row[0],
+                "activity_id": row[1],
+                "hook_name": row[2],
+                "hook_type": row[3],
+                "trigger_context": row[4],
+                "started_at": row[5],
+                "completed_at": row[6],
+                "duration_ms": row[7],
+                "exit_code": row[8],
+                "status": row[9],
+                "output": row[10],
+                "error_message": row[11],
+                "cpu_time_ms": row[12],
+                "memory_mb": row[13],
+                "event_timestamp": row[14],
+                "severity": "info",
+                "is_anomaly": False,
+                "anomaly_score": 0.0,
             },
-            "findings": findings_list,
-            "findings_count": len(findings_list),
+            # hook_findings dropped in migration 129; no canonical-event source exists.
+            "findings": [],
+            "findings_count": 0,
         }
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    finally:
-        conn.close()
-
-
-@router.get("/hooks/findings")
-async def list_hook_findings(
-    severity: Optional[str] = Query(
-        None, description="Filter by severity (info, warning, error, critical)"
-    ),
-    status: Optional[str] = Query(
-        None, description="Filter by status (open, acknowledged, resolved, wont_fix)"
-    ),
-    since: Optional[str] = Query(None, description="Filter by date (YYYY-MM-DD format)"),
-) -> Dict[str, Any]:
-    """
-    List hook findings with optional filters.
-
-    Returns findings sorted by creation time (most recent first).
-    """
-    conn = get_connection()
-
-    try:
-        query = """
-            SELECT
-                hf.finding_id,
-                hf.activity_id,
-                hf.hook_exec_id,
-                hf.finding_type,
-                hf.severity,
-                hf.message,
-                hf.context,
-                hf.recommendation,
-                hf.status,
-                hf.resolved_at,
-                hf.resolution_notes,
-                hf.created_at,
-                he.hook_name,
-                he.started_at as execution_started_at
-            FROM hook_findings hf
-            LEFT JOIN hook_executions he ON hf.hook_exec_id = he.hook_exec_id
-            WHERE 1=1
-        """
-        params = []
-
-        if severity:
-            query += " AND hf.severity = ?"
-            params.append(severity)
-
-        if status:
-            query += " AND hf.status = ?"
-            params.append(status)
-
-        if since:
-            query += " AND hf.created_at >= ?"
-            params.append(since)
-
-        query += " ORDER BY hf.created_at DESC"
-
-        rows = conn.execute(query, params).fetchall()
-
-        findings = []
-        for row in rows:
-            findings.append(
-                {
-                    "finding_id": row["finding_id"],
-                    "activity_id": row["activity_id"],
-                    "hook_exec_id": row["hook_exec_id"],
-                    "finding_type": row["finding_type"],
-                    "severity": row["severity"],
-                    "message": row["message"],
-                    "context": row["context"],
-                    "recommendation": row["recommendation"],
-                    "status": row["status"],
-                    "resolved_at": row["resolved_at"],
-                    "resolution_notes": row["resolution_notes"],
-                    "created_at": row["created_at"],
-                    "hook_name": row["hook_name"],
-                    "execution_started_at": row["execution_started_at"],
-                }
-            )
-
-        return {
-            "findings": findings,
-            "count": len(findings),
-            "filters": {"severity": severity, "status": status, "since": since},
-        }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     finally:

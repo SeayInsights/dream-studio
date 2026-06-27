@@ -42,7 +42,7 @@ Dream Studio is a local-first, AI-agnostic, federated operational intelligence p
 | `vw_security_summary` | SQL migration `029_analytics_views.sql` | security finding tables | rebuildable SQL view | Recreate view | Read-only projection view. |
 | `vw_activity_timeline` | SQL migration `029_analytics_views.sql` | `activity_log` | rebuildable SQL view | Recreate view | Timeline projection; not event authority. |
 | `vw_risk_hotspots` | SQL migration `029_analytics_views.sql` | `sec_sarif_findings` | rebuildable SQL view | Recreate view | Derived risk view. |
-| `vw_hook_performance` | SQL migration `029_analytics_views.sql` | `hook_executions` | rebuildable SQL view | Recreate view | Derived hook view. |
+| `vw_hook_performance` | RETIRED (migration 129, WO-READMODELS-DUCKDB) — formerly SQL migration `029_analytics_views.sql` | `hook_executions` | rebuildable SQL view | DuckDB hook_executions VIEW + /hooks/performance replace it | Dropped with the SQLite hook_executions table; dashboards read DuckDB. |
 | `vw_guardrail_decisions` | SQL migration `029_analytics_views.sql` | guardrail/activity tables | rebuildable SQL view | Recreate view | Derived governance view. |
 | `v_active_execution`, `v_blocked_nodes`, `v_completion_rate` | SQL migration `034_execution_graph.sql` | `execution_nodes`, `execution_dependencies` | rebuildable SQL views | Recreate views | Read-only execution graph projections. |
 | `alert_rules` | `projections.core.alerts.RuleManager` | operator-defined alert config | projection service state | Persisted service configuration | Advisory alert rules, not canonical runtime truth. |
@@ -63,7 +63,7 @@ Dream Studio is a local-first, AI-agnostic, federated operational intelligence p
 | `metrics.py` | telemetry, session, workflow, lesson tables | none | dashboard read API | Metrics do not mutate telemetry authority. |
 | `insights.py` | collectors over raw operational tables | none | advisory read API | Recommendations are advisory. |
 | `intelligence.py` | telemetry, hooks, activity, decision tables | none | advisory/read API | Intelligence does not own decisions or telemetry. |
-| `hooks.py` | `hook_executions`, `hook_findings`, `activity_log`, `vw_hook_performance` | none | dashboard read API | Hook views do not mutate hook execution state. |
+| `hooks.py` | DuckDB `hook_executions` VIEW (over `system.hook.execution.logged`), DuckDB `validation_failures` VIEW, SQLite `execution_events`/`raw_claude_code_events` (telemetry + fallback) | none | dashboard read API | Migration 129: SQLite `hook_executions`/`hook_findings` tables + `vw_hook_performance` retired; reads repointed to DuckDB. Hook views do not mutate hook execution state. |
 | `security.py` GET routes | security tables and `vw_security_summary` | none | dashboard read API | Security reads do not own governance state. |
 | `security.py` SARIF import route | uploaded SARIF file | currently stubbed; parser path writes `activity_log` and `sec_sarif_findings` if enabled | governance ingestion exception | Must remain explicit before parser activation. |
 | `audits.py` | `audit_runs`, `activity_log` | `audit_runs` | governance ingestion exception | Explicit local audit write API. |

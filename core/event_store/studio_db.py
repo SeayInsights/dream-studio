@@ -1810,56 +1810,42 @@ def insert_hook_execution(
     db_path: Path | None = None,
 ) -> Optional[int]:
     """
-    Insert hook execution into activity_log + hook_executions tables via EventNormalizer.
+    Emit the HOOK_EXECUTION_LOGGED canonical event for a hook execution.
 
-    Returns activity_id for linking hook_findings.
+    The SQLite hook_executions projection table was dropped in migration 129
+    (WO-READMODELS-DUCKDB). Hook executions are now served by the DuckDB
+    hook_executions VIEW in aggregate_metrics.db, derived from this canonical
+    event via the events_fact pipeline. This function only emits the canonical
+    event; it no longer writes a SQLite projection row.
+
+    Returns None (activity_id is a retired FK column).
     Uses fire-and-forget pattern with DB lock fallback to text file.
     """
     try:
-        with _db_transaction(db_path) as c:
-            # 1. Emit canonical event (TA0c: activity_log retired)
+        with _db_transaction(db_path):
+            # Emit canonical event (TA0c: activity_log retired). The DuckDB
+            # hook_executions view is derived from this event via events_fact.
             _try_emit_canonical(
                 _CanonicalEventType.HOOK_EXECUTION_LOGGED,
                 {
                     "hook_name": hook_name,
                     "hook_type": hook_type,
+                    "trigger_context": trigger_context,
                     "started_at": started_at,
                     "completed_at": completed_at,
                     "duration_ms": duration_ms,
                     "exit_code": exit_code,
                     "status": status,
+                    "output": output,
+                    "error_message": error_message,
+                    "cpu_time_ms": cpu_time_ms,
+                    "memory_mb": memory_mb,
                 },
                 session_id=session_id,
                 task_id=task_id,
                 prd_id=prd_id,
             )
-            activity_id = None  # deprecated FK column
-
-            # 2. Insert into hook_executions with activity_id
-            c.execute(
-                """INSERT INTO hook_executions
-                   (activity_id, hook_name, hook_type, trigger_context,
-                    started_at, completed_at, duration_ms, exit_code, status,
-                    output, error_message, cpu_time_ms, memory_mb)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    activity_id,
-                    hook_name,
-                    hook_type,
-                    json.dumps(trigger_context) if trigger_context else None,
-                    started_at,
-                    completed_at,
-                    duration_ms,
-                    exit_code,
-                    status,
-                    output,
-                    error_message,
-                    cpu_time_ms,
-                    memory_mb,
-                ),  # type: ignore[arg-type]
-            )
-
-            return activity_id
+            return None
     except Exception as e:
         # 3. If DB locked: write to fallback file
         _reraise_if_busy(e)
