@@ -179,15 +179,15 @@ def run_backfill(db_path: Path, dry_run: bool = False) -> int:
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
         # After WO-M migration 102, canonical_events is renamed to canonical_events_legacy_backup.
-        # Support both: pre-migration (canonical_events table) and post-migration (backup table).
+        # Migration 130 dropped canonical_events_legacy_backup (data already in dual-canonical).
+        # This script is a one-time tool; canonical_events_legacy_backup no longer exists.
         if "canonical_events" in tables:
             source_table = "canonical_events"
-        elif "canonical_events_legacy_backup" in tables:
-            source_table = "canonical_events_legacy_backup"
-            print(f"NOTE: Using {source_table} (post-WO-M migration 102 state).")
         else:
             print(
-                "ERROR: neither canonical_events nor canonical_events_legacy_backup found.",
+                "ERROR: canonical_events table not found."
+                " canonical_events_legacy_backup was dropped in migration 130"
+                " (data already fully migrated to ai_canonical_events + business_canonical_events).",
                 file=sys.stderr,
             )
             return 1

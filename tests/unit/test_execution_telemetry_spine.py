@@ -6,8 +6,6 @@ from core.event_store.studio_db import _connect
 from core.telemetry.execution_spine import (
     classify_research_blocker,
     dashboard_module_declarations,
-    record_authority_projection,
-    record_blocker_resolution,
     record_dashboard_attention,
     record_execution_event,
     record_invocation,
@@ -16,9 +14,7 @@ from core.telemetry.execution_spine import (
     record_route_decision,
     record_security_finding,
     record_token_usage,
-    findings_rollup,
     token_rollup,
-    usage_by_component,
 )
 
 REQUIRED_TABLES = {
@@ -30,13 +26,13 @@ REQUIRED_TABLES = {
     # findings: dropped in migration 112 (data migrated to security_events + findings_current_status).
     "decision_records",
     "research_evidence_records",
-    "blocker_resolution_records",
+    # blocker_resolution_records: dropped migration 130 (aspirational, 0 rows, no live writer)
     "validation_results",
-    "artifact_records",
+    # artifact_records: dropped migration 130 (aspirational, 0 rows, no production writer)
     "outcome_records",
     "route_decision_records",
     "dashboard_attention_items",
-    "authority_projection_records",
+    # authority_projection_records: dropped migration 130 (aspirational, 0 rows, no live writer)
 }
 
 
@@ -133,21 +129,6 @@ def _seed(conn):
         source_summary="Sufficient local evidence",
         decision_impact="continue",
     )
-    route = classify_research_blocker(confidence="high", sources_sufficient=True)
-    record_blocker_resolution(
-        conn,
-        **scope,
-        event_id="event-telemetry-test",
-        blocker_id="blocker-telemetry-test",
-        blocker_class="local_evidence",
-        route_class=route.route_class,
-        confidence="high",
-        resolution_status="resolved",
-        prompt_required=route.prompt_required,
-        dashboard_approval_required=route.dashboard_approval_required,
-        rationale=route.rationale,
-        research_refs=["research-telemetry-test"],
-    )
     record_route_decision(
         conn,
         **scope,
@@ -175,20 +156,7 @@ def _seed(conn):
         operator_action_required=True,
         prompt_required=False,
     )
-    record_authority_projection(
-        conn,
-        **scope,
-        event_id="event-telemetry-test",
-        projection_id="projection-telemetry-test",
-        projection_domain="dashboard",
-        source_authority="structured_state",
-        source_refs=["docs/architecture/dream-studio-dashboard-projection-mapping.yaml"],
-        lifecycle_status="draft_generated",
-        authority_role="derived_projection",
-        derived_fields={"dashboard_is_primary_truth": False},
-        confidence="high",
-        dashboard_readiness={"visible_in_dashboard": True, "primary_truth_warning": "derived view"},
-    )
+    # record_authority_projection removed: authority_projection_records dropped migration 130
     conn.execute(
         """
         INSERT INTO decision_records (
@@ -230,26 +198,7 @@ def _seed(conn):
             "Focused telemetry spine validation passed.",
         ),
     )
-    conn.execute(
-        """
-        INSERT INTO artifact_records (
-            artifact_id, project_id, milestone_id, task_id, process_run_id,
-            event_id, artifact_path, artifact_role, lifecycle_status, source_authority
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "artifact-telemetry-test",
-            scope["project_id"],
-            scope["milestone_id"],
-            scope["task_id"],
-            scope["process_run_id"],
-            "event-telemetry-test",
-            "docs/architecture/dream-studio-execution-telemetry-spine.md",
-            "architecture_doc",
-            "draft_generated",
-            "file_backed_authority",
-        ),
-    )
+    # artifact_records INSERT removed: table dropped in migration 130
     conn.execute(
         """
         INSERT INTO outcome_records (
@@ -325,7 +274,7 @@ def test_spine_writes_reads_and_global_analytics(tmp_path: Path) -> None:
 def test_dashboard_modules_declare_empty_states_and_drilldowns() -> None:
     modules = dashboard_module_declarations()
 
-    assert len(modules) >= 10
+    assert len(modules) >= 9  # artifact_analytics module dropped migration 130
     for module in modules:
         assert module["source_tables"]
         assert module["dashboard_cards"]

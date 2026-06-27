@@ -88,7 +88,8 @@ CONNECTOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "authentication_requirement": "optional_token_or_export",
         "read_write_mode": "read_only",
         "supported_records": ["projects", "validations", "manual_evidence_packets"],
-        "normalization_targets": ["reg_projects", "validation_results", "artifact_records"],
+        "normalization_targets": ["reg_projects", "validation_results"],
+        # artifact_records: dropped migration 130
     },
     {
         "connector_id": "github_actions_metadata",
@@ -96,7 +97,8 @@ CONNECTOR_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "authentication_requirement": "optional_token_or_export",
         "read_write_mode": "read_only",
         "supported_records": ["validations", "ci_logs"],
-        "normalization_targets": ["validation_results", "artifact_records"],
+        "normalization_targets": ["validation_results"],
+        # artifact_records: dropped migration 130
     },
     {
         "connector_id": "junit_report",

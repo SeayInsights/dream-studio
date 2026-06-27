@@ -156,7 +156,7 @@ def scoped_context_packet(
             "agent_invocations",
             "decision_records",
             "validation_results",
-            "artifact_records",
+            # artifact_records: dropped migration 130
         ],
     }
 
@@ -182,7 +182,7 @@ def normalize_agent_result(
             "agent_invocations",
             "decision_records",
             "validation_results",
-            "artifact_records",
+            # artifact_records: dropped migration 130
         ],
         "result_payload": payload or {},
         "requires_authority_write": True,

@@ -62,7 +62,7 @@ MODULE_CONTRACTS: tuple[dict[str, Any], ...] = (
             "execution_events",
             "process_runs",
             "validation_results",
-            "artifact_records",
+            # artifact_records: dropped migration 130
             "outcome_records",
         ],
         "read_dependencies": ["project authority tables when scoped by project"],
