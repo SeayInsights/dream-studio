@@ -53,13 +53,8 @@ CREATE TABLE IF NOT EXISTS raw_sessions (
     started_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS cor_skill_corrections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    telemetry_id INTEGER,
-    corrected_success INTEGER,
-    reason TEXT,
-    corrected_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+-- cor_skill_corrections dropped migration 131; friction source (b) is skipped
+-- gracefully when the table is absent (try/except in aggregate_friction_signals).
 
 CREATE TABLE IF NOT EXISTS guardrail_decisions (
     decision_id TEXT PRIMARY KEY,

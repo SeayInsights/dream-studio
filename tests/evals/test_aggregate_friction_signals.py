@@ -2,12 +2,14 @@
 
 Proving gate:
   Source (a): session failures on linked skill invocations → target flagged
-  Source (b): skill corrections → target flagged
   Source (c): guardrail blocks on hook targets → target flagged
   Threshold:  friction_flag not set until signal_count >= friction_threshold
   Env override: DREAM_STUDIO_FRICTION_THRESHOLD overrides per-row value
   Return shape: ok, sources_checked, new_flags, total_signaled, effective_threshold
   pending_rerun: set to 1 alongside friction_flag when threshold reached
+
+  (Source (b) cor_skill_corrections retired migration 131 — table + dead writer
+   skill_correct() removed; friction now has two live sources.)
 """
 
 from __future__ import annotations
@@ -49,13 +51,7 @@ CREATE TABLE IF NOT EXISTS raw_sessions (
     started_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS cor_skill_corrections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    telemetry_id INTEGER,
-    corrected_success INTEGER,
-    reason TEXT,
-    corrected_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+-- cor_skill_corrections dropped migration 131 (friction source (b) retired).
 
 CREATE TABLE IF NOT EXISTS guardrail_decisions (
     decision_id TEXT PRIMARY KEY,
@@ -128,24 +124,6 @@ def _seed_session_failure(db_path: Path, skill_name: str) -> None:
     conn.close()
 
 
-def _seed_correction(db_path: Path, skill_name: str) -> None:
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO raw_skill_telemetry (skill_name, session_id) VALUES (?, 'sess-cor')",
-        (skill_name,),
-    )
-    row = conn.execute(
-        "SELECT id FROM raw_skill_telemetry WHERE skill_name=? ORDER BY id DESC LIMIT 1",
-        (skill_name,),
-    ).fetchone()
-    conn.execute(
-        "INSERT INTO cor_skill_corrections (telemetry_id, corrected_success) VALUES (?, 0)",
-        (row[0],),
-    )
-    conn.commit()
-    conn.close()
-
-
 def _seed_guardrail_block(db_path: Path, rule_id: str) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.execute(
@@ -166,11 +144,12 @@ class TestReturnShape:
         result = aggregate_friction_signals(db_path=db_path)
         assert result["ok"] is True
 
-    def test_sources_checked_is_three(self, db_path):
+    def test_sources_checked_is_two(self, db_path):
+        # Source (b) cor_skill_corrections retired migration 131; two live sources remain.
         from core.eval.friction import aggregate_friction_signals
 
         result = aggregate_friction_signals(db_path=db_path)
-        assert result["sources_checked"] == 3
+        assert result["sources_checked"] == 2
 
     def test_no_signals_returns_zero_flags(self, db_path):
         from core.eval.friction import aggregate_friction_signals
@@ -244,20 +223,8 @@ class TestSourceA:
         assert row["friction_signal_count"] == 0
 
 
-# ── Source (b): skill corrections ─────────────────────────────────────────────
-
-
-class TestSourceB:
-    def test_correction_increments_signal_count(self, db_path):
-        from core.eval.friction import aggregate_friction_signals
-
-        _register_skill(db_path, "ds-quality:test-b")
-        _seed_correction(db_path, "ds-quality:test-b")
-
-        aggregate_friction_signals(db_path=db_path)
-
-        row = _read_registry(db_path, "ds-quality:test-b")
-        assert row["friction_signal_count"] == 1
+# ── Source (b): skill corrections — RETIRED migration 131 (cor_skill_corrections
+#    dropped; its dead writer skill_correct() removed). Tests deleted. ───────────
 
 
 # ── Source (c): guardrail blocks ──────────────────────────────────────────────

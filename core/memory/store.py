@@ -42,7 +42,7 @@ VALID_SOURCE_TYPES = frozenset(
     {
         "raw_lessons",
         "reg_gotchas",
-        "cor_skill_corrections",
+        # cor_skill_corrections retired migration 131 (table + ingestion consumer removed)
         "canonical_events",
         "filesystem",
         "ds_documents",
@@ -67,7 +67,7 @@ class MemoryEntry:
     category: str  # security | architecture | debugging | workflow | skill_routing | general
     content: str
     source_type: str = (
-        "unknown"  # raw_lessons | reg_gotchas | cor_skill_corrections | canonical_events | filesystem | ds_documents
+        "unknown"  # raw_lessons | reg_gotchas | canonical_events | filesystem | ds_documents
     )
     source_id: str = ""  # FK to source record (lesson_id, gotcha_id, etc.)
     lifecycle_state: str = "ACTIVE"  # persisted as string; see MemoryLifecycle for valid values

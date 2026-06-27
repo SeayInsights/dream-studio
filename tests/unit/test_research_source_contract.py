@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import sqlite3
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -349,58 +348,11 @@ def test_legacy_research_engine_imports_and_classifies_opt_in_status():
     assert "from .studio_db import _connect" not in source
 
 
-def test_tool_detail_lookup_reads_catalog_metadata_only(tmp_path):
-    from control.research import tools
-
-    db_path = tmp_path / "tools.db"
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE tool_registry (
-            tool_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            description TEXT,
-            source_url TEXT,
-            install_command TEXT,
-            tags TEXT,
-            confidence_score REAL DEFAULT 0.5
-        )
-        """)
-    conn.execute(
-        """
-        INSERT INTO tool_registry
-        (tool_id, name, category, description, source_url, install_command, tags, confidence_score)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "mcp:firecrawl",
-            "Firecrawl MCP",
-            "mcp",
-            "Catalog metadata only",
-            "https://github.com/firecrawl/mcp",
-            "npx @firecrawl/mcp",
-            '["web", "mcp"]',
-            0.91,
-        ),
-    )
-    conn.commit()
-    conn.close()
-
-    def _connect():
-        c = sqlite3.connect(db_path)
-        c.row_factory = sqlite3.Row
-        return c
-
-    with patch("control.research.tools.studio_db._connect", side_effect=_connect):
-        detail = tools.get_tool_by_id("mcp:firecrawl")
-        missing = tools.get_tool_by_id("mcp:missing")
-
-    assert detail is not None
-    assert detail.tool_id == "mcp:firecrawl"
-    assert detail.tags == ["web", "mcp"]
-    assert detail.confidence_score == 0.91
-    assert missing is None
+# test_tool_detail_lookup_reads_catalog_metadata_only RETIRED migration 131:
+# tool_registry table dropped (no production INSERT ever existed) and the
+# control.research.tools catalog subsystem has no live caller. The test
+# resurrected tool_registry via a fixture to exercise dormant get_tool_by_id();
+# deleted per the no-resurrection rule.
 
 
 def test_research_artifacts_expose_compatibility_classification_fields():

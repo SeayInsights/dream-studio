@@ -293,77 +293,9 @@ class GotchaIngestionConsumer(IngestionConsumer):
         return {"critical": 0.95, "high": 0.8, "medium": 0.6, "low": 0.4}.get(severity.lower(), 0.5)
 
 
-class CorrectionIngestionConsumer(IngestionConsumer):
-    """Ingests recurring correction patterns from cor_skill_corrections.
-
-    Only ingests when the same correction reason appears >= PATTERN_THRESHOLD
-    times, indicating a recurring pattern worth remembering.
-    """
-
-    PATTERN_THRESHOLD = 3
-
-    @property
-    def name(self) -> str:
-        return "correction_ingestion"
-
-    @property
-    def source_type(self) -> str:
-        return "cor_skill_corrections"
-
-    def fetch_pending(self, conn: sqlite3.Connection) -> List[IngestionRecord]:
-        rows = conn.execute(
-            """
-            SELECT
-                c.reason,
-                COUNT(*) as pattern_count,
-                GROUP_CONCAT(c.id) as correction_ids,
-                MIN(c.corrected_at) as first_seen,
-                MAX(c.corrected_at) as last_seen,
-                t.skill_name
-            FROM cor_skill_corrections c
-            LEFT JOIN raw_skill_telemetry t ON c.telemetry_id = t.id
-            GROUP BY c.reason
-            HAVING COUNT(*) >= ?
-              AND c.reason NOT IN (
-                  SELECT source_id FROM memory_entries
-                  WHERE source_type = 'cor_skill_corrections' AND source_id IS NOT NULL
-              )
-        """,
-            (self.PATTERN_THRESHOLD,),
-        ).fetchall()
-
-        records = []
-        for row in rows:
-            reason = row[0] or "unknown correction"
-            pattern_count = row[1]
-            correction_ids = row[2] or ""
-            first_seen = row[3] or ""
-            last_seen = row[4] or ""
-            skill_name = row[5]
-
-            content = f"Recurring correction pattern ({pattern_count}x): {reason}"
-
-            records.append(
-                IngestionRecord(
-                    source_type="cor_skill_corrections",
-                    source_id=reason,
-                    memory_type="correction",
-                    content=content,
-                    confidence=min(0.5 + (pattern_count * 0.1), 1.0),
-                    category=_infer_category(reason),
-                    tags=["correction", f"count:{pattern_count}"],
-                    metadata={
-                        "pattern_count": pattern_count,
-                        "correction_ids": correction_ids,
-                        "first_seen": first_seen,
-                        "last_seen": last_seen,
-                    },
-                    original_timestamp=first_seen,
-                    skill=skill_name,
-                )
-            )
-
-        return records
+# CorrectionIngestionConsumer RETIRED migration 131: cor_skill_corrections table
+# (and its dead writer skill_correct()) were dropped, so there is no source to
+# ingest. The consumer + its registration in run_all_ingestion() are removed.
 
 
 class DecisionIngestionConsumer(IngestionConsumer):
@@ -454,7 +386,7 @@ def run_all_ingestion(store: Optional[MemoryStore] = None) -> List[IngestionResu
     consumers: List[IngestionConsumer] = [
         LessonIngestionConsumer(),
         GotchaIngestionConsumer(),
-        CorrectionIngestionConsumer(),
+        # CorrectionIngestionConsumer retired migration 131 (cor_skill_corrections dropped)
         DecisionIngestionConsumer(),
     ]
 

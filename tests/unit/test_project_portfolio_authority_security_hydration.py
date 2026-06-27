@@ -157,14 +157,8 @@ dependencies = ["fastapi", "pydantic"]
             "INSERT INTO execution_events(event_id, event_type, event_name, project_id, outcome_status) "
             "VALUES('event-1', 'bootstrap.test', 'Test event', 'dream-studio', 'passed')"
         )
-        conn.execute(
-            "CREATE TABLE route_decision_records("
-            "record_id TEXT, project_id TEXT, handoff_required INTEGER, operator_action_required INTEGER, "
-            "prompt_required INTEGER, recommended_next_work_order TEXT)"
-        )
-        conn.execute(
-            "INSERT INTO route_decision_records VALUES('route-1', 'dream-studio', 0, 0, 0, 'none')"
-        )
+        # route_decision_records dropped migration 131; project_detail.py guards the
+        # route-blocker count with object_exists() and returns 0 when the table is absent.
         # pi_dependencies and pi_components dropped in migration 084 (were empty/broken);
         # the route guards with object_exists() → returns 0 for their counts
         # production_readiness_* tables dropped in migration 112; build_secure_production_readiness_gate

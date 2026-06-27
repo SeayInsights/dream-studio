@@ -164,13 +164,9 @@ def _db_with_process_run_events(tmp_path: Path) -> Path:
                 _built_from_event_id TEXT
             )
             """)
-        conn.execute(
-            "CREATE TABLE process_runs("
-            "process_run_id TEXT PRIMARY KEY, project_id TEXT, milestone_id TEXT, "
-            "task_id TEXT, run_type TEXT, status TEXT, started_at TEXT, ended_at TEXT, "
-            "route_id TEXT, summary TEXT, metadata_json TEXT)"
-        )
-        # Two distinct process runs tracked through execution_events (process_runs table stays empty)
+        # process_runs table dropped migration 131; _process_run_drilldowns reads
+        # process runs from execution_events.process_run_id, not a process_runs table.
+        # Two distinct process runs tracked through execution_events.
         for i, run_id in enumerate(["proc-run-aaa", "proc-run-bbb"]):
             conn.execute(
                 "INSERT INTO execution_events(event_id, event_type, process_run_id, created_at)"
@@ -267,9 +263,8 @@ def test_process_run_drilldowns_uses_execution_events_when_process_runs_empty(
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        # Confirm process_runs is empty
-        assert conn.execute("SELECT COUNT(*) FROM process_runs").fetchone()[0] == 0
-        # _process_run_drilldowns must still return entries via execution_events
+        # process_runs table dropped migration 131; _process_run_drilldowns must
+        # return entries derived from execution_events.process_run_id.
         entries = _process_run_drilldowns(conn)
         assert len(entries) >= 2
         entity_ids = {e["entity_id"] for e in entries}

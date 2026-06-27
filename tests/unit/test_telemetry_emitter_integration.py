@@ -111,15 +111,8 @@ def test_skill_and_token_paths_dual_write_without_losing_legacy_outputs(
         conn.close()
 
 
-def test_best_effort_failure_does_not_raise(tmp_path: Path) -> None:
-    empty_db = tmp_path / "empty.db"
-    result = emit_route_decision(
-        {"route_decision": "continue_internal", "handoff_required": False},
-        db_path=empty_db,
-    )
-
-    assert result.emitted is False
-    assert result.error
+# test_best_effort_failure_does_not_raise RETIRED migration 131:
+# emit_route_decision + route_decision_records dropped (dead writer, no live caller).
 
 
 def test_missing_context_ids_are_recorded_as_null(tmp_path: Path) -> None:
@@ -146,35 +139,5 @@ def test_missing_context_ids_are_recorded_as_null(tmp_path: Path) -> None:
         conn.close()
 
 
-def test_mapping_context_aliases_populate_scope_ids(tmp_path: Path) -> None:
-    db_path = _db(tmp_path)
-    result = emit_route_decision(
-        {
-            "route_decision": "continue_internal",
-            "handoff_required": False,
-            "recommended_next_work_order": "none",
-        },
-        context={
-            "project_name": "Dream Studio",
-            "current_milestone": "telemetry_context_completeness_maturation",
-            "work_order_id": "wo-telemetry-context",
-            "session_name": "session-telemetry-context",
-        },
-        db_path=db_path,
-        mode=MODE_STRICT,
-    )
-
-    conn = _connect(db_path)
-    try:
-        row = conn.execute(
-            "SELECT project_id, milestone_id, task_id, process_run_id FROM route_decision_records WHERE route_id = ?",
-            (result.record_id,),
-        ).fetchone()
-        assert dict(row) == {
-            "project_id": "Dream Studio",
-            "milestone_id": "telemetry_context_completeness_maturation",
-            "task_id": "wo-telemetry-context",
-            "process_run_id": "session-telemetry-context",
-        }
-    finally:
-        conn.close()
+# test_mapping_context_aliases_populate_scope_ids RETIRED migration 131:
+# emit_route_decision + route_decision_records dropped (dead writer, no live caller).

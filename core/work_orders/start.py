@@ -82,31 +82,6 @@ def _check_preflight_gate(work_order_id: str, db_path: Path) -> dict[str, Any] |
     }
 
 
-def _get_pending_audits_for_project(project_id: str | None, db_path: Path) -> list[dict]:
-    """Return deferred pending_audits rows for a project, advisory only.
-
-    Reads ``db_path`` (the authority resolved by the caller) rather than an
-    ambient/singleton connection, so the advisory matches the work order's DB.
-
-    Returns empty list if the table doesn't exist yet or project_id is None.
-    """
-    if not project_id:
-        return []
-    try:
-        with _connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT audit_id, audit_type, status, created_at FROM pending_audits"
-                " WHERE project_id = ? AND status IN ('deferred', 'scheduled')"
-                " ORDER BY created_at",
-                (project_id,),
-            ).fetchall()
-        return [
-            {"audit_id": r[0], "audit_type": r[1], "status": r[2], "created_at": r[3]} for r in rows
-        ]
-    except Exception:
-        return []
-
-
 def _check_sequence_order(
     work_order_id: str,
     db_path: Path,
@@ -666,13 +641,7 @@ def start_work_order(
         )
         result["sequence_blockers"] = _seq_blockers
 
-    # Surface unresolved pending audits advisory (WO-W gate stub — WO-O lands full dispatch).
-    pending = _get_pending_audits_for_project(brief_data.get("project_id"), _db_path_for_seq)
-    if pending:
-        result["pending_audits"] = pending
-        result["pending_audits_notice"] = (
-            f"This project has {len(pending)} deferred audit(s) not yet run. "
-            "Run `ds project audit <project_id>` or defer again to acknowledge."
-        )
+    # pending_audits feature retired (migration 131): writer defer_project_audit()
+    # was dead, table dropped. The advisory reader is removed with it.
 
     return result

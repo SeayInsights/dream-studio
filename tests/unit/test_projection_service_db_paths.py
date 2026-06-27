@@ -68,11 +68,12 @@ def test_alert_evaluator_honors_explicit_db_path(monkeypatch, tmp_path):
     evaluator = AlertEvaluator(str(db_path))
     triggered = evaluator.evaluate_rules({"skill.failure_rate": 0.5})
 
-    with sqlite3.connect(db_path) as conn:
-        rows = conn.execute("SELECT rule_id, metric_value, severity FROM alert_history").fetchall()
-
+    # alert_history dropped migration 131 — trigger_alert() builds the alert dict
+    # in memory only; evaluate_rules reads alert_rules from the explicit db_path
+    # (proving isolation) and returns triggered alerts without persisting.
     assert triggered[0]["rule_id"] == rule_id
-    assert rows == [(rule_id, 0.5, "critical")]
+    assert triggered[0]["metric_value"] == 0.5
+    assert triggered[0]["severity"] == "critical"
 
 
 def test_risk_scoring_writer_uses_configured_transaction_helper():

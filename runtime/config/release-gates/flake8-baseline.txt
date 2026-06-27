@@ -304,7 +304,7 @@ tests/unit/test_llm_guard_scorer.py:9:1: E402 module level import not at top of 
 tests/unit/test_memory_catalog_integration.py:17:1: E402 module level import not at top of file
 tests/unit/test_memory_catalog_integration.py:23:1: E402 module level import not at top of file
 tests/unit/test_memory_ingestion.py:14:1: E402 module level import not at top of file
-tests/unit/test_memory_ingestion.py:21:1: E402 module level import not at top of file
+tests/unit/test_memory_ingestion.py:20:1: E402 module level import not at top of file
 tests/unit/test_memory_retrieval.py:13:1: E402 module level import not at top of file
 tests/unit/test_memory_retrieval.py:14:1: E402 module level import not at top of file
 tests/unit/test_memory_store.py:13:1: E402 module level import not at top of file
@@ -322,8 +322,6 @@ tests/unit/test_session_harvester.py:568:5: F841 local variable 'result' is assi
 tests/unit/test_skill_calibration.py:11:1: E402 module level import not at top of file
 tests/unit/test_skill_execution_logging.py:17:1: E402 module level import not at top of file
 tests/unit/test_studio_db.py:10:1: E402 module level import not at top of file
-tests/unit/test_telemetry_emitter_integration.py:116:14: F821 undefined name 'emit_route_decision'
-tests/unit/test_telemetry_emitter_integration.py:151:14: F821 undefined name 'emit_route_decision'
 tests/unit/test_version_check.py:165:5: F841 local variable 'original_open' is assigned to but never used
 tests/unit/test_version_check.py:193:21: F841 local variable 'result' is assigned to but never used
 tests/unit/test_version_check.py:277:13: F841 local variable 'result' is assigned to but never used
