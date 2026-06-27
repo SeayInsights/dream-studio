@@ -182,7 +182,7 @@ class TestIndexes:
         "idx_telemetry_skill",
         "idx_telemetry_project",
         "idx_telemetry_session",
-        "idx_corrections_telemetry",
+        # idx_corrections_telemetry removed (cor_skill_corrections dropped in migration 131)
         "idx_wfnodes_runkey",
         "idx_wfruns_workflow",
         "idx_gotchas_skill",
