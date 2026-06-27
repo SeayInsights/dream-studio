@@ -94,3 +94,5 @@ overlap, and attribution evidence.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- reviewed 2026-06-27: Wave 1 migration 130 — scoped_agents.py result_normalization_targets updated: removed artifact_records (dropped migration 130; 0 rows, no production writer). Normalization now targets agent_invocations, decision_records, validation_results. No change to github_repo_intake evaluation contract, intake tables, or public boundaries. No semantic change required. -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): github-repo-intake writers retired: migration 131 drops github_repo_evaluations and github_repo_adoption_decisions (0-row tables; record_github_repo_evaluation() was never called from any live path). core/shared_intelligence/github_repo_intake.py keeps the static workflow definition + validators (github_repo_intake_workflow/validate_*), which the contract-atlas still references, but the DB write + dashboard-summary helpers are removed. No live intake feature was active — this retires built-but-unwired evaluation persistence. -->

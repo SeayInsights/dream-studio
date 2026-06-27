@@ -137,3 +137,5 @@ Static validation checks that:
 <!-- Last reviewed 2026-06-24 — chore/docstore-move-files-db (three-store architecture fix): flake8-baseline.txt gains 3 E402 entries for interfaces/cli/migrate_docstore_to_files_db.py (lines 24-26: module-level imports after sys.path.insert — unavoidable pattern for standalone CLI migration scripts, consistent with migrate_files_to_sqlite.py and other migration utilities). No change to lint policy, publication boundary, packaging, docker module profiles, or privacy classification. The three new baseline entries represent known unavoidable debt (path manipulation before imports is standard practice for CLI scripts that cannot be imported as packages). -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no external-project-validation-pipeline change. migration 131 retires dormant studio.db tables and dead in-repo code only; the external-project boundary and validation flow are untouched. flake8-baseline.txt regenerated (332 → 330). -->

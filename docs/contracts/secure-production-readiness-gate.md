@@ -225,3 +225,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no secure-production-readiness-gate behavior change. build_secure_production_readiness_gate still writes release_readiness_records + compliance_review_flags (both live, kept); migration 131 only removed retired dormant-table references from the surrounding contract-atlas productization flow. -->

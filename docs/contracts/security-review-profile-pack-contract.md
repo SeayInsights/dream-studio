@@ -387,3 +387,5 @@ controls instead of creating a competing PRD-specific security system.
 <!-- Last reviewed 2026-06-20 — WO-SPLIT-PROJECT-INTEL (feat/split-project-intel-routes): project_intelligence.py (2480 lines) split into projections/api/lib/ (security_helpers, stack_helpers, project_helpers) and four route files (project_list, project_detail, project_artifacts, project_security). Pure module reorganization — no SQL queries, schema, migration, business logic, or API contract changed. -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no security-review-profile-pack change. migration 131 retires dormant shared-intelligence tables only; the contract-atlas security/production-readiness sections that the pack feeds drop their retired-table references but the review-profile catalog, scan surfaces, and compliance_review_flags/release_readiness_records authority are unchanged. -->

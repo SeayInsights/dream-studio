@@ -339,3 +339,5 @@ and stop-gate context from SQLite authority to supported tools.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- reviewed 2026-06-27: Wave 1 migration 130 — module_contracts.py: removed artifact_records from telemetry module owned_tables (table dropped in migration 130; 0 rows, aspirational telemetry). No installed adapter runtime behavior, state, routing, or productization change. No semantic change required. -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no installed-runtime/global-router behavior change. The retired shared-intelligence writers (adapter_result_records, learning_event_records, hardening_candidate_records, model_provider_profiles, shared_context_packets, artifact_authority_records, skill_evaluation_runs, connector_ingestion_runs) were never invoked from the installed runtime; their tables are dropped in migration 131. Live adapter authority (adapter_authority_profiles, capability_route_records, policy_decision_records) is untouched. -->

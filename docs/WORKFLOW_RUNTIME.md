@@ -226,3 +226,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 
 <!-- Last reviewed 2026-06-21 — db-realignment foundation (chore/schema-cut-to-core): canonical/workflows/pre-push.yaml gains an advisory leanness gate (tier: advisory; command: py -m core.gates.leanness). It points ruff (SIM/C4/PERF/RET/PIE/UP) and vulture (>=80% confidence) at the source tree and prints over-engineering / dead-symbol counts as a hygiene signal; always exits 0. One additive advisory gate entry — no workflow engine, state machine, validator, cost, registry, or retry-contract change. -->
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no workflow engine/state-machine/validator/retry-contract change. migration 131 retires the dormant execution-graph cluster (execution_nodes/dependencies/outputs/event_links) whose only callers were the unregistered dream_exec.py/exec_graph.py CLIs (now deleted); no registered workflow or node-runner referenced those tables. -->
