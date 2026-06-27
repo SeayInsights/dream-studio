@@ -23,14 +23,14 @@ CORE_TABLES: tuple[str, ...] = (
     "execution_events",
     # process_runs: empty in production (no process.* events emitted); removed from
     # core required tables — summaries derive from execution_events.process_run_id.
-    "route_decision_records",
+    # route_decision_records: dropped migration 131 (dead writer emit_route_decision())
     "dashboard_attention_items",
 )
 
 FACT_TABLES: tuple[str, ...] = (
     "token_usage_records",
     "ai_adapter_accounting_profiles",
-    "ai_usage_operational_records",
+    # ai_usage_operational_records: dropped migration 131 (dead writer record_ai_usage_operational_record())
     "findings_current_status",  # findings retired in migration 112 → findings_current_status
     "validation_results",
     "research_evidence_records",
@@ -235,7 +235,7 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
         scope = ScopeFilter(process_run_id=process_run_id)
         source_tables = [
             "execution_events",
-            "process_runs",
+            # process_runs: dropped migration 131
             "token_usage_records",
             "validation_results",
             "findings_current_status",
@@ -322,7 +322,7 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
         _require_tables(conn, (*CORE_TABLES, *FACT_TABLES))
         source_tables = [
             "execution_events",
-            "process_runs",
+            # process_runs: dropped migration 131
             "validation_results",
             "outcome_records",
             "token_usage_records",
@@ -389,15 +389,8 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
                 "nodes": nodes,
                 "edges": edges,
                 "invocations": invocations,
-                "process_runs": (
-                    _rows(
-                        conn,
-                        f"SELECT * FROM process_runs WHERE process_run_id IN ({process_placeholders})",
-                        process_params,
-                    )
-                    if process_run_ids
-                    else []
-                ),
+                # process_runs dropped migration 131 — return empty gracefully
+                "process_runs": [],
                 "events": (
                     _rows(
                         conn,
@@ -1479,78 +1472,15 @@ def _outcome_rollup(
 def _route_rollup(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(milestone_id, 'unknown') AS milestone_id,
-            COALESCE(task_id, 'unknown') AS task_id,
-            route_decision,
-            handoff_required,
-            operator_action_required,
-            prompt_required,
-            COALESCE(recommended_next_work_order, 'none') AS recommended_next_work_order,
-            COUNT(*) AS route_count
-        FROM route_decision_records
-        {where}
-        GROUP BY project_id, milestone_id, task_id, route_decision,
-                 handoff_required, operator_action_required, prompt_required,
-                 recommended_next_work_order
-        ORDER BY route_count DESC, route_decision
-        """,
-        params,
-    )
+    # route_decision_records dropped migration 131 — return empty gracefully
+    return []
 
 
 def _route_explainability(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    rows = _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(milestone_id, 'unknown') AS milestone_id,
-            COALESCE(task_id, 'unknown') AS task_id,
-            COALESCE(process_run_id, 'unknown') AS process_run_id,
-            route_decision,
-            handoff_required,
-            operator_action_required,
-            prompt_required,
-            COALESCE(recommended_next_work_order, 'none') AS recommended_next_work_order,
-            next_stage_gate,
-            next_milestone,
-            source_refs_json,
-            evidence_refs_json,
-            created_at
-        FROM route_decision_records
-        {where}
-        ORDER BY created_at DESC, route_id DESC
-        LIMIT 20
-        """,
-        params,
-    )
-    for row in rows:
-        source_refs = _json_list(row.get("source_refs_json"))
-        evidence_refs = _json_list(row.get("evidence_refs_json"))
-        row["source_refs"] = source_refs
-        row["evidence_refs"] = evidence_refs
-        row["explainability"] = {
-            "has_source_authority_refs": bool(source_refs),
-            "has_evidence_refs": bool(evidence_refs),
-            "has_route_decision": bool(row.get("route_decision")),
-            "has_policy_gate_state": any(
-                row.get(key) is not None
-                for key in ("handoff_required", "operator_action_required", "prompt_required")
-            ),
-            "dashboard_ready": True,
-            "derived_view": True,
-            "primary_authority": False,
-        }
-    return rows
+    # route_decision_records dropped migration 131 — return empty gracefully
+    return []
 
 
 def _scoped_rows(

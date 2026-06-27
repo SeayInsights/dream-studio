@@ -611,69 +611,7 @@ def _milestone_next_action(
         decision["current_milestone"] = milestone.get("id") or milestone.get("milestone_id")
         decision["completed_internal_steps"] = milestone.get("completed_internal_steps", [])
         decision["pending_internal_steps"] = milestone.get("pending_internal_steps", [])
-    _emit_milestone_route_decision(decision, state, work_order, result_metadata)
     return decision
-
-
-def _emit_milestone_route_decision(
-    decision: dict[str, Any],
-    state: dict[str, Any],
-    work_order: dict[str, Any],
-    result_metadata: dict[str, Any] | None,
-) -> None:
-    try:
-        from core.telemetry.emitters import TelemetryContext, emit_route_decision
-
-        context = _handoff_context(work_order, result_metadata)
-        prd = state.get("prd") if isinstance(state.get("prd"), dict) else {}
-        milestone = state.get("milestone") if isinstance(state.get("milestone"), dict) else {}
-        stage_gate = state.get("stage_gate") if isinstance(state.get("stage_gate"), dict) else {}
-        telemetry_context = TelemetryContext(
-            project_id=str(
-                prd.get("prd_id")
-                or prd.get("project_id")
-                or work_order.get("project_name")
-                or "dream-studio"
-            ),
-            milestone_id=str(
-                milestone.get("milestone_id")
-                or milestone.get("id")
-                or decision.get("current_milestone")
-                or ""
-            ),
-            task_id=str(work_order.get("work_order_id") or ""),
-            process_run_id=str(context.get("process_run_id") or ""),
-            source_refs=tuple(
-                str(item) for item in context.get("source_authority_refs", []) if str(item).strip()
-            ),
-            evidence_refs=tuple(
-                str(item) for item in context.get("evidence_refs", []) if str(item).strip()
-            ),
-            current_stage_gate=str(
-                stage_gate.get("stage_gate_id")
-                or stage_gate.get("id")
-                or decision.get("current_stage_gate")
-                or ""
-            ),
-            current_milestone=str(
-                milestone.get("milestone_id")
-                or milestone.get("id")
-                or decision.get("current_milestone")
-                or ""
-            ),
-            next_stage_gate=str(
-                stage_gate.get("next_stage_gate")
-                or stage_gate.get("stage_gate_id")
-                or stage_gate.get("id")
-                or ""
-            ),
-            next_milestone=str(
-                milestone.get("next_milestone") or decision.get("next_milestone") or ""
-            ),
-        )
-        emit_route_decision(decision, context=telemetry_context, state=state)
-    except Exception:
-        pass
 
 
 def _readiness_from_milestone_decision(decision: dict[str, Any]) -> dict[str, Any]:

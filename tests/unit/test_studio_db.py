@@ -17,7 +17,6 @@ from core.event_store.studio_db import (  # noqa: E402
     import_buffer,
     rebuild_summaries,
     rolling_window_prune,
-    skill_correct,
 )
 
 pytestmark = pytest.mark.runtime_reliability
@@ -39,7 +38,7 @@ def test_schema_creates_all_tables(tmp_path):
         "raw_workflow_runs",
         "raw_workflow_nodes",
         "raw_skill_telemetry",
-        "cor_skill_corrections",
+        # cor_skill_corrections: dropped migration 131
         "sum_skill_summary",
         "log_batch_imports",
     }
@@ -130,36 +129,6 @@ def test_import_buffer_batch_logged(tmp_path):
     assert batch_rows[0]["row_count"] == 2
 
 
-# ── 6. skill_correct applies via effective_skill_runs view ────────────────────
-
-
-def test_skill_correct_applies_via_view(tmp_path):
-    db = tmp_path / "test.db"
-    conn = _connect(db)
-    conn.execute(
-        "INSERT INTO raw_skill_telemetry(skill_name, invoked_at, success) "
-        "VALUES('build', '2026-01-01', 1)"
-    )
-    conn.commit()
-    row_id = conn.execute("SELECT id FROM raw_skill_telemetry WHERE skill_name='build'").fetchone()[
-        "id"
-    ]
-    conn.close()
-
-    ok = skill_correct(row_id, 0, "heuristic was wrong", db_path=db)
-    assert ok is True
-
-    conn = _connect(db)
-    view_row = conn.execute(
-        "SELECT success, signal_source FROM effective_skill_runs WHERE id=?",
-        (row_id,),
-    ).fetchone()
-    conn.close()
-
-    assert view_row is not None
-    assert view_row["success"] == 0
-    assert view_row["signal_source"] == "corrected"
-
 
 # ── 7. rebuild_summaries self-heals corrupted data ────────────────────────────
 
@@ -229,5 +198,4 @@ def test_graceful_on_bad_db_path(tmp_path):
     assert last_run("x", db_path=bad) is None
     assert run_count("x", db_path=bad) == 0
     assert import_buffer(tmp_path / "nonexistent.jsonl", db_path=bad) == 0
-    assert skill_correct(1, 0, db_path=bad) is False
     assert rolling_window_prune(db_path=bad) == 0

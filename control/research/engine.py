@@ -7,18 +7,12 @@ execution, architecture, or semantic-memory authority by itself.
 """
 
 from __future__ import annotations
-import hashlib
 import json
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, UTC
 
 from core.event_store.studio_db import _connect
 from core.files.store import connect_files
 from core.storage.document_store import ensure_documents_schema
-
-from canonical.events.envelope import CanonicalEventEnvelope
-from canonical.events.types import EventType as CanonicalEventType
-from canonical.events.redactor import redact_prompt
-from emitters.shared.spool_writer import write_envelopes
 
 # Decision transparency layer
 from core.decisions import emit_decision
@@ -87,6 +81,9 @@ def research_with_cache(
     """
     Main entry point for all research with cache-first strategy.
 
+    raw_research table dropped migration 131. Cache lookup and storage removed;
+    analyzed-repo lookup via files.db ds_documents is preserved.
+
     Args:
         query: Research query string
         context: Context dict for research (project, skill, etc.)
@@ -100,27 +97,7 @@ def research_with_cache(
             - cached: Whether result came from cache (bool)
             - trust_score: Trust score of result (float)
     """
-    query_hash = hashlib.sha256(query.encode()).hexdigest()
-
-    # 1. Check cache first
-    cached_result = _check_cache(query_hash, min_trust)
-    if cached_result:
-        _emit_metric(
-            "research.cache_hit",
-            {
-                "query_hash": query_hash,
-                "research_type": research_type,
-                "trust_score": cached_result["trust_score"],
-            },
-        )
-        return {
-            "data": cached_result["findings"],
-            "primary_source": cached_result["source_url"],
-            "cached": True,
-            "trust_score": cached_result["trust_score"],
-        }
-
-    # 2. Check analyzed repos
+    # 1. Check analyzed repos (files.db ds_documents — not raw_research)
     repo_result = _check_analyzed_repos(query, context, min_trust)
     if repo_result:
         _emit_metric(
@@ -131,16 +108,6 @@ def research_with_cache(
                 "trust_score": repo_result["trust_score"],
             },
         )
-        # Store repo findings in cache for future use
-        ttl_days = _determine_ttl(research_type)
-        _store_research(
-            query,
-            query_hash,
-            repo_result["source_url"],
-            repo_result["data"],
-            research_type,
-            ttl_days,
-        )
         return {
             "data": repo_result["data"],
             "primary_source": repo_result["source_url"],
@@ -148,24 +115,13 @@ def research_with_cache(
             "trust_score": repo_result["trust_score"],
         }
 
-    # 3. Execute fresh research
+    # 2. Execute fresh research
     _emit_metric("research.cache_miss", {"query": query, "research_type": research_type})
     fresh_result = _execute_research(query, context, research_type)
 
-    # 4. Store result
-    ttl_days = _determine_ttl(research_type)
-    research_id = _store_research(
-        query,
-        query_hash,
-        fresh_result["primary_source"],
-        fresh_result["data"],
-        research_type,
-        ttl_days,
-    )
-
     _emit_metric(
         "research.fresh_research",
-        {"query": query, "research_type": research_type, "research_id": research_id},
+        {"query": query, "research_type": research_type},
     )
 
     return {
@@ -175,76 +131,6 @@ def research_with_cache(
         "trust_score": TRUST_POLICY["fresh_research"]["score"],
         "trust_reason": TRUST_POLICY["fresh_research"]["reason"],
     }
-
-
-def _check_cache(query_hash: str, min_trust: float) -> dict | None:
-    """
-    Query cache for validated research with sufficient trust.
-
-    Args:
-        query_hash: SHA256 hash of query string
-        min_trust: Minimum trust score threshold
-
-    Returns:
-        dict with findings, source_url, trust_score if found, else None
-    """
-    try:
-        now = _NOW()
-        with _connect() as c:
-            row = c.execute(
-                """SELECT research_id, findings, source_url, trust_score, times_referenced
-                   FROM raw_research
-                   WHERE query_hash = ?
-                     AND validation_status = 'validated'
-                     AND trust_score >= ?
-                     AND (expires_at IS NULL OR expires_at > ?)
-                   ORDER BY trust_score DESC, created_at DESC
-                   LIMIT 1""",
-                (query_hash, min_trust, now),
-            ).fetchone()
-
-            if not row:
-                return None
-
-            # Slice 3: Emit event via spool pipeline
-            write_envelopes(
-                [
-                    CanonicalEventEnvelope(
-                        event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
-                        session_id=None,
-                        payload={
-                            "research_id": row["research_id"],
-                            "query_hash": query_hash,
-                            "source": "cache",
-                            "trust_score": row["trust_score"],
-                            "times_referenced": (row["times_referenced"] or 0) + 1,
-                        },
-                        confidence="unavailable",
-                        project_id=None,
-                    )
-                ]
-            )
-
-            # Keep existing DB write (dual-write) — using transaction pattern
-            with transaction() as conn:
-                conn.execute(
-                    "UPDATE raw_research SET times_referenced = times_referenced + 1 WHERE research_id = ?",
-                    (row["research_id"],),
-                )
-
-            # Parse findings JSON
-            try:
-                findings = json.loads(row["findings"])
-            except (json.JSONDecodeError, TypeError):
-                findings = {"raw": row["findings"]}
-
-            return {
-                "findings": findings,
-                "source_url": row["source_url"],
-                "trust_score": row["trust_score"],
-            }
-    except Exception:
-        return None
 
 
 def _check_analyzed_repos(query: str, _context: dict, min_trust: float) -> dict | None:
@@ -338,104 +224,6 @@ def _execute_research(query: str, context: dict, research_type: str) -> dict:
         },
         "primary_source": "internal://not-available",
     }
-
-
-def _store_research(
-    query: str, query_hash: str, source_url: str, findings: dict, source_type: str, ttl_days: int
-) -> int:
-    """
-    Store research findings in cache.
-
-    Args:
-        query: Original query string
-        query_hash: SHA256 hash of query
-        source_url: Primary source URL
-        findings: Research findings dict
-        source_type: Type of research source
-        ttl_days: Time-to-live in days
-
-    Returns:
-        research_id of stored record
-    """
-    try:
-        expires_at = None
-        if ttl_days > 0:
-            expires_dt = datetime.now(UTC) + timedelta(days=ttl_days)
-            expires_at = expires_dt.isoformat()
-
-        findings_json = json.dumps(findings)
-
-        # Slice 3: Emit event via spool pipeline (redact raw query per ODP-9)
-        write_envelopes(
-            [
-                CanonicalEventEnvelope(
-                    event_type=CanonicalEventType.RESEARCH_COMPLETED.value,
-                    session_id=None,
-                    payload={
-                        "query": redact_prompt(query),
-                        "query_hash": query_hash,
-                        "source_type": source_type,
-                        "source_url": source_url,
-                        "confidence_score": 0.5,
-                        "trust_score": 0.5,
-                        "validation_status": "pending",
-                        "ttl_days": ttl_days,
-                    },
-                    confidence="unavailable",
-                    project_id=None,
-                )
-            ]
-        )
-
-        # Keep existing DB write (dual-write)
-        # Use policy-defined trust score for fresh research
-        initial_trust = TRUST_POLICY["fresh_research"]["score"]
-
-        # Emit decision for trust score assignment
-        emit_decision(
-            decision_type="trust_score.assignment",
-            context={
-                "source_type": source_type,
-                "source_url": source_url,
-                "query_hash": query_hash,
-            },
-            outcome=initial_trust,
-            reasoning={
-                "policy": "TRUST_POLICY",
-                "rule": "fresh_research",
-                "rationale": TRUST_POLICY["fresh_research"]["reason"],
-            },
-            confidence=0.8,
-            policy_applied="TRUST_POLICY_V1",
-            source_subsystem="research_engine",
-        )
-
-        with transaction() as conn:
-            cursor = conn.execute(
-                """INSERT INTO raw_research
-                   (query, query_hash, source_type, source_url, findings,
-                    confidence_score, trust_score, validation_status,
-                    times_referenced, success_rate, created_at, ttl_days, expires_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    query,
-                    query_hash,
-                    source_type,
-                    source_url,
-                    findings_json,
-                    0.5,
-                    initial_trust,
-                    "pending",
-                    0,
-                    0.5,
-                    _NOW(),
-                    ttl_days,
-                    expires_at,
-                ),
-            )
-            return cursor.lastrowid or -1
-    except Exception:
-        return -1
 
 
 def _determine_ttl(research_type: str) -> int:

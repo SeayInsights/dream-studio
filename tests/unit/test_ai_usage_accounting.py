@@ -6,7 +6,6 @@ from core.event_store.studio_db import _connect
 from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
 from core.shared_intelligence.usage_accounting import (
     adapter_usage_accounting_summary,
-    record_ai_usage_operational_record,
     register_default_adapter_accounting_profiles,
 )
 from core.telemetry.execution_spine import record_token_usage
@@ -89,38 +88,5 @@ def test_token_metered_rows_report_cost_only_when_metadata_marks_it(
     assert codex["cost_visibility"] == {"provider_reported": 1}
 
 
-def test_operational_usage_records_track_value_without_cost(tmp_path: Path) -> None:
-    with _connect(_db(tmp_path)) as conn:
-        register_default_adapter_authority_profiles(conn)
-        record_ai_usage_operational_record(
-            conn,
-            usage_record_id="usage-codex-build",
-            project_id="dream-studio",
-            adapter_id="codex",
-            provider="openai",
-            model_id="codex-plan",
-            billing_mode="subscription_plan",
-            token_visibility="partial",
-            cost_visibility="unavailable",
-            cost_amount=22.0,
-            files_touched=["core/shared_intelligence/usage_accounting.py"],
-            commands_run=["pytest tests/unit/test_ai_usage_accounting.py"],
-            validation_result="passed",
-            success=True,
-            rework_needed=False,
-            duration_ms=1234,
-            evidence_refs=["tests/unit/test_ai_usage_accounting.py"],
-        )
-        row = conn.execute(
-            "SELECT cost_amount FROM ai_usage_operational_records WHERE usage_record_id = ?",
-            ("usage-codex-build",),
-        ).fetchone()
-        summary = adapter_usage_accounting_summary(conn, project_id="dream-studio")
-
-    assert row["cost_amount"] is None
-    codex = summary["by_adapter"]["codex"]
-    assert codex["run_count"] == 1
-    assert codex["files_touched_count"] == 1
-    assert codex["commands_run_count"] == 1
-    assert codex["validation_results"] == {"passed": 1}
-    assert codex["successful_runs"] == 1
+# test_operational_usage_records_track_value_without_cost removed —
+# record_ai_usage_operational_record deleted; ai_usage_operational_records dropped migration 131.

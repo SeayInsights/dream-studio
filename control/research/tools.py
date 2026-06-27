@@ -335,154 +335,6 @@ def build_index() -> TfidfVectorizer:
         raise RuntimeError(f"Failed to build TF-IDF index: {e}") from e
 
 
-def build_embedding_index() -> SentenceTransformer:
-    """Build sentence-transformers embedding index with SQLite caching.
-
-    Uses all-MiniLM-L6-v2 model (lightweight, 384-dim vectors).
-    Embeds tool descriptions and caches to SQLite as BLOB to avoid re-embedding.
-
-    Performance:
-        - First run: ~10-15s (model download + embedding all tools)
-        - Subsequent runs: ~50-100ms (load cached embeddings from SQLite)
-        - Search: <20ms per query (after model loaded)
-
-    Returns:
-        SentenceTransformer: Loaded model ready for encoding queries.
-
-    Raises:
-        RuntimeError: If database is empty or connection fails.
-        ImportError: If sentence-transformers is not installed.
-    """
-    global _sentence_model, _embeddings_matrix, _embedding_tool_ids, _tool_data
-
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        raise ImportError(
-            "sentence-transformers not installed. Run: pip install sentence-transformers"
-        )
-
-    try:
-        # Load model (cached by HuggingFace)
-        if _sentence_model is None:
-            logger.info(f"Loading sentence-transformers model: {EMBEDDING_MODEL}")
-            _sentence_model = SentenceTransformer(EMBEDDING_MODEL)
-
-        # Load tool data if not already loaded
-        if _tool_data is None:
-            conn = studio_db._connect()
-            rows = conn.execute("""
-                SELECT tool_id, name, category, description, source_url,
-                       install_command, tags, confidence_score
-                FROM tool_registry
-                ORDER BY tool_id
-            """).fetchall()
-            conn.close()
-
-            if not rows:
-                logger.warning("tool_registry is empty, returning empty index")
-                _tool_data = []
-                _embeddings_matrix = None
-                _embedding_tool_ids = []
-                return _sentence_model
-
-            _tool_data = [dict(row) for row in rows]
-
-        # Check if embeddings are cached in database
-        conn = studio_db._connect()
-        cached = conn.execute(
-            """
-            SELECT tool_id, embedding
-            FROM tool_embeddings_cache
-            WHERE model_name = ?
-            ORDER BY tool_id
-        """,
-            (EMBEDDING_MODEL,),
-        ).fetchall()
-
-        cached_dict = {row["tool_id"]: row["embedding"] for row in cached}
-
-        # Determine which tools need embedding
-        tools_to_embed = []
-        embeddings_list = []
-        tool_ids = []
-
-        for tool in _tool_data:
-            tool_id = tool["tool_id"]
-            tool_ids.append(tool_id)
-
-            if tool_id in cached_dict:
-                # Load from cache
-                embedding_bytes = cached_dict[tool_id]
-                embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-                embeddings_list.append(embedding)
-            else:
-                # Mark for embedding
-                tools_to_embed.append(tool)
-
-        # Embed any new tools
-        if tools_to_embed:
-            logger.info(f"Embedding {len(tools_to_embed)} new tools...")
-
-            # Build corpus
-            corpus = []
-            for tool in tools_to_embed:
-                desc = tool.get("description") or ""
-                name = tool.get("name") or ""
-                tags = tool.get("tags") or ""
-
-                # Parse tags if JSON
-                try:
-                    tags_list = json.loads(tags) if tags else []
-                    tags_text = " ".join(tags_list)
-                except (json.JSONDecodeError, TypeError):
-                    tags_text = tags
-
-                # Combine description, name, and tags
-                text = f"{desc} {name} {tags_text}".strip()
-                corpus.append(text if text else name)
-
-            # Encode
-            new_embeddings = _sentence_model.encode(corpus, show_progress_bar=False)
-
-            # Save to the same registry database that supplied the tools.
-            for tool, embedding in zip(tools_to_embed, new_embeddings):
-                tool_id = tool["tool_id"]
-
-                # Serialize embedding as bytes
-                embedding_bytes = embedding.astype(np.float32).tobytes()
-
-                # Insert into cache
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO tool_embeddings_cache
-                    (tool_id, embedding, model_name)
-                    VALUES (?, ?, ?)
-                """,
-                    (tool_id, embedding_bytes, EMBEDDING_MODEL),
-                )
-
-                # Find position in tool_ids and insert
-                idx = tool_ids.index(tool_id)
-                embeddings_list.insert(idx, embedding)
-            conn.commit()
-
-            logger.info(f"Cached {len(tools_to_embed)} new embeddings to database")
-
-        conn.close()
-
-        # Convert to numpy matrix for fast similarity search
-        _embeddings_matrix = np.array(embeddings_list)
-        _embedding_tool_ids = tool_ids
-
-        logger.info(f"Built embedding index for {len(tool_ids)} tools")
-        return _sentence_model
-
-    except Exception as e:
-        logger.error(f"Failed to build embedding index: {e}")
-        raise RuntimeError(f"Failed to build embedding index: {e}") from e
-
-
 def calculate_confidence(similarity: float, registry_score: float = 1.0) -> float:
     """Map cosine similarity to confidence score.
 
@@ -541,11 +393,8 @@ def search_tools(
     if cached_result is not None:
         return cached_result
 
-    # Route to appropriate search method
-    if use_embeddings:
-        results = _search_with_embeddings(query, top_k, category)
-    else:
-        results = _search_with_tfidf(query, top_k, category)
+    # tool_embeddings_cache dropped migration 131: semantic embedding path removed; always TF-IDF
+    results = _search_with_tfidf(query, top_k, category)
 
     # Cache the results
     _query_cache.set(cache_key, results)
@@ -624,205 +473,6 @@ def _search_with_tfidf(query: str, top_k: int, category: str | None = None) -> l
         return []
 
 
-def _search_with_embeddings(query: str, top_k: int, category: str | None = None) -> list[ToolMatch]:
-    """Internal semantic search implementation using sentence-transformers."""
-    global _sentence_model, _embeddings_matrix, _embedding_tool_ids, _tool_data
-
-    try:
-        # Build embedding index if not already built
-        if _sentence_model is None or _embeddings_matrix is None:
-            try:
-                build_embedding_index()
-            except (RuntimeError, ImportError) as e:
-                logger.warning(f"Failed to build embedding index, falling back to TF-IDF: {e}")
-                return _search_with_tfidf(query, top_k, category)
-
-        # Handle empty database
-        if _embeddings_matrix is None or len(_embeddings_matrix) == 0:
-            logger.debug("No embeddings in database")
-            return []
-
-        # Encode query
-        query_embedding = _sentence_model.encode([query], show_progress_bar=False)[0]
-
-        # Calculate cosine similarity
-        # Normalize vectors for cosine similarity
-        query_norm = query_embedding / np.linalg.norm(query_embedding)
-        embeddings_norm = _embeddings_matrix / np.linalg.norm(
-            _embeddings_matrix, axis=1, keepdims=True
-        )
-
-        similarities = np.dot(embeddings_norm, query_norm)
-
-        # Get top-k indices sorted by similarity (descending)
-        top_indices = similarities.argsort()[::-1][: top_k * 2]  # Get extra to filter
-
-        # Build results
-        results = []
-        for idx in top_indices:
-            sim_score = float(similarities[idx])
-            tool_id = _embedding_tool_ids[idx]
-
-            # Find tool data
-            tool = next((t for t in _tool_data if t["tool_id"] == tool_id), None)
-            if not tool:
-                continue
-
-            # Calculate combined confidence
-            registry_score = tool.get("confidence_score", 0.5) or 0.5
-            confidence = calculate_confidence(sim_score, registry_score)
-
-            # Filter out low-confidence results (lower threshold than TF-IDF)
-            # Semantic similarity scores tend to be lower, so we use a more lenient cutoff
-            if confidence < 0.4:
-                continue
-
-            results.append(
-                ToolMatch(
-                    tool_id=tool["tool_id"],
-                    name=tool["name"],
-                    category=tool["category"],
-                    description=tool.get("description") or "",
-                    confidence=confidence,
-                    source_url=tool.get("source_url") or "",
-                    install_command=tool.get("install_command") or "",
-                )
-            )
-
-            # Stop once we have enough high-confidence results
-            if len(results) >= top_k:
-                break
-
-        # Apply category filter if provided
-        if category:
-            results = filter_by_category(results, category)
-
-        return results
-
-    except Exception as e:
-        logger.error(f"Embedding search failed, falling back to TF-IDF: {e}")
-        return _search_with_tfidf(query, top_k, category)
-
-
-def hybrid_search(query: str, top_k: int = 5, category: str | None = None) -> list[ToolMatch]:
-    """Search and rank tools using hybrid scoring (TF-IDF + embeddings).
-
-    Combines both TF-IDF (keyword-based) and semantic embedding scores using a
-    weighted average: hybrid_score = 0.5 * tfidf_score + 0.5 * embedding_score.
-
-    This approach leverages the strengths of both methods:
-    - TF-IDF: Excellent for exact keyword matches (e.g., "ffmpeg", "video")
-    - Embeddings: Excellent for semantic understanding (e.g., "I need to process videos" → ffmpeg)
-    - Hybrid: Best of both worlds, more robust and comprehensive results
-
-    Results are cached with a 1-hour TTL. Cache key format: {normalized_query}_{category}_hybrid
-
-    Args:
-        query: Search query string
-        top_k: Maximum number of results to return (default: 5)
-        category: Optional category filter ('mcp', 'python_package', 'api', 'saas')
-
-    Returns:
-        List[ToolMatch]: Top-k results ranked by hybrid score (weighted average of TF-IDF and embedding confidence)
-
-    Examples:
-        >>> # Hybrid search combining keyword and semantic matching
-        >>> results = hybrid_search("video processing", top_k=5)
-        >>> for match in results:
-        ...     print(f"{match.name}: {match.confidence:.2f}")
-
-        >>> # With category filter
-        >>> results = hybrid_search("ffmpeg", top_k=3, category="python_package")
-    """
-    global _vectorizer, _tfidf_matrix, _tool_data, _query_cache
-    global _sentence_model, _embeddings_matrix, _embedding_tool_ids
-
-    # Handle empty query
-    if not query or not query.strip():
-        logger.debug("Empty query received for hybrid search")
-        return []
-
-    # Check cache first (include 'hybrid' in cache key)
-    cache_key = f"{CachedToolSearch.normalize_query(query, category)}_hybrid"
-    cached_result = _query_cache.get(cache_key)
-    if cached_result is not None:
-        return cached_result
-
-    try:
-        # Get results from both search methods (fetch extra to have good pool for merging)
-        tfidf_results = _search_with_tfidf(
-            query, top_k * 2, category=None
-        )  # No category filter yet
-        embedding_results = _search_with_embeddings(
-            query, top_k * 2, category=None
-        )  # No category filter yet
-
-        # Build a map of tool_id -> ToolMatch with hybrid score
-        hybrid_scores = {}
-
-        # Process TF-IDF results
-        for match in tfidf_results:
-            if match.tool_id not in hybrid_scores:
-                hybrid_scores[match.tool_id] = {
-                    "match": match,
-                    "tfidf_score": match.confidence,
-                    "embedding_score": None,
-                }
-            else:
-                hybrid_scores[match.tool_id]["tfidf_score"] = match.confidence
-
-        # Process embedding results
-        for match in embedding_results:
-            if match.tool_id not in hybrid_scores:
-                hybrid_scores[match.tool_id] = {
-                    "match": match,
-                    "tfidf_score": None,
-                    "embedding_score": match.confidence,
-                }
-            else:
-                hybrid_scores[match.tool_id]["embedding_score"] = match.confidence
-
-        # Calculate hybrid scores (weighted average of both methods)
-        # Tools that appear in both searches get full hybrid scoring
-        # Tools in only one search use the available score with an implicit penalty
-        results_with_scores = []
-        for tool_id, score_data in hybrid_scores.items():
-            tfidf_score = score_data["tfidf_score"] or 0.0
-            embedding_score = score_data["embedding_score"] or 0.0
-
-            # Weighted average: 0.5 * TF-IDF + 0.5 * Embeddings
-            hybrid_score = (0.5 * tfidf_score) + (0.5 * embedding_score)
-
-            # Update the match's confidence to reflect hybrid score
-            match = score_data["match"]
-            match.confidence = round(hybrid_score, 3)
-
-            results_with_scores.append(match)
-
-        # Sort by hybrid score (descending)
-        results_with_scores.sort(key=lambda m: m.confidence, reverse=True)
-
-        # Apply category filter if provided
-        if category:
-            results_with_scores = filter_by_category(results_with_scores, category)
-
-        # Take top-k and filter by minimum confidence (0.3 for hybrid, lenient since both methods contribute)
-        results = [m for m in results_with_scores if m.confidence >= 0.3][:top_k]
-
-        # Cache the results
-        _query_cache.set(cache_key, results)
-
-        logger.debug(
-            f"Hybrid search found {len(results)} matches for query: {query} (category: {category or 'any'})"
-        )
-        return results
-
-    except Exception as e:
-        logger.error(f"Hybrid search failed: {e}")
-        # Fall back to TF-IDF on error
-        return _search_with_tfidf(query, top_k, category)
-
-
 def filter_by_category(results: list[ToolMatch], category: str) -> list[ToolMatch]:
     """Filter results by category.
 
@@ -862,21 +512,7 @@ def rebuild_index(clear_embeddings: bool = False) -> bool:
     _embedding_tool_ids = None
     _query_cache.clear()
 
-    # Optionally clear embeddings from database
-    if clear_embeddings:
-        try:
-            # EXEMPTION: tool_embeddings_cache is a low-level performance cache.
-            # - Data is reconstructible (can regenerate embeddings from tool definitions)
-            # - Data is non-authoritative (cache only, not source of truth)
-            # - Data has no audit requirements (no compliance need)
-            # - Mutation has no workflow implications (performance optimization only)
-            # Per Wave 1.5 exemption policy, this mutation does NOT require event emission.
-            with transaction() as conn:
-                conn.execute("DELETE FROM tool_embeddings_cache")
-            logger.info("Cleared all embeddings from database cache")
-        except Exception as e:
-            logger.error(f"Failed to clear embeddings cache: {e}")
-
+    # tool_embeddings_cache dropped migration 131; clear_embeddings arg is a no-op
     try:
         build_index()
         return True
@@ -922,30 +558,13 @@ def search_tools_with_status(
             embeddings_used=False,
         )
 
-    st_status = semantic_retrieval_status()
-    if not st_status["available"]:
-        return SearchResultWithStatus(
-            results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
-            retrieval_mode="tfidf_fallback_dependency_missing",
-            semantic_status="unavailable_dependency_missing",
-            embeddings_used=False,
-        )
-
-    try:
-        build_embedding_index()
-        return SearchResultWithStatus(
-            results=search_tools(query, top_k=top_k, category=category, use_embeddings=True),
-            retrieval_mode="semantic_embeddings",
-            semantic_status="available",
-            embeddings_used=True,
-        )
-    except (ImportError, RuntimeError):
-        return SearchResultWithStatus(
-            results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
-            retrieval_mode="tfidf_fallback_semantic_error",
-            semantic_status="available",
-            embeddings_used=False,
-        )
+    # tool_embeddings_cache dropped migration 131: semantic embedding unavailable
+    return SearchResultWithStatus(
+        results=search_tools(query, top_k=top_k, category=category, use_embeddings=False),
+        retrieval_mode="tfidf_fallback_dependency_missing",
+        semantic_status="unavailable_table_dropped",
+        embeddings_used=False,
+    )
 
 
 def hybrid_search_with_status(
@@ -953,13 +572,8 @@ def hybrid_search_with_status(
 ) -> SearchResultWithStatus:
     """hybrid_search() with explicit retrieval mode metadata.
 
-    Reports whether results used semantic embeddings or fell back to TF-IDF,
-    and why. Probes sentence-transformers availability before attempting to
-    build the embedding index so the failure reason is unambiguous.
-
-    When sentence-transformers is missing: returns tfidf_fallback_dependency_missing.
-    When dep is present and embeddings build successfully: returns semantic_embeddings.
-    When dep is present but embedding build fails at runtime: returns tfidf_fallback_semantic_error.
+    tool_embeddings_cache dropped migration 131: semantic embedding path removed.
+    Always falls back to TF-IDF.
     """
     if not query or not query.strip():
         return SearchResultWithStatus(
@@ -969,30 +583,12 @@ def hybrid_search_with_status(
             embeddings_used=False,
         )
 
-    st_status = semantic_retrieval_status()
-    if not st_status["available"]:
-        return SearchResultWithStatus(
-            results=_search_with_tfidf(query, top_k, category),
-            retrieval_mode="tfidf_fallback_dependency_missing",
-            semantic_status="unavailable_dependency_missing",
-            embeddings_used=False,
-        )
-
-    try:
-        build_embedding_index()
-        return SearchResultWithStatus(
-            results=hybrid_search(query, top_k=top_k, category=category),
-            retrieval_mode="semantic_embeddings",
-            semantic_status="available",
-            embeddings_used=True,
-        )
-    except (ImportError, RuntimeError):
-        return SearchResultWithStatus(
-            results=_search_with_tfidf(query, top_k, category),
-            retrieval_mode="tfidf_fallback_semantic_error",
-            semantic_status="available",
-            embeddings_used=False,
-        )
+    return SearchResultWithStatus(
+        results=_search_with_tfidf(query, top_k, category),
+        retrieval_mode="tfidf_fallback_dependency_missing",
+        semantic_status="unavailable_table_dropped",
+        embeddings_used=False,
+    )
 
 
 def semantic_retrieval_status() -> dict:
@@ -1076,26 +672,16 @@ if __name__ == "__main__":
         if emb_results:
             print(f"Top result: {emb_results[0].name} ({emb_results[0].confidence:.2f})")
 
-        # Hybrid search
-        print("\n[Hybrid Search (TF-IDF + Embeddings)]")
-        start = time.time()
-        hybrid_results = hybrid_search(query, top_k=10)
-        hybrid_time = (time.time() - start) * 1000
-        print(f"Time: {hybrid_time:.1f}ms")
-        print(f"Results: {len(hybrid_results)}")
-        if hybrid_results:
-            print(f"Top result: {hybrid_results[0].name} ({hybrid_results[0].confidence:.2f})")
-
         print("\n" + "=" * 60)
         print(f"Speed difference (embeddings vs TF-IDF): {emb_time / tfidf_time:.2f}x slower")
-        print(f"Speed difference (hybrid vs TF-IDF): {hybrid_time / tfidf_time:.2f}x slower")
         sys.exit(0)
 
     if use_hybrid:
-        method = "hybrid (TF-IDF + embeddings)"
+        # hybrid_search removed (tool_embeddings_cache dropped migration 131); fallback to TF-IDF
+        method = "TF-IDF (hybrid unavailable: tool_embeddings_cache dropped)"
         print(f"Searching for: {query} (method: {method})\n")
         start = time.time()
-        results = hybrid_search(query, top_k=10)
+        results = search_tools(query, top_k=10, use_embeddings=False)
         elapsed = (time.time() - start) * 1000
     else:
         method = "semantic embeddings" if use_embeddings else "TF-IDF"

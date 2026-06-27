@@ -53,106 +53,6 @@ SOURCE_CLASSES = {
 CONFIDENCE_LEVELS = {"high", "medium", "low", "unknown"}
 
 
-def record_task_attribution(conn: sqlite3.Connection, **values: Any) -> None:
-    """Persist a meaningful execution-unit attribution record.
-
-    The writer intentionally stores unknown model/provider and unavailable file
-    or command details as explicit values instead of inventing precision.
-    """
-
-    _require_task_attribution_table(conn)
-    files_touched = values.get("files_touched")
-    commands_run = values.get("commands_run")
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO task_attribution_records (
-            attribution_id, project_id, milestone_id, task_id, work_order_id,
-            process_run_id, event_id, adapter_id, provider, model_id,
-            model_visibility, agent_id, skill_ids_json, workflow_ids_json,
-            hook_ids_json, tool_ids_json, files_touched_json,
-            files_touched_status, files_touched_unavailable_reason,
-            commands_run_json, commands_run_status, validations_json,
-            validation_status, security_impact_json, readiness_impact_json,
-            outcome_status, outcome_summary, commit_refs_json, pr_refs_json,
-            result_refs_json, rework_needed, rework_status, ai_usage_record_id,
-            token_usage_id, adapter_result_id, source_class, confidence,
-            source_refs_json, evidence_refs_json, updated_at
-        ) VALUES (
-            :attribution_id, :project_id, :milestone_id, :task_id, :work_order_id,
-            :process_run_id, :event_id, :adapter_id, :provider, :model_id,
-            :model_visibility, :agent_id, :skill_ids_json, :workflow_ids_json,
-            :hook_ids_json, :tool_ids_json, :files_touched_json,
-            :files_touched_status, :files_touched_unavailable_reason,
-            :commands_run_json, :commands_run_status, :validations_json,
-            :validation_status, :security_impact_json, :readiness_impact_json,
-            :outcome_status, :outcome_summary, :commit_refs_json, :pr_refs_json,
-            :result_refs_json, :rework_needed, :rework_status, :ai_usage_record_id,
-            :token_usage_id, :adapter_result_id, :source_class, :confidence,
-            :source_refs_json, :evidence_refs_json, datetime('now')
-        )
-        """,
-        {
-            "attribution_id": values["attribution_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "work_order_id": values.get("work_order_id"),
-            "process_run_id": values.get("process_run_id"),
-            "event_id": values.get("event_id"),
-            "adapter_id": values["adapter_id"],
-            "provider": values.get("provider") or "unknown",
-            "model_id": values.get("model_id") or "unknown",
-            "model_visibility": _enum(
-                values.get("model_visibility"),
-                MODEL_VISIBILITIES,
-                "unknown",
-            ),
-            "agent_id": values.get("agent_id"),
-            "skill_ids_json": _json(values.get("skill_ids"), []),
-            "workflow_ids_json": _json(values.get("workflow_ids"), []),
-            "hook_ids_json": _json(values.get("hook_ids"), []),
-            "tool_ids_json": _json(values.get("tool_ids"), []),
-            "files_touched_json": _json(files_touched, []),
-            "files_touched_status": _availability_status(
-                values.get("files_touched_status"),
-                files_touched,
-            ),
-            "files_touched_unavailable_reason": values.get("files_touched_unavailable_reason"),
-            "commands_run_json": _json(commands_run, []),
-            "commands_run_status": _availability_status(
-                values.get("commands_run_status"),
-                commands_run,
-            ),
-            "validations_json": _json(values.get("validations"), []),
-            "validation_status": _enum(
-                values.get("validation_status"),
-                VALIDATION_STATUSES,
-                "unknown",
-            ),
-            "security_impact_json": _json(values.get("security_impact"), {}),
-            "readiness_impact_json": _json(values.get("readiness_impact"), {}),
-            "outcome_status": _enum(
-                values.get("outcome_status"),
-                OUTCOME_STATUSES,
-                "manual_review_required",
-            ),
-            "outcome_summary": values.get("outcome_summary"),
-            "commit_refs_json": _json(values.get("commit_refs"), []),
-            "pr_refs_json": _json(values.get("pr_refs"), []),
-            "result_refs_json": _json(values.get("result_refs"), []),
-            "rework_needed": _optional_bool(values.get("rework_needed")),
-            "rework_status": values.get("rework_status") or "unknown",
-            "ai_usage_record_id": values.get("ai_usage_record_id"),
-            "token_usage_id": values.get("token_usage_id"),
-            "adapter_result_id": values.get("adapter_result_id"),
-            "source_class": _enum(values.get("source_class"), SOURCE_CLASSES, "untracked"),
-            "confidence": _enum(values.get("confidence"), CONFIDENCE_LEVELS, "unknown"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
 def task_attribution_summary(
     conn: sqlite3.Connection,
     *,
@@ -347,11 +247,6 @@ def _missing_source_tables(conn: sqlite3.Connection) -> list[str]:
     ).fetchall()
     found = {str(row[0]) for row in rows}
     return sorted(set(TASK_ATTRIBUTION_SOURCE_TABLES) - found)
-
-
-def _require_task_attribution_table(conn: sqlite3.Connection) -> None:
-    if "task_attribution_records" in _missing_source_tables(conn):
-        raise RuntimeError("task_attribution_records schema is missing")
 
 
 def _empty_summary(

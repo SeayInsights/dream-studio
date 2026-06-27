@@ -16,14 +16,12 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
-from core.analytics_ingestion import ingest_analytics_payload
-
 PLATFORM_HARDENING_SCHEMA = "dream_studio.platform_hardening.v1"
 
 PLATFORM_HARDENING_TABLES: tuple[str, ...] = (
-    "skill_evaluation_runs",
     "policy_decision_records",
-    "connector_ingestion_runs",
+    # skill_evaluation_runs: dropped migration 131
+    # connector_ingestion_runs: dropped migration 131
 )
 
 EVALUATED_WORKFLOWS: tuple[str, ...] = (
@@ -285,83 +283,18 @@ def platform_hardening_summary(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def skill_evaluation_harness_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "skill_evaluation_runs")
-    status_counts = Counter(row.get("status") for row in rows)
+    # skill_evaluation_runs: dropped migration 131 (dead writer, test-only callers)
     return {
         "milestone_id": "skill_evaluation_harness",
-        "status": (
-            "runtime_validated"
-            if "skill_evaluation_runs" in _existing_tables(conn)
-            else "schema_pending"
-        ),
+        "status": "table_dropped",
         "evaluated_workflows": [
-            {
-                "workflow_id": workflow_id,
-                "purpose": f"Evaluate {workflow_id} with golden fixtures and rubric scores.",
-                "input_contract": [
-                    "golden_task_fixture",
-                    "expected_output_contract",
-                    "evidence_refs",
-                ],
-                "output_contract": [
-                    "rubric_scores",
-                    "status",
-                    "promotion_decision",
-                    "rollback_decision",
-                ],
-                "expected_evidence": [
-                    "fixture",
-                    "actual_output",
-                    "rubric_result",
-                    "validation_result",
-                ],
-                "states": ["pass", "warn", "fail", "manual_review_required", "unavailable"],
-                "promotion_threshold": "all_required_rubrics_pass_with_evidence",
-                "rollback_threshold": "critical_regression_or_score_below_threshold",
-                "known_limitations": "No skill is claimed improved without evaluation rows.",
-                "contract_atlas_impact": "platform_hardening.skill_evaluation_harness",
-            }
+            {"workflow_id": workflow_id}
             for workflow_id in EVALUATED_WORKFLOWS
         ],
-        "record_count": len(rows),
-        "status_counts": dict(sorted(status_counts.items())),
-        "empty_state": "No skill evaluation runs recorded yet; workflows are measurable but unscored.",
+        "record_count": 0,
+        "status_counts": {},
+        "empty_state": "skill_evaluation_runs dropped in migration 131.",
     }
-
-
-def record_skill_evaluation(conn: sqlite3.Connection, **values: Any) -> None:
-    # Superseded by Phase 19 gap/expansion pipeline (WO-LEARN). Skill
-    # performance signals are now captured by FrictionSignalHarvester and
-    # promoted by RetroactiveValidator via ds_user_extensions. This function
-    # writes to skill_evaluation_runs (Shared Intelligence subsystem); it
-    # remains callable for SI workflows but is not wired into end_session().
-    _require_table(conn, "skill_evaluation_runs")
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO skill_evaluation_runs (
-            evaluation_id, target_type, target_id, target_version, fixture_id,
-            expected_output_contract_json, rubric_scores_json, status,
-            promotion_decision, rollback_decision, failure_patterns_json,
-            evidence_refs_json, source_refs_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """,
-        (
-            values["evaluation_id"],
-            values.get("target_type", "workflow"),
-            values["target_id"],
-            values.get("target_version"),
-            values.get("fixture_id"),
-            _json(values.get("expected_output_contract"), {}),
-            _json(values.get("rubric_scores"), {}),
-            values.get("status", "manual_review_required"),
-            values.get("promotion_decision", "manual_review_required"),
-            values.get("rollback_decision", "manual_review_required"),
-            _json(values.get("failure_patterns"), []),
-            _json(values.get("evidence_refs"), []),
-            _json(values.get("source_refs"), []),
-        ),
-    )
-    conn.commit()
 
 
 def policy_engine_status(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -471,95 +404,14 @@ def record_policy_decision(conn: sqlite3.Connection, *, decision_id: str, **valu
 
 
 def connector_ingestion_framework_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "connector_ingestion_runs")
+    # connector_ingestion_runs: dropped migration 131 (dead writer, test-only callers)
     return {
         "milestone_id": "engineering_connector_ingestion_framework",
-        "status": (
-            "runtime_validated"
-            if "connector_ingestion_runs" in _existing_tables(conn)
-            else "schema_pending"
-        ),
-        "connectors": [
-            {
-                **dict(connector),
-                "privacy_sensitive_data_rules": [
-                    "read only by default",
-                    "normalize into current SQLite authority",
-                    "do not create connector-specific truth",
-                    "preserve evidence refs",
-                    "redact secrets and private local paths before export",
-                ],
-                "retry_failure_behavior": "record failed/partial run and dashboard attention",
-                "dashboard_visibility": "Project Details, Adapter Usage, validation/security/readiness summaries",
-                "contract_atlas_impact": "platform_hardening.connector_ingestion",
-            }
-            for connector in CONNECTOR_DEFINITIONS
-        ],
-        "run_count": len(rows),
-        "status_counts": dict(sorted(Counter(row.get("status") for row in rows).items())),
+        "status": "table_dropped",
+        "connectors": [dict(connector) for connector in CONNECTOR_DEFINITIONS],
+        "run_count": 0,
+        "status_counts": {},
         "analytics_only_supported": True,
-    }
-
-
-def ingest_connector_payload(
-    conn: sqlite3.Connection,
-    *,
-    ingestion_run_id: str,
-    source_type: str,
-    payload: dict[str, Any],
-    execute: bool = False,
-) -> dict[str, Any]:
-    connector = _connector_for_source(source_type)
-    normalized_payload = {
-        "source_refs": payload.get("source_refs", []),
-        "evidence_refs": payload.get("evidence_refs", []),
-        "projects": _connector_project_records(
-            payload.get("projects", []),
-            source_type=source_type,
-        ),
-        "validations": payload.get("validations", []),
-        "findings": payload.get("findings", []),
-        "token_usage": payload.get("token_usage", []),
-        "ai_usage": payload.get("ai_usage", []),
-        "components": payload.get("components", []),
-        "dependencies": payload.get("dependencies", []),
-        "prds": payload.get("prds", []),
-        "readiness_assessments": payload.get("readiness_assessments", []),
-    }
-    result = ingest_analytics_payload(conn, normalized_payload, execute=execute)
-    _require_table(conn, "connector_ingestion_runs")
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO connector_ingestion_runs (
-            ingestion_run_id, connector_id, source_type, authentication_requirement,
-            read_write_mode, supported_records_json, normalization_targets_json,
-            status, records_planned_json, records_written_json, privacy_rules_json,
-            evidence_refs_json, source_refs_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """,
-        (
-            ingestion_run_id,
-            connector["connector_id"],
-            connector["source_type"],
-            connector["authentication_requirement"],
-            connector["read_write_mode"],
-            _json(connector["supported_records"], []),
-            _json(connector["normalization_targets"], []),
-            "imported" if execute else "planned",
-            _json(result["records_planned"], {}),
-            _json(result["records_written"], {}),
-            _json(["no_secret_values", "source_refs_required", "sanitize_before_export"], []),
-            _json(payload.get("evidence_refs"), []),
-            _json(payload.get("source_refs"), []),
-        ),
-    )
-    conn.commit()
-    return {
-        "connector": connector,
-        "analytics_ingestion": result,
-        "status": "imported" if execute else "planned",
-        "execute": execute,
-        "parallel_truth_created": False,
     }
 
 
@@ -585,6 +437,8 @@ def _connector_project_records(records: Any, *, source_type: str) -> list[dict[s
 
 def validate_platform_hardening_summary(conn: sqlite3.Connection) -> list[str]:
     errors: list[str] = []
+    # PLATFORM_HARDENING_TABLES now only contains policy_decision_records;
+    # skill_evaluation_runs and connector_ingestion_runs dropped in migration 131.
     tables = _existing_tables(conn)
     missing = sorted(set(PLATFORM_HARDENING_TABLES) - tables)
     if missing:

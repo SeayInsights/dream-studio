@@ -15,7 +15,6 @@ from core.config.database import get_db_path
 from core.telemetry.execution_spine import (
     record_dashboard_attention,
     record_execution_event,
-    record_route_decision,
     record_research_evidence,
     record_security_finding,
     record_token_usage,
@@ -84,93 +83,6 @@ class TelemetryEmitResult:
     event_id: str | None = None
     record_id: str | None = None
     error: str | None = None
-
-
-def emit_route_decision(
-    decision: Mapping[str, Any],
-    *,
-    context: TelemetryContext | Mapping[str, Any] | None = None,
-    state: Mapping[str, Any] | None = None,
-    db_path: Path | str | None = None,
-    mode: str = MODE_BEST_EFFORT,
-) -> TelemetryEmitResult:
-    """Persist a route/work-order decision without replacing legacy behavior."""
-
-    ctx = _context(context)
-
-    def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
-        event_id = _id("route-event")
-        route_id = _id("route")
-        route_decision = (
-            _text(decision.get("route_decision"), decision.get("next_action")) or "unknown"
-        )
-        handoff_required = _truthy(decision.get("handoff_required"))
-        operator_action_required = _truthy(
-            decision.get("operator_action_required"),
-            decision.get("human_approval_required"),
-        )
-        prompt_required = handoff_required or operator_action_required
-        source_refs = _refs(ctx.source_refs, decision.get("source_refs"))
-        evidence_refs = _refs(ctx.evidence_refs, decision.get("evidence_refs"))
-        current_stage_gate = _text(decision.get("current_stage_gate"), ctx.current_stage_gate)
-        current_milestone = _text(decision.get("current_milestone"), ctx.current_milestone)
-        next_stage_gate = _text(
-            decision.get("next_stage_gate"), ctx.next_stage_gate, current_stage_gate
-        )
-        next_milestone = _text(decision.get("next_milestone"), ctx.next_milestone)
-        recommended_next_work_order = _text(decision.get("recommended_next_work_order"))
-        if not recommended_next_work_order and not handoff_required:
-            recommended_next_work_order = "none"
-
-        metadata = {
-            "current_stage_gate": current_stage_gate,
-            "current_milestone": current_milestone,
-            "next_stage_gate": next_stage_gate,
-            "next_milestone": next_milestone,
-            "handoff_reason": decision.get("handoff_reason"),
-            "stop_gate": decision.get("stop_gate"),
-            "continuation_allowed": not handoff_required and not operator_action_required,
-            "reason": decision.get("decision_rationale") or decision.get("reason"),
-            "state_keys": (
-                sorted(str(key) for key in state.keys()) if isinstance(state, Mapping) else []
-            ),
-        }
-        record_execution_event(
-            conn,
-            **ctx.scope(),
-            event_id=event_id,
-            event_type="work_order.route_decision",
-            event_name=f"Route decision: {route_decision}",
-            actor_type="system",
-            actor_id="dream-studio",
-            source_refs=source_refs,
-            evidence_refs=evidence_refs,
-            metadata=metadata,
-            outcome_status="recorded",
-        )
-        record_route_decision(
-            conn,
-            **ctx.scope(),
-            event_id=event_id,
-            route_id=route_id,
-            route_decision=route_decision,
-            handoff_required=handoff_required,
-            operator_action_required=operator_action_required,
-            prompt_required=prompt_required,
-            next_stage_gate=next_stage_gate,
-            next_milestone=next_milestone,
-            recommended_next_work_order=recommended_next_work_order,
-            source_refs=source_refs,
-            evidence_refs=evidence_refs,
-        )
-        return TelemetryEmitResult(True, event_id=event_id, record_id=route_id)
-
-    return _emit(
-        _write,
-        db_path=db_path,
-        mode=mode,
-        required_tables=("execution_events", "route_decision_records"),
-    )
 
 
 def emit_hook_tool_activity(

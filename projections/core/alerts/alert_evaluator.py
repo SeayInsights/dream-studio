@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
-from core.config.database import get_connection, transaction
+from core.config.database import get_connection
 from core.event_store import studio_db
 
 
@@ -50,16 +50,6 @@ class AlertEvaluator:
             yield conn
         finally:
             conn.close()
-
-    @contextmanager
-    def _transaction(self):
-        """Write through the configured database authority."""
-        if self._explicit_db_path is not None:
-            with studio_db._db_transaction(self._explicit_db_path) as conn:
-                yield conn
-        else:
-            with transaction() as conn:
-                yield conn
 
     def evaluate_rules(self, metrics: dict[str, Any]) -> list[dict[str, Any]]:
         """
@@ -112,10 +102,17 @@ class AlertEvaluator:
                     condition = rule["condition"]
 
                     if self.check_threshold(metric_value, condition, threshold):
-                        # Trigger alert
-                        alert = self.trigger_alert(dict(rule), metric_value)
-                        if alert:
-                            triggered_alerts.append(alert)
+                        # alert_history table dropped migration 131 — build alert dict in memory only
+                        triggered_alerts.append({
+                            "alert_id": str(uuid.uuid4()),
+                            "rule_id": rule["rule_id"],
+                            "rule_name": rule["rule_name"],
+                            "metric_path": rule["metric_path"],
+                            "metric_value": metric_value,
+                            "threshold": rule["threshold"],
+                            "severity": rule["severity"],
+                            "triggered_at": datetime.now(UTC).isoformat(),
+                        })
 
         except sqlite3.Error as e:
             # Log error but don't crash - return partial results
@@ -148,43 +145,3 @@ class AlertEvaluator:
         # Unknown condition - return False to avoid false positives
         return False
 
-    def trigger_alert(self, rule: dict[str, Any], value: float) -> dict[str, Any] | None:
-        """
-        Create an alert record and save to alert_history table
-
-        Args:
-            rule: Alert rule dictionary containing rule_id, rule_name, severity, etc.
-            value: Actual metric value that triggered the alert
-
-        Returns:
-            Alert data dictionary if successful, None if failed
-        """
-        alert_id = str(uuid.uuid4())
-        triggered_at = datetime.now(UTC).isoformat()
-
-        alert_data = {
-            "alert_id": alert_id,
-            "rule_id": rule["rule_id"],
-            "rule_name": rule["rule_name"],
-            "metric_path": rule["metric_path"],
-            "metric_value": value,
-            "threshold": rule["threshold"],
-            "severity": rule["severity"],
-            "triggered_at": triggered_at,
-        }
-
-        try:
-            with self._transaction() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO alert_history (alert_id, rule_id, triggered_at, metric_value, severity)
-                    VALUES (?, ?, ?, ?, ?)
-                """,
-                    (alert_id, rule["rule_id"], triggered_at, value, rule["severity"]),
-                )
-
-            return alert_data
-
-        except sqlite3.Error as e:
-            print(f"Failed to save alert to database: {e}")
-            return None

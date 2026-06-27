@@ -124,11 +124,15 @@ def model_provider_registry_policy() -> dict[str, Any]:
 
 
 def _model_profiles(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute("""
-        SELECT *
-        FROM model_provider_profiles
-        ORDER BY provider ASC, model_id ASC
-        """).fetchall()
+    # model_provider_profiles dropped migration 131 — return empty gracefully
+    try:
+        rows = conn.execute("""
+            SELECT *
+            FROM model_provider_profiles
+            ORDER BY provider ASC, model_id ASC
+            """).fetchall()
+    except Exception:
+        return []
     return [_decode_profile(row) for row in rows]
 
 

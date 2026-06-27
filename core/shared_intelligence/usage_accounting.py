@@ -13,15 +13,14 @@ from collections.abc import Mapping
 from typing import Any
 
 from core.shared_intelligence.authority import require_shared_intelligence_tables
-from core.shared_intelligence.task_attribution import task_attribution_summary
 
 ACCOUNTING_SOURCE_TABLES: tuple[str, ...] = (
     "ai_adapter_accounting_profiles",
-    "ai_usage_operational_records",
     "token_usage_records",
     "adapter_authority_profiles",
-    "model_provider_profiles",
-    "task_attribution_records",
+    # ai_usage_operational_records: dropped migration 131
+    # model_provider_profiles: dropped migration 131
+    # task_attribution_records: dropped migration 131
 )
 
 REPORTABLE_COST_VISIBILITIES = {
@@ -207,78 +206,6 @@ def record_adapter_accounting_profile(conn: sqlite3.Connection, **values: Any) -
     )
 
 
-def record_ai_usage_operational_record(conn: sqlite3.Connection, **values: Any) -> None:
-    require_shared_intelligence_tables(conn)
-    _require_accounting_tables(conn)
-    cost_amount = values.get("cost_amount")
-    cost_visibility = values.get("cost_visibility", "unknown")
-    if cost_visibility not in REPORTABLE_COST_VISIBILITIES:
-        cost_amount = None
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO ai_usage_operational_records (
-            usage_record_id, project_id, milestone_id, task_id, work_order_id,
-            process_run_id, adapter_id, provider, model_id, accounting_profile_id,
-            token_usage_id, billing_mode, token_visibility, cost_visibility,
-            usage_source, cost_source, confidence, input_tokens, output_tokens,
-            cached_tokens, total_tokens, cost_amount, cost_currency, run_count,
-            files_touched_json, commands_run_json, validation_result,
-            pr_result_outcome, success, failure_reason, rework_needed,
-            security_findings_json, readiness_findings_json, duration_ms,
-            source_refs_json, evidence_refs_json
-        ) VALUES (
-            :usage_record_id, :project_id, :milestone_id, :task_id, :work_order_id,
-            :process_run_id, :adapter_id, :provider, :model_id, :accounting_profile_id,
-            :token_usage_id, :billing_mode, :token_visibility, :cost_visibility,
-            :usage_source, :cost_source, :confidence, :input_tokens, :output_tokens,
-            :cached_tokens, :total_tokens, :cost_amount, :cost_currency, :run_count,
-            :files_touched_json, :commands_run_json, :validation_result,
-            :pr_result_outcome, :success, :failure_reason, :rework_needed,
-            :security_findings_json, :readiness_findings_json, :duration_ms,
-            :source_refs_json, :evidence_refs_json
-        )
-        """,
-        {
-            "usage_record_id": values["usage_record_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "work_order_id": values.get("work_order_id"),
-            "process_run_id": values.get("process_run_id"),
-            "adapter_id": values["adapter_id"],
-            "provider": values.get("provider"),
-            "model_id": values.get("model_id"),
-            "accounting_profile_id": values.get("accounting_profile_id"),
-            "token_usage_id": values.get("token_usage_id"),
-            "billing_mode": values.get("billing_mode", "unknown"),
-            "token_visibility": values.get("token_visibility", "unavailable"),
-            "cost_visibility": cost_visibility,
-            "usage_source": values.get("usage_source", "local_telemetry"),
-            "cost_source": values.get("cost_source", "unknown"),
-            "confidence": values.get("confidence", "unknown"),
-            "input_tokens": values.get("input_tokens"),
-            "output_tokens": values.get("output_tokens"),
-            "cached_tokens": values.get("cached_tokens"),
-            "total_tokens": values.get("total_tokens"),
-            "cost_amount": cost_amount,
-            "cost_currency": values.get("cost_currency"),
-            "run_count": int(values.get("run_count", 1)),
-            "files_touched_json": _json(values.get("files_touched"), []),
-            "commands_run_json": _json(values.get("commands_run"), []),
-            "validation_result": values.get("validation_result"),
-            "pr_result_outcome": values.get("pr_result_outcome"),
-            "success": _optional_bool(values.get("success")),
-            "failure_reason": values.get("failure_reason"),
-            "rework_needed": _optional_bool(values.get("rework_needed")),
-            "security_findings_json": _json(values.get("security_findings"), []),
-            "readiness_findings_json": _json(values.get("readiness_findings"), []),
-            "duration_ms": values.get("duration_ms"),
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
 def adapter_usage_accounting_summary(
     conn: sqlite3.Connection,
     *,
@@ -288,9 +215,9 @@ def adapter_usage_accounting_summary(
     if missing:
         return _empty_accounting_summary(project_id=project_id, missing=missing)
     profiles = _accounting_profiles(conn)
-    operations = _operational_records(conn, project_id=project_id)
     token_rows = _token_accounting_rows(conn, project_id=project_id)
-    task_attribution = task_attribution_summary(conn, project_id=project_id)
+    # ai_usage_operational_records: dropped migration 131
+    # task_attribution_records: dropped migration 131
     by_adapter: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "run_count": 0,
@@ -324,22 +251,6 @@ def adapter_usage_accounting_summary(
             )
         else:
             bucket["cost_unknown_count"] += 1
-    for row in operations:
-        bucket = by_adapter[row["adapter_id"]]
-        bucket["run_count"] += int(row.get("run_count") or 1)
-        bucket["files_touched_count"] += len(row.get("files_touched") or [])
-        bucket["commands_run_count"] += len(row.get("commands_run") or [])
-        if row.get("success") == 1:
-            bucket["successful_runs"] += 1
-        elif row.get("success") == 0:
-            bucket["failed_runs"] += 1
-        if row.get("rework_needed") == 1:
-            bucket["rework_needed_count"] += 1
-        if row.get("validation_result"):
-            bucket["validation_results"][row["validation_result"]] += 1
-        bucket["billing_modes"][row.get("billing_mode") or "unknown"] += 1
-        bucket["token_visibility"][row.get("token_visibility") or "unavailable"] += 1
-        bucket["cost_visibility"][row.get("cost_visibility") or "unknown"] += 1
     return {
         "model_name": "dream_studio_ai_usage_accounting",
         "derived_view": True,
@@ -349,22 +260,12 @@ def adapter_usage_accounting_summary(
         "source_tables": list(ACCOUNTING_SOURCE_TABLES),
         "profiles": profiles,
         "profile_count": len(profiles),
-        "operational_records": operations,
-        "operational_record_count": len(operations),
+        "operational_records": [],
+        "operational_record_count": 0,
         "token_record_count": len(token_rows),
         "by_adapter": {
             adapter: _finalize_adapter_bucket(bucket)
             for adapter, bucket in sorted(by_adapter.items())
-        },
-        "task_attribution": {
-            "record_count": task_attribution["record_count"],
-            "outcome_counts": task_attribution["summary"]["outcome_counts"],
-            "validation_counts": task_attribution["summary"]["validation_counts"],
-            "by_project_milestone_task": task_attribution["summary"]["by_project_milestone_task"],
-            "by_skill": task_attribution["summary"]["by_skill"],
-            "by_workflow": task_attribution["summary"]["by_workflow"],
-            "manual_review_count": task_attribution["summary"]["manual_review_count"],
-            "source_status": task_attribution["source_status"],
         },
         "policy": {
             "tokens_are_usage_not_cost": True,
@@ -408,16 +309,6 @@ def _empty_accounting_summary(*, project_id: str | None, missing: list[str]) -> 
         "operational_record_count": 0,
         "token_record_count": 0,
         "by_adapter": {},
-        "task_attribution": {
-            "record_count": 0,
-            "outcome_counts": {},
-            "validation_counts": {},
-            "by_project_milestone_task": {},
-            "by_skill": {},
-            "by_workflow": {},
-            "manual_review_count": 0,
-            "source_status": {"status": "unavailable", "missing_tables": missing},
-        },
         "schema_status": "migration_required",
         "missing_tables": missing,
         "policy": {
@@ -439,26 +330,6 @@ def _accounting_profiles(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         ORDER BY adapter_id, active DESC, configuration_label
         """).fetchall()
     return [_decode_profile(row) for row in rows]
-
-
-def _operational_records(
-    conn: sqlite3.Connection, *, project_id: str | None = None
-) -> list[dict[str, Any]]:
-    where = ""
-    params: tuple[Any, ...] = ()
-    if project_id:
-        where = "WHERE project_id = ?"
-        params = (project_id,)
-    rows = conn.execute(
-        f"""
-        SELECT *
-        FROM ai_usage_operational_records
-        {where}
-        ORDER BY created_at DESC, usage_record_id DESC
-        """,
-        params,
-    ).fetchall()
-    return [_decode_operational(row) for row in rows]
 
 
 def _token_accounting_rows(
@@ -490,20 +361,6 @@ def _decode_profile(row: sqlite3.Row) -> dict[str, Any]:
     profile["source_refs"] = _loads(profile.pop("source_refs_json"), [])
     profile["evidence_refs"] = _loads(profile.pop("evidence_refs_json"), [])
     return profile
-
-
-def _decode_operational(row: sqlite3.Row) -> dict[str, Any]:
-    record = dict(row)
-    for key in (
-        "files_touched",
-        "commands_run",
-        "security_findings",
-        "readiness_findings",
-        "source_refs",
-        "evidence_refs",
-    ):
-        record[key] = _loads(record.pop(f"{key}_json"), [])
-    return record
 
 
 def _finalize_adapter_bucket(bucket: Mapping[str, Any]) -> dict[str, Any]:
