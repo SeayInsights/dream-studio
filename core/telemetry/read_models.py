@@ -30,7 +30,7 @@ CORE_TABLES: tuple[str, ...] = (
 FACT_TABLES: tuple[str, ...] = (
     "token_usage_records",
     "ai_adapter_accounting_profiles",
-    # ai_usage_operational_records: dropped migration 131 (dead writer record_ai_usage_operational_record())
+    "ai_usage_operational_records",  # KEPT: live writer analytics_ingestion.ingest_analytics_payload()
     "findings_current_status",  # findings retired in migration 112 → findings_current_status
     "validation_results",
     "research_evidence_records",
@@ -389,8 +389,26 @@ def workflow_execution_graph(workflow_id: str, db_path: Path | str | None = None
                 "nodes": nodes,
                 "edges": edges,
                 "invocations": invocations,
-                # process_runs dropped migration 131 — return empty gracefully
-                "process_runs": [],
+                # process_runs table dropped migration 131 — derive process-run rows
+                # from execution_events.process_run_id (the live source).
+                "process_runs": (
+                    _rows(
+                        conn,
+                        f"SELECT process_run_id,"
+                        f"  min(project_id) AS project_id,"
+                        f"  min(milestone_id) AS milestone_id,"
+                        f"  min(task_id) AS task_id,"
+                        f"  min(created_at) AS started_at,"
+                        f"  max(created_at) AS ended_at"
+                        f" FROM execution_events"
+                        f" WHERE process_run_id IN ({process_placeholders})"
+                        f" GROUP BY process_run_id"
+                        f" ORDER BY started_at, process_run_id",
+                        process_params,
+                    )
+                    if process_run_ids
+                    else []
+                ),
                 "events": (
                     _rows(
                         conn,

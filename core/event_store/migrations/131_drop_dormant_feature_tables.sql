@@ -6,7 +6,6 @@
 -- Tables DROPPED (0 rows, no live writers, dormant features never reached production):
 --
 -- adapter_result_records       — dead writer record_adapter_result(); no caller outside tests
--- ai_usage_operational_records — dead writer record_ai_usage_operational_record(); test-only callers
 -- alert_history                — dead writer trigger_alert(); AlertEvaluator never instantiated in production
 -- artifact_authority_records   — dead writer record_artifact_authority(); test-only callers
 -- connector_ingestion_runs     — dead writer ingest_connector_payload(); test-only callers
@@ -30,7 +29,23 @@
 -- tool_embeddings_cache        — dead writer build_embedding_index(); never called from live path
 -- tool_registry                — no production INSERT exists; only test fixtures
 --
--- Result: 100 - 24 = 76 tables.
+-- Table reviewed and KEPT (NOT dropped — has a LIVE writer):
+-- ai_usage_operational_records — written by core/analytics_ingestion.py::ingest_analytics_payload(),
+--   reachable from the registered CLI `ds system analytics-ingest`. The Wave 2 writer-trace
+--   originally flagged it dormant by only inspecting usage_accounting.record_ai_usage_operational_record
+--   (which is itself unused), but missed the live table-driven INSERT in analytics_ingestion.py.
+--   Its indexes idx_ai_usage_operational_process/_scope are managed by migrations 081/117.
+--
+-- VIEWS repaired/dropped (they referenced retired tables):
+--   effective_skill_runs   — RECREATED without the dropped cor_skill_corrections LEFT JOIN. The
+--     correction join was always a no-op (cor_skill_corrections had no live writer, always 0 rows;
+--     COALESCE(c.corrected_success, t.success) always fell through to t.success and signal_source
+--     was always 'heuristic'). The view is LIVE: read by studio_db.rebuild_summaries /
+--     get_skill_summaries and interfaces/cli/ds_analytics (skill velocity).
+--   v_active_execution / v_blocked_nodes / v_completion_rate — DROPPED. They read the retired
+--     execution_nodes/execution_dependencies tables and have no live Python reader.
+--
+-- Result: 100 - 23 = 77 tables.
 -- Note: sqlite_autoindex_* indexes are dropped automatically with their tables.
 --
 -- Reviewed: 2026-06-27 (Wave 2 substrate realignment)
@@ -38,11 +53,6 @@
 -- adapter_result_records — 0 rows, dead writer record_adapter_result()
 DROP INDEX IF EXISTS idx_adapter_results_scope;
 DROP TABLE IF EXISTS adapter_result_records;
-
--- ai_usage_operational_records — 0 rows, dead writer record_ai_usage_operational_record()
-DROP INDEX IF EXISTS idx_ai_usage_operational_process;
-DROP INDEX IF EXISTS idx_ai_usage_operational_scope;
-DROP TABLE IF EXISTS ai_usage_operational_records;
 
 -- alert_history — 0 rows, dead writer trigger_alert(); AlertEvaluator never instantiated
 DROP INDEX IF EXISTS idx_alert_history_rule;
@@ -57,9 +67,30 @@ DROP TABLE IF EXISTS artifact_authority_records;
 DROP INDEX IF EXISTS idx_connector_ingestion_runs_source;
 DROP TABLE IF EXISTS connector_ingestion_runs;
 
+-- Repair effective_skill_runs view BEFORE dropping cor_skill_corrections so a partial-fixture
+-- replay never leaves a view bound to a table about to be dropped. The recreated view drops the
+-- correction LEFT JOIN (cor_skill_corrections retired) and reads raw_skill_telemetry directly.
+DROP VIEW IF EXISTS effective_skill_runs;
+CREATE VIEW IF NOT EXISTS effective_skill_runs AS
+SELECT
+    t.id,
+    t.skill_name,
+    t.invoked_at,
+    t.success AS success,
+    'heuristic' AS signal_source,
+    t.input_tokens,
+    t.output_tokens,
+    t.execution_time_s
+FROM raw_skill_telemetry t;
+
 -- cor_skill_corrections — 0 rows, only reachable via unregistered __main__
 DROP INDEX IF EXISTS idx_corrections_telemetry;
 DROP TABLE IF EXISTS cor_skill_corrections;
+
+-- Drop the execution-graph views before their backing tables (no live Python reader).
+DROP VIEW IF EXISTS v_active_execution;
+DROP VIEW IF EXISTS v_blocked_nodes;
+DROP VIEW IF EXISTS v_completion_rate;
 
 -- execution_dependencies — 0 rows, dream_exec.py unregistered from ds CLI
 DROP INDEX IF EXISTS idx_execution_deps_source;

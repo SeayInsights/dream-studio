@@ -25,7 +25,7 @@ CLASSIFICATION: dict[str, str] = {
     "adapter_result_records": "DROP",  # Dropped migration 131: dead writer record_adapter_result(), never called from production
     "ai_adapter_accounting_profiles": "KEEP",
     "ai_canonical_events": "KEEP",
-    "ai_usage_operational_records": "DROP",  # Dropped migration 131: dead writer record_ai_usage_operational_record(), test-only callers
+    "ai_usage_operational_records": "KEEP",  # LIVE writer: analytics_ingestion.ingest_analytics_payload() via `ds system analytics-ingest`; indexes managed by migrations 081/117
     "alert_history": "DROP",  # Dropped migration 131: dead writer trigger_alert(), AlertEvaluator never instantiated in production
     "alert_rules": "KEEP",
     "artifact_authority_records": "DROP",  # Dropped migration 131: dead writer record_artifact_authority(), test-only callers

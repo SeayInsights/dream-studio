@@ -78,6 +78,7 @@ from core.shared_intelligence.scoped_agents import (
 from core.shared_intelligence.usage_accounting import (
     adapter_usage_accounting_summary,
     record_adapter_accounting_profile,
+    record_ai_usage_operational_record,
     register_default_adapter_accounting_profiles,
 )
 
@@ -127,5 +128,6 @@ __all__ = [
     "validate_scoped_agent_registry",
     "adapter_usage_accounting_summary",
     "record_adapter_accounting_profile",
+    "record_ai_usage_operational_record",
     "register_default_adapter_accounting_profiles",
 ]
