@@ -186,18 +186,28 @@ _PROJECTION_VIEWS_DDL = """
         TRY_CAST(json_extract_string(payload,'$.memory_mb') AS DOUBLE) AS memory_mb
     FROM events_fact WHERE event_type='system.hook.execution.logged';
     CREATE OR REPLACE VIEW validation_failures AS SELECT
-        event_id AS failure_id, event_id, event_type AS vf_event_type,
+        event_id AS failure_id, event_id,
+        event_type AS vf_event_type,
+        event_type,
         json_extract_string(payload,'$.errors') AS errors,
         json_extract_string(payload,'$.invalid_event_type') AS attempted_event,
         event_timestamp AS attempted_at
     FROM events_fact WHERE event_type='event.validation.failed';
     CREATE OR REPLACE VIEW raw_sessions AS SELECT
-        session_id, project_id, json_extract_string(payload,'$.topic') AS topic,
-        event_timestamp AS started_at, NULL AS ended_at, NULL::DOUBLE AS duration_s,
-        input_tokens, output_tokens, NULL::BIGINT AS tasks_completed,
-        json_extract_string(payload,'$.pipeline_phase') AS pipeline_phase,
-        NULL::BIGINT AS handoff_consumed, outcome
-    FROM events_fact WHERE event_type='system.session.recorded';
+        r.session_id, r.project_id,
+        json_extract_string(r.payload,'$.topic') AS topic,
+        r.event_timestamp AS started_at,
+        c.event_timestamp AS ended_at,
+        TRY_CAST(json_extract_string(c.payload,'$.duration_s') AS DOUBLE) AS duration_s,
+        r.input_tokens, r.output_tokens,
+        TRY_CAST(json_extract_string(c.payload,'$.tasks_completed') AS BIGINT) AS tasks_completed,
+        json_extract_string(r.payload,'$.pipeline_phase') AS pipeline_phase,
+        NULL::BIGINT AS handoff_consumed,
+        COALESCE(json_extract_string(c.payload,'$.outcome'), r.outcome) AS outcome
+    FROM events_fact r
+    LEFT JOIN events_fact c ON c.session_id = r.session_id
+        AND c.event_type = 'system.session.closed'
+    WHERE r.event_type='system.session.recorded';
 """
 
 # (legacy) per-read-model tables — kept as a constant name only for transition; no longer used.

@@ -41,12 +41,9 @@ DEFAULT_TABLE_GROUPS: tuple[dict[str, Any], ...] = (
         "retention_class": "aggregate_then_archive_candidate",
         "reason": "token detail can later roll up to cost analytics if raw linkage is preserved.",
     },
-    {
-        "group": "derived_dashboard_projections",
-        "tables": ["proj_sessions", "proj_skill_stats", "proj_workflow_runs"],
-        "retention_class": "rebuildable_projection",
-        "reason": "derived projections are not primary authority and can be rebuilt after source proof.",
-    },
+    # derived_dashboard_projections group removed: proj_sessions, proj_skill_stats,
+    # proj_workflow_runs were dropped in migration 129 (WO-READMODELS-DUCKDB).
+    # No retention action needed for tables that no longer exist.
     {
         "group": "backups_recovery_artifacts",
         "tables": ["sqlite_backup_files"],

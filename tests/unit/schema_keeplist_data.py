@@ -14,7 +14,8 @@ from __future__ import annotations
 # bootstrapped schema but present in the live authority.
 RUNTIME_TABLES = {
     "projection_checkpoints",  # core/projections/framework.py
-    "validation_failures",  # core/event_store/event_store.py
+    # validation_failures removed: dropped in migration 129 (WO-READMODELS-DUCKDB);
+    # DuckDB validation_failures VIEW replaces the SQLite projection table.
 }
 
 CLASSIFICATION: dict[str, str] = {
@@ -84,7 +85,7 @@ CLASSIFICATION: dict[str, str] = {
     "guardrail_decisions": "KEEP",
     "hardening_candidate_records": "KEEP",
     "hook_eval_runs": "KEEP",
-    "hook_executions": "KEEP",
+    "hook_executions": "KEEP",  # Not dropped: /hooks/executions/{exec_id} + hook_findings JOIN
     "hook_findings": "KEEP",
     "installer_distribution_checks": "DROP",
     "learning_event_records": "KEEP",
@@ -118,7 +119,7 @@ CLASSIFICATION: dict[str, str] = {
     "raw_pulse_snapshots": "DROP",
     "raw_research": "KEEP",
     "raw_sentinels": "KEEP",
-    "raw_sessions": "KEEP",
+    "raw_sessions": "KEEP",  # Not dropped: end_session() UPDATEs it; get_session() reads it
     "raw_skill_telemetry": "KEEP",
     "raw_specs": "DROP",
     "raw_tasks": "DROP",
@@ -145,10 +146,10 @@ CLASSIFICATION: dict[str, str] = {
     "sum_skill_summary": "KEEP",
     "task_attribution_records": "KEEP",
     "team_rollup_records": "DROP",
-    "token_usage_records": "KEEP",
+    "token_usage_records": "KEEP",  # Not dropped: token_usage_sql() + cost accounting writer
     "tool_embeddings_cache": "KEEP",
     "tool_registry": "KEEP",
-    "validation_failures": "KEEP",
+    "validation_failures": "DROP",  # Dropped mig 129: DuckDB validation_failures VIEW replaces it
     "validation_results": "KEEP",
     "work_order_dependencies": "KEEP",
 }

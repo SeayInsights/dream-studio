@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 from typing import Dict, Any, List
 
 from core.config.database import get_connection
-from projections.api.routes.sqlite_schema import has_columns
+from core.analytics.duckdb_store import connect_analytics
 from projections.core.collectors.authority_sources import token_usage_sql
 from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 
@@ -15,6 +15,10 @@ router = APIRouter()
 
 def _connect():
     return get_connection()
+
+
+def _connect_analytics():
+    return connect_analytics(read_only=True)
 
 
 def _empty_anomalies() -> Dict[str, Any]:
@@ -53,50 +57,65 @@ def _empty_performance() -> Dict[str, Any]:
 
 @router.get("/anomalies")
 async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
-    """Detect anomalies using z-score on session duration and token usage"""
-    conn = _connect()
+    """Detect anomalies using z-score on session duration and token usage.
+
+    Session data reads from DuckDB aggregate_metrics.db (raw_sessions view with
+    ended_at derived from system.session.closed events). Token join stays on SQLite
+    since token_usage_sql() targets the SQLite authority source.
+    """
+    duck_conn = _connect_analytics()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
-        if not has_columns(conn, "raw_sessions", ["session_id", "started_at", "ended_at"]):
-            return _empty_anomalies()
-
-        token_sql = token_usage_sql(conn)
-        token_join = (
-            f"""
-            LEFT JOIN (
-                SELECT session_id, SUM(input_tokens + output_tokens) as total_tokens
-                FROM ({token_sql}) token_usage
-                WHERE session_id IS NOT NULL
-                GROUP BY session_id
-            ) t ON s.session_id = t.session_id
-        """
-            if token_sql is not None
-            else ""
-        )
-        token_expr = "COALESCE(t.total_tokens, 0)" if token_join else "0"
-
-        rows = conn.execute(
-            f"""
+        # Fetch session rows with duration_s from DuckDB (ended_at now populated)
+        session_rows = duck_conn.execute(
+            """
             SELECT
-                s.session_id,
-                s.started_at,
-                (julianday(s.ended_at) - julianday(s.started_at)) * 86400 as duration_s,
-                {token_expr} as tokens
-            FROM raw_sessions s
-            {token_join}
-            WHERE s.started_at >= ?
-              AND s.ended_at IS NOT NULL
+                session_id,
+                started_at,
+                duration_s,
+                COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS total_tokens
+            FROM raw_sessions
+            WHERE started_at >= ?
+              AND ended_at IS NOT NULL
+              AND duration_s IS NOT NULL
               AND duration_s > 0
         """,
-            (cutoff,),
+            [cutoff],
         ).fetchall()
 
-        if len(rows) < 3:
+        if len(session_rows) < 3:
             return _empty_anomalies()
 
-        durations = [r["duration_s"] for r in rows]
-        tokens = [r["tokens"] for r in rows]
+        # Augment tokens from SQLite token_usage_sql if available
+        token_by_session: Dict[str, int] = {}
+        sql_conn = _connect()
+        try:
+            token_sql = token_usage_sql(sql_conn)
+            if token_sql is not None:
+                tok_rows = sql_conn.execute(f"""
+                    SELECT session_id, SUM(input_tokens + output_tokens) as total_tokens
+                    FROM ({token_sql}) token_usage
+                    WHERE session_id IS NOT NULL
+                    GROUP BY session_id
+                """).fetchall()
+                for tr in tok_rows:
+                    token_by_session[tr["session_id"]] = tr["total_tokens"] or 0
+        finally:
+            sql_conn.close()
+
+        rows_data = [
+            {
+                "session_id": r[0],
+                "started_at": r[1],
+                "duration_s": r[2],
+                "tokens": token_by_session.get(r[0], r[3] or 0),
+            }
+            for r in session_rows
+        ]
+
+        durations = [r["duration_s"] for r in rows_data]
+        tokens = [r["tokens"] for r in rows_data]
         dur_mean, dur_std = statistics.mean(durations), statistics.pstdev(durations) or 1
         tok_mean, tok_std = statistics.mean(tokens), statistics.pstdev(tokens) or 1
 
@@ -104,7 +123,7 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
         anomalies: List[Dict[str, Any]] = []
         severity_counts = {"low": 0, "medium": 0, "high": 0}
 
-        for r in rows:
+        for r in rows_data:
             dur_z = abs(r["duration_s"] - dur_mean) / dur_std
             tok_z = abs(r["tokens"] - tok_mean) / tok_std
             max_z = max(dur_z, tok_z)
@@ -149,35 +168,40 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
                 "affected_metrics": ["duration", "tokens"] if anomalies else [],
             },
             "last_detected": last_detected,
-            "detection_rate": round(len(anomalies) / len(rows), 3) if rows else 0,
+            "detection_rate": round(len(anomalies) / len(rows_data), 3) if rows_data else 0,
             "avg_severity": avg_severity,
         }
     finally:
-        conn.close()
+        duck_conn.close()
 
 
 @router.get("/trends")
 async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
-    """Analyze daily trends for sessions, tokens, and cost with linear regression"""
-    conn = _connect()
+    """Analyze daily trends for sessions, tokens, and cost with linear regression.
+
+    Session counts read from DuckDB aggregate_metrics.db (raw_sessions view).
+    Token/cost trends read from SQLite via token_usage_sql() (authority source).
+    """
+    duck_conn = _connect_analytics()
+    sql_conn = _connect()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
-        if has_columns(conn, "raw_sessions", ["started_at"]):
-            session_rows = conn.execute(
-                """
-                SELECT DATE(started_at) as date, COUNT(*) as count
-                FROM raw_sessions WHERE started_at >= ?
-                GROUP BY DATE(started_at) ORDER BY date
-            """,
-                (cutoff,),
-            ).fetchall()
-        else:
-            session_rows = []
+        # Sessions from DuckDB raw_sessions view
+        sess_rows = duck_conn.execute(
+            """
+            SELECT DATE(started_at) as date, COUNT(*) as count
+            FROM raw_sessions WHERE started_at >= ?
+            GROUP BY DATE(started_at) ORDER BY date
+        """,
+            [cutoff],
+        ).fetchall()
+        session_rows = [{"date": r[0], "count": r[1]} for r in sess_rows]
 
-        token_sql = token_usage_sql(conn)
+        # Tokens/cost from SQLite via token_usage_sql (cost data lives in SQLite authority)
+        token_sql = token_usage_sql(sql_conn)
         if token_sql is not None:
-            token_rows = conn.execute(
+            token_rows_raw = sql_conn.execute(
                 f"""
                 SELECT DATE(recorded_at) as date,
                        SUM(input_tokens + output_tokens) as tokens,
@@ -193,6 +217,10 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
             """,
                 (*REPORTABLE_COST_VISIBILITIES, cutoff),
             ).fetchall()
+            token_rows = [
+                {"date": r["date"], "tokens": r["tokens"], "cost": r["cost"]}
+                for r in token_rows_raw
+            ]
         else:
             token_rows = []
 
@@ -246,45 +274,42 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
             "summary": {"upward_trends": up, "downward_trends": down, "stable_metrics": stable},
         }
     finally:
-        conn.close()
+        duck_conn.close()
+        sql_conn.close()
 
 
 @router.get("/performance")
 async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
-    """Analyze session performance: flow breakdown, day-of-week, and hourly activity"""
-    conn = _connect()
+    """Analyze session performance: flow breakdown, day-of-week, and hourly activity.
+
+    Reads from DuckDB aggregate_metrics.db (raw_sessions view over events_fact).
+    """
+    conn = _connect_analytics()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
-        if not has_columns(conn, "raw_sessions", ["started_at"]):
-            return _empty_performance()
-
-        outcome_expr = (
-            "COALESCE(outcome, 'unknown')"
-            if has_columns(conn, "raw_sessions", ["outcome"])
-            else "'unknown'"
-        )
+        # Outcome breakdown — DuckDB raw_sessions view always has 'outcome' column
         outcome_rows = conn.execute(
-            f"""
+            """
             SELECT
-                {outcome_expr} as outcome,
+                COALESCE(outcome, 'unknown') as outcome,
                 COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
             GROUP BY outcome
         """,
-            (cutoff,),
+            [cutoff],
         ).fetchall()
 
-        outcome_map = {r["outcome"]: r["count"] for r in outcome_rows}
+        if not outcome_rows:
+            return _empty_performance()
+
+        outcome_map = {r[0]: r[1] for r in outcome_rows}
         total = sum(outcome_map.values())
 
         session_flow = {
             "started": total,
             "completed": outcome_map.get("success", 0) + outcome_map.get("completed", 0),
             "failed": outcome_map.get("failed", 0) + outcome_map.get("error", 0),
-            # "timeout" is a real outcome; "unknown"/"in_progress" are distinct states.
-            # Previously all three were merged into "timeout", making it look like
-            # every unresolved session had timed out — that was misleading.
             "timeout": outcome_map.get("timeout", 0),
             "other": outcome_map.get("unknown", 0) + outcome_map.get("in_progress", 0),
         }
@@ -292,32 +317,32 @@ async def get_performance(days: int = Query(default=30, ge=1, le=365)) -> Dict[s
         dow_rows = conn.execute(
             """
             SELECT
-                CAST(strftime('%w', started_at) AS INTEGER) as dow,
+                CAST(strftime(started_at, '%w') AS INTEGER) as dow,
                 COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
             GROUP BY dow
         """,
-            (cutoff,),
+            [cutoff],
         ).fetchall()
 
-        dow_map = {r["dow"]: r["count"] for r in dow_rows}
+        dow_map = {r[0]: r[1] for r in dow_rows}
         day_of_week = [dow_map.get((i % 7 + 1) % 7, 0) for i in range(7)]
 
         hourly_rows = conn.execute(
             """
             SELECT
-                CAST(strftime('%w', started_at) AS INTEGER) as dow,
-                CAST(strftime('%H', started_at) AS INTEGER) as hour,
+                CAST(strftime(started_at, '%w') AS INTEGER) as dow,
+                CAST(strftime(started_at, '%H') AS INTEGER) as hour,
                 COUNT(*) as count
             FROM raw_sessions WHERE started_at >= ?
             GROUP BY dow, hour
         """,
-            (cutoff,),
+            [cutoff],
         ).fetchall()
 
         hourly_map = {}
         for r in hourly_rows:
-            hourly_map[(r["dow"], r["hour"])] = r["count"]
+            hourly_map[(r[0], r[1])] = r[2]
 
         hourly_activity = []
         for day_idx in range(7):

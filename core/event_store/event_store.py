@@ -96,22 +96,10 @@ class EventStore:
         This method only creates validation_failures, which EventStore still owns.
         Dual-canonical tables are created on demand by _write_to_dual_canonical.
         """
-        with self._transaction() as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS validation_failures (
-                    failure_id TEXT PRIMARY KEY,
-                    event_id TEXT,
-                    event_type TEXT,
-                    errors JSON NOT NULL,
-                    attempted_event JSON NOT NULL,
-                    attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_validation_failures_event_type
-                ON validation_failures(event_type)
-            """)
+        # validation_failures was dropped in migration 129 (WO-READMODELS-DUCKDB).
+        # The DuckDB events_fact validation_failures VIEW replaces this projection table.
+        # No tables created here; dual-canonical tables are created on demand by
+        # _write_to_dual_canonical, and the migration system owns all other tables.
 
     def write_event(self, event: Dict) -> bool:
         """
@@ -147,27 +135,15 @@ class EventStore:
         return True
 
     def _log_validation_failure(self, event: Dict, result: ValidationResult):
-        """
-        Log validation failure to validation_failures table.
+        """Log validation failure.
 
-        Args:
-            event: Invalid event
-            result: ValidationResult with errors
+        The SQLite validation_failures projection table was dropped in migration 129
+        (WO-READMODELS-DUCKDB). Validation failures are now surfaced via the
+        event.validation.failed canonical event (emitted by _emit_validation_failure_event)
+        which the DuckDB events_fact pipeline projects into the validation_failures VIEW.
+        This method is retained as a no-op to preserve the call site; the canonical
+        event emission path is the sole writer going forward.
         """
-        failure_id = str(uuid4())
-        event_id = event.get("event_id", "MISSING")
-        event_type = event.get("event_type", "UNKNOWN")
-
-        with self._transaction() as conn:
-            conn.execute(
-                """
-                INSERT INTO validation_failures (
-                    failure_id, event_id, event_type, errors, attempted_event
-                )
-                VALUES (?, ?, ?, ?, ?)
-            """,
-                (failure_id, event_id, event_type, json.dumps(result.errors), json.dumps(event)),
-            )
 
     def _emit_validation_failure_event(self, event: Dict, result: ValidationResult):
         """
@@ -267,37 +243,16 @@ class EventStore:
         """
         Get recent validation failures (for debugging).
 
-        Args:
-            limit: Maximum number of failures to return
+        Stubbed out: the SQLite validation_failures table was dropped in migration 129
+        (WO-READMODELS-DUCKDB). Validation failures are now served by the DuckDB
+        validation_failures VIEW in aggregate_metrics.db (events_fact pipeline).
+        Use connect_analytics(read_only=True) and SELECT from validation_failures
+        in DuckDB for live data.
 
         Returns:
-            List of validation failure records
+            Empty list (SQLite table no longer exists)
         """
-        cursor = self.db.execute(
-            """
-            SELECT * FROM validation_failures
-            ORDER BY attempted_at DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
-
-        rows = cursor.fetchall()
-
-        failures = []
-        for row in rows:
-            failures.append(
-                {
-                    "failure_id": row["failure_id"],
-                    "event_id": row["event_id"],
-                    "event_type": row["event_type"],
-                    "errors": json.loads(row["errors"]),
-                    "attempted_event": json.loads(row["attempted_event"]),
-                    "attempted_at": row["attempted_at"],
-                }
-            )
-
-        return failures
+        return []
 
     def close(self):
         """Close database connection."""

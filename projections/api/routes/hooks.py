@@ -1,10 +1,10 @@
 """Hook execution tracking API routes for webhooks dashboard"""
 
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Query, Path
 
 from core.config.database import get_connection
+from core.analytics.duckdb_store import connect_analytics
 from projections.api.routes.sqlite_schema import has_columns, object_exists
 
 router = APIRouter()
@@ -113,104 +113,110 @@ async def list_hook_executions(
     List recent hook executions with activity log data joined.
 
     Returns hook executions sorted by most recent first, with optional filters.
+    Reads from DuckDB aggregate_metrics.db (derived from canonical events via events_fact).
     """
-    conn = get_connection()
+    conn = connect_analytics(read_only=True)
 
     try:
-        if not object_exists(conn, "hook_executions"):
-            executions = _fallback_hook_invocations(conn, hook_name, status, since, limit)
-            if not executions:
-                return _empty_executions(
-                    hook_name=hook_name,
-                    status=status,
-                    since=since,
-                    limit=limit,
-                    reason="hook_executions is absent and hook_invocations has no compatible rows.",
-                )
-            return {
-                "executions": executions,
-                "count": len(executions),
-                "filters": {
-                    "hook_name": hook_name,
-                    "status": status,
-                    "since": since,
-                    "limit": limit,
-                },
-                "source_status": {
-                    "classification": "unified source",
-                    "reason": "hook_executions is absent; using execution_events telemetry fallback.",
-                    "source_tables": ["execution_events"],
-                    "derived_view": True,
-                    "primary_authority": False,
-                },
-            }
-
-        # Build query with optional filters
+        # Build query with optional filters — DuckDB views always exist; no object_exists needed
         query = """
             SELECT
-                he.hook_exec_id,
-                he.activity_id,
-                he.hook_name,
-                he.hook_type,
-                he.trigger_context,
-                he.started_at,
-                he.completed_at,
-                he.duration_ms,
-                he.exit_code,
-                he.status,
-                he.output,
-                he.error_message,
-                he.cpu_time_ms,
-                he.memory_mb,
-                he.started_at AS event_timestamp,
+                hook_exec_id,
+                activity_id,
+                hook_name,
+                hook_type,
+                trigger_context,
+                started_at,
+                completed_at,
+                duration_ms,
+                exit_code,
+                status,
+                output,
+                error_message,
+                cpu_time_ms,
+                memory_mb,
+                started_at AS event_timestamp,
                 'info' AS severity,
-                0 AS is_anomaly,
+                false AS is_anomaly,
                 0 AS anomaly_score
-            FROM hook_executions he
+            FROM hook_executions
             WHERE 1=1
         """
         params = []
 
         if hook_name:
-            query += " AND he.hook_name = ?"
+            query += " AND hook_name = ?"
             params.append(hook_name)
 
         if status:
-            query += " AND he.status = ?"
+            query += " AND status = ?"
             params.append(status)
 
         if since:
-            query += " AND he.started_at >= ?"
+            query += " AND started_at >= ?"
             params.append(since)
 
-        query += " ORDER BY he.started_at DESC LIMIT ?"
+        query += " ORDER BY started_at DESC LIMIT ?"
         params.append(limit)
 
         rows = conn.execute(query, params).fetchall()
 
-        executions = []
-        for row in rows:
-            executions.append(
-                {
-                    "hook_exec_id": row["hook_exec_id"],
-                    "activity_id": row["activity_id"],
-                    "hook_name": row["hook_name"],
-                    "hook_type": row["hook_type"],
-                    "trigger_context": row["trigger_context"],
-                    "started_at": row["started_at"],
-                    "completed_at": row["completed_at"],
-                    "duration_ms": row["duration_ms"],
-                    "exit_code": row["exit_code"],
-                    "status": row["status"],
-                    "output": row["output"],
-                    "error_message": row["error_message"],
-                    "cpu_time_ms": row["cpu_time_ms"],
-                    "memory_mb": row["memory_mb"],
-                    "event_timestamp": row["event_timestamp"],
-                    "severity": row["severity"],
-                    "is_anomaly": bool(row["is_anomaly"]),
-                    "anomaly_score": row["anomaly_score"],
+        executions = [
+            {
+                "hook_exec_id": r[0],
+                "activity_id": r[1],
+                "hook_name": r[2],
+                "hook_type": r[3],
+                "trigger_context": r[4],
+                "started_at": r[5],
+                "completed_at": r[6],
+                "duration_ms": r[7],
+                "exit_code": r[8],
+                "status": r[9],
+                "output": r[10],
+                "error_message": r[11],
+                "cpu_time_ms": r[12],
+                "memory_mb": r[13],
+                "event_timestamp": r[14],
+                "severity": r[15],
+                "is_anomaly": bool(r[16]),
+                "anomaly_score": r[17],
+            }
+            for r in rows
+        ]
+
+        # DuckDB returns 0 rows when events_fact is empty — surface a fallback status
+        # if no DuckDB rows found; still try execution_events in SQLite for telemetry
+        if not executions:
+            sql_conn = get_connection()
+            try:
+                fb = _fallback_hook_invocations(sql_conn, hook_name, status, since, limit)
+            finally:
+                sql_conn.close()
+            if fb:
+                return {
+                    "executions": fb,
+                    "count": len(fb),
+                    "filters": {
+                        "hook_name": hook_name,
+                        "status": status,
+                        "since": since,
+                        "limit": limit,
+                    },
+                    "source_status": {
+                        "classification": "unified source",
+                        "reason": "DuckDB events_fact empty; using execution_events telemetry fallback.",
+                        "source_tables": ["execution_events"],
+                        "derived_view": True,
+                        "primary_authority": False,
+                    },
                 }
+            return _empty_executions(
+                hook_name=hook_name,
+                status=status,
+                since=since,
+                limit=limit,
+                reason="No hook_executions in DuckDB events_fact and no execution_events rows.",
             )
 
         return {
@@ -434,53 +440,11 @@ async def get_hook_performance() -> Dict[str, Any]:
     Get hook execution performance statistics.
 
     Returns execution counts, durations, and failure rates by hook name.
+    Reads from DuckDB aggregate_metrics.db (derived from canonical events via events_fact).
     """
-    conn = get_connection()
+    conn = connect_analytics(read_only=True)
 
     try:
-        if not object_exists(conn, "hook_executions"):
-            invocations = _fallback_hook_invocations(conn, None, None, None, 1000)
-            by_hook: dict[str, dict[str, Any]] = {}
-            for item in invocations:
-                hook = item["hook_name"] or "unknown"
-                if hook not in by_hook:
-                    by_hook[hook] = {
-                        "execution_count": 0,
-                        "avg_duration_ms": 0,
-                        "max_duration_ms": 0,
-                        "failure_count": 0,
-                        "success_count": 0,
-                        "success_rate": 0.0,
-                    }
-                by_hook[hook]["execution_count"] += 1
-                failed = item["status"] in ("failed", "failure", "timeout", "error")
-                by_hook[hook]["failure_count"] += 1 if failed else 0
-                by_hook[hook]["success_count"] += 0 if failed else 1
-            for item in by_hook.values():
-                count = item["execution_count"]
-                item["success_rate"] = round(item["success_count"] / count, 3) if count else 0.0
-            total_executions = sum(item["execution_count"] for item in by_hook.values())
-            total_failures = sum(item["failure_count"] for item in by_hook.values())
-            total_successes = total_executions - total_failures
-            return {
-                "by_hook": by_hook,
-                "summary": {
-                    "total_executions": total_executions,
-                    "total_successes": total_successes,
-                    "total_failures": total_failures,
-                    "overall_success_rate": (
-                        round(total_successes / total_executions, 3) if total_executions else 0.0
-                    ),
-                },
-                "source_status": {
-                    "classification": "unified source",
-                    "reason": "hook performance is derived from execution_events telemetry fallback.",
-                    "source_tables": ["execution_events"],
-                    "derived_view": True,
-                    "primary_authority": False,
-                },
-            }
-
         rows = conn.execute("""
             SELECT
                 COALESCE(NULLIF(hook_name, ''), 'unknown') AS hook_name,
@@ -504,8 +468,8 @@ async def get_hook_performance() -> Dict[str, Any]:
         total_failures = 0
 
         for row in rows:
-            execution_count = row["execution_count"]
-            failure_count = row["failure_count"]
+            execution_count = row[1]
+            failure_count = row[4]
             success_count = execution_count - failure_count
 
             total_executions += execution_count
@@ -513,14 +477,42 @@ async def get_hook_performance() -> Dict[str, Any]:
 
             success_rate = (success_count / execution_count) if execution_count > 0 else 0.0
 
-            by_hook[row["hook_name"]] = {
+            by_hook[row[0]] = {
                 "execution_count": execution_count,
-                "avg_duration_ms": round(row["avg_duration_ms"], 2),
-                "max_duration_ms": row["max_duration_ms"],
+                "avg_duration_ms": round(row[2], 2) if row[2] is not None else 0,
+                "max_duration_ms": row[3],
                 "failure_count": failure_count,
                 "success_count": success_count,
                 "success_rate": round(success_rate, 3),
             }
+
+        # DuckDB returned no rows — fall back to execution_events in SQLite
+        if not by_hook:
+            sql_conn = get_connection()
+            try:
+                invocations = _fallback_hook_invocations(sql_conn, None, None, None, 1000)
+            finally:
+                sql_conn.close()
+            for item in invocations:
+                hook = item["hook_name"] or "unknown"
+                if hook not in by_hook:
+                    by_hook[hook] = {
+                        "execution_count": 0,
+                        "avg_duration_ms": 0,
+                        "max_duration_ms": 0,
+                        "failure_count": 0,
+                        "success_count": 0,
+                        "success_rate": 0.0,
+                    }
+                by_hook[hook]["execution_count"] += 1
+                failed = item["status"] in ("failed", "failure", "timeout", "error")
+                by_hook[hook]["failure_count"] += 1 if failed else 0
+                by_hook[hook]["success_count"] += 0 if failed else 1
+            for item in by_hook.values():
+                count = item["execution_count"]
+                item["success_rate"] = round(item["success_count"] / count, 3) if count else 0.0
+            total_executions = sum(item["execution_count"] for item in by_hook.values())
+            total_failures = sum(item["failure_count"] for item in by_hook.values())
 
         total_successes = total_executions - total_failures
         overall_success_rate = (total_successes / total_executions) if total_executions > 0 else 0.0
@@ -605,18 +597,24 @@ async def list_validation_failures(limit: int = Query(default=50, le=200)) -> Di
 
     Previously invisible: 443+ rows in validation_failures with no dashboard surface.
     These are events that were rejected by the validation pipeline.
+    Reads from DuckDB aggregate_metrics.db (derived from canonical events).
     """
-    conn = get_connection()
+    conn = connect_analytics(read_only=True)
     try:
-        conn.row_factory = __import__("sqlite3").Row
-        if not object_exists(conn, "validation_failures"):
-            return {"failures": [], "count": 0, "by_event_type": {}}
         rows = conn.execute(
             "SELECT event_id, event_type, errors, attempted_at "
             "FROM validation_failures ORDER BY attempted_at DESC LIMIT ?",
-            (limit,),
+            [limit],
         ).fetchall()
-        failures = [dict(r) for r in rows]
+        failures = [
+            {
+                "event_id": r[0],
+                "event_type": r[1],
+                "errors": r[2],
+                "attempted_at": r[3],
+            }
+            for r in rows
+        ]
         by_type = {}
         for r in failures:
             t = r.get("event_type") or "unknown"

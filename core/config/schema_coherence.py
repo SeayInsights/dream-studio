@@ -30,7 +30,12 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # EventStore._init_tables and spool/ingestor.py _write_to_sqlite are
     # idempotent fallbacks that defer to the migration. Removed from this
     # registry; the staleness guard will find it in migration_tables and skip it.
-    "validation_failures": "core/event_store/event_store.py:112 (EventStore._init_tables)",
+    # validation_failures: The SQLite table was dropped in migration 129 (WO-READMODELS-DUCKDB).
+    # event_store.py _init_tables() CREATE TABLE removed; _log_validation_failure() no-op'd.
+    # The name remains in _PYTHON_OWNED_TABLES because duckdb_store.py:_PROJECTION_TABLES_DDL_UNUSED
+    # still contains a CREATE TABLE IF NOT EXISTS for the DuckDB-side equivalent (not studio.db).
+    # The staleness guard would otherwise flag the DuckDB-side DDL as an unregistered table.
+    "validation_failures": "core/analytics/duckdb_store.py:231 (DuckDB table in _PROJECTION_TABLES_DDL_UNUSED — NOT studio.db; SQLite validation_failures dropped in migration 129)",
     "action_feedback": "core/repo_actions/feedback.py:244",
     "real_action_feedback": "core/execution/real_feedback.py:200",
     "workflow_executions": "core/projections/workflow_metrics.py:30",
@@ -39,11 +44,9 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     "phase_kpis": "core/projections/workflow_metrics.py:79",
     "consumer_state": "core/projections/workflow_consumer.py:158",
     "projection_checkpoints": "core/projections/framework.py:1186",
-    "proj_workflow_runs": "core/projections/consumers.py:27",
-    "proj_skill_stats": "core/projections/consumers.py:146",
-    "proj_sessions": "core/projections/consumers.py:241",
-    "proj_decision_patterns": "core/projections/consumers.py:335",
-    "proj_security_summary": "core/projections/consumers.py:409",
+    # proj_workflow_runs, proj_skill_stats, proj_sessions, proj_decision_patterns,
+    # proj_security_summary: REMOVED from registry — dropped in migration 129 (WO-READMODELS-DUCKDB).
+    # consumers.py consumers retired; no live readers existed; DuckDB events_fact is source of truth.
     # memory_fts: dual-owned — migration 079 + retrieval.py both use CREATE VIRTUAL TABLE
     # IF NOT EXISTS (idempotent). Listed here so the staleness guard does not
     # flag retrieval.py as an unregistered call site on FTS5-absent systems.
