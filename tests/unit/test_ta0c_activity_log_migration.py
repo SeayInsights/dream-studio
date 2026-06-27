@@ -75,24 +75,9 @@ def db_with_canonical(tmp_path):
 # ── Nullable activity_id ─────────────────────────────────────────────────────
 
 
-class TestActivityIdNullable:
-    # hook_executions was dropped in migration 129 (WO-READMODELS-DUCKDB) — it no longer
-    # survives to the end of the migration chain, so it cannot be probed here. Migration 062
-    # still makes its activity_id nullable while the table exists; hook_findings remains.
-    TARGET_TABLES = [
-        "hook_findings",
-    ]
-
-    def test_activity_id_nullable_in_all_target_tables(self, tmp_path):
-        db = tmp_path / "test.db"
-        conn = _connect(db)
-        for tname in self.TARGET_TABLES:
-            cols = {r[1]: r[3] for r in conn.execute(f"PRAGMA table_info({tname})").fetchall()}
-            assert "activity_id" in cols, f"{tname} missing activity_id column"
-            assert (
-                cols["activity_id"] == 0
-            ), f"{tname}.activity_id should be nullable (notnull=0) after migration 062"
-        conn.close()
+# TestActivityIdNullable removed: its only subject tables (hook_executions, hook_findings)
+# were dropped in migrations 129/131, so migration 062's nullable-activity_id behavior has
+# no surviving table to probe.
 
 
 # ── Retired views ────────────────────────────────────────────────────────────
