@@ -281,3 +281,5 @@ Platform-hardening reinforces the shared-authority rule: adapters may produce ev
 <!-- Last reviewed 2026-06-20 — WO-P20-FULLCI-FIX: the generated AGENTS.md header now includes the lowercase "projection" authority marker so the codex active_repo_surface staleness classification holds (it was lost when AGENTS.md became generated). No change to the staleness classifier or authority-marker set; AGENTS.md remains a generated projection consuming canonical authority. .claude-plugin/plugin.json is now committed (un-ignored) so the marketplace manifest ships with the repo. -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- reviewed 2026-06-27: Wave 1 migration 130 — module_contracts.py: removed artifact_records from telemetry module owned_tables (table dropped in migration 130; 0 rows, aspirational telemetry). No installed adapter runtime behavior, state, routing, or productization change. No semantic change required. -->

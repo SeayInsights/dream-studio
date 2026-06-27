@@ -58,6 +58,13 @@ All new migrations MUST be added here. The migration runner in `core/event_store
 
 The `_schema_version` table tracks which migrations have been applied. It is managed by `studio_db._run_migrations()` and must not be modified manually or by external tools.
 
+## Notable Drop Migrations
+
+| Migration | Tables dropped | Reason |
+|---|---|---|
+| 130 | `artifact_records`, `authority_projection_records`, `blocker_resolution_records`, `hook_findings`, `canonical_events_legacy_backup` | Aspirational telemetry tables (0 rows, no production writers). Backup table data already migrated to dual-canonical in migration 102. |
+| 129 | `hook_executions`, `validation_failures` | Repointed to DuckDB views; SQLite tables no longer needed. |
+
 ## Root `migrations/` Directory — Legacy
 
 The root `migrations/` directory contains legacy migration files from an earlier execution-graph and security-linking phase. These files are **not managed by the canonical migration runner** and exist only as historical reference.

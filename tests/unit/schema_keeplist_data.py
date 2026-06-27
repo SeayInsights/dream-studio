@@ -29,10 +29,10 @@ CLASSIFICATION: dict[str, str] = {
     "alert_history": "KEEP",
     "alert_rules": "KEEP",
     "artifact_authority_records": "KEEP",
-    "artifact_records": "KEEP",
+    "artifact_records": "DROP",  # Dropped migration 130: 0 rows, no production writer, aspirational telemetry
     "audit_runs": "KEEP",
-    "authority_projection_records": "KEEP",
-    "blocker_resolution_records": "KEEP",
+    "authority_projection_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
+    "blocker_resolution_records": "DROP",  # Dropped migration 130: 0 rows, no live writer, aspirational telemetry
     "business_canonical_events": "KEEP",
     "business_design_briefs": "KEEP",
     "business_milestones": "KEEP",
@@ -88,8 +88,7 @@ CLASSIFICATION: dict[str, str] = {
     "hook_executions": "DROP",  # Dropped mig 129: DuckDB hook_executions VIEW (over
     #                             system.hook.execution.logged) replaces it; writer now only
     #                             emits the canonical event; all reads repointed to DuckDB.
-    "hook_findings": "KEEP",  # Empty (0 rows), no readers (JOIN removed), writer uncalled;
-    #                           retained as harmless empty table — follow-up dead-table cleanup.
+    "hook_findings": "DROP",  # Dropped migration 130: 0 rows, no live readers, writer removed
     "installer_distribution_checks": "DROP",
     "learning_event_records": "KEEP",
     "legacy_canonical_event_import_map": "DROP",

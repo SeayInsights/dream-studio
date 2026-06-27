@@ -35,10 +35,10 @@ FACT_TABLES: tuple[str, ...] = (
     "validation_results",
     "research_evidence_records",
     "decision_records",
-    "blocker_resolution_records",
-    "artifact_records",
+    # blocker_resolution_records: dropped migration 130 (aspirational, 0 rows, no live writer)
+    # artifact_records: dropped migration 130 (aspirational, 0 rows, no production writer)
+    # authority_projection_records: dropped migration 130 (aspirational, 0 rows, no live writer)
     "outcome_records",
-    "authority_projection_records",
 )
 
 COMPONENT_TABLES: Mapping[str, tuple[str, str, str]] = {
@@ -61,7 +61,7 @@ MODULE_SEGMENTS: Mapping[str, tuple[str, ...]] = {
     ),
     "validation_only": ("validation_analytics",),
     "research_decision_only": ("research_decision_analytics",),
-    "artifact_only": ("artifact_analytics",),
+    # artifact_only removed: artifact_analytics module dropped in migration 130
     "route_attention_only": ("route_milestone_analytics",),
 }
 
@@ -185,8 +185,8 @@ def global_telemetry_summary(db_path: Path | str | None = None) -> dict[str, Any
                 "validation_outcomes": _validation_rollup(conn),
                 "validation_outcome_intelligence": _validation_outcome_intelligence(conn),
                 "research_decisions": _research_decision_rollup(conn),
-                "research_blocker_resolution": _research_blocker_resolution(conn),
-                "artifact_lineage_lifecycle": _artifact_lineage_lifecycle(conn),
+                # research_blocker_resolution removed: blocker_resolution_records dropped mig 130
+                # artifact_lineage_lifecycle removed: artifact_records dropped mig 130
                 "dashboard_attention": _attention_rollup(conn),
                 "route_status": _route_rollup(conn),
                 "route_explainability": _route_explainability(conn),
@@ -241,8 +241,8 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
             "findings_current_status",
             "research_evidence_records",
             "decision_records",
-            "blocker_resolution_records",
-            "artifact_records",
+            # blocker_resolution_records: dropped migration 130
+            # artifact_records: dropped migration 130
             "outcome_records",
             "dashboard_attention_items",
         ]
@@ -300,15 +300,8 @@ def process_run_timeline(process_run_id: str, db_path: Path | str | None = None)
                 "decisions": _scoped_rows(
                     conn, "decision_records", scope, order_by="created_at, decision_id"
                 ),
-                "blockers": _scoped_rows(
-                    conn,
-                    "blocker_resolution_records",
-                    scope,
-                    order_by="created_at, blocker_id",
-                ),
-                "artifacts": _scoped_rows(
-                    conn, "artifact_records", scope, order_by="created_at, artifact_id"
-                ),
+                # blockers removed: blocker_resolution_records dropped migration 130
+                # artifacts removed: artifact_records dropped migration 130
                 "outcomes": _scoped_rows(
                     conn, "outcome_records", scope, order_by="created_at, outcome_id"
                 ),
@@ -553,8 +546,8 @@ def _scoped_summary(
             "validations": _validation_rollup(conn, scope),
             "validation_outcome_intelligence": _validation_outcome_intelligence(conn, scope),
             "research_decisions": _research_decision_rollup(conn, scope),
-            "research_blocker_resolution": _research_blocker_resolution(conn, scope),
-            "artifact_lineage_lifecycle": _artifact_lineage_lifecycle(conn, scope),
+            # research_blocker_resolution removed: blocker_resolution_records dropped mig 130
+            # artifact_lineage_lifecycle removed: artifact_records dropped mig 130
             "attention": _attention_rollup(conn, scope),
             "outcomes": _outcome_rollup(conn, scope),
             "route_status": _route_rollup(conn, scope),
@@ -1401,100 +1394,6 @@ def _research_decision_rollup(
     return {"research": research, "decisions": decisions}
 
 
-def _research_blocker_resolution(
-    conn: sqlite3.Connection, scope: ScopeFilter | None = None
-) -> dict[str, Any]:
-    where, params = _where_scope(scope)
-    blockers = _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(milestone_id, 'unknown') AS milestone_id,
-            COALESCE(task_id, 'unknown') AS task_id,
-            COALESCE(process_run_id, 'unknown') AS process_run_id,
-            blocker_class,
-            route_class,
-            confidence,
-            resolution_status,
-            prompt_required,
-            dashboard_approval_required,
-            COUNT(*) AS blocker_count
-        FROM blocker_resolution_records
-        {where}
-        GROUP BY project_id, milestone_id, task_id, process_run_id,
-                 blocker_class, route_class, confidence, resolution_status,
-                 prompt_required, dashboard_approval_required
-        ORDER BY prompt_required DESC, dashboard_approval_required DESC,
-                 blocker_count DESC, route_class
-        """,
-        params,
-    )
-    research_classes = _rows(
-        conn,
-        f"""
-        SELECT
-            decision_class,
-            confidence,
-            operator_verification_required,
-            COUNT(*) AS research_count
-        FROM research_evidence_records
-        {where}
-        GROUP BY decision_class, confidence, operator_verification_required
-        ORDER BY operator_verification_required DESC, research_count DESC, decision_class
-        """,
-        params,
-    )
-
-    def count_if(predicate: Any) -> int:
-        return sum(int(row["blocker_count"] or 0) for row in blockers if predicate(row))
-
-    route_counts = {
-        "continue_allowed": count_if(
-            lambda row: row["route_class"] == "concrete_research_resolved_continue"
-            and row["prompt_required"] == 0
-            and row["dashboard_approval_required"] == 0
-        ),
-        "dashboard_approval_required": count_if(
-            lambda row: row["dashboard_approval_required"] == 1
-        ),
-        "operator_prompt_required": count_if(lambda row: row["prompt_required"] == 1),
-        "true_unknown_prompt_required": count_if(
-            lambda row: row["route_class"] == "true_unknown_prompt_required"
-        ),
-        "unsafe_hard_stop": count_if(lambda row: row["route_class"] == "unsafe_hard_stop"),
-        "unresolved": count_if(
-            lambda row: row["resolution_status"] not in {"resolved", "continue_allowed"}
-        ),
-    }
-    operator_verification_count = sum(
-        int(row["research_count"] or 0)
-        for row in research_classes
-        if row["operator_verification_required"] == 1
-    )
-    route_counts["research_operator_verification_required"] = operator_verification_count
-
-    return {
-        "blocker_routes": blockers,
-        "research_decision_classes": research_classes,
-        "route_counts": route_counts,
-        "route_guidance": {
-            "low_risk_research_can_continue": route_counts["continue_allowed"] > 0,
-            "material_risk_routes_to_dashboard_approval": route_counts[
-                "dashboard_approval_required"
-            ]
-            > 0,
-            "true_unknown_requires_operator_prompt": route_counts["true_unknown_prompt_required"]
-            > 0,
-            "hard_stop_present": route_counts["unsafe_hard_stop"] > 0,
-            "dashboard_ready": True,
-            "derived_view": True,
-            "primary_authority": False,
-        },
-        "empty_state": "No research blocker resolution records for the selected scope.",
-    }
-
-
 def _attention_rollup(
     conn: sqlite3.Connection, scope: ScopeFilter | None = None
 ) -> list[dict[str, Any]]:
@@ -1572,101 +1471,6 @@ def _outcome_rollup(
         {where}
         GROUP BY project_id, milestone_id, task_id, outcome_type, outcome_status
         ORDER BY outcome_count DESC, outcome_type
-        """,
-        params,
-    )
-
-
-def _artifact_lineage_lifecycle(
-    conn: sqlite3.Connection, scope: ScopeFilter | None = None
-) -> dict[str, Any]:
-    where, params = _where_scope(scope)
-    artifacts = _rows(
-        conn,
-        f"""
-        SELECT
-            artifact_id,
-            COALESCE(project_id, 'unknown') AS project_id,
-            COALESCE(milestone_id, 'unknown') AS milestone_id,
-            COALESCE(task_id, 'unknown') AS task_id,
-            COALESCE(process_run_id, 'unknown') AS process_run_id,
-            event_id,
-            artifact_path,
-            artifact_role,
-            lifecycle_status,
-            COALESCE(source_authority, 'unknown') AS source_authority,
-            source_refs_json,
-            metadata_json,
-            created_at
-        FROM artifact_records
-        {where}
-        ORDER BY created_at DESC, artifact_id
-        """,
-        params,
-    )
-    enriched: list[dict[str, Any]] = []
-    for artifact in artifacts:
-        metadata = _json_object(artifact.get("metadata_json"))
-        source_refs = _json_list(artifact.get("source_refs_json"))
-        evidence_refs = metadata.get("evidence_refs", [])
-        if not isinstance(evidence_refs, list):
-            evidence_refs = []
-        stale_superseded = {
-            "is_stale": artifact["lifecycle_status"] == "stale" or bool(metadata.get("stale")),
-            "is_superseded": artifact["lifecycle_status"] == "superseded"
-            or bool(metadata.get("superseded_by")),
-            "superseded_by": metadata.get("superseded_by"),
-        }
-        enriched.append(
-            {
-                **artifact,
-                "source_refs": source_refs,
-                "evidence_refs": evidence_refs,
-                "metadata": metadata,
-                "stale_superseded": stale_superseded,
-                "dashboard_visible": artifact["lifecycle_status"] not in {"deleted", "rejected"},
-                "requires_manual_review": stale_superseded["is_stale"]
-                or stale_superseded["is_superseded"]
-                or artifact["source_authority"] == "unknown",
-                "derived_view": True,
-                "primary_authority": False,
-            }
-        )
-    return {
-        "artifacts": enriched,
-        "lifecycle_counts": _artifact_lifecycle_counts(conn, scope),
-        "manual_review_required": [
-            artifact for artifact in enriched if artifact["requires_manual_review"]
-        ],
-        "dashboard_visible": [artifact for artifact in enriched if artifact["dashboard_visible"]],
-        "policy": {
-            "derived_view": True,
-            "primary_authority": False,
-            "cleanup_execution_authorized": False,
-            "archive_execution_authorized": False,
-            "source_artifacts_remain_authority": True,
-        },
-        "empty_state": "No artifact records for the selected scope.",
-    }
-
-
-def _artifact_lifecycle_counts(
-    conn: sqlite3.Connection, scope: ScopeFilter | None = None
-) -> list[dict[str, Any]]:
-    where, params = _where_scope(scope)
-    return _rows(
-        conn,
-        f"""
-        SELECT
-            COALESCE(project_id, 'unknown') AS project_id,
-            artifact_role,
-            lifecycle_status,
-            COALESCE(source_authority, 'unknown') AS source_authority,
-            COUNT(*) AS artifact_count
-        FROM artifact_records
-        {where}
-        GROUP BY project_id, artifact_role, lifecycle_status, source_authority
-        ORDER BY artifact_count DESC, artifact_role, lifecycle_status
         """,
         params,
     )

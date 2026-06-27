@@ -118,16 +118,16 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "owns_tables": [
             "research_evidence_records",
             "decision_records",
-            "blocker_resolution_records",
+            # blocker_resolution_records: dropped migration 130
         ],
         "source_tables": [
             "research_evidence_records",
             "decision_records",
-            "blocker_resolution_records",
+            # blocker_resolution_records: dropped migration 130
         ],
-        "dashboard_cards": ["research_confidence", "decision_status", "blocker_routes"],
-        "drilldown_paths": ["project", "milestone", "task", "research", "decision", "blocker"],
-        "empty_state": "No research, decision, or blocker records for the selected scope.",
+        "dashboard_cards": ["research_confidence", "decision_status"],
+        "drilldown_paths": ["project", "milestone", "task", "research", "decision"],
+        "empty_state": "No research or decision records for the selected scope.",
     },
     {
         "module_id": "validation_analytics",
@@ -140,17 +140,8 @@ DASHBOARD_MODULES: tuple[dict[str, Any], ...] = (
         "drilldown_paths": ["project", "milestone", "task", "process_run", "validation"],
         "empty_state": "No validation results recorded for the selected scope.",
     },
-    {
-        "module_id": "artifact_analytics",
-        "module_name": "Artifact Analytics",
-        "module_type": "dashboard_projection",
-        "docker_profile": None,
-        "owns_tables": ["artifact_records", "authority_projection_records"],
-        "source_tables": ["artifact_records", "authority_projection_records"],
-        "dashboard_cards": ["artifact_lifecycle", "authority_projection_status"],
-        "drilldown_paths": ["project", "milestone", "task", "artifact", "projection"],
-        "empty_state": "No artifact records for the selected scope.",
-    },
+    # artifact_analytics module removed: artifact_records + authority_projection_records
+    # dropped in migration 130 (aspirational telemetry, 0 rows, no live writers).
     {
         "module_id": "route_milestone_analytics",
         "module_name": "Route And Milestone Analytics",
@@ -648,82 +639,6 @@ def record_research_evidence(conn: sqlite3.Connection, **values: Any) -> None:
                 1 if values.get("operator_verification_required") else 0
             ),
             "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
-def record_blocker_resolution(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO blocker_resolution_records (
-            blocker_id, project_id, milestone_id, task_id, process_run_id, event_id,
-            blocker_class, route_class, confidence, resolution_status,
-            prompt_required, dashboard_approval_required, rationale,
-            research_refs_json, evidence_refs_json
-        ) VALUES (
-            :blocker_id, :project_id, :milestone_id, :task_id, :process_run_id, :event_id,
-            :blocker_class, :route_class, :confidence, :resolution_status,
-            :prompt_required, :dashboard_approval_required, :rationale,
-            :research_refs_json, :evidence_refs_json
-        )
-        """,
-        {
-            "blocker_id": values["blocker_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "event_id": values.get("event_id"),
-            "blocker_class": values["blocker_class"],
-            "route_class": values["route_class"],
-            "confidence": values["confidence"],
-            "resolution_status": values["resolution_status"],
-            "prompt_required": 1 if values.get("prompt_required") else 0,
-            "dashboard_approval_required": 1 if values.get("dashboard_approval_required") else 0,
-            "rationale": values.get("rationale"),
-            "research_refs_json": _json(values.get("research_refs"), []),
-            "evidence_refs_json": _json(values.get("evidence_refs"), []),
-        },
-    )
-
-
-def record_authority_projection(conn: sqlite3.Connection, **values: Any) -> None:
-    _execute(
-        conn,
-        """
-        INSERT INTO authority_projection_records (
-            projection_id, project_id, milestone_id, task_id, process_run_id,
-            event_id, projection_domain, source_authority, source_refs_json,
-            lifecycle_status, authority_role, derived_fields_json, confidence,
-            stale_superseded_json, stop_gate_implications_json,
-            validation_requirements_json, dashboard_readiness_json
-        ) VALUES (
-            :projection_id, :project_id, :milestone_id, :task_id, :process_run_id,
-            :event_id, :projection_domain, :source_authority, :source_refs_json,
-            :lifecycle_status, :authority_role, :derived_fields_json, :confidence,
-            :stale_superseded_json, :stop_gate_implications_json,
-            :validation_requirements_json, :dashboard_readiness_json
-        )
-        """,
-        {
-            "projection_id": values["projection_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "event_id": values.get("event_id"),
-            "projection_domain": values["projection_domain"],
-            "source_authority": values["source_authority"],
-            "source_refs_json": _json(values.get("source_refs"), []),
-            "lifecycle_status": values.get("lifecycle_status", "draft_generated"),
-            "authority_role": values["authority_role"],
-            "derived_fields_json": _json(values.get("derived_fields"), {}),
-            "confidence": values.get("confidence", "unknown"),
-            "stale_superseded_json": _json(values.get("stale_superseded"), {}),
-            "stop_gate_implications_json": _json(values.get("stop_gate_implications"), []),
-            "validation_requirements_json": _json(values.get("validation_requirements"), []),
-            "dashboard_readiness_json": _json(values.get("dashboard_readiness"), {}),
         },
     )
 

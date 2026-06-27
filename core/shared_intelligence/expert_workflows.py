@@ -73,7 +73,7 @@ AUTHORITY_WRITE_TARGETS = (
     "decision_records",
     "research_evidence_records",
     "validation_results",
-    "artifact_records",
+    # artifact_records: dropped migration 130
     "dashboard_attention_items",
     "work_order_records",
 )

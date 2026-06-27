@@ -18,21 +18,24 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     {
         "source_domain": "projects",
         "target_domain": "project registry and project authority records",
-        "target_tables": ["reg_projects", "authority_projection_records"],
+        "target_tables": ["reg_projects"],
+        # authority_projection_records: dropped migration 130
         "source_evidence": ["database_authority", "install_bootstrap"],
         "status": "map_in_rehearsal",
     },
     {
         "source_domain": "milestones",
         "target_domain": "milestone/progress state and route records",
-        "target_tables": ["route_decision_records", "authority_projection_records"],
+        "target_tables": ["route_decision_records"],
+        # authority_projection_records: dropped migration 130
         "source_evidence": ["dashboard_read_models", "integration_matrix"],
         "status": "map_in_rehearsal",
     },
     {
         "source_domain": "work_orders",
         "target_domain": "work-order records and evidence refs",
-        "target_tables": ["artifact_records", "route_decision_records", "outcome_records"],
+        "target_tables": ["route_decision_records", "outcome_records"],
+        # artifact_records: dropped migration 130
         "source_evidence": ["integration_matrix"],
         "status": "map_in_rehearsal",
     },
@@ -101,15 +104,17 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     },
     {
         "source_domain": "reports_prompts",
-        "target_domain": "artifact_records or archive candidates",
-        "target_tables": ["artifact_records"],
+        "target_domain": "archive candidates (artifact_records dropped migration 130)",
+        "target_tables": [],
+        # artifact_records: dropped migration 130 (aspirational, 0 rows, no production writer)
         "source_evidence": ["integration_matrix"],
         "status": "manual_review_before_cleanup",
     },
     {
         "source_domain": "dashboard_projection_data",
-        "target_domain": "derived read-model state or stale/superseded records",
-        "target_tables": ["authority_projection_records"],
+        "target_domain": "derived read-model state (authority_projection_records dropped mig 130)",
+        "target_tables": [],
+        # authority_projection_records: dropped migration 130 (aspirational, 0 rows, no live writer)
         "source_evidence": ["dashboard_read_models"],
         "status": "deduplicate_after_rehearsal",
     },

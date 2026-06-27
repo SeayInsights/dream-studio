@@ -59,6 +59,11 @@ Dream Studio's SQLite authority covers:
   **[DROPPED — migration 099]** `project_readiness_scorecards`, `project_health_scorecards` dropped.
   **[DROPPED — migration 112]** `findings`, `sec_sarif_findings`, `sec_cve_matches`, `sec_manual_reviews`
   and related cluster dropped; security findings now live in the `security_events` spine.
+  **[DROPPED — migration 130]** `artifact_records`, `authority_projection_records`, `blocker_resolution_records`,
+  `hook_findings`, and `canonical_events_legacy_backup` dropped; these were aspirational telemetry tables
+  with 0 rows, no production writers, and no live readers. Dashboard read-model functions that
+  queried them have been removed; `canonical_events_legacy_backup` data was already fully migrated
+  to `ai_canonical_events` + `business_canonical_events`.
 - release/cutover evidence summaries where safe.
 
 Current Capability Center, scoped-agent, and GitHub repo intake
@@ -69,7 +74,8 @@ authority lives in migration 044:
   records. (Wave 6 / migration 101 dropped the 0-row `capability_center_records`,
   `workflow_agent_skill_mappings`, and `agent_result_records` tables 044 created;
   Capability Center now reports an empty state and normalized agent results route
-  to `agent_invocations`/`decision_records`/`validation_results`/`artifact_records`.)
+  to `agent_invocations`/`decision_records`/`validation_results`.
+  (`artifact_records` was dropped in migration 130 — 0 rows, aspirational telemetry only.))
 - `github_repo_*` tables for evidence-backed repository evaluations, license,
   security, dependency, integration, pattern, adoption, and attribution records.
 

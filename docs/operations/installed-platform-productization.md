@@ -395,3 +395,5 @@ the source repo.
 <!-- Last reviewed 2026-06-07 — WO-F prd_* cluster drop (migration 103): migration 103 drops the entire prd_* cluster (prd_documents, prd_plans, prd_tasks, prd_sessions, prd_handoffs, session_tasks, prd_version_records, prd_amendment_records, prd_route_reconciliation_records) and the views vw_prd_progress and vw_task_details. AD-10 decision: business_projects IS what PRD was. All prd_* callers removed from studio_db.py, prd_authority.py (deleted), routes/prd.py (deleted), analytics_ingestion.py, module_contracts.py, dashboard_freshness.py, contract_atlas.py, contract_registry.py, project_intelligence.py, shared_intelligence.py, resume_from_handoff.py, and migrate_prd_schema.py (deleted). -->
 
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
+
+<!-- reviewed 2026-06-27: Wave 1 migration 130 — module_contracts.py: removed artifact_records from telemetry module owned_tables (table dropped in migration 130; 0 rows, aspirational telemetry). No installed adapter runtime behavior, state, routing, or productization change. No semantic change required. -->
