@@ -29,8 +29,9 @@ def _isolate_files_db(tmp_path, monkeypatch):
 
 
 def _make_db(tmp_path: Path) -> Path:
-    # studio.db fixture: reg_gotchas, raw_approaches, ds_technology_signals.
+    # studio.db fixture: reg_gotchas, raw_approaches.
     # ds_documents is NOT here — it lives in files.db (three-store architecture).
+    # ds_technology_signals dropped in migration 132 (pure write-only sink, zero readers).
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
@@ -51,12 +52,6 @@ def _make_db(tmp_path: Path) -> Path:
             model       TEXT,
             project_id  TEXT,
             created_at  TEXT
-        );
-        CREATE TABLE ds_technology_signals (
-            signal_id  TEXT PRIMARY KEY,
-            extension  TEXT NOT NULL,
-            count      INTEGER NOT NULL DEFAULT 0,
-            last_seen  TEXT NOT NULL
         );
         """)
     conn.commit()
@@ -365,36 +360,6 @@ def test_harvest_arch_doc_written_with_null_content(tmp_path):
     assert rows[0][0] is None
 
 
-# ── harvest — file paths → extension counted ─────────────────────────────────
-
-
-def test_harvest_file_extensions_counted(tmp_path):
-    db = _make_db(tmp_path)
-    projects_dir = tmp_path / "projects"
-    records = [
-        _tool_use_write("/project/main.py"),
-        _tool_use_write("/project/app.ts"),
-        _tool_use_write("/project/style.css"),
-    ]
-    _write_jsonl(projects_dir / "proj" / "session.jsonl", records)
-
-    harvester = SessionHarvester()
-    result = harvester.harvest(
-        claude_projects_dir=projects_dir,
-        db_path=db,
-        consent=True,
-        dry_run=False,
-    )
-
-    assert result.tech_signals_recorded >= 3
-    conn = sqlite3.connect(str(db))
-    exts = {r[0] for r in conn.execute("SELECT extension FROM ds_technology_signals").fetchall()}
-    conn.close()
-    assert ".py" in exts
-    assert ".ts" in exts
-    assert ".css" in exts
-
-
 # ── harvest — idempotency ─────────────────────────────────────────────────────
 
 
@@ -510,71 +475,3 @@ def test_no_db_column_stores_raw_content_over_300_chars(tmp_path):
         for val in row:
             if val is not None:
                 assert len(val) <= 500, f"Column value exceeds 500 chars: {len(val)}"
-
-
-# ── migration 055 applies cleanly ────────────────────────────────────────────
-
-
-def test_migration_055_applies_cleanly(tmp_path):
-    """Migration SQL for 055 creates ds_technology_signals without error."""
-    db = tmp_path / "test.db"
-    migration_path = (
-        Path(__file__).resolve().parents[2]
-        / "core"
-        / "event_store"
-        / "migrations"
-        / "055_technology_signals.sql"
-    )
-    assert migration_path.is_file(), f"Migration file not found: {migration_path}"
-    sql = migration_path.read_text(encoding="utf-8")
-
-    conn = sqlite3.connect(str(db))
-    conn.executescript(sql)
-    conn.commit()
-
-    tables = {
-        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-    }
-    conn.close()
-
-    assert "ds_technology_signals" in tables
-
-
-# ── harvest creates ds_technology_signals if absent ──────────────────────────
-
-
-def test_harvest_creates_technology_signals_table_if_missing(tmp_path):
-    """Harvester auto-creates ds_technology_signals if the DB lacks it."""
-    # ds_documents is NOT created here — it lives in files.db (three-store architecture).
-    db = tmp_path / "studio.db"
-    conn = sqlite3.connect(str(db))
-    conn.executescript("""
-        CREATE TABLE reg_gotchas (
-            gotcha_id TEXT PRIMARY KEY, skill_id TEXT, severity TEXT,
-            title TEXT, context TEXT, fix TEXT, discovered TEXT, times_hit INTEGER DEFAULT 0
-        );
-        CREATE TABLE raw_approaches (
-            approach_id TEXT PRIMARY KEY, skill_id TEXT, approach TEXT,
-            model TEXT, project_id TEXT, created_at TEXT
-        );
-        """)
-    conn.commit()
-    conn.close()
-
-    projects_dir = tmp_path / "projects"
-    _write_jsonl(projects_dir / "proj" / "session.jsonl", [_tool_use_write("/a/b.py")])
-
-    harvester = SessionHarvester()
-    result = harvester.harvest(
-        claude_projects_dir=projects_dir,
-        db_path=db,
-        consent=True,
-        dry_run=False,
-    )
-
-    conn = sqlite3.connect(str(db))
-    tables = {
-        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
-    }
-    conn.close()
-    assert "ds_technology_signals" in tables

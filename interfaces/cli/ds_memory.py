@@ -600,7 +600,6 @@ def cmd_memory_ingest_sessions(args) -> int:
         f"  Skill approaches:     {result.approaches_new} new, {result.approaches_skipped} skipped"
     )
     print(f"  Architecture docs:    {result.arch_docs_found} found")
-    print(f"  Technology signals:   {result.tech_signals_recorded} file types recorded")
     print(f"  Sessions processed:   {result.sessions_processed}")
     print(f"  Sessions skipped:     {result.sessions_skipped}")
     return 0

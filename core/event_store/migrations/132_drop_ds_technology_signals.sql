@@ -1,0 +1,38 @@
+-- Migration 132: Drop ds_technology_signals (Wave 4 substrate realignment)
+--
+-- Target architecture: studio.db = canonical EVENTS + non-event-sourced AUTHORITY + pipeline ONLY.
+-- Everything derived (analytics, telemetry sinks with no reader) moves out.
+--
+-- Table DROPPED:
+--
+-- ds_technology_signals (54 rows) — writer: spool/session_harvester.py::_write_tech_signals(),
+--   reachable from `ds memory ingest-sessions` CLI command.
+--   Reader trace (full grep of core/, projections/, interfaces/, spool/, control/, guardrails/,
+--   runtime/): ZERO production SELECT/FROM/JOIN on ds_technology_signals.
+--   Eval test test_dependency_chain.py:642-650 explicitly documents:
+--     "no code path reading ds_technology_signals for recommendations was identified —
+--      consumption code not yet implemented"
+--   This is a pure write-only sink with confirmed zero production consumers.
+--   Writer code (session_harvester._write_tech_signals, CREATE TABLE guard, ext_counts
+--   accumulation) removed in the same commit. No dangling references remain.
+--
+-- Tables reviewed and SKIPPED (not dropped — live readers or writers):
+--
+-- log_batch_imports — live production READER at studio_db.py:479:
+--   `SELECT 1 FROM log_batch_imports WHERE batch_id=?` — deduplication guard in import_buffer().
+--   import_buffer() is called from pulse_collector.py._import_and_rotate_buffer(), a live path.
+--   Cannot drop without breaking idempotency semantics of the skill telemetry pipeline.
+--
+-- raw_approaches — live writer (session_harvester._record_approach, insert_approach) AND
+--   live reader via vw_approach_patterns view (studio_db.get_approaches() at lines 667/672/686).
+--   Actively consumed by `ds memory` subsystem and skill routing intelligence.
+--
+-- raw_operational_snapshots — live writer (pulse_collector.py:559 insert_operational_snapshot)
+--   called on every `ds pulse` run; live reader in interfaces/cli/ds_analytics/harvester.py:36,43.
+--   Confirmed active CLI analytics path.
+--
+-- Result: 77 - 1 = 76 tables.
+-- Reviewed: 2026-06-27 (Wave 4 substrate realignment, first batch)
+
+-- ds_technology_signals — 54 rows, pure write-only sink, zero production readers
+DROP TABLE IF EXISTS ds_technology_signals;
