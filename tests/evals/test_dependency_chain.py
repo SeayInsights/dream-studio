@@ -3,17 +3,17 @@
 Machine-checked projection of `.audit/dependency-chain-map-2026-05-17.md`
 (post-A0/A3 reclassifications in `.audit/dependency-chain-map-2026-05-20-post-A0-A3.md`).
 
-Chain 7 status — 2026-05-28 (18.4.4):
+Chain 7 status — 2026-06-27 (Wave 4):
   L1: PROVEN (session events → SQLite)
   L2: UNTESTED (memory harvest trigger — manual only; automation is follow-up WO)
-  L3: PROVEN (technology signals schema — post-18.1.15a)
+  L3: DROPPED (ds_technology_signals — migration 132, pure write-only sink, zero readers)
   L4: ✅ PROVEN (18.4.4) — on-context-inject hook injects reg_gotchas from
       memory_entries via FTS5+relevance before every UserPromptSubmit.
       Verified with real data: 1488 reg_gotchas ingested via Batch 7.5,
       hook surfaces relevant entries on accessibility/form/keyboard prompts.
       Batch 8 real-data verification passed 2026-05-28.
   L5: UNTESTED (raw_approaches → model routing)
-  L6: UNKNOWN (tech signals → skill recommendations)
+  L6: DROPPED (tech signals table removed in migration 132)
 
 Every link in the 8-chain audit gets exactly one test here, totaling 46.
 Tests are organized by chain. The docstring of each test cites the current
@@ -445,17 +445,20 @@ def test_chain_7_link_2_memory_harvest_trigger_untested():
     pytest.fail("UNTESTED: no auto-trigger for memory harvest")
 
 
-def test_chain_7_link_3_technology_signals_schema_aligned():
-    """C7-L3: ds memory ingest-sessions → SQLite populated. PROVEN post-18.1.15a.
+def test_chain_7_link_3_technology_signals_dropped():
+    """C7-L3: ds_technology_signals dropped in migration 132 (Wave 4).
 
-    Fixed: session_harvester.py INSERT now uses column `count` matching migration 055.
-    No `file_count` references remain in the harvester.
+    The table was a pure write-only sink with zero production readers.
+    The harvester no longer writes technology signals; the writer code was removed
+    in the same commit as migration 132.
     """
     harvester_path = REPO_ROOT / "spool" / "session_harvester.py"
     assert harvester_path.is_file(), "session_harvester.py missing"
     content = harvester_path.read_text(encoding="utf-8")
     assert "file_count" not in content, "Stale `file_count` column reference still in harvester"
-    assert "ds_technology_signals" in content, "ds_technology_signals not referenced in harvester"
+    assert (
+        "ds_technology_signals" not in content
+    ), "ds_technology_signals still referenced in harvester after migration 132 drop"
 
 
 def test_chain_7_link_4_memory_hook_query_path_exists():
@@ -637,17 +640,6 @@ def test_chain_7_hook_dedup_within_session():
 def test_chain_7_link_5_raw_approaches_model_routing_untested():
     """C7-L5: raw_approaches populated → model tier routing improved. UNTESTED."""
     pytest.fail("UNTESTED: model selector does not consult raw_approaches")
-
-
-@pytest.mark.xfail(
-    strict=False,
-    reason="C7-L6 UNKNOWN post-18.1.15a; C7-L3 schema mismatch fixed so signals can now "
-    "be stored, but no code path reading ds_technology_signals for recommendations "
-    "was identified — consumption code not yet implemented",
-)
-def test_chain_7_link_6_tech_signals_recommendations_unknown():
-    """C7-L6: ds_technology_signals populated → skill pack recommendations. UNKNOWN."""
-    pytest.fail("UNKNOWN: C7-L3 unblocked but no consumption code found")
 
 
 # ═════════════════════════════════════════════════════════════════════════════

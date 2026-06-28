@@ -5,7 +5,7 @@ Extracts derived metadata from Claude Code JSONL session files in
 
 Privacy guarantee: raw conversation content, prompts, assistant responses,
 and file contents are NEVER stored. Only derived metadata is stored:
-error patterns, skill usage, timestamps, tool types, technology signals,
+error patterns, skill usage, timestamps, tool types,
 and written architectural document paths.
 """
 
@@ -93,7 +93,7 @@ class HarvestResult:
     approaches_new: int = 0
     approaches_skipped: int = 0
     arch_docs_found: int = 0
-    tech_signals_recorded: int = 0
+
     sessions_processed: int = 0
     sessions_skipped: int = 0
 
@@ -106,11 +106,10 @@ class SessionHarvester:
     Extracts intelligence from Claude Code JSONL session files in
     ~/.claude/projects/.
 
-    Processes four signal types:
+    Processes three signal types:
     1. Gotchas — error→fix cycles
     2. Skill invocations — Skill() tool call records
     3. Architecture documents — written doc file paths
-    4. Technology signals — file extensions detected from tool calls
 
     Privacy guarantee: never stores raw content. Only stores derived metadata.
     """
@@ -143,18 +142,7 @@ class SessionHarvester:
         if consent and not dry_run and db_path.exists():
             conn = sqlite3.connect(str(db_path))
             conn.execute("PRAGMA journal_mode=WAL")
-            # Ensure migration 055 table exists
-            conn.execute(
-                "CREATE TABLE IF NOT EXISTS ds_technology_signals ("
-                "  signal_id TEXT PRIMARY KEY,"
-                "  extension TEXT NOT NULL,"
-                "  count INTEGER NOT NULL DEFAULT 0,"
-                "  last_seen TEXT NOT NULL"
-                ")"
-            )
-            conn.commit()
 
-        ext_counts: dict[str, int] = {}
         seen_approaches: set[tuple[str, str, str]] = set()
 
         try:
@@ -175,15 +163,8 @@ class SessionHarvester:
                     session_ts=session_ts,
                     conn=conn,
                     result=result,
-                    ext_counts=ext_counts,
                     seen_approaches=seen_approaches,
                 )
-
-            # Write technology signals
-            if ext_counts:
-                result.tech_signals_recorded = len(ext_counts)
-                if conn is not None:
-                    _write_tech_signals(conn, ext_counts)
 
         finally:
             if conn is not None:
@@ -199,7 +180,6 @@ class SessionHarvester:
         session_ts: str,
         conn: sqlite3.Connection | None,
         result: HarvestResult,
-        ext_counts: dict[str, int],
         seen_approaches: set[tuple[str, str, str]],
     ) -> None:
         for i, record in enumerate(records):
@@ -257,13 +237,6 @@ class SessionHarvester:
                                         conn=conn,
                                         result=result,
                                     )
-
-                            # Technology signals
-                            file_path = _extract_file_path(item)
-                            if file_path:
-                                ext = Path(file_path).suffix.lower()
-                                if ext and len(ext) <= 10:
-                                    ext_counts[ext] = ext_counts.get(ext, 0) + 1
 
     def _record_gotcha(
         self,
@@ -475,16 +448,3 @@ def _infer_skill_from_context(records: list[dict], idx: int) -> str:
                     if isinstance(item, dict) and item.get("name") == "Skill":
                         return item.get("input", {}).get("skill", "ds-core")
     return "ds-core"
-
-
-def _write_tech_signals(conn: sqlite3.Connection, ext_counts: dict[str, int]) -> None:
-    now = datetime.now(UTC).isoformat()
-    for ext, count in ext_counts.items():
-        signal_id = hashlib.sha256(ext.encode()).hexdigest()[:32]
-        conn.execute(
-            "INSERT INTO ds_technology_signals (signal_id, extension, count, last_seen)"
-            " VALUES (?, ?, ?, ?)"
-            " ON CONFLICT(signal_id) DO UPDATE SET"
-            " count = count + excluded.count, last_seen = excluded.last_seen",
-            (signal_id, ext, count, now),
-        )

@@ -58,7 +58,7 @@ CLASSIFICATION: dict[str, str] = {
     "ds_eval_baselines": "KEEP",
     "ds_eval_runs": "KEEP",
     "ds_friction_signals": "KEEP",
-    "ds_technology_signals": "KEEP",
+    "ds_technology_signals": "DROP",  # Dropped migration 132: pure write-only sink, zero production readers
     "ds_user_extensions": "KEEP",
     "ds_workflow_pattern_signals": "KEEP",
     "eval_registry": "KEEP",
