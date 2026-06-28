@@ -237,14 +237,12 @@ async def get_shared_intelligence_status(
                     "surface_id": "platform-hardening",
                     "api_path": "/api/shared-intelligence/platform-hardening",
                     "source_tables": [
-                        "skill_evaluation_runs",
-                        "policy_decision_records",
-                        "connector_ingestion_runs",
-                        "privacy_redaction_export_records",
-                        "local_watch_schedule_records",
-                        "team_rollup_records",
-                        "installer_distribution_checks",
-                        "demo_case_study_packets",
+                        # skill_evaluation_runs: dropped migration 131
+                        # policy_decision_records: dropped migration 133
+                        # connector_ingestion_runs: dropped migration 131
+                        # privacy_redaction_export_records, local_watch_schedule_records,
+                        # team_rollup_records, installer_distribution_checks,
+                        # demo_case_study_packets: dropped migration 128
                     ],
                 },
                 {

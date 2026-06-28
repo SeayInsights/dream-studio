@@ -585,7 +585,7 @@ def record_production_readiness_assessment(
             ),
         )
     _record_scorecards(conn, gate, created_at)
-    _record_compliance_flags(conn, gate, created_at)
+    # _record_compliance_flags removed — compliance_review_flags dropped in migration 133.
     conn.commit()
     return True
 
@@ -644,17 +644,10 @@ def production_readiness_dashboard_summary(
             (assessment_id,),
         ).fetchall()
     ]
-    compliance_flags = [
-        dict(row)
-        for row in conn.execute(
-            """
-            SELECT * FROM compliance_review_flags
-            WHERE assessment_id = ?
-            ORDER BY flag_type, control_id
-            """,
-            (assessment_id,),
-        ).fetchall()
-    ]
+    # compliance_review_flags: dropped in migration 133 — query removed.
+    # (This code path is already unreachable: production_readiness_assessment_runs
+    # was dropped in migration 112, so the early return at line 601 fires first.)
+    compliance_flags: list[dict] = []
     summary = Counter(row["status"] for row in controls)
     return {
         "model_name": "production_readiness_dashboard_summary",
@@ -667,8 +660,8 @@ def production_readiness_dashboard_summary(
             "production_readiness_control_results",
             "production_readiness_findings",
             "production_readiness_remediation_work_orders",
-            "release_readiness_records",
-            "compliance_review_flags",
+            # release_readiness_records: dropped migration 133
+            # compliance_review_flags: dropped migration 133
         ],
         "readiness_score": json.loads(latest["readiness_score_json"]),
         "health_score": json.loads(latest["health_score_json"]),
@@ -935,6 +928,9 @@ def _compliance_flags(control_results: list[dict[str, Any]]) -> list[dict[str, A
 
 
 def _record_scorecards(conn: sqlite3.Connection, gate: dict[str, Any], created_at: str) -> None:
+    # release_readiness_records dropped in migration 133 (persist=False dead gate — no
+    # production caller ever passes persist=True). Only writes to project_readiness_scorecards
+    # and project_health_scorecards remain; release_readiness_records write removed.
     if not _table_exists(conn, "project_readiness_scorecards"):
         return
     for table, prefix, score_key, score_column in (
@@ -968,52 +964,7 @@ def _record_scorecards(conn: sqlite3.Connection, gate: dict[str, Any], created_a
                 created_at,
             ),
         )
-    release = gate["release_readiness"]
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO release_readiness_records(
-            release_readiness_id, project_id, assessment_id, status,
-            release_readiness_effect, blocker_count, manual_review_count,
-            evidence_refs_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            _stable_id("release-readiness", gate["assessment_id"]),
-            gate["project_id"],
-            gate["assessment_id"],
-            release["status"],
-            release["release_readiness_effect"],
-            release["blocker_count"],
-            release["manual_review_count"],
-            _json(release["evidence_refs"]),
-            created_at,
-        ),
-    )
-
-
-def _record_compliance_flags(
-    conn: sqlite3.Connection, gate: dict[str, Any], created_at: str
-) -> None:
-    for flag in gate["compliance_review_flags"]:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO compliance_review_flags(
-                flag_id, project_id, assessment_id, control_id, flag_type,
-                status, reason, evidence_refs_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                _stable_id("compliance-flag", gate["assessment_id"], flag["control_id"]),
-                gate["project_id"],
-                gate["assessment_id"],
-                flag["control_id"],
-                flag["flag_type"],
-                flag["status"],
-                flag["reason"],
-                _json(flag["evidence_refs"]),
-                created_at,
-            ),
-        )
+    # release_readiness_records write removed — table dropped migration 133.
 
 
 def _release_effect(

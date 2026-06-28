@@ -43,7 +43,7 @@ CLASSIFICATION: dict[str, str] = {
     "business_work_orders": "KEEP",
     "canonical_events_legacy_backup": "DROP",
     "capability_route_records": "KEEP",
-    "compliance_review_flags": "KEEP",
+    "compliance_review_flags": "DROP",  # Dropped migration 133: persist=False dead gate — _record_compliance_flags() only reachable when persist=True, which no production caller passes
     "connector_ingestion_runs": "DROP",  # Dropped migration 131: dead writer ingest_connector_payload(), test-only callers
     "cor_skill_corrections": "DROP",  # Dropped migration 131: dead writer skill_correct(), only reachable via unregistered __main__
     "dashboard_attention_items": "KEEP",
@@ -81,7 +81,7 @@ CLASSIFICATION: dict[str, str] = {
     "github_repo_license_findings": "DROP",
     "github_repo_pattern_references": "DROP",
     "github_repo_security_findings": "DROP",
-    "guard_events": "KEEP",
+    "guard_events": "DROP",  # Dropped migration 133: all writers (delta_guard.py, memory_taint.py) are test-only reachable; no hook/CLI/projection calls them
     "guardrail_decisions": "KEEP",
     "hardening_candidate_records": "DROP",  # Dropped migration 131: dead writer record_hardening_candidate(), test-only callers
     "hook_eval_runs": "KEEP",
@@ -104,7 +104,7 @@ CLASSIFICATION: dict[str, str] = {
     "model_provider_profiles": "DROP",  # Dropped migration 131: dead writer record_model_provider_profile(), test-only callers
     "outcome_records": "KEEP",
     "pending_audits": "DROP",  # Dropped migration 131: dead writer defer_project_audit(), never called from any production path
-    "policy_decision_records": "KEEP",
+    "policy_decision_records": "DROP",  # Dropped migration 133: test-only writer record_policy_decision(); no production CLI/hook/route calls it
     "preflight_events": "KEEP",
     "privacy_redaction_export_records": "DROP",
     "process_runs": "DROP",  # Dropped migration 131: dead writer record_process_run(), test-only callers
@@ -141,7 +141,7 @@ CLASSIFICATION: dict[str, str] = {
     "reg_skill_deps": "DROP",
     "reg_skills": "DROP",
     "reg_workflows": "DROP",
-    "release_readiness_records": "KEEP",
+    "release_readiness_records": "DROP",  # Dropped migration 133: same persist=False dead gate as compliance_review_flags; _record_scorecards() unreachable in production
     "research_cache": "KEEP",
     "research_evidence_records": "KEEP",
     "route_decision_records": "DROP",  # Dropped migration 131: dead writer emit_route_decision() via handoff.py, no live callers

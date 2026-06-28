@@ -6,9 +6,7 @@ without requiring the full dream-studio runtime dependency chain.
 
 from __future__ import annotations
 
-import json
 import os
-import uuid
 from pathlib import Path
 
 
@@ -49,51 +47,14 @@ def emit_memory_skip_event(
     project_id: str | None = None,
     db_path: Path | None = None,
 ) -> None:
-    """Log a guard_event when a tainted memory entry is skipped by on-memory-retrieve."""
-    import datetime
+    """No-op: guard_events dropped in migration 133 (test-only writer — no production caller).
 
-    try:
-        path = db_path or _studio_db_path()
-        if not path.exists():
-            return
-        import sqlite3
-
-        conn = sqlite3.connect(str(path))
-        try:
-            now = datetime.datetime.now(datetime.UTC).isoformat()
-            conn.execute(
-                """INSERT OR IGNORE INTO guard_events
-                   (event_id, event_type, rule_id, severity, source_type, source_id,
-                    project_id, scan_id, action, confidence, details, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    str(uuid.uuid4()),
-                    "memory_skipped_tainted",
-                    None,
-                    "high",
-                    "memory_entry",
-                    skipped_path,
-                    project_id,
-                    None,
-                    "skipped",
-                    1.0,
-                    json.dumps(
-                        {
-                            "description": (
-                                "Memory entry sourced from tainted repo — "
-                                "skipped before LLM context injection"
-                            ),
-                            "skipped_path": skipped_path,
-                        }
-                    ),
-                    now,
-                ),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception:
-        pass
+    Function retained to avoid import errors in any external callers; body is a no-op.
+    """
+    # guard_events table dropped in migration 133. The table had no production writer
+    # (emit_memory_skip_event was only called from tests/unit/test_guard_phase2.py;
+    # runtime/hooks/meta/on-memory-retrieve.py never imported this function).
+    pass
 
 
 def taint_project_memory(

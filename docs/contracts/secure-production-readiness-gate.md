@@ -227,3 +227,5 @@ unavailable until a targeted or full applicable review supplies evidence.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no secure-production-readiness-gate behavior change. build_secure_production_readiness_gate still writes release_readiness_records + compliance_review_flags (both live, kept); migration 131 only removed retired dormant-table references from the surrounding contract-atlas productization flow. -->
+
+<!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): release_readiness_records and compliance_review_flags dropped (both DEAD — build_secure_production_readiness_gate persist=False and record_production_readiness_assessment has early-return guard making _record_scorecards/_record_compliance_flags unreachable). Secure production readiness gate behavior: project_readiness_scorecards and project_health_scorecards writes retained. -->

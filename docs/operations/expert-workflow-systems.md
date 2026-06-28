@@ -170,3 +170,5 @@ authority.
 <!-- reviewed 2026-06-27: Wave 1 migration 130 — expert_workflows.py AUTHORITY_WRITE_TARGETS updated: removed artifact_records (dropped migration 130; 0 rows, aspirational telemetry, no production writer). Expert workflow system behavior and overlap matrix unchanged. No semantic change required. -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no expert-workflow-system change. expert_workflow_catalog() is static/policy data; migration 131 only removed retired dormant-table references (task_attribution_records, github_repo_* intake) from the surrounding contract-atlas assembly. -->
+
+<!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): shared_intelligence route source_tables list cleaned of dropped-table references. Expert workflow system (expert_workflow_catalog, ds system, capability routes) unchanged. -->

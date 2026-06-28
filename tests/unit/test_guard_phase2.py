@@ -1,10 +1,12 @@
-"""Tests for LLM Guard Phase 2 — guard_events + memory taint.
+"""Tests for LLM Guard Phase 2 — memory taint.
 
 Proving PAIR:
   - Memory PAIR: tainted entry → tainted=1 | clean entry → tainted=0
-  - Context-inject PAIR: clean surfaces | tainted skipped + guard_event logged
-  - guard_events emission alongside findings
-  - Boundary: finding (scan) vs guard_event (runtime)
+  - Context-inject PAIR: tainted path detected by get_tainted_paths()
+
+guard_events table dropped in migration 133 (all writers were test-only reachable;
+no hook/CLI/projection ever called emit_memory_skip_event or guard_delta_pairs from
+a production entry path). Tests for guard_events emission removed.
 """
 
 from __future__ import annotations
@@ -24,24 +26,13 @@ import pytest  # noqa: E402
 
 
 def _make_test_db(tmp_path: Path) -> Path:
-    """Create a minimal studio.db with guard_events and memory_entries taint columns."""
+    """Create a minimal studio.db with memory_entries taint columns.
+
+    guard_events table not created — dropped in migration 133.
+    """
     db_path = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db_path))
     conn.executescript("""
-        CREATE TABLE IF NOT EXISTS guard_events (
-            event_id TEXT PRIMARY KEY,
-            event_type TEXT NOT NULL,
-            rule_id TEXT,
-            severity TEXT,
-            source_type TEXT NOT NULL,
-            source_id TEXT,
-            project_id TEXT,
-            scan_id TEXT,
-            action TEXT NOT NULL DEFAULT 'logged',
-            confidence REAL,
-            details TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
-        );
         CREATE TABLE IF NOT EXISTS memory_entries (
             memory_id TEXT PRIMARY KEY,
             source TEXT NOT NULL,
@@ -124,32 +115,8 @@ class TestMemoryTaintPair:
         assert row["source_repo_id"] is None
 
 
-class TestGuardEventEmission:
-    """guard_events emitted for guard actions."""
-
-    def test_guard_event_distinct_from_findings(self, tmp_path, monkeypatch):
-        """guard_events and findings are in separate tables — boundary holds."""
-        db_path = _make_test_db(tmp_path)
-        # Add a minimal findings table to confirm separation
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS findings (
-                finding_id TEXT PRIMARY KEY, rule_id TEXT, skill_id TEXT
-            )
-        """)
-        conn.execute(
-            "INSERT INTO findings VALUES (?, ?, ?)", (str(uuid.uuid4()), "guard-001", "guard")
-        )
-        conn.commit()
-
-        # guard_events should be empty (finding goes to findings, not guard_events)
-        rows = conn.execute("SELECT * FROM guard_events").fetchall()
-        findings = conn.execute("SELECT * FROM findings").fetchall()
-        conn.close()
-
-        assert len(rows) == 0  # No events emitted yet
-        assert len(findings) == 1  # Finding is in findings table
-        # Boundary holds: same rule_id, different tables
+# TestGuardEventEmission removed — guard_events table dropped in migration 133;
+# emit_memory_skip_event() is now a no-op; guard_delta_pairs() no longer writes to guard_events.
 
 
 class TestContextInjectFilter:
@@ -181,23 +148,6 @@ class TestContextInjectFilter:
         assert "memory/tainted-lesson.md" in tainted
         assert "memory/clean-lesson.md" not in tainted
 
-    def test_memory_skip_event_emitted(self, tmp_path):
-        """emit_memory_skip_event writes guard_event with memory_skipped_tainted."""
-        db_path = _make_test_db(tmp_path)
-        from guardrails.memory_taint import emit_memory_skip_event  # noqa: E402
-
-        project_id = str(uuid.uuid4())
-        emit_memory_skip_event("memory/tainted-lesson.md", project_id, db_path)
-
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM guard_events WHERE event_type='memory_skipped_tainted'"
-        ).fetchall()
-        conn.close()
-
-        assert len(rows) == 1
-        assert rows[0]["source_type"] == "memory_entry"
-        assert rows[0]["source_id"] == "memory/tainted-lesson.md"
-        assert rows[0]["action"] == "skipped"
-        assert rows[0]["project_id"] == project_id
+    # test_memory_skip_event_emitted removed — guard_events dropped migration 133;
+    # emit_memory_skip_event() is now a no-op (the skip detection logic is preserved
+    # via get_tainted_paths() — callers still avoid injecting tainted memory).
