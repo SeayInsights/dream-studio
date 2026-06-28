@@ -9,26 +9,18 @@
 -- Same project_id foreign key as findings; both queryable per project.
 -- skill_scan_runs.scan_id links guard_events back to the scan that triggered them.
 
-CREATE TABLE IF NOT EXISTS guard_events (
-    event_id TEXT PRIMARY KEY,
-    event_type TEXT NOT NULL,          -- 'guard_finding_logged' | 'memory_skipped_tainted' | 'guard_candidate_logged'
-    rule_id TEXT,                      -- guard-NNN, or NULL for memory events
-    severity TEXT,                     -- critical | high | medium | low | NULL
-    source_type TEXT NOT NULL,         -- 'repo_file' | 'memory_entry' | 'prompt' | 'output'
-    source_id TEXT,                    -- file path, memory_id, etc.
-    project_id TEXT,                   -- FK to business_projects.project_id
-    scan_id TEXT,                      -- FK to scan_runs.scan_id (nullable for memory events)
-    action TEXT NOT NULL DEFAULT 'logged',  -- 'logged' | 'sanitized' | 'blocked' | 'skipped'
-    confidence REAL,                   -- 0.0–1.0 from pattern risk_weight
-    details TEXT NOT NULL DEFAULT '{}', -- JSON with matched_text, description, etc.
-    created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_guard_events_project
-ON guard_events(project_id, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_guard_events_type
-ON guard_events(event_type, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_guard_events_scan
-ON guard_events(scan_id) WHERE scan_id IS NOT NULL;
+-- guard_events: dropped in migration 133 (all writers are test-only reachable).
+--
+-- Writers:
+--   guardrails/delta_guard.py::_emit_delta_block_event() (line 129) — called only from
+--     guard_delta_pairs(), which has zero production callers (no hook, CLI, or projection
+--     imports it; only tests/unit/test_guard_phase3.py calls it).
+--   guardrails/delta_guard.py::_emit_delta_advisory_events() (line 191) — same dead path.
+--   guardrails/memory_taint.py::emit_memory_skip_event() (line 65) — called only from
+--     tests/unit/test_guard_phase2.py; runtime/hooks/meta/on-memory-retrieve.py does NOT
+--     import memory_taint.
+--
+-- Readers that gracefully degrade when table is absent:
+--   projections/api/routes/guard_metrics.py — uses object_exists() guard, returns _guard_empty()
+--   core/analytics/aggregate_metrics.py — guard_events queries wrapped in try/except
+--   core/analytics/duckdb_store.py — guard_calibration DuckDB table kept (no studio.db dep)

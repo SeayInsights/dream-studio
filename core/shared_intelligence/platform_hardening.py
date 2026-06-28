@@ -12,14 +12,13 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
 PLATFORM_HARDENING_SCHEMA = "dream_studio.platform_hardening.v1"
 
 PLATFORM_HARDENING_TABLES: tuple[str, ...] = (
-    "policy_decision_records",
+    # policy_decision_records: dropped migration 133 (test-only writer record_policy_decision())
     # skill_evaluation_runs: dropped migration 131
     # connector_ingestion_runs: dropped migration 131
 )
@@ -297,19 +296,14 @@ def skill_evaluation_harness_status(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def policy_engine_status(conn: sqlite3.Connection) -> dict[str, Any]:
-    rows = _rows(conn, "policy_decision_records")
+    # policy_decision_records dropped in migration 133 (test-only writer); policy evaluation
+    # remains available via evaluate_policy_decision() (read-only, no DB dependency).
     return {
         "milestone_id": "policy_permission_engine_maturation",
-        "status": (
-            "runtime_validated"
-            if "policy_decision_records" in _existing_tables(conn)
-            else "schema_pending"
-        ),
+        "status": "table_dropped",
         "actions": [dict(item) for item in POLICY_ACTIONS],
-        "decision_count": len(rows),
-        "decision_state_counts": dict(
-            sorted(Counter(row.get("decision_state") for row in rows).items())
-        ),
+        "decision_count": 0,
+        "decision_state_counts": {},
         "integration_targets": [
             "Work Orders",
             "route decisions",
@@ -320,7 +314,7 @@ def policy_engine_status(conn: sqlite3.Connection) -> dict[str, Any]:
             "career/application automation",
             "Contract Atlas",
         ],
-        "empty_state": "No policy decisions recorded yet; default action matrix remains enforceable.",
+        "empty_state": "policy_decision_records dropped migration 133 — evaluate_policy_decision() remains available.",
     }
 
 
@@ -364,44 +358,6 @@ def evaluate_policy_decision(
     }
 
 
-def record_policy_decision(conn: sqlite3.Connection, *, decision_id: str, **values: Any) -> None:
-    evidence_refs = values.get("evidence_refs")
-    decision_inputs = {
-        key: values[key]
-        for key in ("actor", "action", "target", "scope", "approved")
-        if key in values
-    }
-    decision = evaluate_policy_decision(**decision_inputs)
-    _require_table(conn, "policy_decision_records")
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO policy_decision_records (
-            decision_id, actor, action, target, scope_json, risk_level,
-            approval_requirement, evidence_requirement, rollback_requirement,
-            decision_state, reason, source_authority, dashboard_attention_impact,
-            evidence_refs_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """,
-        (
-            decision_id,
-            decision["actor"],
-            decision["action"],
-            decision.get("target"),
-            _json(decision.get("scope"), {}),
-            decision["risk_level"],
-            decision["approval_requirement"],
-            decision["evidence_requirement"],
-            decision["rollback_requirement"],
-            decision["decision_state"],
-            decision["reason"],
-            decision["source_authority"],
-            decision["dashboard_attention_impact"],
-            _json(evidence_refs, []),
-        ),
-    )
-    conn.commit()
-
-
 def connector_ingestion_framework_status(conn: sqlite3.Connection) -> dict[str, Any]:
     # connector_ingestion_runs: dropped migration 131 (dead writer, test-only callers)
     return {
@@ -436,8 +392,9 @@ def _connector_project_records(records: Any, *, source_type: str) -> list[dict[s
 
 def validate_platform_hardening_summary(conn: sqlite3.Connection) -> list[str]:
     errors: list[str] = []
-    # PLATFORM_HARDENING_TABLES now only contains policy_decision_records;
-    # skill_evaluation_runs and connector_ingestion_runs dropped in migration 131.
+    # PLATFORM_HARDENING_TABLES is now empty:
+    # policy_decision_records dropped migration 133; skill_evaluation_runs and
+    # connector_ingestion_runs dropped migration 131.
     tables = _existing_tables(conn)
     missing = sorted(set(PLATFORM_HARDENING_TABLES) - tables)
     if missing:
@@ -492,11 +449,6 @@ def _rows(conn: sqlite3.Connection, table: str) -> list[dict[str, Any]]:
     cursor = conn.execute(f"SELECT * FROM {table} ORDER BY created_at DESC LIMIT 200")
     columns = [description[0] for description in cursor.description]
     return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
-
-
-def _require_table(conn: sqlite3.Connection, table: str) -> None:
-    if table not in _existing_tables(conn):
-        raise RuntimeError(f"required platform hardening table missing: {table}")
 
 
 def _json(value: Any, default: Any) -> str:

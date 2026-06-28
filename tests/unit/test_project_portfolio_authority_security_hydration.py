@@ -163,19 +163,8 @@ dependencies = ["fastapi", "pydantic"]
         # the route guards with object_exists() → returns 0 for their counts
         # production_readiness_* tables dropped in migration 112; build_secure_production_readiness_gate
         # guards with _table_exists() and returns _empty_summary() when tables are absent.
-        conn.execute(
-            "CREATE TABLE release_readiness_records("
-            "release_readiness_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "status TEXT NOT NULL, release_readiness_effect TEXT NOT NULL, "
-            "blocker_count INTEGER NOT NULL DEFAULT 0, manual_review_count INTEGER NOT NULL DEFAULT 0, "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
-        conn.execute(
-            "CREATE TABLE compliance_review_flags("
-            "flag_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, assessment_id TEXT NOT NULL, "
-            "control_id TEXT NOT NULL, flag_type TEXT NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL, "
-            "evidence_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL)"
-        )
+        # release_readiness_records and compliance_review_flags dropped in migration 133
+        # (persist=False dead gate — no production caller reaches persist=True).
         conn.commit()
     finally:
         conn.close()

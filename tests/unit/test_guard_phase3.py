@@ -1,4 +1,9 @@
-"""Tests for LLM Guard Phase 3 — delta guard + stub hardening + dashboard metrics."""
+"""Tests for LLM Guard Phase 3 — delta guard + stub hardening + dashboard metrics.
+
+guard_events table dropped in migration 133 (all writers were test-only reachable).
+Tests that relied on guard_events DB writes have been updated to verify only the
+clean/blocked classification behavior; DB emit assertions removed.
+"""
 
 from __future__ import annotations
 
@@ -17,18 +22,9 @@ from guardrails.delta_guard import guard_delta_pairs  # noqa: E402
 
 
 def _make_db(tmp_path: Path) -> Path:
+    """Minimal DB for delta guard tests. guard_events not created — dropped migration 133."""
     db_path = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db_path))
-    conn.executescript("""
-        CREATE TABLE guard_events (
-            event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL,
-            rule_id TEXT, severity TEXT, source_type TEXT NOT NULL,
-            source_id TEXT, project_id TEXT, scan_id TEXT,
-            action TEXT NOT NULL DEFAULT 'logged', confidence REAL,
-            details TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc'))
-        );
-    """)
     conn.commit()
     conn.close()
     return db_path
@@ -37,7 +33,11 @@ def _make_db(tmp_path: Path) -> Path:
 class TestDeltaGuardPair:
 
     def test_poisoned_excerpt_blocks_llm(self, tmp_path):
-        """Pair with CRITICAL pattern in excerpt -> blocked, not sent to LLM."""
+        """Pair with CRITICAL pattern in excerpt -> blocked, not sent to LLM.
+
+        guard_events DB emit removed — table dropped migration 133. Classification
+        behavior (blocked pair is returned, clean pair is not) is preserved.
+        """
         db_path = _make_db(tmp_path)
         project_id = str(uuid.uuid4())
 
@@ -57,17 +57,7 @@ class TestDeltaGuardPair:
 
         assert len(clean) == 0, "Poisoned pair should NOT be in clean"
         assert len(blocked) == 1, "Poisoned pair should be blocked"
-
-        # Confirm guard_event was emitted
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM guard_events WHERE event_type='delta_adjudication_blocked'"
-        ).fetchall()
-        conn.close()
-        assert len(rows) == 1
-        assert rows[0]["severity"] == "critical"
-        assert rows[0]["action"] == "blocked"
+        # guard_events DB emit assertions removed — table dropped migration 133.
 
     def test_clean_pair_passes_to_llm(self, tmp_path):
         """Pair with no injection in either excerpt -> passes through to LLM."""
@@ -88,8 +78,12 @@ class TestDeltaGuardPair:
         assert len(clean) == 1, "Clean pair should pass to LLM"
         assert len(blocked) == 0
 
-    def test_delta_block_event_has_correct_fields(self, tmp_path):
-        """guard_event for blocked delta has correct event_type and source_type."""
+    def test_delta_block_event_classification(self, tmp_path):
+        """Pair with CRITICAL injection pattern is classified as blocked.
+
+        guard_events DB emit removed — table dropped migration 133. Only
+        classification behavior is tested: the pair appears in blocked_pairs.
+        """
         db_path = _make_db(tmp_path)
         prev_f = {"finding_id": "prev-1", "code_excerpt": "normal code"}
         curr_f = {
@@ -98,15 +92,7 @@ class TestDeltaGuardPair:
         }
         _, blocked = guard_delta_pairs([(prev_f, curr_f)], db_path=db_path)
         assert len(blocked) == 1
-
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        row = conn.execute(
-            "SELECT * FROM guard_events WHERE event_type='delta_adjudication_blocked'"
-        ).fetchone()
-        conn.close()
-        assert row["source_type"] == "delta_excerpt"
-        assert row["action"] == "blocked"
+        # guard_events row check removed — table dropped migration 133.
 
 
 class TestStubHardening:
@@ -143,70 +129,25 @@ class TestDashboardMetrics:
         assert empty["memory_skips"] == 0
         assert empty["delta_blocks"] == 0
 
-    def test_guard_metrics_counts(self, tmp_path, monkeypatch):
-        """Guard metrics returns correct counts from guard_events."""
-        db_path = _make_db(tmp_path)
-        monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
-        project_id = str(uuid.uuid4())
+    def test_guard_metrics_returns_empty_when_table_dropped(self, tmp_path, monkeypatch):
+        """Guard metrics route returns _guard_empty() shape when guard_events is absent.
 
-        conn = sqlite3.connect(str(db_path))
-        for _ in range(3):
-            conn.execute(
-                "INSERT INTO guard_events VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
-                (
-                    str(uuid.uuid4()),
-                    "guard_finding_logged",
-                    "guard-001",
-                    "critical",
-                    "repo_file",
-                    "src/x.py",
-                    project_id,
-                    None,
-                    "logged",
-                    0.9,
-                    "{}",
-                ),
-            )
-        conn.execute(
-            "INSERT INTO guard_events VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
-            (
-                str(uuid.uuid4()),
-                "memory_skipped_tainted",
-                None,
-                "high",
-                "memory_entry",
-                "mem/x.md",
-                project_id,
-                None,
-                "skipped",
-                1.0,
-                "{}",
-            ),
-        )
-        conn.execute(
-            "INSERT INTO guard_events VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
-            (
-                str(uuid.uuid4()),
-                "delta_adjudication_blocked",
-                "guard-001",
-                "critical",
-                "delta_excerpt",
-                "prev..curr",
-                project_id,
-                None,
-                "blocked",
-                1.0,
-                "{}",
-            ),
-        )
-        conn.commit()
-        conn.close()
-
+        guard_events dropped in migration 133 — the route gracefully degrades via
+        object_exists() check. This verifies the degraded path is the default.
+        """
+        from core.config.database import DatabaseRuntime  # noqa: E402
         from projections.api.routes.guard_metrics import get_guard_metrics  # noqa: E402
         import asyncio
 
-        result = asyncio.run(get_guard_metrics(project_id=project_id))
-        assert result["total_events"] == 5
-        assert result["memory_skips"] == 1
-        assert result["delta_blocks"] == 1
-        assert result["by_severity"]["critical"] == 4
+        db_path = _make_db(tmp_path)
+        monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(db_path))
+        DatabaseRuntime.reset_instance()
+        try:
+            result = asyncio.run(get_guard_metrics(project_id="any-project"))
+            # guard_events absent → route returns _guard_empty() shape
+            assert result["total_events"] == 0
+            assert result["memory_skips"] == 0
+            assert result["delta_blocks"] == 0
+            assert "source_status" in result
+        finally:
+            DatabaseRuntime.reset_instance()

@@ -148,35 +148,12 @@ CREATE TABLE IF NOT EXISTS project_health_scorecards (
 CREATE INDEX IF NOT EXISTS idx_project_health_scorecards_project
 ON project_health_scorecards(project_id, created_at);
 
-CREATE TABLE IF NOT EXISTS release_readiness_records (
-    release_readiness_id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    assessment_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    release_readiness_effect TEXT NOT NULL,
-    blocker_count INTEGER NOT NULL DEFAULT 0,
-    manual_review_count INTEGER NOT NULL DEFAULT 0,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
-);
+-- release_readiness_records: dropped in migration 133 (dead writer — persist=False gate never
+-- lifted in production; _record_scorecards() only reachable when persist=True, which no
+-- production caller ever passes).
 
-CREATE INDEX IF NOT EXISTS idx_release_readiness_records_project
-ON release_readiness_records(project_id, created_at);
-
-CREATE TABLE IF NOT EXISTS compliance_review_flags (
-    flag_id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    assessment_id TEXT NOT NULL,
-    control_id TEXT NOT NULL,
-    flag_type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_compliance_review_flags_project
-ON compliance_review_flags(project_id, status);
+-- compliance_review_flags: dropped in migration 133 (same persist=False dead gate as
+-- release_readiness_records; _record_compliance_flags() unreachable in production).
 
 DROP VIEW IF EXISTS vw_project_readiness_latest;
 CREATE VIEW vw_project_readiness_latest AS

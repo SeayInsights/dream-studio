@@ -15,7 +15,7 @@ from core.shared_intelligence.platform_hardening import (
     EVALUATED_WORKFLOWS,
     evaluate_policy_decision,
     platform_hardening_summary,
-    record_policy_decision,
+    # record_policy_decision removed — policy_decision_records dropped migration 133 (test-only writer).
     # ingest_connector_payload removed — connector_ingestion_records dropped migration 131.
     # record_skill_evaluation removed — skill_evaluation_records dropped migration 131.
     # sanitize_export_packet removed — privacy_redaction_export_records dropped in migration 128.
@@ -72,25 +72,9 @@ def test_policy_engine_denies_or_defers_risky_actions_without_approval() -> None
     assert read_only["decision_state"] == "allowed"
 
 
-def test_policy_decision_persists(tmp_path: Path) -> None:
-    with _connect(_db(tmp_path)) as conn:
-        record_policy_decision(
-            conn,
-            decision_id="policy-live-write-1",
-            actor="codex",
-            action="live_sqlite_write",
-            target="installed_state",
-            scope={"home": "redacted"},
-            approved=False,
-            evidence_refs=["operator_decision"],
-        )
-        summary = platform_hardening_summary(conn)
-
-    assert summary["milestones"]["policy_permission_engine"]["decision_count"] == 1
-    assert summary["milestones"]["policy_permission_engine"]["decision_state_counts"] == {
-        "deferred": 1
-    }
-
+# test_policy_decision_persists removed — record_policy_decision() deleted; policy_decision_records
+# dropped in migration 133 (test-only writer; no production caller; evaluate_policy_decision()
+# remains as the read-only production path).
 
 # test_privacy_redaction_blocks_private_fields_and_secret_like_keys removed —
 # sanitize_export_packet deleted; privacy_redaction_export_records dropped in migration 128.

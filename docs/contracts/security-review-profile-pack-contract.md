@@ -389,3 +389,5 @@ controls instead of creating a competing PRD-specific security system.
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no security-review-profile-pack change. migration 131 retires dormant shared-intelligence tables only; the contract-atlas security/production-readiness sections that the pack feeds drop their retired-table references but the review-profile catalog, scan surfaces, and compliance_review_flags/release_readiness_records authority are unchanged. -->
+
+<!-- Last reviewed 2026-06-28 — Batch 1 canonical-first migration (migration 133): compliance_review_flags and release_readiness_records dropped. These tables were never written to in production (persist=False early-return). Security review profile pack feeds security_events, scan_runs, findings_current_status — all retained. No pack contract change. -->

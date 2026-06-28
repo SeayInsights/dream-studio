@@ -1332,7 +1332,7 @@ def _source_tables() -> list[str]:
             "ai_usage_operational_records",
             "token_usage_records",
             "reg_projects",
-            "release_readiness_records",
+            # release_readiness_records: dropped migration 133
             "validation_results",
             "agent_registry_records",
             "agent_context_scope_policies",
@@ -1340,7 +1340,7 @@ def _source_tables() -> list[str]:
             "github_repo_adoption_decisions",
             "task_attribution_records",
             "skill_evaluation_runs",
-            "policy_decision_records",
+            # policy_decision_records: dropped migration 133
             "connector_ingestion_runs",
             # github_repo_license_findings, github_repo_security_findings,
             # github_repo_dependency_findings, github_repo_integration_candidates,

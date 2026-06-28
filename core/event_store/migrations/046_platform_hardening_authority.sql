@@ -22,23 +22,10 @@ CREATE TABLE IF NOT EXISTS skill_evaluation_runs (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS policy_decision_records (
-    decision_id TEXT PRIMARY KEY,
-    actor TEXT NOT NULL,
-    action TEXT NOT NULL,
-    target TEXT,
-    scope_json TEXT NOT NULL DEFAULT '{}',
-    risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-    approval_requirement TEXT NOT NULL,
-    evidence_requirement TEXT NOT NULL,
-    rollback_requirement TEXT NOT NULL,
-    decision_state TEXT NOT NULL CHECK (decision_state IN ('allowed', 'denied', 'deferred')),
-    reason TEXT,
-    source_authority TEXT NOT NULL DEFAULT 'dream_studio_policy_engine',
-    dashboard_attention_impact TEXT NOT NULL DEFAULT 'none',
-    evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+-- policy_decision_records: dropped in migration 133 (test-only writer — record_policy_decision()
+-- only called from tests/unit/test_platform_hardening_sequence.py; no production CLI, hook,
+-- or route calls the write function; evaluate_policy_decision() is the production path,
+-- which is read-only and does not touch this table).
 
 CREATE TABLE IF NOT EXISTS connector_ingestion_runs (
     ingestion_run_id TEXT PRIMARY KEY,
@@ -67,8 +54,7 @@ CREATE TABLE IF NOT EXISTS connector_ingestion_runs (
 CREATE INDEX IF NOT EXISTS idx_skill_evaluation_runs_target
 ON skill_evaluation_runs(target_type, target_id);
 
-CREATE INDEX IF NOT EXISTS idx_policy_decision_records_action
-ON policy_decision_records(action, decision_state);
+-- idx_policy_decision_records_action: dropped with policy_decision_records in migration 133.
 
 CREATE INDEX IF NOT EXISTS idx_connector_ingestion_runs_source
 ON connector_ingestion_runs(source_type, status);
