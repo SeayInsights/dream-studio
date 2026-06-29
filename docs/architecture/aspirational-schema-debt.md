@@ -1,3 +1,4 @@
+<!-- Last reviewed 2026-06-28 — removed action_feedback (core/repo_actions deleted, test-only) and real_action_feedback (core/execution adapters deleted, test-only) from _PYTHON_OWNED_TABLES registry in schema_coherence.py. No schema debt introduced; both tables were already Python-owned with no migration references. -->
 # Aspirational Schema Debt
 
 > **HISTORICAL DEBT LOG — NOT THE LIVE SCHEMA**

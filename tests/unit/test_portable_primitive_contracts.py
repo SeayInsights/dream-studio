@@ -23,7 +23,6 @@ RETIRED_HELPER_TOKENS = {
     "HOOKS_LIB",
     "workflow_state.py",
     "workflow_validate.py",
-    "context_compiler.py",
     "prompt_assembler.py",
 }
 
