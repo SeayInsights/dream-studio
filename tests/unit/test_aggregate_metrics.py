@@ -17,7 +17,11 @@ from core.analytics.aggregate_metrics import ensure_aggregate_schema, run_aggreg
 
 
 def _make_source_db(tmp_path: Path) -> Path:
-    """Create a minimal source DB with findings + scan_runs."""
+    """Create a minimal source DB with findings + scan_runs.
+
+    guard_events is NOT created: it was dropped in migration 133 (all writers
+    were test-only with no production callers). Tests must not recreate dead tables.
+    """
     db = tmp_path / "studio.db"
     conn = sqlite3.connect(str(db))
     conn.executescript("""
@@ -32,11 +36,9 @@ def _make_source_db(tmp_path: Path) -> Path:
             is_baseline INTEGER DEFAULT 0, findings_count INTEGER DEFAULT 0,
             status TEXT DEFAULT 'completed', started_at TEXT
         );
-        CREATE TABLE guard_events (
-            event_id TEXT PRIMARY KEY, event_type TEXT NOT NULL, rule_id TEXT,
-            severity TEXT, source_type TEXT NOT NULL, project_id TEXT,
-            action TEXT DEFAULT 'logged', confidence REAL,
-            details TEXT DEFAULT '{}', created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        CREATE TABLE security_events (
+            event_id TEXT PRIMARY KEY, parent_event_id TEXT, event_kind TEXT NOT NULL,
+            project_id TEXT, vuln_class TEXT, severity TEXT, created_at TEXT NOT NULL
         );
         INSERT INTO findings_current_status VALUES
             ('f1', 'proj-a', 'security', 'sec-001', 'critical', 'open', datetime('now')),
@@ -46,9 +48,9 @@ def _make_source_db(tmp_path: Path) -> Path:
         INSERT INTO scan_runs VALUES
             ('s1', 'proj-a', 'security', 1, 2, 'completed', datetime('now')),
             ('s2', 'proj-a', 'security', 0, 1, 'completed', datetime('now'));
-        INSERT INTO guard_events VALUES
-            ('g1', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'logged', 0.9, '{}', datetime('now')),
-            ('g2', 'guard_finding_logged', 'guard-001', 'critical', 'repo_file', 'proj-a', 'dismissed', 0.9, '{}', datetime('now'));
+        INSERT INTO security_events VALUES
+            ('e1', NULL, 'finding.recorded', 'proj-a', 'sql-injection', 'high', datetime('now')),
+            ('e2', NULL, 'finding.recorded', 'proj-a', 'sql-injection', 'critical', datetime('now'));
     """)
     conn.commit()
     conn.close()
@@ -132,21 +134,16 @@ class TestAggregationPipeline:
 
         assert count1 == count2, f"Idempotency failed: {count1} vs {count2}"
 
-    def test_guard_calibration_fp_rate(self, tmp_path, monkeypatch):
+    def test_guard_calibration_is_empty(self, tmp_path, monkeypatch):
+        """guard_events was dropped in migration 133; guard_calibration stays empty."""
         source_db = _make_source_db(tmp_path)
         agg_db = tmp_path / "aggregate_metrics.db"
         monkeypatch.setenv("DREAM_STUDIO_DB_PATH", str(source_db))
 
-        run_aggregation(agg_db)
-        agg = duckdb.connect(str(agg_db), read_only=True)
-        row = agg.execute(
-            "SELECT total_fires, dismiss_count, fp_rate"
-            " FROM guard_calibration WHERE rule_id = 'guard-001'"
-        ).fetchone()
-        agg.close()
+        result = run_aggregation(agg_db)
+        assert result["tables_written"]["guard_calibration"] == 0
 
-        assert row is not None
-        total_fires, dismiss_count, fp_rate = row
-        assert total_fires == 2
-        assert dismiss_count == 1
-        assert abs(fp_rate - 0.5) < 0.01
+        agg = duckdb.connect(str(agg_db), read_only=True)
+        count = agg.execute("SELECT COUNT(*) FROM guard_calibration").fetchone()[0]
+        agg.close()
+        assert count == 0

@@ -107,6 +107,10 @@ def run_aggregation(db_path: Path | None = None) -> dict:
             summary["finding_rollups"] = f"error: {e}"
 
         # ── rule_fire_rates ────────────────────────────────────────────────────
+        # Source: security_events spine (finding.recorded events).
+        # dismiss_count was previously read from guard_events, which was dropped
+        # in migration 133 (all guard_events writers were test-only; no production
+        # callers). dismiss_count is now 0; fp_rate is not computable without it.
         try:
             rows = src.execute("""
                 SELECT
@@ -118,18 +122,6 @@ def run_aggregation(db_path: Path | None = None) -> dict:
                 WHERE event_kind = 'finding.recorded' AND vuln_class IS NOT NULL
                 GROUP BY vuln_class
             """).fetchall()
-            # Also get dismiss counts from guard_events
-            guard_rows = {}
-            try:
-                g = src.execute("""
-                    SELECT rule_id, COUNT(*) AS dismiss_count
-                    FROM guard_events
-                    WHERE action = 'dismissed' AND rule_id IS NOT NULL
-                    GROUP BY rule_id
-                """).fetchall()
-                guard_rows = {r["rule_id"]: r["dismiss_count"] for r in g}
-            except Exception:
-                pass
 
             agg.executemany(
                 """INSERT OR REPLACE INTO rule_fire_rates
@@ -141,8 +133,8 @@ def run_aggregation(db_path: Path | None = None) -> dict:
                         r["rule_id"],
                         r["skill_id"],
                         r["fire_count"],
-                        guard_rows.get(r["rule_id"], 0),
-                        guard_rows.get(r["rule_id"], 0) / max(r["fire_count"], 1),
+                        0,  # dismiss_count: guard_events dropped in migration 133
+                        None,  # fp_rate: not computable without dismiss signal
                         r["last_fired_at"],
                         now,
                     )
@@ -202,41 +194,12 @@ def run_aggregation(db_path: Path | None = None) -> dict:
             summary["baseline_trends"] = f"error: {e}"
 
         # ── guard_calibration ─────────────────────────────────────────────────
-        try:
-            rows = src.execute("""
-                SELECT
-                    rule_id,
-                    COUNT(*) AS total_fires,
-                    SUM(CASE WHEN action = 'dismissed' THEN 1 ELSE 0 END) AS dismiss_count,
-                    SUM(CASE WHEN action = 'blocked' THEN 1 ELSE 0 END) AS block_count,
-                    SUM(CASE WHEN action = 'logged' THEN 1 ELSE 0 END) AS advisory_count
-                FROM guard_events
-                WHERE rule_id IS NOT NULL
-                GROUP BY rule_id
-            """).fetchall()
-            agg.executemany(
-                """INSERT OR REPLACE INTO guard_calibration
-                   (rule_id, total_fires, dismiss_count, block_count, advisory_count,
-                    fp_rate, calibration_status, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                [
-                    (
-                        r["rule_id"],
-                        r["total_fires"],
-                        r["dismiss_count"],
-                        r["block_count"],
-                        r["advisory_count"],
-                        r["dismiss_count"] / max(r["total_fires"], 1),
-                        "ready" if r["total_fires"] >= 10 else "pending",
-                        now,
-                    )
-                    for r in rows
-                ],
-            )
-            agg.commit()
-            summary["guard_calibration"] = len(rows)
-        except Exception as e:
-            summary["guard_calibration"] = f"error: {e}"
+        # guard_events was dropped in migration 133 (all three writers —
+        # delta_guard.py, memory_taint.py — were test-only reachable with no
+        # production callers). guard_calibration table is retained in the schema
+        # for future canonical-event-sourced population (a separate WO will wire
+        # guardrail.decision events from the canonical stream). For now: no-op.
+        summary["guard_calibration"] = 0
 
         # ── pattern_catalog ───────────────────────────────────────────────────
         try:
