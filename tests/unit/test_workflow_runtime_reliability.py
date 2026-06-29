@@ -10,7 +10,7 @@ Covers:
 7. Gate/pause/resume behavior is implemented
 8. Dashboard-dependent workflows are identified
 9. Model names are Claude-specific (Phase 7 portability scope)
-10. Execution graph integration modules exist
+10. (Retired) Execution graph integration modules — graph.py/context_compiler.py/workflow_integration.py deleted (migration 131 dropped tables)
 11. Workflow state CLI accepts documented commands
 12. No prior phase regressions
 """
@@ -124,11 +124,8 @@ class TestEngineModulesExist:
     def test_module_exists(self, relpath):
         assert (REPO_ROOT / relpath).is_file(), f"Missing: {relpath}"
 
-    def test_execution_graph_exists(self):
-        assert (REPO_ROOT / "core" / "execution" / "graph.py").is_file()
-
-    def test_workflow_integration_exists(self):
-        assert (REPO_ROOT / "core" / "execution" / "workflow_integration.py").is_file()
+    # test_execution_graph_exists RETIRED: core/execution/graph.py deleted (migration 131)
+    # test_workflow_integration_exists RETIRED: core/execution/workflow_integration.py deleted
 
 
 # ── 4. State persistence uses documented locking ───────────────────────────
@@ -326,23 +323,9 @@ class TestModelPortability:
         assert "resolve_model" not in engine_source
 
 
-# ── 10. Execution graph integration modules exist ──────────────────────────
-
-
-class TestExecutionGraphIntegration:
-
-    def test_graph_module_has_persistent_dag(self):
-        source = (REPO_ROOT / "core" / "execution" / "graph.py").read_text(encoding="utf-8")
-        assert "class" in source or "def" in source
-
-    def test_workflow_integration_bridges(self):
-        source = (REPO_ROOT / "core" / "execution" / "workflow_integration.py").read_text(
-            encoding="utf-8"
-        )
-        assert "workflow" in source.lower()
-
-    def test_context_compiler_exists(self):
-        assert (REPO_ROOT / "core" / "execution" / "context_compiler.py").is_file()
+# ── 10. Retired: Execution graph integration modules ──────────────────────
+# graph.py, context_compiler.py, workflow_integration.py deleted (migration 131
+# dropped execution_nodes/execution_event_links; zero production callers confirmed).
 
 
 # ── 11. State CLI accepts documented commands ──────────────────────────────

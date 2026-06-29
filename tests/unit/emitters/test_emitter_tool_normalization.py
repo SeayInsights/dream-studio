@@ -8,12 +8,7 @@ imports, no authority DB writes, no network calls, no subprocess.
 from __future__ import annotations
 
 import ast
-import importlib
 import re
-import socket
-import subprocess
-import sys
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -100,27 +95,6 @@ def _matches_any_prefix(module: str, prefixes: set[str]) -> bool:
     return any(module == prefix or module.startswith(f"{prefix}.") for prefix in prefixes)
 
 
-def _top_level_subprocess_calls(path: Path) -> list[str]:
-    source = _read(path)
-    tree = ast.parse(source)
-    calls: list[str] = []
-
-    for node in tree.body:
-        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        for child in ast.walk(node):
-            if not isinstance(child, ast.Call):
-                continue
-            func = child.func
-            if (
-                isinstance(func, ast.Attribute)
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "subprocess"
-            ):
-                calls.append(f"{_rel(path)}:{child.lineno} subprocess.{func.attr}()")
-    return calls
-
-
 def test_authority_paths_do_not_import_provider_sdks_directly():
     roots = [
         REPO_ROOT / "core",
@@ -154,64 +128,12 @@ def test_emitter_layer_is_pure_normalization_only():
     assert offenders == []
 
 
-def test_importing_core_execution_is_opt_in_and_side_effect_free(monkeypatch, tmp_path):
-    fake_home = tmp_path / "home"
-    fake_profile = tmp_path / "profile"
-    monkeypatch.setenv("HOME", str(fake_home))
-    monkeypatch.setenv("USERPROFILE", str(fake_profile))
+# test_importing_core_execution_is_opt_in_and_side_effect_free RETIRED:
+# core/execution/ package deleted — ci_collector.py, real_feedback.py, github_adapter.py
+# removed (zero production callers; lazy-export __init__ also deleted).
 
-    def forbidden_call(*_args, **_kwargs):
-        raise AssertionError("core.execution import attempted an external/runtime side effect")
-
-    monkeypatch.setattr(subprocess, "run", forbidden_call)
-    monkeypatch.setattr(subprocess, "Popen", forbidden_call)
-    monkeypatch.setattr(socket, "create_connection", forbidden_call)
-    monkeypatch.setattr(urllib.request, "urlopen", forbidden_call)
-
-    for name in list(sys.modules):
-        if name == "core.execution" or name.startswith("core.execution."):
-            sys.modules.pop(name)
-
-    module = importlib.import_module("core.execution")
-
-    assert "core.execution.github_adapter" not in sys.modules
-    assert "core.execution.ci_collector" not in sys.modules
-    assert "core.execution.real_feedback" not in sys.modules
-    assert module.GitHubAdapter.__name__ == "GitHubAdapter"
-    assert module.CICollector.__name__ == "CICollector"
-    assert not (fake_home / ".dream-studio").exists()
-    assert not (fake_profile / ".dream-studio").exists()
-
-
-def test_github_and_ci_execution_tools_remain_explicit_method_only_adapters():
-    github_adapter = REPO_ROOT / "core" / "execution" / "github_adapter.py"
-    ci_collector = REPO_ROOT / "core" / "execution" / "ci_collector.py"
-    offenders: list[str] = []
-
-    for path in [github_adapter, ci_collector]:
-        source = _read(path)
-        modules = _imported_modules(source)
-
-        offenders.extend(_top_level_subprocess_calls(path))
-
-        if "subprocess" not in modules:
-            offenders.append(f"{_rel(path)} no longer declares explicit subprocess dependency")
-        # Accept either legacy core.events path or new canonical.events spool pipeline (Slice 3)
-        routes_events = (
-            "core.events" in modules
-            or "core.events.types" in modules
-            or "canonical.events.envelope" in modules
-            or "emitters.shared.spool_writer" in modules
-        )
-        if not routes_events:
-            offenders.append(f"{_rel(path)} does not route events through core contracts")
-        if "core.decisions" not in modules:
-            offenders.append(f"{_rel(path)} does not route decisions through core contracts")
-        for module in sorted(modules):
-            if _matches_any_prefix(module, {"sqlite3", "core.config.database", "core.event_store"}):
-                offenders.append(f"{_rel(path)} imports DB authority module {module}")
-
-    assert offenders == []
+# test_github_and_ci_execution_tools_remain_explicit_method_only_adapters RETIRED:
+# Same — source files deleted along with the package.
 
 
 def test_runtime_hooks_do_not_import_provider_sdks_or_adapters_directly():
@@ -246,27 +168,9 @@ def test_runtime_model_metadata_defaults_are_provider_neutral():
     assert 'model: str = "unspecified"' in studio_db_source
 
 
-def test_discovery_provider_names_remain_catalog_metadata_only():
-    files = [
-        REPO_ROOT / "control" / "research" / "tools.py",
-    ]
-    offenders: list[str] = []
-
-    for path in files:
-        source = _read(path)
-        modules = _imported_modules(source)
-        for module in sorted(modules):
-            if _matches_any_prefix(module, PROVIDER_OR_NETWORK_IMPORT_PREFIXES):
-                offenders.append(f"{_rel(path)} imports provider/network module {module}")
-        for token in ["subprocess.", "requests.", "httpx.", "urllib.", "socket.", "websocket."]:
-            if token in source:
-                offenders.append(f"{_rel(path)} contains external call token {token}")
-
-    tool_source = _read(files[0])
-
-    assert "class ToolMatch" in tool_source
-    assert "tool_registry" in tool_source
-    assert offenders == []
+# test_discovery_provider_names_remain_catalog_metadata_only RETIRED:
+# control/research/tools.py deleted — no live caller, tool_registry table dropped
+# in migration 131, confirmed test-only per invoked-not-imported audit.
 
 
 def test_legacy_top_level_adapter_import_residue_is_absent():

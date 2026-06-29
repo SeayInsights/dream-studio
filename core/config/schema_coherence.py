@@ -36,8 +36,6 @@ _PYTHON_OWNED_TABLES: dict[str, str] = {
     # _PROJECTION_TABLES_DDL_UNUSED constant (which held the only DuckDB-side CREATE TABLE
     # statements) was removed in this WO — so the staleness guard finds no CREATE TABLE site.
     # They are served as DuckDB CREATE OR REPLACE VIEW (not matched by the CREATE TABLE guard).
-    "action_feedback": "core/repo_actions/feedback.py:244",
-    "real_action_feedback": "core/execution/real_feedback.py:200",
     "workflow_executions": "core/projections/workflow_metrics.py:30",
     "workflow_phases": "core/projections/workflow_metrics.py:49",
     "workflow_kpis": "core/projections/workflow_metrics.py:63",

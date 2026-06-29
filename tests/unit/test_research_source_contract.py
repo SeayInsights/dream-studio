@@ -243,7 +243,6 @@ def test_research_cache_cannot_silently_promote_to_semantic_memory():
 
 def test_external_research_services_are_optional_and_degrade_cleanly():
     web_source = _read(REPO_ROOT / "control" / "research" / "web.py")
-    tools_source = _read(REPO_ROOT / "control" / "research" / "tools.py")
     contract = _read(RESEARCH_CONTRACT).lower()
 
     assert re.search(r"api_key = os\.environ\.get\([\"']JINA_API_KEY[\"']\)", web_source)
@@ -251,10 +250,8 @@ def test_external_research_services_are_optional_and_degrade_cleanly():
     assert "return []" in web_source
     assert "sources = search_web(query)" in web_source
 
-    # tool_embeddings_cache + the sentence-transformers embedding/hybrid path were
-    # retired migration 131 (dormant — no live caller). tools.py keeps the TF-IDF
-    # default search; the embedding-fallback assertions are removed with that code.
-    assert "use_embeddings: bool = False" in tools_source
+    # control/research/tools.py deleted — no live caller, tool_registry dropped migration 131,
+    # TF-IDF catalog subsystem removed as test-only dead code.
 
     assert "external research providers are optional" in contract
     assert "base local runtime validation must not require an external research service" in contract
