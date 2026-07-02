@@ -228,3 +228,5 @@ These are **not abstracted** — they're passed directly to the orchestrating ag
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no workflow engine/state-machine/validator/retry-contract change. migration 131 retires the dormant execution-graph cluster (execution_nodes/dependencies/outputs/event_links) whose only callers were the unregistered dream_exec.py/exec_graph.py CLIs (now deleted); no registered workflow or node-runner referenced those tables. -->
+
+<!-- Last reviewed 2026-07-02 — WO-ENFORCE-SQLITE (feat/issue-441-enforce-hooks, #441): no workflow engine, state machine, validator, gate-runner, or retry-contract change. The change set adds two blocking hooks (on-edit-enforce PreToolUse, on-stop-enforce Stop) as direct hooks.json entries plus projection/installer propagation — hook runtime only; see HOOK_RUNTIME.md 'SQLite Enforcement Hooks'. No canonical/workflows/*.yaml touched. -->
