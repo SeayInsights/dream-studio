@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "dream_studio_managed": true,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); script=next((p/'runtime'/'hooks'/'meta'/'on-edit-enforce.py' for p in (root,*root.parents) if (p/'runtime'/'hooks'/'meta'/'on-edit-enforce.py').is_file()),None); sys.argv=[str(script)]; (runpy.run_path(str(script),run_name='__main__') if script else None); sys.exit(0)\""
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "dream_studio_managed": true,
@@ -36,6 +48,15 @@
           {
             "type": "command",
             "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); dispatcher=next((p/'runtime'/'dispatch'/'hooks.py' for p in (root,*root.parents) if (p/'runtime'/'dispatch'/'hooks.py').is_file()),None); sys.argv=[str(dispatcher),'Stop']; (runpy.run_path(str(dispatcher),run_name='__main__') if dispatcher else None); sys.exit(0)\""
+          }
+        ]
+      },
+      {
+        "dream_studio_managed": true,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,pathlib,runpy,sys; root=pathlib.Path(os.environ.get('CLAUDE_PLUGIN_ROOT') or os.getcwd()).resolve(); script=next((p/'runtime'/'hooks'/'meta'/'on-stop-enforce.py' for p in (root,*root.parents) if (p/'runtime'/'hooks'/'meta'/'on-stop-enforce.py').is_file()),None); sys.argv=[str(script)]; (runpy.run_path(str(script),run_name='__main__') if script else None); sys.exit(0)\""
           }
         ]
       }

@@ -1,5 +1,24 @@
 [
   {
+    "event": "PreToolUse",
+    "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/runtime/hooks/meta/on-edit-enforce.py\""
+      }
+    ]
+  },
+  {
+    "event": "Stop",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "{python_cmd} \"{hooks_dir}/runtime/hooks/meta/on-stop-enforce.py\""
+      }
+    ]
+  },
+  {
     "event": "UserPromptSubmit",
     "hooks": [
       {

@@ -266,13 +266,25 @@ def test_chain_4_link_1_workflow_trigger_in_installed_routing():
     """C4-L1: 'idea-to-pr' → workflow routing triggered. PROVEN post-18.1.15a.
 
     Fixed: workflow trigger keywords added to ds-workflow pack routing table.
-    Verifies installed ~/.claude/CLAUDE.md contains 'workflow:' keyword.
+    Post-Phase-20 the installed CLAUDE.md delegates the routing table via an
+    @AGENTS.md import, so the keyword may live in either file — but a dangling
+    import (CLAUDE.md references AGENTS.md that was never installed) must fail.
     """
     claude_md = Path.home() / ".claude" / "CLAUDE.md"
     if not claude_md.is_file():
         pytest.skip("Operator's ~/.claude/CLAUDE.md not installed in this environment")
     content = claude_md.read_text(encoding="utf-8")
-    assert "workflow:" in content, "workflow: trigger keyword absent from installed CLAUDE.md"
+    if "workflow:" in content:
+        return
+    assert "@AGENTS.md" in content, "workflow: trigger keyword absent from installed CLAUDE.md"
+    agents_md = Path.home() / ".claude" / "AGENTS.md"
+    assert agents_md.is_file(), (
+        "installed CLAUDE.md imports @AGENTS.md but ~/.claude/AGENTS.md was never installed"
+        " — routing table is unreachable"
+    )
+    assert "workflow:" in agents_md.read_text(
+        encoding="utf-8"
+    ), "workflow: trigger keyword absent from installed AGENTS.md routing table"
 
 
 @pytest.mark.xfail(

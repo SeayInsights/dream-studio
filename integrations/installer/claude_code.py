@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import platform
 import stat
 import sys
@@ -140,7 +139,22 @@ def _collect_hook_file_ops(
             source_root / "runtime" / "session_config.py",
             hooks_dir / "runtime" / "session_config.py",
         ),
+        # runtime package __init__ chain — required for runtime.lib.* imports
+        # by direct-entry hooks (on-edit-enforce, on-stop-enforce)
+        (source_root / "runtime" / "__init__.py", hooks_dir / "runtime" / "__init__.py"),
     ]
+
+    # runtime/lib — shared hook libraries; direct-entry hooks resolve
+    # runtime.lib relative to the plugin root, so the installed tree must
+    # carry them (with .ds-source-root as the repo-import fallback).
+    lib_src_dir = source_root / "runtime" / "lib"
+    if lib_src_dir.is_dir():
+        for lib_file in sorted(lib_src_dir.rglob("*.py")):
+            if "__pycache__" in lib_file.parts:
+                continue
+            hook_files.append(
+                (lib_file, hooks_dir / "runtime" / "lib" / lib_file.relative_to(lib_src_dir))
+            )
 
     for src, tgt in hook_files:
         if not src.is_file():
@@ -309,7 +323,7 @@ def _write_path_to_profile(bin_dir: Path) -> dict[str, Any]:
             profile_path = (
                 Path.home() / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"
             )
-        path_line = f'$env:PATH += ";$HOME\\.dream-studio\\bin"'
+        path_line = '$env:PATH += ";$HOME\\.dream-studio\\bin"'
     elif system == "Darwin":
         profile_path = Path.home() / ".zshrc"
         path_line = 'export PATH="$HOME/.dream-studio/bin:$PATH"'
@@ -544,6 +558,27 @@ class ClaudeCodeInstaller(InstallerBase):
                         "Existing file is backed up before write."
                     ),
                     backup_path=backup_base if claude_target.exists() else None,
+                )
+            )
+
+        # 2b. AGENTS.md — create (routing table target of CLAUDE.md's @AGENTS.md
+        # import; without it the installed routing surface has no trigger keywords)
+        agents_md_content = pack["files"].get("AGENTS.md")
+        if agents_md_content:
+            agents_target = self.config_root / "AGENTS.md"
+            ops.append(
+                FileOp(
+                    target=agents_target,
+                    op="create",
+                    backup_required=agents_target.exists(),
+                    source_hash=compute_hash(agents_md_content),
+                    source_content=agents_md_content,
+                    reason="Install generated AGENTS.md (resolves CLAUDE.md @AGENTS.md import)",
+                    safety_notes=(
+                        "Generated projection — overwritten on every install. "
+                        "Existing file is backed up before write."
+                    ),
+                    backup_path=backup_base if agents_target.exists() else None,
                 )
             )
 

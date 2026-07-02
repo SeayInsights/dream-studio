@@ -360,6 +360,25 @@ def step_sync_hook_projection() -> StepResult:
             shutil.copy2(sc_src, sc_dst)
             copied += 1
 
+        # Also sync runtime/lib/ — direct-entry hooks (on-edit-enforce,
+        # on-stop-enforce) resolve runtime.lib relative to the plugin root,
+        # so the projection must be self-contained.
+        lib_src = REPO_ROOT / "runtime" / "lib"
+        lib_dst = REPO_ROOT / ".claude" / "hooks" / "runtime" / "lib"
+        if lib_src.exists():
+            for src_file in lib_src.rglob("*.py"):
+                if "__pycache__" in src_file.parts:
+                    continue
+                dst_file = lib_dst / src_file.relative_to(lib_src)
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+                copied += 1
+            init_src = REPO_ROOT / "runtime" / "__init__.py"
+            init_dst = REPO_ROOT / ".claude" / "hooks" / "runtime" / "__init__.py"
+            if init_src.exists():
+                shutil.copy2(init_src, init_dst)
+                copied += 1
+
         plugin_root = REPO_ROOT / ".claude" / "hooks" / ".plugin-root"
         plugin_root.write_text(str(REPO_ROOT / ".claude" / "hooks"), encoding="utf-8")
 
