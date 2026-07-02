@@ -561,6 +561,27 @@ class ClaudeCodeInstaller(InstallerBase):
                 )
             )
 
+        # 2b. AGENTS.md — create (routing table target of CLAUDE.md's @AGENTS.md
+        # import; without it the installed routing surface has no trigger keywords)
+        agents_md_content = pack["files"].get("AGENTS.md")
+        if agents_md_content:
+            agents_target = self.config_root / "AGENTS.md"
+            ops.append(
+                FileOp(
+                    target=agents_target,
+                    op="create",
+                    backup_required=agents_target.exists(),
+                    source_hash=compute_hash(agents_md_content),
+                    source_content=agents_md_content,
+                    reason="Install generated AGENTS.md (resolves CLAUDE.md @AGENTS.md import)",
+                    safety_notes=(
+                        "Generated projection — overwritten on every install. "
+                        "Existing file is backed up before write."
+                    ),
+                    backup_path=backup_base if agents_target.exists() else None,
+                )
+            )
+
         # 3. settings.json — merge_json (with {hooks_dir} interpolation + legacy purge)
         hooks_dir = self.config_root / "hooks"
         interpolated_hooks = _interpolate_hooks_dir(pack["settings_hooks"], hooks_dir)
