@@ -158,6 +158,11 @@ def main(argv: list[str] | None = None) -> int:
                 return args.func(args)
             print("Usage: ds learn review [--limit N] [--batch]", file=sys.stderr)
             return 1
+        if args.command == "files":
+            if hasattr(args, "func"):
+                return args.func(args)
+            print("Usage: ds files <subcommand>", file=sys.stderr)
+            return 1
         if args.command == "projection":
             from interfaces.cli.projection_cli import handle_projection_command
 

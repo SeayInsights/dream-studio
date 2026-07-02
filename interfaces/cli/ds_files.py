@@ -63,6 +63,60 @@ def cmd_files_list(args) -> int:
     return 0
 
 
+def _default_artifact_name(path: Path) -> str:
+    """Prefer a cwd-relative POSIX name so records stay readable and greppable."""
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.name
+
+
+def cmd_files_add(args) -> int:
+    """Entry point for `ds files add` — register an artifact in files.db."""
+    import json
+    import mimetypes
+    import uuid
+
+    from core.files.store import write_file
+
+    path = Path(args.path)
+    if not path.is_file():
+        print(json.dumps({"ok": False, "error": f"not a file: {args.path}"}))
+        return 1
+
+    name = args.name or _default_artifact_name(path)
+    content_type = args.content_type or mimetypes.guess_type(path.name)[0] or "text/markdown"
+
+    try:
+        content = path.read_bytes()
+        file_id = write_file(
+            name,
+            content,
+            content_type,
+            args.category,
+            project_id=args.project_id,
+            correlation_id=str(uuid.uuid4()),
+            created_by="cli",
+        )
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}))
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "file_id": file_id,
+                "name": name,
+                "category": args.category,
+                "content_type": content_type,
+                "bytes": len(content),
+            }
+        )
+    )
+    return 0
+
+
 def add_files_subcommand(subparsers) -> None:
     """Register the 'files' subcommand group."""
     files_parser = subparsers.add_parser("files", help="Artifact store commands")
@@ -82,3 +136,32 @@ def add_files_subcommand(subparsers) -> None:
         help="Filter by category",
     )
     list_parser.set_defaults(func=cmd_files_list)
+
+    add_parser = files_sub.add_parser(
+        "add", help="Register an artifact file in the files.db docstore"
+    )
+    add_parser.add_argument("path", help="Path of the file to register")
+    add_parser.add_argument(
+        "--project-id",
+        default=None,
+        dest="project_id",
+        help="Project ID to attach the artifact to",
+    )
+    add_parser.add_argument(
+        "--category",
+        default="evidence",
+        choices=["handoff", "evidence", "release", "rollback", "export"],
+        help="Artifact category (default: evidence)",
+    )
+    add_parser.add_argument(
+        "--name",
+        default=None,
+        help="Stored artifact name (default: cwd-relative path of the file)",
+    )
+    add_parser.add_argument(
+        "--content-type",
+        default=None,
+        dest="content_type",
+        help="MIME type (default: guessed from the file name)",
+    )
+    add_parser.set_defaults(func=cmd_files_add)
