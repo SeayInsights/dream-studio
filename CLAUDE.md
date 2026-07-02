@@ -44,6 +44,15 @@ workflows, or packs change (the AGENTS.md drift gate enforces this).
 
 If the user's intent does not match any keyword above, route to `ds-quality` with arg `coach`. Coach will classify the intent, map it to the nearest pack and mode, and explain confidence + alternatives.
 
+## SQLite Enforcement (blocking hooks)
+
+Two blocking hooks convert the authority/docstore rules from prose into failure modes for every adapter session:
+
+- **PreToolUse (Edit|Write):** edits to product source inside a registered project are **denied** unless that project has an `in_progress` work order in the SQLite authority. The deny reason names the exact `ds work-order start <id>` command to run.
+- **Stop:** a session that edited product source must have recorded an authority write (`ds work-order task-done` / `close`), and persistent documentation artifacts (`docs/**`, `.planning/**` except `personal/`) must be registered in the files.db docstore via `ds files add <path> --project-id <id>`. Violations block the stop once, with the exact remediation command per item.
+
+Both hooks fail open (a broken DB disables enforcement, never editing) and respect the operator escape hatch `DS_ENFORCE=0`. Canonical source: `runtime/hooks/meta/on-edit-enforce.py`, `runtime/hooks/meta/on-stop-enforce.py`, `runtime/lib/enforcement.py`; wired in `hooks/hooks.json`.
+
 ## Dream Studio CLI — Decision Guide
 
 ### Session Start

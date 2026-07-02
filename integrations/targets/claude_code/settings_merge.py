@@ -31,6 +31,15 @@ _DS_DISPATCHER_MARKERS = (
     "'dispatch'/'hooks.py'",  # legacy: pathlib expression form
 )
 
+_DS_ENFORCEMENT_MARKERS = (
+    "on-edit-enforce.py",
+    "on-stop-enforce.py",
+)
+
+
+def _command_is_ds_enforcement(command: str) -> bool:
+    return any(m in command for m in _DS_ENFORCEMENT_MARKERS)
+
 
 def _command_is_ds_emitter(command: str) -> bool:
     return any(m in command for m in _DS_EMITTER_MARKERS)
@@ -72,7 +81,8 @@ def _command_is_legacy_ds_hook(command: str) -> bool:
 
 
 def _event_has_stable_ds_hook(event_list: list[Any]) -> bool:
-    """Return True if the event list has at least one new stable-path DS hook (emitter or dispatcher)."""
+    """Return True if the event list has at least one new stable-path DS hook
+    (emitter, dispatcher, or enforcement)."""
     stable_emitter_markers = ("hooks\\run.py", "hooks/run.py")
     stable_dispatcher_markers = ("hooks\\dispatch\\hooks.py", "hooks/dispatch/hooks.py")
     for entry in event_list:
@@ -81,6 +91,10 @@ def _event_has_stable_ds_hook(event_list: list[Any]) -> bool:
                 continue
             cmd = h.get("command", "")
             if any(m in cmd for m in stable_emitter_markers + stable_dispatcher_markers):
+                return True
+            # Enforcement hooks count as stable only in their direct-path form,
+            # not as the legacy filesystem-walking one-liner.
+            if _command_is_ds_enforcement(cmd) and not _command_is_legacy_ds_hook(cmd):
                 return True
     return False
 
@@ -260,6 +274,7 @@ def _entry_is_ds_owned(entry: Any) -> bool:
         if (
             _command_is_ds_emitter(command)
             or _command_is_ds_dispatcher(command)
+            or _command_is_ds_enforcement(command)
             or _command_is_legacy_ds_hook(command)
         ):
             return True
