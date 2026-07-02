@@ -67,8 +67,10 @@ current working directory.
 
 | Event | Handler | Pack Location |
 |-------|---------|--------------|
+| PreToolUse (Edit\|Write\|MultiEdit\|NotebookEdit) | `on-edit-enforce` | meta (direct, blocking) |
 | UserPromptSubmit | `on-prompt-dispatch` | meta (dispatcher) |
 | Stop | `on-stop-dispatch` | meta (dispatcher) |
+| Stop | `on-stop-enforce` | meta (direct, blocking) |
 | PostCompact | `on-post-compact` | meta (direct) |
 | PostToolUse (Skill) | `on-skill-metrics` | meta (direct) |
 | PostToolUse (Skill) | `on-skill-complete` | meta (direct) |
@@ -83,6 +85,36 @@ Production readiness is not an implicit hook execution path. Hook telemetry may
 be evidence for readiness, and future approved hooks may emit readiness-related
 facts, but readiness control execution and SQLite persistence remain owned by
 the `production-readiness` workflow and explicit runtime authorization.
+
+## SQLite Enforcement Hooks (blocking, direct-entry)
+
+`on-edit-enforce` (PreToolUse) and `on-stop-enforce` (Stop) are the only
+BLOCKING hooks in the runtime. They are registered as dedicated hooks.json /
+hooks_template.json entries — never through the dispatchers — because
+`dispatch_tracking.run_handlers()` swallows handler stdout and the dispatcher
+always exits 0; a deny/block decision must own its process stdout for Claude
+Code to parse it.
+
+- `on-edit-enforce` denies Edit/Write to product source inside a registered
+  project (`business_projects.project_path` match) when the project has no
+  `in_progress` work order in the authority; the deny reason names the exact
+  `ds work-order start <id>` command. Allowed edits are recorded to
+  `~/.dream-studio/state/enforce/<session_id>.json`.
+- `on-stop-enforce` blocks the Stop at most once per session when recorded
+  product-source edits have no authority write (task.completed /
+  work_order.closed event OR fresh done-task / closed-WO row — both directions
+  of spool/projection lag are accepted), or when a documentation artifact
+  (docs/**, .planning/** except personal/) lacks a `ds_files` record in
+  files.db at least as fresh as the session's last edit to it (remediation:
+  `ds files add`).
+
+Shared logic lives in `runtime/lib/enforcement.py`. Both hooks fail open on
+every error path (broken DB disables enforcement, never editing), honor
+`stop_hook_active`, and respect the `DS_ENFORCE=0` operator escape hatch.
+`runtime/lib/` is carried by both projections (repo `.claude/hooks/runtime/lib/`
+via `step_sync_hook_projection`, installed `~/.claude/hooks/runtime/lib/` via
+the installer) with `.ds-source-root` as the repo-import fallback.
+Gate tests: `tests/unit/test_enforce_sqlite_hooks.py`.
 
 ## Dispatcher Sub-Handler Mapping
 
@@ -227,3 +259,5 @@ These exist in runtime/hooks/ but are not reachable via any registered hook:
 <!-- reviewed 2026-06-26: migration 128 dead-tables removal — no content changes required -->
 
 <!-- Last reviewed 2026-06-27 — Wave 2 substrate realignment (migration 131, worktree-agent-a910d590fedb5c672): no hook dispatch/registration/fail-open change. migration 131 retires dormant tables and their dead writers; hooks that emit canonical events (on-commit, on-edit-dispatch, on-session-end, on-skill-telemetry, on-memory-ingest) keep their live targets (guardrail_decisions, decision_records, decision_event_link, hook_eval_runs, ds_friction_signals, dashboard_attention_items). on-memory-ingest's run_all_ingestion no longer includes the retired CorrectionIngestionConsumer (cor_skill_corrections dropped) — 3 consumers remain; no PROTECTED_PATHS or handler-chain change. -->
+
+<!-- Last reviewed 2026-07-02 — WO-ENFORCE-SQLITE (feat/issue-441-enforce-hooks, #441): first BLOCKING hooks added — on-edit-enforce (PreToolUse Edit|Write|MultiEdit|NotebookEdit) and on-stop-enforce (Stop), both meta pack, both direct hooks.json entries (dispatcher swallows stdout, so blocking output cannot route through it). Shared lib runtime/lib/enforcement.py; session state at ~/.dream-studio/state/enforce/. Fail-open on all error paths; DS_ENFORCE=0 escape hatch; stop blocks at most once per session. Projection changes: step_sync_hook_projection and the installer now carry runtime/lib/; installer writes AGENTS.md (dangling @AGENTS.md import fix, WO-INSTALL-AGENTS-MD); hooks_template.json gains stable-path PreToolUse/Stop enforcement entries; settings_merge treats enforcement commands as DS-owned (uninstall) and stable (legacy purge). VERSION bumped 2026-05-17 → 2026-07-02 to propagate new hook files past the manifest drift check (new files are invisible to it). See 'SQLite Enforcement Hooks' section above. -->
