@@ -412,9 +412,10 @@ def _write_live_eval_run(
                 )
         conn.commit()
         conn.close()
-    except Exception:
-        # eval_registry may not exist on older DBs.
-        pass
+    except Exception as exc:
+        # eval_registry may not exist on older DBs — tolerated, but never silent:
+        # a swallowed registry write means stale last_run/friction state.
+        logging.getLogger(__name__).warning("eval_registry update failed for %s: %s", eval_id, exc)
 
     from core.eval.events import emit_eval_run_event
 
@@ -553,21 +554,26 @@ def _record_outcome_run(work_order_id: str, outcome: dict, db_path: Path) -> Non
     """Emit the outcome eval as an eval.run.completed canonical event (never raises).
 
     History for outcome eval runs now lives solely in business_canonical_events
-    (T4 dropped ds_eval_runs).
+    (T4 dropped ds_eval_runs). emit_eval_run_event is itself fail-open, but the
+    never-raises contract here is load-bearing for the close path, so it gets
+    its own guard rather than relying on the callee's.
     """
-    from core.eval.events import emit_eval_run_event
+    try:
+        from core.eval.events import emit_eval_run_event
 
-    emit_eval_run_event(
-        {
-            "run_id": str(uuid.uuid4()),
-            "eval_id": f"outcome:{work_order_id[:8]}",
-            "work_order_id": work_order_id,
-            "passed": outcome["passed"],
-            "failure_reasons": outcome["failures"],
-            "run_mode": "outcome",
-        },
-        work_order_id=work_order_id,
-    )
+        emit_eval_run_event(
+            {
+                "run_id": str(uuid.uuid4()),
+                "eval_id": f"outcome:{work_order_id[:8]}",
+                "work_order_id": work_order_id,
+                "passed": outcome["passed"],
+                "failure_reasons": outcome["failures"],
+                "run_mode": "outcome",
+            },
+            work_order_id=work_order_id,
+        )
+    except Exception:
+        pass
 
 
 def _reopen_and_escalate(

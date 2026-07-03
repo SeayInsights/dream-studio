@@ -256,9 +256,11 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
             params = [target_type] if target_type else []
             # "passed" now comes from the eval.run.completed / work_order.verified
             # canonical event whose payload.run_id matches er.last_run_id — the
-            # ds_eval_runs/hook_eval_runs LEFT JOINs were dropped in T4. No match
-            # (e.g. last_run_id is NULL, or the run predates canonical emission)
-            # leaves passed NULL, same as before.
+            # ds_eval_runs/hook_eval_runs LEFT JOINs were dropped in T4. A
+            # correlated scalar subquery (latest event wins) instead of a JOIN:
+            # one registry row can never multiply, even if several events share
+            # a run_id. No match (last_run_id NULL, or the run predates
+            # canonical emission) leaves passed NULL, same as before.
             rows = conn.execute(
                 f"""
                 SELECT
@@ -268,11 +270,15 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
                     er.rubric_score,
                     er.last_run_at,
                     er.friction_flag,
-                    json_extract(bce.payload, '$.passed') AS passed
+                    (
+                        SELECT json_extract(bce.payload, '$.passed')
+                        FROM business_canonical_events bce
+                        WHERE bce.event_type IN ('eval.run.completed', 'work_order.verified')
+                          AND json_extract(bce.payload, '$.run_id') = er.last_run_id
+                        ORDER BY bce.event_timestamp DESC
+                        LIMIT 1
+                    ) AS passed
                 FROM eval_registry er
-                LEFT JOIN business_canonical_events bce
-                    ON bce.event_type IN ('eval.run.completed', 'work_order.verified')
-                    AND json_extract(bce.payload, '$.run_id') = er.last_run_id
                 {where}
                 ORDER BY er.target_type, er.target_id
                 """,

@@ -81,14 +81,14 @@ def get_decisions(
         conditions.append("CAST(json_extract(payload, '$.confidence') AS REAL) >= ?")
         params.append(min_confidence)
 
-    where_clause = " AND ".join(conditions)
-    query = f"""
-        SELECT payload, event_timestamp
-        FROM business_canonical_events
-        WHERE {where_clause}
-        ORDER BY event_timestamp DESC
-        LIMIT ?
-    """
+    query = (
+        "SELECT payload, event_timestamp"
+        " FROM business_canonical_events"
+        " WHERE "
+        + " AND ".join(conditions)  # constant fragments; values bound below
+        + " ORDER BY event_timestamp DESC"
+        " LIMIT ?"
+    )
     params.append(limit)
 
     with _connect() as conn:
