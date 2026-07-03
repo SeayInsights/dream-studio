@@ -181,7 +181,7 @@ def _make_ds_config_conn() -> sqlite3.Connection:
     return conn
 
 
-def test_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_dashboard_cost_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """T4: import, api_equivalent_cost on seeded DuckDB view, plan_comparison False/True, route path."""
     # Import must succeed
     from projections.core.cost_analysis import api_equivalent_cost, plan_comparison
