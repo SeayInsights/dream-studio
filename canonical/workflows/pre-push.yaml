@@ -67,6 +67,7 @@ gates:
       tests/unit/test_plugin_manifest.py,
       tests/unit/test_schema_debt_doc.py,
       tests/unit/test_hook_runtime_reliability.py,
+      tests/unit/test_schema_tombstones.py,
       -q]
     fail_hint: >
       A schema/contract pin drifted — update the pin's expected set in the SAME
