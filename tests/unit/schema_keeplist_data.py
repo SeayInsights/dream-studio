@@ -47,8 +47,8 @@ CLASSIFICATION: dict[str, str] = {
     "connector_ingestion_runs": "DROP",  # Dropped migration 131: dead writer ingest_connector_payload(), test-only callers
     "cor_skill_corrections": "DROP",  # Dropped migration 131: dead writer skill_correct(), only reachable via unregistered __main__
     "dashboard_attention_items": "KEEP",
-    "decision_event_link": "KEEP",
-    "decision_log": "KEEP",
+    "decision_event_link": "DROP",  # Dropped migration 136: emit_decision's decision.recorded canonical event is the sole durable write; join replaced by payload.triggered_event_id
+    "decision_log": "DROP",  # Dropped migration 136: writer emit_decision() repointed to decision.recorded canonical events; readers repointed to business_canonical_events
     "decision_records": "KEEP",
     "demo_case_study_packets": "DROP",
     "ds_config": "KEEP",
@@ -56,7 +56,7 @@ CLASSIFICATION: dict[str, str] = {
     # these tables from studio.db.  They now live in files.db (three-store arch).
     "ds_escalations": "KEEP",
     "ds_eval_baselines": "KEEP",
-    "ds_eval_runs": "KEEP",
+    "ds_eval_runs": "DROP",  # Dropped migration 136: writers (verify.py, eval/runner.py) repointed to work_order.verified/eval.run.completed canonical events
     "ds_friction_signals": "KEEP",
     "ds_technology_signals": "DROP",  # Dropped migration 132: pure write-only sink, zero production readers
     "ds_user_extensions": "KEEP",
@@ -84,7 +84,7 @@ CLASSIFICATION: dict[str, str] = {
     "guard_events": "DROP",  # Dropped migration 133: all writers (delta_guard.py, memory_taint.py) are test-only reachable; no hook/CLI/projection calls them
     "guardrail_decisions": "KEEP",
     "hardening_candidate_records": "DROP",  # Dropped migration 131: dead writer record_hardening_candidate(), test-only callers
-    "hook_eval_runs": "KEEP",
+    "hook_eval_runs": "DROP",  # Dropped migration 136: writer guardrails/evaluator.py::_write_hook_eval_run() repointed to eval.run.completed canonical events
     "hook_executions": "DROP",  # Dropped mig 129: DuckDB hook_executions VIEW (over
     #                             system.hook.execution.logged) replaces it; writer now only
     #                             emits the canonical event; all reads repointed to DuckDB.
