@@ -67,13 +67,14 @@ ALLOWED_DASHBOARD_WRITES = [
 
 CANONICAL_STATE_TABLES = {
     "canonical_events",
+    "business_canonical_events",
     "execution_nodes",
     "execution_dependencies",
     "execution_outputs",
     "raw_workflow_runs",
     "raw_workflow_nodes",
-    "decision_log",
-    "decision_event_link",
+    # decision_log / decision_event_link dropped migration 136 (WO-DBA-EVAL-DECISION
+    # T4): decisions are decision.recorded events in business_canonical_events.
     "memory_entries",
     "hook_executions",
     "guardrail_decisions",

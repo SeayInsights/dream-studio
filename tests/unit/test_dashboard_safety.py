@@ -179,15 +179,23 @@ class TestDecisionLogSafety:
         assert "context" not in DECISION_LOG_SAFE_COLUMNS
 
     def test_intelligence_decision_log_is_aggregate_only(self):
-        """intelligence.py only uses COUNT(*) on decision_log, never exposes reasoning."""
+        """intelligence.py only uses COUNT(*) on decision.recorded events, never exposes reasoning.
+
+        decision_log was dropped in migration 136 (WO-DBA-EVAL-DECISION T4);
+        decision counting now reads business_canonical_events WHERE
+        event_type = 'decision.recorded'.
+        """
         source = (REPO_ROOT / "projections" / "api" / "routes" / "intelligence.py").read_text(
             encoding="utf-8"
         )
-        decision_queries = [line for line in source.splitlines() if "decision_log" in line.lower()]
+        decision_queries = [
+            line for line in source.splitlines() if "decision.recorded" in line.lower()
+        ]
+        assert decision_queries, "expected at least one decision.recorded query in intelligence.py"
         for line in decision_queries:
             assert (
                 "reasoning" not in line.lower()
-            ), f"decision_log reasoning exposed in: {line.strip()}"
+            ), f"decision.recorded reasoning exposed in: {line.strip()}"
 
 
 # ── 7. Data classification constants ─────────────────────────────────────────

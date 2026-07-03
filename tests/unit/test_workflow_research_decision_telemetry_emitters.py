@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from core.decisions.emitter import emit_decision
@@ -212,11 +213,19 @@ def test_decision_emitter_records_attention_and_is_idempotent(tmp_path: Path) ->
         conn.close()
 
 
-def test_legacy_decision_log_dual_writes_telemetry(tmp_path: Path, monkeypatch) -> None:
+def test_decision_emission_dual_writes_canonical_event_and_telemetry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """emit_decision's sole durable write is the decision.recorded canonical event
+    (decision_log/decision_event_link dropped migration 136, WO-DBA-EVAL-DECISION
+    T4); it also dual-writes decision_records via the telemetry bridge."""
     db_path = _db(tmp_path)
     monkeypatch.setenv("DREAM_STUDIO_TELEMETRY_DB", str(db_path))
+    spool_root = tmp_path / "spool"
+    monkeypatch.setenv("DS_SPOOL_ROOT", str(spool_root))
 
     from core.config.database import DatabaseRuntime, initialize_database
+    from spool.ingestor import ingest
 
     DatabaseRuntime.reset_instance()
     initialize_database(db_path)
@@ -231,15 +240,21 @@ def test_legacy_decision_log_dual_writes_telemetry(tmp_path: Path, monkeypatch) 
             source_subsystem="work_orders",
         )
 
+        ingest(root=spool_root, db_path=db_path)
+
         conn = _connect(db_path)
         try:
-            assert (
-                conn.execute(
-                    "SELECT COUNT(*) FROM decision_log WHERE decision_id = ?",
-                    (decision.decision_id,),
-                ).fetchone()[0]
-                == 1
-            )
+            row = conn.execute(
+                "SELECT payload FROM business_canonical_events"
+                " WHERE event_type = 'decision.recorded'"
+                " AND json_extract(payload, '$.decision_id') = ?",
+                (decision.decision_id,),
+            ).fetchone()
+            assert row is not None
+            payload = json.loads(row[0])
+            assert payload["decision_type"] == "route.continue"
+            assert payload["policy_applied"] == "route-first"
+
             row = conn.execute(
                 "SELECT decision_type, selected_option FROM decision_records WHERE decision_id = ?",
                 (decision.decision_id,),
