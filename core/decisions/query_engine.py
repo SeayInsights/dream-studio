@@ -1,4 +1,12 @@
-"""Decision query engine for causal analysis and explainability."""
+"""Decision query engine for causal analysis and explainability.
+
+Decisions are read from business_canonical_events (event_type='decision.recorded')
+rather than the retired decision_log / decision_event_link tables (T4,
+WO-DBA-EVAL-DECISION). Backfilled history (migration 135) stored context/
+outcome/reasoning as JSON-encoded strings (decision_log columns were TEXT);
+live-emitted events (core/decisions/emitter.py) carry them as native JSON
+values. ``_parse_json_field`` handles both shapes defensively.
+"""
 
 from __future__ import annotations
 import json
@@ -6,6 +14,39 @@ from typing import Any, Optional
 
 from core.event_store.studio_db import _connect
 from .schema import Decision
+
+_DECISION_EVENT_TYPE = "decision.recorded"
+
+
+def _parse_json_field(value: Any) -> Any:
+    """Best-effort JSON parse of a decision payload sub-field.
+
+    Backfilled rows carry context/outcome/reasoning as JSON-encoded strings;
+    live rows carry them as native JSON values already decoded by json.loads()
+    on the outer payload. If ``value`` is a string that itself parses as JSON,
+    parse it one more level; otherwise return it unchanged (e.g. a bare scalar
+    outcome like "allow").
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return value
+
+
+def _decision_from_payload(payload: dict[str, Any], event_timestamp: str) -> Decision:
+    return Decision(
+        decision_id=payload.get("decision_id"),
+        decision_type=payload.get("decision_type"),
+        context=_parse_json_field(payload.get("context")) or {},
+        outcome=_parse_json_field(payload.get("outcome")),
+        reasoning=_parse_json_field(payload.get("reasoning")) or {},
+        confidence=payload.get("confidence"),
+        policy_applied=payload.get("policy_applied"),
+        source_subsystem=payload.get("source_subsystem"),
+        timestamp=event_timestamp,
+    )
 
 
 def get_decisions(
@@ -25,28 +66,27 @@ def get_decisions(
     Returns:
         List of Decision objects matching filters
     """
-    conditions = []
-    params = []
+    conditions = ["event_type = ?"]
+    params: list[Any] = [_DECISION_EVENT_TYPE]
 
     if decision_type:
-        conditions.append("decision_type = ?")
+        conditions.append("json_extract(payload, '$.decision_type') = ?")
         params.append(decision_type)
 
     if subsystem:
-        conditions.append("source_subsystem = ?")
+        conditions.append("json_extract(payload, '$.source_subsystem') = ?")
         params.append(subsystem)
 
     if min_confidence is not None:
-        conditions.append("confidence >= ?")
+        conditions.append("CAST(json_extract(payload, '$.confidence') AS REAL) >= ?")
         params.append(min_confidence)
 
-    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    where_clause = " AND ".join(conditions)
     query = f"""
-        SELECT decision_id, decision_type, context, outcome, reasoning,
-               confidence, policy_applied, source_subsystem, timestamp
-        FROM decision_log
-        {where_clause}
-        ORDER BY timestamp DESC
+        SELECT payload, event_timestamp
+        FROM business_canonical_events
+        WHERE {where_clause}
+        ORDER BY event_timestamp DESC
         LIMIT ?
     """
     params.append(limit)
@@ -56,19 +96,8 @@ def get_decisions(
 
     decisions = []
     for row in rows:
-        decisions.append(
-            Decision(
-                decision_id=row[0],
-                decision_type=row[1],
-                context=json.loads(row[2]) if row[2] else {},
-                outcome=json.loads(row[3]) if row[3] else None,
-                reasoning=json.loads(row[4]) if row[4] else {},
-                confidence=row[5],
-                policy_applied=row[6],
-                source_subsystem=row[7],
-                timestamp=row[8],
-            )
-        )
+        payload = json.loads(row[0]) if row[0] else {}
+        decisions.append(_decision_from_payload(payload, row[1]))
 
     return decisions
 
@@ -85,48 +114,40 @@ def explain_decision(decision_id: str) -> dict[str, Any]:
     with _connect() as conn:
         # Get decision
         row = conn.execute(
-            """SELECT decision_id, decision_type, context, outcome, reasoning,
-                      confidence, policy_applied, source_subsystem, timestamp
-               FROM decision_log
-               WHERE decision_id = ?""",
-            (decision_id,),
+            """SELECT payload, event_timestamp
+               FROM business_canonical_events
+               WHERE event_type = ? AND json_extract(payload, '$.decision_id') = ?""",
+            (_DECISION_EVENT_TYPE, decision_id),
         ).fetchone()
 
         if not row:
             return {"error": f"Decision {decision_id} not found"}
 
-        decision = Decision(
-            decision_id=row[0],
-            decision_type=row[1],
-            context=json.loads(row[2]) if row[2] else {},
-            outcome=json.loads(row[3]) if row[3] else None,
-            reasoning=json.loads(row[4]) if row[4] else {},
-            confidence=row[5],
-            policy_applied=row[6],
-            source_subsystem=row[7],
-            timestamp=row[8],
-        )
+        payload = json.loads(row[0]) if row[0] else {}
+        decision = _decision_from_payload(payload, row[1])
 
-        # Get linked events
-        linked_events = conn.execute(
-            """SELECT e.event_id, e.event_type, e.timestamp, e.payload, l.relation_type
-               FROM decision_event_link l
-               JOIN canonical_events e ON l.event_id = e.event_id
-               WHERE l.decision_id = ?""",
-            (decision_id,),
-        ).fetchall()
-
-        events = []
-        for event_row in linked_events:
-            events.append(
-                {
-                    "event_id": event_row[0],
-                    "event_type": event_row[1],
-                    "timestamp": event_row[2],
-                    "payload": json.loads(event_row[3]) if event_row[3] else {},
-                    "relation_type": event_row[4],
-                }
-            )
+        # Linked events: the event this decision was triggered by, sourced from
+        # payload.triggered_event_id (replaces the dropped decision_event_link
+        # join table — emit_decision only ever recorded a single "triggered" link).
+        events: list[dict[str, Any]] = []
+        triggered_event_id = payload.get("triggered_event_id")
+        if triggered_event_id:
+            event_row = conn.execute(
+                """SELECT event_id, event_type, timestamp, payload
+                   FROM canonical_events
+                   WHERE event_id = ?""",
+                (triggered_event_id,),
+            ).fetchone()
+            if event_row:
+                events.append(
+                    {
+                        "event_id": event_row[0],
+                        "event_type": event_row[1],
+                        "timestamp": event_row[2],
+                        "payload": json.loads(event_row[3]) if event_row[3] else {},
+                        "relation_type": "triggered",
+                    }
+                )
 
         # Get upstream events (events that occurred before this decision)
         try:
@@ -201,27 +222,28 @@ def trace_event(event_id: str) -> dict[str, Any]:
             "severity": event_row[4],
         }
 
-        # Get decisions linked to this event
+        # Get decisions triggered by this event, sourced from
+        # payload.triggered_event_id (replaces the dropped decision_event_link
+        # join table).
         decision_rows = conn.execute(
-            """SELECT d.decision_id, d.decision_type, d.outcome, d.reasoning,
-                      d.confidence, d.policy_applied, l.relation_type
-               FROM decision_event_link l
-               JOIN decision_log d ON l.decision_id = d.decision_id
-               WHERE l.event_id = ?""",
-            (event_id,),
+            """SELECT payload
+               FROM business_canonical_events
+               WHERE event_type = ? AND json_extract(payload, '$.triggered_event_id') = ?""",
+            (_DECISION_EVENT_TYPE, event_id),
         ).fetchall()
 
         decisions = []
-        for d_row in decision_rows:
+        for (d_payload_json,) in decision_rows:
+            d_payload = json.loads(d_payload_json) if d_payload_json else {}
             decisions.append(
                 {
-                    "decision_id": d_row[0],
-                    "decision_type": d_row[1],
-                    "outcome": json.loads(d_row[2]) if d_row[2] else None,
-                    "reasoning": json.loads(d_row[3]) if d_row[3] else {},
-                    "confidence": d_row[4],
-                    "policy_applied": d_row[5],
-                    "relation_type": d_row[6],
+                    "decision_id": d_payload.get("decision_id"),
+                    "decision_type": d_payload.get("decision_type"),
+                    "outcome": _parse_json_field(d_payload.get("outcome")),
+                    "reasoning": _parse_json_field(d_payload.get("reasoning")) or {},
+                    "confidence": d_payload.get("confidence"),
+                    "policy_applied": d_payload.get("policy_applied"),
+                    "relation_type": "triggered",
                 }
             )
 
@@ -265,10 +287,10 @@ def audit_decisions(decision_type: str) -> dict[str, Any]:
     with _connect() as conn:
         # Get all decisions of this type
         rows = conn.execute(
-            """SELECT outcome, reasoning, confidence, policy_applied
-               FROM decision_log
-               WHERE decision_type = ?""",
-            (decision_type,),
+            """SELECT payload
+               FROM business_canonical_events
+               WHERE event_type = ? AND json_extract(payload, '$.decision_type') = ?""",
+            (_DECISION_EVENT_TYPE, decision_type),
         ).fetchall()
 
         if not rows:
@@ -279,27 +301,29 @@ def audit_decisions(decision_type: str) -> dict[str, Any]:
             }
 
         # Count outcomes
-        outcome_counts = {}
-        reasoning_factors = {}
+        outcome_counts: dict[str, int] = {}
+        reasoning_factors: dict[str, dict[str, int]] = {}
         confidence_buckets = {"0.0-0.2": 0, "0.2-0.4": 0, "0.4-0.6": 0, "0.6-0.8": 0, "0.8-1.0": 0}
-        policies_used = {}
+        policies_used: dict[str, int] = {}
 
-        for row in rows:
-            outcome = json.loads(row[0]) if row[0] else None
-            reasoning = json.loads(row[1]) if row[1] else {}
-            confidence = row[2]
-            policy = row[3]
+        for (payload_json,) in rows:
+            payload = json.loads(payload_json) if payload_json else {}
+            outcome = _parse_json_field(payload.get("outcome"))
+            reasoning = _parse_json_field(payload.get("reasoning")) or {}
+            confidence = payload.get("confidence")
+            policy = payload.get("policy_applied")
 
             # Count outcomes
             outcome_key = str(outcome)
             outcome_counts[outcome_key] = outcome_counts.get(outcome_key, 0) + 1
 
             # Extract reasoning factors
-            for key, value in reasoning.items():
-                if key not in reasoning_factors:
-                    reasoning_factors[key] = {}
-                value_key = str(value)
-                reasoning_factors[key][value_key] = reasoning_factors[key].get(value_key, 0) + 1
+            if isinstance(reasoning, dict):
+                for key, value in reasoning.items():
+                    if key not in reasoning_factors:
+                        reasoning_factors[key] = {}
+                    value_key = str(value)
+                    reasoning_factors[key][value_key] = reasoning_factors[key].get(value_key, 0) + 1
 
             # Bucket confidence
             if confidence is not None:
