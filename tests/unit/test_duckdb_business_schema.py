@@ -22,6 +22,9 @@ from core.analytics.duckdb_store import connect_analytics, ensure_analytics_sche
 _EXPECTED_ANALYTICS_TABLES = {
     "duckdb_execution_events",
     "events_fact",
+    # WO-TOKEN-VIEW-WIDEN: pricing projection of core/pricing/claude_models.py,
+    # joined by the token_usage_records view to derive estimated_cost.
+    "token_model_pricing",
 }
 
 _EXPECTED_ROLLUP_TABLES = {
