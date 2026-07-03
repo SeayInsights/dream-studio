@@ -103,6 +103,15 @@
 
 PRAGMA foreign_keys = OFF;
 
+-- SQLite validates EVERY view when ALTER TABLE ... RENAME runs (the
+-- migration-118 lesson). On upgrade-path DBs, vw_approach_patterns /
+-- vw_guardrail_decisions can dangle (their tables are created later in the
+-- chain or by Python), which would abort the rebuild's RENAME below. Drop
+-- them here and recreate them (identical migration-118 DDL) at the end —
+-- forward-referencing CREATE VIEW is legal; only RENAME validates.
+DROP VIEW IF EXISTS vw_approach_patterns;
+DROP VIEW IF EXISTS vw_guardrail_decisions;
+
 CREATE TABLE ai_usage_operational_records_m137_rebuild (
     usage_record_id TEXT PRIMARY KEY,
     project_id TEXT,
@@ -218,5 +227,33 @@ CREATE INDEX IF NOT EXISTS idx_ai_usage_operational_process
 ON ai_usage_operational_records(process_run_id, adapter_id, model_id);
 
 DROP TABLE IF EXISTS token_usage_records;
+
+-- Recreate the views dropped above (identical DDL to migration 118).
+CREATE VIEW IF NOT EXISTS vw_approach_patterns AS
+SELECT
+    skill_id,
+    approach,
+    COUNT(*) AS times_tried,
+    SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS successes,
+    ROUND(
+        CAST(SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS REAL)
+        / COUNT(*) * 100, 1
+    ) AS success_pct,
+    CAST(AVG(tokens_used) AS INTEGER) AS avg_tokens,
+    ROUND(AVG(duration_s), 1) AS avg_duration
+FROM raw_approaches
+GROUP BY skill_id, approach
+HAVING COUNT(*) >= 2;
+
+CREATE VIEW IF NOT EXISTS vw_guardrail_decisions AS
+SELECT
+    decision_id,
+    rule_id,
+    action AS decision,
+    event_id,
+    evaluated_at AS event_timestamp,
+    message AS reason
+FROM guardrail_decisions
+ORDER BY evaluated_at DESC;
 
 PRAGMA foreign_keys = ON;
