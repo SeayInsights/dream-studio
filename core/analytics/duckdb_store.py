@@ -163,16 +163,38 @@ _ANALYTICS_TABLES_DDL = """
 # where the old SQLite projections were partial (e.g. token capture). Created after
 # events_fact in ensure_analytics_schema (they depend on it).
 _PROJECTION_VIEWS_DDL = """
-    CREATE OR REPLACE VIEW token_usage_records AS SELECT
-        event_id AS token_usage_id, project_id, milestone_id, task_id, NULL AS process_run_id,
-        agent_id, skill_id, workflow_id, hook_id, model_id, NULL AS provider,
-        input_tokens, output_tokens, NULL::BIGINT AS cached_tokens,
-        COALESCE(input_tokens,0)+COALESCE(output_tokens,0) AS total_tokens,
-        NULL::DOUBLE AS estimated_cost, NULL AS purpose, event_timestamp AS created_at,
-        NULL AS source_refs_json, NULL AS evidence_refs_json, adapter_id, NULL AS billing_mode,
-        NULL AS token_visibility, NULL AS cost_visibility, NULL AS usage_source, NULL AS cost_source,
-        NULL AS accounting_confidence, NULL::BIGINT AS cache_read_tokens
-    FROM events_fact WHERE event_type LIKE 'token%';
+    CREATE OR REPLACE VIEW token_usage_records AS
+    WITH tok AS (
+        SELECT
+            *,
+            COALESCE(model_id, json_extract_string(payload, '$.model')) AS payload_model,
+            TRY_CAST(json_extract_string(payload, '$.cache_creation_input_tokens') AS BIGINT)
+                AS payload_cache_write,
+            TRY_CAST(json_extract_string(payload, '$.cache_read_input_tokens') AS BIGINT)
+                AS payload_cache_read
+        FROM events_fact WHERE event_type LIKE 'token%'
+    )
+    SELECT
+        t.event_id AS token_usage_id, t.project_id, t.milestone_id, t.task_id,
+        NULL AS process_run_id,
+        t.agent_id, t.skill_id, t.workflow_id, t.hook_id,
+        t.payload_model AS model_id, NULL AS provider,
+        t.input_tokens, t.output_tokens, t.payload_cache_write AS cached_tokens,
+        COALESCE(t.input_tokens,0)+COALESCE(t.output_tokens,0) AS total_tokens,
+        CASE WHEN p.model IS NULL THEN NULL ELSE (
+            COALESCE(t.input_tokens,0) * p.input_per_m
+            + COALESCE(t.output_tokens,0) * p.output_per_m
+            + COALESCE(t.payload_cache_write,0) * p.cache_write_per_m
+            + COALESCE(t.payload_cache_read,0) * p.cache_read_per_m
+        ) / 1000000.0 END AS estimated_cost,
+        NULL AS purpose, t.event_timestamp AS created_at,
+        NULL AS source_refs_json, NULL AS evidence_refs_json, t.adapter_id, NULL AS billing_mode,
+        NULL AS token_visibility, NULL AS cost_visibility, NULL AS usage_source,
+        NULL AS cost_source,
+        NULL AS accounting_confidence, t.payload_cache_read AS cache_read_tokens
+    FROM tok t
+    LEFT JOIN token_model_pricing p
+        ON p.model = regexp_replace(lower(trim(t.payload_model)), '-\\d{8}$', '');
     CREATE OR REPLACE VIEW hook_executions AS SELECT
         event_id AS hook_exec_id, NULL::BIGINT AS activity_id,
         json_extract_string(payload,'$.hook_name') AS hook_name,
@@ -336,6 +358,29 @@ def connect_analytics(
     return duckdb.connect(str(path), read_only=read_only)
 
 
+def _refresh_pricing_table(conn: duckdb.DuckDBPyConnection) -> None:
+    """Materialize the Claude pricing reference into DuckDB.
+
+    core/pricing/claude_models.py is the single pricing source; this table is a
+    projection of it so the token_usage_records view can derive estimated_cost
+    the same way execution_spine.record_token_usage does at SQLite insert time
+    (WO-TOKEN-VIEW-WIDEN). Refreshed on every schema ensure so price updates
+    propagate without a store rebuild.
+    """
+    from core.pricing.claude_models import CLAUDE_MODEL_PRICING
+
+    conn.execute(
+        "CREATE OR REPLACE TABLE token_model_pricing ("
+        " model VARCHAR, input_per_m DOUBLE, output_per_m DOUBLE,"
+        " cache_write_per_m DOUBLE, cache_read_per_m DOUBLE)"
+    )
+    for model, p in CLAUDE_MODEL_PRICING.items():
+        conn.execute(
+            "INSERT INTO token_model_pricing VALUES (?, ?, ?, ?, ?)",
+            [model, p["input"], p["output"], p["cache_write"], p["cache_read"]],
+        )
+
+
 def ensure_analytics_schema(
     conn: duckdb.DuckDBPyConnection,
 ) -> None:
@@ -343,4 +388,5 @@ def ensure_analytics_schema(
     conn.execute(_ROLLUP_TABLES_DDL)
     conn.execute(_ANALYTICS_TABLES_DDL)
     conn.execute(_EVENTS_FACT_DDL)
+    _refresh_pricing_table(conn)  # before the views: token_usage_records joins it
     conn.execute(_PROJECTION_VIEWS_DDL)  # views over events_fact (after it exists)
