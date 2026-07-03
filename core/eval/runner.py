@@ -7,7 +7,7 @@ Fixture mode (default): composite_score = event_score (100% deterministic, no LL
 Live mode (--live): spawn a fresh claude subprocess, synthesize events from its
   tool-call JSON output, score with the same deterministic matcher.
   Requires 'claude' CLI in PATH. Skipped gracefully when unavailable.
-  Live runs write run_mode='live' to ds_eval_runs.
+  Live runs emit an eval.run.completed canonical event with run_mode='live'.
 """
 
 from __future__ import annotations
@@ -377,7 +377,15 @@ def _write_live_eval_run(
     target_type: str | None = None,
     fixture_baseline_score: float | None = None,
 ) -> None:
-    """Persist one live-mode eval run to ds_eval_runs and update eval_registry. Non-fatal on any error."""
+    """Update eval_registry and emit the eval.run.completed canonical event.
+
+    Non-fatal on any error. History for live eval runs now lives solely in
+    business_canonical_events (T4 dropped ds_eval_runs); run_id is still
+    generated here because eval_registry.last_run_id needs it, and it is
+    carried in the emitted event payload so it stays discoverable.
+    """
+    run_id = str(uuid.uuid4())
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         import sqlite3
 
@@ -386,27 +394,6 @@ def _write_live_eval_run(
 
             db_path = _default_db_path()
         conn = sqlite3.connect(str(db_path))
-        run_id = str(uuid.uuid4())
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        conn.execute(
-            "INSERT INTO ds_eval_runs"
-            " (run_id, eval_id, eval_version, started_at, completed_at,"
-            "  event_score, behavior_score, total_score, passed, failure_reasons, run_mode)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                run_id,
-                eval_id,
-                version,
-                now,
-                now,
-                composite_score,
-                composite_score,
-                composite_score,
-                1 if passed else 0,
-                json.dumps(failure_reasons),
-                "live",
-            ),
-        )
         if target_id and target_type:
             conn.execute(
                 "UPDATE eval_registry"
@@ -426,13 +413,14 @@ def _write_live_eval_run(
         conn.commit()
         conn.close()
     except Exception:
-        # ds_eval_runs may not exist or run_mode column may be absent on older DBs.
+        # eval_registry may not exist on older DBs.
         pass
 
     from core.eval.events import emit_eval_run_event
 
     emit_eval_run_event(
         {
+            "run_id": run_id,
             "eval_id": eval_id,
             "eval_version": version,
             "total_score": composite_score,
@@ -562,43 +550,16 @@ def evaluate_wo_outcome(
 
 
 def _record_outcome_run(work_order_id: str, outcome: dict, db_path: Path) -> None:
-    """Best-effort: record the outcome eval to ds_eval_runs (never raises)."""
-    import sqlite3
-    from datetime import datetime
+    """Emit the outcome eval as an eval.run.completed canonical event (never raises).
 
-    try:
-        now = datetime.now(UTC).isoformat()
-        conn = sqlite3.connect(str(db_path))
-        try:
-            conn.execute(
-                "INSERT INTO ds_eval_runs"
-                " (run_id, eval_id, eval_version, started_at, completed_at,"
-                "  event_score, behavior_score, total_score, passed, failure_reasons, run_mode)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    str(uuid.uuid4()),
-                    f"outcome:{work_order_id[:8]}",
-                    "1",
-                    now,
-                    now,
-                    None,
-                    None,
-                    None,
-                    1 if outcome["passed"] else 0,
-                    json.dumps(outcome["failures"]),
-                    "outcome",
-                ),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception:
-        pass
-
+    History for outcome eval runs now lives solely in business_canonical_events
+    (T4 dropped ds_eval_runs).
+    """
     from core.eval.events import emit_eval_run_event
 
     emit_eval_run_event(
         {
+            "run_id": str(uuid.uuid4()),
             "eval_id": f"outcome:{work_order_id[:8]}",
             "work_order_id": work_order_id,
             "passed": outcome["passed"],
