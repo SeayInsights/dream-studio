@@ -215,12 +215,13 @@ def test_api_route_direct_sql_writes_stay_explicitly_classified():
 def test_api_routes_do_not_directly_write_canonical_runtime_tables():
     forbidden_tables = {
         "canonical_events",
+        "business_canonical_events",
         "activity_log",
         "execution_nodes",
         "execution_dependencies",
         "execution_outputs",
-        "decision_log",
-        "decision_event_link",
+        # decision_log / decision_event_link dropped migration 136 (WO-DBA-EVAL-DECISION
+        # T4): decisions are decision.recorded events in business_canonical_events.
         "memory_entries",
         "raw_sessions",
         "raw_workflow_runs",

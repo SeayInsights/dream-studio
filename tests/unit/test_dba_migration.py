@@ -1,9 +1,10 @@
 """WO-DBA-EVAL-DECISION gate tests.
 
 Covers migration 134 (business_work_orders verify columns), migration 135
-(eval/decision history backfill into business_canonical_events), the live
-event emission paths (verify verdicts, decisions, eval runs), and the
-event-type routing registry entries.
+(eval/decision history backfill into business_canonical_events), migration 136
+(drop the now-legacy ds_eval_runs/hook_eval_runs/decision_log/decision_event_link
+tables), the live event emission paths (verify verdicts, decisions, eval runs),
+and the event-type routing registry entries.
 """
 
 from __future__ import annotations
@@ -23,10 +24,20 @@ MIGRATION_135 = (
 WO_ID = "abcd1234-0000-0000-0000-000000000001"
 PROJECT_ID = "11111111-0000-0000-0000-000000000001"
 
+# Tables dropped by migration 136 (WO-DBA-EVAL-DECISION T4) — history lives on
+# in business_canonical_events (work_order.verified / eval.run.completed /
+# decision.recorded) via the migration 135 backfill + live spool emission.
+DROPPED_EVAL_DECISION_TABLES = (
+    "ds_eval_runs",
+    "hook_eval_runs",
+    "decision_log",
+    "decision_event_link",
+)
+
 
 @pytest.fixture
 def migrated_db(tmp_path):
-    """Fresh DB with the full migration chain applied (134/135 included)."""
+    """Fresh DB with the full migration chain applied (through the latest release)."""
     from core.config.sqlite_bootstrap import run_migrations
 
     db_path = tmp_path / "studio.db"
@@ -46,6 +57,53 @@ def _seed_work_order(conn) -> None:
     conn.commit()
 
 
+def _seed_legacy_eval_decision_rows(conn) -> None:
+    """Seed rows into the pre-migration-136 ds_eval_runs/hook_eval_runs/decision_log
+    (+decision_event_link) tables. Caller must run this against a connection
+    migrated to <= 134 — before migration 136 drops these tables."""
+    _seed_work_order(conn)
+    conn.execute(
+        "INSERT INTO ds_eval_runs"
+        " (run_id, eval_id, started_at, completed_at, event_score, behavior_score,"
+        "  total_score, passed, failure_reasons, run_mode)"
+        " VALUES ('run-verify-1', ?, '2026-01-02T00:00:00Z', '2026-01-02T00:01:00Z',"
+        "  0.9, 0.8, 0.85, 1, '[]', 'fixture')",
+        (f"work_order_verify:{WO_ID[:8]}",),
+    )
+    conn.execute(
+        "INSERT INTO ds_eval_runs"
+        " (run_id, eval_id, started_at, completed_at, total_score, passed,"
+        "  failure_reasons, run_mode)"
+        " VALUES ('run-live-1', 'skill:ds-core', '2026-01-03T00:00:00Z',"
+        "  '2026-01-03T00:01:00Z', 0.7, 1, '[]', 'live')",
+    )
+    conn.execute(
+        "INSERT INTO ds_eval_runs"
+        " (run_id, eval_id, started_at, completed_at, passed, failure_reasons, run_mode)"
+        " VALUES ('run-outcome-1', ?, '2026-01-04T00:00:00Z', '2026-01-04T00:01:00Z',"
+        "  0, '[\"symptom persists\"]', 'outcome')",
+        (f"outcome:{WO_ID[:8]}",),
+    )
+    conn.execute(
+        "INSERT INTO hook_eval_runs"
+        " (run_id, hook_id, eval_type, passed, score, failure_reasons, created_at)"
+        " VALUES ('run-hook-1', 'on-edit-dispatch', 'guardrail', 1, 1.0, '[]',"
+        "  '2026-01-05T00:00:00Z')",
+    )
+    conn.execute(
+        "INSERT INTO decision_log"
+        " (decision_id, decision_type, context, outcome, reasoning, confidence,"
+        "  policy_applied, source_subsystem, timestamp)"
+        " VALUES ('dec-1', 'ttl.assignment', '{}', '\"7d\"', '{}', 0.9,"
+        "  'ttl-policy-v1', 'research', '2026-01-06T00:00:00Z')",
+    )
+    conn.execute(
+        "INSERT INTO decision_event_link (decision_id, event_id, relation_type)"
+        " VALUES ('dec-1', 'evt-999', 'triggered')",
+    )
+    conn.commit()
+
+
 def _spool_events(spool_root: Path) -> list[dict]:
     return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(spool_root.rglob("*.json"))]
 
@@ -58,56 +116,26 @@ class TestMigration134VerifyColumns:
 
 
 class TestMigration135Backfill:
-    def _seed_history(self, conn) -> None:
-        _seed_work_order(conn)
-        conn.execute(
-            "INSERT INTO ds_eval_runs"
-            " (run_id, eval_id, started_at, completed_at, event_score, behavior_score,"
-            "  total_score, passed, failure_reasons, run_mode)"
-            " VALUES ('run-verify-1', ?, '2026-01-02T00:00:00Z', '2026-01-02T00:01:00Z',"
-            "  0.9, 0.8, 0.85, 1, '[]', 'fixture')",
-            (f"work_order_verify:{WO_ID[:8]}",),
-        )
-        conn.execute(
-            "INSERT INTO ds_eval_runs"
-            " (run_id, eval_id, started_at, completed_at, total_score, passed,"
-            "  failure_reasons, run_mode)"
-            " VALUES ('run-live-1', 'skill:ds-core', '2026-01-03T00:00:00Z',"
-            "  '2026-01-03T00:01:00Z', 0.7, 1, '[]', 'live')",
-        )
-        conn.execute(
-            "INSERT INTO ds_eval_runs"
-            " (run_id, eval_id, started_at, completed_at, passed, failure_reasons, run_mode)"
-            " VALUES ('run-outcome-1', ?, '2026-01-04T00:00:00Z', '2026-01-04T00:01:00Z',"
-            "  0, '[\"symptom persists\"]', 'outcome')",
-            (f"outcome:{WO_ID[:8]}",),
-        )
-        conn.execute(
-            "INSERT INTO hook_eval_runs"
-            " (run_id, hook_id, eval_type, passed, score, failure_reasons, created_at)"
-            " VALUES ('run-hook-1', 'on-edit-dispatch', 'guardrail', 1, 1.0, '[]',"
-            "  '2026-01-05T00:00:00Z')",
-        )
-        conn.execute(
-            "INSERT INTO decision_log"
-            " (decision_id, decision_type, context, outcome, reasoning, confidence,"
-            "  policy_applied, source_subsystem, timestamp)"
-            " VALUES ('dec-1', 'ttl.assignment', '{}', '\"7d\"', '{}', 0.9,"
-            "  'ttl-policy-v1', 'research', '2026-01-06T00:00:00Z')",
-        )
-        conn.execute(
-            "INSERT INTO decision_event_link (decision_id, event_id, relation_type)"
-            " VALUES ('dec-1', 'evt-999', 'triggered')",
-        )
+    @pytest.fixture
+    def pre136_db(self, tmp_path):
+        """DB migrated through 134 only — the legacy ds_eval_runs/hook_eval_runs/
+        decision_log/decision_event_link tables still exist here, pre-dating
+        migration 135's backfill and migration 136's drop (WO-DBA-EVAL-DECISION T4)."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(db_path)
+        run_migrations(conn, target_version=134, apply_unreleased=True)
         conn.commit()
+        return conn, db_path
 
     def _apply_backfill(self, conn) -> None:
         conn.executescript(MIGRATION_135.read_text(encoding="utf-8"))
         conn.commit()
 
-    def test_backfill_produces_expected_events(self, migrated_db):
-        conn, _ = migrated_db
-        self._seed_history(conn)
+    def test_backfill_produces_expected_events(self, pre136_db):
+        conn, _ = pre136_db
+        _seed_legacy_eval_decision_rows(conn)
         self._apply_backfill(conn)
 
         row = conn.execute(
@@ -145,14 +173,53 @@ class TestMigration135Backfill:
         assert payload["policy_applied"] == "ttl-policy-v1"
         assert payload["triggered_event_id"] == "evt-999"
 
-    def test_backfill_is_idempotent(self, migrated_db):
-        conn, _ = migrated_db
-        self._seed_history(conn)
+    def test_backfill_is_idempotent(self, pre136_db):
+        conn, _ = pre136_db
+        _seed_legacy_eval_decision_rows(conn)
         self._apply_backfill(conn)
         before = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
         self._apply_backfill(conn)
         after = conn.execute("SELECT COUNT(*) FROM business_canonical_events").fetchone()[0]
         assert before == after
+
+
+class TestMigration136DropTables:
+    def test_tables_dropped_and_backfilled_history_survives(self, tmp_path):
+        """After the full chain (through 136), the four legacy tables are gone but
+        the migration-135 backfilled events they seeded remain in
+        business_canonical_events (WO-DBA-EVAL-DECISION T4)."""
+        from core.config.sqlite_bootstrap import run_migrations
+
+        db_path = tmp_path / "studio.db"
+        conn = sqlite3.connect(db_path)
+        # Stop at 134 so the legacy tables exist to seed, before 135's backfill
+        # and 136's drop run.
+        run_migrations(conn, target_version=134, apply_unreleased=True)
+        conn.commit()
+        _seed_legacy_eval_decision_rows(conn)
+
+        # Continue the chain to the latest migration: 135 backfills the seeded
+        # rows into business_canonical_events, then 136 drops the source tables.
+        run_migrations(conn, apply_unreleased=True)
+        conn.commit()
+
+        for table in DROPPED_EVAL_DECISION_TABLES:
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+                (table,),
+            ).fetchone()
+            assert row is None, f"{table} should be dropped by migration 136"
+
+        counts = dict(
+            conn.execute(
+                "SELECT event_type, COUNT(*) FROM business_canonical_events"
+                " WHERE event_id LIKE 'backfill-135-%'"
+                " GROUP BY event_type"
+            ).fetchall()
+        )
+        assert counts.get("work_order.verified", 0) >= 1
+        assert counts.get("eval.run.completed", 0) >= 1
+        assert counts.get("decision.recorded", 0) >= 1
 
 
 class TestVerifyVerdictPersistence:

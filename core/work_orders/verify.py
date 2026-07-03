@@ -1092,34 +1092,11 @@ def _write_eval_run(
     completed_at: str,
     status: str | None = None,
 ) -> None:
-    """Persist the verify verdict: business_work_orders columns, the
-    work_order.verified canonical event (via spool), and the legacy
-    ds_eval_runs row (removed once T4 drops the table)."""
+    """Persist the verify verdict: business_work_orders columns and the
+    work_order.verified canonical event (via spool). The canonical event is
+    the sole durable record of the verify run (T4 dropped ds_eval_runs;
+    history is available via business_canonical_events)."""
     verify_status = status or ("passed" if passed else "failed")
-
-    try:
-        run_id = str(uuid.uuid4())
-        eval_id = f"work_order_verify:{work_order_id[:8]}"
-        conn.execute(
-            "INSERT INTO ds_eval_runs"
-            " (run_id, eval_id, started_at, completed_at,"
-            "  event_score, behavior_score, total_score, passed, failure_reasons)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                run_id,
-                eval_id,
-                started_at,
-                completed_at,
-                scores["completion_score"],
-                scores["correctness_score"],
-                scores["composite_score"],
-                1 if passed else 0,
-                json.dumps(failure_reasons),
-            ),
-        )
-    except Exception:
-        # ds_eval_runs may not exist in all environments; non-fatal.
-        pass
 
     try:
         conn.execute(

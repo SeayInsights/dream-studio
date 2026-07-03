@@ -1,12 +1,10 @@
 """Decision emission with causal event linking."""
 
 from __future__ import annotations
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from core.config.database import transaction
 from .schema import Decision
 
 
@@ -53,41 +51,6 @@ def emit_decision(
         source_subsystem=source_subsystem,
     )
 
-    try:
-        with transaction() as conn:
-            # Write decision to decision_log
-            conn.execute(
-                """INSERT INTO decision_log
-                   (decision_id, decision_type, context, outcome, reasoning,
-                    confidence, policy_applied, source_subsystem, timestamp)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    decision_id,
-                    decision_type,
-                    json.dumps(context),
-                    json.dumps(outcome),
-                    json.dumps(reasoning),
-                    confidence,
-                    policy_applied,
-                    source_subsystem,
-                    timestamp,
-                ),
-            )
-
-            # Link to event if provided
-            if event_id:
-                conn.execute(
-                    """INSERT INTO decision_event_link
-                       (decision_id, event_id, relation_type)
-                       VALUES (?, ?, ?)""",
-                    (decision_id, event_id, "triggered"),
-                )
-
-    except Exception as e:
-        raise RuntimeError(
-            f"Failed to emit decision {decision_id} (type={decision_type}). " f"Error: {e}"
-        ) from e
-
     _emit_decision_event(decision, event_id)
     _emit_decision_telemetry(decision, event_id)
     return decision
@@ -96,9 +59,10 @@ def emit_decision(
 def _emit_decision_event(decision: Decision, event_id: Optional[str]) -> None:
     """Emit the decision.recorded canonical event via the spool → ingestor path.
 
-    The canonical event is the durable record (WO-DBA-EVAL-DECISION); the
-    decision_log row above becomes redundant once T4 drops the table.
-    Best-effort: spool failures never fail the decision write.
+    This is now the primary, sole durable write for a decision (T4 dropped
+    decision_log / decision_event_link). A spool-write failure therefore fails
+    the decision itself — raises RuntimeError, preserving emit_decision's
+    documented raise contract.
     """
     try:
         import spool.writer as _spool_writer
@@ -131,8 +95,11 @@ def _emit_decision_event(decision: Decision, event_id: Optional[str]) -> None:
             },
         )
         _spool_writer.write_event(envelope.to_dict())
-    except Exception:
-        return
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to emit decision {decision.decision_id} "
+            f"(type={decision.decision_type}). Error: {e}"
+        ) from e
 
 
 def _emit_decision_telemetry(decision: Decision, event_id: Optional[str]) -> None:

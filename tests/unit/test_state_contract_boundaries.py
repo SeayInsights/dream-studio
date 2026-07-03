@@ -105,7 +105,6 @@ def test_state_contract_names_high_risk_duplicate_authority_surfaces():
         "`workflows.json`, `raw_workflow_runs`, and `execution_nodes`",
         "`raw_sessions` and `prd_sessions`",
         "`raw_handoffs` and `prd_handoffs`",
-        "`decision_log` and `decision.*` canonical events",
         "`raw_skill_telemetry` and `activity_log`",
         "`memory_entries`, `memory_fts`, and `control.research.memory` indexes",
         "`research_cache` and `raw_research`",
@@ -175,12 +174,13 @@ def test_telemetry_modules_do_not_mutate_authoritative_state_tables_directly():
     ]
     forbidden_tables = [
         "canonical_events",
+        "business_canonical_events",
         "activity_log",
         "execution_nodes",
         "execution_dependencies",
         "execution_outputs",
-        "decision_log",
-        "decision_event_link",
+        # decision_log / decision_event_link dropped migration 136 (WO-DBA-EVAL-DECISION
+        # T4): decisions are decision.recorded events in business_canonical_events.
         "memory_entries",
         "guardrail_decisions",
     ]

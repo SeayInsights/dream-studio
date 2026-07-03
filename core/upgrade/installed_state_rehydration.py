@@ -49,7 +49,9 @@ REHYDRATION_DOMAINS: tuple[dict[str, Any], ...] = (
     {
         "source_domain": "decisions",
         "target_domain": "decision_records and canonical decisions",
-        "target_tables": ["decision_records", "decision_log"],
+        "target_tables": ["decision_records"],
+        # decision_log + decision_event_link: dropped migration 136 (WO-DBA-EVAL-DECISION T4)
+        # — decisions are now decision.recorded events in business_canonical_events.
         "source_evidence": ["research_decision_bridge"],
         "status": "map_in_rehearsal",
     },

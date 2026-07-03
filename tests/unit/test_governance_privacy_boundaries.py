@@ -58,13 +58,14 @@ RAW_PRIVATE_TABLES = {
 
 CANONICAL_AUTHORITY_TABLES = {
     "canonical_events",
+    "business_canonical_events",
     "execution_nodes",
     "execution_dependencies",
     "execution_outputs",
     "raw_workflow_runs",
     "raw_workflow_nodes",
-    "decision_log",
-    "decision_event_link",
+    # decision_log / decision_event_link dropped migration 136 (WO-DBA-EVAL-DECISION
+    # T4): decisions are decision.recorded events in business_canonical_events.
     "memory_entries",
     "raw_sessions",
     "raw_token_usage",
@@ -235,9 +236,10 @@ def test_guardrail_evaluator_writes_only_decision_governance_surfaces():
     source = _read(evaluator)
     writes = _sql_writes_in_file(evaluator)
 
+    # hook_eval_runs write dropped migration 136 (WO-DBA-EVAL-DECISION T4):
+    # _write_hook_eval_run now only emits an eval.run.completed canonical event.
     assert writes == [
         ("guardrails/evaluator.py", "INSERT INTO", "guardrail_decisions"),
-        ("guardrails/evaluator.py", "INSERT INTO", "hook_eval_runs"),
         ("guardrails/evaluator.py", "INSERT INTO", "guardrail_decisions"),
     ]
     assert "emit_decision(" in source

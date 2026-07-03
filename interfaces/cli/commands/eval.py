@@ -254,6 +254,11 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
                 )
             where = "WHERE er.target_type = ?" if target_type else ""
             params = [target_type] if target_type else []
+            # "passed" now comes from the eval.run.completed / work_order.verified
+            # canonical event whose payload.run_id matches er.last_run_id — the
+            # ds_eval_runs/hook_eval_runs LEFT JOINs were dropped in T4. No match
+            # (e.g. last_run_id is NULL, or the run predates canonical emission)
+            # leaves passed NULL, same as before.
             rows = conn.execute(
                 f"""
                 SELECT
@@ -263,12 +268,11 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
                     er.rubric_score,
                     er.last_run_at,
                     er.friction_flag,
-                    COALESCE(dr.passed, hr.passed, NULL) AS passed
+                    json_extract(bce.payload, '$.passed') AS passed
                 FROM eval_registry er
-                LEFT JOIN ds_eval_runs dr ON dr.run_id = er.last_run_id
-                LEFT JOIN hook_eval_runs hr
-                    ON er.target_type = 'hook' AND hr.hook_id = er.target_id
-                    AND hr.created_at = er.last_run_at
+                LEFT JOIN business_canonical_events bce
+                    ON bce.event_type IN ('eval.run.completed', 'work_order.verified')
+                    AND json_extract(bce.payload, '$.run_id') = er.last_run_id
                 {where}
                 ORDER BY er.target_type, er.target_id
                 """,
@@ -306,25 +310,60 @@ def _eval_registry_dispatch(args: argparse.Namespace, *, source_root: Path) -> i
                 return _print(
                     {"ok": False, "error": f"No registry entry for target_id={target_id!r}"}
                 )
-            # Fetch run history depending on target type
+            # Fetch run history from canonical events (T4 dropped ds_eval_runs /
+            # hook_eval_runs). Hooks wrote eval_id as 'hook:<hook_id>'; other
+            # target types matched eval_id directly to target_id.
             target_type = entry["target_type"]
+            eval_id_filter = f"hook:{target_id}" if target_type == "hook" else target_id
+            history_rows = conn.execute(
+                """
+                SELECT payload, event_timestamp
+                FROM business_canonical_events
+                WHERE event_type IN ('eval.run.completed', 'work_order.verified')
+                  AND json_extract(payload, '$.eval_id') = ?
+                ORDER BY event_timestamp DESC
+                LIMIT 20
+                """,
+                (eval_id_filter,),
+            ).fetchall()
             if target_type == "hook":
-                runs = conn.execute(
-                    """SELECT run_id, eval_type, passed, score, failure_reasons, created_at
-                    FROM hook_eval_runs WHERE hook_id = ?
-                    ORDER BY created_at DESC LIMIT 20""",
-                    (target_id,),
-                ).fetchall()
-                run_rows = [dict(r) for r in runs]
+                run_rows = [
+                    {
+                        "run_id": p.get("run_id"),
+                        "eval_type": p.get("eval_type"),
+                        "passed": p.get("passed"),
+                        "score": p.get("score"),
+                        "failure_reasons": p.get("failure_reasons"),
+                        "created_at": p.get("created_at", ts),
+                    }
+                    for (p, ts) in (
+                        (
+                            json.loads(row["payload"]) if row["payload"] else {},
+                            row["event_timestamp"],
+                        )
+                        for row in history_rows
+                    )
+                ]
             else:
-                runs = conn.execute(
-                    """SELECT run_id, eval_id, eval_version, total_score, passed,
-                    failure_reasons, started_at, completed_at
-                    FROM ds_eval_runs WHERE eval_id = ?
-                    ORDER BY started_at DESC LIMIT 20""",
-                    (target_id,),
-                ).fetchall()
-                run_rows = [dict(r) for r in runs]
+                run_rows = [
+                    {
+                        "run_id": p.get("run_id"),
+                        "eval_id": p.get("eval_id"),
+                        "eval_version": p.get("eval_version"),
+                        "total_score": p.get("total_score"),
+                        "passed": p.get("passed"),
+                        "failure_reasons": p.get("failure_reasons"),
+                        "started_at": p.get("started_at", ts),
+                        "completed_at": p.get("completed_at", ts),
+                    }
+                    for (p, ts) in (
+                        (
+                            json.loads(row["payload"]) if row["payload"] else {},
+                            row["event_timestamp"],
+                        )
+                        for row in history_rows
+                    )
+                ]
         return _print(
             {
                 "target_id": target_id,

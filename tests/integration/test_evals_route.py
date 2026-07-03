@@ -1,13 +1,16 @@
 """Integration tests for WO-EVALS-RENDER: /api/v1/evals/health route.
 
 Covers:
-- HTTP 200 with correct payload shape when ds_eval_baselines + ds_eval_runs rows exist
+- HTTP 200 with correct payload shape when ds_eval_baselines rows + eval canonical
+  events exist (ds_eval_runs was dropped migration 136, WO-DBA-EVAL-DECISION T4;
+  recent_runs now reads business_canonical_events)
 - Honest empty-state (baselines=[], recent_runs=[]) when no data present
 - route resolves correctly with FastAPI TestClient
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -36,8 +39,31 @@ def _schema_version_row(conn, version: int) -> None:
     )
 
 
+def _create_canonical_events_table(conn) -> None:
+    conn.execute("""
+        CREATE TABLE business_canonical_events (
+            event_id TEXT PRIMARY KEY,
+            event_type TEXT NOT NULL,
+            event_timestamp TEXT,
+            payload TEXT
+        )
+    """)
+
+
+def _insert_canonical_event(conn, event_id: str, event_type: str, payload: dict, ts: str) -> None:
+    conn.execute(
+        "INSERT INTO business_canonical_events (event_id, event_type, event_timestamp, payload)"
+        " VALUES (?, ?, ?, ?)",
+        (event_id, event_type, ts, json.dumps(payload)),
+    )
+
+
 def _db_with_baselines_and_runs(tmp_path: Path) -> Path:
-    """Seed a DB with ds_eval_baselines + ds_eval_runs rows."""
+    """Seed a DB with ds_eval_baselines rows + eval.run.completed canonical events.
+
+    ds_eval_runs was dropped in migration 136 (WO-DBA-EVAL-DECISION T4);
+    /api/v1/evals/health now reads recent_runs from business_canonical_events.
+    """
     db_path = tmp_path / "evals-populated.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -67,33 +93,35 @@ def _db_with_baselines_and_runs(tmp_path: Path) -> Path:
                 ('eval-core-build', '1.0.0', 0.75, 1, '2026-06-17T09:00:00')
         """)
 
-        conn.execute("""
-            CREATE TABLE ds_eval_runs (
-                run_id TEXT PRIMARY KEY,
-                eval_id TEXT NOT NULL,
-                eval_version TEXT NOT NULL DEFAULT '1.0.0',
-                started_at TEXT NOT NULL,
-                completed_at TEXT,
-                model_tested TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
-                skill_versions_snapshot TEXT,
-                event_score REAL,
-                behavior_score REAL,
-                total_score REAL,
-                passed INTEGER NOT NULL DEFAULT 0,
-                failure_reasons TEXT,
-                token_cost_usd REAL,
-                baseline_run_id TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                run_mode TEXT NOT NULL DEFAULT 'fixture'
-            )
-        """)
-        conn.execute("""
-            INSERT INTO ds_eval_runs
-                (run_id, eval_id, total_score, passed, started_at, model_tested)
-            VALUES
-                ('run-001', 'eval-core-plan', 0.92, 1, '2026-06-17T10:00:00', 'claude-sonnet-4-6'),
-                ('run-002', 'eval-core-build', 0.70, 0, '2026-06-17T09:00:00', 'claude-sonnet-4-6')
-        """)
+        _create_canonical_events_table(conn)
+        _insert_canonical_event(
+            conn,
+            "run-001",
+            "eval.run.completed",
+            {
+                "run_id": "run-001",
+                "eval_id": "eval-core-plan",
+                "total_score": 0.92,
+                "passed": True,
+                "started_at": "2026-06-17T10:00:00",
+                "model_tested": "claude-sonnet-4-6",
+            },
+            "2026-06-17T10:00:00",
+        )
+        _insert_canonical_event(
+            conn,
+            "run-002",
+            "eval.run.completed",
+            {
+                "run_id": "run-002",
+                "eval_id": "eval-core-build",
+                "total_score": 0.70,
+                "passed": False,
+                "started_at": "2026-06-17T09:00:00",
+                "model_tested": "claude-sonnet-4-6",
+            },
+            "2026-06-17T09:00:00",
+        )
 
         conn.commit()
     finally:
@@ -124,26 +152,7 @@ def _db_empty(tmp_path: Path) -> Path:
                 PRIMARY KEY (eval_id, version)
             )
         """)
-        conn.execute("""
-            CREATE TABLE ds_eval_runs (
-                run_id TEXT PRIMARY KEY,
-                eval_id TEXT NOT NULL,
-                eval_version TEXT NOT NULL DEFAULT '1.0.0',
-                started_at TEXT NOT NULL,
-                completed_at TEXT,
-                model_tested TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
-                skill_versions_snapshot TEXT,
-                event_score REAL,
-                behavior_score REAL,
-                total_score REAL,
-                passed INTEGER NOT NULL DEFAULT 0,
-                failure_reasons TEXT,
-                token_cost_usd REAL,
-                baseline_run_id TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                run_mode TEXT NOT NULL DEFAULT 'fixture'
-            )
-        """)
+        _create_canonical_events_table(conn)
         conn.commit()
     finally:
         conn.close()

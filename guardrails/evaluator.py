@@ -224,22 +224,14 @@ def evaluate_rule_trigger(rule, event_id: str | None, conn) -> bool:
     return count > 0
 
 
-def _write_hook_eval_run(hook_id: str, passed: bool, failure_reasons: list[str], conn) -> None:
-    """Record a guardrail evaluation: hook_eval_runs row + eval.run.completed event."""
+def _write_hook_eval_run(hook_id: str, passed: bool, failure_reasons: list[str]) -> None:
+    """Record a guardrail evaluation as an eval.run.completed canonical event.
+
+    History for hook eval runs now lives solely in business_canonical_events
+    (T4 dropped hook_eval_runs).
+    """
     run_id = str(uuid.uuid4())
     score = 1.0 if passed else max(0.0, 1.0 - len(failure_reasons) * 0.25)
-    try:
-        conn.execute(
-            """
-            INSERT INTO hook_eval_runs
-            (run_id, hook_id, eval_type, passed, score, failure_reasons, created_at)
-            VALUES (?, ?, 'guardrail', ?, ?, ?, datetime('now'))
-            """,
-            (run_id, hook_id, int(passed), score, json.dumps(failure_reasons)),
-        )
-        conn.commit()
-    except Exception:
-        pass  # hook_eval_runs may not exist on older DBs; never block the main path
 
     try:
         from core.eval.events import emit_eval_run_event
@@ -309,7 +301,7 @@ def evaluate(
 
     if not triggered_rules:
         if hook_id:
-            _write_hook_eval_run(hook_id=hook_id, passed=True, failure_reasons=[], conn=conn)
+            _write_hook_eval_run(hook_id=hook_id, passed=True, failure_reasons=[])
         return GuardrailAction.ALLOW
 
     # Determine most severe action
@@ -389,7 +381,6 @@ def evaluate(
             hook_id=hook_id,
             passed=(final_action == GuardrailAction.ALLOW),
             failure_reasons=[r.rule_id for r in triggered_rules],
-            conn=conn,
         )
 
     return final_action

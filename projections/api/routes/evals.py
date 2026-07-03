@@ -1,4 +1,6 @@
-"""Eval Health routes — surfaces ds_eval_baselines and ds_eval_runs for the dashboard."""
+"""Eval Health routes — surfaces ds_eval_baselines + eval canonical events for the dashboard."""
+
+import json
 
 from fastapi import APIRouter
 from typing import Any, Dict, List
@@ -46,25 +48,31 @@ async def get_eval_health() -> Dict[str, Any]:
         failing = total - passing
         pass_rate = round(passing / total * 100, 1) if total > 0 else None
 
+        # Recent runs now come from the canonical event stream — ds_eval_runs was
+        # dropped in T4 (WO-DBA-EVAL-DECISION). work_order.verified events carry
+        # composite_score instead of total_score; COALESCE bridges the two shapes.
         recent_runs: list = []
-        if _has_table(conn, "ds_eval_runs"):
+        if _has_table(conn, "business_canonical_events"):
             rows = conn.execute("""
-                SELECT run_id, eval_id, total_score, passed, started_at, model_tested
-                FROM ds_eval_runs
-                ORDER BY started_at DESC
+                SELECT payload
+                FROM business_canonical_events
+                WHERE event_type IN ('eval.run.completed', 'work_order.verified')
+                ORDER BY event_timestamp DESC
                 LIMIT 20
                 """).fetchall()
-            recent_runs = [
-                {
-                    "run_id": r["run_id"],
-                    "eval_id": r["eval_id"],
-                    "total_score": r["total_score"],
-                    "passed": bool(r["passed"]),
-                    "started_at": r["started_at"],
-                    "model_tested": r["model_tested"],
-                }
-                for r in rows
-            ]
+            recent_runs = []
+            for r in rows:
+                payload = json.loads(r["payload"]) if r["payload"] else {}
+                recent_runs.append(
+                    {
+                        "run_id": payload.get("run_id"),
+                        "eval_id": payload.get("eval_id"),
+                        "total_score": payload.get("total_score", payload.get("composite_score")),
+                        "passed": bool(payload.get("passed")),
+                        "started_at": payload.get("started_at"),
+                        "model_tested": payload.get("model_tested"),
+                    }
+                )
 
         return {
             "total_evals": total,
@@ -89,14 +97,16 @@ async def get_eval_health() -> Dict[str, Any]:
 
 @registry_router.get("/registry")
 async def get_eval_registry() -> List[Dict[str, Any]]:
-    """Return eval_registry entries joined with baseline scores from ds_eval_runs."""
+    """Return eval_registry entries joined with baseline scores from ds_eval_baselines."""
     conn = get_connection()
     try:
         if not _has_table(conn, "eval_registry"):
             return []
 
-        has_runs = _has_table(conn, "ds_eval_runs")
-        if has_runs:
+        # Baseline score now comes from ds_eval_baselines (join on eval_id) instead
+        # of the dropped ds_eval_runs table (T4, WO-DBA-EVAL-DECISION).
+        has_baselines = _has_table(conn, "ds_eval_baselines")
+        if has_baselines:
             rows = conn.execute("""
                 SELECT
                     er.target_id,
@@ -105,9 +115,9 @@ async def get_eval_registry() -> List[Dict[str, Any]]:
                     er.friction_flag,
                     er.last_run_at,
                     er.last_run_id,
-                    dr.total_score AS baseline_score
+                    eb.baseline_score AS baseline_score
                 FROM eval_registry er
-                LEFT JOIN ds_eval_runs dr ON er.baseline_run_id = dr.run_id
+                LEFT JOIN ds_eval_baselines eb ON eb.eval_id = er.eval_id
                 ORDER BY er.target_type, er.target_id
             """).fetchall()
         else:

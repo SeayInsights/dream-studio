@@ -350,11 +350,13 @@ def get_whats_working() -> List[Dict[str, Any]]:
                 }
             )
 
-        # Win 2: Decision tracking active
+        # Win 2: Decision tracking active — decision.recorded canonical events
+        # replaced decision_log rows (T4, WO-DBA-EVAL-DECISION).
         query = """
             SELECT COUNT(*) as decisions
-            FROM decision_log
-            WHERE timestamp > datetime('now', '-7 days')
+            FROM business_canonical_events
+            WHERE event_type = 'decision.recorded'
+              AND event_timestamp > datetime('now', '-7 days')
         """
         row = cursor.execute(query).fetchone()
         if row and row["decisions"] > 0:
@@ -830,11 +832,13 @@ async def get_architecture_intelligence() -> Dict[str, Any]:
                 }
             )
 
-        # Check for decision tracking
+        # Check for decision tracking — decision.recorded canonical events
+        # replaced decision_log rows (T4, WO-DBA-EVAL-DECISION).
         query = """
             SELECT COUNT(*) as decisions
-            FROM decision_log
-            WHERE timestamp > datetime('now', '-7 days')
+            FROM business_canonical_events
+            WHERE event_type = 'decision.recorded'
+              AND event_timestamp > datetime('now', '-7 days')
         """
         dec_row = cursor.execute(query).fetchone()
         if dec_row and dec_row["decisions"] > 0:

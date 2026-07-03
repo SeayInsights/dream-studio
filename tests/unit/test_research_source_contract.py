@@ -50,8 +50,9 @@ RESEARCH_ROUTE_FILES: list = []
 
 CANONICAL_AUTHORITY_TABLES = {
     "canonical_events",
-    "decision_log",
-    "decision_event_link",
+    "business_canonical_events",
+    # decision_log / decision_event_link dropped migration 136 (WO-DBA-EVAL-DECISION
+    # T4): decisions are decision.recorded events in business_canonical_events.
     "execution_nodes",
     "execution_dependencies",
     "execution_outputs",
