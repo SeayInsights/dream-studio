@@ -1078,7 +1078,7 @@ def _compute_scores(
     }
 
 
-# ── ds_eval_runs persistence ────────────────────────────────────────────────────
+# ── Verdict persistence ─────────────────────────────────────────────────────────
 
 
 def _write_eval_run(
@@ -1090,7 +1090,13 @@ def _write_eval_run(
     failure_reasons: list[str],
     started_at: str,
     completed_at: str,
+    status: str | None = None,
 ) -> None:
+    """Persist the verify verdict: business_work_orders columns, the
+    work_order.verified canonical event (via spool), and the legacy
+    ds_eval_runs row (removed once T4 drops the table)."""
+    verify_status = status or ("passed" if passed else "failed")
+
     try:
         run_id = str(uuid.uuid4())
         eval_id = f"work_order_verify:{work_order_id[:8]}"
@@ -1113,6 +1119,49 @@ def _write_eval_run(
         )
     except Exception:
         # ds_eval_runs may not exist in all environments; non-fatal.
+        pass
+
+    try:
+        conn.execute(
+            "UPDATE business_work_orders"
+            " SET verify_status = ?, verify_score = ?, verified_at = ?"
+            " WHERE work_order_id = ?",
+            (verify_status, scores["composite_score"], completed_at, work_order_id),
+        )
+    except Exception:
+        # Pre-migration-134 databases lack the columns; non-fatal.
+        pass
+
+    try:
+        import spool.writer as _spool_writer
+
+        from canonical.events.envelope import CanonicalEventEnvelope
+
+        envelope = CanonicalEventEnvelope(
+            event_type="work_order.verified",
+            session_id=None,
+            payload={
+                "work_order_id": work_order_id,
+                "verify_status": verify_status,
+                "completion_score": scores["completion_score"],
+                "correctness_score": scores["correctness_score"],
+                "quality_score": scores.get("quality_score"),
+                "composite_score": scores["composite_score"],
+                "passed": passed,
+                "failure_reasons": failure_reasons,
+                "started_at": started_at,
+                "completed_at": completed_at,
+            },
+            timestamp=completed_at,
+            severity="info",
+            trace={
+                "domain": "sdlc",
+                "work_order_id": work_order_id,
+                "attribution_status": "fully_attributed",
+            },
+        )
+        _spool_writer.write_event(envelope.to_dict())
+    except Exception:
         pass
 
 
@@ -1419,6 +1468,7 @@ def verify_work_order(
                 failure_reasons=["unreviewable_no_commits_found"],
                 started_at=started_at,
                 completed_at=completed_at,
+                status="unreviewable",
             )
             verdict_dir = p_root / "work-orders" / work_order_id
             verdict_dir.mkdir(parents=True, exist_ok=True)
@@ -1526,6 +1576,7 @@ def verify_work_order(
                 failure_reasons=["unreviewable_grader_no_summary"],
                 started_at=started_at,
                 completed_at=completed_at,
+                status="unreviewable",
             )
             verdict_dir = p_root / "work-orders" / work_order_id
             verdict_dir.mkdir(parents=True, exist_ok=True)

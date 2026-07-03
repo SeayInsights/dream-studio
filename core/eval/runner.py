@@ -429,6 +429,21 @@ def _write_live_eval_run(
         # ds_eval_runs may not exist or run_mode column may be absent on older DBs.
         pass
 
+    from core.eval.events import emit_eval_run_event
+
+    emit_eval_run_event(
+        {
+            "eval_id": eval_id,
+            "eval_version": version,
+            "total_score": composite_score,
+            "passed": passed,
+            "failure_reasons": failure_reasons,
+            "run_mode": "live",
+            "target_id": target_id,
+            "target_type": target_type,
+        }
+    )
+
 
 def format_results_report(results: list[EvalResult]) -> str:
     """Format eval results as a human-readable report."""
@@ -579,6 +594,19 @@ def _record_outcome_run(work_order_id: str, outcome: dict, db_path: Path) -> Non
             conn.close()
     except Exception:
         pass
+
+    from core.eval.events import emit_eval_run_event
+
+    emit_eval_run_event(
+        {
+            "eval_id": f"outcome:{work_order_id[:8]}",
+            "work_order_id": work_order_id,
+            "passed": outcome["passed"],
+            "failure_reasons": outcome["failures"],
+            "run_mode": "outcome",
+        },
+        work_order_id=work_order_id,
+    )
 
 
 def _reopen_and_escalate(
