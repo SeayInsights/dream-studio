@@ -95,7 +95,7 @@ def test_all_consumers_get_current_rates():
     ), f"efficiency_analytics must price opus-4-8 via the shared table ($30), got {result['total_cost_usd']}"
 
 
-def test_end_to_end(tmp_path, monkeypatch):
+def test_pricing_view_end_to_end(tmp_path, monkeypatch):
     """End-to-end: a token.consumed event on claude-opus-4-8 yields non-zero
     API-equivalent cost and is counted as priced (no longer 'unknown model').
 

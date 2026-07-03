@@ -291,7 +291,7 @@ def test_gate_blocks_close_and_merge(tmp_path: Path, monkeypatch: pytest.MonkeyP
 # ---------------------------------------------------------------------------
 
 
-def test_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dashboard_truth_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Broad: invariants run, empty passes, violating fails, doctor exits nonzero.
 
     Also verifies the CLI entry point behaviour for the dashboard-truth mode

@@ -98,7 +98,7 @@ def _seed_token_consumed_event(
         conn.close()
 
 
-def _seed(db_path: Path, analytics_db: Path) -> None:
+def _seed_read_model_dbs(db_path: Path, analytics_db: Path) -> None:
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "dashboard_read_models_for_telemetry_spine",
@@ -365,7 +365,7 @@ def test_global_summary_reads_telemetry_spine_and_marks_derived(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     summary = global_telemetry_summary(db_path)
 
@@ -443,7 +443,7 @@ def test_project_milestone_task_and_process_drilldowns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     project = project_telemetry_summary("dream-studio", db_path)
     milestone = milestone_telemetry_summary(
@@ -478,7 +478,7 @@ def test_workflow_execution_graph_links_process_events_validations_and_outcomes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
 
     graph = workflow_execution_graph("route-first", db_path)
 
@@ -504,7 +504,7 @@ def test_component_usage_and_attention_rollups(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
     with _connect(db_path) as conn:
         record_dashboard_attention(
             conn,
@@ -578,7 +578,7 @@ def test_security_remediation_intelligence_keeps_execution_approval_separate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "security_analytics_and_remediation_maturation",
@@ -651,7 +651,7 @@ def test_validation_outcome_intelligence_correlates_failures_without_authorizing
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db_path = _db(tmp_path)
-    _seed(db_path, _isolate_analytics(monkeypatch, tmp_path))
+    _seed_read_model_dbs(db_path, _isolate_analytics(monkeypatch, tmp_path))
     with _connect(db_path) as conn:
         conn.execute(
             """
@@ -722,7 +722,7 @@ def test_token_cost_intelligence_correlates_cost_with_outcomes_without_provider_
 ) -> None:
     db_path = _db(tmp_path)
     analytics_db = _isolate_analytics(monkeypatch, tmp_path)
-    _seed(db_path, analytics_db)
+    _seed_read_model_dbs(db_path, analytics_db)
     scope = {
         "project_id": "dream-studio",
         "milestone_id": "token_cost_intelligence",

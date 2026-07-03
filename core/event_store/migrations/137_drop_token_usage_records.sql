@@ -95,15 +95,15 @@
 -- (idx_ai_usage_operational_scope, idx_ai_usage_operational_process) are
 -- recreated again since DROP TABLE removes them.
 --
--- Idempotent: DROP TABLE IF EXISTS / CREATE TABLE IF NOT EXISTS / CREATE INDEX
--- IF NOT EXISTS throughout.
+-- Applied once via _schema_version tracking; the rebuild temp table uses a
+-- migration-unique name (m137_rebuild) so no other migration's DDL collides.
 --
 -- Result: 76 - 1 = 75 tables.
 -- Reviewed: 2026-07-03 (WO-DBA-DROP, authority e0b90310-bf30-4146-b9df-58707a2e5d86)
 
 PRAGMA foreign_keys = OFF;
 
-CREATE TABLE IF NOT EXISTS ai_usage_operational_records_new (
+CREATE TABLE ai_usage_operational_records_m137_rebuild (
     usage_record_id TEXT PRIMARY KEY,
     project_id TEXT,
     milestone_id TEXT,
@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS ai_usage_operational_records_new (
     -- FK to token_usage_records(token_usage_id) removed — the table is dropped below.
 );
 
-INSERT INTO ai_usage_operational_records_new
+INSERT INTO ai_usage_operational_records_m137_rebuild
 SELECT
     usage_record_id,
     project_id,
@@ -209,7 +209,7 @@ SELECT
 FROM ai_usage_operational_records;
 
 DROP TABLE IF EXISTS ai_usage_operational_records;
-ALTER TABLE ai_usage_operational_records_new RENAME TO ai_usage_operational_records;
+ALTER TABLE ai_usage_operational_records_m137_rebuild RENAME TO ai_usage_operational_records;
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_operational_scope
 ON ai_usage_operational_records(project_id, milestone_id, task_id, work_order_id, adapter_id);
