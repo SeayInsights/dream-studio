@@ -946,7 +946,7 @@ def test_dedup_same_matcher_same_command_different_slash_style():
 def test_second_install_after_dedup_fix_produces_correct_hook_counts(
     config_root, canonical_root, ds_home
 ):
-    """Reinstall on top of backslash-path settings produces 2/2/2/4 hook entries."""
+    """Reinstall on top of backslash-path settings dedups to the template counts."""
     installer = ClaudeCodeInstaller(
         config_root, "user", canonical_root=canonical_root, ds_home=ds_home
     )
@@ -973,11 +973,13 @@ def test_second_install_after_dedup_fix_produces_correct_hook_counts(
     stop = len(hooks.get("Stop", []))
     pc = len(hooks.get("PostCompact", []))
     ptu = len(hooks.get("PostToolUse", []))
+    pre = len(hooks.get("PreToolUse", []))
 
     assert ups == 2, f"UserPromptSubmit: expected 2, got {ups}"
-    assert stop == 2, f"Stop: expected 2, got {stop}"
+    assert stop == 3, f"Stop: expected 3 (emitter, dispatcher, enforcement), got {stop}"
     assert pc == 2, f"PostCompact: expected 2, got {pc}"
     assert ptu == 3, f"PostToolUse: expected 3 (Read matcher removed), got {ptu}"
+    assert pre == 1, f"PreToolUse: expected 1 (edit enforcement), got {pre}"
 
 
 # ── Fix verifications ─────────────────────────────────────────────────────────
