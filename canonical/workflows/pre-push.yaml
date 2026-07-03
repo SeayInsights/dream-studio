@@ -53,6 +53,27 @@ gates:
     command: [py, -m, pytest, tests/evals, -q]
     fail_hint: "Eval failures block push — fix the failing eval before retry."
 
+  - id: pin-tests
+    tier: blocking
+    description: >
+      Exact-set schema/contract pin tests the pr-smoke matrix does not run.
+      Two post-merge full-ci reds in one day came from this class (packs.yaml
+      handler list + plugin.json after #442; the DuckDB schema pin after #450).
+      A pin only drifts when a change set adds an object without updating the
+      expected set — precisely a pre-push-time mistake. Fast and deterministic.
+    command: [py, -m, pytest,
+      tests/unit/test_duckdb_business_schema.py,
+      tests/unit/test_packs_yaml_integrity.py,
+      tests/unit/test_plugin_manifest.py,
+      tests/unit/test_schema_debt_doc.py,
+      tests/unit/test_hook_runtime_reliability.py,
+      -q]
+    fail_hint: >
+      A schema/contract pin drifted — update the pin's expected set in the SAME
+      change set as the schema/artifact change (DuckDB objects in
+      test_duckdb_business_schema.py, packs.yaml handler lists, regenerated
+      plugin.json, a schema-debt doc entry for new migrations).
+
   - id: atlas-leak
     tier: blocking
     description: >
