@@ -1,63 +1,55 @@
 """Tests for WO-DASH-ATTRIBUTION-SURFACES T3: cost-by-model populates with non-zero values for known models."""
 
 from __future__ import annotations
+
 import sqlite3
+from pathlib import Path
+
+import pytest
 
 
-def _make_seeded_conn() -> sqlite3.Connection:
-    """Return an in-memory SQLite connection with token_usage_records seeded for two models."""
+def _make_bare_conn() -> sqlite3.Connection:
+    """Return a bare in-memory SQLite connection (no token_usage_records table).
+
+    WO-DBA-DROP (migration 137): token_usage_records is retired from SQLite —
+    api_equivalent_cost() falls through to the DuckDB aggregate_metrics.db
+    view; seed it via _seed_duckdb_tokens() before calling this.
+    """
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE token_usage_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            model_id TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            cached_tokens INTEGER,
-            cache_read_tokens INTEGER,
-            total_tokens INTEGER,
-            skill_id TEXT,
-            estimated_cost REAL,
-            cost_visibility TEXT,
-            created_at TEXT
-        )
-        """)
-    # Two rows for claude-opus-4-8
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 5000, 2000, 0, 0)",
-        ("claude-opus-4-8",),
-    )
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 5000, 2000, 0, 0)",
-        ("claude-opus-4-8",),
-    )
-    # Two rows for claude-sonnet-4-6
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 5000, 2000, 0, 0)",
-        ("claude-sonnet-4-6",),
-    )
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 5000, 2000, 0, 0)",
-        ("claude-sonnet-4-6",),
-    )
-    conn.commit()
     return conn
 
 
-def test_cost_by_model_nonzero():
+def _seed_duckdb_tokens(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Seed two token.consumed events each for claude-opus-4-8 and
+    claude-sonnet-4-6 (5000/2000/0/0, matching the retired SQLite fixture)
+    into an isolated DuckDB analytics store's events_fact."""
+    from core.analytics import duckdb_store
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        for i, model in enumerate(
+            ["claude-opus-4-8", "claude-opus-4-8", "claude-sonnet-4-6", "claude-sonnet-4-6"]
+        ):
+            conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+                " input_tokens, output_tokens, payload)"
+                " VALUES (?, 'token.consumed', '2026-07-03T00:00:00Z', ?, 5000, 2000, '{}')",
+                [f"tok-{i}", model],
+            )
+    finally:
+        conn.close()
+
+
+def test_cost_by_model_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Verify api_equivalent_cost returns non-zero costs for known models with seeded token data."""
     from projections.core.cost_analysis import api_equivalent_cost
 
-    conn = _make_seeded_conn()
+    _seed_duckdb_tokens(monkeypatch, tmp_path)
+    conn = _make_bare_conn()
     result = api_equivalent_cost(conn)
     conn.close()
 

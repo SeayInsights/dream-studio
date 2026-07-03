@@ -24,6 +24,8 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parents[2]
 DASHBOARD_HTML = REPO_ROOT / "projections/frontend/dashboard.html"
 
@@ -119,38 +121,49 @@ def test_models_cost_charts_render_or_emptystate():
 
 
 def _make_seeded_conn(model_id: str = "claude-sonnet-4-6") -> sqlite3.Connection:
-    """Return an in-memory SQLite connection with token_usage_records seeded."""
+    """Return a bare in-memory SQLite connection (no token_usage_records table).
+
+    WO-DBA-DROP (migration 137): token_usage_records is retired from SQLite —
+    api_equivalent_cost() falls through to the DuckDB aggregate_metrics.db
+    view. Callers must isolate + seed that view via _seed_duckdb_tokens()
+    before calling api_equivalent_cost()/plan_comparison() with this conn.
+    """
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE token_usage_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            model_id TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            cached_tokens INTEGER,
-            cache_read_tokens INTEGER,
-            total_tokens INTEGER,
-            skill_id TEXT,
-            estimated_cost REAL,
-            cost_visibility TEXT,
-            created_at TEXT
-        )
-        """)
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 1000, 500, 200, 100)",
-        (model_id,),
-    )
-    conn.execute(
-        "INSERT INTO token_usage_records "
-        "(model_id, input_tokens, output_tokens, cached_tokens, cache_read_tokens) "
-        "VALUES (?, 2000, 1000, 0, 0)",
-        (model_id,),
-    )
-    conn.commit()
     return conn
+
+
+def _seed_duckdb_tokens(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, model_id: str) -> None:
+    """Isolate the DuckDB analytics store and seed two token.consumed events
+    for *model_id* — the events_fact equivalent of the retired SQLite
+    token_usage_records fixture (same two rows: 1000/500/200/100 and
+    2000/1000/0/0)."""
+    import json
+
+    from core.analytics import duckdb_store
+
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('tok-1', 'token.consumed', '2026-07-03T00:00:00Z', ?, 1000, 500, ?)",
+            [
+                model_id,
+                json.dumps({"cache_creation_input_tokens": 200, "cache_read_input_tokens": 100}),
+            ],
+        )
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " input_tokens, output_tokens, payload)"
+            " VALUES ('tok-2', 'token.consumed', '2026-07-03T00:00:00Z', ?, 2000, 1000, '{}')",
+            [model_id],
+        )
+    finally:
+        conn.close()
 
 
 def _make_ds_config_conn() -> sqlite3.Connection:
@@ -168,11 +181,13 @@ def _make_ds_config_conn() -> sqlite3.Connection:
     return conn
 
 
-def test_end_to_end():
-    """T4: import, api_equivalent_cost on seeded DB, plan_comparison False/True, route path."""
+def test_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """T4: import, api_equivalent_cost on seeded DuckDB view, plan_comparison False/True, route path."""
     # Import must succeed
     from projections.core.cost_analysis import api_equivalent_cost, plan_comparison
     from core.config.authority import set_config_value
+
+    _seed_duckdb_tokens(monkeypatch, tmp_path, "claude-sonnet-4-6")
 
     # api_equivalent_cost on seeded connection
     conn = _make_seeded_conn("claude-sonnet-4-6")
@@ -236,12 +251,13 @@ def test_end_to_end():
 # ── Focused unit: api_equivalent_cost correctness ────────────────────────────
 
 
-def test_api_equivalent_cost_correctness():
+def test_api_equivalent_cost_correctness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Seed 2 rows with a known model; assert total_usd == sum of compute_cost calls."""
     from projections.core.cost_analysis import api_equivalent_cost
     from core.pricing.claude_models import compute_cost
 
     model = "claude-haiku-4-5"
+    _seed_duckdb_tokens(monkeypatch, tmp_path, model)
     conn = _make_seeded_conn(model)
 
     result = api_equivalent_cost(conn)
