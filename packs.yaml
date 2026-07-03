@@ -61,6 +61,10 @@ packs:
       - on-edit-dispatch
       - on-skill-complete
       - on-skill-metrics
+      # Blocking enforcement hooks (direct hooks.json entries — must own stdout,
+      # cannot route through the output-swallowing dispatcher)
+      - on-edit-enforce
+      - on-stop-enforce
     lib: hooks/lib/
 
   security:

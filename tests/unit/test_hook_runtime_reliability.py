@@ -80,11 +80,18 @@ class TestHooksJsonValid:
         assert "PostToolUse" in events
 
     def test_all_commands_use_cross_platform_launcher(self):
-        """Every hook command routes through the emitter or the runtime dispatcher.
+        """Every hook command routes through the emitter, the runtime dispatcher,
+        or a direct-entry blocking enforcement hook.
 
         Slice 3+: hooks/run.py removed. Each event has two entries:
           - emitters/claude_code/run.py  (spool write)
           - runtime/dispatch/hooks.py    (runtime handler dispatch)
+
+        WO-ENFORCE-SQLITE: the blocking enforcement hooks (on-edit-enforce,
+        on-stop-enforce) are intentionally direct entries — a deny/block
+        decision must own its process stdout, and the dispatcher swallows
+        handler output. They use the same cross-platform python -c resolution
+        pattern as the emitter/dispatcher shims.
         """
 
         def extract_commands(obj):
@@ -102,9 +109,11 @@ class TestHooksJsonValid:
         for cmd in extract_commands(self.config):
             uses_emitter = "'emitters'/'claude_code'/'run.py'" in cmd
             uses_dispatcher = "'runtime'/'dispatch'/'hooks.py'" in cmd
-            assert (
-                uses_emitter or uses_dispatcher
-            ), f"Command must route through canonical emitter or runtime dispatcher: {cmd}"
+            uses_enforcement = "'on-edit-enforce.py'" in cmd or "'on-stop-enforce.py'" in cmd
+            assert uses_emitter or uses_dispatcher or uses_enforcement, (
+                f"Command must route through canonical emitter, runtime dispatcher,"
+                f" or a direct-entry enforcement hook: {cmd}"
+            )
             assert '"${CLAUDE_PLUGIN_ROOT}/hooks/run.sh"' not in cmd
 
     def test_user_prompt_submit_command_resolves_without_env_root(self, tmp_path):
