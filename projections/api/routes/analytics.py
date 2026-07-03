@@ -68,21 +68,26 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
 
     try:
         # Fetch session rows with duration_s from DuckDB (ended_at now populated)
-        session_rows = duck_conn.execute(
-            """
-            SELECT
-                session_id,
-                started_at,
-                duration_s,
-                COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS total_tokens
-            FROM raw_sessions
-            WHERE started_at >= ?
-              AND ended_at IS NOT NULL
-              AND duration_s IS NOT NULL
-              AND duration_s > 0
-        """,
-            [cutoff],
-        ).fetchall()
+        try:
+            session_rows = duck_conn.execute(
+                """
+                SELECT
+                    session_id,
+                    started_at,
+                    duration_s,
+                    COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS total_tokens
+                FROM raw_sessions
+                WHERE started_at >= ?
+                  AND ended_at IS NOT NULL
+                  AND duration_s IS NOT NULL
+                  AND duration_s > 0
+            """,
+                [cutoff],
+            ).fetchall()
+        except Exception:
+            # Fresh analytics store: the projection runner has not created the
+            # compat views yet. Empty shape, never a 500.
+            return _empty_anomalies()
 
         if len(session_rows) < 3:
             return _empty_anomalies()
