@@ -8,7 +8,6 @@ from typing import Dict, Any, List
 from core.config.database import get_connection
 from core.analytics.duckdb_store import connect_analytics
 from projections.core.collectors.authority_sources import token_usage_sql
-from core.shared_intelligence.usage_accounting import REPORTABLE_COST_VISIBILITIES
 
 router = APIRouter()
 
@@ -184,11 +183,14 @@ async def get_anomalies(days: int = Query(default=30, ge=1, le=365)) -> Dict[str
 async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, Any]:
     """Analyze daily trends for sessions, tokens, and cost with linear regression.
 
-    Session counts read from DuckDB aggregate_metrics.db (raw_sessions view).
-    Token/cost trends read from SQLite via token_usage_sql() (authority source).
+    Session counts and token/cost trends both read from DuckDB
+    aggregate_metrics.db (raw_sessions and token_usage_records views).
+    WO-DBA-DROP (migration 137): the SQLite token_usage_records table is
+    retired; the DuckDB view (derived from canonical token.consumed events)
+    already carries model-priced estimated_cost, so cost trends read from the
+    same connection already open for sessions.
     """
     duck_conn = _connect_analytics()
-    sql_conn = _connect()
     cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
@@ -203,30 +205,27 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
         ).fetchall()
         session_rows = [{"date": r[0], "count": r[1]} for r in sess_rows]
 
-        # Tokens/cost from SQLite via token_usage_sql (cost data lives in SQLite authority)
-        token_sql = token_usage_sql(sql_conn)
-        if token_sql is not None:
-            token_rows_raw = sql_conn.execute(
-                f"""
-                SELECT DATE(recorded_at) as date,
-                       SUM(input_tokens + output_tokens) as tokens,
-                       SUM(
-                           CASE
-                               WHEN cost_visibility IN ({','.join('?' for _ in REPORTABLE_COST_VISIBILITIES)})
-                               THEN estimated_cost
-                               ELSE NULL
-                           END
-                       ) as cost
-                FROM ({token_sql}) token_usage WHERE recorded_at >= ?
-                GROUP BY DATE(recorded_at) ORDER BY date
-            """,
-                (*REPORTABLE_COST_VISIBILITIES, cutoff),
+        # Tokens/cost from the DuckDB token_usage_records view. estimated_cost
+        # is non-NULL exactly when the model is in the pricing table — the
+        # honest "is this cost known" signal now that the view's governance
+        # columns (cost_visibility, etc.) carry no information for
+        # canonical-event-derived rows.
+        try:
+            token_rows_raw = duck_conn.execute(
+                """
+                SELECT substr(created_at, 1, 10) AS date,
+                       SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) AS tokens,
+                       SUM(CASE WHEN estimated_cost IS NOT NULL THEN estimated_cost ELSE NULL END) AS cost
+                FROM token_usage_records
+                WHERE created_at >= ?
+                GROUP BY date ORDER BY date
+                """,
+                [cutoff],
             ).fetchall()
-            token_rows = [
-                {"date": r["date"], "tokens": r["tokens"], "cost": r["cost"]}
-                for r in token_rows_raw
-            ]
-        else:
+            token_rows = [{"date": r[0], "tokens": r[1] or 0, "cost": r[2]} for r in token_rows_raw]
+        except Exception:
+            # Fresh analytics store: the projection runner has not created the
+            # compat views yet. Empty shape, never a 500.
             token_rows = []
 
         dates = sorted(set([r["date"] for r in session_rows] + [r["date"] for r in token_rows]))
@@ -280,7 +279,6 @@ async def get_trends(days: int = Query(default=30, ge=1, le=365)) -> Dict[str, A
         }
     finally:
         duck_conn.close()
-        sql_conn.close()
 
 
 @router.get("/performance")

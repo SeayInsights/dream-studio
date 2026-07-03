@@ -510,28 +510,23 @@ async def get_memory_surface(project_id: str = Query(default=None)) -> dict:
 # Attribution Breakouts — token usage aggregated by dimension (18.x)
 # ---------------------------------------------------------------------------
 
-_BREAKOUT_REQUIRED_COLUMNS = {
-    "project_id",
-    "milestone_id",
-    "task_id",
-    "skill_id",
-    "agent_id",
-    "input_tokens",
-    "output_tokens",
-}
-
 
 @router.get("/attribution-breakouts")
 async def get_attribution_breakouts() -> dict:
     """Return token usage aggregated by project, milestone, task, skill, and agent.
 
-    Reads directly from ``token_usage_records``. If the table does not exist or
-    lacks the expected columns, returns ``data_status="empty"`` with empty lists.
-    All breakouts are capped at 20 rows, ordered by tokens DESC.
+    WO-DBA-DROP (migration 137): reads the DuckDB aggregate_metrics.db
+    token_usage_records view (derived from canonical token.consumed events via
+    events_fact) instead of the retired SQLite token_usage_records table.
+    business_projects.name enrichment stays on SQLite (two-connection pattern
+    also used in projections/api/routes/analytics.py). If the analytics store
+    or view is unavailable, returns ``data_status="empty"`` with empty lists —
+    never a 500.
     """
     import sqlite3 as _sqlite3
+    from core.analytics.duckdb_store import connect_analytics
     from core.config.database import get_connection
-    from projections.api.routes.sqlite_schema import has_columns, object_exists
+    from projections.api.routes.sqlite_schema import object_exists
 
     _EMPTY = {
         "schema": "dream_studio.attribution_breakouts.v1",
@@ -547,29 +542,22 @@ async def get_attribution_breakouts() -> dict:
     }
 
     try:
-        conn = get_connection()
-        conn.row_factory = _sqlite3.Row
+        duck_conn = connect_analytics(read_only=True)
         try:
-            if not object_exists(conn, "token_usage_records"):
-                return _EMPTY
-
-            if not has_columns(conn, "token_usage_records", _BREAKOUT_REQUIRED_COLUMNS):
-                return _EMPTY
-
             # Totals
-            totals_row = conn.execute(
+            totals_row = duck_conn.execute(
                 "SELECT"
-                "  COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,"
+                "  COALESCE(SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)), 0) AS total_tokens,"
                 "  COUNT(*) AS total_records"
                 " FROM token_usage_records"
             ).fetchone()
-            total_tokens = int(totals_row["total_tokens"] or 0)
-            total_records = int(totals_row["total_records"] or 0)
+            total_tokens = int((totals_row[0] if totals_row else 0) or 0)
+            total_records = int((totals_row[1] if totals_row else 0) or 0)
 
             def _breakout(column: str) -> list[dict]:
-                rows = conn.execute(
+                rows = duck_conn.execute(
                     f"SELECT {column} AS key,"
-                    f"  SUM(input_tokens + output_tokens) AS tokens,"
+                    f"  SUM(COALESCE(input_tokens,0) + COALESCE(output_tokens,0)) AS tokens,"
                     f"  COUNT(*) AS records"
                     f" FROM token_usage_records"
                     f" WHERE {column} IS NOT NULL"
@@ -579,22 +567,35 @@ async def get_attribution_breakouts() -> dict:
                 ).fetchall()
                 return [
                     {
-                        column: row["key"],
-                        "tokens": int(row["tokens"] or 0),
-                        "records": int(row["records"] or 0),
+                        column: row[0],
+                        "tokens": int(row[1] or 0),
+                        "records": int(row[2] or 0),
                     }
                     for row in rows
                 ]
 
             by_project = _breakout("project_id")
+            by_milestone = _breakout("milestone_id")
+            by_task = _breakout("task_id")
+            by_skill = _breakout("skill_id")
+            by_agent = _breakout("agent_id")
+        except Exception:
+            # Fresh analytics store: the projection runner has not created the
+            # compat views yet. Empty shape, never a 500.
+            return _EMPTY
+        finally:
+            duck_conn.close()
 
-            # Enrich by_project rows with human-readable project names.
-            # Falls back to None per row if business_projects doesn't exist or lookup fails.
+        # Enrich by_project rows with human-readable project names from SQLite.
+        # Falls back to None per row if business_projects doesn't exist or lookup fails.
+        try:
+            sql_conn = get_connection()
+            sql_conn.row_factory = _sqlite3.Row
             try:
-                if by_project and object_exists(conn, "business_projects"):
+                if by_project and object_exists(sql_conn, "business_projects"):
                     project_ids = [row["project_id"] for row in by_project]
                     placeholders = ",".join("?" * len(project_ids))
-                    name_rows = conn.execute(
+                    name_rows = sql_conn.execute(
                         f"SELECT project_id, name FROM business_projects"
                         f" WHERE project_id IN ({placeholders})",
                         project_ids,
@@ -613,16 +614,10 @@ async def get_attribution_breakouts() -> dict:
                     ]
                 else:
                     by_project = [{**row, "project_name": None} for row in by_project]
-            except Exception:
-                by_project = [{**row, "project_name": None} for row in by_project]
-
-            by_milestone = _breakout("milestone_id")
-            by_task = _breakout("task_id")
-            by_skill = _breakout("skill_id")
-            by_agent = _breakout("agent_id")
-
-        finally:
-            conn.close()
+            finally:
+                sql_conn.close()
+        except Exception:
+            by_project = [{**row, "project_name": None} for row in by_project]
 
         return {
             "schema": "dream_studio.attribution_breakouts.v1",

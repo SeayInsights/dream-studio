@@ -354,72 +354,6 @@ def record_invocation(conn: sqlite3.Connection, invocation_type: str, **values: 
         logger.debug("record_invocation: DB write skipped for %s — %s", table, exc)
 
 
-def record_token_usage(conn: sqlite3.Connection, **values: Any) -> None:
-    input_tokens = int(values.get("input_tokens", 0))
-    output_tokens = int(values.get("output_tokens", 0))
-    cached_tokens = int(values.get("cached_tokens", 0))
-    billing_mode = values.get("billing_mode", "unknown")
-    estimated_cost = float(values.get("estimated_cost", 0))
-    cost_visibility = values.get("cost_visibility")
-    if cost_visibility is None:
-        if billing_mode in {"subscription_plan", "plan_allowance"}:
-            cost_visibility = "unavailable"
-            estimated_cost = 0.0
-        else:
-            cost_visibility = "estimated" if estimated_cost > 0 else "unavailable"
-    cost_source = values.get("cost_source")
-    if cost_source is None:
-        cost_source = "local_estimate" if estimated_cost > 0 else "unavailable"
-    _execute(
-        conn,
-        """
-        INSERT INTO token_usage_records (
-            token_usage_id, project_id, milestone_id, task_id, process_run_id,
-            agent_id, skill_id, workflow_id, hook_id, model_id, provider,
-            input_tokens, output_tokens, cached_tokens, total_tokens,
-            estimated_cost, purpose, adapter_id, billing_mode, token_visibility,
-            cost_visibility, usage_source, cost_source, accounting_confidence
-        ) VALUES (
-            :token_usage_id, :project_id, :milestone_id, :task_id, :process_run_id,
-            :agent_id, :skill_id, :workflow_id, :hook_id, :model_id, :provider,
-            :input_tokens, :output_tokens, :cached_tokens, :total_tokens,
-            :estimated_cost, :purpose, :adapter_id, :billing_mode, :token_visibility,
-            :cost_visibility, :usage_source, :cost_source, :accounting_confidence
-        )
-        """,
-        {
-            "token_usage_id": values["token_usage_id"],
-            "project_id": values.get("project_id"),
-            "milestone_id": values.get("milestone_id"),
-            "task_id": values.get("task_id"),
-            "process_run_id": values.get("process_run_id"),
-            "agent_id": values.get("agent_id"),
-            "skill_id": values.get("skill_id"),
-            "workflow_id": values.get("workflow_id"),
-            "hook_id": values.get("hook_id"),
-            "model_id": values.get("model_id"),
-            "provider": values.get("provider"),
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "cached_tokens": cached_tokens,
-            "total_tokens": int(
-                values.get("total_tokens", input_tokens + output_tokens + cached_tokens)
-            ),
-            "estimated_cost": estimated_cost,
-            "purpose": values.get("purpose"),
-            "adapter_id": values.get("adapter_id"),
-            "billing_mode": billing_mode,
-            "token_visibility": values.get("token_visibility", "exact"),
-            "cost_visibility": cost_visibility,
-            "usage_source": values.get("usage_source", "local_telemetry"),
-            "cost_source": cost_source,
-            "accounting_confidence": values.get(
-                "confidence", values.get("accounting_confidence", "medium")
-            ),
-        },
-    )
-
-
 def record_security_finding(conn: sqlite3.Connection, **values: Any) -> None:
     # findings table retired in migration 112 (WO-Y). Write to security_events spine.
     try:
@@ -651,17 +585,6 @@ def usage_by_component(
         FROM {table}
         GROUP BY project_id, milestone_id, task_id, {component_column}
         ORDER BY invocation_count DESC, component_id
-        """).fetchall()
-
-
-def token_rollup(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    return conn.execute("""
-        SELECT project_id, milestone_id, task_id, agent_id, skill_id, workflow_id,
-               hook_id, model_id, SUM(total_tokens) AS total_tokens,
-               SUM(estimated_cost) AS estimated_cost
-        FROM token_usage_records
-        GROUP BY project_id, milestone_id, task_id, agent_id, skill_id, workflow_id, hook_id, model_id
-        ORDER BY total_tokens DESC
         """).fetchall()
 
 

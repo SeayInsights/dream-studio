@@ -357,135 +357,92 @@ def test_skill_timeline(test_skill_db):
 
 
 # TokenCollector tests
+#
+# WO-DBA-DROP (migration 137): token_usage_records is retired from SQLite.
+# TokenCollector reads authority_sources.token_usage_sql(), which now falls
+# through to the DuckDB aggregate_metrics.db token_usage_records view when
+# the SQLite connection has no such table. These fixtures seed that view via
+# events_fact (the test_session_collector_duckdb.py pattern) instead of
+# building the dropped table directly — model ids are real Claude models
+# (claude-sonnet-4-6/claude-haiku-4-5/claude-opus-4-8) so the view's
+# token_model_pricing join produces real, non-zero estimated_cost, same as
+# production. The sqlite db_path returned is a bare, empty database — the
+# collector still needs one to open, but it carries no token data.
+
+_SONNET = "claude-sonnet-4-6"
+_HAIKU = "claude-haiku-4-5"
+_OPUS = "claude-opus-4-8"
+
+
+def _seed_token_events_fact(analytics_db, rows: list[tuple]) -> None:
+    """Seed token.consumed events into an isolated DuckDB analytics store.
+
+    Each row: (event_id, project_id, skill_id, model_id, input_tokens,
+    output_tokens, event_timestamp).
+    """
+    from core.analytics import duckdb_store
+
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        for event_id, project_id, skill_id, model_id, inp, out, ts in rows:
+            conn.execute(
+                "INSERT INTO events_fact (event_id, event_type, event_timestamp, project_id,"
+                " skill_id, model_id, input_tokens, output_tokens)"
+                " VALUES (?, 'token.consumed', ?, ?, ?, ?, ?, ?)",
+                [event_id, ts, project_id, skill_id, model_id, inp, out],
+            )
+    finally:
+        conn.close()
 
 
 @pytest.fixture
-def test_token_db(tmp_path):
-    """Create a temporary test database with token usage data"""
+def test_token_db(tmp_path, monkeypatch):
+    """Create an isolated DuckDB analytics store with token.consumed events,
+    plus a bare SQLite db_path for the collector to open."""
+    from core.analytics import duckdb_store
+
     db_path = tmp_path / "test_studio_tokens.db"
+    sqlite3.connect(str(db_path)).close()
 
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
 
-    # Create current token authority table.
-    cursor.execute("""
-        CREATE TABLE token_usage_records (
-            token_usage_id TEXT PRIMARY KEY,
-            process_run_id TEXT,
-            project_id TEXT,
-            skill_id TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            total_tokens INTEGER,
-            model_id TEXT,
-            provider TEXT,
-            estimated_cost REAL,
-            cost_visibility TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
-
-    # Insert sample data
     now = datetime.now()
-    test_data = [
-        (
-            "token-1",
-            "sess-1",
-            "proj-a",
-            "ds-core",
-            1000,
-            500,
-            1500,
-            "sonnet",
-            "anthropic",
-            0.01,
-            "provider_reported",
-            (now - timedelta(days=1)).isoformat(),
-        ),
-        (
-            "token-2",
-            "sess-2",
-            "proj-a",
-            "ds-core",
-            1200,
-            600,
-            1800,
-            "sonnet",
-            "anthropic",
-            0.01,
-            "provider_reported",
-            (now - timedelta(days=2)).isoformat(),
-        ),
+    rows = [
+        ("token-1", "proj-a", "ds-core", _SONNET, 1000, 500, (now - timedelta(days=1)).isoformat()),
+        ("token-2", "proj-a", "ds-core", _SONNET, 1200, 600, (now - timedelta(days=2)).isoformat()),
         (
             "token-3",
-            "sess-3",
             "proj-b",
             "ds-quality",
+            _HAIKU,
             500,
             200,
-            700,
-            "haiku",
-            "anthropic",
-            0.01,
-            "provider_reported",
             (now - timedelta(days=3)).isoformat(),
         ),
-        (
-            "token-4",
-            "sess-4",
-            "proj-a",
-            "ds-core",
-            2000,
-            1000,
-            3000,
-            "opus",
-            "anthropic",
-            0.01,
-            "provider_reported",
-            (now - timedelta(days=4)).isoformat(),
-        ),
+        ("token-4", "proj-a", "ds-core", _OPUS, 2000, 1000, (now - timedelta(days=4)).isoformat()),
         (
             "token-5",
-            "sess-5",
             "proj-c",
             "ds-security",
+            _SONNET,
             800,
             400,
-            1200,
-            "sonnet",
-            "anthropic",
-            0.01,
-            "provider_reported",
             (now - timedelta(days=5)).isoformat(),
         ),
+        # Too old — excluded by the 90-day window.
         (
             "token-6",
-            "sess-6",
             "proj-a",
             "ds-core",
+            _SONNET,
             1000,
             500,
-            1500,
-            "sonnet",
-            "anthropic",
-            0.01,
-            "provider_reported",
             (now - timedelta(days=100)).isoformat(),
-        ),  # Too old
+        ),
     ]
-
-    cursor.executemany(
-        """
-        INSERT INTO token_usage_records
-        (token_usage_id, process_run_id, project_id, skill_id, input_tokens, output_tokens,
-         total_tokens, model_id, provider, estimated_cost, cost_visibility, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        test_data,
-    )
-
-    conn.commit()
-    conn.close()
+    _seed_token_events_fact(analytics_db, rows)
 
     return db_path
 
@@ -526,12 +483,12 @@ def test_token_by_model(test_token_db):
     metrics = collector.collect(days=90)
 
     assert "by_model" in metrics
-    assert "sonnet" in metrics["by_model"]
-    assert "haiku" in metrics["by_model"]
-    assert "opus" in metrics["by_model"]
+    assert _SONNET in metrics["by_model"]
+    assert _HAIKU in metrics["by_model"]
+    assert _OPUS in metrics["by_model"]
 
     # Sonnet: 3 records within 90 days
-    sonnet = metrics["by_model"]["sonnet"]
+    sonnet = metrics["by_model"][_SONNET]
     assert sonnet["input_tokens"] == (1000 + 1200 + 800)
     assert sonnet["output_tokens"] == (500 + 600 + 400)
 
@@ -599,36 +556,25 @@ def test_token_percentage(test_token_db):
 
 
 # ModelCollector tests
+#
+# WO-DBA-DROP (migration 137): same DuckDB-events_fact seeding as the
+# TokenCollector fixture above (token_usage_records is retired from SQLite).
+# ModelCollector reads token_usage_sql() for per-model invocation counts and
+# token volume; skill telemetry no longer carries the model dimension, so
+# success/timing are not attributed per model.
 
 
 @pytest.fixture
-def test_model_db(tmp_path):
-    """Create a temporary test database with model performance data"""
+def test_model_db(tmp_path, monkeypatch):
+    """Create an isolated DuckDB analytics store with token.consumed events,
+    plus a bare SQLite db_path for the collector to open."""
+    from core.analytics import duckdb_store
+
     db_path = tmp_path / "test_studio_models.db"
+    sqlite3.connect(str(db_path)).close()
 
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
-
-    # Seed token_usage_records — the authoritative model-attributed source
-    # (model_id column). ModelCollector reads token_usage_sql() for per-model
-    # invocation counts and token volume; skill telemetry no longer carries the
-    # model dimension, so success/timing are not attributed per model.
-    cursor.execute("""
-        CREATE TABLE token_usage_records (
-            token_usage_id TEXT PRIMARY KEY,
-            process_run_id TEXT,
-            project_id TEXT,
-            skill_id TEXT,
-            input_tokens INTEGER,
-            output_tokens INTEGER,
-            total_tokens INTEGER,
-            model_id TEXT,
-            provider TEXT,
-            estimated_cost REAL,
-            cost_visibility TEXT,
-            created_at TEXT NOT NULL
-        )
-    """)
+    analytics_db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: analytics_db)
 
     now = datetime.now()
 
@@ -639,43 +585,18 @@ def test_model_db(tmp_path):
     # plus one older-than-90-days record that must be excluded.
     # (id, model_id, input, output, project, skill, days_ago)
     token_data = [
-        ("tok-1", "sonnet", 1000, 500, "proj-a", "ds-core", 1),
-        ("tok-2", "sonnet", 1200, 600, "proj-a", "ds-core", 2),
-        ("tok-3", "haiku", 500, 200, "proj-b", "ds-quality", 3),
-        ("tok-4", "opus", 2000, 1000, "proj-a", "ds-core", 4),
-        ("tok-5", "sonnet", 800, 400, "proj-c", "ds-security", 5),
-        ("tok-old", "haiku", 450, 180, "proj-b", "ds-quality", 100),  # too old
+        ("tok-1", _SONNET, 1000, 500, "proj-a", "ds-core", 1),
+        ("tok-2", _SONNET, 1200, 600, "proj-a", "ds-core", 2),
+        ("tok-3", _HAIKU, 500, 200, "proj-b", "ds-quality", 3),
+        ("tok-4", _OPUS, 2000, 1000, "proj-a", "ds-core", 4),
+        ("tok-5", _SONNET, 800, 400, "proj-c", "ds-security", 5),
+        ("tok-old", _HAIKU, 450, 180, "proj-b", "ds-quality", 100),  # too old
     ]
     rows = [
-        (
-            tid,
-            f"run-{tid}",
-            proj,
-            skill,
-            inp,
-            out,
-            inp + out,
-            model,
-            "anthropic",
-            0.01,
-            "exact",
-            _ts(ago),
-        )
+        (tid, proj, skill, model, inp, out, _ts(ago))
         for tid, model, inp, out, proj, skill, ago in token_data
     ]
-
-    cursor.executemany(
-        """
-        INSERT INTO token_usage_records
-        (token_usage_id, process_run_id, project_id, skill_id, input_tokens, output_tokens,
-         total_tokens, model_id, provider, estimated_cost, cost_visibility, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """,
-        rows,
-    )
-
-    conn.commit()
-    conn.close()
+    _seed_token_events_fact(analytics_db, rows)
 
     return db_path
 
@@ -692,12 +613,12 @@ def test_model_collect_by_model(test_model_db):
     metrics = collector.collect(days=90)
 
     assert "by_model" in metrics
-    assert "sonnet" in metrics["by_model"]
-    assert "haiku" in metrics["by_model"]
-    assert "opus" in metrics["by_model"]
+    assert _SONNET in metrics["by_model"]
+    assert _HAIKU in metrics["by_model"]
+    assert _OPUS in metrics["by_model"]
 
     # Sonnet: 3 invocations
-    assert metrics["by_model"]["sonnet"]["invocations"] == 3
+    assert metrics["by_model"][_SONNET]["invocations"] == 3
 
 
 def test_model_success_rates(test_model_db):
@@ -708,9 +629,9 @@ def test_model_success_rates(test_model_db):
     metrics = collector.collect(days=90)
 
     assert "success_rates" in metrics
-    assert "sonnet" in metrics["success_rates"]
-    assert metrics["by_model"]["sonnet"]["success_rate"] == 0.0
-    assert metrics["by_model"]["opus"]["success_rate"] == 0.0
+    assert _SONNET in metrics["success_rates"]
+    assert metrics["by_model"][_SONNET]["success_rate"] == 0.0
+    assert metrics["by_model"][_OPUS]["success_rate"] == 0.0
 
 
 def test_model_distribution(test_model_db):
@@ -719,10 +640,10 @@ def test_model_distribution(test_model_db):
     metrics = collector.collect(days=90)
 
     assert "distribution_pct" in metrics
-    assert "sonnet" in metrics["distribution_pct"]
+    assert _SONNET in metrics["distribution_pct"]
 
     # 5 in-window invocations, sonnet has 3 = 60%
-    assert metrics["distribution_pct"]["sonnet"] == 60.0
+    assert metrics["distribution_pct"][_SONNET] == 60.0
 
     # Sum should be ~100%
     total = sum(metrics["distribution_pct"].values())
@@ -748,14 +669,14 @@ def test_model_token_totals(test_model_db):
     metrics = collector.collect(days=90)
 
     # sonnet: (1000+500) + (1200+600) + (800+400) = 4500 tokens across 3 records.
-    assert metrics["by_model"]["sonnet"]["total_tokens"] == 4500
-    assert metrics["by_model"]["haiku"]["total_tokens"] == 700
+    assert metrics["by_model"][_SONNET]["total_tokens"] == 4500
+    assert metrics["by_model"][_HAIKU]["total_tokens"] == 700
 
 
 def test_model_timeline(test_model_db):
     """Test model timeline retrieval"""
     collector = ModelCollector(db_path=str(test_model_db))
-    timeline = collector.get_model_timeline("sonnet", days=30)
+    timeline = collector.get_model_timeline(_SONNET, days=30)
 
     assert isinstance(timeline, list)
     assert len(timeline) == 3  # 3 days with sonnet usage
@@ -770,11 +691,11 @@ def test_model_performance_metrics(test_model_db):
     collector = ModelCollector(db_path=str(test_model_db))
     metrics = collector.collect(days=90)
 
-    sonnet_metrics = metrics["by_model"]["sonnet"]
+    sonnet_metrics = metrics["by_model"][_SONNET]
     # Timing is not attributed per model in the current authority.
     assert "avg_exec_time_s" in sonnet_metrics
     assert sonnet_metrics["avg_exec_time_s"] == 0.0
-    # Token volume IS attributed (from token_usage_records).
+    # Token volume IS attributed (from the DuckDB token_usage_records view).
     assert sonnet_metrics["avg_tokens_per_run"] > 0
     assert sonnet_metrics["total_tokens"] > 0
 

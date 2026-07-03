@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from core.event_store.studio_db import _connect
 from core.shared_intelligence.adapter_alignment import register_default_adapter_authority_profiles
@@ -9,11 +12,54 @@ from core.shared_intelligence.usage_accounting import (
     record_ai_usage_operational_record,
     register_default_adapter_accounting_profiles,
 )
-from core.telemetry.execution_spine import record_token_usage
 
 
 def _db(tmp_path: Path) -> Path:
     return tmp_path / "ai-usage-accounting" / "studio.db"
+
+
+@pytest.fixture
+def analytics_store(tmp_path, monkeypatch):
+    """Isolated DuckDB analytics store (WO-DBA-DROP: token_usage_records is a
+    view over events_fact now — seed token.consumed events, not the retired
+    SQLite table)."""
+    from core.analytics import duckdb_store
+
+    db = tmp_path / "aggregate_metrics.db"
+    monkeypatch.setattr(duckdb_store, "analytics_db_path", lambda: db)
+    return db
+
+
+def _seed_token_event(
+    analytics_db: Path,
+    *,
+    event_id: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    adapter_id: str,
+    provider: str,
+) -> None:
+    from core.analytics import duckdb_store
+
+    conn = duckdb_store.connect_analytics(analytics_db, read_only=False)
+    try:
+        duckdb_store.ensure_analytics_schema(conn)
+        conn.execute(
+            "INSERT INTO events_fact (event_id, event_type, event_timestamp, model_id,"
+            " adapter_id, input_tokens, output_tokens, payload)"
+            " VALUES (?, 'token.consumed', '2026-07-03T00:00:00Z', ?, ?, ?, ?, ?)",
+            [
+                event_id,
+                model,
+                adapter_id,
+                input_tokens,
+                output_tokens,
+                json.dumps({"model": model, "provider": provider}),
+            ],
+        )
+    finally:
+        conn.close()
 
 
 def test_default_adapter_accounting_profiles_are_honest_about_plan_costs(
@@ -35,22 +81,25 @@ def test_default_adapter_accounting_profiles_are_honest_about_plan_costs(
     assert summary["policy"]["provider_billing_credentials_inspected"] is False
 
 
-def test_plan_token_rows_preserve_tokens_without_inventing_cost(tmp_path: Path) -> None:
+def test_unpriced_model_rows_preserve_tokens_without_inventing_cost(
+    tmp_path: Path, analytics_store: Path
+) -> None:
+    """A token.consumed event for a model absent from the pricing table
+    (WO-DBA-DROP: DuckDB token_usage_records view LEFT JOINs
+    token_model_pricing) reports tokens honestly with no fabricated cost —
+    the same governance outcome the retired subscription_plan override used
+    to produce."""
+    _seed_token_event(
+        analytics_store,
+        event_id="token-claude-plan",
+        model="claude-plan-not-a-real-model",
+        input_tokens=1000,
+        output_tokens=250,
+        adapter_id="claude",
+        provider="anthropic",
+    )
     with _connect(_db(tmp_path)) as conn:
         register_default_adapter_authority_profiles(conn)
-        record_token_usage(
-            conn,
-            token_usage_id="token-claude-plan",
-            adapter_id="claude",
-            provider="anthropic",
-            model_id="claude-sonnet",
-            billing_mode="subscription_plan",
-            token_visibility="partial",
-            input_tokens=1000,
-            output_tokens=250,
-            estimated_cost=99.0,
-            purpose="plan telemetry",
-        )
         summary = adapter_usage_accounting_summary(conn)
 
     claude = summary["by_adapter"]["claude"]
@@ -60,33 +109,34 @@ def test_plan_token_rows_preserve_tokens_without_inventing_cost(tmp_path: Path) 
     assert claude["cost_visibility"] == {"unavailable": 1}
 
 
-def test_token_metered_rows_report_cost_only_when_metadata_marks_it(
-    tmp_path: Path,
+def test_priced_model_rows_report_cost_from_duckdb_view(
+    tmp_path: Path, analytics_store: Path
 ) -> None:
+    """A token.consumed event for a model IN the pricing table gets a
+    computed reportable cost from the DuckDB view — the WO-DBA-DROP
+    replacement for the retired externally-injected provider-metadata cost
+    path (token.consumed events carry no pre-computed dollar amount)."""
+    from core.pricing.claude_models import CLAUDE_MODEL_PRICING, compute_cost
+
+    model = next(iter(CLAUDE_MODEL_PRICING))
+    _seed_token_event(
+        analytics_store,
+        event_id="token-claude-api",
+        model=model,
+        input_tokens=1000,
+        output_tokens=500,
+        adapter_id="claude",
+        provider="anthropic",
+    )
     with _connect(_db(tmp_path)) as conn:
         register_default_adapter_authority_profiles(conn)
-        record_token_usage(
-            conn,
-            token_usage_id="token-codex-api",
-            adapter_id="codex",
-            provider="openai",
-            model_id="gpt-5",
-            billing_mode="token_metered",
-            token_visibility="exact",
-            cost_visibility="provider_reported",
-            usage_source="provider_metadata",
-            cost_source="provider_metadata",
-            input_tokens=100,
-            output_tokens=50,
-            estimated_cost=0.123456,
-            purpose="api usage",
-        )
         summary = adapter_usage_accounting_summary(conn)
 
-    codex = summary["by_adapter"]["codex"]
-    assert codex["total_tokens"] == 150
-    assert codex["reportable_cost"] == 0.123456
-    assert codex["cost_visibility"] == {"provider_reported": 1}
+    claude = summary["by_adapter"]["claude"]
+    assert claude["total_tokens"] == 1500
+    expected_cost = compute_cost(model, 1000, 500)
+    assert claude["reportable_cost"] == pytest.approx(expected_cost, rel=1e-6)
+    assert claude["cost_visibility"] == {"estimated": 1}
 
 
 def test_operational_usage_records_track_value_without_cost(tmp_path: Path) -> None:

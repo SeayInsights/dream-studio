@@ -158,12 +158,23 @@ _USAGE_INDEXES = {
     "idx_ai_usage_operational_process",
 }
 
+# idx_token_usage_scope lived on token_usage_records, dropped (table and all)
+# by migration 137 (WO-DBA-DROP). Migration 117 still recreates it correctly
+# for any schema between v82 and v136; it just doesn't survive past v137,
+# same as the table it indexed. The "full chain to HEAD" tests below check
+# against this narrower set; the historical migration-117 recreation is still
+# covered by test_migration_sequence_creates_usage_indexes_before_081 (v80)
+# and the upgrade-path check up to v117 further down.
+_USAGE_INDEXES_AT_HEAD = _USAGE_INDEXES - {"idx_token_usage_scope"}
+
 
 def test_migration_117_recreates_usage_indexes_fresh_install():
-    """Fresh-install path: full sequence up to latest should include all three indexes."""
+    """Fresh-install path: full sequence up to latest should include the
+    surviving usage-table indexes (idx_token_usage_scope is gone with
+    token_usage_records itself, migration 137)."""
     conn = sqlite3.connect(":memory:")
     run_migrations(conn)
-    missing = _USAGE_INDEXES - _index_names(conn)
+    missing = _USAGE_INDEXES_AT_HEAD - _index_names(conn)
     assert not missing, (
         f"usage-table indexes missing after full migration sequence: {missing}. "
         "Migration 117 should recreate indexes dropped by migration 081."
@@ -172,7 +183,8 @@ def test_migration_117_recreates_usage_indexes_fresh_install():
 
 
 def test_migration_117_recreates_usage_indexes_upgrade_path():
-    """Upgrade path: run to v116, confirm indexes absent, then complete to HEAD."""
+    """Upgrade path: run to v116, confirm indexes absent, then complete to v117
+    (before migration 137 drops token_usage_records and its index again)."""
     conn = sqlite3.connect(":memory:")
     run_migrations(conn, target_version=116)
 
@@ -183,11 +195,12 @@ def test_migration_117_recreates_usage_indexes_upgrade_path():
         not present_before
     ), f"Expected indexes to be absent at v116 (dropped by 081), but found: {present_before}"
 
-    # Continue from v116 to HEAD — migration 117 should recreate them.
-    run_migrations(conn)
+    # Continue from v116 to v117 — migration 117 should recreate all three
+    # (before migration 137 later drops token_usage_records and its index).
+    run_migrations(conn, target_version=117)
     missing = _USAGE_INDEXES - _index_names(conn)
     assert not missing, (
-        f"usage-table indexes missing after upgrading from v116: {missing}. "
+        f"usage-table indexes missing after upgrading from v116 to v117: {missing}. "
         "Migration 117 should recreate indexes dropped by migration 081."
     )
     conn.close()

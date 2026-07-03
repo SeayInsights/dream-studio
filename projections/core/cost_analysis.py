@@ -33,6 +33,14 @@ def api_equivalent_cost(conn: sqlite3.Connection) -> dict[str, Any]:
     Rows whose model_id is unknown in the pricing table contribute $0 and are
     counted as unpriced — the coverage dict is honest about that gap.
 
+    WO-DBA-DROP (migration 137): the SQLite token_usage_records table is
+    retired. If *conn* still has one (a not-yet-migrated authority, or a test
+    fixture that builds one directly), it is read exactly as before. Otherwise
+    this reads the DuckDB aggregate_metrics.db token_usage_records view
+    (core/analytics/duckdb_store.py), which derives model_id/cached_tokens/
+    cache_read_tokens from canonical token.consumed events — the source of
+    truth now that the SQLite table is gone.
+
     Returns::
 
         {
@@ -43,7 +51,32 @@ def api_equivalent_cost(conn: sqlite3.Connection) -> dict[str, Any]:
             "unpriced_record_count": int,
         }
     """
-    if not _has_table(conn, "token_usage_records"):
+    if _has_table(conn, "token_usage_records"):
+        rows: list[Any] = conn.execute("""
+            SELECT
+                model_id,
+                COALESCE(input_tokens, 0)      AS input_tokens,
+                COALESCE(output_tokens, 0)     AS output_tokens,
+                COALESCE(cached_tokens, 0)     AS cached_tokens,
+                COALESCE(cache_read_tokens, 0) AS cache_read_tokens
+            FROM token_usage_records
+            """).fetchall()
+    else:
+        from projections.core.collectors.authority_sources import fetch_token_usage_records
+
+        duckdb_rows = fetch_token_usage_records() or []
+        rows = [
+            {
+                "model_id": row.get("model_id"),
+                "input_tokens": row.get("input_tokens") or 0,
+                "output_tokens": row.get("output_tokens") or 0,
+                "cached_tokens": row.get("cached_tokens") or 0,
+                "cache_read_tokens": row.get("cache_read_tokens") or 0,
+            }
+            for row in duckdb_rows
+        ]
+
+    if not rows:
         return {
             "total_usd": 0.0,
             "by_model": [],
@@ -51,16 +84,6 @@ def api_equivalent_cost(conn: sqlite3.Connection) -> dict[str, Any]:
             "priced_record_count": 0,
             "unpriced_record_count": 0,
         }
-
-    rows = conn.execute("""
-        SELECT
-            model_id,
-            COALESCE(input_tokens, 0)      AS input_tokens,
-            COALESCE(output_tokens, 0)     AS output_tokens,
-            COALESCE(cached_tokens, 0)     AS cached_tokens,
-            COALESCE(cache_read_tokens, 0) AS cache_read_tokens
-        FROM token_usage_records
-        """).fetchall()
 
     # Accumulate per-model totals
     per_model: dict[str, dict[str, Any]] = {}

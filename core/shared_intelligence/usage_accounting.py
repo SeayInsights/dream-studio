@@ -17,10 +17,12 @@ from core.shared_intelligence.authority import require_shared_intelligence_table
 ACCOUNTING_SOURCE_TABLES: tuple[str, ...] = (
     "ai_adapter_accounting_profiles",
     "ai_usage_operational_records",
-    "token_usage_records",
     "adapter_authority_profiles",
     # model_provider_profiles: dropped migration 131 (dormant — no live writer)
     # task_attribution_records: dropped migration 131 (dormant — no live writer)
+    # token_usage_records: dropped migration 137 (WO-DBA-DROP) — no longer a
+    # required SQLite table; _token_accounting_rows reads the DuckDB
+    # aggregate_metrics.db view when the SQLite table is absent.
 )
 
 REPORTABLE_COST_VISIBILITIES = {
@@ -442,27 +444,68 @@ def _operational_records(
     return [_decode_operational(row) for row in rows]
 
 
+_TOKEN_ACCOUNTING_COLUMNS = (
+    "token_usage_id",
+    "project_id",
+    "process_run_id",
+    "adapter_id",
+    "provider",
+    "model_id",
+    "billing_mode",
+    "token_visibility",
+    "cost_visibility",
+    "usage_source",
+    "cost_source",
+    "accounting_confidence",
+    "input_tokens",
+    "output_tokens",
+    "cached_tokens",
+    "total_tokens",
+    "estimated_cost",
+)
+
+
 def _token_accounting_rows(
     conn: sqlite3.Connection, *, project_id: str | None = None
 ) -> list[dict[str, Any]]:
-    where = ""
-    params: tuple[Any, ...] = ()
-    if project_id:
-        where = "WHERE project_id = ?"
-        params = (project_id,)
-    rows = conn.execute(
-        f"""
-        SELECT token_usage_id, project_id, process_run_id, adapter_id, provider,
-               model_id, billing_mode, token_visibility, cost_visibility,
-               usage_source, cost_source, accounting_confidence, input_tokens,
-               output_tokens, cached_tokens, total_tokens, estimated_cost
-        FROM token_usage_records
-        {where}
-        ORDER BY created_at DESC, token_usage_id DESC
-        """,
-        params,
-    ).fetchall()
-    return [dict(row) for row in rows]
+    has_table = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'token_usage_records'"
+        ).fetchone()
+        is not None
+    )
+    if has_table:
+        where = ""
+        params: tuple[Any, ...] = ()
+        if project_id:
+            where = "WHERE project_id = ?"
+            params = (project_id,)
+        rows = conn.execute(
+            f"""
+            SELECT token_usage_id, project_id, process_run_id, adapter_id, provider,
+                   model_id, billing_mode, token_visibility, cost_visibility,
+                   usage_source, cost_source, accounting_confidence, input_tokens,
+                   output_tokens, cached_tokens, total_tokens, estimated_cost
+            FROM token_usage_records
+            {where}
+            ORDER BY created_at DESC, token_usage_id DESC
+            """,
+            params,
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
+    # table in a fresh install — read the DuckDB aggregate_metrics.db view.
+    from projections.core.collectors.authority_sources import fetch_token_usage_records
+
+    duckdb_rows = fetch_token_usage_records() or []
+    filtered = [
+        row for row in duckdb_rows if project_id is None or row.get("project_id") == project_id
+    ]
+    filtered.sort(
+        key=lambda r: (r.get("created_at") or "", r.get("token_usage_id") or ""), reverse=True
+    )
+    return [{column: row.get(column) for column in _TOKEN_ACCOUNTING_COLUMNS} for row in filtered]
 
 
 def _decode_profile(row: sqlite3.Row) -> dict[str, Any]:

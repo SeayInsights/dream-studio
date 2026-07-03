@@ -30,7 +30,6 @@
 │  SQLite DB: ~/.dream-studio/state/studio.db                                  │
 │  Canonical events: business_canonical_events, ai_canonical_events            │
 │  Business state: business_projects, business_milestones, business_work_orders│
-│  Token tracking: token_usage_records (with cache_read_tokens, migration 105) │
 │  Eval records: ds_eval_baselines, ds_eval_runs                               │
 │  Spool buffer: ~/.dream-studio/spool/*.json                                  │
 └────────────────────────────────┬────────────────────────────────────────────┘
@@ -85,7 +84,6 @@
 | `business_milestones` | Milestone tracking |
 | `business_work_orders` | Work order lifecycle state |
 | `business_tasks` | Task completion tracking |
-| `token_usage_records` | Token telemetry (with cache_read_tokens) |
 | `ds_eval_baselines` | Eval baseline scores per eval_id/version |
 | `ds_eval_runs` | Per-run eval evidence and regression history |
 | `reg_gotchas` | Known-failure patterns from gate and debug runs |
@@ -97,7 +95,7 @@
 | `projections/api/routes/metrics.py` | Dashboard token metrics endpoint |
 | `projections/api/routes/intelligence.py` | Token intelligence endpoint |
 | `projections/api/queries/token_attribution.py` | Canonical token metric queries |
-| `projections/core/collectors/token_collector.py` | Token metrics from token_usage_records |
+| `projections/core/collectors/token_collector.py` | Token metrics from the DuckDB aggregate_metrics.db token_usage_records view (migration 137 dropped the SQLite table) |
 | `projections/core/collectors/authority_sources.py` | SQL subquery builders with fallbacks |
 
 ---
@@ -168,6 +166,12 @@ canonical_token_metrics(days: int) -> dict
 token_usage_sql(conn: sqlite3.Connection) -> str | None
 ```
 
-- **Reads:** `PRAGMA table_info("token_usage_records")` to detect available columns
-- **Returns:** SQL subquery string with `_column_or_literal()` fallbacks for optional columns
-- **Fallbacks:** `adapter_id → NULL`, `cache_read_tokens → 0` (pre-migration 105 DBs)
+- **Reads (WO-DBA-DROP, migration 137):** if `conn` still has a real `token_usage_records`
+  table (a not-yet-migrated authority), `PRAGMA table_info("token_usage_records")` as before.
+  Otherwise reads the DuckDB `aggregate_metrics.db` `token_usage_records` VIEW via
+  `connect_analytics(read_only=True)`.
+- **Returns:** SQL subquery string. For the SQLite branch, `_column_or_literal()` fallbacks
+  for optional columns (`adapter_id → NULL`, `cache_read_tokens → 0`, pre-migration-105 DBs).
+  For the DuckDB branch, a `SELECT * FROM <connection-scoped TEMP TABLE>` materializing the
+  current view rows so every existing caller's subquery-embedding pattern keeps working.
+- **Never raises:** returns `None` (harmless empty state) when neither source has data.

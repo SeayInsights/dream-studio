@@ -17,7 +17,6 @@ from core.telemetry.execution_spine import (
     record_execution_event,
     record_research_evidence,
     record_security_finding,
-    record_token_usage,
     resolve_security_finding,
 )
 
@@ -191,13 +190,21 @@ def emit_token_usage_record(
     db_path: Path | str | None = None,
     mode: str = MODE_BEST_EFFORT,
 ) -> TelemetryEmitResult:
-    """Dual-write token log rows to token_usage_records."""
+    """Dual-write token log telemetry into execution_events.
+
+    WO-DBA-DROP: the token_usage_records SQLite table (migration 137) is retired
+    — record_token_usage/token_usage_records were removed since the canonical
+    token.consumed events (captured independently by
+    core/telemetry/token_capture.py) are the source of truth for token
+    accounting, projected into the DuckDB aggregate_metrics.db
+    token_usage_records view. This function's execution_events dual-write is
+    unrelated telemetry (session/skill invocation tracking) and is unchanged.
+    """
 
     ctx = _context(context)
 
     def _write(conn: sqlite3.Connection) -> TelemetryEmitResult:
         event_id = _id("token-event")
-        token_usage_id = _id("token")
         metadata = {"session_name": session_name, "model": model}
         record_execution_event(
             conn,
@@ -213,24 +220,13 @@ def emit_token_usage_record(
             metadata=metadata,
             outcome_status="recorded",
         )
-        record_token_usage(
-            conn,
-            **ctx.scope(),
-            token_usage_id=token_usage_id,
-            model_id=model,
-            provider=_provider_from_model(model),
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            purpose="session token logging",
-        )
-        return TelemetryEmitResult(True, event_id=event_id, record_id=token_usage_id)
+        return TelemetryEmitResult(True, event_id=event_id, record_id=event_id)
 
     return _emit(
         _write,
         db_path=db_path,
         mode=mode,
-        required_tables=("execution_events", "token_usage_records"),
+        required_tables=("execution_events",),
     )
 
 
@@ -1120,12 +1116,3 @@ def _truthy(*values: Any) -> bool:
 
 def _id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex}"
-
-
-def _provider_from_model(model: str) -> str | None:
-    lower = model.lower()
-    if "claude" in lower:
-        return "anthropic"
-    if "gpt" in lower or "openai" in lower:
-        return "openai"
-    return None
