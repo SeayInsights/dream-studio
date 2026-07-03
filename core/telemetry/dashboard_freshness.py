@@ -46,7 +46,8 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
                 "alert_history",
             )
         }
-        sections = _section_statuses(conn, table_counts)
+        duckdb_token_count = _duckdb_token_count()
+        sections = _section_statuses(conn, table_counts, duckdb_token_count)
         backfill_plan = plan_legacy_telemetry_backfill(path)
         generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         return {
@@ -99,7 +100,30 @@ def dashboard_data_freshness_status(db_path: Path | str | None = None) -> dict[s
         conn.close()
 
 
-def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[dict[str, Any]]:
+def _duckdb_token_count() -> int:
+    """Row count of the DuckDB aggregate_metrics.db token_usage_records view.
+
+    WO-DBA-DROP (migration 137): token_usage_records is no longer a SQLite
+    table — this is the freshness signal for the token-related sections now.
+    Returns 0 (never raises) when the analytics store/view is unavailable.
+    """
+    try:
+        from core.analytics.duckdb_store import connect_analytics
+
+        conn = connect_analytics(read_only=True)
+    except Exception:
+        return 0
+    try:
+        return int(conn.execute("SELECT COUNT(*) FROM token_usage_records").fetchone()[0] or 0)
+    except Exception:
+        return 0
+    finally:
+        conn.close()
+
+
+def _section_statuses(
+    conn: sqlite3.Connection, counts: dict[str, int], duckdb_token_count: int = 0
+) -> list[dict[str, Any]]:
     telemetry_component_rows = sum(
         counts[table]
         for table in (
@@ -202,21 +226,26 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
             "/api/v1/metrics/tokens",
             (
                 "fresh"
-                if _has_columns(
-                    conn, "token_usage_records", ["input_tokens", "output_tokens", "created_at"]
-                )
-                and counts["token_usage_records"]
+                if _token_sqlite_ready(conn) and counts["token_usage_records"]
                 else (
                     "empty by design"
-                    if _has_columns(
-                        conn, "token_usage_records", ["input_tokens", "output_tokens", "created_at"]
+                    if _token_sqlite_ready(conn)
+                    else (
+                        # WO-DBA-DROP (migration 137): token_usage_records is no
+                        # longer a SQLite table by design — the DuckDB
+                        # aggregate_metrics.db view is the source now, not a
+                        # sign the live schema is behind repo migrations.
+                        "fresh"
+                        if duckdb_token_count
+                        else "empty by design"
                     )
-                    else "missing because live DB schema is behind repo migrations"
                 )
             ),
-            "Token metrics read current token_usage_records authority.",
-            ["token_usage_records"],
-            counts["token_usage_records"],
+            "Token metrics read the DuckDB aggregate_metrics.db token_usage_records view"
+            " (derived from canonical token.consumed events); a not-yet-migrated authority"
+            " with the legacy SQLite table is still read directly.",
+            ["token_usage_records (DuckDB view)"],
+            counts["token_usage_records"] or duckdb_token_count,
             _latest(conn, "token_usage_records", "created_at"),
         ),
         _section(
@@ -251,16 +280,17 @@ def _section_statuses(conn: sqlite3.Connection, counts: dict[str, int]) -> list[
             (
                 "fresh"
                 if session_authority_ready
-                and (counts["raw_sessions"] or counts["token_usage_records"])
+                and (counts["raw_sessions"] or counts["token_usage_records"] or duckdb_token_count)
                 else (
                     "empty by design"
                     if session_authority_ready
                     else "missing because live DB schema is behind repo migrations"
                 )
             ),
-            "Analytics routes read reconciled session/token authority and return current empty states when inputs are absent.",
-            ["raw_sessions", "token_usage_records"],
-            counts["raw_sessions"] + counts["token_usage_records"],
+            "Analytics routes read reconciled session authority (SQLite) and token authority"
+            " (DuckDB aggregate_metrics.db view); return current empty states when inputs are absent.",
+            ["raw_sessions", "token_usage_records (DuckDB view)"],
+            counts["raw_sessions"] + counts["token_usage_records"] + duckdb_token_count,
             _latest_any(conn, ["raw_sessions", "token_usage_records"], "started_at", "created_at"),
         ),
         _section(
@@ -329,6 +359,15 @@ def _columns(conn: sqlite3.Connection, name: str) -> set[str]:
     return {str(row[1]) for row in conn.execute(f'PRAGMA table_info("{name}")')}
 
 
+def _token_sqlite_ready(conn: sqlite3.Connection) -> bool:
+    """True when *conn* still has a real token_usage_records table (a
+    not-yet-migrated authority). Dropped by migration 137 (WO-DBA-DROP) in a
+    fresh install — the DuckDB view is the source there."""
+    return _has_columns(
+        conn, "token_usage_records", ["input_tokens", "output_tokens", "created_at"]
+    )
+
+
 def _has_columns(conn: sqlite3.Connection, name: str, columns: list[str]) -> bool:
     available = _columns(conn, name)
     return all(column in available for column in columns)
@@ -366,7 +405,8 @@ def _latest_any(conn: sqlite3.Connection, tables: list[str], *columns: str) -> s
 def _schema_drift(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     required = {
         "raw_sessions": ["started_at", "project_id", "outcome", "ended_at"],
-        "token_usage_records": ["input_tokens", "output_tokens", "created_at"],
+        # token_usage_records dropped migration 137 (WO-DBA-DROP) — its absence
+        # is by design (DuckDB view replaces it), not schema drift.
         "vw_security_summary": ["source_type", "finding_id", "tool", "created_at"],
         # hook_executions dropped migration 129 (DuckDB view replaces it); not schema drift.
         "alert_rules": [
